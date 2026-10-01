@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_host/configured_worker_registry.dart';
+import 'package:conclave_host/tool_profile_catalog.dart';
 
 void main() {
   late Directory directory;
@@ -128,6 +129,37 @@ void main() {
       registry.create(
         name: 'Unsupported',
         workerTypeId: 'claude',
+        authStrategy: 'browser_auth',
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('creates a future logical Worker only from an approved catalog entry',
+      () async {
+    const entry = LogicalWorkerCatalogEntry(
+      workerTypeId: 'approved-cli',
+      displayName: 'Approved CLI',
+      description: 'fixture',
+      profileDefinitionId: 'approved-cli-profile',
+      providerToolName: 'approved',
+      engineFamily: 'cli',
+      releaseStage: 'testing',
+      capabilities: ['text'],
+      sortOrder: 30,
+    );
+    final worker = await registry.create(
+      name: entry.displayName,
+      workerTypeId: entry.workerTypeId,
+      approvedCatalogEntry: entry,
+      authStrategy: 'browser_auth',
+    );
+    expect(worker.workerTypeId, 'approved-cli');
+
+    await expectLater(
+      registry.create(
+        name: 'Unapproved',
+        workerTypeId: 'unapproved-cli',
         authStrategy: 'browser_auth',
       ),
       throwsArgumentError,

@@ -81,6 +81,26 @@ interface ForgeExecutionRecord {
   readonly updatedAt: string;
 }
 
+/** Stable provider-session partition for one logical Work v1 binding. */
+export function workStepSessionKey(params: {
+  readonly workBindingId?: WorkstreamBindingId;
+  readonly workstreamId: string;
+  readonly workRequestId: string;
+  readonly stepKind: string;
+  readonly retryStepKind?: unknown;
+  readonly retrySessionStrategy?: unknown;
+  readonly retryNumber?: unknown;
+}): string {
+  const baseSessionKey =
+    params.workBindingId === "direct"
+      ? `workstream:${params.workstreamId}:direct:work-conversation`
+      : `work-request:${params.workRequestId}:${params.stepKind}`;
+  return params.retryStepKind === params.stepKind &&
+    params.retrySessionStrategy === "fresh"
+    ? `${baseSessionKey}:retry-fresh-${Number(params.retryNumber) || 1}`
+    : baseSessionKey;
+}
+
 function forgeExecutionRecord(
   row: Record<string, unknown>,
 ): ForgeExecutionRecord {
@@ -1330,8 +1350,12 @@ async function executeBoundWorkStepAssignment(
 ): Promise<{
   text: string;
   workerId: string | null;
-  workerRuntimeVersion: string | null;
+  workerTypeId: string | null;
+  engineVersion: string | null;
+  profileDefinitionId: string | null;
+  profileReleaseVersion: number | null;
   providerToolVersion: string | null;
+  model: string | null;
 }> {
   const workRequestId = String(params.workRequestId ?? "");
   const workflowStep =
@@ -1389,14 +1413,15 @@ async function executeBoundWorkStepAssignment(
   // Direct keeps one conversation for this Workstream's Direct binding.
   // Multi-step Workflows isolate a durable retry session by Work Request and
   // Step, so Verify never resumes Implement's provider conversation.
-  const baseSessionKey =
-    params.workBindingId === "direct"
-      ? `workstream:${row.workstreamId}:direct:work-conversation`
-      : `work-request:${workRequestId}:${stepKind}`;
-  const sessionKey =
-    params.retryStepKind === stepKind && params.retrySessionStrategy === "fresh"
-      ? `${baseSessionKey}:retry-fresh-${Number(params.retryNumber) || 1}`
-      : baseSessionKey;
+  const sessionKey = workStepSessionKey({
+    workBindingId: params.workBindingId === "direct" ? "direct" : undefined,
+    workstreamId: row.workstreamId,
+    workRequestId,
+    stepKind,
+    retryStepKind: params.retryStepKind,
+    retrySessionStrategy: params.retrySessionStrategy,
+    retryNumber: params.retryNumber,
+  });
   const dispatched = await dispatchTaskAssignment(
     env as unknown as AssignmentDispatcherEnv,
     {
@@ -1440,10 +1465,10 @@ async function executeBoundWorkStepAssignment(
   while (Date.now() < deadline) {
     const assignment = await env.CONCLAVE_DB.prepare(
       `SELECT wa.status, wa.output_json, wa.error_json,
-              wa.workspace_worker_id AS workerId, wa.worker_version AS workerRuntimeVersion,
-              i.provider_tool_version AS providerToolVersion
+              wa.workspace_worker_id AS workerId, wa.worker_id AS workerTypeId,
+              wa.engine_version AS engineVersion, wa.model AS model,
+              wa.permission_snapshot_json AS permissionSnapshotJson
        FROM worker_assignments wa
-       LEFT JOIN workspace_worker_inventory i ON i.worker_id = wa.workspace_worker_id
        WHERE wa.id = ?1`,
     )
       .bind(dispatched.assignmentId)
@@ -1452,8 +1477,10 @@ async function executeBoundWorkStepAssignment(
         output_json: string | null;
         error_json: string | null;
         workerId: string | null;
-        workerRuntimeVersion: string | null;
-        providerToolVersion: string | null;
+        workerTypeId: string | null;
+        engineVersion: string | null;
+        model: string | null;
+        permissionSnapshotJson: string | null;
       }>();
     if (assignment?.status === "completed" && assignment.output_json) {
       const output = JSON.parse(assignment.output_json) as Record<
@@ -1472,22 +1499,40 @@ async function executeBoundWorkStepAssignment(
             : typeof nested.summary === "string"
               ? nested.summary
               : null;
-      if (text?.trim())
+      if (text?.trim()) {
+        const evidence = parseJsonRecord(assignment.permissionSnapshotJson);
+        const profileReleaseVersion = evidence.profileReleaseVersion;
         return {
           text: text.slice(0, 96_000),
           workerId: assignment.workerId,
-          workerRuntimeVersion: assignment.workerRuntimeVersion,
-          providerToolVersion: assignment.providerToolVersion,
+          workerTypeId: assignment.workerTypeId,
+          engineVersion:
+            typeof evidence.profileDefinitionId === "string"
+              ? assignment.engineVersion
+              : null,
+          profileDefinitionId:
+            typeof evidence.profileDefinitionId === "string"
+              ? evidence.profileDefinitionId
+              : null,
+          profileReleaseVersion:
+            Number.isSafeInteger(profileReleaseVersion) &&
+            Number(profileReleaseVersion) > 0
+              ? Number(profileReleaseVersion)
+              : null,
+          providerToolVersion:
+            typeof evidence.providerToolVersion === "string"
+              ? evidence.providerToolVersion
+              : null,
+          model: assignment.model,
         };
+      }
       throw new Error("Work Step completed without final answer text");
     }
     if (assignment?.status === "cancelled") {
       throw new WorkAssignmentCancelledError();
     }
     if (assignment?.status === "failed") {
-      throw new Error(
-        assignment.error_json ?? "Worker assignment failed",
-      );
+      throw new Error(assignment.error_json ?? "Worker assignment failed");
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
@@ -1706,8 +1751,12 @@ export class ConclaveForgeExecutionService {
         ? {
             finalText: workStepResult.text,
             workerId: workStepResult.workerId,
-            workerRuntimeVersion: workStepResult.workerRuntimeVersion,
+            workerTypeId: workStepResult.workerTypeId,
+            engineVersion: workStepResult.engineVersion,
+            profileDefinitionId: workStepResult.profileDefinitionId,
+            profileReleaseVersion: workStepResult.profileReleaseVersion,
             providerToolVersion: workStepResult.providerToolVersion,
+            model: workStepResult.model,
           }
         : {}),
     });

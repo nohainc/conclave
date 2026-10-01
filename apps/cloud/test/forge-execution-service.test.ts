@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ConclaveForgeExecutionService,
   readExecutionContext,
+  workStepSessionKey,
 } from "../src/forge-execution.js";
 
 class MemoryD1 {
@@ -104,6 +105,52 @@ function service(db: MemoryD1): ConclaveForgeExecutionService {
 }
 
 describe("durable Forge execution service", () => {
+  it("keeps Verify in a separate provider session from Implement", () => {
+    const implement = workStepSessionKey({
+      workBindingId: "implement",
+      workstreamId: "workstream-1",
+      workRequestId: "request-1",
+      stepKind: "implement",
+    });
+    const verify = workStepSessionKey({
+      workBindingId: "verify",
+      workstreamId: "workstream-1",
+      workRequestId: "request-1",
+      stepKind: "verify",
+    });
+    expect(implement).toBe("work-request:request-1:implement");
+    expect(verify).toBe("work-request:request-1:verify");
+    expect(verify).not.toBe(implement);
+  });
+
+  it("keeps Direct durable across requests and isolates fresh retries", () => {
+    const direct = workStepSessionKey({
+      workBindingId: "direct",
+      workstreamId: "workstream-1",
+      workRequestId: "request-1",
+      stepKind: "implement",
+    });
+    expect(
+      workStepSessionKey({
+        workBindingId: "direct",
+        workstreamId: "workstream-1",
+        workRequestId: "request-2",
+        stepKind: "implement",
+      }),
+    ).toBe(direct);
+    expect(
+      workStepSessionKey({
+        workBindingId: "direct",
+        workstreamId: "workstream-1",
+        workRequestId: "request-1",
+        stepKind: "implement",
+        retryStepKind: "implement",
+        retrySessionStrategy: "fresh",
+        retryNumber: 2,
+      }),
+    ).toBe(`${direct}:retry-fresh-2`);
+  });
+
   it("rejects a domain run that belongs to another Goal", async () => {
     const db = new MemoryD1();
     db.contextRow = {

@@ -1,13 +1,16 @@
-# Conclave Gemini Worker
+# Conclave Gemini Worker (migration-only)
 
-Standalone Dart console executable package for the Gemini product Worker.
-It discovers and verifies the local Antigravity CLI, checks its version and
-available local configuration, performs explicitly requested live probes,
-executes assignments in sandbox mode, parses streaming JSON events, and stores
-durable conversation IDs in the Worker state directory. Provider credentials,
-CLI arguments, and conversation IDs remain local to this executable.
+This package contains the pre-v8 Gemini Worker Runtime v2 implementation and
+is retained only as migration reference until v8 acceptance is complete. New
+Gemini execution belongs to the generic CLI Worker Engine and the official
+`gemini-antigravity` Tool Profile Release.
 
-The executable speaks Local Worker Protocol 3.0 on stdin/stdout. Operational
-logs go to stderr as structured JSONL. Passive checks do not send a model
-request; the CLI reuses its local account credentials for headless requests.
-A live probe sends a minimal request and may consume provider quota.
+Run `dart test` from this package to execute the generic Engine + Profile
+acceptance corpus. It does not launch the migration-only v2 Worker. The
+synthetic Antigravity CLI and JSONL corpus exercise discovery, versioning,
+local config/auth readiness, filtered environment, stream-json transport,
+timeout/model/sandbox arguments, progress, sessions, and error mapping.
+
+The current v2 executable speaks Local Worker Protocol 3.0 and is not the v8
+runtime contract. Remove its provider-specific runtime code after generic
+Engine + Profile, real-provider, durable-session, and Work v1 acceptance.

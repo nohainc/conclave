@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:conclave_protocol/conclave_protocol.dart';
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:conclave_host/host.dart';
 import 'package:conclave_host/bundled_adapter_asset_loader.dart';
 import 'package:conclave_host/host_configuration.dart';
@@ -21,6 +22,9 @@ import 'package:conclave_host/workspace_enrollment.dart';
 import 'package:conclave_host/workspace_transport.dart';
 import 'package:conclave_host/worker_readiness.dart';
 import 'package:conclave_host/worker_process_supervisor.dart';
+import 'package:conclave_host/bundled_cli_worker_engine_loader.dart';
+import 'package:conclave_host/cli_worker_engine_supervisor.dart';
+import 'package:conclave_host/worker_diagnostic_store.dart';
 
 Set<WorkerPermission> _configuredPermissions() {
   final configured = Platform.environment['CONCLAVE_WORKER_PERMISSIONS'];
@@ -39,6 +43,7 @@ Future<Host> buildWorkspaceRuntime(
   SecureCredentialStore? credentialStore,
 }) async {
   final workerTrustPolicy = workspaceReleaseTrustPolicy();
+  final workspacePaths = WorkspacePaths(config.dataDirectory);
   final secureCredentialStore =
       credentialStore ?? const PlatformSecureCredentialStore();
   final workerExecutor = WorkerProcessExecutor();
@@ -107,6 +112,55 @@ Future<Host> buildWorkspaceRuntime(
           authToken: config.authToken,
           hasActiveAssignments: () =>
               (connection?.activeAssignmentCount ?? 0) > 0,
+        );
+  final toolProfileReleaseStore = ToolProfileReleaseStore(
+    profilesRoot: WorkspacePaths(config.dataDirectory).profilesDirectory,
+    trustPolicy: workerTrustPolicy,
+  );
+  final bundledEngine = await loadBundledCliWorkerEngine(
+    enginesDirectory: workspacePaths.enginesDirectory,
+  );
+  final cliWorkerEngineSupervisor = bundledEngine == null
+      ? null
+      : CliWorkerEngineSupervisor(engineExecutable: bundledEngine.path);
+  late final WorkerReadinessMonitor readinessMonitor;
+  final toolProfileCatalog = config.cloudUri == null
+      ? null
+      : ToolProfileCatalogClient(
+          cloudUri: config.cloudUri!,
+          store: toolProfileReleaseStore,
+          trustPolicy: workerTrustPolicy,
+          workspaceRuntimeId: config.hostId,
+          authToken: config.authToken,
+          candidateValidator: (candidate, profileFile) async {
+            final supervisor = cliWorkerEngineSupervisor;
+            if (supervisor == null) return false;
+            final workers = (await localWorkerRegistry.list())
+                .where((worker) =>
+                    worker.workerTypeId == candidate.logicalWorkerTypeId)
+                .toList();
+            if (workers.isEmpty) return false;
+            final worker = workers.first;
+            final result = await supervisor.probe(
+              candidate,
+              profileFile: profileFile,
+              stateDirectory: workspacePaths.workerStateDirectory(worker.id),
+              mode: WorkerProbeMode.passive,
+              timeout: const Duration(seconds: 20),
+            );
+            return result.ready;
+          },
+          onRevocationsApplied: (workerTypeIds) async {
+            for (final workerTypeId in workerTypeIds) {
+              unawaited(readinessMonitor
+                  .checkNow(
+                    mode: LocalWorkerProbeMode.passive,
+                    workerTypeId: workerTypeId,
+                    includeDisabled: true,
+                  )
+                  .catchError((_) {}));
+            }
+          },
         );
   final activeWorkerIds = (await localWorkerRegistry.list())
       .where((worker) => worker.status == LocalWorkerStatus.ready)
@@ -231,16 +285,26 @@ Future<Host> buildWorkspaceRuntime(
             final localWorkers = await localWorkerRegistry.list();
             final lastSeenAt = DateTime.now().toUtc().toIso8601String();
             return Future.wait(localWorkers.map((worker) async {
-              String? runtimeVersion;
-              List<String> capabilities = const <String>[];
-              try {
-                final manifest = await workerVersionStore
-                    .activeManifest(worker.workerTypeId);
-                runtimeVersion = manifest?.workerVersion;
-                capabilities = manifest?.capabilities ?? capabilities;
-              } on Object {
-                // The release remains unavailable until local admission passes.
+              final catalogEntry =
+                  toolProfileCatalog?.entryForWorker(worker.workerTypeId);
+              final definitionId = catalogEntry?.profileDefinitionId;
+              ToolProfileReleaseAdmission? activeProfile;
+              if (definitionId != null) {
+                try {
+                  activeProfile =
+                      await toolProfileReleaseStore.activeRelease(definitionId);
+                } on Object {
+                  // Missing or revoked Profile evidence is reported as absent.
+                }
               }
+              final declaredCapabilities =
+                  catalogEntry?.capabilities ?? const <String>[];
+              final capabilities = <String>{
+                ...declaredCapabilities,
+                if (declaredCapabilities.contains('workstream_read'))
+                  'authorized_context_read',
+              }.toList()
+                ..sort();
               return <String, Object?>{
                 'workerId': worker.id,
                 'workerTypeId': worker.workerTypeId,
@@ -251,8 +315,11 @@ Future<Host> buildWorkspaceRuntime(
                 'readinessState': worker.readinessState.wireValue,
                 if (worker.readinessIssueCode != null)
                   'readinessIssueCode': worker.readinessIssueCode,
-                'workerRuntimeVersion': runtimeVersion,
-                'providerToolName': worker.toolName,
+                'engineVersion': cliWorkerEngineVersion,
+                'profileDefinitionId': definitionId,
+                'profileReleaseVersion': activeProfile?.releaseVersion,
+                'providerToolName':
+                    worker.toolName ?? catalogEntry?.providerToolName,
                 'providerToolVersion': worker.toolVersion,
                 'capabilities': capabilities,
                 'localConcurrencyLimit': worker.localConcurrencyLimit,
@@ -347,14 +414,52 @@ Future<Host> buildWorkspaceRuntime(
       }());
     });
   }
-  final readinessMonitor = WorkerReadinessMonitor(
+  readinessMonitor = WorkerReadinessMonitor(
     registry: localWorkerRegistry,
     adapterStore: v7AdapterPackageStore,
-    workerVersionStore: workerVersionStore,
-    workerProcessSupervisor: nativeWorkerSupervisor,
+    toolProfileReleaseStore: toolProfileReleaseStore,
+    toolProfileCatalog: toolProfileCatalog,
+    cliWorkerEngineSupervisor: cliWorkerEngineSupervisor,
+    workerStateDirectory: workspacePaths.workerStateDirectory,
+    profileDiagnosticStoreForWorker: (workerTypeId) => WorkerDiagnosticStore(
+      directory: workerVersionStore.logsDirectory(workerTypeId),
+    ),
+    ensureToolProfileAvailable: (workerTypeId) async {
+      await toolProfileCatalog?.syncCatalog();
+      await toolProfileCatalog?.syncWorkerProfiles(workerTypeId);
+    },
     executor: workerExecutor,
     readCredential: secureCredentialStore.read,
   );
+  if (toolProfileCatalog != null) {
+    var refreshingToolProfiles = false;
+    Future<void> refreshToolProfiles() async {
+      if (refreshingToolProfiles) return;
+      refreshingToolProfiles = true;
+      try {
+        await toolProfileCatalog.loadCatalog();
+        List<LogicalWorkerCatalogEntry> workers;
+        try {
+          workers = await toolProfileCatalog.syncCatalog();
+        } on Object {
+          workers = toolProfileCatalog.workers;
+        }
+        for (final worker in workers) {
+          final workerTypeId = worker.workerTypeId;
+          await toolProfileCatalog.syncWorkerProfiles(workerTypeId);
+        }
+      } on Object {
+        // Keep verified cached Profiles usable and retry on the next interval.
+      } finally {
+        refreshingToolProfiles = false;
+      }
+    }
+
+    Timer.periodic(const Duration(minutes: 10), (_) {
+      unawaited(refreshToolProfiles());
+    });
+    unawaited(refreshToolProfiles());
+  }
   final engine = Host(
     config: effectiveConfig,
     credentialStore: secureCredentialStore,
@@ -365,6 +470,8 @@ Future<Host> buildWorkspaceRuntime(
     adapterPackageStore: v7AdapterPackageStore,
     workerVersionStore: workerVersionStore,
     workerReleaseCatalog: workerReleaseCatalog,
+    toolProfileReleaseStore: toolProfileReleaseStore,
+    toolProfileCatalog: toolProfileCatalog,
     statusProvider: () async {
       await refreshUpdateAvailability();
       final workers = await localWorkerRegistry.list();

@@ -29,7 +29,9 @@ function candidate(overrides: Record<string, unknown> = {}) {
     worker_id: "worker-a",
     worker_type_id: "chatgpt",
     publisher: "chatgpt",
-    worker_runtime_version: "1.0.0",
+    engine_version: "1.0.0",
+    profile_definition_id: "chatgpt-codex",
+    profile_release_version: 3,
     provider_tool_name: "Codex CLI",
     provider_tool_version: "0.44.0",
     capabilities_json: JSON.stringify(["repository"]),
@@ -101,11 +103,16 @@ describe("V7 Project execution scheduler", () => {
     expect(result).toMatchObject({
       workerId: "worker-a",
       workerTypeId: "chatgpt",
-      workerRuntimeVersion: "1.0.0",
+      engineVersion: "1.0.0",
+      profileDefinitionId: "chatgpt-codex",
+      profileReleaseVersion: 3,
       providerToolName: "Codex CLI",
       providerToolVersion: "0.44.0",
       permissionSnapshot: {
-        workerRuntimeVersion: "1.0.0",
+        engineVersion: "1.0.0",
+        profileDefinitionId: "chatgpt-codex",
+        profileReleaseVersion: 3,
+        model: "gpt-5.6-codex",
         providerToolName: "Codex CLI",
         providerToolVersion: "0.44.0",
       },
@@ -113,7 +120,9 @@ describe("V7 Project execution scheduler", () => {
       selectionExplanation: {
         worker: {
           workBindingId: "implement",
-          workerRuntimeVersion: "1.0.0",
+          engineVersion: "1.0.0",
+          profileDefinitionId: "chatgpt-codex",
+          profileReleaseVersion: 3,
           providerToolName: "Codex CLI",
           providerToolVersion: "0.44.0",
           selection: "configured_preference",
@@ -122,7 +131,7 @@ describe("V7 Project execution scheduler", () => {
     });
 
     const atLimit = await selectProjectExecutionTarget(
-      db([candidate({ ...configured, active_assignments: 1 })]),
+      db([candidate({ ...configured, active_assignments: 2 })]),
       {
         projectId: "project-a",
         requesterUserId: "user-a",
@@ -207,7 +216,9 @@ describe("V7 Project execution scheduler", () => {
       worker_id: "worker-antigravity-1",
       worker_type_id: "gemini",
       publisher: "gemini",
-      worker_runtime_version: "1.0.0",
+      engine_version: "1.0.0",
+      profile_definition_id: "gemini-antigravity",
+      profile_release_version: 3,
       capabilities_json: JSON.stringify(["code", "shell"]),
       local_permissions_json: JSON.stringify([
         "repository:read",
@@ -237,7 +248,7 @@ describe("V7 Project execution scheduler", () => {
       workspaceId: "workspace-v7",
       workerId: "worker-antigravity-1",
       workerTypeId: "gemini",
-      effectivePermissions: ["repository:read", "repository:write"],
+      effectivePermissions: ["repository:read"],
     });
   });
 
@@ -267,7 +278,9 @@ describe("V7 Project execution scheduler", () => {
       worker_id: "worker-openai-1",
       worker_type_id: "openai-api",
       publisher: "openai-api",
-      worker_runtime_version: "1.0.0",
+      engine_version: "1.0.0",
+      profile_definition_id: "chatgpt-codex",
+      profile_release_version: 3,
       capabilities_json: JSON.stringify(["code"]),
       local_permissions_json: JSON.stringify(["repository:read"]),
       local_worker_activation_state: "enabled",
@@ -368,7 +381,7 @@ describe("V7 Project execution scheduler", () => {
       workerId: "worker-openai-1",
       workerTypeId: "openai-api",
       model: "gpt-5.5",
-      effectivePermissions: ["repository:read", "repository:write"],
+      effectivePermissions: ["repository:read"],
     });
   });
 
@@ -401,7 +414,9 @@ describe("V7 Project execution scheduler", () => {
       worker_id: "worker-sandboxed",
       worker_type_id: "chatgpt",
       publisher: "chatgpt",
-      worker_runtime_version: "1.0.0",
+      engine_version: "1.0.0",
+      profile_definition_id: "chatgpt-codex",
+      profile_release_version: 3,
       capabilities_json: JSON.stringify(["code"]),
       // Local worker manifest / local permissions ONLY permit repository:read
       local_permissions_json: JSON.stringify(["repository:read"]),
@@ -425,8 +440,6 @@ describe("V7 Project execution scheduler", () => {
     expect(target).not.toBeNull();
     expect(target?.effectivePermissions).toEqual([
       "repository:read",
-      "repository:write",
-      "shell:execute",
       "network:use",
     ]);
   });
@@ -494,6 +507,18 @@ describe("V7 Project execution scheduler", () => {
         request,
       ),
     ).resolves.toMatchObject({ workerId: "worker-v7" });
+    await expect(
+      selectProjectExecutionTarget(
+        db([
+          {
+            ...base,
+            cloud_scheduling_state: "enabled",
+            profile_release_version: null,
+          },
+        ]),
+        request,
+      ),
+    ).resolves.toBeNull();
     await expect(
       selectProjectExecutionTarget(
         db([

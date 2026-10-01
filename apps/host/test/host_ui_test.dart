@@ -1217,6 +1217,7 @@ void main() {
     expect(find.text('Setup required'), findsNWidgets(2));
     expect(find.text('Codex CLI version not detected'), findsOneWidget);
     expect(find.text('agy version not detected'), findsOneWidget);
+    expect(find.textContaining('Capabilities:'), findsNothing);
     expect(find.byType(ExpansionTile), findsNothing);
     expect(find.text('Set up ChatGPT'), findsNothing);
     expect(find.text('Set up Gemini'), findsNothing);
@@ -1352,17 +1353,18 @@ void main() {
     await tester.ensureVisible(find.text('Advanced Diagnostics'));
     await tester.tap(find.text('Advanced Diagnostics'));
     await tester.pumpAndSettle();
-    expect(find.text('Worker Packages'), findsOneWidget);
-    await tester.tap(find.text('ChatGPT local'));
+    expect(find.text('Engine & Tool Profiles'), findsOneWidget);
+    await tester.tap(find.text('ChatGPT').last);
     await tester.pumpAndSettle();
-    expect(find.text('Package ID'), findsOneWidget);
-    expect(find.text('Tool'), findsOneWidget);
+    expect(find.text('Engine version'), findsOneWidget);
+    expect(find.text('1.0.0'), findsWidgets);
+    expect(find.text('Provider CLI'), findsOneWidget);
+    expect(find.text('Provider CLI version'), findsOneWidget);
     expect(find.text('Codex CLI'), findsOneWidget);
-    expect(find.text('Path'), findsOneWidget);
-    expect(find.text('/Users/test/.local/bin/codex'), findsOneWidget);
-    expect(find.text('Version'), findsOneWidget);
     expect(find.text('1.2.3'), findsOneWidget);
-    expect(find.text('Signing key'), findsWidgets);
+    expect(find.textContaining('Worker version'), findsNothing);
+    expect(find.textContaining('Signing key'), findsNothing);
+    expect(find.textContaining('Release channel'), findsNothing);
   });
 
   testWidgets('testing a disabled Worker preserves activation', (tester) async {

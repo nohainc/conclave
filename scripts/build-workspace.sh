@@ -40,6 +40,7 @@ HOST="$ROOT/apps/host"
 command -v flutter >/dev/null 2>&1 || { echo "Flutter is required." >&2; exit 1; }
 cd "$HOST"
 flutter pub get
+bash "$ROOT/scripts/build-cli-worker-engine.sh"
 if [[ "$MODE" == debug ]]; then
   flutter build "$target" --debug \
     --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}" \

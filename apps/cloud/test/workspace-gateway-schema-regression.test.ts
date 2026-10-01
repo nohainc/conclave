@@ -85,6 +85,11 @@ describe("Workspace Gateway active-schema regression", () => {
       "workspace_project_grants",
       "workstream_execution_policies",
       "worker_assignments",
+      "worker_catalog",
+      "tool_profile_definitions",
+      "tool_profile_releases",
+      "tool_profile_release_audit",
+      "tool_profile_channel_pointers",
     ];
     const actualTables = new Set(
       database
@@ -97,6 +102,8 @@ describe("Workspace Gateway active-schema regression", () => {
     expect(expectedTables.filter((table) => !actualTables.has(table))).toEqual(
       [],
     );
+    expect(actualTables.has("worker_releases")).toBe(false);
+    expect(actualTables.has("v7_adapter_releases")).toBe(false);
     const inventoryColumns = new Set(
       database
         .prepare("PRAGMA table_info(workspace_worker_inventory)")
@@ -107,7 +114,9 @@ describe("Workspace Gateway active-schema regression", () => {
       [
         "activation_state",
         "readiness_state",
-        "worker_runtime_version",
+        "engine_version",
+        "profile_definition_id",
+        "profile_release_version",
         "provider_tool_name",
         "provider_tool_version",
       ].every((column) => inventoryColumns.has(column)),
@@ -124,6 +133,15 @@ describe("Workspace Gateway active-schema regression", () => {
         "provider_tool_path",
       ].some((column) => inventoryColumns.has(column)),
     ).toBe(false);
+    expect(inventoryColumns.has("worker_runtime_version")).toBe(false);
+    const assignmentColumns = new Set(
+      database
+        .prepare("PRAGMA table_info(worker_assignments)")
+        .all()
+        .map((row) => String((row as { name: string }).name)),
+    );
+    expect(assignmentColumns.has("engine_version")).toBe(true);
+    expect(assignmentColumns.has("worker_version")).toBe(false);
 
     const workspaceId = "workspace-schema-regression";
     const runtimeId = "runtime-schema-regression";

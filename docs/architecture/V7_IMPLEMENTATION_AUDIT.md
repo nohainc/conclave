@@ -1,5 +1,10 @@
 # Architecture v7 Implementation Audit
 
+**Status:** Historical audit snapshot. Architecture v7 is the historical
+baseline; Architecture v8 is the active runtime target. This audit is retained
+for predecessor evidence and does not define current Worker implementation
+status.
+
 **Reviewed baseline:** `02ce1db`
 **Audit date:** 2026-09-26
 **Architecture:** [Architecture v7](ARCHITECTURE_V7.md)
@@ -7,8 +12,8 @@
 
 ## Executive assessment
 
-Architecture v7 is the **current and sole Worker ownership architecture**. It
-is **not yet the implemented baseline**. The Phase 1–3 architecture work and
+At the time of this audit, Architecture v7 was treated as the intended Worker
+ownership architecture but was **not yet the implemented baseline**. The Phase 1–3 architecture work and
 Phase 4 public-key release trust are implemented. Production Worker acceptance,
 full failure/security acceptance, and native macOS app update recovery remain
 open. Do not change the baseline declaration until every release gate has

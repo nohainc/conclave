@@ -1,6 +1,9 @@
 # Conclave AX Roadmap
 
 Architecture v8 is the active implementation target.
+It is not declared implemented for production; the release gate and current
+evidence are tracked in the
+[v8 implementation plan](docs/roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md#phase-36--architecture-v8-release-declaration).
 
 ~~~text
 Conclave AX
@@ -11,9 +14,10 @@ Conclave AX
 -> provider CLI
 ~~~
 
-Architecture v8 preserves the v7 Workspace ownership model and current Work v1
-product, but replaces separate provider-specific native Worker executables with
-one generic CLI Worker Engine and immutable signed Tool Profiles.
+Architecture v8 preserves the historical v7 Workspace ownership model and
+current Work v1 product, but replaces separate provider-specific native Worker
+executables with one generic CLI Worker Engine and immutable signed Tool
+Profiles.
 
 ## Current product contract
 
@@ -177,10 +181,11 @@ Earlier implementation history remains available in:
 - [v4 Implementation Status](docs/roadmaps/V4_IMPLEMENTATION_STATUS.md)
 
 
-## Worker Runtime v2 — standalone Dart Worker executables
+## Historical predecessor: Worker Runtime v2
 
-ADR-017 keeps Architecture v7 but replaces the legacy Node-backed first-party
-Worker runtime with independently versioned native Dart console executables:
+Worker Runtime v2 was the process-boundary predecessor to the v8 Engine/Profile
+architecture. ADR-017's implementation created independently versioned native
+Dart console executables for each provider:
 
 ~~~text
 Conclave Workspace
@@ -190,16 +195,15 @@ Conclave Workspace
 -> Gemini Worker executable -> agy
 ~~~
 
-Workspace owns Worker installation, signature verification, activation, update,
-rollback, process supervision and Local Worker Protocol. Each Worker owns
-provider CLI discovery, version/auth checks, execution, session IDs, output
-parsing and provider-specific diagnostics.
+At that stage, Workspace owned Worker installation, signature verification,
+activation, update, rollback, process supervision and Local Worker Protocol.
+Each executable owned provider CLI discovery, version/auth checks, execution,
+session IDs, output parsing and provider-specific diagnostics. That design is
+retained only as migration history; ADR-018 supersedes it for implementation.
 
-This is intentionally an aggressive pre-production convergence: after both Dart
-Workers and update/rollback acceptance pass, the legacy Node `.mjs` adapters, Node
-runtime prerequisite, legacy release schema, obsolete local Worker
-fields, and unreleased D1 compatibility layers should be removed rather than
-maintained indefinitely.
+The v2 cleanup plan is historical. Remaining v2 code and release tooling are
+removed only after the v8 Phase 31 acceptance gate passes; this section is not
+an implementation guide for new CLI providers.
 
 Implementation sequence:
 
@@ -284,4 +288,3 @@ re-registering or rebuilding the runtime, and passive expiry never disconnects
 Cloud participation.
 
 [Workspace Desktop Lifecycle Implementation](docs/roadmaps/WORKSPACE_DESKTOP_LIFECYCLE_IMPLEMENTATION.md)
-

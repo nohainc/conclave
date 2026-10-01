@@ -1,0 +1,7 @@
+{
+  "versionFixture": "version/supported.txt",
+  "versionExitCode": 0,
+  "commandExitCodes": {
+    "authentication": 0
+  }
+}

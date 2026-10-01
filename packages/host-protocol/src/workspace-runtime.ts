@@ -55,13 +55,14 @@ const executionErrorCode = z.enum(EXECUTION_ERROR_CODES);
 /** Product-facing Worker Type IDs; legacy provider package IDs are not valid. */
 export const WorkspaceProductWorkerTypeIdSchema = nonEmptyString
   .max(128)
+  .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/)
   .refine((id) => id !== "codex" && id !== "antigravity", {
     message: "legacy package IDs are not Workspace product Worker Types",
   });
 
 export const WorkspaceWorkerInventoryEntrySchema = z
   .object({
-    workerId: nonEmptyString.max(128),
+    workerId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
     workerTypeId: WorkspaceProductWorkerTypeIdSchema,
     activationState: z.enum(["enabled", "disabled"]),
     readinessState: z.enum([
@@ -76,10 +77,32 @@ export const WorkspaceWorkerInventoryEntrySchema = z
       .string()
       .regex(/^[a-z][a-z0-9_]{0,127}$/)
       .optional(),
-    workerRuntimeVersion: z.string().max(128).nullable(),
-    providerToolName: z.string().max(128).nullable(),
-    providerToolVersion: z.string().max(128).nullable(),
-    capabilities: z.array(nonEmptyString.max(128)).max(128),
+    engineVersion: z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$/)
+      .nullable(),
+    profileDefinitionId: z
+      .string()
+      .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/)
+      .max(96)
+      .nullable(),
+    profileReleaseVersion: z
+      .number()
+      .int()
+      .positive()
+      .max(Number.MAX_SAFE_INTEGER)
+      .nullable(),
+    providerToolName: z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,127}$/)
+      .nullable(),
+    providerToolVersion: z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$/)
+      .nullable(),
+    capabilities: z
+      .array(z.string().regex(/^[a-z][a-z0-9_:-]{0,127}$/))
+      .max(128),
     localConcurrencyLimit: z.number().int().min(1).max(1024),
     revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
     createdAt: timestamp,

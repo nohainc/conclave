@@ -49,7 +49,11 @@ the Worker.
 
 ## Decision
 
-### 1. Historical v7/v2 decision
+> **Historical decision:** the sections below record the v7/Worker Runtime v2
+> decision as made. They are not current implementation guidance. ADR-018
+> supersedes the per-provider executable model for first-party CLI integrations.
+
+### 1. Decision at the time: v7/v2
 
 This change does **not** create Architecture v8.
 

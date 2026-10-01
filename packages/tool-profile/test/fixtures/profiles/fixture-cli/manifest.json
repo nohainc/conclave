@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "profile": "../../fixture-cli.v1.json",
+  "versionCases": [
+    {
+      "name": "supported",
+      "fixture": "version/supported.txt",
+      "exitCode": 0,
+      "expected": {
+        "version": "0.3.0",
+        "supported": true,
+        "issueCode": null
+      }
+    },
+    {
+      "name": "unsupported",
+      "fixture": "version/unsupported.txt",
+      "exitCode": 0,
+      "expected": {
+        "version": "99.0.0",
+        "supported": false,
+        "issueCode": "unsupported_provider_tool_version"
+      }
+    },
+    {
+      "name": "malformed",
+      "fixture": "version/malformed.txt",
+      "exitCode": 0,
+      "expected": {
+        "version": null,
+        "supported": false,
+        "issueCode": "unsupported_provider_tool_version"
+      }
+    }
+  ],
+  "readinessCases": [
+    {
+      "name": "ready",
+      "fixture": "auth/ready.json",
+      "expected": {
+        "ready": true,
+        "providerVersion": "0.3.0",
+        "checks": [
+          { "code": "provider_tool_version", "status": "passed" },
+          { "code": "fixture_auth", "status": "passed" }
+        ],
+        "issueCode": null
+      }
+    },
+    {
+      "name": "authentication-required",
+      "fixture": "auth/authentication-required.json",
+      "expected": {
+        "ready": false,
+        "providerVersion": "0.3.0",
+        "checks": [
+          { "code": "provider_tool_version", "status": "passed" },
+          { "code": "fixture_auth", "status": "failed" }
+        ],
+        "issueCode": "provider_authentication_required"
+      }
+    }
+  ],
+  "executionCases": [
+    {
+      "name": "execute-success",
+      "fixture": "execute-success/output.txt",
+      "sessionPolicy": "stateless",
+      "expected": {
+        "terminal": "success",
+        "finalText": "fixture echo: fixture prompt\n",
+        "sessionId": null,
+        "terminalStatus": null,
+        "progress": [],
+        "issueCode": null
+      }
+    },
+    {
+      "name": "execute-error",
+      "fixture": "execute-error/output.txt",
+      "exitCode": 2,
+      "sessionPolicy": "stateless",
+      "expected": {
+        "terminal": "failure",
+        "finalText": "",
+        "sessionId": null,
+        "terminalStatus": null,
+        "progress": [],
+        "issueCode": "provider_failure"
+      }
+    }
+  ]
+}

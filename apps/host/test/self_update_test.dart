@@ -516,8 +516,7 @@ void main() {
     await root.delete(recursive: true);
   });
 
-  test('refreshes Worker release revocations from the Worker trust API',
-      () async {
+  test('refreshes shared Workspace and Tool Profile release trust', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final requestPath = Completer<String>();
     final subscription = server.listen((request) async {
@@ -530,6 +529,13 @@ void main() {
             {'workerTypeId': 'chatgpt', 'version': '2.0.0'}
           ],
           'revokedWorkspaceReleases': [],
+          'revokedToolProfiles': [
+            {
+              'profileDefinitionId': 'chatgpt-codex',
+              'releaseVersion': 3,
+              'payloadDigest': 'revoked-profile-digest',
+            }
+          ],
         }));
       await request.response.close();
     });
@@ -540,9 +546,10 @@ void main() {
         authToken: null,
         policy: policy,
       );
-      expect(await requestPath.future, '/api/worker-releases/trust');
+      expect(await requestPath.future, '/api/release-trust');
       expect(policy.revokedKeyIds, {'key-1'});
-      expect(policy.revokedReleaseIds, {'chatgpt@2.0.0'});
+      expect(policy.revokedReleaseIds, {'chatgpt@2.0.0', 'chatgpt-codex@3'});
+      expect(policy.revokedDigests, {'revoked-profile-digest'});
     } finally {
       await subscription.cancel();
       await server.close(force: true);

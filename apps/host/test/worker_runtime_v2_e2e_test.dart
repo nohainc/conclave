@@ -102,7 +102,7 @@ void main() {
     if (await scratch.exists()) await scratch.delete(recursive: true);
   });
 
-  test('Workspace supervises native Worker initialize, probe and execution',
+  test('v2 migration supervises Worker initialize, probe and execution',
       () async {
     expect(admission.manifest.workerTypeId, 'test');
     expect(admission.manifest.platform, currentWorkerPlatform());
@@ -1015,7 +1015,7 @@ void main() {
     }
   });
 
-  test('ensureWorkerRelease installs a signed native Worker release', () async {
+  test('v2 migration installs a signed Worker release', () async {
     final store = WorkerVersionStore(
       workersRoot: Directory('${scratch.path}/EnsureWorkerRelease'),
       trustPolicy: signingFixture.trustPolicy,

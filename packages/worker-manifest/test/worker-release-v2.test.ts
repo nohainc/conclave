@@ -22,8 +22,8 @@ const validManifest = {
   signature: "fixture-signature",
 };
 
-describe("Worker release manifest v2", () => {
-  it("parses provider-neutral native Worker release metadata", () => {
+describe("Migration-only Worker release manifest v2", () => {
+  it("parses historical provider-neutral native Worker release metadata", () => {
     expect(parseWorkerReleaseManifestV2(validManifest)).toEqual(validManifest);
   });
 

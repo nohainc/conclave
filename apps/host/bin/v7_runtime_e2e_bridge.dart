@@ -363,7 +363,9 @@ exec __DART__ "$(dirname "$0")/adapter.dart"
             'readinessIssueCode': worker.readinessIssueCode,
           // The bridge executes a test Worker implementation, so report a
           // stable test runtime version for Cloud admission/scheduling.
-          'workerRuntimeVersion': '0.0.0-test',
+          'engineVersion': '1.0.0-test',
+          'profileDefinitionId': 'fixture-profile',
+          'profileReleaseVersion': 1,
           'providerToolName': null,
           'providerToolVersion': null,
           'capabilities': active?['capabilities'] ?? const <String>[],

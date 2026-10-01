@@ -46,7 +46,7 @@ describe("V7 Workspace inventory recovery acceptance", () => {
         worker_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
         worker_type_id TEXT NOT NULL, activation_state TEXT NOT NULL,
         readiness_state TEXT NOT NULL, readiness_issue_code TEXT,
-        worker_runtime_version TEXT, provider_tool_name TEXT, provider_tool_version TEXT,
+        engine_version TEXT, profile_definition_id TEXT, profile_release_version INTEGER, provider_tool_name TEXT, provider_tool_version TEXT,
         capabilities_json TEXT NOT NULL, local_concurrency_limit INTEGER NOT NULL,
         revision INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
         last_seen_at TEXT NOT NULL
@@ -117,7 +117,9 @@ describe("V7 Workspace inventory recovery acceptance", () => {
       readinessState: "ready",
       revision: 1,
       localConcurrencyLimit: 1,
-      workerRuntimeVersion: "2.0.0",
+      engineVersion: "1.0.0",
+      profileDefinitionId: "chatgpt-codex",
+      profileReleaseVersion: 3,
       providerToolName: "codex",
       providerToolVersion: "1.0.0",
       providerToolPath: "/Users/local/.local/bin/codex",
@@ -138,14 +140,16 @@ describe("V7 Workspace inventory recovery acceptance", () => {
     });
     let row = sqlite
       .prepare(
-        "SELECT workspace_id, activation_state, readiness_state, readiness_issue_code, worker_runtime_version, provider_tool_name, provider_tool_version, capabilities_json, revision FROM workspace_worker_inventory WHERE worker_id = ?",
+        "SELECT workspace_id, activation_state, readiness_state, readiness_issue_code, engine_version, profile_definition_id, profile_release_version, provider_tool_name, provider_tool_version, capabilities_json, revision FROM workspace_worker_inventory WHERE worker_id = ?",
       )
       .get("worker-shared-id") as Record<string, unknown>;
     expect(row).toMatchObject({
       workspace_id: "workspace-a",
       activation_state: "enabled",
       readiness_state: "ready",
-      worker_runtime_version: "2.0.0",
+      engine_version: "1.0.0",
+      profile_definition_id: "chatgpt-codex",
+      profile_release_version: 3,
       provider_tool_name: "codex",
       provider_tool_version: "1.0.0",
       capabilities_json: '["code"]',

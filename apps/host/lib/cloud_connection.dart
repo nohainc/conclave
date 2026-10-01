@@ -1476,7 +1476,9 @@ class HostCloudConnection {
         'requestedByUserId',
         'workspaceRuntimeId',
         'workerId',
-        'resolvedWorkerVersion',
+        'engineVersion',
+        'profileDefinitionId',
+        'profileReleaseVersion',
         'credentialProfileId',
         'config',
         'permissions',
@@ -1502,12 +1504,17 @@ class HostCloudConnection {
       'objective',
       'role',
       'workerId',
-      'resolvedWorkerVersion',
+      'engineVersion',
+      'profileDefinitionId',
     ]) {
       if (rawPayload[field] is! String ||
           (rawPayload[field] as String).trim().isEmpty) {
         return 'Assignment field $field is required';
       }
+    }
+    final profileReleaseVersion = rawPayload['profileReleaseVersion'];
+    if (profileReleaseVersion is! int || profileReleaseVersion < 1) {
+      return 'Assignment profileReleaseVersion must be a positive integer';
     }
     if (rawPayload['input'] is! Map) {
       return 'Assignment input must be an object';

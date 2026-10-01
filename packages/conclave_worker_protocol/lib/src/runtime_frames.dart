@@ -15,6 +15,7 @@ final class ProbeRequest extends WorkerFrame {
   ProbeRequest({
     required super.requestId,
     required this.mode,
+    this.timeoutMs = WorkerProtocolLimits.maxProbeTimeoutMs,
     this.protocolVersion = localWorkerProtocolVersion,
   }) {
     _validateProtocol(protocolVersion);
@@ -23,26 +24,34 @@ final class ProbeRequest extends WorkerFrame {
       'requestId',
       WorkerProtocolLimits.maxRequestIdLength,
     );
+    if (timeoutMs < 100 || timeoutMs > WorkerProtocolLimits.maxProbeTimeoutMs) {
+      throw const FormatException('probe timeout is outside the allowed range');
+    }
   }
 
   final String protocolVersion;
 
   /// `passive` guarantees no provider model request; `live` may consume quota.
   final WorkerProbeMode mode;
+  final int timeoutMs;
 
   @override
   String get type => 'probe.request';
 
   @override
   Map<String, Object?> toJson() => {
-    'type': type,
-    'protocolVersion': protocolVersion,
-    'requestId': requestId,
-    'mode': mode.name,
-  };
+        'type': type,
+        'protocolVersion': protocolVersion,
+        'requestId': requestId,
+        'mode': mode.name,
+        'timeoutMs': timeoutMs,
+      };
 
   factory ProbeRequest.fromJson(Map<String, Object?> json) {
-    _expectKeys(json, const {'type', 'protocolVersion', 'requestId', 'mode'});
+    _expectKeys(
+      json,
+      const {'type', 'protocolVersion', 'requestId', 'mode', 'timeoutMs'},
+    );
     _expectType(json, 'probe.request');
     final mode = _requiredString(json, 'mode');
     return ProbeRequest(
@@ -57,31 +66,36 @@ final class ProbeRequest extends WorkerFrame {
         orElse: () =>
             throw const FormatException('probe mode must be passive or live'),
       ),
+      timeoutMs: _probeTimeout(json),
     );
   }
 }
 
+int _probeTimeout(Map<String, Object?> json) {
+  final value = json['timeoutMs'] ?? WorkerProtocolLimits.maxProbeTimeoutMs;
+  if (value is! int ||
+      value < 100 ||
+      value > WorkerProtocolLimits.maxProbeTimeoutMs) {
+    throw const FormatException('probe timeout is outside the allowed range');
+  }
+  return value;
+}
+
 final class ProviderToolInfo {
   ProviderToolInfo({required String name, String? version, String? path})
-    : name = _boundedText(
-        name,
-        'tool name',
-        WorkerProtocolLimits.maxProviderToolNameLength,
-      ),
-      version = version == null
-          ? null
-          : _boundedText(
-              version,
-              'tool version',
-              WorkerProtocolLimits.maxProviderToolVersionLength,
-            ),
-      path = path == null
-          ? null
-          : _boundedText(
-              path,
-              'tool path',
-              WorkerProtocolLimits.maxProviderToolPathLength,
-            );
+      : name = _boundedText(
+          name,
+          'tool name',
+          WorkerProtocolLimits.maxProviderToolNameLength,
+        ),
+        version = version == null
+            ? null
+            : _boundedText(
+                version,
+                'tool version',
+                WorkerProtocolLimits.maxProviderToolVersionLength,
+              ),
+        path = path;
 
   final String name;
   final String? version;
@@ -90,13 +104,12 @@ final class ProviderToolInfo {
   final String? path;
 
   Map<String, Object?> toJson() => {
-    'name': name,
-    if (version != null) 'version': version,
-    if (path != null) 'path': path,
-  };
+        'name': name,
+        if (version != null) 'version': version,
+      };
 
   factory ProviderToolInfo.fromJson(Map<String, Object?> json) {
-    _expectKeys(json, const {'name', 'version', 'path'});
+    _expectKeys(json, const {'name', 'version'});
     return ProviderToolInfo(
       name: _requiredString(json, 'name'),
       version: _optionalString(json, 'version'),
@@ -110,16 +123,16 @@ final class ProbeCheck {
     required String code,
     required this.status,
     required String message,
-  }) : code = _boundedText(
-         code,
-         'check code',
-         WorkerProtocolLimits.maxCheckCodeLength,
-       ),
-       message = _safeBoundedText(
-         message,
-         'check message',
-         WorkerProtocolLimits.maxCheckMessageLength,
-       ) {
+  })  : code = _boundedText(
+          code,
+          'check code',
+          WorkerProtocolLimits.maxCheckCodeLength,
+        ),
+        message = _safeBoundedText(
+          message,
+          'check message',
+          WorkerProtocolLimits.maxCheckMessageLength,
+        ) {
     if (!RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(this.code)) {
       throw const FormatException(
         'check code must be a stable lowercase issue identifier',
@@ -132,10 +145,10 @@ final class ProbeCheck {
   final String message;
 
   Map<String, Object?> toJson() => {
-    'code': code,
-    'status': status.name,
-    'message': message,
-  };
+        'code': code,
+        'status': status.name,
+        'message': message,
+      };
 
   factory ProbeCheck.fromJson(Map<String, Object?> json) {
     _expectKeys(json, const {'code', 'status', 'message'});
@@ -157,24 +170,32 @@ final class ProbeResult extends WorkerFrame {
     required this.mode,
     required this.ready,
     required Iterable<ProbeCheck> checks,
-    this.tool,
+    ProviderToolInfo? tool,
+    String? providerToolName,
+    String? providerToolVersion,
     String? issueCode,
     String? diagnostics,
-  }) : checks = List.unmodifiable(checks),
-       issueCode = issueCode == null
-           ? null
-           : _boundedText(
-               issueCode,
-               'issueCode',
-               WorkerProtocolLimits.maxCheckCodeLength,
-             ),
-       diagnostics = diagnostics == null
-           ? null
-           : _safeBoundedText(
-               diagnostics,
-               'diagnostics',
-               WorkerProtocolLimits.maxDiagnosticLength,
-             ) {
+  })  : providerToolName = (providerToolName ?? tool?.name) == null
+            ? null
+            : _safeToolName(providerToolName ?? tool!.name),
+        providerToolVersion = (providerToolVersion ?? tool?.version) == null
+            ? null
+            : _safeToolVersion(providerToolVersion ?? tool!.version!),
+        checks = List.unmodifiable(checks),
+        issueCode = issueCode == null
+            ? null
+            : _boundedText(
+                issueCode,
+                'issueCode',
+                WorkerProtocolLimits.maxCheckCodeLength,
+              ),
+        diagnostics = diagnostics == null
+            ? null
+            : _safeBoundedText(
+                diagnostics,
+                'diagnostics',
+                WorkerProtocolLimits.maxDiagnosticLength,
+              ) {
     _validateToken(
       requestId,
       'requestId',
@@ -188,6 +209,11 @@ final class ProbeResult extends WorkerFrame {
         'a not-ready probe result requires an issueCode',
       );
     }
+    if (this.providerToolName == null && this.providerToolVersion != null) {
+      throw const FormatException(
+        'providerToolVersion requires providerToolName',
+      );
+    }
     if (this.issueCode != null && !WorkerIssueCode.isKnown(this.issueCode!)) {
       throw const FormatException('issueCode is not a supported stable code');
     }
@@ -195,7 +221,12 @@ final class ProbeResult extends WorkerFrame {
 
   final WorkerProbeMode mode;
   final bool ready;
-  final ProviderToolInfo? tool;
+  final String? providerToolName;
+  final String? providerToolVersion;
+  @Deprecated('Use providerToolName and providerToolVersion')
+  ProviderToolInfo? get tool => providerToolName == null
+      ? null
+      : ProviderToolInfo(name: providerToolName!, version: providerToolVersion);
   final List<ProbeCheck> checks;
   final String? issueCode;
   final String? diagnostics;
@@ -205,15 +236,16 @@ final class ProbeResult extends WorkerFrame {
 
   @override
   Map<String, Object?> toJson() => {
-    'type': type,
-    'requestId': requestId,
-    'mode': mode.name,
-    'ready': ready,
-    'tool': tool?.toJson(),
-    'checks': checks.map((check) => check.toJson()).toList(growable: false),
-    'issueCode': issueCode,
-    'diagnostics': diagnostics,
-  };
+        'type': type,
+        'requestId': requestId,
+        'mode': mode.name,
+        'ready': ready,
+        'providerToolName': providerToolName,
+        'providerToolVersion': providerToolVersion,
+        'checks': checks.map((check) => check.toJson()).toList(growable: false),
+        'issueCode': issueCode,
+        'diagnostics': diagnostics,
+      };
 
   factory ProbeResult.fromJson(Map<String, Object?> json) {
     _expectKeys(json, const {
@@ -221,7 +253,8 @@ final class ProbeResult extends WorkerFrame {
       'requestId',
       'mode',
       'ready',
-      'tool',
+      'providerToolName',
+      'providerToolVersion',
       'checks',
       'issueCode',
       'diagnostics',
@@ -229,12 +262,19 @@ final class ProbeResult extends WorkerFrame {
     _expectType(json, 'probe.result');
     final rawMode = _requiredString(json, 'mode');
     final rawReady = json['ready'];
-    final rawTool = json['tool'];
+    final rawToolName = json['providerToolName'];
+    final rawToolVersion = json['providerToolVersion'];
     final rawChecks = json['checks'];
     if (rawReady is! bool)
       throw const FormatException('ready must be a boolean');
-    if (rawTool != null && rawTool is! Map)
-      throw const FormatException('tool must be an object or null');
+    if (rawToolName != null && rawToolName is! String)
+      throw const FormatException('providerToolName must be a string or null');
+    if (rawToolVersion != null && rawToolVersion is! String)
+      throw const FormatException(
+          'providerToolVersion must be a string or null');
+    if (rawToolName == null && rawToolVersion != null)
+      throw const FormatException(
+          'providerToolVersion requires providerToolName');
     if (rawChecks is! List ||
         rawChecks.length > WorkerProtocolLimits.maxProbeChecks) {
       throw const FormatException('checks must be a bounded array');
@@ -247,18 +287,13 @@ final class ProbeResult extends WorkerFrame {
       ),
       mode: _parseProbeMode(rawMode),
       ready: rawReady,
-      tool: rawTool == null
-          ? null
-          : ProviderToolInfo.fromJson(
-              Map<String, Object?>.from(rawTool as Map),
-            ),
-      checks: rawChecks
-          .map((check) {
-            if (check is! Map)
-              throw const FormatException('each check must be an object');
-            return ProbeCheck.fromJson(Map<String, Object?>.from(check));
-          })
-          .toList(growable: false),
+      providerToolName: rawToolName as String?,
+      providerToolVersion: rawToolVersion as String?,
+      checks: rawChecks.map((check) {
+        if (check is! Map)
+          throw const FormatException('each check must be an object');
+        return ProbeCheck.fromJson(Map<String, Object?>.from(check));
+      }).toList(growable: false),
       issueCode: _optionalString(json, 'issueCode'),
       diagnostics: _optionalString(json, 'diagnostics'),
     );
@@ -331,18 +366,18 @@ final class ExecuteRequest extends WorkerFrame {
 
   @override
   Map<String, Object?> toJson() => {
-    'type': type,
-    'protocolVersion': protocolVersion,
-    'requestId': requestId,
-    'assignmentId': assignmentId,
-    'prompt': prompt,
-    'model': model,
-    'timeoutMs': timeoutMs,
-    'sessionPolicy': sessionPolicy == WorkerSessionPolicy.durableSession
-        ? 'durable_session'
-        : 'stateless',
-    if (sessionKey != null) 'sessionKey': sessionKey,
-  };
+        'type': type,
+        'protocolVersion': protocolVersion,
+        'requestId': requestId,
+        'assignmentId': assignmentId,
+        'prompt': prompt,
+        'model': model,
+        'timeoutMs': timeoutMs,
+        'sessionPolicy': sessionPolicy == WorkerSessionPolicy.durableSession
+            ? 'durable_session'
+            : 'stateless',
+        if (sessionKey != null) 'sessionKey': sessionKey,
+      };
 
   factory ExecuteRequest.fromJson(Map<String, Object?> json) {
     _expectKeys(json, const {
@@ -397,12 +432,12 @@ final class WorkerProgress extends WorkerFrame {
     required this.percentage,
     String? message,
   }) : message = message == null
-           ? null
-           : _safeBoundedText(
-               message,
-               'progress message',
-               WorkerProtocolLimits.maxProgressMessageLength,
-             ) {
+            ? null
+            : _safeBoundedText(
+                message,
+                'progress message',
+                WorkerProtocolLimits.maxProgressMessageLength,
+              ) {
     _validateToken(
       requestId,
       'requestId',
@@ -429,12 +464,12 @@ final class WorkerProgress extends WorkerFrame {
 
   @override
   Map<String, Object?> toJson() => {
-    'type': type,
-    'requestId': requestId,
-    'assignmentId': assignmentId,
-    'percentage': percentage,
-    if (message != null) 'message': message,
-  };
+        'type': type,
+        'requestId': requestId,
+        'assignmentId': assignmentId,
+        'percentage': percentage,
+        if (message != null) 'message': message,
+      };
 
   factory WorkerProgress.fromJson(Map<String, Object?> json) {
     _expectKeys(json, const {
@@ -506,12 +541,12 @@ final class WorkerResult extends WorkerFrame {
 
   @override
   Map<String, Object?> toJson() => {
-    'type': type,
-    'requestId': requestId,
-    'assignmentId': assignmentId,
-    'output': output,
-    'artifacts': artifacts,
-  };
+        'type': type,
+        'requestId': requestId,
+        'assignmentId': assignmentId,
+        'output': output,
+        'artifacts': artifacts,
+      };
 
   factory WorkerResult.fromJson(Map<String, Object?> json) {
     _expectKeys(json, const {
@@ -555,23 +590,23 @@ final class WorkerErrorFrame extends WorkerFrame {
     this.assignmentId,
     this.retryable = false,
     String? diagnostics,
-  }) : code = _boundedText(
-         code,
-         'error code',
-         WorkerProtocolLimits.maxCheckCodeLength,
-       ),
-       message = _safeBoundedText(
-         message,
-         'error message',
-         WorkerProtocolLimits.maxErrorMessageLength,
-       ),
-       diagnostics = diagnostics == null
-           ? null
-           : _safeBoundedText(
-               diagnostics,
-               'diagnostics',
-               WorkerProtocolLimits.maxDiagnosticLength,
-             ) {
+  })  : code = _boundedText(
+          code,
+          'error code',
+          WorkerProtocolLimits.maxCheckCodeLength,
+        ),
+        message = _safeBoundedText(
+          message,
+          'error message',
+          WorkerProtocolLimits.maxErrorMessageLength,
+        ),
+        diagnostics = diagnostics == null
+            ? null
+            : _safeBoundedText(
+                diagnostics,
+                'diagnostics',
+                WorkerProtocolLimits.maxDiagnosticLength,
+              ) {
     _validateToken(
       requestId,
       'requestId',
@@ -600,14 +635,14 @@ final class WorkerErrorFrame extends WorkerFrame {
 
   @override
   Map<String, Object?> toJson() => {
-    'type': type,
-    'requestId': requestId,
-    if (assignmentId != null) 'assignmentId': assignmentId,
-    'code': code,
-    'message': message,
-    'retryable': retryable,
-    if (diagnostics != null) 'diagnostics': diagnostics,
-  };
+        'type': type,
+        'requestId': requestId,
+        if (assignmentId != null) 'assignmentId': assignmentId,
+        'code': code,
+        'message': message,
+        'retryable': retryable,
+        if (diagnostics != null) 'diagnostics': diagnostics,
+      };
 
   factory WorkerErrorFrame.fromJson(Map<String, Object?> json) {
     _expectKeys(json, const {
@@ -641,9 +676,10 @@ final class WorkerErrorFrame extends WorkerFrame {
 void validateInitializeAdmission(
   InitializeResult result, {
   required String expectedWorkerTypeId,
-  required String expectedWorkerVersion,
-  required int minReadableStateSchema,
-  required int maxReadableStateSchema,
+  required String expectedEngineVersion,
+  required String expectedProfileDefinitionId,
+  required String expectedProfileReleaseVersion,
+  required int expectedProfileSchemaVersion,
   required Set<String> requiredCapabilities,
   String negotiatedProtocolVersion = localWorkerProtocolVersion,
 }) {
@@ -652,20 +688,24 @@ void validateInitializeAdmission(
       'initialized Worker Type does not match manifest',
     );
   }
-  if (result.workerVersion != expectedWorkerVersion) {
+  if (result.engineVersion != expectedEngineVersion) {
     throw const FormatException(
-      'initialized Worker version does not match manifest',
+      'initialized Engine version does not match admission',
     );
+  }
+  if (result.profileDefinitionId != expectedProfileDefinitionId ||
+      result.profileReleaseVersion != expectedProfileReleaseVersion) {
+    throw const FormatException(
+        'initialized Tool Profile does not match admission');
   }
   if (result.protocolVersion != negotiatedProtocolVersion) {
     throw const FormatException(
       'initialized protocol does not match negotiation',
     );
   }
-  if (result.stateSchemaVersion < minReadableStateSchema ||
-      result.stateSchemaVersion > maxReadableStateSchema) {
+  if (result.profileSchemaVersion != expectedProfileSchemaVersion) {
     throw const FormatException(
-      'Worker state schema is outside the supported range',
+      'Tool Profile schema does not match admission',
     );
   }
   if (!result.capabilities.toSet().containsAll(requiredCapabilities)) {
@@ -723,6 +763,31 @@ String _boundedText(String value, String name, int maxLength) {
     throw FormatException('$name is empty or exceeds $maxLength characters');
   }
   return value;
+}
+
+String _safeToolName(String value) {
+  final safe = _boundedText(
+    value,
+    'providerToolName',
+    WorkerProtocolLimits.maxProviderToolNameLength,
+  );
+  if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9 ._+()\-]*$').hasMatch(safe)) {
+    throw const FormatException('providerToolName must be safe display text');
+  }
+  return safe;
+}
+
+String _safeToolVersion(String value) {
+  final safe = _boundedText(
+    value,
+    'providerToolVersion',
+    WorkerProtocolLimits.maxProviderToolVersionLength,
+  );
+  if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9.+_\-]*$').hasMatch(safe)) {
+    throw const FormatException(
+        'providerToolVersion must be a safe version token');
+  }
+  return safe;
 }
 
 String _safeBoundedText(String value, String name, int maxLength) {

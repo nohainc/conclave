@@ -215,7 +215,10 @@ async function findWorkspaceRuntimeIdentity(
 export class WorkspaceGateway implements DurableObject {
   private readonly pendingCancelAcks = new Map<
     string,
-    { resolve: (payload: Record<string, unknown>) => void; timer: ReturnType<typeof setTimeout> }
+    {
+      resolve: (payload: Record<string, unknown>) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
   >();
   private socket: WebSocket | null = null;
   private socketConnectedAt: string | null = null;
@@ -1296,13 +1299,20 @@ export class WorkspaceGateway implements DurableObject {
             ? value
                 .filter((entry): entry is string => typeof entry === "string")
                 .map((entry) => entry.trim())
-                .filter(Boolean)
+                .filter((entry) => /^[a-z][a-z0-9_:-]{0,127}$/.test(entry))
                 .slice(0, max)
             : [],
         );
       const nullableText = (value: unknown, max: number): string | null =>
         typeof value === "string" && value.trim().length <= max
           ? value.trim() || null
+          : null;
+      const nullableSafeToken = (
+        value: unknown,
+        pattern: RegExp,
+      ): string | null =>
+        typeof value === "string" && pattern.test(value.trim())
+          ? value.trim()
           : null;
       const readinessIssueCode =
         typeof item.readinessIssueCode === "string" &&
@@ -1313,16 +1323,19 @@ export class WorkspaceGateway implements DurableObject {
         `INSERT INTO workspace_worker_inventory
           (worker_id, workspace_id, owner_user_id, worker_type_id,
            activation_state, readiness_state, readiness_issue_code,
-           worker_runtime_version, provider_tool_name, provider_tool_version,
+           engine_version, profile_definition_id, profile_release_version,
+           provider_tool_name, provider_tool_version,
            capabilities_json, local_concurrency_limit, revision,
            created_at, updated_at, last_seen_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
          ON CONFLICT(worker_id) DO UPDATE SET
            worker_type_id = excluded.worker_type_id,
            activation_state = excluded.activation_state,
            readiness_state = excluded.readiness_state,
            readiness_issue_code = excluded.readiness_issue_code,
-           worker_runtime_version = excluded.worker_runtime_version,
+           engine_version = excluded.engine_version,
+           profile_definition_id = excluded.profile_definition_id,
+           profile_release_version = excluded.profile_release_version,
            provider_tool_name = excluded.provider_tool_name,
            provider_tool_version = excluded.provider_tool_version,
            capabilities_json = excluded.capabilities_json,
@@ -1341,9 +1354,27 @@ export class WorkspaceGateway implements DurableObject {
           activationState,
           readinessState,
           readinessIssueCode,
-          nullableText(item.workerRuntimeVersion, 128),
-          nullableText(item.providerToolName, 128),
-          nullableText(item.providerToolVersion, 128),
+          nullableSafeToken(
+            item.engineVersion,
+            /^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$/,
+          ),
+          typeof item.profileDefinitionId === "string" &&
+            /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(item.profileDefinitionId) &&
+            item.profileDefinitionId.length <= 96
+            ? item.profileDefinitionId
+            : null,
+          Number.isSafeInteger(item.profileReleaseVersion) &&
+            (item.profileReleaseVersion as number) > 0
+            ? item.profileReleaseVersion
+            : null,
+          nullableSafeToken(
+            item.providerToolName,
+            /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,127}$/,
+          ),
+          nullableSafeToken(
+            item.providerToolVersion,
+            /^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$/,
+          ),
           arrayJson(item.capabilities, 128),
           Math.min(1024, concurrency as number),
           revision,
@@ -1651,15 +1682,22 @@ export class WorkspaceGateway implements DurableObject {
     };
     const assignmentId = body.assignmentId;
     if (this.pendingCancelAcks.has(assignmentId))
-      return Response.json({ error: "Cancellation is already in progress" }, { status: 409 });
+      return Response.json(
+        { error: "Cancellation is already in progress" },
+        { status: 409 },
+      );
     let timer: ReturnType<typeof setTimeout>;
-    const ackPromise = new Promise<Record<string, unknown>>((resolve, reject) => {
-      timer = setTimeout(() => {
-        this.pendingCancelAcks.delete(assignmentId);
-        reject(new Error("Timed out waiting for Workspace process cancellation"));
-      }, 15_000);
-      this.pendingCancelAcks.set(assignmentId, { resolve, timer });
-    });
+    const ackPromise = new Promise<Record<string, unknown>>(
+      (resolve, reject) => {
+        timer = setTimeout(() => {
+          this.pendingCancelAcks.delete(assignmentId);
+          reject(
+            new Error("Timed out waiting for Workspace process cancellation"),
+          );
+        }, 15_000);
+        this.pendingCancelAcks.set(assignmentId, { resolve, timer });
+      },
+    );
     this.send({
       protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
       protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
@@ -1672,11 +1710,19 @@ export class WorkspaceGateway implements DurableObject {
     try {
       const acknowledgement = await ackPromise;
       if (acknowledgement.cancelled !== true)
-        return Response.json({ cancelled: false, ...acknowledgement }, { status: 409 });
+        return Response.json(
+          { cancelled: false, ...acknowledgement },
+          { status: 409 },
+        );
       return Response.json({ cancelled: true, ...acknowledgement });
     } catch (error) {
       return Response.json(
-        { error: error instanceof Error ? error.message : "Cancellation was not acknowledged" },
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Cancellation was not acknowledged",
+        },
         { status: 504 },
       );
     }

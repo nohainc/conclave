@@ -1,4 +1,4 @@
-const localWorkerProtocolVersion = '3.0';
+const localWorkerProtocolVersion = '4.0';
 const supportedLocalWorkerProtocolVersions = {localWorkerProtocolVersion};
 
 /// Selects the newest protocol version supported by both sides.
@@ -7,12 +7,11 @@ String? negotiateProtocolVersion({
   required Iterable<String> workerVersions,
 }) {
   final worker = workerVersions.toSet();
-  final common =
-      workspaceVersions
-          .where(supportedLocalWorkerProtocolVersions.contains)
-          .where(worker.contains)
-          .toList()
-        ..sort(_compareVersions);
+  final common = workspaceVersions
+      .where(supportedLocalWorkerProtocolVersions.contains)
+      .where(worker.contains)
+      .toList()
+    ..sort(_compareVersions);
   return common.isEmpty ? null : common.last;
 }
 

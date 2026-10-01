@@ -129,5 +129,8 @@ Provider secrets never enter Conclave Cloud.
 - [Release trust and rotation](docs/security/RELEASE_TRUST_AND_ROTATION.md)
 - [AI Development Rules](AGENTS.md)
 
-Architecture v7, Worker Runtime v2, and ADR-017 remain historical predecessor
-documents. New first-party CLI integration work follows v8.
+Architecture v7 is the historical architecture baseline. Worker Runtime v2 is
+its process-boundary predecessor, retained as migration evidence. ADR-017 is
+superseded in implementation by ADR-018. New first-party CLI integrations use
+the generic Engine and official signed Tool Profiles; they do not add a
+provider-specific Worker binary.

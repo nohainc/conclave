@@ -6,7 +6,7 @@ releases documented later in this file are migration history until removed.
 
 ## v8 release classes
 
-Conclave now has three distinct release classes:
+The v8 release model has three distinct release classes:
 
 1. **Workspace application release** — signed/notarized desktop application.
 2. **CLI Worker Engine release** — generic native Dart executable; initially may
@@ -32,29 +32,68 @@ create immutable Profile release
 
 Stable promotion changes lifecycle/pointers, never the signed Profile payload.
 
+The Ed25519 signature binds the canonical full Profile payload digest and an
+explicit identity envelope: publisher, signing key ID, Profile definition and
+release version, logical Worker, schema and Engine compatibility, provider CLI
+name, and supported provider CLI versions. Workspace recomputes the digest,
+compares the envelope claims to Cloud metadata, then checks its trust roots and
+refreshed revocations before Engine admission. Lifecycle/channel and audit
+metadata remain independently mutable and cannot change the signed behavior.
+
+Workspace stores releases in its managed `Profiles/` directory, with one
+versioned directory per Profile Definition, a signed release metadata sidecar,
+and a per-definition `release-state.json`. Stable catalog sync refreshes the
+Cloud revocation snapshot first, validates the complete Profile v1 schema and
+signature before writing, then updates active/last-known-good pointers. The
+default cache retains three releases, including active and last-known-good.
+Revoked or locally altered releases are removed from the usable cache and
+active pointers move to the newest remaining verified version. Profile sync is
+periodic and independent of Engine or Workspace application updates.
+
 Profile rollback selects a previous trusted compatible release. Revoked releases
 are never eligible for activation/rollback.
 
 ### Generic Engine release flow
 
-The first v8 implementation may ship a known-good Engine with Workspace. The
-Engine still has its own version and diagnostic identity. If independent Engine
-delivery is enabled later, it must use immutable signed platform artifacts,
-active/LKG state, admission, health check, and rollback.
+The signed/notarized Workspace application archive is the initial trust
+boundary for the bundled Engine. Each Workspace release contains one
+platform-specific Engine build. Workspace bounds and hashes the asset, then
+materializes it at
+`<ApplicationSupport>/Engines/cli_worker/<engine-version>-<sha256>/`. The
+Engine version is independently checked during Protocol 4.0 initialization
+and recorded in diagnostics. Workspace rehashes a cached executable on
+startup and replaces altered bytes from its bundled copy. Failure to load or
+materialize the asset makes the Engine unavailable.
+
+There is no separate Engine catalog, signing key, Cloud lifecycle, or local
+active/LKG pointer in this release model. Updating or rolling back the Engine
+means updating or restoring the complete signed/notarized Workspace release.
+The current Workspace app update path is manual until its drain, staging,
+restart, health-check, and rollback transaction has passed end-to-end
+acceptance (see Production readiness limit below). Recovery from a bad Engine
+release therefore uses the prior verified Workspace archive; Workspace does
+not fall back to another cached Engine automatically.
+
+If independent Engine delivery becomes necessary later, it must add immutable
+signed per-platform artifacts, trust and revocation checks, candidate Engine
+initialization and passive health admission, atomic activation, and active/LKG
+rollback. This is optional follow-on work and does not block v8.
 
 
-**Current Worker release contract:** signed platform-specific native Dart
-executables published as Worker release v2 records. The Node adapter workflow
-and adapter signing configuration below are retained as migration history only.
-Workspace release and Worker release are separate pipelines and trust classes.
+**Migration-only v2 release tooling:** signed platform-specific provider Worker
+executables published as Worker release v2 records. Neither those binaries nor
+their release records define the v8 release contract. The Node adapter workflow
+and its signing configuration below are retained as migration history only.
+The v8 release contract is the generic CLI Worker Engine plus signed Tool
+Profile Releases described above.
 
 ## Legacy adapter release tooling
 
 The manually dispatched [V7 adapter release workflow](../../.github/workflows/release-v7-adapter.yml)
-is retained only as migration tooling. Its releases are no longer part of the
+is retained only as migration history. Its releases are no longer part of the
 Cloud catalog. Migration `0035_worker_releases.sql` drops
-`v7_adapter_releases`; pre-production release rows are recreated through the
-native Worker publish workflow.
+`v7_adapter_releases`; migration `0049_remove_native_worker_release_catalog.sql`
+drops the native Worker package catalog. Neither release table is recreated.
 
 For a publish run, provide `source` as a repository-relative adapter package
 directory, for example:
@@ -78,24 +117,19 @@ The legacy adapter test command is:
 pnpm worker-adapters:test
 ```
 
-## Historical v2 native provider Worker release catalog
+## Retired v2 native provider Worker release catalog
 
-Cloud stores immutable releases in `worker_releases`, keyed by Worker Type ID,
-version, and platform. The catalog requires a platform and can be narrowed by
-Worker Type ID and channel:
+This catalog is migration history only. Migration `0049` drops
+`worker_releases` from the v8 database after Tool Profile tables are created;
+`v7_adapter_releases` is also absent from the final schema. The old API routes
+and publish workflow must not be used for v8 releases. Workspace receives
+signed Tool Profile releases through the Profile registry described above.
 
-```text
-GET /api/worker-releases?platform=macos-arm64&workerTypeId=chatgpt&channel=stable
-POST /api/worker-releases/publish
-GET /api/worker-releases/{workerTypeId}/{version}/{platform}/download
-POST /api/worker-releases/{workerTypeId}/{version}/{platform}/revoke
-GET /api/worker-releases/trust
-```
-
-Publishing verifies the Worker Release Manifest v2 signature and archive hash
-before writing the platform artifact to R2. A release identity cannot be
-overwritten. Revocation applies to one platform artifact; signing-key
-revocation remains available through the Worker release trust endpoint.
+Older migration files remain in the ordered D1 history so already-initialized
+development databases can advance safely. The old `/api/worker-releases` paths
+return HTTP 410; shared Workspace/Profile signing trust is served by
+`/api/release-trust`. Clean-room and upgraded v8 databases finish with no
+native provider Worker release table or package rows.
 
 ## macOS Workspace releases
 
@@ -143,11 +177,23 @@ key separation, overlap rotation, revocation, and recovery constraints. Do not
 store release seeds or publication tokens in the repository, package archive,
 desktop artifact, or workflow output.
 
-## Historical Worker Runtime v2 release workflow
+## Migration-only Worker Runtime v2 release workflow
 
-ADR-017 defines independently versioned platform-specific native Worker releases. Node adapter release tooling remains migration-only; first-party Worker releases are native Dart executables. The native publish workflow is implemented, but full Workspace download, admission, candidate activation, update/rollback, and assignment-path acceptance remain tracked gates.
+This section is an archival record of predecessor procedures, not an approved
+way to add or publish a normal CLI integration. The Phase 31 acceptance gate in
+the [v8 implementation plan](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md)
+must pass before remaining provider-specific executables and publishing code
+are removed.
 
-Target Worker release flow:
+ADR-017 records independently versioned platform-specific native Worker
+releases. This section documents existing migration tooling and must not be
+used to define or extend the v8 runtime. Retained local publishing artifacts
+are not supported: Cloud returns HTTP 410 for the old package endpoints, and
+the v8 database has no native package catalog. Phase 31 removes remaining
+provider-specific binaries and publishing code after generic Engine/Profile
+real-provider, activation/rollback, and Work v1 acceptance.
+
+Historical v2 Worker release flow:
 
 ~~~text
 compile native Dart Worker per platform/architecture
@@ -164,7 +210,10 @@ compile native Dart Worker per platform/architecture
 
 Worker release identity includes `(worker_type_id, version, platform)`. Workspace and Worker versions remain independent. The user can stay on, update, pin, or roll back one Worker without changing the Workspace application or the other Worker. See [Worker Runtime v2](../architecture/WORKER_RUNTIME_V2.md) and its [implementation plan](../roadmaps/WORKER_RUNTIME_V2_IMPLEMENTATION.md).
 
-### Publishing native ChatGPT and Gemini Workers
+### Historical publishing of native ChatGPT and Gemini Workers
+
+This workflow exists only for migration/reference builds. Do not publish new
+provider-specific Worker releases as a v8 integration strategy.
 
 Run the manually dispatched [native Worker release workflow](../../.github/workflows/release-worker-v2.yml)
 with one shared semantic version and release channel. It builds and tests both
@@ -200,7 +249,11 @@ signatures; add platform signing if the distribution channel or operating
 system policy requires it. Signing credentials and publication tokens are
 never written to artifacts or logs.
 
-### Local unsigned Worker development
+### Migration-only local native Worker development
+
+These commands build the superseded v2 provider-specific Worker binaries for
+migration/reference work. They are not the v8 local execution path; do not use
+them to add or update a normal provider integration.
 
 Use the repository scripts from the project root to build a debug Workspace
 and unsigned native Worker packages for the current OS/CPU. Local packages are

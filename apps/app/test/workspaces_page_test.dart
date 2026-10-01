@@ -402,6 +402,52 @@ void main() {
       expect(find.text('Drain'), findsNothing);
     });
 
+    testWidgets('expanded Worker details use v8 runtime terminology',
+        (tester) async {
+      final worker = StudioWorker.fromJson({
+        'id': 'worker-chatgpt',
+        'workspaceId': 'workspace-1',
+        'workerTypeId': 'chatgpt',
+        'status': 'ready',
+        'readinessState': 'ready',
+        'localConcurrencyLimit': 1,
+        'capabilities': ['text'],
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 4,
+        'providerToolName': 'Codex CLI',
+        'providerToolVersion': '0.190.0',
+      });
+
+      await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
+        workspaces: const [
+          StudioWorkspace(
+            id: 'workspace-1',
+            name: 'Build Mac',
+            hostname: 'build-mac.local',
+            status: 'online',
+            appVersion: '1.0.0',
+            workerCount: 1,
+            activeTaskCount: 0,
+          ),
+        ],
+        workspaceWorkers: [worker],
+        onGrant: (_) {},
+      )));
+      await tester.pumpAndSettle();
+      final workerRow =
+          find.byKey(const Key('workspace-worker-row-worker-chatgpt'));
+      await tester.ensureVisible(workerRow);
+      await tester.tap(workerRow);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Engine · 1.0.0'), findsOneWidget);
+      expect(find.text('Integration · chatgpt-codex@4'), findsOneWidget);
+      expect(find.text('Provider CLI · Codex CLI'), findsOneWidget);
+      expect(find.text('Provider CLI version · 0.190.0'), findsOneWidget);
+      expect(find.text('Adapter'), findsNothing);
+    });
+
     testWidgets('Workers are grouped only under their owning Workspace ID',
         (tester) async {
       StudioWorkspace workspace(String id) => StudioWorkspace(

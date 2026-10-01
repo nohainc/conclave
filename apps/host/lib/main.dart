@@ -13,7 +13,6 @@ import 'host.dart';
 import 'host_configuration.dart';
 import 'local_worker_setup.dart';
 import 'local_worker_permissions.dart';
-import 'first_party_worker_registry.dart';
 import 'secure_credentials.dart';
 import 'secure_credentials_flutter.dart';
 import 'v7_adapter_package_store.dart';
@@ -24,8 +23,8 @@ import 'workspace_lifecycle_store.dart';
 import 'workspace_lifecycle.dart';
 import 'local_management_authenticator.dart';
 import 'copyable_messages.dart';
-import 'worker_diagnostic_store.dart';
-import 'worker_failure_policy.dart';
+import 'cli_worker_engine_supervisor.dart';
+import 'tool_profile_resolver.dart';
 
 export 'copyable_messages.dart' show showCopyableErrorSnackBar;
 
@@ -41,6 +40,12 @@ bool _hasValidCachedDesktopSession(SecureCredentialStore credentialStore) {
     return false;
   }
 }
+
+String? _toolProfileDefinitionId(String workerTypeId) => switch (workerTypeId) {
+      'chatgpt' => 'chatgpt-codex',
+      'gemini' => 'gemini-antigravity',
+      _ => null,
+    };
 
 String? _readUserEmailFromCredentialStore(
     SecureCredentialStore credentialStore) {
@@ -602,6 +607,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       journal: host.cloudConnection?.assignmentJournal,
       workerRegistry: host.localWorkerRegistry,
       workerVersionStore: host.workerVersionStore,
+      toolProfileReleaseStore: host.toolProfileReleaseStore,
       lastUpdateCheckStatus: status['lastUpdateCheckStatus'] as String?,
       lastUpdateCheckAt: checkAt,
       updateStatus: update['phase'] as String?,
@@ -1957,13 +1963,6 @@ class _ConclaveHostAppState extends State<ConclaveHostApp>
     }
   }
 
-  Future<bool> _ensureWorkerRelease(String workerTypeId) async {
-    final host = widget.lifecycle.host;
-    final catalog = host.workerReleaseCatalog;
-    if (catalog == null || host.workerVersionStore == null) return false;
-    return catalog.ensureWorkerRelease(workerTypeId);
-  }
-
   Future<void> _changeWorkRoot(String newPath) async {
     if (!await _requireStepUp('Change the Workspace Work Root')) return;
     final currentHost = widget.lifecycle.host;
@@ -2062,13 +2061,17 @@ class _ConclaveHostAppState extends State<ConclaveHostApp>
       onExportDiagnostics: _exportDiagnostics,
       onChangeWorkRoot: _changeWorkRoot,
       onReadinessCheck: lifecycle.checkWorkerReadiness,
+      onRollbackToolProfile: (workerTypeId) async =>
+          await lifecycle.host.workerReadinessMonitor
+              ?.rollbackToolProfile(workerTypeId) ??
+          false,
       workerRevision: _workerRevision,
       localWorkerRegistry: lifecycle.host.localWorkerRegistry,
       credentialStore: lifecycle.host.credentialStore,
       adapterPackageStore: lifecycle.host.adapterPackageStore,
       workerVersionStore: lifecycle.host.workerVersionStore,
-      workerReleaseCatalog: lifecycle.host.workerReleaseCatalog,
-      ensureWorkerRelease: _ensureWorkerRelease,
+      toolProfileReleaseStore: lifecycle.host.toolProfileReleaseStore,
+      toolProfileCatalog: lifecycle.host.toolProfileCatalog,
       signedIn: true,
     );
   }
@@ -2552,13 +2555,14 @@ class HostDashboard extends StatefulWidget {
     this.onExportDiagnostics,
     this.onChangeWorkRoot,
     this.onReadinessCheck,
+    this.onRollbackToolProfile,
     this.workerRevision = 0,
     this.localWorkerRegistry,
     this.credentialStore = const PlatformSecureCredentialStore(),
     this.adapterPackageStore,
     this.workerVersionStore,
-    this.workerReleaseCatalog,
-    this.ensureWorkerRelease,
+    this.toolProfileReleaseStore,
+    this.toolProfileCatalog,
     this.signedIn = false,
     super.key,
   });
@@ -2584,12 +2588,13 @@ class HostDashboard extends StatefulWidget {
   final Future<void> Function(String path)? onChangeWorkRoot;
   final Future<void> Function(
       {LocalWorkerProbeMode mode, String? workerTypeId})? onReadinessCheck;
+  final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
   final int workerRevision;
   final SecureCredentialStore credentialStore;
   final V7AdapterPackageStore? adapterPackageStore;
   final WorkerVersionStore? workerVersionStore;
-  final WorkerReleaseCatalog? workerReleaseCatalog;
-  final Future<bool> Function(String workerTypeId)? ensureWorkerRelease;
+  final ToolProfileReleaseStore? toolProfileReleaseStore;
+  final ToolProfileCatalogClient? toolProfileCatalog;
   final bool signedIn;
 
   @override
@@ -2840,6 +2845,8 @@ class _HostDashboardState extends State<HostDashboard> {
                     localWorkerRegistry: widget.localWorkerRegistry,
                     adapterPackageStore: widget.adapterPackageStore,
                     workerVersionStore: widget.workerVersionStore,
+                    toolProfileReleaseStore: widget.toolProfileReleaseStore,
+                    onRollbackToolProfile: widget.onRollbackToolProfile,
                     onConnect: widget.onConnect,
                     onRegister: widget.onRegister,
                     onRecoverCredential: widget.onRecoverCredential,
@@ -2857,10 +2864,7 @@ class _HostDashboardState extends State<HostDashboard> {
                   _WorkersTab(
                     key: ValueKey(widget.workerRevision),
                     registry: widget.localWorkerRegistry,
-                    adapterPackageStore: widget.adapterPackageStore,
-                    ensureWorkerRelease: widget.ensureWorkerRelease,
-                    workerVersionStore: widget.workerVersionStore,
-                    workerReleaseCatalog: widget.workerReleaseCatalog,
+                    toolProfileCatalog: widget.toolProfileCatalog,
                     onReadinessCheck: widget.onReadinessCheck,
                   ),
                 ],
@@ -2944,6 +2948,8 @@ class _WorkspaceTab extends StatefulWidget {
     this.localWorkerRegistry,
     this.adapterPackageStore,
     this.workerVersionStore,
+    this.toolProfileReleaseStore,
+    this.onRollbackToolProfile,
     this.onRetry,
     this.onExportDiagnostics,
     this.onChangeWorkRoot,
@@ -2964,6 +2970,8 @@ class _WorkspaceTab extends StatefulWidget {
   final LocalConfiguredWorkerRegistry? localWorkerRegistry;
   final V7AdapterPackageStore? adapterPackageStore;
   final WorkerVersionStore? workerVersionStore;
+  final ToolProfileReleaseStore? toolProfileReleaseStore;
+  final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
   final Future<void> Function(String path)? onChangeWorkRoot;
@@ -3209,6 +3217,8 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
           workerRegistry: widget.localWorkerRegistry,
           adapterPackageStore: widget.adapterPackageStore,
           workerVersionStore: widget.workerVersionStore,
+          toolProfileReleaseStore: widget.toolProfileReleaseStore,
+          onRollbackToolProfile: widget.onRollbackToolProfile,
         ),
       ],
     );
@@ -3222,6 +3232,8 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
     this.workerRegistry,
     this.adapterPackageStore,
     this.workerVersionStore,
+    this.toolProfileReleaseStore,
+    this.onRollbackToolProfile,
   });
 
   final HostUiSnapshot snapshot;
@@ -3229,6 +3241,8 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
   final LocalConfiguredWorkerRegistry? workerRegistry;
   final V7AdapterPackageStore? adapterPackageStore;
   final WorkerVersionStore? workerVersionStore;
+  final ToolProfileReleaseStore? toolProfileReleaseStore;
+  final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -3348,9 +3362,10 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
             ],
             const SizedBox(height: 12),
 
-            _WorkerReleaseDiagnostics(
+            _RuntimeDiagnostics(
               registry: workerRegistry,
-              workerVersionStore: workerVersionStore,
+              toolProfileReleaseStore: toolProfileReleaseStore,
+              onRollbackToolProfile: onRollbackToolProfile,
             ),
             const SizedBox(height: 12),
 
@@ -3495,22 +3510,24 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
   }
 }
 
-class _WorkerReleaseDiagnostics extends StatefulWidget {
-  const _WorkerReleaseDiagnostics({
+class _RuntimeDiagnostics extends StatefulWidget {
+  const _RuntimeDiagnostics({
     required this.registry,
-    required this.workerVersionStore,
+    required this.toolProfileReleaseStore,
+    required this.onRollbackToolProfile,
   });
 
   final LocalConfiguredWorkerRegistry? registry;
-  final WorkerVersionStore? workerVersionStore;
+  final ToolProfileReleaseStore? toolProfileReleaseStore;
+  final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
 
   @override
-  State<_WorkerReleaseDiagnostics> createState() =>
-      _WorkerReleaseDiagnosticsState();
+  State<_RuntimeDiagnostics> createState() => _RuntimeDiagnosticsState();
 }
 
-class _WorkerReleaseDiagnosticsState extends State<_WorkerReleaseDiagnostics> {
-  Future<List<({LocalConfiguredWorker worker, Map<String, Object?>? release})>>?
+class _RuntimeDiagnosticsState extends State<_RuntimeDiagnostics> {
+  bool _rollingBack = false;
+  Future<List<({LocalConfiguredWorker worker, Map<String, Object?>? profile})>>?
       _details;
 
   @override
@@ -3520,10 +3537,10 @@ class _WorkerReleaseDiagnosticsState extends State<_WorkerReleaseDiagnostics> {
   }
 
   @override
-  void didUpdateWidget(covariant _WorkerReleaseDiagnostics oldWidget) {
+  void didUpdateWidget(covariant _RuntimeDiagnostics oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.registry != widget.registry ||
-        oldWidget.workerVersionStore != widget.workerVersionStore) {
+        oldWidget.toolProfileReleaseStore != widget.toolProfileReleaseStore) {
       _load();
     }
   }
@@ -3532,26 +3549,55 @@ class _WorkerReleaseDiagnosticsState extends State<_WorkerReleaseDiagnostics> {
     _details = _readDetails();
   }
 
-  Future<List<({LocalConfiguredWorker worker, Map<String, Object?>? release})>>
+  Future<List<({LocalConfiguredWorker worker, Map<String, Object?>? profile})>>
       _readDetails() async {
     final registry = widget.registry;
     if (registry == null) return const [];
     final workers = await registry.list(includeRemoved: true);
     return Future.wait(workers.map((worker) async {
-      Map<String, Object?>? release;
-      try {
-        final manifest = await widget.workerVersionStore
-            ?.activeManifest(worker.workerTypeId);
-        if (manifest != null) {
-          release = {
-            ...manifest.toJson(),
-            'signatureVerified': true,
+      Map<String, Object?>? profile;
+      final definitionId = _toolProfileDefinitionId(worker.workerTypeId);
+      final profileStore = widget.toolProfileReleaseStore;
+      if (definitionId != null && profileStore != null) {
+        try {
+          final resolver = ToolProfileResolver(profileStore);
+          final profileState = await profileStore.releaseState(definitionId);
+          var resolution = worker.toolVersion == null
+              ? await resolver.resolveBootstrapProfile(
+                  logicalWorkerTypeId: worker.workerTypeId,
+                  profileDefinitionId: definitionId,
+                  engineVersion: cliWorkerEngineVersion,
+                  channel: profileState.selectedChannel,
+                )
+              : await resolver.resolve(
+                  logicalWorkerTypeId: worker.workerTypeId,
+                  profileDefinitionId: definitionId,
+                  engineVersion: cliWorkerEngineVersion,
+                  providerCliVersion: worker.toolVersion!,
+                  channel: profileState.selectedChannel,
+                );
+          if (!resolution.isAvailable && worker.toolVersion != null) {
+            resolution = await resolver.resolveBootstrapProfile(
+              logicalWorkerTypeId: worker.workerTypeId,
+              profileDefinitionId: definitionId,
+              engineVersion: cliWorkerEngineVersion,
+              channel: profileState.selectedChannel,
+            );
+          }
+          profile = {
+            'definitionId': definitionId,
+            'source': resolution.source.name,
+            'activeVersion': profileState.activeVersion,
+            'lastKnownGoodVersion': profileState.lastKnownGoodVersion,
+            'channel': profileState.selectedChannel,
+            if (resolution.release != null)
+              'releaseVersion': resolution.release!.releaseVersion,
           };
+        } on Object {
+          profile = {'definitionId': definitionId, 'source': 'unavailable'};
         }
-      } on Object {
-        // Worker release admission failures remain local diagnostics.
       }
-      return (worker: worker, release: release);
+      return (worker: worker, profile: profile);
     }));
   }
 
@@ -3561,7 +3607,7 @@ class _WorkerReleaseDiagnosticsState extends State<_WorkerReleaseDiagnostics> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Worker Runtime Releases',
+        Text('Engine & Tool Profiles',
             style: theme.textTheme.bodySmall
                 ?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
@@ -3569,7 +3615,7 @@ class _WorkerReleaseDiagnosticsState extends State<_WorkerReleaseDiagnostics> {
             List<
                 ({
                   LocalConfiguredWorker worker,
-                  Map<String, Object?>? release
+                  Map<String, Object?>? profile,
                 })>>(
           future: _details,
           builder: (context, snapshot) {
@@ -3603,20 +3649,74 @@ class _WorkerReleaseDiagnosticsState extends State<_WorkerReleaseDiagnostics> {
                     ),
                     children: [
                       _DetailRow(
+                        label: 'Workspace version',
+                        value: conclaveWorkspaceAppVersion,
+                      ),
+                      _DetailRow(
+                        label: 'Engine version',
+                        value: cliWorkerEngineVersion,
+                      ),
+                      if (record.profile != null) ...[
+                        _DetailRow(
+                          label: 'Integration',
+                          value:
+                              '${record.profile!['definitionId']}@${record.profile!['releaseVersion'] ?? 'unavailable'}',
+                        ),
+                        _DetailRow(
+                          label: 'Profile resolution',
+                          value: '${record.profile!['source']}',
+                        ),
+                        _DetailRow(
+                          label: 'Profile channel',
+                          value: '${record.profile!['channel']}',
+                        ),
+                        _DetailRow(
+                          label: 'Active Profile',
+                          value:
+                              '${record.profile!['activeVersion'] ?? 'None'}',
+                        ),
+                        _DetailRow(
+                          label: 'Last-known-good Profile',
+                          value:
+                              '${record.profile!['lastKnownGoodVersion'] ?? 'None'}',
+                        ),
+                        if (record.profile!['lastKnownGoodVersion'] is int)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 138, top: 6),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutlinedButton.icon(
+                                onPressed: _rollingBack ||
+                                        widget.onRollbackToolProfile == null
+                                    ? null
+                                    : () => _rollbackToolProfile(
+                                          record.worker.workerTypeId,
+                                        ),
+                                icon: _rollingBack
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.restore, size: 16),
+                                label: Text(
+                                  'Validate and roll back to Profile ${record.profile!['lastKnownGoodVersion']}',
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                      _DetailRow(
                         label: 'Worker Type ID',
                         value: record.worker.workerTypeId,
                       ),
                       _DetailRow(
-                        label: 'Worker version',
-                        value:
-                            '${record.release?['workerVersion'] ?? 'Not installed'}',
+                        label: 'Provider CLI',
+                        value: record.worker.toolName ?? 'Not detected',
                       ),
                       _DetailRow(
-                        label: record.worker.toolName == 'Codex CLI'
-                            ? 'Codex CLI version'
-                            : record.worker.toolName == 'agy'
-                                ? 'agy version'
-                                : 'Provider tool version',
+                        label: 'Provider CLI version',
                         value: record.worker.toolVersion ?? 'Not detected',
                       ),
                       _DetailRow(
@@ -3624,33 +3724,9 @@ class _WorkerReleaseDiagnosticsState extends State<_WorkerReleaseDiagnostics> {
                         value: record.worker.toolPath ?? 'Not resolved',
                       ),
                       _DetailRow(
-                        label: 'Provider tool',
-                        value: record.worker.toolName ?? 'Not reported',
-                      ),
-                      _DetailRow(
                         label: 'Readiness',
                         value:
                             '${record.worker.readinessState.wireValue}${record.worker.readinessIssueCode == null ? '' : ' · ${record.worker.readinessIssueCode}'}',
-                      ),
-                      _DetailRow(
-                        label: 'Publisher',
-                        value:
-                            '${record.release?['publisher'] ?? 'Unavailable'}',
-                      ),
-                      _DetailRow(
-                        label: 'Signing key',
-                        value:
-                            '${record.release?['signingKeyId'] ?? 'Unavailable'}',
-                      ),
-                      _DetailRow(
-                        label: 'Signature verified',
-                        value:
-                            '${record.release?['signatureVerified'] ?? false}',
-                      ),
-                      _DetailRow(
-                        label: 'Release channel',
-                        value:
-                            '${record.release?['releaseChannel'] ?? 'Unavailable'}',
                       ),
                       _DetailRow(
                         label: 'Last Test',
@@ -3674,24 +3750,43 @@ class _WorkerReleaseDiagnosticsState extends State<_WorkerReleaseDiagnostics> {
       ],
     );
   }
+
+  Future<void> _rollbackToolProfile(String workerTypeId) async {
+    if (_rollingBack) return;
+    setState(() => _rollingBack = true);
+    var passed = false;
+    try {
+      passed = await widget.onRollbackToolProfile?.call(workerTypeId) ?? false;
+    } on Object {
+      passed = false;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _rollingBack = false;
+          _load();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(passed
+                ? 'Profile rollback passed its passive probe.'
+                : 'Rollback validation failed. The current Profile was kept.'),
+          ),
+        );
+      }
+    }
+  }
 }
 
 class _WorkersTab extends StatefulWidget {
   const _WorkersTab({
     required this.registry,
-    required this.adapterPackageStore,
-    this.workerVersionStore,
-    this.workerReleaseCatalog,
-    this.ensureWorkerRelease,
+    this.toolProfileCatalog,
     this.onReadinessCheck,
     super.key,
   });
 
   final LocalConfiguredWorkerRegistry? registry;
-  final V7AdapterPackageStore? adapterPackageStore;
-  final WorkerVersionStore? workerVersionStore;
-  final WorkerReleaseCatalog? workerReleaseCatalog;
-  final Future<bool> Function(String workerTypeId)? ensureWorkerRelease;
+  final ToolProfileCatalogClient? toolProfileCatalog;
   final Future<void> Function(
       {LocalWorkerProbeMode mode, String? workerTypeId})? onReadinessCheck;
 
@@ -3702,89 +3797,98 @@ class _WorkersTab extends StatefulWidget {
 class _WorkersTabState extends State<_WorkersTab> {
   Future<List<LocalConfiguredWorker>>? _workers;
   final Set<String> _updatingWorkerTypes = {};
-  final Map<String, _WorkerReleaseSummary> _releaseSummaries = {};
+  List<LogicalWorkerCatalogEntry> _catalogEntries = const [];
+  Timer? _catalogRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadWorkers();
-    unawaited(_refreshWorkerReleaseInfo());
+    _loadLogicalWorkerCatalog();
+    _catalogRefreshTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+      unawaited(_loadLogicalWorkerCatalog());
+    });
   }
+
+  @override
+  void dispose() {
+    _catalogRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadLogicalWorkerCatalog() async {
+    final catalog = widget.toolProfileCatalog;
+    if (catalog == null) {
+      if (mounted) setState(() => _catalogEntries = _fallbackLogicalWorkers);
+      return;
+    }
+    try {
+      final cached = await catalog.loadCatalog();
+      if (mounted && cached.isNotEmpty) {
+        setState(() => _catalogEntries = cached);
+      }
+    } on Object {
+      /* A malformed cache is ignored; the signed Cloud response is authoritative. */
+    }
+    try {
+      final current = await catalog.syncCatalog();
+      if (mounted) setState(() => _catalogEntries = current);
+    } on Object {
+      if (mounted && _catalogEntries.isEmpty) {
+        setState(() => _catalogEntries = _fallbackLogicalWorkers);
+      }
+    }
+  }
+
+  static const _fallbackLogicalWorkers = <LogicalWorkerCatalogEntry>[
+    LogicalWorkerCatalogEntry(
+      workerTypeId: 'chatgpt',
+      displayName: 'ChatGPT',
+      description: '',
+      profileDefinitionId: 'chatgpt-codex',
+      providerToolName: 'codex',
+      engineFamily: 'cli',
+      releaseStage: 'stable',
+      capabilities: [
+        'text',
+        'local_file',
+        'workstream_read',
+        'workstream_write',
+        'durable_session'
+      ],
+      sortOrder: 10,
+    ),
+    LogicalWorkerCatalogEntry(
+      workerTypeId: 'gemini',
+      displayName: 'Gemini',
+      description: '',
+      profileDefinitionId: 'gemini-antigravity',
+      providerToolName: 'agy',
+      engineFamily: 'cli',
+      releaseStage: 'stable',
+      capabilities: [
+        'text',
+        'local_file',
+        'workstream_read',
+        'workstream_write',
+        'durable_session'
+      ],
+      sortOrder: 20,
+    ),
+  ];
 
   @override
   void didUpdateWidget(covariant _WorkersTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.registry != widget.registry) _loadWorkers();
-    if (oldWidget.workerVersionStore != widget.workerVersionStore ||
-        oldWidget.workerReleaseCatalog != widget.workerReleaseCatalog) {
-      unawaited(_refreshWorkerReleaseInfo());
+    if (oldWidget.toolProfileCatalog != widget.toolProfileCatalog) {
+      unawaited(_loadLogicalWorkerCatalog());
     }
   }
 
   void _loadWorkers() {
     _workers = widget.registry?.list();
   }
-
-  Future<void> _refreshWorkerReleaseInfo() async {
-    final store = widget.workerVersionStore;
-    if (store == null) return;
-    for (final entry in FirstPartyWorkerPackage.all) {
-      final typeId = entry.productWorkerTypeId;
-      try {
-        await widget.workerReleaseCatalog?.refreshAutomaticUpdate(typeId);
-        final releaseState = await store.releaseState(typeId);
-        final installed = await store.installedVersions(typeId);
-        final available =
-            await widget.workerReleaseCatalog?.latestCompatibleRelease(
-          typeId,
-          newerThan: releaseState.activeVersion,
-        );
-        final activeManifest = await store.activeManifest(typeId);
-        final candidateFailure = await store.lastCandidateFailure(typeId);
-        final runtimeFailure = await WorkerFailurePolicy(
-          versionStore: store,
-        ).readState(typeId);
-        if (!mounted) return;
-        setState(() {
-          _releaseSummaries[typeId] = _WorkerReleaseSummary(
-            state: releaseState,
-            installedVersions: installed,
-            available: available,
-            releaseChannel: activeManifest?.releaseChannel,
-            candidateFailure: candidateFailure,
-            runtimeFailure: runtimeFailure,
-          );
-        });
-      } on Object {
-        if (!mounted) return;
-        setState(() {
-          _releaseSummaries[typeId] = _WorkerReleaseSummary(
-            state: null,
-            installedVersions: const [],
-            available: null,
-            releaseChannel: null,
-            candidateFailure: null,
-            runtimeFailure: null,
-            unavailable: true,
-          );
-        });
-      }
-    }
-  }
-
-  Future<void> _runReleaseAction(
-    FirstPartyWorkerPackage entry,
-    Future<void> Function() action,
-  ) =>
-      _runWorkerAction(
-        entry,
-        () async {
-          await action();
-          await _refreshWorkerReleaseInfo();
-        },
-        failureMessage:
-            'Could not update ${entry.productName}. Check Advanced Diagnostics for details.',
-      );
 
   Future<void> _setActivationState(
     LocalConfiguredWorker worker,
@@ -3812,82 +3916,6 @@ class _WorkersTabState extends State<_WorkersTab> {
     if (mounted) setState(_loadWorkers);
   }
 
-  Future<void> _configure(FirstPartyWorkerPackage entry) =>
-      _runWorkerAction(entry, () async {
-        final registry = widget.registry;
-        if (registry == null) return;
-        await widget.ensureWorkerRelease?.call(entry.productWorkerTypeId);
-        await LocalWorkerSetupService(registry: registry).create(
-          type: entry,
-          permissions: firstPartyWorkerLocalPermissions,
-        );
-        await widget.onReadinessCheck?.call(
-          mode: LocalWorkerProbeMode.live,
-          workerTypeId: entry.productWorkerTypeId,
-        );
-      },
-          failureMessage:
-              'Could not finish setting up ${entry.productName}. Check Advanced Diagnostics for details.');
-
-  Future<void> _testWorker(
-    FirstPartyWorkerPackage entry,
-    LocalConfiguredWorker worker,
-  ) =>
-      _runWorkerAction(
-        entry,
-        () async {
-          await widget.onReadinessCheck?.call(
-            mode: LocalWorkerProbeMode.live,
-            workerTypeId: worker.workerTypeId,
-          );
-        },
-        failureMessage:
-            'Could not test ${entry.productName}. Check Advanced Diagnostics for details.',
-      );
-
-  Future<void> _copyWorkerDiagnostic(FirstPartyWorkerPackage entry) async {
-    final store = widget.workerVersionStore;
-    if (store == null) return;
-    try {
-      final report = await WorkerDiagnosticStore(
-        directory: store.logsDirectory(entry.productWorkerTypeId),
-      ).createCopyableReport();
-      await Clipboard.setData(ClipboardData(text: report));
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Worker diagnostic report copied')),
-      );
-    } on Object {
-      if (!mounted) return;
-      showCopyableErrorSnackBar(
-        context,
-        'Could not create the local Worker diagnostic report.',
-      );
-    }
-  }
-
-  Future<void> _runWorkerAction(
-    FirstPartyWorkerPackage entry,
-    Future<void> Function() action, {
-    required String failureMessage,
-  }) async {
-    if (!_updatingWorkerTypes.add(entry.productWorkerTypeId)) return;
-    setState(() {});
-    try {
-      await action();
-      if (mounted) setState(_loadWorkers);
-    } on Object {
-      if (!mounted) return;
-      showCopyableErrorSnackBar(
-        context,
-        failureMessage,
-      );
-    } finally {
-      _updatingWorkerTypes.remove(entry.productWorkerTypeId);
-      if (mounted) setState(() {});
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -3908,127 +3936,8 @@ class _WorkersTabState extends State<_WorkersTab> {
             final canConfigure = widget.registry != null && snapshot.hasData;
             return Column(
               children: [
-                for (final entry in FirstPartyWorkerPackage.all)
-                  Builder(builder: (context) {
-                    final worker = records
-                        .where((record) =>
-                            record.workerTypeId == entry.productWorkerTypeId)
-                        .firstOrNull;
-                    final pending = _updatingWorkerTypes
-                        .contains(entry.productWorkerTypeId);
-                    final readinessStatus = pending
-                        ? 'Checking…'
-                        : snapshot.hasError
-                            ? 'Needs attention'
-                            : !snapshot.hasData
-                                ? 'Checking…'
-                                : worker == null
-                                    ? 'Setup required'
-                                    : deriveLocalWorkerReadiness(worker);
-                    final statusBadges = worker != null && !snapshot.hasError
-                        ? deriveLocalWorkerStatusBadges(
-                            worker,
-                            readinessLabel: pending ? readinessStatus : null,
-                          )
-                        : [readinessStatus];
-                    return Card(
-                      key: Key('worker-catalog-${entry.productWorkerTypeId}'),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      color: theme.colorScheme.surfaceContainerLow,
-                      child: ListTile(
-                        leading: Icon(
-                          _workerTypeIcon(entry.productWorkerTypeId),
-                          color: theme.colorScheme.primary,
-                        ),
-                        title: Text(entry.productName,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              children: [
-                                for (final badge in statusBadges)
-                                  _CatalogStatusBadge(label: badge),
-                              ],
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 3),
-                              child: Text(
-                                '${worker?.toolName ?? (entry.productWorkerTypeId == 'chatgpt' ? 'Codex CLI' : 'agy')} ${worker?.toolVersion ?? 'version not detected'}',
-                                style: theme.textTheme.bodySmall,
-                              ),
-                            ),
-                            _workerReleaseControls(entry, theme),
-                            if (worker != null &&
-                                widget.workerVersionStore != null)
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: TextButton.icon(
-                                  onPressed: () => _copyWorkerDiagnostic(entry),
-                                  icon: const Icon(Icons.copy, size: 16),
-                                  label: const Text('Copy diagnostics'),
-                                ),
-                              ),
-                          ],
-                        ),
-                        trailing: pending
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : worker == null
-                                ? TextButton(
-                                    onPressed: canConfigure
-                                        ? () => _configure(entry)
-                                        : null,
-                                    child: const Text('Configure'),
-                                  )
-                                : Wrap(
-                                    spacing: 4,
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
-                                    children: [
-                                      if (_hasNewerRelease(entry))
-                                        TextButton(
-                                          onPressed: canConfigure
-                                              ? () => _installAvailable(entry)
-                                              : null,
-                                          child: const Text('Update'),
-                                        ),
-                                      TextButton(
-                                        onPressed: canConfigure
-                                            ? () => _testWorker(entry, worker)
-                                            : null,
-                                        child: const Text('Test'),
-                                      ),
-                                      Tooltip(
-                                        message: worker.activationState ==
-                                                LocalWorkerActivationState
-                                                    .enabled
-                                            ? 'Disable'
-                                            : 'Enable',
-                                        child: Switch(
-                                          value: worker.activationState ==
-                                              LocalWorkerActivationState
-                                                  .enabled,
-                                          onChanged: canConfigure
-                                              ? (enabled) =>
-                                                  _setActivationState(
-                                                      worker, enabled)
-                                              : null,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                      ),
-                    );
-                  }),
+                for (final entry in _catalogEntries)
+                  _buildLogicalWorkerCard(entry, records, canConfigure, theme),
                 if (snapshot.hasError)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
@@ -4053,255 +3962,130 @@ class _WorkersTabState extends State<_WorkersTab> {
     );
   }
 
-  bool _hasNewerRelease(FirstPartyWorkerPackage entry) {
-    final summary = _releaseSummaries[entry.productWorkerTypeId];
-    final active = summary?.state?.activeVersion;
-    final available = summary?.available;
-    return available != null &&
-        summary?.state?.updatePolicy != WorkerUpdatePolicy.pinned &&
-        (active == null ||
-            _compareWorkerVersions(available.version, active) > 0);
+  Widget _buildLogicalWorkerCard(
+    LogicalWorkerCatalogEntry entry,
+    List<LocalConfiguredWorker> records,
+    bool canConfigure,
+    ThemeData theme,
+  ) {
+    final worker = records
+        .where((record) => record.workerTypeId == entry.workerTypeId)
+        .firstOrNull;
+    final pending = _updatingWorkerTypes.contains(entry.workerTypeId);
+    final readiness = pending
+        ? 'Checking…'
+        : worker == null
+            ? 'Setup required'
+            : deriveLocalWorkerReadiness(worker);
+    final badges = worker == null
+        ? <String>[readiness]
+        : deriveLocalWorkerStatusBadges(worker,
+            readinessLabel: pending ? readiness : null);
+    final providerToolName = worker?.toolName ?? entry.providerToolName;
+    final providerToolLabel =
+        providerToolName == 'codex' ? 'Codex CLI' : providerToolName;
+    return Card(
+      key: Key('worker-catalog-${entry.workerTypeId}'),
+      margin: const EdgeInsets.only(bottom: 12),
+      color: theme.colorScheme.surfaceContainerLow,
+      child: ListTile(
+        leading: Icon(_workerTypeIcon(entry.workerTypeId),
+            color: theme.colorScheme.primary),
+        title: Text(entry.displayName,
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Wrap(spacing: 6, runSpacing: 4, children: [
+                for (final badge in badges) _CatalogStatusBadge(label: badge)
+              ]),
+              Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(
+                    '$providerToolLabel ${worker?.toolVersion ?? 'version not detected'}',
+                    style: theme.textTheme.bodySmall,
+                  )),
+            ]),
+        trailing: pending
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2))
+            : worker == null
+                ? TextButton(
+                    onPressed: canConfigure
+                        ? () => _configureCatalogWorker(entry)
+                        : null,
+                    child: const Text('Configure'))
+                : Wrap(
+                    spacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                        TextButton(
+                            onPressed: canConfigure
+                                ? () => _testCatalogWorker(entry, worker)
+                                : null,
+                            child: const Text('Test')),
+                        Tooltip(
+                            message: worker.activationState ==
+                                    LocalWorkerActivationState.enabled
+                                ? 'Disable'
+                                : 'Enable',
+                            child: Switch(
+                              value: worker.activationState ==
+                                  LocalWorkerActivationState.enabled,
+                              onChanged: canConfigure
+                                  ? (enabled) =>
+                                      _setActivationState(worker, enabled)
+                                  : null,
+                            )),
+                      ]),
+      ),
+    );
   }
 
-  Future<void> _installAvailable(FirstPartyWorkerPackage entry) =>
-      _runReleaseAction(entry, () async {
-        final latest =
-            await widget.workerReleaseCatalog?.latestCompatibleRelease(
-          entry.productWorkerTypeId,
-          newerThan: _releaseSummaries[entry.productWorkerTypeId]
-              ?.state
-              ?.activeVersion,
-        );
-        if (latest == null) {
-          throw StateError('Worker release is no longer available');
-        }
-        await widget.workerReleaseCatalog!.installRelease(latest);
-      });
+  Future<void> _configureCatalogWorker(LogicalWorkerCatalogEntry entry) async {
+    await _runCatalogAction(entry, () async {
+      final registry = widget.registry;
+      if (registry == null) return;
+      await LocalWorkerSetupService(registry: registry).createCatalogWorker(
+        entry: entry,
+        permissions: permissionsForLogicalWorker(entry.capabilities),
+      );
+      await widget.toolProfileCatalog?.syncWorkerProfiles(entry.workerTypeId);
+      await widget.onReadinessCheck?.call(
+          mode: LocalWorkerProbeMode.live, workerTypeId: entry.workerTypeId);
+    });
+  }
 
-  Widget _workerReleaseControls(
-      FirstPartyWorkerPackage entry, ThemeData theme) {
-    final store = widget.workerVersionStore;
-    final summary = _releaseSummaries[entry.productWorkerTypeId];
-    if (store == null) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: Text('Worker version: Not installed',
-            style: theme.textTheme.bodySmall),
-      );
+  Future<void> _testCatalogWorker(
+          LogicalWorkerCatalogEntry entry, LocalConfiguredWorker worker) =>
+      _runCatalogAction(
+          entry,
+          () =>
+              widget.onReadinessCheck?.call(
+                mode: LocalWorkerProbeMode.live,
+                workerTypeId: worker.workerTypeId,
+              ) ??
+              Future<void>.value());
+
+  Future<void> _runCatalogAction(
+      LogicalWorkerCatalogEntry entry, Future<void> Function() action) async {
+    if (!_updatingWorkerTypes.add(entry.workerTypeId)) return;
+    setState(() {});
+    try {
+      await action();
+      if (mounted) setState(_loadWorkers);
+    } on Object {
+      if (mounted) {
+        showCopyableErrorSnackBar(context,
+            'Could not complete setup for ${entry.displayName}. Check Advanced Diagnostics.');
+      }
+    } finally {
+      _updatingWorkerTypes.remove(entry.workerTypeId);
+      if (mounted) setState(() {});
     }
-    if (summary == null) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 6),
-        child: LinearProgressIndicator(minHeight: 2),
-      );
-    }
-    final releaseState = summary.state;
-    final active = releaseState?.activeVersion;
-    final pending = _updatingWorkerTypes.contains(entry.productWorkerTypeId);
-    final advanced = ExpansionTile(
-      tilePadding: EdgeInsets.zero,
-      childrenPadding: const EdgeInsets.only(bottom: 8),
-      title: const Text('Advanced', style: TextStyle(fontSize: 13)),
-      subtitle: Text(
-        'Active ${active ?? 'none'} · Previous ${releaseState?.lastKnownGoodVersion ?? 'none'}',
-        style: theme.textTheme.bodySmall,
-      ),
-      children: [
-        _DetailRow(
-          label: 'Active version',
-          value: active ?? 'Not installed',
-        ),
-        _DetailRow(
-          label: 'Previous / last-known-good',
-          value: releaseState?.lastKnownGoodVersion ?? 'None',
-        ),
-        _DetailRow(
-          label: 'Release channel',
-          value: summary.releaseChannel ?? 'Unavailable',
-        ),
-        if (summary.candidateFailure case final failure?) ...[
-          _DetailRow(
-            label: 'Last candidate failure',
-            value: '${failure['version']} · ${failure['issueCode']}',
-          ),
-          if (failure['failedAt'] is String)
-            _DetailRow(
-                label: 'Failed at', value: failure['failedAt'] as String),
-          if (failure['diagnostic'] is String)
-            _DetailRow(
-              label: 'Diagnostic',
-              value: failure['diagnostic'] as String,
-            ),
-        ] else
-          const _DetailRow(
-            label: 'Last candidate failure',
-            value: 'None recorded',
-          ),
-        if (summary.runtimeFailure case final failure?
-            when failure.workerVersion == active) ...[
-          _DetailRow(
-            label: 'Worker runtime failures',
-            value: '${failure.consecutiveFailureCount} consecutive · '
-                '${failure.lastFailureKind.name}',
-          ),
-          if (failure.needsAttention)
-            _DetailRow(
-              label: 'Worker status',
-              value: 'Needs attention · ${failure.lastIssueCode}',
-            ),
-          if (failure.rollbackSuggestedVersion case final rollback?)
-            _DetailRow(
-              label: 'Suggested rollback',
-              value: rollback,
-            ),
-        ],
-        _DetailRow(
-          label: 'Installed versions',
-          value: summary.installedVersions.isEmpty
-              ? 'None'
-              : summary.installedVersions.join(', '),
-        ),
-        if (summary.installedVersions.isNotEmpty)
-          Row(
-            children: [
-              const Expanded(child: Text('Activate installed version')),
-              DropdownButton<String>(
-                value:
-                    summary.installedVersions.contains(active) ? active : null,
-                hint: const Text('Choose version'),
-                items: [
-                  for (final version in summary.installedVersions)
-                    DropdownMenuItem(value: version, child: Text(version)),
-                ],
-                onChanged: pending || releaseState == null
-                    ? null
-                    : (version) {
-                        if (version == null || version == active) return;
-                        _runReleaseAction(
-                          entry,
-                          () => store.activateVersion(
-                            entry.productWorkerTypeId,
-                            version,
-                          ),
-                        );
-                      },
-              ),
-            ],
-          ),
-        if (releaseState != null)
-          Row(
-            children: [
-              const Expanded(child: Text('Update policy')),
-              DropdownButton<WorkerUpdatePolicy>(
-                value: releaseState.updatePolicy,
-                items: const [
-                  DropdownMenuItem(
-                    value: WorkerUpdatePolicy.notify,
-                    child: Text('Notify'),
-                  ),
-                  DropdownMenuItem(
-                    value: WorkerUpdatePolicy.automatic,
-                    child: Text('Automatic'),
-                  ),
-                  DropdownMenuItem(
-                    value: WorkerUpdatePolicy.pinned,
-                    child: Text('Pinned'),
-                  ),
-                ],
-                onChanged: pending
-                    ? null
-                    : (policy) {
-                        if (policy == null) return;
-                        _runReleaseAction(
-                            entry,
-                            () => store.setUpdatePolicy(
-                                  entry.productWorkerTypeId,
-                                  policy,
-                                  pinnedVersion:
-                                      policy == WorkerUpdatePolicy.pinned
-                                          ? releaseState.pinnedVersion ?? active
-                                          : null,
-                                ));
-                      },
-              ),
-            ],
-          ),
-        if (releaseState != null)
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                    releaseState.updatePolicy == WorkerUpdatePolicy.pinned
-                        ? 'Pinned version: ${releaseState.pinnedVersion}'
-                        : 'Pin an installed version'),
-              ),
-              if (releaseState.updatePolicy == WorkerUpdatePolicy.pinned)
-                TextButton(
-                  onPressed: pending
-                      ? null
-                      : () => _runReleaseAction(
-                          entry,
-                          () => store.setUpdatePolicy(entry.productWorkerTypeId,
-                              WorkerUpdatePolicy.notify)),
-                  child: const Text('Unpin'),
-                )
-              else
-                DropdownButton<String>(
-                  hint: const Text('Pin version'),
-                  value: null,
-                  items: [
-                    for (final version in summary.installedVersions)
-                      DropdownMenuItem(value: version, child: Text(version)),
-                  ],
-                  onChanged: pending || summary.installedVersions.isEmpty
-                      ? null
-                      : (version) {
-                          if (version == null) return;
-                          _runReleaseAction(
-                              entry,
-                              () => store.setUpdatePolicy(
-                                    entry.productWorkerTypeId,
-                                    WorkerUpdatePolicy.pinned,
-                                    pinnedVersion: version,
-                                  ));
-                        },
-                ),
-            ],
-          ),
-        if (releaseState?.lastKnownGoodVersion != null &&
-            releaseState?.lastKnownGoodVersion != active)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: pending
-                  ? null
-                  : () => _runReleaseAction(
-                        entry,
-                        () => store.rollbackToLastKnownGood(
-                          entry.productWorkerTypeId,
-                        ),
-                      ),
-              child: const Text('Roll back to previous'),
-            ),
-          ),
-        if (summary.unavailable)
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text('Worker release catalog is unavailable.'),
-          ),
-      ],
-    );
-    return Padding(
-      padding: const EdgeInsets.only(top: 3),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Worker ${active ?? 'not installed'}',
-              style: theme.textTheme.bodySmall),
-          advanced,
-        ],
-      ),
-    );
   }
 
   static IconData _workerTypeIcon(String id) => switch (id) {
@@ -4309,38 +4093,6 @@ class _WorkersTabState extends State<_WorkersTab> {
         'gemini' => Icons.auto_awesome,
         _ => Icons.smart_toy_outlined,
       };
-}
-
-class _WorkerReleaseSummary {
-  const _WorkerReleaseSummary({
-    required this.state,
-    required this.installedVersions,
-    required this.available,
-    required this.releaseChannel,
-    required this.candidateFailure,
-    required this.runtimeFailure,
-    this.unavailable = false,
-  });
-
-  final WorkerReleaseState? state;
-  final List<String> installedVersions;
-  final AvailableWorkerRelease? available;
-  final String? releaseChannel;
-  final Map<String, Object?>? candidateFailure;
-  final WorkerRuntimeFailureState? runtimeFailure;
-  final bool unavailable;
-}
-
-int _compareWorkerVersions(String left, String right) {
-  final leftCore =
-      left.split(RegExp(r'[+-]')).first.split('.').map(int.parse).toList();
-  final rightCore =
-      right.split(RegExp(r'[+-]')).first.split('.').map(int.parse).toList();
-  for (var index = 0; index < 3; index++) {
-    final comparison = leftCore[index].compareTo(rightCore[index]);
-    if (comparison != 0) return comparison;
-  }
-  return left.compareTo(right);
 }
 
 class _CatalogStatusBadge extends StatelessWidget {

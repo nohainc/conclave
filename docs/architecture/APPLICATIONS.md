@@ -1,6 +1,7 @@
 # Conclave AX Applications
 
-**Status:** Architecture v8 product/application boundary; v7/v2 runtime details below are predecessor history where noted
+**Status:** Architecture v8 product/application boundary. Architecture v7 and
+Worker Runtime v2 details are historical predecessor material where noted.
 
 Conclave AX has three primary applications and one extension type.
 
@@ -27,7 +28,7 @@ Conclave AX is the web application. It is not packaged as the machine-side execu
 Conclave AX communicates only with Conclave Cloud through the Human Product
 Protocol. It MUST NOT connect to the Workspace Runtime Protocol or send
 machine-authenticated runtime messages. Protocol ownership and the explicit
-Workspace-to-adapter boundary are defined in the
+Workspace-to-Engine boundary are defined in the
 [Protocol Boundaries contract](PROTOCOL_BOUNDARIES.md).
 
 The canonical execution-capacity destination in AX is **Workspaces**. Workers
@@ -73,7 +74,7 @@ additional Work v1 choices.
 - human authentication;
 - realtime App connections;
 - Workspace Gateway;
-- built-in Work catalog and signed Worker release registry;
+- built-in Work catalog, logical Worker catalog, and signed Tool Profile release registry;
 - synchronized configured Worker inventory;
 - Project/Workstream Worker authorization;
 - assignment scheduling;
@@ -136,13 +137,16 @@ Projects, Workstreams, Discuss, Work orchestration and Project administration re
 
 ## 4. Logical Workers, CLI Worker Engine, and Tool Profiles
 
-**Suggested path:** `workers/<worker-type-id>`
+**Current v8 runtime:** `engines/cli_worker` plus official Profile definitions
+and immutable releases. Do not add `workers/<worker-type-id>` executable
+packages for normal provider CLIs.
 
-A Worker Type is a signed integration adapter definition, not a user-installed application and not an AI model.
+A Worker Type is the stable product/catalog identity for a Logical Worker, not
+a user-installed application and not an AI model.
 
-The frozen first-party v1 product catalog contains:
-- **ChatGPT**, powered locally by Codex CLI (`codex`);
-- **Gemini**, powered locally by Antigravity CLI (`agy`).
+The frozen first-party v1 product catalog contains two Logical Workers:
+- **ChatGPT**, resolved by the `chatgpt-codex` Tool Profile Definition to Codex CLI (`codex`);
+- **Gemini**, resolved by the `gemini-antigravity` Tool Profile Definition to Antigravity CLI (`agy`).
 
 Each Workspace has one stable slot for each type and at most one configured
 Worker per slot. The CLI owns provider authentication and billing mode; Conclave
@@ -150,17 +154,12 @@ does not ask the user to choose subscription versus API-key authentication or
 store the provider credentials. See the
 [Worker catalog contract v1](../specifications/FIRST_PARTY_WORKER_CATALOG_V1.md).
 
-Other adapters may remain in the implementation or historical records during
-migration, but are not part of the supported first-party v1 catalog.
-
-Adapter packages are installed/verified by Conclave Workspace and execute out-of-process as child processes.
-
-Adapters speak only the versioned Local Adapter Protocol with their local
-Workspace supervisor. They MUST NOT speak to Cloud or receive Workspace runtime
-credentials. Workspace translates between the adapter's local frames and the
-Workspace Runtime Protocol.
-
-One adapter package/version may serve many local configured Workers of the same Worker Type.
+Conclave Workspace resolves each Logical Worker to one compatible signed Tool
+Profile Release and starts the generic CLI Worker Engine out of process. The
+Engine invokes the locally installed Provider CLI using structured arguments
+and Local Worker Protocol 4.0. Provider binaries and release tooling from
+Worker Runtime v2 are migration-only until v8 acceptance; they are not the
+architecture target for new integrations.
 
 A configured Worker:
 - belongs to exactly one Workspace;
@@ -179,7 +178,7 @@ Use:
 - Workspaces for the top-level AX execution-capacity page;
 - Workspace;
 - Worker;
-- Worker Type when referring to adapter/catalog infrastructure;
+- Worker Type for the stable catalog identity;
 - Conclave Workspace for the machine-side application/runtime;
 - credential state when referring to local authentication/readiness.
 
@@ -215,7 +214,9 @@ Real desktop-to-Cloud smoke:
 CONCLAVE_ENROLLMENT_TOKEN=... bash scripts/test-workspace-cloud-connection.sh
 ~~~
 
-See [Architecture v7](ARCHITECTURE_V7.md) and [V7 Implementation Audit](V7_IMPLEMENTATION_AUDIT.md).
+For historical ownership decisions, see [Architecture v7](ARCHITECTURE_V7.md)
+and [V7 Implementation Audit](V7_IMPLEMENTATION_AUDIT.md). New runtime work
+starts from [Architecture v8](ARCHITECTURE_V8.md) and [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md).
 
 
 ## Workspace authentication and transport
@@ -238,4 +239,9 @@ one another.
 
 ## Architecture v8 local runtime refinement
 
-Conclave Workspace launches one generic standalone CLI Worker Engine process per assignment/probe by default. Product-visible ChatGPT/Gemini rows remain logical Workers. Official signed Tool Profiles map those identities to supported provider CLI behavior. New normal CLI integrations should be added through the Cloud Worker catalog + Tool Profile releases when Profile v1 can express them, not by adding another provider-specific native Worker binary.
+Conclave Workspace launches one generic standalone CLI Worker Engine process
+per assignment/probe by default. Product-visible ChatGPT/Gemini rows remain
+Logical Workers. Official signed Tool Profile Releases map those identities to
+supported Provider CLI behavior. New normal CLI integrations should be added
+through the Cloud Worker catalog and Tool Profile releases when Profile v1 can
+express them. Existing v2 provider-specific binaries are migration-only.

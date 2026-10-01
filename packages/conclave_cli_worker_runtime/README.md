@@ -1,9 +1,9 @@
-# Conclave CLI Worker Runtime
+# CLI process primitives and v2 migration runtime
 
-Provider-neutral Dart support for Worker executables. The package starts with
-generic executable lookup, environment construction, bounded command output,
-session-state storage, structured diagnostics/logging, cleanup primitives, and
-the Local Worker Protocol 3.0 console loop.
+The package shares provider-neutral CLI process primitives: executable lookup,
+environment construction, bounded command output, structured diagnostics,
+cleanup, deadlines, and session-state storage.
 
-Provider command lines, authentication interpretation, and output parsing
-belong in individual Worker packages.
+`WorkerRuntime` and its Protocol 3.0 identity model are migration-only v2
+implementation code. The v8 executable is [the generic CLI Worker Engine](../../engines/cli_worker/README.md);
+new Engine behavior must not be added to the v2 loop.

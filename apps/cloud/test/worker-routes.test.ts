@@ -99,12 +99,9 @@ describe("Worker API routes", () => {
     expect(calls).toHaveLength(3);
   });
 
-  it("routes native Worker catalog and artifact paths by platform", async () => {
+  it("retires native Worker package routes and serves shared release trust", async () => {
     const handlers = {
-      handleListWorkerReleases: vi.fn(async () => new Response("catalog")),
-      handleDownloadWorkerRelease: vi.fn(async () => new Response("artifact")),
-      handleRevokeWorkerRelease: vi.fn(async () => new Response("revoked")),
-      handlePublishWorkerRelease: vi.fn(async () => new Response("published")),
+      handleGetReleaseTrustState: vi.fn(async () => new Response("trust")),
     } as unknown as WorkerRouteHandlers;
 
     const catalog = await routeWorkerRequest(
@@ -114,15 +111,8 @@ describe("Worker API routes", () => {
       handlers,
       dependencies,
     );
-    const download = await routeWorkerRequest(
-      request("/api/worker-releases/chatgpt/1.2.3/linux-arm64/download"),
-      {} as Parameters<typeof routeWorkerRequest>[1],
-      undefined,
-      handlers,
-      dependencies,
-    );
-    const revoke = await routeWorkerRequest(
-      request("/api/worker-releases/chatgpt/1.2.3/linux-arm64/revoke", "POST"),
+    const trust = await routeWorkerRequest(
+      request("/api/release-trust"),
       {} as Parameters<typeof routeWorkerRequest>[1],
       undefined,
       handlers,
@@ -130,6 +120,13 @@ describe("Worker API routes", () => {
     );
     const publish = await routeWorkerRequest(
       request("/api/worker-releases/publish", "POST"),
+      {} as Parameters<typeof routeWorkerRequest>[1],
+      undefined,
+      handlers,
+      dependencies,
+    );
+    const legacyTrust = await routeWorkerRequest(
+      request("/api/worker-releases/trust"),
       {} as Parameters<typeof routeWorkerRequest>[1],
       undefined,
       handlers,
@@ -143,28 +140,90 @@ describe("Worker API routes", () => {
       dependencies,
     );
 
-    expect(catalog.status).toBe(200);
-    expect(download.status).toBe(200);
-    expect(revoke.status).toBe(200);
-    expect(publish.status).toBe(200);
+    expect(catalog.status).toBe(410);
+    expect(publish.status).toBe(410);
+    expect(legacyTrust.status).toBe(410);
+    expect(trust.status).toBe(200);
     expect(legacy.status).toBe(404);
-    expect(handlers.handleListWorkerReleases).toHaveBeenCalledOnce();
-    expect(handlers.handleDownloadWorkerRelease).toHaveBeenCalledWith(
+    expect(handlers.handleGetReleaseTrustState).toHaveBeenCalledOnce();
+  });
+
+  it("routes v8 Tool Profile resolution and admin lifecycle operations", async () => {
+    const handlers = {
+      handleResolveToolProfileChannels: vi.fn(
+        async () => new Response("resolved"),
+      ),
+      handleSetWorkspaceToolProfileChannel: vi.fn(
+        async () => new Response("channel"),
+      ),
+      handleCreateToolProfileDefinition: vi.fn(
+        async () => new Response("definition"),
+      ),
+      handleCreateApprovedLogicalWorker: vi.fn(
+        async () => new Response("worker"),
+      ),
+      handleCreateDraftToolProfileRelease: vi.fn(
+        async () => new Response("draft"),
+      ),
+      handlePublishDraftToolProfileRelease: vi.fn(
+        async () => new Response("published"),
+      ),
+      handlePromoteToolProfileRelease: vi.fn(
+        async () => new Response("promoted"),
+      ),
+      handleChangeToolProfileReleaseLifecycle: vi.fn(
+        async () => new Response("revoked"),
+      ),
+      handleListToolProfileReleaseAudit: vi.fn(
+        async () => new Response("audit"),
+      ),
+    } as unknown as WorkerRouteHandlers;
+    const routes = [
+      [
+        "/api/tool-profiles?workerTypeId=chatgpt&workspaceRuntimeId=runtime-1",
+        "GET",
+      ],
+      ["/api/tool-profiles?workspaceRuntimeId=runtime-1", "GET"],
+      ["/api/workspaces/workspace-1/tool-profile-channel", "PATCH"],
+      ["/api/admin/tool-profiles/definitions", "POST"],
+      ["/api/admin/workers/catalog", "POST"],
+      ["/api/admin/tool-profiles/chatgpt-codex/releases", "POST"],
+      ["/api/admin/tool-profiles/chatgpt-codex/releases/2/publish", "POST"],
+      ["/api/admin/tool-profiles/chatgpt-codex/releases/2/promote", "POST"],
+      ["/api/admin/tool-profiles/chatgpt-codex/releases/1/revoke", "POST"],
+      ["/api/admin/tool-profiles/chatgpt-codex/releases/1/audit", "GET"],
+    ] as const;
+    for (const [path, method] of routes) {
+      const response = await routeWorkerRequest(
+        request(path, method),
+        {} as Parameters<typeof routeWorkerRequest>[1],
+        undefined,
+        handlers,
+        dependencies,
+      );
+      expect(response.status, `${method} ${path}`).toBe(200);
+    }
+    expect(handlers.handleResolveToolProfileChannels).toHaveBeenCalledTimes(2);
+    expect(
+      handlers.handleSetWorkspaceToolProfileChannel,
+    ).toHaveBeenCalledOnce();
+    expect(handlers.handleCreateToolProfileDefinition).toHaveBeenCalledOnce();
+    expect(handlers.handleCreateApprovedLogicalWorker).toHaveBeenCalledOnce();
+    expect(handlers.handleCreateDraftToolProfileRelease).toHaveBeenCalledOnce();
+    expect(
+      handlers.handlePublishDraftToolProfileRelease,
+    ).toHaveBeenCalledOnce();
+    expect(handlers.handlePromoteToolProfileRelease).toHaveBeenCalledOnce();
+    expect(
+      handlers.handleChangeToolProfileReleaseLifecycle,
+    ).toHaveBeenCalledWith(
       expect.any(Request),
       expect.anything(),
-      "chatgpt",
-      "1.2.3",
-      "linux-arm64",
+      "chatgpt-codex",
+      "1",
+      "revoke",
       undefined,
     );
-    expect(handlers.handleRevokeWorkerRelease).toHaveBeenCalledWith(
-      expect.any(Request),
-      expect.anything(),
-      "chatgpt",
-      "1.2.3",
-      "linux-arm64",
-      undefined,
-    );
-    expect(handlers.handlePublishWorkerRelease).toHaveBeenCalledOnce();
+    expect(handlers.handleListToolProfileReleaseAudit).toHaveBeenCalledOnce();
   });
 });

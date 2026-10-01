@@ -153,7 +153,7 @@ async function dispatchWorkspaceWorkerAssignment(
     `INSERT INTO worker_assignments
        (id, project_id, execution_workspace_id, workspace_project_grant_id,
         run_id, task_id, attempt_id, requested_by_user_id, runtime_identity_id,
-        worker_id, workspace_worker_id, worker_version,
+        worker_id, workspace_worker_id, engine_version,
         account_id, model, config_json, effective_permissions_json,
         permission_snapshot_json, timeout_ms, session_policy, idempotency_key, status,
         input_json, created_at, updated_at)
@@ -172,7 +172,7 @@ async function dispatchWorkspaceWorkerAssignment(
       target.workspaceRuntimeIdentityId,
       target.workerTypeId,
       target.workerId,
-      target.workerRuntimeVersion,
+      target.engineVersion,
       null,
       target.model,
       JSON.stringify(assignmentInput),
@@ -258,8 +258,9 @@ async function dispatchWorkspaceWorkerAssignment(
       requestedByUserId: task.requestedByUserId,
       workerId: target.workerId,
       workerTypeId: target.workerTypeId,
-      resolvedWorkerVersion: target.workerRuntimeVersion,
-      workerRuntimeVersion: target.workerRuntimeVersion,
+      engineVersion: target.engineVersion,
+      profileDefinitionId: target.profileDefinitionId,
+      profileReleaseVersion: target.profileReleaseVersion,
       providerToolName: target.providerToolName,
       providerToolVersion: target.providerToolVersion,
       model: target.model,
@@ -553,9 +554,7 @@ export async function cancelTaskAssignment(
   const gatewayNamespace = env.CONCLAVE_WORKSPACE_GATEWAY;
   if (!gatewayNamespace) return { cancelled: false };
   try {
-    const stub = gatewayNamespace.get(
-      gatewayNamespace.idFromName(workspaceId),
-    );
+    const stub = gatewayNamespace.get(gatewayNamespace.idFromName(workspaceId));
     const cancelPayload: AssignmentCancelPayload = {
       assignmentId,
       reason,

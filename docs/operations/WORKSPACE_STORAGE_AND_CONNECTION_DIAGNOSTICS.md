@@ -1,5 +1,11 @@
 # Workspace storage and connection diagnostics
 
+**Migration note:** `Adapters/` and adapter references below document the
+existing V7/V2 storage layout only. They are migration-era package storage,
+not the Architecture v8 runtime model. The v8 target uses a signed Tool Profile
+cache alongside the generic CLI Worker Engine; provider-specific Worker
+binaries and their release storage remain migration-only until v8 acceptance.
+
 Conclave Workspace prepares local storage before contacting Cloud. Work Root,
 runtime state, the log directory, and their permissions are checked locally;
 the app does not request a separate macOS “internet permission.” macOS App
@@ -92,3 +98,32 @@ and is preserved when it is forwarded unchanged. The Durable Object stores
 that ID in the WebSocket attachment so hello and sync records retain it after
 the handshake. These records include runtime and Workspace IDs, but never
 credential values, authorization headers, cookies, or provider secrets.
+
+## Engine and Tool Profile diagnostics
+
+For v8 Workers, Workspace keeps bounded per-Worker JSONL diagnostic records.
+They identify Workspace and Engine versions, the logical Worker, Tool Profile
+definition/release and resolution source, provider tool/version, probe stage,
+run ID, stable error code, duration, and failure layer (`engine`, `profile`, or
+`provider_tool`). Assignment/request IDs are included when available. The
+Advanced Diagnostics panel shows the Engine version and resolved official
+integration release alongside the provider CLI version.
+
+Diagnostics are designed for attribution, not reproduction of user input.
+They omit Profile payloads, signing material, provider/runtime credentials,
+prompts, raw provider output, and arbitrary environment values. An unavailable
+Profile resolution is reported as such; diagnostics do not silently present an
+incompatible release as active.
+
+### Profile release channels
+
+Cloud defaults every Workspace to the `stable` Tool Profile channel. During
+internal validation, a platform administrator can opt a Workspace into
+`testing` or `beta` with the authenticated Cloud operation
+`PATCH /api/workspaces/{workspaceId}/tool-profile-channel`, passing one
+`channel` field. Return the Workspace to normal production delivery with
+`channel: "stable"`. Workspace catalog requests authenticate with the runtime
+credential and cannot select a channel themselves; Cloud resolves the
+Workspace's assigned channel and returns only that channel's current release.
+Use the normal Worker Test action for explicit real-provider acceptance; routine
+channel sync runs only a passive readiness probe and does not spend model quota.

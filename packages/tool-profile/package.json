@@ -1,0 +1,17 @@
+{
+  "name": "@conclave/tool-profile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:fixtures": "vitest run test/profile-fixture-harness.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "^4.1.11"
+  }
+}

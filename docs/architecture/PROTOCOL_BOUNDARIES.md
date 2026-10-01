@@ -71,15 +71,17 @@ policy, Workspace inventory, and assignment snapshots use IDs such as
 `chatgpt` and `gemini`; internal Worker release identifiers are not accepted
 in this protocol.
 Cloud forwards the selected product Worker Type ID unchanged. Workspace
-validates it against the selected local Worker slot, then resolves the local
-Worker executable through its product-to-Worker registry. AX therefore does
-not need to know which package implements a product Worker.
+validates it against the selected local Worker slot, then resolves the admitted
+Engine and compatible official Tool Profile Release for that logical Worker.
+AX therefore does not need to know which Engine build or Profile implements a
+product Worker.
 
 Only Conclave Workspace speaks this protocol as a client. Cloud's Workspace
-Gateway is its server. Conclave AX is not a runtime client. Worker executables are
-not runtime clients and MUST NOT connect to Cloud, invoke Workspace Gateway
-routes, or receive the Workspace runtime credential. Workspace translates
-between runtime messages and Local Worker Protocol frames.
+Gateway is its server. Conclave AX is not a runtime client. CLI Worker Engine
+processes are not runtime clients and MUST NOT connect to Cloud, invoke
+Workspace Gateway routes, or receive the Workspace runtime credential.
+Workspace translates between runtime messages and Local Worker Protocol 4.0
+frames.
 
 The current implementation is named
 `conclave.workspace-runtime-protocol` and is defined in
@@ -102,7 +104,16 @@ Protocol 4.0 carries:
 - result;
 - error.
 
-The identity includes logical Worker Type, Engine version, Tool Profile definition/release, Profile schema version, provider tool name/version, and capabilities.
+Initialize requests bind `workerTypeId`, `expectedEngineVersion`,
+`profileDefinitionId`, `profileReleaseVersion`, the lowercase SHA-256
+`profileDigest`, and `protocolVersion`. Initialize results confirm the logical
+Worker Type, Engine version, Tool Profile definition/release/schema version,
+and capabilities. Probe results may report only the bounded provider tool name
+and version; executable paths are not part of the wire contract.
+Probe requests carry an Engine-enforced `timeoutMs` ceiling of at most 30
+seconds. For live probes, the Engine supplies the fixed Conclave test prompt
+and requires exact final text `OK`; Profiles can define only provider transport
+and output parsing.
 
 Workspace owns Engine/Profile admission, process lifetime, local permissions, CWD, cancellation and safe Cloud synchronization. Workspace does not discover or invoke provider CLIs directly.
 
@@ -112,7 +123,9 @@ Tool Profiles are not protocol peers. They are signed immutable behavior configu
 
 Provider credentials, provider session IDs, arbitrary Cloud executable paths, shell commands, and raw provider output are not Local Worker Protocol fields.
 
-Protocol 3.0 and the older 2.x adapter schemas remain migration/history references only. Architecture v8 implementation must not add new provider-specific binary identity to the Local Worker Protocol.
+Local Worker Protocol 3.0 and the older 2.x schemas remain migration/history
+references only. Local Worker Protocol 4.0 is the v8 target. Architecture v8
+implementation must not add provider-specific binary identity to the protocol.
 
 ## Shared canonical domain vocabulary
 
@@ -153,11 +166,11 @@ wire contracts.
 | Product and collaboration actions/read models | Conclave AX | Cloud human API/realtime | Human Product Protocol | Human session |
 | Desktop owner/account management | Workspace management UI | Cloud management routes | Human Product Protocol, HTTPS management surface | Human session |
 | Inventory, assignments, progress, cancellation | Workspace runtime | Cloud Workspace Gateway | Workspace Runtime Protocol | Workspace runtime credential |
-| Local setup, readiness, execution, progress, result | Workspace supervisor | Worker executable process | Local Worker Protocol | Bounded non-secret settings; no provider tokens or account secrets |
+| Local setup, readiness, execution, progress, result | Workspace supervisor | CLI Worker Engine process | Local Worker Protocol 4.0 | Bounded non-secret settings; no provider tokens or account secrets |
 
 Cloud may translate and persist domain state between its product API and
 Workspace Gateway. Workspace may translate between its Cloud runtime client
-and Worker executable process. Neither translation forwards a wire envelope
+and CLI Worker Engine process. Neither translation forwards a wire envelope
 unchanged across a boundary.
 
 ## Current schema locations
@@ -169,7 +182,7 @@ unchanged across a boundary.
   `apps/host/lib/cloud_connection.dart`; schema
   `packages/host-protocol/src/workspace-runtime.ts`; Cloud
   `apps/cloud/src/workspace-gateway.ts`.
-- Local Worker Protocol historical source implementation: Workspace `apps/host/lib/worker_executor.dart` / `apps/host/lib/v7_adapter_protocol.dart` and `packages/worker-manifest/src/adapter-v7.ts` (Node-backed Protocol 2.x).
-- Local Worker Protocol 3.0 target: shared Dart `conclave_worker_protocol` package consumed by Workspace and standalone Worker executables; see `WORKER_RUNTIME_V2.md`.
+- Local Worker Protocol 2.x/3.0 historical source implementation: Workspace `apps/host/lib/worker_executor.dart` / `apps/host/lib/v7_adapter_protocol.dart` and `packages/worker-manifest/src/adapter-v7.ts`; retained as migration evidence.
+- Local Worker Protocol 4.0 target: Workspace-to-CLI Worker Engine contract; implementation is scheduled in Phase 4 of the [Architecture v8 plan](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
 - Canonical domain model: domain entities in `packages/core/src` and the
   canonical vocabulary in this document; wire validators remain protocol-owned.

@@ -23,7 +23,7 @@ WorkerFrame decodeWorkerFrame(String line) {
     'result' => WorkerResult.fromJson(json),
     'error' => WorkerErrorFrame.fromJson(json),
     _ => throw FormatException(
-      'unsupported Worker frame type: ${json['type']}',
-    ),
+        'unsupported Worker frame type: ${json['type']}',
+      ),
   };
 }

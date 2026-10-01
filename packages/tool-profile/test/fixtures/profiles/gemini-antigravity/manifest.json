@@ -1,0 +1,198 @@
+{
+  "schemaVersion": 1,
+  "profile": "../../gemini-antigravity.v1.json",
+  "versionCases": [
+    {
+      "name": "supported",
+      "fixture": "version/supported.txt",
+      "exitCode": 0,
+      "expected": {
+        "version": "1.4.0",
+        "supported": true,
+        "issueCode": null
+      }
+    },
+    {
+      "name": "unsupported",
+      "fixture": "version/unsupported.txt",
+      "exitCode": 0,
+      "expected": {
+        "version": "2.0.0",
+        "supported": false,
+        "issueCode": "unsupported_provider_tool_version"
+      }
+    },
+    {
+      "name": "malformed",
+      "fixture": "version/malformed.txt",
+      "exitCode": 0,
+      "expected": {
+        "version": null,
+        "supported": false,
+        "issueCode": "unsupported_provider_tool_version"
+      }
+    }
+  ],
+  "readinessCases": [
+    {
+      "name": "ready",
+      "expected": {
+        "ready": true,
+        "providerVersion": "1.4.0",
+        "checks": [
+          {
+            "code": "provider_tool_version",
+            "status": "passed"
+          },
+          {
+            "code": "gemini-provider-config",
+            "status": "passed"
+          }
+        ],
+        "issueCode": null
+      },
+      "fixture": "auth/ready.json"
+    },
+    {
+      "name": "authentication-required",
+      "expected": {
+        "ready": false,
+        "providerVersion": "1.4.0",
+        "checks": [
+          {
+            "code": "provider_tool_version",
+            "status": "passed"
+          },
+          {
+            "code": "gemini-provider-config",
+            "status": "failed"
+          }
+        ],
+        "issueCode": "provider_authentication_required"
+      },
+      "fixture": "auth/authentication-required.json"
+    }
+  ],
+  "executionCases": [
+    {
+      "name": "execute-success",
+      "fixture": "execute-success/events.jsonl",
+      "sessionPolicy": "stateless",
+      "sessionId": null,
+      "expected": {
+        "terminal": "success",
+        "finalText": "Gemini answer",
+        "sessionId": "fixture-conversation-1",
+        "terminalStatus": "SUCCESS",
+        "progress": [
+          {
+            "percentage": 40,
+            "messageKey": "provider_response_received"
+          },
+          {
+            "percentage": 40,
+            "messageKey": "provider_working"
+          }
+        ],
+        "issueCode": null
+      }
+    },
+    {
+      "name": "execute-tool-use",
+      "fixture": "execute-tool-use/events.jsonl",
+      "sessionPolicy": "stateless",
+      "sessionId": null,
+      "expected": {
+        "terminal": "success",
+        "finalText": "Gemini answer",
+        "sessionId": "fixture-conversation-1",
+        "terminalStatus": "SUCCESS",
+        "progress": [
+          {
+            "percentage": 40,
+            "messageKey": "provider_response_received"
+          },
+          {
+            "percentage": 40,
+            "messageKey": "provider_working"
+          }
+        ],
+        "issueCode": null
+      }
+    },
+    {
+      "name": "execute-error",
+      "fixture": "execute-error/events.jsonl",
+      "sessionPolicy": "stateless",
+      "sessionId": null,
+      "expected": {
+        "terminal": "failure",
+        "finalText": null,
+        "sessionId": null,
+        "terminalStatus": "ERROR",
+        "progress": [],
+        "issueCode": "provider_authentication_required"
+      }
+    },
+    {
+      "name": "session-start",
+      "fixture": "session-start/events.jsonl",
+      "sessionPolicy": "durable",
+      "sessionId": null,
+      "expected": {
+        "terminal": "success",
+        "finalText": "Gemini answer",
+        "sessionId": "fixture-conversation-1",
+        "terminalStatus": "SUCCESS",
+        "progress": [
+          {
+            "percentage": 40,
+            "messageKey": "provider_response_received"
+          },
+          {
+            "percentage": 40,
+            "messageKey": "provider_working"
+          }
+        ],
+        "issueCode": null
+      }
+    },
+    {
+      "name": "session-resume",
+      "fixture": "session-resume/events.jsonl",
+      "sessionPolicy": "durable",
+      "sessionId": "fixture-conversation-1",
+      "expected": {
+        "terminal": "success",
+        "finalText": "Gemini answer",
+        "sessionId": "fixture-conversation-1",
+        "terminalStatus": "SUCCESS",
+        "progress": [
+          {
+            "percentage": 40,
+            "messageKey": "provider_response_received"
+          },
+          {
+            "percentage": 40,
+            "messageKey": "provider_working"
+          }
+        ],
+        "issueCode": null
+      }
+    },
+    {
+      "name": "session-mismatch",
+      "fixture": "session-mismatch/events.jsonl",
+      "sessionPolicy": "durable",
+      "sessionId": "expected-other-session",
+      "expected": {
+        "terminal": "failure",
+        "finalText": null,
+        "sessionId": null,
+        "terminalStatus": null,
+        "progress": [],
+        "issueCode": "session_resume_failed"
+      }
+    }
+  ]
+}

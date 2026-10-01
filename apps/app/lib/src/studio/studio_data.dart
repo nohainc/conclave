@@ -46,9 +46,12 @@ class StudioWorkRequestStep {
     required this.status,
     required this.workerId,
     this.workerTypeId,
-    this.workerRuntimeVersion,
+    this.engineVersion,
+    this.profileDefinitionId,
+    this.profileReleaseVersion,
     this.providerToolName,
     this.providerToolVersion,
+    this.model,
     this.testSummary,
     this.startedAt,
     this.updatedAt,
@@ -66,9 +69,12 @@ class StudioWorkRequestStep {
   final String status;
   final String? workerId;
   final String? workerTypeId;
-  final String? workerRuntimeVersion;
+  final String? engineVersion;
+  final String? profileDefinitionId;
+  final int? profileReleaseVersion;
   final String? providerToolName;
   final String? providerToolVersion;
+  final String? model;
   final String? testSummary;
   final String? startedAt;
   final String? updatedAt;
@@ -87,9 +93,12 @@ class StudioWorkRequestStep {
         status: json['status']?.toString() ?? 'queued',
         workerId: json['workerId']?.toString(),
         workerTypeId: json['workerTypeId']?.toString(),
-        workerRuntimeVersion: json['workerRuntimeVersion']?.toString(),
+        engineVersion: json['engineVersion']?.toString(),
+        profileDefinitionId: json['profileDefinitionId']?.toString(),
+        profileReleaseVersion: json['profileReleaseVersion'] as int?,
         providerToolName: json['providerToolName']?.toString(),
         providerToolVersion: json['providerToolVersion']?.toString(),
+        model: json['model']?.toString(),
         testSummary: json['testSummary']?.toString(),
         startedAt: json['startedAt']?.toString(),
         updatedAt: json['updatedAt']?.toString(),

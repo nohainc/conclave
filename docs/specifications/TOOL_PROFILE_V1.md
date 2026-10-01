@@ -20,8 +20,9 @@ code.
 3. Placeholders come from a closed list.
 4. Selectors use a bounded JSON-path-like syntax implemented by the Engine.
 5. Match/action rules use a fixed finite operation set.
-6. Profiles cannot define loops, arbitrary expressions, file I/O, network
-   access, or helper subprocesses.
+6. Profiles cannot define loops, arbitrary expressions, arbitrary file I/O,
+   network access, or helper subprocesses. The sole bounded filesystem read is
+   the typed local JSON config check defined in section 9.1.
 7. Engine hard limits override Profile values.
 8. Material provider behavior changes should prefer a new Profile release over
    large in-profile branching.
@@ -48,14 +49,48 @@ Conceptual JSON:
   "probe": {},
   "execution": {},
   "session": {},
+  "model": {},
+  "timeout": {},
+  "sandbox": {},
   "progress": {},
   "errors": {},
-  "capabilities": []
+  "capabilities": [],
+  "compatibilityOverrides": []
 }
 ~~~
 
 Unknown fields are rejected unless a later schema version explicitly permits
 extensions.
+
+The canonical v1 validator and inferred TypeScript model are maintained
+together in [`packages/tool-profile/src/index.ts`](../../packages/tool-profile/src/index.ts).
+The same source exports a JSON Schema representation. Its engine-owned bounds
+are published as `TOOL_PROFILE_LIMITS`; the validator rejects payloads over
+256 KiB and rejects unknown fields at every Profile-defined object.
+
+### 3.1 Schema evolution gate
+
+Profile v1 is closed. Do not add optional escape hatches, expressions, scripts,
+or provider-only interpreter branches to make one integration fit. For an
+unsupported CLI behavior, the proposal must:
+
+1. document the concrete provider behavior and the missing v1 primitive;
+2. test whether the behavior is generic across integrations, using at least a
+   fixture CLI/Profile where practical;
+3. justify any integration-specific handling and explain why bounded Profile
+   data cannot represent it safely;
+4. update the [security threat model](../security/V2-28-threat-model.md) with
+   the new authority, inputs, and resource bounds before implementation;
+5. add schema v2 only when the behavior needs new Profile semantics that cannot
+   be expressed by the existing finite v1 primitives.
+
+When v2 is justified, it must have its own strict versioned validator and
+interpreter semantics. v1 payloads continue through the unchanged v1 validator;
+they are never reinterpreted as v2, and neither validator accepts unknown
+fields. Workspace and Engine reject unsupported schema versions before
+execution. Profile releases remain immutable and signed over the schema
+version and complete behavior payload. No schema v2 is defined by this
+specification.
 
 ## 4. Identity
 
@@ -87,6 +122,9 @@ Constraints:
 ~~~
 
 Workspace/Engine rejects a Profile outside the running Engine version range.
+Semantic-version checks use full SemVer precedence, including prerelease
+ordering; build metadata does not affect compatibility. Both Engine and
+Workspace use the shared Tool Profile v1 comparator.
 
 ## 6. Provider tool declaration
 
@@ -131,7 +169,16 @@ Conceptual:
 - standard locations may use approved path placeholders only;
 - Engine owns maximum path count/search depth;
 - Workspace/Engine may add generic safe OS locations;
-- a cached previously verified absolute path may be tried first.
+- a cached absolute path may be tried first only after checking its identity,
+  path bounds, expected executable name, and executable status again;
+- when `allowPathSearch` is true, Engine searches the inherited OS `PATH`
+  independently of the environment keys passed through to the provider;
+- no Conclave-specific environment variable is required for discovery.
+
+Engine generic locations include the common user CLI directories under the OS
+home directory and standard system locations such as `/opt/homebrew/bin`,
+`/usr/local/bin`, `/usr/bin`, and `/bin` on macOS. These are added by Engine;
+Profiles do not need to enumerate every normal installation location.
 
 ## 7. Closed placeholders
 
@@ -153,6 +200,11 @@ The Engine performs substitution without invoking a shell.
 Unknown placeholders fail Profile validation.
 
 No nested expressions or function calls exist.
+
+At execution time a missing value for a referenced placeholder is a controlled
+Profile execution failure. `timeoutMs` expands to
+`max(1, assignmentTimeoutMs - providerReserveMs)`; `timeoutSeconds` is the
+ceiling of that value in seconds, with a minimum of one.
 
 ## 8. Environment
 
@@ -195,13 +247,9 @@ Conceptual:
       "checks": [
         {
           "id": "authentication",
-          "command": {
-            "arguments": ["login", "status"],
-            "timeoutMs": 10000
-          },
-          "success": {
-            "exitCodes": [0]
-          },
+          "arguments": ["login", "status"],
+          "timeoutMs": 10000,
+          "successExitCodes": [0],
           "failureIssueCode": "provider_authentication_required"
         }
       ]
@@ -213,16 +261,37 @@ Conceptual:
 The already-resolved provider executable is always used. A Profile cannot
 execute a second arbitrary program for probes.
 
+### 9.1 Bounded local config check
+
+A passive probe may read a small JSON file below the Engine-approved local home
+directory through `configChecks`. A check must declare `root: "home"`, a
+relative path with no `.`/`..` segments, `format: "json"`, and a `maxBytes`
+value no greater than 64 KiB. The Engine opens only that file, parses bounded
+JSON, applies the same property-only selectors as event rules, and returns
+only a passed/warning/failed state and stable issue code. It never exposes file
+contents to Cloud or the UI. Missing, malformed, and oversized files are
+handled by declared finite outcomes. No globbing, directory listing, symlink
+traversal, arbitrary roots, or other file reads are permitted. Required
+environment variables can be checked by name for non-empty values using
+`requiredEnvironmentAny`; if none are present, the rule's explicit
+`whenEnvironmentMissing` result applies. A missing file or home directory uses
+`onMissing` and does not imply an authentication failure unless that outcome
+is explicitly `failed`. The conditions and no-match result make the config
+decision exhaustive. Values are never returned.
+
 ## 10. Live probe
 
-Live probe uses normal execution with a Conclave-controlled test request:
+Live probe uses normal Profile execution with a Conclave-controlled test
+request and a hard 30-second timeout ceiling:
 
 ~~~text
 Reply with exactly the word OK. Do not use tools.
 ~~~
 
-The Profile may select an execution variant, expected final-text matcher, and
-shorter timeout. It may not replace the controlled test request.
+The Engine owns the prompt and exact expected final text `OK`. Profiles cannot
+change either. The Engine runs the Profile's normal transport and output parser
+with a stateless session, applies the remaining request deadline, and fails
+closed when the final text does not exactly match `OK` after trimming.
 
 Live tests are explicit because they may consume provider quota.
 
@@ -235,16 +304,17 @@ Conceptual Codex-like Profile:
   "execution": {
     "arguments": [
       "--ask-for-approval", "never",
-      "--sandbox", "workspace-write",
+      {"sandboxPolicyMapping": true},
       "exec",
       "--json",
       "--color", "never",
       "--skip-git-repo-check",
       "--cd", "{{workingDirectory}}",
-      {"ifPresent": "model", "values": ["--model", "{{model}}"]},
-      {"ifPresent": "sessionId", "values": ["resume", "{{sessionId}}"]},
+      {"modelArguments": true},
+      {"sessionResumeArguments": true},
       {"ifAbsent": "sessionId", "ifSessionPolicy": "stateless",
        "values": ["--ephemeral"]},
+      {"providerTimeoutArguments": true},
       "-"
     ],
     "stdin": {
@@ -259,9 +329,19 @@ Conceptual Codex-like Profile:
 ~~~
 
 Conditional argument forms are fixed schema constructs, not expressions.
+Every execution argument list has exactly one
+`{"sandboxPolicyMapping": true}` slot. The Engine replaces it with the
+arguments mapped for the authorized execution policy, preserving provider CLI
+argument position. It also contains one `{"providerTimeoutArguments": true}`
+slot and contains one `{"modelArguments": true}` slot when model arguments are
+declared, plus one `{"sessionResumeArguments": true}` slot when sessions are
+supported. These markers insert the corresponding section's fixed argument
+vector at that position. The profile's `sandbox.mappings` define finite vectors
+for `restricted`, `provider_default`, and `full_access`.
 
 Allowed v1 conditions are limited to:
-- known field present/absent;
+- known field present/absent, equals/not-equals, one-of bounded constants, or
+  has a JSON value type;
 - session policy equality;
 - bounded Engine-defined execution policy.
 
@@ -297,6 +377,11 @@ jsonl
 ~~~
 
 For `jsonl`, each bounded line is decoded as one JSON value.
+Blank lines are ignored. A malformed non-empty line or output exceeding Engine
+limits is a controlled provider failure. The v1 interpreter bounds prompt and
+stdin at 1 MiB, expanded argv bytes at 128 KiB, total output at 4 MiB, each
+JSONL line at 512 KiB, event count at 10,000, and normalized final text at 512
+KiB. Session IDs are limited to 256 characters.
 
 Required structured output that cannot be decoded is a controlled execution
 failure.
@@ -317,6 +402,7 @@ $.result.response
 v1 selectors:
 - begin at root;
 - allow object-property traversal only;
+- address own JSON data properties only and reject prototype properties;
 - have bounded depth/length;
 - do not support filters;
 - do not support recursive descent;
@@ -326,6 +412,10 @@ v1 selectors:
 
 Finite rules map provider events into Engine semantics.
 
+Progress rules are evaluated in source order and the first matching rule
+wins. Profiles must put specific rules before a broader fallback. This makes
+the Gemini `agent_response` mapping deterministic.
+
 Conceptual:
 
 ~~~json
@@ -333,7 +423,7 @@ Conceptual:
   "events": [
     {
       "when": [
-        {"selector": "$.type", "equals": "thread.started"}
+        {"kind": "equals", "selector": "$.type", "value": "thread.started"}
       ],
       "actions": [
         {"type": "set_session", "selector": "$.thread_id"}
@@ -341,8 +431,8 @@ Conceptual:
     },
     {
       "when": [
-        {"selector": "$.type", "equals": "item.completed"},
-        {"selector": "$.item.type", "equals": "agent_message"}
+        {"kind": "equals", "selector": "$.type", "value": "item.completed"},
+        {"kind": "equals", "selector": "$.item.type", "value": "agent_message"}
       ],
       "actions": [
         {"type": "set_final_text", "selector": "$.item.text"}
@@ -385,6 +475,16 @@ turn.completed observed AND final text exists
 ~~~
 
 The Engine requires one bounded final result for successful execution.
+For structured output, success requires exit code zero, a `mark_success` action,
+and non-empty final text. `mark_failure`, a provider error, cancellation, or an
+Engine timeout makes the terminal result fail. For `plain_text`, a non-empty
+text result and exit code zero are sufficient. A failed result uses the first
+matching Profile error mapping, except Engine cancellation/deadline outcomes,
+which take precedence.
+
+The interpreter returns the same bounded result shape for each output mode:
+terminal success/failure, final text, observed session ID, terminal status,
+Engine message-key progress entries, and an optional stable issue code.
 
 ## 17. Progress mapping
 
@@ -394,7 +494,7 @@ Conceptual:
 {
   "progress": [
     {
-      "when": [{"selector": "$.type", "equals": "turn.started"}],
+      "when": [{"kind": "equals", "selector": "$.type", "value": "turn.started"}],
       "percentage": 10,
       "messageKey": "provider_working"
     }
@@ -413,6 +513,8 @@ Conceptual:
 {
   "session": {
     "supported": true,
+    "formatId": "codex-thread-v1",
+    "compatibleFormatIds": ["codex-thread-v1"],
     "extract": "$.thread_id",
     "resumeArguments": ["resume", "{{sessionId}}"],
     "requireObservedIdMatch": true
@@ -426,6 +528,18 @@ When durable session is requested:
 - an observed provider session ID must exist;
 - resumed observed ID must equal the stored expected ID;
 - mismatch is a hard session-resume failure.
+
+`formatId` identifies the provider's local session-ID format. A Profile Release
+must include its own format in `compatibleFormatIds`; it may include an older
+format only when it declares that ID safe to resume. The Engine partitions
+session records by logical Worker, Profile definition, provider tool identity,
+and logical Conclave `sessionKey`. It resumes a stored provider ID only when
+the active Profile declares that stored format compatible. Otherwise it starts
+without the stored provider ID and replaces the local mapping after a
+successful new durable session. Profile release metadata never changes the
+signed compatibility declaration. Session files written by the unpartitioned
+development Engine are ignored by this format and will begin a fresh provider
+session on first use.
 
 ## 19. Model mapping
 
@@ -455,12 +569,16 @@ A Profile may map the assignment timeout to a provider argument:
 {
   "timeout": {
     "providerArguments": ["--print-timeout", "{{timeoutSeconds}}s"],
-    "reserveMsForCleanup": 1800
+    "providerReserveMs": 1500
   }
 }
 ~~~
 
-Engine validates reserve bounds and remains the authoritative process deadline.
+For `{{timeoutSeconds}}`, the Engine supplies
+`max(1, ceil((assignmentTimeoutMs - providerReserveMs) / 1000))`. The provider
+reserve is independent from the Engine's own hard process deadline and cleanup
+grace. The Engine deadline always wins if the CLI ignores its provider timeout.
+The Engine owns the cleanup grace; Profiles cannot change it.
 
 ## 21. Sandbox/permission mapping
 
@@ -499,6 +617,7 @@ permission_denied
 quota_exhausted
 provider_unavailable
 deadline_exceeded
+cancelled
 session_resume_failed
 provider_failure
 ~~~
@@ -510,7 +629,8 @@ A release may contain small bounded compatibility overrides.
 Requirements:
 - bounded number;
 - non-overlapping provider-version ranges;
-- only explicitly overrideable fields;
+- only `executionArguments`, `versionProbeArguments`, `progress`, and
+  `errorMappings` may be overridden in v1;
 - fixtures for every range.
 
 Materially different behavior should become a new Profile release instead.
@@ -536,23 +656,47 @@ A Profile cannot grant capabilities forbidden by Workspace.
 
 ## 25. Profile release envelope
 
-The signed release envelope contains at minimum:
+Workspace verifies a Tool Profile Release v1 envelope before passing the
+payload to the generic CLI Worker Engine. The payload digest is lowercase
+hexadecimal SHA-256 over the canonical JSON encoding of the complete validated
+Profile v1 object. The Ed25519 signature is over UTF-8 bytes of:
 
 ~~~text
-profileDefinitionId
-releaseVersion
-schemaVersion
-logicalWorkerTypeId
-engineFamily
-payloadDigest
-signingKeyId
-signature
+conclave-tool-profile-release-v1\n<canonical envelope JSON>
 ~~~
 
-The behavior payload is covered by the digest/signature.
+The canonical envelope JSON has exactly these signing claims:
 
-Lifecycle state and promotion metadata may be stored alongside the immutable
-signed payload.
+~~~text
+domain = conclave-tool-profile-release-v1
+publisher
+signingKeyId
+payloadDigest
+profileDefinitionId
+releaseVersion
+logicalWorkerTypeId
+engineFamily
+schemaVersion
+engineCompatibility
+providerToolName
+providerCompatibility
+~~~
+
+`providerCompatibility` is the signed payload's
+`providerTool.supportedVersions`. Workspace recomputes the payload digest,
+compares every repeated envelope claim against the payload and Cloud release
+metadata, then checks the publisher/key ID against its Ed25519 trust roots.
+Changing behavior, identity, release version, logical Worker binding, Engine
+compatibility, provider compatibility, publisher, or key ID invalidates
+admission.
+
+Lifecycle state, channel, promotion pointers, audit fields, display name, and
+timestamps are registry metadata outside the signed envelope. Workspace may
+accept a trusted signed release at a permitted channel, but those fields cannot
+change signed behavior or compatibility claims. Workspace also rejects a
+revoked payload digest, `<profileDefinitionId>@<releaseVersion>`, publisher, or
+signing key ID. Key rotation adds a new key ID and public key to the Workspace
+trust roots before signing with it; key IDs cannot be relabeled after signing.
 
 ## 26. Immutability
 
@@ -590,13 +734,33 @@ Once a Profile release is published beyond draft:
 ### Real acceptance
 
 - real installed provider CLI;
-- passive probe;
-- explicit live probe;
-- representative execution;
-- durable session when supported.
+- passive probe and explicit live probe;
+- representative assignment and Workstream write where the Profile can write
+  local files;
+- durable session start and resume when the Profile supports sessions;
+- bounded timeout and assignment cancellation through the Workspace process
+  tree supervisor.
 
 Stable promotion for first-party official Profiles requires all applicable
-levels.
+levels. The controlled acceptance runner records a JSON evidence artifact bound
+to the exact Profile digest, release identity, Engine version, provider CLI
+version, and required scenario results. Evidence must be no older than 90 days
+and must use Engine/provider versions allowed by the signed Profile. The stable
+promotion API requires this artifact and retains it as immutable release
+evidence. Normal CI must not enable real acceptance or consume provider
+allowance.
+
+Run one controlled profile from `apps/host` with:
+
+~~~sh
+CONCLAVE_TEST_REAL_PROFILE_CHATGPT=1 \
+CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/secure/path/profile-evidence \
+flutter test test/tool_profile_real_acceptance_test.dart
+~~~
+
+Use `CONCLAVE_TEST_REAL_PROFILE_GEMINI=1` for the Gemini Profile. The evidence
+artifact contains version and scenario metadata only; it does not retain
+credentials, prompts, provider output, or Workstream file contents.
 
 ## 28. Initial official Profiles
 
@@ -629,3 +793,25 @@ If Profile v1 cannot represent a provider safely:
    Engine/Profile capability in a new schema version.
 2. If it is provider-specific, prefer a specialized driver/engine rather than
    making the Profile schema a programming language.
+
+## 31. Machine bounds
+
+The canonical validator publishes the exact hard limits in
+`TOOL_PROFILE_LIMITS`. In v1 these include: 256 KiB serialized payload; 4,096
+characters per general string; 256 characters per short label; 64 items per
+general array; 128 arguments; 128 event rules; 64 progress and error rules;
+16 selector conditions per rule; selector depth 16 and selector length 256;
+JSON template nesting depth 16;
+64 environment names; 8 config checks with a 64 KiB maximum file size; and
+16 compatibility overrides. More specific schema fields may have tighter
+limits. Pattern IDs are finite Engine-owned enum values, not user-provided
+regular expressions.
+
+## 32. Deterministic rule processing
+
+Event rules and progress rules are evaluated in Profile source order. Event
+actions within a matched rule execute in source order. A progress event emits
+the action from the first matching progress rule only. Stable failure mappings
+are ordered; the Engine uses the first matching mapping. An Engine may still
+report its own hard deadline or protocol-integrity failure regardless of
+Profile mappings.

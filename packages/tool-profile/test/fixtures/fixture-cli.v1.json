@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "profileDefinitionId": "fixture-cli",
+  "releaseVersion": 1,
+  "logicalWorkerTypeId": "fixture-worker",
+  "engineFamily": "cli",
+  "engineCompatibility": { "min": "1.0.0", "maxExclusive": "2.0.0" },
+  "providerTool": {
+    "name": "Fixture CLI",
+    "executableCandidates": ["fixture-provider"],
+    "discovery": { "standardLocations": [], "allowPathSearch": true },
+    "versionProbe": {
+      "arguments": ["--version"],
+      "timeoutMs": 10000,
+      "source": "stdout",
+      "extract": { "kind": "regex_capture", "patternId": "semver" }
+    },
+    "supportedVersions": [{ "min": "0.0.0", "maxExclusive": "99.0.0" }]
+  },
+  "environment": { "passthrough": ["PATH", "HOME", "PUB_CACHE"], "set": {} },
+  "probe": {
+    "passive": {
+      "checks": [
+        {
+          "id": "fixture-auth",
+          "arguments": ["probe"],
+          "timeoutMs": 5000,
+          "successExitCodes": [0],
+          "failureIssueCode": "provider_authentication_required"
+        }
+      ],
+      "configChecks": []
+    }
+  },
+  "execution": {
+    "arguments": [
+      { "sandboxPolicyMapping": true },
+      "echo",
+      "{{prompt}}",
+      { "providerTimeoutArguments": true }
+    ],
+    "stdin": { "mode": "raw_text", "value": "{{prompt}}" },
+    "output": { "mode": "plain_text" },
+    "events": []
+  },
+  "session": {
+    "supported": false,
+    "formatId": "fixture-session-v1",
+    "compatibleFormatIds": ["fixture-session-v1"],
+    "resumeArguments": [],
+    "requireObservedIdMatch": false
+  },
+  "model": {
+    "supported": false,
+    "arguments": [],
+    "unknownModelPolicy": "pass_through"
+  },
+  "timeout": { "providerArguments": [], "providerReserveMs": 0 },
+  "sandbox": {
+    "mappings": { "restricted": [], "provider_default": [], "full_access": [] }
+  },
+  "progress": [],
+  "errors": {
+    "mappings": [
+      {
+        "evidence": { "kind": "exit_code", "value": 2 },
+        "issueCode": "provider_failure"
+      },
+      {
+        "evidence": { "kind": "missing_terminal" },
+        "issueCode": "provider_failure"
+      }
+    ]
+  },
+  "capabilities": ["text"],
+  "compatibilityOverrides": []
+}

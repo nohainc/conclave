@@ -57,6 +57,9 @@ const migrationFiles = [
   "0037_workstream_work_config.sql",
   "0038_work_request_snapshots.sql",
   "0039_workstream_runtime_leases.sql",
+  "0041_workflow_task_timing.sql",
+  "0048_safe_worker_inventory_v8.sql",
+  "0049_remove_native_worker_release_catalog.sql",
 ];
 
 class LocalD1Statement {
@@ -566,6 +569,9 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"fake 
         worker_type_id: workerTypeId,
         activation_state: "enabled",
         readiness_state: "ready",
+        engine_version: "1.0.0-test",
+        profile_definition_id: "fixture-profile",
+        profile_release_version: 1,
       });
       const liveStatus = await gateway.fetch(
         new Request("https://gateway.internal/status"),
@@ -793,6 +799,37 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"fake 
         configuredWorkerId: "worker-local-v7-e2e",
         workerTypeId,
         workspaceId: "workspace-v7-e2e",
+        engineVersion: "1.0.0-test",
+        profileDefinitionId: "fixture-profile",
+        profileReleaseVersion: 1,
+        providerToolVersion: null,
+        model: modelId ?? null,
+      });
+      await db
+        .prepare(
+          `UPDATE workspace_worker_inventory
+              SET engine_version = '9.9.9', profile_release_version = 99,
+                  provider_tool_version = '9.9.9'
+            WHERE worker_id = 'worker-local-v7-e2e'`,
+        )
+        .run();
+      const frozenAssignmentSnapshot = JSON.parse(
+        String(
+          await db
+            .prepare(
+              "SELECT permission_snapshot_json FROM worker_assignments WHERE id = ?1",
+            )
+            .bind(dispatched.assignmentId)
+            .first<{ permission_snapshot_json: string }>()
+            .then((row) => row?.permission_snapshot_json),
+        ),
+      ) as Record<string, unknown>;
+      expect(frozenAssignmentSnapshot).toMatchObject({
+        engineVersion: "1.0.0-test",
+        profileDefinitionId: "fixture-profile",
+        profileReleaseVersion: 1,
+        providerToolVersion: null,
+        model: modelId ?? null,
       });
       const task = await db
         .prepare("SELECT status, output_json FROM workflow_tasks WHERE id = ?1")

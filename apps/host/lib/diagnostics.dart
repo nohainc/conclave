@@ -6,7 +6,8 @@ import 'cloud_connection.dart';
 import 'host.dart';
 import 'platform_runtime.dart';
 import 'workspace_enrollment.dart';
-import 'first_party_worker_registry.dart';
+import 'cli_worker_engine_supervisor.dart';
+import 'tool_profile_resolver.dart';
 
 const _diagnosticSecretPattern =
     r'(secret|token|password|api[_-]?key|authorization|cookie|raw[_-]?credential|private[_-]?key)';
@@ -44,6 +45,7 @@ Future<Map<String, Object?>> buildHostDiagnostics({
   AssignmentJournal? journal,
   LocalConfiguredWorkerRegistry? workerRegistry,
   WorkerVersionStore? workerVersionStore,
+  ToolProfileReleaseStore? toolProfileReleaseStore,
   String? lastUpdateCheckStatus,
   DateTime? lastUpdateCheckAt,
   String? updateStatus,
@@ -60,17 +62,45 @@ Future<Map<String, Object?>> buildHostDiagnostics({
   final workers = <Map<String, Object?>>[];
   for (final worker
       in await workerRegistry?.list(includeRemoved: true) ?? const []) {
-    Map<String, Object?>? workerRelease;
-    try {
-      workerRelease =
-          (await workerVersionStore?.activeManifest(worker.workerTypeId))
-              ?.toJson();
-    } on Object {
-      // Keep diagnostics safe when the native Worker release is invalid.
+    Map<String, Object?>? toolProfile;
+    final profileDefinitionId = _profileDefinitionId(worker.workerTypeId);
+    if (profileDefinitionId != null && toolProfileReleaseStore != null) {
+      try {
+        final resolver = ToolProfileResolver(toolProfileReleaseStore);
+        var resolution = worker.toolVersion == null
+            ? await resolver.resolveBootstrapProfile(
+                logicalWorkerTypeId: worker.workerTypeId,
+                profileDefinitionId: profileDefinitionId,
+                engineVersion: cliWorkerEngineVersion,
+              )
+            : await resolver.resolve(
+                logicalWorkerTypeId: worker.workerTypeId,
+                profileDefinitionId: profileDefinitionId,
+                engineVersion: cliWorkerEngineVersion,
+                providerCliVersion: worker.toolVersion!,
+              );
+        if (!resolution.isAvailable && worker.toolVersion != null) {
+          resolution = await resolver.resolveBootstrapProfile(
+            logicalWorkerTypeId: worker.workerTypeId,
+            profileDefinitionId: profileDefinitionId,
+            engineVersion: cliWorkerEngineVersion,
+          );
+        }
+        toolProfile = {
+          'profileDefinitionId': profileDefinitionId,
+          'profileResolutionSource': resolution.source.name,
+          'profileResolutionAvailable': resolution.isAvailable,
+          if (resolution.release != null)
+            'profileReleaseVersion': resolution.release!.releaseVersion,
+        };
+      } on Object {
+        toolProfile = {
+          'profileDefinitionId': profileDefinitionId,
+          'profileResolutionSource': 'unavailable',
+          'profileResolutionAvailable': false,
+        };
+      }
     }
-    final descriptor = FirstPartyWorkerPackage.forProductWorkerTypeId(
-      worker.workerTypeId,
-    );
     workers.add({
       'workerId': worker.id,
       'workerTypeId': worker.workerTypeId,
@@ -81,10 +111,11 @@ Future<Map<String, Object?>> buildHostDiagnostics({
       'readinessIssueCode': worker.readinessIssueCode,
       'providerToolVersion': worker.toolVersion,
       'providerToolName': worker.toolName,
+      'engineVersion': cliWorkerEngineVersion,
       'providerToolPath': worker.toolPath,
-      if (descriptor != null) 'packageId': descriptor.packageId,
-      'workerRuntimeVersion': workerRelease?['workerVersion'],
-      'workerRelease': workerRelease,
+      if (toolProfile != null) 'toolProfile': toolProfile,
+      'profileDefinitionId': profileDefinitionId,
+      'profileReleaseVersion': toolProfile?['profileReleaseVersion'],
       'lastLiveTest': {
         'at': worker.lastLiveTestAt,
         'passed': worker.lastLiveTestPassed,
@@ -112,6 +143,8 @@ Future<Map<String, Object?>> buildHostDiagnostics({
   return {
     'format': 'conclave-host-diagnostics-v1',
     'appVersion': conclaveWorkspaceAppVersion,
+    'workspaceVersion': conclaveWorkspaceAppVersion,
+    'cliWorkerEngineVersion': cliWorkerEngineVersion,
     'exportedAt': DateTime.now().toUtc().toIso8601String(),
     'host': {
       'hostId': config.hostId,
@@ -204,6 +237,7 @@ Future<File> writeHostDiagnostics({
   AssignmentJournal? journal,
   LocalConfiguredWorkerRegistry? workerRegistry,
   WorkerVersionStore? workerVersionStore,
+  ToolProfileReleaseStore? toolProfileReleaseStore,
   String? lastUpdateCheckStatus,
   DateTime? lastUpdateCheckAt,
   String? updateStatus,
@@ -215,6 +249,7 @@ Future<File> writeHostDiagnostics({
     journal: journal,
     workerRegistry: workerRegistry,
     workerVersionStore: workerVersionStore,
+    toolProfileReleaseStore: toolProfileReleaseStore,
     lastUpdateCheckStatus: lastUpdateCheckStatus,
     lastUpdateCheckAt: lastUpdateCheckAt,
     updateStatus: updateStatus,
@@ -226,3 +261,9 @@ Future<File> writeHostDiagnostics({
   await currentPlatformRuntime.restrictPermissions(file.path, directory: false);
   return file;
 }
+
+String? _profileDefinitionId(String workerTypeId) => switch (workerTypeId) {
+      'chatgpt' => 'chatgpt-codex',
+      'gemini' => 'gemini-antigravity',
+      _ => null,
+    };

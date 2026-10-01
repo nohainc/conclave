@@ -1,0 +1,10 @@
+name: conclave_tool_profile_v1
+description: Shared Tool Profile v1 structural and security validator.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  crypto: ^3.0.0

@@ -88,6 +88,7 @@ echo "Building Conclave Workspace $VERSION for macOS (mode: $MODE)"
 cd "$HOST_DIR"
 flutter clean
 flutter pub get
+bash "$ROOT/scripts/build-cli-worker-engine.sh"
 
 if [[ "$ALLOW_UNSIGNED_DEVELOPMENT_WORKERS" == "1" && "$MODE" != "debug" ]]; then
   echo "Unsigned development Workers can only be enabled in a debug Workspace build." >&2

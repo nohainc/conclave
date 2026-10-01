@@ -27,7 +27,9 @@ export interface WorkspaceWorkerInventory {
   readonly activationState: WorkerActivationState;
   readonly readinessState: WorkerReadinessState;
   readonly readinessIssueCode: string | null;
-  readonly workerRuntimeVersion: string | null;
+  readonly engineVersion: string | null;
+  readonly profileDefinitionId: string | null;
+  readonly profileReleaseVersion: number | null;
   readonly providerToolName: string | null;
   readonly providerToolVersion: string | null;
   readonly capabilities: readonly string[];
@@ -101,11 +103,69 @@ export function validateWorkspaceWorkerInventory(
     );
   }
   optionalText(worker.readinessIssueCode, "readinessIssueCode", 128);
-  optionalText(worker.workerRuntimeVersion, "workerRuntimeVersion", 128);
+  optionalText(worker.engineVersion, "engineVersion", 64);
+  optionalText(worker.profileDefinitionId, "profileDefinitionId", 96);
+  if (
+    worker.profileDefinitionId !== null &&
+    !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(worker.profileDefinitionId)
+  ) {
+    throw new DomainInvariantError(
+      "WorkerInventory profileDefinitionId is invalid",
+    );
+  }
+  for (const [field, value, pattern] of [
+    [
+      "engineVersion",
+      worker.engineVersion,
+      /^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$/,
+    ],
+    [
+      "providerToolName",
+      worker.providerToolName,
+      /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,127}$/,
+    ],
+    [
+      "providerToolVersion",
+      worker.providerToolVersion,
+      /^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$/,
+    ],
+  ] as const) {
+    if (value !== null && !pattern.test(value)) {
+      throw new DomainInvariantError(
+        `WorkerInventory ${field} contains unsupported characters`,
+      );
+    }
+  }
+  if (
+    worker.profileReleaseVersion !== null &&
+    (!Number.isSafeInteger(worker.profileReleaseVersion) ||
+      worker.profileReleaseVersion < 1)
+  ) {
+    throw new DomainInvariantError(
+      "WorkerInventory profileReleaseVersion must be null or a positive safe integer",
+    );
+  }
+  if (
+    (worker.profileDefinitionId === null) !==
+    (worker.profileReleaseVersion === null)
+  ) {
+    throw new DomainInvariantError(
+      "WorkerInventory Profile definition and release must be reported together",
+    );
+  }
   optionalText(worker.providerToolName, "providerToolName", 128);
   optionalText(worker.providerToolVersion, "providerToolVersion", 128);
   unique(worker.capabilities, "WorkerInventory capabilities");
   unique(worker.inputCapabilities, "WorkerInventory inputCapabilities");
+  if (
+    worker.capabilities.some(
+      (value) => !/^[a-z][a-z0-9_:-]{0,127}$/.test(value),
+    )
+  ) {
+    throw new DomainInvariantError(
+      "WorkerInventory capabilities contain unsupported characters",
+    );
+  }
   if (
     worker.inputCapabilities.some(
       (capability) =>

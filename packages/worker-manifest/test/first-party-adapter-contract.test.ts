@@ -48,7 +48,7 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"Gemin
   },
 ] as const;
 
-describe.each(cases)("$name Local Adapter Protocol contract", (adapterCase) => {
+describe.each(cases)("$name v7 migration protocol contract", (adapterCase) => {
   let directory: string | undefined;
   let processHandle: ReturnType<typeof spawn> | undefined;
 

@@ -1,1 +1,1 @@
-{"type":"probe.request","protocolVersion":"3.0","requestId":"probe-1","mode":"passive"}
+{"type":"probe.request","protocolVersion":"4.0","requestId":"probe-1","mode":"passive","timeoutMs":30000}

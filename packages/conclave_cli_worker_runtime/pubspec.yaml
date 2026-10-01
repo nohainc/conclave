@@ -1,5 +1,5 @@
 name: conclave_cli_worker_runtime
-description: Provider-neutral Dart CLI and process support for Conclave Worker executables.
+description: Shared isolated CLI process primitives for the Conclave CLI Worker Engine.
 publish_to: none
 version: 0.1.0
 

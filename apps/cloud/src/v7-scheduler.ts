@@ -30,7 +30,9 @@ export interface V7ExecutionTarget {
   readonly workerId: string;
   /** Product Worker Type ID reported by Workspace and selected by policy. */
   readonly workerTypeId: string;
-  readonly workerRuntimeVersion: string;
+  readonly engineVersion: string;
+  readonly profileDefinitionId: string;
+  readonly profileReleaseVersion: number;
   readonly providerToolName: string | null;
   readonly providerToolVersion: string | null;
   readonly model: string | null;
@@ -218,7 +220,8 @@ export async function selectProjectExecutionTarget(
             ew.name AS workspace_name, ew.owner_user_id, ew.status AS workspace_status,
             wri.id AS runtime_identity_id,
             i.worker_id, i.worker_type_id,
-            i.worker_runtime_version AS worker_runtime_version,
+            i.engine_version AS engine_version,
+            i.profile_definition_id, i.profile_release_version,
             i.provider_tool_name,
             i.provider_tool_version,
             i.capabilities_json,
@@ -370,10 +373,14 @@ export async function selectProjectExecutionTarget(
       continue;
     }
     if (
-      typeof row.worker_runtime_version !== "string" ||
-      !row.worker_runtime_version
+      typeof row.engine_version !== "string" ||
+      !row.engine_version ||
+      typeof row.profile_definition_id !== "string" ||
+      !row.profile_definition_id ||
+      !Number.isSafeInteger(Number(row.profile_release_version)) ||
+      Number(row.profile_release_version) < 1
     ) {
-      reject("worker_runtime_unavailable");
+      reject("engine_profile_unavailable");
       continue;
     }
     if (request.workstreamId && !hasBinding) {
@@ -504,7 +511,10 @@ export async function selectProjectExecutionTarget(
       workerId,
       workerTypeId,
       grantId: String(row.grant_id),
-      workerRuntimeVersion: String(row.worker_runtime_version),
+      engineVersion: String(row.engine_version),
+      profileDefinitionId: String(row.profile_definition_id),
+      profileReleaseVersion: Number(row.profile_release_version),
+      model: selectedModel ?? null,
       providerToolName:
         typeof row.provider_tool_name === "string"
           ? row.provider_tool_name
@@ -538,7 +548,9 @@ export async function selectProjectExecutionTarget(
       workspaceProjectGrantId: String(row.grant_id),
       workerId,
       workerTypeId,
-      workerRuntimeVersion: String(row.worker_runtime_version),
+      engineVersion: String(row.engine_version),
+      profileDefinitionId: String(row.profile_definition_id),
+      profileReleaseVersion: Number(row.profile_release_version),
       providerToolName:
         typeof row.provider_tool_name === "string"
           ? row.provider_tool_name
@@ -561,7 +573,9 @@ export async function selectProjectExecutionTarget(
         worker: {
           id: workerId,
           workerTypeId,
-          workerRuntimeVersion: row.worker_runtime_version,
+          engineVersion: row.engine_version,
+          profileDefinitionId: row.profile_definition_id,
+          profileReleaseVersion: row.profile_release_version,
           providerToolName:
             typeof row.provider_tool_name === "string"
               ? row.provider_tool_name

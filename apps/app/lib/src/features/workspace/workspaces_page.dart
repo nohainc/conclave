@@ -314,6 +314,7 @@ class _WorkerRowState extends State<_WorkerRow> {
     return Column(
       children: [
         ListTile(
+          key: Key('workspace-worker-row-${worker.id}'),
           contentPadding: EdgeInsets.zero,
           onTap: () => setState(() => _showDiagnostics = !_showDiagnostics),
           leading: Icon(worker.status == 'ready'
@@ -349,7 +350,21 @@ class _WorkerRowState extends State<_WorkerRow> {
                       label: 'Worker Type',
                       value: _workerTypeLabel(worker.workerTypeId)),
                   _Diagnostic(
-                      label: 'Adapter', value: worker.adapterVersion ?? '—'),
+                      label: 'Engine', value: worker.engineVersion ?? '—'),
+                  if (worker.profileDefinitionId != null)
+                    _Diagnostic(
+                      label: 'Integration',
+                      value:
+                          '${worker.profileDefinitionId}@${worker.profileReleaseVersion ?? '—'}',
+                    ),
+                  _Diagnostic(
+                    label: 'Provider CLI',
+                    value: worker.providerToolName ?? '—',
+                  ),
+                  _Diagnostic(
+                    label: 'Provider CLI version',
+                    value: worker.providerToolVersion ?? '—',
+                  ),
                   _Diagnostic(
                       label: 'Capabilities',
                       value: worker.capabilities.isEmpty

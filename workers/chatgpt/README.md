@@ -1,13 +1,10 @@
-# Conclave ChatGPT Worker
+# Conclave ChatGPT Worker v2 (migration-only)
 
-Standalone Dart console executable package for the ChatGPT product Worker.
-It discovers and verifies the local Codex CLI, passively checks provider login,
-performs explicitly requested live probes, runs assignments as a constrained
-workspace-write subprocess, parses structured events, and keeps durable provider
-session IDs in the Worker state directory. Provider credentials, CLI arguments,
-and session IDs remain local to this executable.
+This provider-specific executable is retained temporarily as the behavior
+reference for the v8 migration. New ChatGPT/Codex local execution is owned by the
+generic CLI Worker Engine and the signed `chatgpt-codex` Tool Profile.
 
-The executable speaks Local Worker Protocol 3.0 on stdin/stdout. Operational
-logs go to stderr as structured JSONL. A live probe sends a minimal provider
-request and may consume provider quota; passive readiness checks never send a
-model request.
+`dart test` in this package now runs the generic Engine/Profile acceptance
+corpus. The v2 executable and service are not the acceptance target and should
+be removed after v8 acceptance. Historical Protocol 3.0 details are retained
+only in the source until that cleanup phase.

@@ -41,6 +41,8 @@ void main() {
     expect(exported, contains('assignment-1'));
     expect(exported, contains('run-1'));
     expect(exported, contains('appVersion'));
+    expect(exported, contains('workspaceVersion'));
+    expect(exported, contains('cliWorkerEngineVersion'));
     expect(exported, contains('activeAssignmentCount'));
     expect(exported, contains('workRoot'));
     expect(exported, isNot(contains('secret-value')));

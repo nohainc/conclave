@@ -299,17 +299,20 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
-    if (request.method === "GET" && url.pathname === "/api/worker-releases") {
-      return await handlers.handleListWorkerReleases!(request, env, ctx);
-    }
     if (
-      request.method === "GET" &&
-      url.pathname === "/api/worker-releases/trust"
+      url.pathname === "/api/worker-releases" ||
+      url.pathname.startsWith("/api/worker-releases/")
     ) {
+      return Response.json(
+        { code: "native_worker_releases_retired" },
+        { status: 410 },
+      );
+    }
+    if (request.method === "GET" && url.pathname === "/api/release-trust") {
       return await handlers.handleGetReleaseTrustState!(request, env, ctx);
     }
     const releaseKeyRevocation = url.pathname.match(
-      /^\/api\/worker-releases\/trust\/keys\/([^/]+)\/revoke$/,
+      /^\/api\/admin\/release-trust\/keys\/([^/]+)\/revoke$/,
     );
     if (request.method === "POST" && releaseKeyRevocation?.[1]) {
       return await handlers.handleRevokeReleaseSigningKey!(
@@ -319,47 +322,108 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
-    if (
-      request.method === "POST" &&
-      url.pathname === "/api/worker-releases/publish"
-    ) {
-      return await handlers.handlePublishWorkerRelease!(request, env, ctx);
-    }
-    const workerReleaseDownloadMatch = url.pathname.match(
-      /^\/api\/worker-releases\/([^/]+)\/([^/]+)\/([^/]+)\/download$/,
-    );
-    if (
-      request.method === "GET" &&
-      workerReleaseDownloadMatch?.[1] &&
-      workerReleaseDownloadMatch?.[2] &&
-      workerReleaseDownloadMatch?.[3]
-    ) {
-      return await handlers.handleDownloadWorkerRelease!(
+    if (request.method === "GET" && url.pathname === "/api/tool-profiles") {
+      return await handlers.handleResolveToolProfileChannels!(
         request,
         env,
-        workerReleaseDownloadMatch[1],
-        workerReleaseDownloadMatch[2],
-        workerReleaseDownloadMatch[3],
         ctx,
       );
     }
-    const workerReleaseRevokeMatch = url.pathname.match(
-      /^\/api\/worker-releases\/([^/]+)\/([^/]+)\/([^/]+)\/revoke$/,
-    );
     if (
       request.method === "POST" &&
-      workerReleaseRevokeMatch?.[1] &&
-      workerReleaseRevokeMatch?.[2] &&
-      workerReleaseRevokeMatch?.[3]
+      url.pathname === "/api/admin/tool-profiles/definitions"
     ) {
-      return await handlers.handleRevokeWorkerRelease!(
+      return await handlers.handleCreateToolProfileDefinition!(
         request,
         env,
-        workerReleaseRevokeMatch[1],
-        workerReleaseRevokeMatch[2],
-        workerReleaseRevokeMatch[3],
         ctx,
       );
+    }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/admin/workers/catalog"
+    ) {
+      return await handlers.handleCreateApprovedLogicalWorker!(
+        request,
+        env,
+        ctx,
+      );
+    }
+    const toolProfileReleaseMatch = url.pathname.match(
+      /^\/api\/admin\/tool-profiles\/([^/]+)\/releases(?:\/(\d+)(?:\/(draft|publish|promote|retire|revoke|audit))?)?$/,
+    );
+    if (toolProfileReleaseMatch?.[1]) {
+      const profileDefinitionId = decodeURIComponent(
+        toolProfileReleaseMatch[1],
+      );
+      const version = toolProfileReleaseMatch[2];
+      const action = toolProfileReleaseMatch[3];
+      if (request.method === "GET" && !version) {
+        return await handlers.handleListToolProfileReleases!(
+          request,
+          env,
+          profileDefinitionId,
+          ctx,
+        );
+      }
+      if (request.method === "POST" && !version) {
+        return await handlers.handleCreateDraftToolProfileRelease!(
+          request,
+          env,
+          profileDefinitionId,
+          ctx,
+        );
+      }
+      if (version && action === "audit" && request.method === "GET") {
+        return await handlers.handleListToolProfileReleaseAudit!(
+          request,
+          env,
+          profileDefinitionId,
+          version,
+          ctx,
+        );
+      }
+      if (version && action === "draft" && request.method === "PUT") {
+        return await handlers.handleUpdateDraftToolProfileRelease!(
+          request,
+          env,
+          profileDefinitionId,
+          version,
+          ctx,
+        );
+      }
+      if (version && action === "publish" && request.method === "POST") {
+        return await handlers.handlePublishDraftToolProfileRelease!(
+          request,
+          env,
+          profileDefinitionId,
+          version,
+          ctx,
+        );
+      }
+      if (version && action === "promote" && request.method === "POST") {
+        return await handlers.handlePromoteToolProfileRelease!(
+          request,
+          env,
+          profileDefinitionId,
+          version,
+          ctx,
+        );
+      }
+      if (
+        version &&
+        (action === "retire" || action === "revoke") &&
+        request.method === "POST"
+      ) {
+        return await handlers.handleChangeToolProfileReleaseLifecycle!(
+          request,
+          env,
+          profileDefinitionId,
+          version,
+          action,
+          ctx,
+        );
+      }
     }
     const workspaceProjectsMatch = url.pathname.match(
       /^\/api\/workspaces\/([^/]+)\/projects$/,
@@ -535,6 +599,17 @@ export async function routeWorkerRequest(
       );
     }
     // Workspace Agents Fleet
+    const toolProfileChannelMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/tool-profile-channel$/,
+    );
+    if (request.method === "PATCH" && toolProfileChannelMatch?.[1]) {
+      return await handlers.handleSetWorkspaceToolProfileChannel!(
+        request,
+        env,
+        decodeURIComponent(toolProfileChannelMatch[1]),
+        ctx,
+      );
+    }
     const hostsMatch = url.pathname.match(
       /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts$/,
     );

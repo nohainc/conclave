@@ -1,11 +1,14 @@
 # Worker release manifest contracts
 
-> **Current contract:** use Worker Release Manifest v2 for first-party
-> releases. The V6/V7 adapter sections below document historical Node-era
-> migration schemas only and are superseded; do not use them for new Workers.
+> **Migration-only contract:** Worker Release Manifest v2 describes the
+> superseded per-provider native Worker release path. Architecture v8 uses one
+> generic CLI Worker Engine and signed Tool Profile Releases. Keep this
+> manifest for migration evidence until v8 acceptance and cleanup; do not use it
+> for new v8 Workers or releases.
 
-New standalone Dart Worker releases use `WorkerReleaseManifestV2Schema` and
-`WorkerReleaseManifestV2` from `src/worker-release-v2.ts`. The native release
+Historical standalone Dart Worker releases used
+`WorkerReleaseManifestV2Schema` and `WorkerReleaseManifestV2` from
+`src/worker-release-v2.ts`. The native release
 manifest is provider-neutral and declares Worker identity/version, platform,
 Local Worker Protocol range, state schema range, capabilities, Workspace
 permissions, executable-relative path, release channel, package and archive
@@ -20,14 +23,14 @@ signature/hash cycle.
 
 The v2 schema rejects unknown fields, including provider executable
 prerequisites, provider version/auth commands, and provider CLI environment
-policy. Those details belong inside the native Worker executable.
+policy. Those details were implemented inside each native Worker executable;
+in v8 they belong in the constrained Tool Profile schema when representable.
 
 ## Legacy V6/V7 adapter manifests (migration history)
 
 The following schemas and package assets describe the unreleased Node-era
-migration path. They remain available while Workspace release storage and
-first-party package wiring move to native Worker releases; do not use them for
-new Worker Runtime v2 releases.
+migration path. They remain as historical source material; do not use them for
+new v8 implementations.
 
 The package still exports the v6 package contract and the V7 adapter contract.
 Legacy V7 consumers use `V7AdapterManifestSchema` and

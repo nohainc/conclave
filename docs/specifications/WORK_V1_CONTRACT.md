@@ -208,8 +208,12 @@ interface StepResult {
   startedAt: string;
   completedAt: string;
   workerId: string | null;
-  workerRuntimeVersion: string | null;
+  workerTypeId: string | null;
+  engineVersion: string | null;
+  profileDefinitionId: string | null;
+  profileReleaseVersion: number | null;
   providerToolVersion: string | null;
+  model: string | null;
   artifacts?: string[];
   changedFiles?: string[];
   testStatus?: "passed" | "failed" | "blocked" | "not_run";

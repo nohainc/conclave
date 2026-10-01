@@ -635,7 +635,11 @@ class StudioWorker {
     required this.localConcurrencyLimit,
     required this.capabilities,
     this.inputCapabilities = const [],
-    this.adapterVersion,
+    this.engineVersion,
+    this.profileDefinitionId,
+    this.profileReleaseVersion,
+    this.providerToolName,
+    this.providerToolVersion,
   });
 
   final String id;
@@ -646,7 +650,11 @@ class StudioWorker {
   final String activationState;
   final String? attentionReasonCode;
   final int localConcurrencyLimit;
-  final String? adapterVersion;
+  final String? engineVersion;
+  final String? profileDefinitionId;
+  final int? profileReleaseVersion;
+  final String? providerToolName;
+  final String? providerToolVersion;
   final List<String> capabilities;
   final List<String> inputCapabilities;
 
@@ -660,7 +668,11 @@ class StudioWorker {
         attentionReasonCode: json['readinessIssueCode']?.toString() ??
             json['attentionReasonCode']?.toString(),
         localConcurrencyLimit: json['localConcurrencyLimit'] as int? ?? 1,
-        adapterVersion: json['adapterVersion']?.toString(),
+        engineVersion: json['engineVersion']?.toString(),
+        profileDefinitionId: json['profileDefinitionId']?.toString(),
+        profileReleaseVersion: json['profileReleaseVersion'] as int?,
+        providerToolName: json['providerToolName']?.toString(),
+        providerToolVersion: json['providerToolVersion']?.toString(),
         capabilities: _strings(json, 'capabilities'),
         inputCapabilities: _strings(json, 'inputCapabilities'),
       );

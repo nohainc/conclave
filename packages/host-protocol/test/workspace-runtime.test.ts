@@ -76,7 +76,9 @@ describe("Workspace Runtime protocol", () => {
       activationState: "enabled",
       readinessState: "setup_required",
       readinessIssueCode: "setup_required",
-      workerRuntimeVersion: null,
+      engineVersion: "1.0.0",
+      profileDefinitionId: "chatgpt-codex",
+      profileReleaseVersion: 1,
       providerToolName: "codex",
       providerToolVersion: null,
       capabilities: ["code"],
@@ -99,6 +101,16 @@ describe("Workspace Runtime protocol", () => {
         type: "worker.inventory",
         payload: {
           workers: [{ ...worker, providerToolPath: "/local/only/codex" }],
+          fullSnapshot: true,
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "worker.inventory",
+        payload: {
+          workers: [{ ...worker, providerToolName: "/Users/local/codex" }],
           fullSnapshot: true,
         },
       }),

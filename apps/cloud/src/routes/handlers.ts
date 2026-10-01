@@ -113,6 +113,20 @@ import {
   parseMachineCheckEvidence,
 } from "@conclave/protocol";
 import { createEventPublisher } from "../event-publisher.js";
+import {
+  changeToolProfileLifecycle,
+  createDraftToolProfileRelease,
+  createToolProfileDefinition,
+  createApprovedLogicalWorker,
+  listToolProfileReleaseAudit,
+  listToolProfileReleases,
+  promoteToolProfileRelease,
+  publishDraftToolProfileRelease,
+  resolveToolProfileChannels,
+  setWorkspaceToolProfileChannel,
+  updateDraftToolProfilePayload,
+  type ToolProfileChannel,
+} from "../tool-profile-registry.js";
 
 function parseJson<T = Record<string, unknown>>(
   value: unknown,
@@ -5954,8 +5968,8 @@ function eligibilityMessage(
     return `${step}: all Steps in this Workflow must use Workers from the same Workspace.`;
   if (code === "workspace_not_primary")
     return `${step}: the Worker must be on this Workstream's primary Workspace.`;
-  if (code === "worker_runtime_unavailable")
-    return `${step}: the Worker has no available runtime release.`;
+  if (code === "engine_profile_unavailable")
+    return `${step}: the Worker has no compatible Engine and Tool Profile release.`;
   if (code === "model_not_allowed")
     return `${step}: the selected model is not allowed by this Workstream.`;
   if (code === "model_required")
@@ -5995,7 +6009,9 @@ async function validateWorkflowWorkerEligibility(
       `SELECT i.workspace_id AS workspaceId, i.worker_type_id AS workerTypeId,
               i.activation_state AS activationState, i.readiness_state AS readinessState,
               i.readiness_issue_code AS readinessIssueCode, i.capabilities_json AS capabilitiesJson,
-              i.worker_runtime_version AS workerRuntimeVersion,
+              i.engine_version AS engineVersion,
+              i.profile_definition_id AS profileDefinitionId,
+              i.profile_release_version AS profileReleaseVersion,
               vs.state AS schedulingState,
               g.id AS grantId, g.status AS grantStatus, g.expires_at AS grantExpiresAt,
               g.allowed_worker_ids_json AS allowedWorkerIdsJson,
@@ -6054,10 +6070,14 @@ async function validateWorkflowWorkerEligibility(
     if (row.readinessState !== "ready") push("worker_not_ready");
     if (row.schedulingState !== "enabled") push("worker_scheduling_disabled");
     if (
-      typeof row.workerRuntimeVersion !== "string" ||
-      !row.workerRuntimeVersion
+      typeof row.engineVersion !== "string" ||
+      !row.engineVersion ||
+      typeof row.profileDefinitionId !== "string" ||
+      !row.profileDefinitionId ||
+      !Number.isSafeInteger(Number(row.profileReleaseVersion)) ||
+      Number(row.profileReleaseVersion) < 1
     )
-      push("worker_runtime_unavailable");
+      push("engine_profile_unavailable");
     if (row.workspaceStatus !== "online") push("workspace_offline");
     if (row.runtimeIdentityId == null) push("workspace_offline");
     const capabilities = parseJson<unknown[]>(row.capabilitiesJson, []).filter(
@@ -7115,15 +7135,16 @@ async function handleGetWorkRequest(
             wt.output_json AS outputJson, wt.error, wt.attempt,
             wt.started_at AS startedAt, wt.finished_at AS finishedAt,
             wa.id AS assignmentId, wa.workspace_worker_id AS workerId,
-            wa.worker_version AS workerRuntimeVersion,
+            wa.worker_id AS logicalWorkerTypeId, wa.model AS assignedModel,
+            wa.engine_version AS engineVersion,
             wa.session_policy AS sessionPolicy,
             wa.created_at AS assignmentCreatedAt,
             wa.updated_at AS assignmentUpdatedAt,
             wa.permission_snapshot_json AS permissionSnapshotJson,
             wa.error_json AS assignmentErrorJson,
-            wi.worker_type_id AS workerTypeId,
-            wi.provider_tool_name AS providerToolName,
-            wi.provider_tool_version AS providerToolVersion
+            wi.worker_type_id AS configuredWorkerTypeId,
+            wi.provider_tool_name AS configuredProviderToolName,
+            wi.provider_tool_version AS configuredProviderToolVersion
        FROM workflow_tasks wt
        JOIN work_requests wr ON wr.id = wt.work_request_id
        LEFT JOIN worker_assignments wa ON wa.id = (
@@ -7166,6 +7187,7 @@ async function handleGetWorkRequest(
         : null,
       {},
     );
+    const hasAssignment = typeof task?.assignmentId === "string";
     const assignmentError = parseJson<Record<string, unknown>>(
       typeof task?.assignmentErrorJson === "string"
         ? task.assignmentErrorJson
@@ -7213,23 +7235,42 @@ async function handleGetWorkRequest(
           task?.status ?? (row.status === "queued" ? "queued" : "waiting"),
         ),
         workerId: task?.workerId ?? resolvedWorkerId,
-        workerTypeId: task?.workerTypeId ?? null,
-        workerRuntimeVersion:
-          task?.workerRuntimeVersion ??
-          (typeof output.workerRuntimeVersion === "string"
-            ? output.workerRuntimeVersion
-            : null),
+        workerTypeId: hasAssignment
+          ? (task?.logicalWorkerTypeId ?? null)
+          : (task?.configuredWorkerTypeId ?? null),
+        engineVersion: hasAssignment
+          ? typeof permissionSnapshot.profileDefinitionId === "string"
+            ? (task?.engineVersion ?? null)
+            : null
+          : typeof output.engineVersion === "string"
+            ? output.engineVersion
+            : null,
+        profileDefinitionId: hasAssignment
+          ? typeof permissionSnapshot.profileDefinitionId === "string"
+            ? permissionSnapshot.profileDefinitionId
+            : null
+          : null,
+        profileReleaseVersion: hasAssignment
+          ? Number.isSafeInteger(permissionSnapshot.profileReleaseVersion)
+            ? permissionSnapshot.profileReleaseVersion
+            : null
+          : null,
+        model: hasAssignment
+          ? (task?.assignedModel ?? null)
+          : typeof binding.model === "string"
+            ? binding.model
+            : null,
         providerToolName:
           (typeof permissionSnapshot.providerToolName === "string"
             ? permissionSnapshot.providerToolName
             : null) ??
-          task?.providerToolName ??
+          (hasAssignment ? null : task?.configuredProviderToolName) ??
           null,
         providerToolVersion:
           (typeof permissionSnapshot.providerToolVersion === "string"
             ? permissionSnapshot.providerToolVersion
             : null) ??
-          task?.providerToolVersion ??
+          (hasAssignment ? null : task?.configuredProviderToolVersion) ??
           (typeof output.providerToolVersion === "string"
             ? output.providerToolVersion
             : null),
@@ -7371,7 +7412,9 @@ async function handleListWorkRequests(
       .join(", ");
     const workerRows = await env.CONCLAVE_DB.prepare(
       `SELECT worker_id AS workerId, worker_type_id AS workerTypeId,
-              worker_runtime_version AS workerRuntimeVersion,
+              engine_version AS engineVersion,
+              profile_definition_id AS profileDefinitionId,
+              profile_release_version AS profileReleaseVersion,
               provider_tool_name AS providerToolName,
               provider_tool_version AS providerToolVersion
          FROM workspace_worker_inventory WHERE worker_id IN (${workerPlaceholders})`,
@@ -7388,10 +7431,14 @@ async function handleListWorkRequests(
             COALESCE(wt.started_at, wt.created_at) AS startedAt,
             COALESCE(wt.finished_at, wt.updated_at) AS updatedAt,
             wa.error_json AS assignmentErrorJson,
-            wa.workspace_worker_id AS workerId, wa.worker_version AS workerRuntimeVersion,
-            wi.worker_type_id AS workerTypeId,
-            wi.provider_tool_name AS providerToolName,
-            wi.provider_tool_version AS providerToolVersion
+            wa.workspace_worker_id AS workerId,
+            wa.worker_id AS logicalWorkerTypeId,
+            wa.model AS assignedModel,
+            wa.engine_version AS engineVersion,
+            wa.permission_snapshot_json AS permissionSnapshotJson,
+            wi.worker_type_id AS configuredWorkerTypeId,
+            wi.provider_tool_name AS configuredProviderToolName,
+            wi.provider_tool_version AS configuredProviderToolVersion
        FROM workflow_tasks wt
        JOIN work_requests wr ON wr.id = wt.work_request_id
        LEFT JOIN worker_assignments wa ON wa.id = (
@@ -7456,6 +7503,13 @@ async function handleListWorkRequests(
         typeof task?.outputJson === "string"
           ? parseJson<Record<string, unknown>>(task.outputJson, {})
           : {};
+      const permissionSnapshot = parseJson<Record<string, unknown>>(
+        typeof task?.permissionSnapshotJson === "string"
+          ? task.permissionSnapshotJson
+          : null,
+        {},
+      );
+      const hasAssignment = typeof task?.workerId === "string";
       const testSummary =
         kind === "test" && typeof output.text === "string"
           ? summarizeTestCounts(output.text)
@@ -7494,16 +7548,43 @@ async function handleListWorkRequests(
             task?.status ?? (row.status === "queued" ? "queued" : "waiting"),
           ),
           workerId: task?.workerId ?? binding.workerId ?? null,
-          workerTypeId:
-            task?.workerTypeId ?? desiredWorker?.workerTypeId ?? null,
-          workerRuntimeVersion:
-            task?.workerRuntimeVersion ??
-            desiredWorker?.workerRuntimeVersion ??
-            null,
+          workerTypeId: hasAssignment
+            ? (task?.logicalWorkerTypeId ?? null)
+            : (task?.configuredWorkerTypeId ??
+              desiredWorker?.workerTypeId ??
+              null),
+          engineVersion: hasAssignment
+            ? typeof permissionSnapshot.profileDefinitionId === "string"
+              ? (task?.engineVersion ?? null)
+              : null
+            : (desiredWorker?.engineVersion ?? null),
+          profileDefinitionId: hasAssignment
+            ? typeof permissionSnapshot.profileDefinitionId === "string"
+              ? permissionSnapshot.profileDefinitionId
+              : null
+            : (desiredWorker?.profileDefinitionId ?? null),
+          profileReleaseVersion: hasAssignment
+            ? Number.isSafeInteger(permissionSnapshot.profileReleaseVersion)
+              ? permissionSnapshot.profileReleaseVersion
+              : null
+            : (desiredWorker?.profileReleaseVersion ?? null),
+          model: hasAssignment
+            ? (task?.assignedModel ?? null)
+            : typeof binding.model === "string"
+              ? binding.model
+              : null,
           providerToolName:
-            task?.providerToolName ?? desiredWorker?.providerToolName ?? null,
+            (typeof permissionSnapshot.providerToolName === "string"
+              ? permissionSnapshot.providerToolName
+              : null) ??
+            (hasAssignment ? null : task?.configuredProviderToolName) ??
+            desiredWorker?.providerToolName ??
+            null,
           providerToolVersion:
-            task?.providerToolVersion ??
+            (typeof permissionSnapshot.providerToolVersion === "string"
+              ? permissionSnapshot.providerToolVersion
+              : null) ??
+            (hasAssignment ? null : task?.configuredProviderToolVersion) ??
             desiredWorker?.providerToolVersion ??
             null,
           startedAt: task?.startedAt ?? null,
@@ -9668,7 +9749,8 @@ export async function handleListWorkspaceWorkerInventory(
     `SELECT i.worker_id, i.workspace_id,
             i.worker_type_id, i.activation_state, i.readiness_state,
             i.readiness_issue_code, i.capabilities_json,
-            i.local_concurrency_limit, i.worker_runtime_version,
+            i.local_concurrency_limit, i.engine_version,
+            i.profile_definition_id, i.profile_release_version,
             i.provider_tool_name, i.provider_tool_version, i.last_seen_at
        FROM workspace_worker_inventory i
       WHERE i.owner_user_id = ?1
@@ -9703,10 +9785,16 @@ export async function handleListWorkspaceWorkerInventory(
           (WORKER_INPUT_CAPABILITIES as readonly string[]).includes(capability),
       ),
       localConcurrencyLimit: Number(row.local_concurrency_limit),
-      workerRuntimeVersion:
-        row.worker_runtime_version == null
+      engineVersion:
+        row.engine_version == null ? null : String(row.engine_version),
+      profileDefinitionId:
+        row.profile_definition_id == null
           ? null
-          : String(row.worker_runtime_version),
+          : String(row.profile_definition_id),
+      profileReleaseVersion:
+        row.profile_release_version == null
+          ? null
+          : Number(row.profile_release_version),
       providerToolName:
         row.provider_tool_name == null ? null : String(row.provider_tool_name),
       providerToolVersion:
@@ -9728,7 +9816,8 @@ export async function handleV7WorkerScheduling(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   const worker = await env.CONCLAVE_DB.prepare(
-    `SELECT i.workspace_id, i.activation_state, i.readiness_state, i.worker_runtime_version
+    `SELECT i.workspace_id, i.activation_state, i.readiness_state,
+            i.engine_version, i.profile_definition_id, i.profile_release_version
        FROM workspace_worker_inventory i WHERE i.worker_id = ?1 AND i.owner_user_id = ?2`,
   )
     .bind(workerId, context.userId)
@@ -9736,7 +9825,9 @@ export async function handleV7WorkerScheduling(
       workspace_id: string;
       activation_state: string;
       readiness_state: string;
-      worker_runtime_version: string | null;
+      engine_version: string | null;
+      profile_definition_id: string | null;
+      profile_release_version: number | null;
     }>();
   if (!worker) throw new HttpError(404, "Workspace Worker not found");
   const now = new Date().toISOString();
@@ -9748,7 +9839,9 @@ export async function handleV7WorkerScheduling(
       action === "enable" &&
       (worker.activation_state !== "enabled" ||
         worker.readiness_state !== "ready" ||
-        !worker.worker_runtime_version)
+        !worker.engine_version ||
+        !worker.profile_definition_id ||
+        !worker.profile_release_version)
     ) {
       throw new HttpError(409, "Worker is not locally ready");
     }
@@ -14264,34 +14357,35 @@ async function handleRevokeWorkerRelease(
 }
 
 async function handleGetReleaseTrustState(env: SecurityEnv): Promise<Response> {
-  const [keys, workers, workspaceReleases] = await Promise.all([
+  const [keys, workspaceReleases, toolProfiles] = await Promise.all([
     env.CONCLAVE_DB.prepare(
       "SELECT key_id FROM release_signing_key_revocations ORDER BY key_id",
     ).all<{ key_id: string }>(),
     env.CONCLAVE_DB.prepare(
-      `SELECT worker_type_id, version, platform, package_digest
-       FROM worker_releases WHERE is_revoked = 1`,
-    ).all<{
-      worker_type_id: string;
-      version: string;
-      platform: string;
-      package_digest: string;
-    }>(),
-    env.CONCLAVE_DB.prepare(
       "SELECT version, package_digest FROM host_releases WHERE is_revoked = 1",
     ).all<{ version: string; package_digest: string }>(),
+    env.CONCLAVE_DB.prepare(
+      `SELECT profile_definition_id, release_version, payload_digest
+         FROM tool_profile_releases WHERE lifecycle_state = 'revoked'`,
+    ).all<{
+      profile_definition_id: string;
+      release_version: number;
+      payload_digest: string;
+    }>(),
   ]);
   return json({
     revokedKeyIds: (keys.results ?? []).map((row) => row.key_id),
-    revokedWorkers: (workers.results ?? []).map((row) => ({
-      workerTypeId: row.worker_type_id,
-      version: row.version,
-      platform: row.platform,
-      packageDigest: row.package_digest,
-    })),
+    // Retained as an empty compatibility field for installed Workspaces that
+    // still decode the v2 trust response shape. v8 has no native package rows.
+    revokedWorkers: [],
     revokedWorkspaceReleases: (workspaceReleases.results ?? []).map((row) => ({
       version: row.version,
       packageDigest: row.package_digest,
+    })),
+    revokedToolProfiles: (toolProfiles.results ?? []).map((row) => ({
+      profileDefinitionId: row.profile_definition_id,
+      releaseVersion: row.release_version,
+      payloadDigest: row.payload_digest,
     })),
   });
 }
@@ -14329,6 +14423,436 @@ async function handleRevokeReleaseSigningKey(
   return json({ keyId, isRevoked: true, revokedAt: now });
 }
 
+async function authorizeToolProfileAdmin(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<SecurityContext> {
+  const actor = await authorizeRequest(
+    request,
+    env,
+    "workspace:manage",
+    undefined,
+    ctx,
+  );
+  if (!actor.roles.some((role) => role === "owner" || role === "admin")) {
+    throw new HttpError(403, "owner or administrator role is required");
+  }
+  return actor;
+}
+
+async function readToolProfileAdminBody(
+  request: Request,
+  allowed: readonly string[],
+): Promise<Record<string, unknown>> {
+  const maxBytes = 384 * 1024;
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > maxBytes)
+    throw new HttpError(413, "request body is too large");
+  const reader = request.body?.getReader();
+  if (!reader) throw new HttpError(400, "request body is required");
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel();
+        throw new HttpError(413, "request body is too large");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    throw new HttpError(400, "request body must be valid JSON");
+  }
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).some((key) => !allowed.includes(key))
+  ) {
+    throw new HttpError(400, "request body contains unsupported fields");
+  }
+  return value as Record<string, unknown>;
+}
+
+function toolProfileReleaseVersion(value: string): number {
+  if (!/^\d{1,10}$/.test(value))
+    throw new HttpError(400, "releaseVersion is invalid");
+  const version = Number(value);
+  if (
+    !Number.isSafeInteger(version) ||
+    version < 1 ||
+    version > 2_147_483_647
+  ) {
+    throw new HttpError(400, "releaseVersion is invalid");
+  }
+  return version;
+}
+
+async function handleResolveToolProfileChannels(
+  request: Request,
+  env: SecurityEnv,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const workerTypeId = url.searchParams.get("workerTypeId") ?? undefined;
+  if (url.searchParams.has("channel")) {
+    throw new HttpError(400, "Profile channel is selected by Conclave Cloud");
+  }
+  const runtimeId = url.searchParams.get("workspaceRuntimeId");
+  const credential = extractBearerToken(request.headers);
+  if (!runtimeId || !credential) {
+    throw new HttpError(401, "Workspace runtime credentials are required");
+  }
+  const runtime = await env.CONCLAVE_DB.prepare(
+    `SELECT wri.workspace_id AS workspaceId
+       FROM workspace_runtime_identities wri
+       JOIN execution_workspaces ew ON ew.id = wri.workspace_id
+      WHERE wri.id = ?1 AND wri.credential_token_hash = ?2
+        AND wri.revoked_at IS NULL AND ew.status <> 'revoked'`,
+  )
+    .bind(runtimeId, await hashToken(credential))
+    .first<{ workspaceId: string }>();
+  if (!runtime)
+    throw new HttpError(401, "Workspace runtime credential is invalid");
+  const channelRow = await env.CONCLAVE_DB.prepare(
+    `SELECT channel FROM workspace_tool_profile_channels WHERE workspace_id = ?1`,
+  )
+    .bind(runtime.workspaceId)
+    .first<{ channel: ToolProfileChannel }>();
+  const channel = channelRow?.channel ?? "stable";
+  const result = await resolveToolProfileChannels(
+    env.CONCLAVE_DB,
+    workerTypeId,
+    channel,
+  );
+  return json({ ...result, channel });
+}
+
+async function handleSetWorkspaceToolProfileChannel(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  if (!actor.roles.includes("admin")) {
+    throw new HttpError(403, "platform administrator role is required");
+  }
+  await requireWorkspaceContext(actor, env, workspaceId);
+  const body = await readToolProfileAdminBody(request, ["channel"]);
+  if (
+    typeof body.channel !== "string" ||
+    !["testing", "beta", "stable"].includes(body.channel)
+  ) {
+    throw new HttpError(400, "channel must be testing, beta, or stable");
+  }
+  const updated = await setWorkspaceToolProfileChannel(env.CONCLAVE_DB, {
+    workspaceId,
+    channel: body.channel as ToolProfileChannel,
+    actorUserId: actor.userId,
+  });
+  await recordAudit(
+    env,
+    actor,
+    "workspace.tool_profile_channel.updated",
+    "workspace",
+    workspaceId,
+    {
+      channel: updated.channel,
+    },
+  );
+  return json(updated);
+}
+
+async function handleCreateToolProfileDefinition(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  const body = await readToolProfileAdminBody(request, [
+    "profileDefinitionId",
+    "workerTypeId",
+    "displayName",
+    "providerToolName",
+  ]);
+  if (
+    typeof body.profileDefinitionId !== "string" ||
+    typeof body.workerTypeId !== "string" ||
+    typeof body.displayName !== "string" ||
+    typeof body.providerToolName !== "string"
+  ) {
+    throw new HttpError(400, "Tool Profile definition fields are required");
+  }
+  await createToolProfileDefinition(env.CONCLAVE_DB, {
+    profileDefinitionId: body.profileDefinitionId,
+    workerTypeId: body.workerTypeId,
+    displayName: body.displayName,
+    providerToolName: body.providerToolName,
+    actorUserId: actor.userId,
+  });
+  return json(
+    { profileDefinitionId: body.profileDefinitionId, status: "created" },
+    { status: 201 },
+  );
+}
+
+async function handleCreateApprovedLogicalWorker(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  if (!actor.roles.includes("admin")) {
+    throw new HttpError(403, "platform administrator role is required");
+  }
+  const body = await readToolProfileAdminBody(request, [
+    "workerTypeId",
+    "profileDefinitionId",
+    "displayName",
+    "description",
+    "providerToolName",
+    "releaseStage",
+    "capabilities",
+    "sortOrder",
+  ]);
+  if (
+    typeof body.workerTypeId !== "string" ||
+    typeof body.profileDefinitionId !== "string" ||
+    typeof body.displayName !== "string" ||
+    typeof body.description !== "string" ||
+    typeof body.providerToolName !== "string" ||
+    typeof body.releaseStage !== "string" ||
+    !Array.isArray(body.capabilities) ||
+    !body.capabilities.every((item) => typeof item === "string") ||
+    typeof body.sortOrder !== "number"
+  ) {
+    throw new HttpError(400, "Logical Worker catalog fields are required");
+  }
+  await createApprovedLogicalWorker(env.CONCLAVE_DB, {
+    workerTypeId: body.workerTypeId,
+    profileDefinitionId: body.profileDefinitionId,
+    displayName: body.displayName,
+    description: body.description,
+    providerToolName: body.providerToolName,
+    releaseStage: body.releaseStage as ToolProfileChannel,
+    capabilities: body.capabilities as string[],
+    sortOrder: body.sortOrder,
+    actorUserId: actor.userId,
+  });
+  await recordAudit(
+    env,
+    actor,
+    "worker_catalog.entry.approved",
+    "logical_worker",
+    body.workerTypeId,
+    { profileDefinitionId: body.profileDefinitionId },
+  );
+  return json(
+    {
+      workerTypeId: body.workerTypeId,
+      profileDefinitionId: body.profileDefinitionId,
+      status: "created",
+    },
+    { status: 201 },
+  );
+}
+
+async function handleCreateDraftToolProfileRelease(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  const body = await readToolProfileAdminBody(request, [
+    "releaseVersion",
+    "profile",
+  ]);
+  if (
+    !Number.isSafeInteger(body.releaseVersion) ||
+    body.profile === undefined
+  ) {
+    throw new HttpError(400, "releaseVersion and profile are required");
+  }
+  const result = await createDraftToolProfileRelease(
+    env.CONCLAVE_DB,
+    { profileDefinitionId, releaseVersion: body.releaseVersion as number },
+    body.profile,
+    actor.userId,
+  );
+  return json(result, { status: 201 });
+}
+
+async function handleUpdateDraftToolProfileRelease(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  versionText: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  const body = await readToolProfileAdminBody(request, ["profile"]);
+  if (body.profile === undefined)
+    throw new HttpError(400, "profile is required");
+  return json(
+    await updateDraftToolProfilePayload(
+      env.CONCLAVE_DB,
+      {
+        profileDefinitionId,
+        releaseVersion: toolProfileReleaseVersion(versionText),
+      },
+      body.profile,
+      actor.userId,
+    ),
+  );
+}
+
+async function handlePublishDraftToolProfileRelease(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  versionText: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  const body = await readToolProfileAdminBody(request, [
+    "signature",
+    "signingKeyId",
+  ]);
+  if (
+    typeof body.signature !== "string" ||
+    typeof body.signingKeyId !== "string"
+  ) {
+    throw new HttpError(400, "signature and signingKeyId are required");
+  }
+  return json(
+    await publishDraftToolProfileRelease(
+      env,
+      {
+        profileDefinitionId,
+        releaseVersion: toolProfileReleaseVersion(versionText),
+      },
+      body.signature,
+      body.signingKeyId,
+      actor.userId,
+    ),
+  );
+}
+
+async function handlePromoteToolProfileRelease(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  versionText: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  const body = await readToolProfileAdminBody(request, [
+    "channel",
+    "acceptanceEvidence",
+  ]);
+  if (
+    typeof body.channel !== "string" ||
+    !["testing", "beta", "stable"].includes(body.channel)
+  ) {
+    throw new HttpError(400, "channel is invalid");
+  }
+  if (body.channel === "stable" && body.acceptanceEvidence === undefined) {
+    throw new HttpError(
+      400,
+      "Real Profile acceptance evidence is required for stable promotion",
+    );
+  }
+  if (body.channel !== "stable" && body.acceptanceEvidence !== undefined) {
+    throw new HttpError(
+      400,
+      "Acceptance evidence is only accepted for stable promotion",
+    );
+  }
+  return json(
+    await promoteToolProfileRelease(
+      env.CONCLAVE_DB,
+      {
+        profileDefinitionId,
+        releaseVersion: toolProfileReleaseVersion(versionText),
+      },
+      body.channel as ToolProfileChannel,
+      actor.userId,
+      body.acceptanceEvidence,
+    ),
+  );
+}
+
+async function handleChangeToolProfileReleaseLifecycle(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  versionText: string,
+  lifecycle: "retired" | "revoked",
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  const body = await readToolProfileAdminBody(request, ["reason"]);
+  if (typeof body.reason !== "string")
+    throw new HttpError(400, "reason is required");
+  return json(
+    await changeToolProfileLifecycle(
+      env.CONCLAVE_DB,
+      {
+        profileDefinitionId,
+        releaseVersion: toolProfileReleaseVersion(versionText),
+      },
+      lifecycle,
+      actor.userId,
+      body.reason,
+    ),
+  );
+}
+
+async function handleListToolProfileReleases(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await authorizeToolProfileAdmin(request, env, ctx);
+  return json(
+    await listToolProfileReleases(env.CONCLAVE_DB, profileDefinitionId),
+  );
+}
+
+async function handleListToolProfileReleaseAudit(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  versionText: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await authorizeToolProfileAdmin(request, env, ctx);
+  return json(
+    await listToolProfileReleaseAudit(env.CONCLAVE_DB, {
+      profileDefinitionId,
+      releaseVersion: toolProfileReleaseVersion(versionText),
+    }),
+  );
+}
+
 export {
   json,
   errorMessage,
@@ -14363,6 +14887,17 @@ export {
   handleRevokeWorkerRelease,
   handleGetReleaseTrustState,
   handleRevokeReleaseSigningKey,
+  handleResolveToolProfileChannels,
+  handleSetWorkspaceToolProfileChannel,
+  handleCreateToolProfileDefinition,
+  handleCreateApprovedLogicalWorker,
+  handleCreateDraftToolProfileRelease,
+  handleUpdateDraftToolProfileRelease,
+  handlePublishDraftToolProfileRelease,
+  handlePromoteToolProfileRelease,
+  handleChangeToolProfileReleaseLifecycle,
+  handleListToolProfileReleases,
+  handleListToolProfileReleaseAudit,
   handleCreateWorkspace,
   handleCreateWorkspacePairingIntent,
   handleGetWorkspacePairingIntent,

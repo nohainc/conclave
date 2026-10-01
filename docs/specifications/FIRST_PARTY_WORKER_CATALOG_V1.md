@@ -3,6 +3,11 @@
 **Contract ID:** `firstPartyWorkerCatalogVersion: 1`  
 **Status:** Product identity frozen by ADR-015; runtime implementation updated by Architecture v8 / ADR-018
 
+**Implementation rule:** a normal local CLI integration is a Logical Worker
+implemented by the generic CLI Worker Engine and an official signed Tool
+Profile Release. Provider-specific native Worker binaries are predecessor
+artifacts and are not an extension point for this catalog.
+
 ## Catalog
 
 | Product type ID | User-facing name | v8 implementation | Cardinality per Workspace |
@@ -164,3 +169,14 @@ Normal users still cannot add arbitrary catalog entries in v8.
 A new Worker may become visible without a Workspace binary update only after its
 Profile has passed the same trust/testing/release process as existing official
 Profiles.
+
+## Development/testing scalability proof
+
+The optional v8 development seed includes `fixture-worker`, a testing-channel
+Logical Worker mapped to the `fixture-cli` Tool Profile Definition. Its v1
+release payload and offline version, readiness, success, and error fixtures
+live under `packages/tool-profile/test/fixtures/`. The generic Profile fixture
+harness and CLI Worker Engine acceptance test exercise it without a new
+Workspace or Engine implementation or a provider-specific Worker executable.
+The entry is excluded from the stable catalog and is not an official user-facing
+Worker.

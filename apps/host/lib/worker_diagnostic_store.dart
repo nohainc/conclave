@@ -34,6 +34,13 @@ final class WorkerDiagnosticStore {
     required String workerVersion,
     required String protocolStage,
     required String event,
+    String? workspaceVersion,
+    String? engineVersion,
+    String? profileDefinitionId,
+    int? profileReleaseVersion,
+    String? profileResolutionSource,
+    String? probeStage,
+    String? failureLayer,
     String level = 'info',
     String? runId,
     String? providerToolName,
@@ -50,6 +57,23 @@ final class WorkerDiagnosticStore {
       'workerTypeId': _safeToken(workerTypeId, maxLength: 64),
       'workerVersion': _safeToken(workerVersion, maxLength: 64),
       'protocolStage': _safeToken(protocolStage, maxLength: 32),
+      if (workspaceVersion != null)
+        'workspaceVersion': _safeToken(workspaceVersion, maxLength: 64),
+      if (engineVersion != null)
+        'engineVersion': _safeToken(engineVersion, maxLength: 64),
+      if (profileDefinitionId != null)
+        'profileDefinitionId': _safeToken(profileDefinitionId, maxLength: 96),
+      if (profileReleaseVersion != null && profileReleaseVersion > 0)
+        'profileReleaseVersion': profileReleaseVersion,
+      if (profileResolutionSource != null)
+        'profileResolutionSource': _safeToken(
+          profileResolutionSource,
+          maxLength: 32,
+        ),
+      if (probeStage != null)
+        'probeStage': _safeToken(probeStage, maxLength: 32),
+      if (failureLayer != null)
+        'failureLayer': _safeToken(failureLayer, maxLength: 32),
       if (runId != null) 'runId': _safeToken(runId, maxLength: 128),
       if (providerToolName != null)
         'providerToolName': _safeToken(providerToolName, maxLength: 64),
@@ -100,6 +124,16 @@ final class WorkerDiagnosticStore {
         workerTypeId: workerTypeId,
         workerVersion: workerVersion,
         protocolStage: protocolStage,
+        workspaceVersion: _stringContext(context, 'workspaceVersion'),
+        engineVersion: _stringContext(context, 'engineVersion'),
+        profileDefinitionId: _stringContext(context, 'profileDefinitionId'),
+        profileReleaseVersion: _intContext(context, 'profileReleaseVersion'),
+        profileResolutionSource: _stringContext(
+          context,
+          'profileResolutionSource',
+        ),
+        probeStage: _stringContext(context, 'probeStage'),
+        failureLayer: _stringContext(context, 'failureLayer'),
         event: event is String &&
                 RegExp(r'^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$')
                     .hasMatch(event)
@@ -227,6 +261,36 @@ final class WorkerDiagnosticStore {
         value['protocolStage']?.toString() ?? '',
         maxLength: 32,
       ),
+      if (value['workspaceVersion'] is String)
+        'workspaceVersion': _safeToken(
+          value['workspaceVersion'] as String,
+          maxLength: 64,
+        ),
+      if (value['engineVersion'] is String)
+        'engineVersion': _safeToken(
+          value['engineVersion'] as String,
+          maxLength: 64,
+        ),
+      if (value['profileDefinitionId'] is String)
+        'profileDefinitionId': _safeToken(
+          value['profileDefinitionId'] as String,
+          maxLength: 96,
+        ),
+      if (value['profileReleaseVersion'] is int &&
+          (value['profileReleaseVersion'] as int) > 0)
+        'profileReleaseVersion': value['profileReleaseVersion'],
+      if (value['profileResolutionSource'] is String)
+        'profileResolutionSource': _safeToken(
+          value['profileResolutionSource'] as String,
+          maxLength: 32,
+        ),
+      if (value['probeStage'] is String)
+        'probeStage': _safeToken(value['probeStage'] as String, maxLength: 32),
+      if (value['failureLayer'] is String)
+        'failureLayer': _safeToken(
+          value['failureLayer'] as String,
+          maxLength: 32,
+        ),
       if (value['runId'] is String)
         'runId': _safeToken(value['runId'] as String, maxLength: 128),
       if (value['providerToolName'] is String)
@@ -258,6 +322,13 @@ final class WorkerDiagnosticStore {
       'requestId',
       'providerToolName',
       'providerToolVersion',
+      'workspaceVersion',
+      'engineVersion',
+      'profileDefinitionId',
+      'profileReleaseVersion',
+      'profileResolutionSource',
+      'probeStage',
+      'failureLayer',
       'durationMs',
       'errorCode',
       'protocolStage',

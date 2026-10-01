@@ -1,0 +1,420 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import {
+  constructProviderStdin,
+  expandExecutionArguments,
+  interpretProfileExecution,
+  parseToolProfileV1,
+  selectProfileValue,
+  type ProfileExecutionContext,
+} from "../src/index.js";
+
+function loadProfile(name: string) {
+  const source = readFileSync(
+    fileURLToPath(new URL(`./fixtures/${name}.json`, import.meta.url)),
+    "utf8",
+  );
+  return parseToolProfileV1(source);
+}
+
+function context(
+  overrides: Partial<ProfileExecutionContext> = {},
+): ProfileExecutionContext {
+  return {
+    prompt: "Make the requested change",
+    workingDirectory: "/workspace/repo",
+    home: "/home/tester",
+    workerStateDirectory: "/home/tester/.conclave/worker",
+    assignmentTimeoutMs: 30_000,
+    executionPolicy: "restricted",
+    sessionPolicy: "stateless",
+    ...overrides,
+  };
+}
+
+describe("Tool Profile v1 pure interpreter", () => {
+  it("expands Codex arguments into discrete argv without shell parsing", () => {
+    const profile = loadProfile("chatgpt-codex.v1");
+    const result = expandExecutionArguments(
+      profile,
+      context({ model: "gpt-test", workingDirectory: "/work path/repo" }),
+    );
+    expect(result).toEqual([
+      "--ask-for-approval",
+      "never",
+      "--sandbox",
+      "workspace-write",
+      "exec",
+      "--json",
+      "--color",
+      "never",
+      "--skip-git-repo-check",
+      "--cd",
+      "/work path/repo",
+      "--model",
+      "gpt-test",
+      "--ephemeral",
+      "-",
+    ]);
+
+    const literal = expandExecutionArguments(profile, context(), [
+      { sandboxPolicyMapping: true },
+      { modelArguments: true },
+      { sessionResumeArguments: true },
+      { providerTimeoutArguments: true },
+      "one; touch /tmp/not-created",
+    ]);
+    expect(literal).toContain("one; touch /tmp/not-created");
+  });
+
+  it("expands model, resume, timeout, and sandbox vectors at their declared slots", () => {
+    const profile = loadProfile("gemini-antigravity.v1");
+    const result = expandExecutionArguments(
+      profile,
+      context({
+        model: "gemini-pro",
+        sessionPolicy: "durable",
+        sessionId: "conversation-7",
+        assignmentTimeoutMs: 30_000,
+      }),
+    );
+    expect(result).toEqual([
+      "--input-format",
+      "stream-json",
+      "--output-format",
+      "stream-json",
+      "--sandbox",
+      "--print-timeout",
+      "29s",
+      "--conversation",
+      "conversation-7",
+      "--model",
+      "gemini-pro",
+    ]);
+  });
+
+  it("evaluates only the fixed present/absent argument conditions", () => {
+    const profile = loadProfile("gemini-antigravity.v1");
+    expect(
+      expandExecutionArguments(
+        profile,
+        context({ model: "gpt-test", sessionId: "thread-9" }),
+        [
+          { sandboxPolicyMapping: true },
+          { modelArguments: true },
+          { sessionResumeArguments: true },
+          { providerTimeoutArguments: true },
+          { ifPresent: "model", values: ["--model", "{{model}}"] },
+          { ifPresent: "sessionId", values: ["resume", "{{sessionId}}"] },
+          {
+            ifAbsent: "sessionId",
+            ifSessionPolicy: "stateless",
+            values: ["--ephemeral"],
+          },
+          "{{timeoutMs}}",
+          "{{timeoutSeconds}}",
+        ],
+      ),
+    ).toEqual([
+      "--sandbox",
+      "--model",
+      "gpt-test",
+      "--conversation",
+      "thread-9",
+      "--print-timeout",
+      "29s",
+      "--model",
+      "gpt-test",
+      "resume",
+      "thread-9",
+      "28500",
+      "29",
+    ]);
+    const newStatelessSession = expandExecutionArguments(
+      profile,
+      context({ sessionPolicy: "stateless" }),
+      [
+        { sandboxPolicyMapping: true },
+        { modelArguments: true },
+        { sessionResumeArguments: true },
+        { providerTimeoutArguments: true },
+        {
+          ifAbsent: "sessionId",
+          ifSessionPolicy: "stateless",
+          values: ["--ephemeral"],
+        },
+      ],
+    );
+    expect(newStatelessSession).toContain("--ephemeral");
+    expect(newStatelessSession).not.toContain("--conversation");
+  });
+
+  it("constructs raw-text stdin and JSON-object stdin without string interpolation", () => {
+    const prompt = 'A quote: "hello"\nand a newline';
+    const chatgpt = loadProfile("chatgpt-codex.v1");
+    expect(constructProviderStdin(chatgpt, context({ prompt }))).toBe(prompt);
+
+    const gemini = loadProfile("gemini-antigravity.v1");
+    const serialized = constructProviderStdin(gemini, context({ prompt }));
+    expect(serialized.endsWith("\n")).toBe(true);
+    expect(JSON.parse(serialized)).toEqual({
+      event: "user",
+      message: { content: prompt },
+    });
+  });
+
+  it("normalizes Codex JSONL into the expected final result and progress", () => {
+    const profile = loadProfile("chatgpt-codex.v1");
+    const stdout = [
+      { type: "thread.started", thread_id: "thread-1" },
+      { type: "turn.started" },
+      { type: "item.started", item: { type: "command_execution" } },
+      { type: "item.updated", item: { type: "command_execution" } },
+      { type: "item.completed", item: { type: "command_execution" } },
+      {
+        type: "item.completed",
+        item: { type: "agent_message", text: "Codex answer" },
+      },
+      { type: "turn.completed" },
+    ]
+      .map((event) => JSON.stringify(event))
+      .join("\n");
+
+    expect(
+      interpretProfileExecution(profile, {
+        context: context({ sessionPolicy: "durable" }),
+        stdout,
+        exitCode: 0,
+      }),
+    ).toEqual({
+      terminal: "success",
+      finalText: "Codex answer",
+      sessionId: "thread-1",
+      terminalStatus: null,
+      progress: [
+        { percentage: 10, messageKey: "provider_working" },
+        { percentage: 45, messageKey: "provider_tool_started" },
+        { percentage: 45, messageKey: "provider_tool_started" },
+        { percentage: 45, messageKey: "provider_tool_started" },
+      ],
+      issueCode: null,
+    });
+  });
+
+  it("normalizes Antigravity JSONL and chooses the first matching progress rule", () => {
+    const profile = loadProfile("gemini-antigravity.v1");
+    const stdout = [
+      { event: "init", conversation_id: "conversation-7" },
+      {
+        event: "step_update",
+        step_update: { state: "ACTIVE", step_type: "agent_response" },
+      },
+      {
+        event: "step_update",
+        step_update: { state: "ACTIVE", step_type: 42 },
+      },
+      {
+        event: "step_update",
+        step_update: { state: "ACTIVE", step_type: "tool_execution" },
+      },
+      {
+        event: "result",
+        result: {
+          status: "SUCCESS",
+          response: "Gemini answer",
+          conversation_id: "conversation-7",
+        },
+      },
+    ]
+      .map((event) => JSON.stringify(event))
+      .join("\n");
+
+    expect(
+      interpretProfileExecution(profile, {
+        context: context({ sessionPolicy: "durable" }),
+        stdout,
+        exitCode: 0,
+      }),
+    ).toEqual({
+      terminal: "success",
+      finalText: "Gemini answer",
+      sessionId: "conversation-7",
+      terminalStatus: "SUCCESS",
+      progress: [
+        { percentage: 40, messageKey: "provider_response_received" },
+        { percentage: 40, messageKey: "provider_working" },
+      ],
+      issueCode: null,
+    });
+  });
+
+  it("supports plain-text and single-JSON output modes", () => {
+    const base = loadProfile("chatgpt-codex.v1");
+    const plain = structuredClone(base);
+    plain.execution.output.mode = "plain_text";
+    expect(
+      interpretProfileExecution(plain, {
+        context: context(),
+        stdout: "plain answer",
+        exitCode: 0,
+      }).finalText,
+    ).toBe("plain answer");
+
+    const single = structuredClone(base);
+    single.execution.output.mode = "single_json";
+    single.execution.events = [
+      {
+        when: [{ kind: "equals", selector: "$.status", value: "SUCCESS" }],
+        actions: [
+          { type: "set_final_text", selector: "$.response" },
+          { type: "mark_success" },
+        ],
+      },
+    ];
+    expect(
+      interpretProfileExecution(single, {
+        context: context(),
+        stdout: JSON.stringify({ status: "SUCCESS", response: "JSON answer" }),
+        exitCode: 0,
+      }),
+    ).toMatchObject({ terminal: "success", finalText: "JSON answer" });
+  });
+
+  it("fails closed on invalid output, missing terminal state, and resume mismatch", () => {
+    const profile = loadProfile("chatgpt-codex.v1");
+    expect(
+      interpretProfileExecution(profile, {
+        context: context(),
+        stdout: '{"type":',
+        exitCode: 0,
+      }).issueCode,
+    ).toBe("provider_failure");
+    expect(
+      interpretProfileExecution(profile, {
+        context: context(),
+        stdout: JSON.stringify({
+          type: "thread.started",
+          thread_id: "thread-1",
+        }),
+        exitCode: 0,
+      }),
+    ).toMatchObject({ terminal: "failure", issueCode: "provider_failure" });
+    expect(
+      interpretProfileExecution(profile, {
+        context: context({ sessionPolicy: "durable", sessionId: "expected" }),
+        stdout: JSON.stringify({
+          type: "thread.started",
+          thread_id: "different",
+        }),
+        exitCode: 0,
+      }).issueCode,
+    ).toBe("session_resume_failed");
+  });
+
+  it("maps provider authentication evidence and Engine-owned timeout failures", () => {
+    const profile = loadProfile("chatgpt-codex.v1");
+    expect(
+      interpretProfileExecution(profile, {
+        context: context(),
+        stdout: "",
+        stderr: "Authentication required. Please sign in.",
+        exitCode: 1,
+      }).issueCode,
+    ).toBe("provider_authentication_required");
+    expect(
+      interpretProfileExecution(profile, {
+        context: context(),
+        stdout: "",
+        exitCode: 1,
+        timedOut: true,
+      }).issueCode,
+    ).toBe("deadline_exceeded");
+    const apparentlySuccessful = [
+      { type: "item.completed", item: { type: "agent_message", text: "late" } },
+      { type: "turn.completed" },
+    ]
+      .map((event) => JSON.stringify(event))
+      .join("\n");
+    expect(
+      interpretProfileExecution(profile, {
+        context: context(),
+        stdout: apparentlySuccessful,
+        exitCode: 0,
+        timedOut: true,
+      }),
+    ).toMatchObject({ terminal: "failure", issueCode: "deadline_exceeded" });
+  });
+
+  it("maps an Antigravity terminal error and captures its terminal status", () => {
+    const profile = loadProfile("gemini-antigravity.v1");
+    const result = interpretProfileExecution(profile, {
+      context: context(),
+      stdout: JSON.stringify({
+        event: "result",
+        result: { status: "ERROR", error: "Not authenticated" },
+      }),
+      exitCode: 0,
+    });
+    expect(result).toMatchObject({
+      terminal: "failure",
+      terminalStatus: "ERROR",
+      issueCode: "provider_authentication_required",
+    });
+  });
+
+  it("applies existence predicates, provider-error actions, progress actions, and failure actions", () => {
+    const profile = structuredClone(loadProfile("chatgpt-codex.v1"));
+    profile.execution.events = [
+      {
+        when: [{ kind: "exists", selector: "$.error", exists: true }],
+        actions: [
+          { type: "set_provider_error", selector: "$.error" },
+          {
+            type: "emit_progress",
+            percentage: 15,
+            messageKey: "provider_working",
+          },
+          { type: "mark_failure" },
+        ],
+      },
+      {
+        when: [{ kind: "not_equals", selector: "$.kind", value: "ignore" }],
+        actions: [
+          {
+            type: "emit_progress",
+            percentage: 20,
+            messageKey: "provider_finalizing",
+          },
+        ],
+      },
+    ];
+    profile.errors.mappings.unshift({
+      evidence: { kind: "structured_provider_error", selector: "$.error" },
+      issueCode: "provider_authentication_required",
+    });
+    const result = interpretProfileExecution(profile, {
+      context: context(),
+      stdout: JSON.stringify({
+        error: "authentication required",
+        kind: "error",
+      }),
+      exitCode: 0,
+    });
+    expect(result).toMatchObject({
+      terminal: "failure",
+      issueCode: "provider_authentication_required",
+      progress: [
+        { percentage: 15, messageKey: "provider_working" },
+        { percentage: 20, messageKey: "provider_finalizing" },
+      ],
+    });
+  });
+
+  it("selects own JSON properties and refuses prototype traversal", () => {
+    const root = JSON.parse('{"type":"safe","constructor":"data"}');
+    expect(selectProfileValue(root, "$.type")).toBe("safe");
+    expect(selectProfileValue(root, "$.absent")).toBeUndefined();
+    expect(() => selectProfileValue(root, "$.constructor")).toThrow();
+  });
+});

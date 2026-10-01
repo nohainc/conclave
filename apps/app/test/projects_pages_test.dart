@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/features/projects/projects_pages.dart';
+import 'package:conclave_app/src/studio/studio_data.dart';
 import 'package:conclave_app/src/studio/studio_models.dart';
 
 import 'studio_fixture_data.dart';
@@ -205,11 +208,13 @@ void main() {
               primaryWorkspace: 'Workspace One',
               currentCheckpoint: 'main',
               queueStatus: 'Idle',
+              canExecuteWork: true,
             ),
+            dataSource: _WorkFormDataSource(),
             onBackToProject: _noop,
             onArchive: _noop,
             onProvisionCheckout: _noop,
-            onRunWork: (work, _) async {
+            onRunWork: (work, workflowId, attachments) async {
               submittedWork = work;
               return 'request-1';
             },
@@ -230,6 +235,64 @@ void main() {
 
     expect(submittedWork, 'Add the missing tests');
     await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets('Work history reloads from Cloud after a realtime reconnect gap',
+      (tester) async {
+    final events = StreamController<Map<String, dynamic>>.broadcast();
+    addTearDown(events.close);
+    final dataSource = _WorkHistoryDataSource([
+      _workRequest('request-1', 'History before reconnect'),
+    ]);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: WorkstreamPage(
+            project: const StudioProject(
+              id: 'project-1',
+              name: 'Project One',
+              branch: '',
+              activeGoals: 0,
+              lastActivity: 'today',
+              role: 'collaborator',
+            ),
+            workstream: const StudioWorkstream(
+              id: 'workstream-1',
+              projectId: 'project-1',
+              name: 'Implementation',
+              lead: 'Owner',
+              status: 'active',
+              brief: 'Implement the requested change.',
+              primaryWorkspace: 'Workspace One',
+              currentCheckpoint: 'main',
+              queueStatus: 'Idle',
+            ),
+            dataSource: dataSource,
+            realtimeEvents: events.stream,
+            onBackToProject: _noop,
+            onArchive: _noop,
+            onProvisionCheckout: _noop,
+            initialTab: 1,
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('History before reconnect'), findsOneWidget);
+
+    dataSource.requests = [
+      _workRequest('request-1', 'History restored after reconnect'),
+      _workRequest('request-2', 'Run submitted while the browser was away'),
+    ];
+    events.add({'type': 'reconnect.required'});
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(dataSource.activeOnlyCalls, contains(false));
+    expect(find.text('History before reconnect'), findsNothing);
+    expect(find.text('History restored after reconnect'), findsOneWidget);
+    expect(
+        find.text('Run submitted while the browser was away'), findsOneWidget);
   });
 
   testWidgets('Discuss messages can be sent and copied to clipboard',
@@ -897,5 +960,47 @@ class _DuplicateTestDataSource extends StudioFixtureDataSource {
     onInviteMember?.call();
   }
 }
+
+class _WorkHistoryDataSource extends StudioFixtureDataSource {
+  _WorkHistoryDataSource(this.requests);
+
+  List<StudioWorkRequest> requests;
+  final List<bool> activeOnlyCalls = [];
+
+  @override
+  Future<List<StudioWorkRequest>> loadWorkstreamWorkRequests({
+    required String workstreamId,
+    bool activeOnly = false,
+  }) async {
+    activeOnlyCalls.add(activeOnly);
+    return requests;
+  }
+}
+
+class _WorkFormDataSource extends StudioFixtureDataSource {
+  @override
+  Future<List<StudioBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async => [
+        StudioBuiltinWorkflow.fromJson({
+          'id': 'direct',
+          'version': 1,
+          'name': 'Direct',
+          'description': 'Complete a request directly.',
+          'steps': [
+            {'kind': 'implement', 'order': 0},
+          ],
+        }),
+      ];
+}
+
+StudioWorkRequest _workRequest(String id, String prompt) => StudioWorkRequest(
+      id: id,
+      requestedByName: 'Owner',
+      prompt: prompt,
+      workflowId: 'direct',
+      workflowVersion: 1,
+      status: 'completed',
+      createdAt: '2026-10-01T10:00:00.000Z',
+      steps: const [],
+    );
 
 void _noop() {}

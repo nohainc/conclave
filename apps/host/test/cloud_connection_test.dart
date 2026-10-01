@@ -580,8 +580,16 @@ void main() {
     connection.reportWorkerInventory([
       {
         'workerId': 'worker-1',
-        'workerTypeId': 'codex',
-        'status': 'ready',
+        'workerTypeId': 'chatgpt',
+        'activationState': 'enabled',
+        'readinessState': 'ready',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
+        'providerToolName': 'codex',
+        'providerToolVersion': '1.0.0',
+        'capabilities': ['text', 'workstream_read'],
+        'localConcurrencyLimit': 1,
         'revision': 2,
       },
     ]);
@@ -594,7 +602,13 @@ void main() {
     final payload = inventory['payload'] as Map<String, dynamic>;
     expect(payload['fullSnapshot'], isTrue);
     expect((payload['workers'] as List).single['workerId'], 'worker-1');
+    expect((payload['workers'] as List).single['engineVersion'], '1.0.0');
+    expect(
+      (payload['workers'] as List).single['profileDefinitionId'],
+      'chatgpt-codex',
+    );
     expect(jsonEncode(payload), isNot(contains('credentialRef')));
+    expect(jsonEncode(payload), isNot(contains('providerToolPath')));
     await connection.close();
   });
 
@@ -783,7 +797,9 @@ void main() {
         'objective': 'inspect',
         'role': 'research',
         'workerId': 'conclave.echo',
-        'resolvedWorkerVersion': '1.0.0',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
         'input': {},
         'contextArtifactIds': [],
         'timeoutMs': 1000,
@@ -846,7 +862,9 @@ void main() {
         'objective': 'test normalized error',
         'role': 'implementer',
         'workerId': 'chatgpt',
-        'resolvedWorkerVersion': '1.0.0',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
         'input': {},
         'contextArtifactIds': [],
         'timeoutMs': 1000,
@@ -902,7 +920,9 @@ void main() {
         'objective': 'inspect',
         'role': 'research',
         'workerId': 'worker-1',
-        'resolvedWorkerVersion': '1.0.0',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
         'input': {},
         'contextArtifactIds': [],
         'timeoutMs': 1000,
@@ -954,7 +974,9 @@ void main() {
         'objective': 'work without a repository',
         'role': 'implementer',
         'workerId': 'worker-1',
-        'resolvedWorkerVersion': '1.0.0',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
         'projectId': 'project-1',
         'workstreamId': 'workstream-1',
         'executionClass': 'stateful_workstream',
@@ -1155,7 +1177,9 @@ void main() {
             'objective': 'inspect',
             'role': 'research',
             'workerId': 'conclave.echo',
-            'resolvedWorkerVersion': '1.0.0',
+            'engineVersion': '1.0.0',
+            'profileDefinitionId': 'chatgpt-codex',
+            'profileReleaseVersion': 1,
             'input': {},
             'contextArtifactIds': [],
             'timeoutMs': 1000,
@@ -1228,7 +1252,9 @@ void main() {
         'objective': 'inspect',
         'role': 'research',
         'workerId': 'conclave.echo',
-        'resolvedWorkerVersion': '1.0.0',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
         'input': {},
         'contextArtifactIds': [],
         'timeoutMs': 1000,
@@ -1344,7 +1370,9 @@ void main() {
           'objective': 'Fix add and verify the implementation',
           'role': 'implementer',
           'workerId': 'conclave.forge',
-          'resolvedWorkerVersion': '0.1.0',
+          'engineVersion': '1.0.0',
+          'profileDefinitionId': 'chatgpt-codex',
+          'profileReleaseVersion': 1,
           'input': {'repositoryPath': fixture.path},
           'contextArtifactIds': [],
           'timeoutMs': 60000,
@@ -1474,7 +1502,9 @@ void main() {
         'workerId': 'worker-1',
         'objective': 'keep running until Cloud cancels',
         'role': 'implementer',
-        'resolvedWorkerVersion': '1.0.0',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
         'input': <String, Object?>{},
         'contextArtifactIds': <String>[],
         'timeoutMs': 60000,

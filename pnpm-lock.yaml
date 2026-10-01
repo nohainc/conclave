@@ -56,6 +56,9 @@ importers:
       '@conclave/security':
         specifier: workspace:*
         version: link:../../packages/security
+      '@conclave/tool-profile':
+        specifier: workspace:*
+        version: link:../../packages/tool-profile
       '@conclave/worker-manifest':
         specifier: workspace:*
         version: link:../../packages/worker-manifest
@@ -123,6 +126,12 @@ importers:
         version: 4.6.5
 
   packages/security: {}
+
+  packages/tool-profile:
+    dependencies:
+      zod:
+        specifier: ^4.1.11
+        version: 4.6.5
 
   packages/worker-manifest:
     dependencies:

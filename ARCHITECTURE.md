@@ -3,9 +3,13 @@
 **Current architecture target:** Architecture v8 — generic CLI Worker Engine +
 signed Tool Profiles.
 
-Architecture v8 preserves the v7 Workspace/Worker ownership model and Work v1
-orchestration while replacing one native provider Worker binary per integration
-with one isolated generic Engine and Cloud-managed official Profile releases.
+**v8 release declaration:** Withheld pending the acceptance gates in the
+[v8 implementation plan](docs/roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
+
+Architecture v8 is the current architecture. It preserves the historical v7
+Workspace/Worker ownership model and Work v1 orchestration while replacing one
+native provider Worker binary per integration with one isolated generic Engine
+and Cloud-managed official Profile releases.
 
 ~~~text
 Conclave AX
@@ -189,7 +193,8 @@ The ordered migration is defined in:
 
 ## Historical predecessors
 
-Architecture v7 and Worker Runtime v2 remain historical design/evidence for:
+Architecture v7 is the historical baseline; Worker Runtime v2 is its
+process-boundary predecessor. They remain evidence for:
 - Workspace ownership;
 - process isolation;
 - local provider credentials;

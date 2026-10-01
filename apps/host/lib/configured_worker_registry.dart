@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 
 import 'first_party_worker_registry.dart';
+import 'tool_profile_catalog.dart';
 import 'platform_runtime.dart';
 
 const _registrySchemaVersion = 17;
@@ -504,6 +505,7 @@ class LocalConfiguredWorkerRegistry {
     WorkerReadinessState? readinessState,
     LocalWorkerCredentialStatus credentialStatus =
         LocalWorkerCredentialStatus.needsAuthentication,
+    LogicalWorkerCatalogEntry? approvedCatalogEntry,
   }) =>
       _locked(() async {
         final workers = await _read();
@@ -514,8 +516,11 @@ class LocalConfiguredWorkerRegistry {
         final descriptor = FirstPartyWorkerPackage.forProductWorkerTypeId(
           normalizedTypeId,
         );
-        if (descriptor == null) {
-          throw ArgumentError('Only first-party Worker slots are supported');
+        if (descriptor == null &&
+            (approvedCatalogEntry == null ||
+                approvedCatalogEntry.workerTypeId != normalizedTypeId ||
+                approvedCatalogEntry.engineFamily != 'cli')) {
+          throw ArgumentError('Worker slot is not in the approved catalog');
         }
         final existingSlot = workers
             .indexWhere((worker) => worker.workerTypeId == normalizedTypeId);
@@ -529,7 +534,7 @@ class LocalConfiguredWorkerRegistry {
         final worker = LocalConfiguredWorker(
           id: previous?.id ?? idGenerator(),
           workspaceId: workspaceId,
-          name: descriptor.productName,
+          name: descriptor?.productName ?? approvedCatalogEntry!.displayName,
           workerTypeId: normalizedTypeId,
           authStrategy: authStrategy,
           credentialRef: credentialRef,
@@ -836,9 +841,9 @@ class LocalConfiguredWorkerRegistry {
   void _validateWorker(LocalConfiguredWorker worker) {
     if (worker.workspaceId != workspaceId ||
         worker.id.trim().isEmpty ||
-        worker.workerTypeId.trim().isEmpty ||
-        FirstPartyWorkerPackage.forProductWorkerTypeId(worker.workerTypeId) ==
-            null ||
+        !RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$')
+            .hasMatch(worker.workerTypeId) ||
+        worker.workerTypeId.length > 96 ||
         worker.localConcurrencyLimit < 1 ||
         worker.revision < 1) {
       throw ArgumentError(

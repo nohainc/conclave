@@ -1,0 +1,263 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:crypto/crypto.dart';
+import 'package:test/test.dart';
+
+void main() {
+  test('chatgpt-codex Profile reproduces the current Worker acceptance path', () async {
+    final repository = Directory.current.parent.parent.path;
+    final profile =
+        jsonDecode(
+              await File(
+                '$repository/packages/tool-profile/test/fixtures/chatgpt-codex.v1.json',
+              ).readAsString(),
+            )
+            as Map<String, Object?>;
+    final provider = profile['providerTool']! as Map<String, Object?>;
+    const providerScript =
+        'workers/fixture_cli/tool/codex_profile_provider.dart';
+    provider['executableCandidates'] = ['dart'];
+    (provider['discovery']! as Map<String, Object?>)['standardLocations'] =
+        <String>[];
+    (provider['versionProbe']! as Map<String, Object?>)['arguments'] = [
+      'run',
+      providerScript,
+      '--version',
+    ];
+    provider['supportedVersions'] = [
+      {'min': '0.0.0', 'maxExclusive': '2.0.0'},
+    ];
+    final passive =
+        (profile['probe']! as Map<String, Object?>)['passive']!
+            as Map<String, Object?>;
+    passive['checks'] = [
+      {
+        'id': 'authentication',
+        'arguments': ['run', providerScript, 'login', 'status'],
+        'timeoutMs': 10000,
+        'successExitCodes': [0],
+        'failureIssueCode': 'provider_authentication_required',
+      },
+    ];
+    final execution = profile['execution']! as Map<String, Object?>;
+    execution['arguments'] = [
+      'run',
+      providerScript,
+      ...(execution['arguments']! as List<Object?>),
+    ];
+    final profileBytes = utf8.encode(jsonEncode(profile));
+    final root = await Directory.systemTemp.createTemp('codex-profile-');
+    final profileFile = File('${root.path}/profile.json')
+      ..writeAsBytesSync(profileBytes);
+    final stateDirectory = await Directory('${root.path}/state').create();
+    final providerHome = await Directory('${root.path}/provider-home').create();
+    final process = await Process.start(
+      Platform.resolvedExecutable,
+      [
+        '$repository/engines/cli_worker/bin/conclave_cli_worker.dart',
+        '--profile',
+        profileFile.path,
+        '--engine-version',
+        '1.0.0',
+        '--state-directory',
+        stateDirectory.path,
+      ],
+      workingDirectory: repository,
+      environment: {
+        ...Platform.environment,
+        'PATH':
+            '${File(Platform.resolvedExecutable).parent.path}${Platform.isWindows ? ';' : ':'}${Platform.environment['PATH'] ?? ''}',
+        'HOME': providerHome.path,
+        'CODEX_HOME': '${providerHome.path}/.codex',
+        'OPENAI_API_KEY': 'codex-fixture-key',
+      },
+      runInShell: false,
+    );
+    final lines = StreamIterator<String>(
+      process.stdout.transform(utf8.decoder).transform(const LineSplitter()),
+    );
+    final engineStderr = StringBuffer();
+    final stderrTask = process.stderr
+        .transform(utf8.decoder)
+        .listen(engineStderr.write);
+    final progress = <WorkerProgress>[];
+    addTearDown(() async {
+      process.kill(ProcessSignal.sigkill);
+      await process.exitCode;
+      await lines.cancel();
+      await stderrTask.cancel();
+      await root.delete(recursive: true);
+    });
+
+    Future<({WorkerFrame terminal, List<WorkerProgress> progress})> exchange(
+      WorkerFrame request,
+    ) async {
+      process.stdin.writeln(request.encode());
+      await process.stdin.flush();
+      final observedProgress = <WorkerProgress>[];
+      while (await lines.moveNext().timeout(const Duration(seconds: 35))) {
+        final frame = decodeWorkerFrame(lines.current);
+        if (frame is WorkerProgress && frame.requestId == request.requestId) {
+          observedProgress.add(frame);
+          progress.add(frame);
+          continue;
+        }
+        if (frame.requestId != request.requestId) continue;
+        if (frame is WorkerResult ||
+            frame is WorkerErrorFrame ||
+            frame is ProbeResult ||
+            frame is InitializeResult) {
+          return (terminal: frame, progress: observedProgress);
+        }
+      }
+      throw TimeoutException('Engine did not return ${request.requestId}');
+    }
+
+    final initialized = await exchange(
+      InitializeRequest(
+        requestId: 'codex-profile-init',
+        workerTypeId: 'chatgpt',
+        expectedEngineVersion: '1.0.0',
+        profileDefinitionId: 'chatgpt-codex',
+        profileReleaseVersion: '1',
+        profileDigest: sha256.convert(profileBytes).toString(),
+      ),
+    );
+    expect(initialized.terminal, isA<InitializeResult>());
+
+    final passiveProbe = await exchange(
+      ProbeRequest(
+        requestId: 'codex-profile-passive',
+        mode: WorkerProbeMode.passive,
+      ),
+    );
+    final passiveResult = passiveProbe.terminal as ProbeResult;
+    expect(passiveResult.ready, isTrue, reason: '${passiveResult.toJson()}');
+    expect(passiveResult.providerToolVersion, '1.2.3');
+    expect(
+      passiveResult.checks.map((check) => check.code),
+      containsAll(['provider_tool_version', 'authentication']),
+    );
+
+    final liveProbe = await exchange(
+      ProbeRequest(
+        requestId: 'codex-profile-live',
+        mode: WorkerProbeMode.live,
+        timeoutMs: 30000,
+      ),
+    );
+    final liveResult = liveProbe.terminal as ProbeResult;
+    expect(liveResult.ready, isTrue, reason: '${liveResult.toJson()}');
+    expect(
+      liveResult.checks
+          .singleWhere((check) => check.code == 'provider_live_execution')
+          .status,
+      ProbeCheckStatus.passed,
+    );
+
+    final stateless = await exchange(
+      ExecuteRequest(
+        requestId: 'codex-profile-stateless',
+        assignmentId: 'codex-stateless',
+        prompt: 'Say OK',
+        model: 'gpt-fixture',
+        timeoutMs: 10000,
+        sessionPolicy: WorkerSessionPolicy.stateless,
+      ),
+    );
+    expect((stateless.terminal as WorkerResult).output, 'Codex answer');
+    expect(stateless.progress.map((item) => item.percentage), contains(10));
+    expect(stateless.progress.map((item) => item.percentage), contains(45));
+
+    final durableStart = await exchange(
+      ExecuteRequest(
+        requestId: 'codex-profile-durable-start',
+        assignmentId: 'codex-durable-start',
+        prompt: 'Start durable',
+        timeoutMs: 10000,
+        sessionPolicy: WorkerSessionPolicy.durableSession,
+        sessionKey: 'logical-session-1',
+      ),
+    );
+    expect(
+      durableStart.terminal,
+      isA<WorkerResult>(),
+      reason: '${durableStart.terminal.toJson()}',
+    );
+    expect((durableStart.terminal as WorkerResult).output, 'Codex answer');
+    final storedSession = stateDirectory
+        .listSync()
+        .whereType<File>()
+        .singleWhere(
+          (file) => file.uri.pathSegments.last.startsWith('session-'),
+        );
+    expect(
+      (jsonDecode(await storedSession.readAsString()) as Map)['sessionId'],
+      'fake-session-1',
+    );
+
+    final durableResume = await exchange(
+      ExecuteRequest(
+        requestId: 'codex-profile-durable-resume',
+        assignmentId: 'codex-durable-resume',
+        prompt: 'Continue durable',
+        timeoutMs: 10000,
+        sessionPolicy: WorkerSessionPolicy.durableSession,
+        sessionKey: 'logical-session-1',
+      ),
+    );
+    expect((durableResume.terminal as WorkerResult).output, 'Codex answer');
+
+    final rejectedResume = await exchange(
+      ExecuteRequest(
+        requestId: 'codex-profile-durable-mismatch',
+        assignmentId: 'codex-durable-mismatch',
+        prompt: 'Continue safely',
+        timeoutMs: 10000,
+        sessionPolicy: WorkerSessionPolicy.durableSession,
+        sessionKey: 'logical-session-1',
+      ),
+    );
+    expect(
+      (rejectedResume.terminal as WorkerErrorFrame).code,
+      WorkerIssueCode.providerFailure,
+      reason:
+          '${rejectedResume.terminal.toJson()} diagnostics=${(rejectedResume.terminal as WorkerErrorFrame).diagnostics}',
+    );
+
+    final permissionFailure = await exchange(
+      ExecuteRequest(
+        requestId: 'codex-profile-permission-error',
+        assignmentId: 'codex-permission-error',
+        prompt: 'Permission failure',
+        timeoutMs: 10000,
+        sessionPolicy: WorkerSessionPolicy.stateless,
+      ),
+    );
+    expect(
+      (permissionFailure.terminal as WorkerErrorFrame).code,
+      WorkerIssueCode.permissionDenied,
+      reason:
+          '${permissionFailure.terminal.toJson()} diagnostics=${(permissionFailure.terminal as WorkerErrorFrame).diagnostics}',
+    );
+    final providerEventFailure = await exchange(
+      ExecuteRequest(
+        requestId: 'codex-profile-provider-event-error',
+        assignmentId: 'codex-provider-event-error',
+        prompt: 'Provider event failure',
+        timeoutMs: 10000,
+        sessionPolicy: WorkerSessionPolicy.stateless,
+      ),
+    );
+    expect(
+      (providerEventFailure.terminal as WorkerErrorFrame).code,
+      WorkerIssueCode.permissionDenied,
+      reason:
+          '${providerEventFailure.terminal.toJson()} diagnostics=${(providerEventFailure.terminal as WorkerErrorFrame).diagnostics} stderr=$engineStderr',
+    );
+    expect(progress, isNotEmpty);
+  });
+}

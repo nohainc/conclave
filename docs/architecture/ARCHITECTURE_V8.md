@@ -1,6 +1,8 @@
 # Conclave AX Architecture v8 — Generic Worker Engine and Tool Profiles
 
 **Status:** Accepted architecture and implementation target  
+**Release declaration:** Withheld; acceptance gates remain open
+
 **Date:** 2026-10-01  
 **Builds on:** Architecture v7, Worker Runtime v2, Work v1  
 **Primary decision:** [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md)
@@ -10,7 +12,8 @@
 Architecture v8 keeps the v7 product model and Work v1 orchestration, but
 simplifies the local AI execution layer.
 
-The v7/v2 target compiled one first-party Worker executable per provider:
+The historical Worker Runtime v2 implementation used one first-party Worker
+executable per provider:
 
 ~~~text
 Workspace
@@ -38,6 +41,26 @@ Conclave CLI Worker Engine
     v
 provider CLI
 ~~~
+
+### 1.1 Canonical v8 terminology and migration boundary
+
+Use these terms for v8 architecture, implementation, tests, and operations:
+
+- **Logical Worker** — stable product identity selected by Workstreams and Work;
+- **CLI Worker Engine** — generic isolated executable supervised by Workspace;
+- **Tool Profile Definition** — stable official provider integration identity;
+- **Tool Profile Release** — immutable signed payload for a definition;
+- **Profile lifecycle/channel** — Cloud-managed release state and promotion;
+- **Provider CLI** — locally installed tool such as `codex` or `agy`;
+- **Local Worker Protocol 4.0** — Workspace-to-Engine contract.
+
+Workspace, Worker, Worker Type, Workstream, Work Request, and Work v1 Workflow
+remain canonical product/domain terms. “ChatGPT Worker executable,” “Gemini
+Worker executable,” “provider-specific Worker release,” and “per-provider
+native Worker package” describe the superseded v2 implementation only. Existing
+v2 provider binaries and their release machinery are migration-only references
+until the v8 acceptance gates pass and Phase 31 removes them. Do not extend that
+runtime for new provider integrations.
 
 Examples:
 
@@ -162,6 +185,14 @@ It owns:
 - logs/diagnostics aggregation;
 - safe Worker readiness synchronization to Cloud.
 
+Signed Profile releases are materialized under Workspace-managed
+`Profiles/<profileDefinitionId>/<releaseVersion>/profile.json` directories,
+with signed release metadata beside each immutable payload and active/LKG
+pointers in `release-state.json`. Workspace refreshes Cloud revocations before
+release sync and validates the shared Profile v1 schema and trust envelope
+before writing. Cache updates are independent of Engine and Workspace
+application versions.
+
 Workspace does **not** know provider-specific commands or event formats.
 
 ### 4.4 CLI Worker Engine
@@ -169,8 +200,10 @@ Workspace does **not** know provider-specific commands or event formats.
 The CLI Worker Engine is one generic standalone Dart console executable.
 
 It owns:
-- Tool Profile parsing/validation;
-- provider CLI discovery;
+- bounded Tool Profile runtime parsing and identity/digest checks;
+- provider CLI discovery from Profile candidates and approved locations;
+- verified cached executable paths, generic OS search locations, bounded PATH
+  search, and executable validation;
 - provider environment construction within engine policy;
 - passive/live probe execution;
 - command/argument construction;
@@ -182,6 +215,11 @@ It owns:
 - engine-side logs/diagnostics.
 
 It has no Cloud credentials and never connects directly to Cloud.
+
+Workspace verifies official release signatures and performs canonical Tool
+Profile v1 schema admission before launching the Engine. The Engine rechecks
+the loaded payload digest, identity, compatibility, and execution bounds before
+accepting Protocol 4.0 requests.
 
 ### 4.5 Tool Profile
 
@@ -201,6 +239,16 @@ draft -> testing -> beta -> stable -> retired
 
 The actual lifecycle may skip beta for urgent fixes, but stable promotion is
 always explicit and audited.
+
+Cloud selects the Profile channel for each Workspace. A Workspace without an
+explicit internal override receives `stable`; platform-admin development
+operations may opt a Workspace into `testing` or `beta`. The Workspace runtime
+authenticates its catalog request with its runtime credential, and Cloud derives
+the allowed channel from that identity. The catalog API rejects caller-supplied
+channel selection. Normal users do not choose Profile channels in AX or
+Workspace settings. Each selected release is still signature-checked and
+passively validated locally before activation; real provider acceptance is an
+explicit test action.
 
 ## 5. Protocol boundaries
 
@@ -302,24 +350,41 @@ windows-x64
 ...
 ~~~
 
-Initially, a Workspace release should bundle a known-good Engine baseline.
+Initially, the signed/notarized Workspace application release is the Engine
+trust boundary. Each Workspace build bundles one known-good Engine executable
+for its platform. The executable is not fetched from Cloud and has no mutable
+database lifecycle. Its version is compiled into the Workspace supervisor and
+is independently reported by Engine initialization and diagnostics.
 
-Workspace may materialize it into a managed runtime directory:
+At startup, Workspace bounds and hashes the bundled asset, then materializes it
+into the managed application-support directory:
 
 ~~~text
 <WorkspaceData>/
-  Runtime/
-    cli-worker/
-      1.3.0/
-      1.3.1/
-      release-state.json
+  Engines/
+    cli_worker/
+      1.0.0-<sha256>/
+        conclave_cli_worker_engine[.exe]
 ~~~
 
-Engine and Workspace versions are independent, but v8 does not require fully
-independent Engine delivery on day one. The architecture permits it later.
+The version and digest make each materialized artifact immutable and
+content-specific. Workspace restricts directory/executable permissions and
+rechecks an existing artifact against the bundled bytes on startup; altered or
+incomplete cached bytes are replaced from that trusted bundle. A missing,
+oversized, or unmaterializable Engine fails closed and leaves the Worker
+runtime unavailable.
 
-Engine rollback remains available because generic runtime bugs can affect all
-profiles.
+The active Engine is exactly the one bundled by the installed Workspace
+release. There is no independent Engine active/LKG pointer and no Engine
+selection from Profile lifecycle metadata. Engine changes therefore ship with
+a Workspace release. Until the Workspace application update transaction has
+verified drain, staging, restart, health check, and rollback, recovery from a
+bad Engine release means reinstalling the previous verified signed/notarized
+Workspace release as a whole. The Engine is not silently replaced by an older
+cached executable. Independent signed Engine delivery may later add its own
+immutable platform artifacts, trust/revocation checks, candidate admission,
+health check, and atomic active/LKG rollback; that mechanism is not required
+for v8 acceptance.
 
 ## 9. Tool Profile domain model
 
@@ -403,19 +468,39 @@ revocation state
 
 Resolution returns one signed eligible profile release.
 
-Normal preference:
+Workspace resolves locally cached, signature-verified releases in this order:
 
 1. locally active verified release if still eligible;
 2. current compatible stable release;
 3. last-known-good compatible stable release where permitted;
 4. otherwise Worker becomes Setup required / Needs attention.
 
-An unsupported provider CLI version does not silently select an incompatible
+Compatibility uses semantic-version ranges with an inclusive minimum and
+exclusive maximum. The current stable candidate is the version selected by
+the latest successful stable catalog sync; it is tracked separately from the
+active pointer so a local rollback cannot make an older release appear current.
+Every candidate must match the requested logical Worker, definition, channel,
+Engine range, provider CLI range, and current revocation policy. An unsupported
+provider CLI version returns unavailable and never selects an incompatible
 profile.
 
 ## 12. Profile update/rollback
 
 Profile updates are lightweight and independent from Workspace/Engine binaries.
+
+Workspace rollback selects a locally cached, signature-verified, compatible
+last-known-good release. It initializes the Engine and runs a passive probe
+against that candidate before atomically switching the active Profile pointer.
+The previous active release becomes last-known-good. A failed validation leaves
+the current pointers unchanged; rollback never sends a model request.
+
+Revocation makes a release ineligible as soon as the refreshed revocation state
+is applied. If it was active, Workspace clears that active pointer first, then
+resolves and passively probes another eligible release before activation. A
+cached release is never promoted solely because it remains trusted. If no
+eligible release passes, the Worker is marked Needs attention. Provider
+authentication, quota, and service outages do not trigger Profile rollback;
+they remain readiness failures for the current release.
 
 ~~~text
 Cloud stable pointer -> new release
@@ -437,6 +522,13 @@ activate
 ~~~
 
 No live model request is required for every automatic stable update.
+
+Workspace first caches a validated release as an inactive candidate. The
+candidate Engine performs initialize and a passive provider probe before one
+atomic release-state update changes the active/stable pointers and records the
+previous active release as last-known-good. If the Engine or a matching local
+Worker is unavailable, or the candidate probe fails, the candidate remains
+cached and the previous active/LKG pointers stay unchanged.
 
 Testing/beta promotion should run fixture and real provider acceptance.
 
@@ -584,6 +676,10 @@ Work/Workflow
 Provider session IDs remain local.
 
 Profile describes extraction/resume mapping; Engine enforces identity continuity.
+Workspace session state is partitioned by logical Worker, Profile definition,
+provider tool identity, and logical `sessionKey`. A Profile Release may resume
+an older provider session format only when its signed compatibility list names
+that format; otherwise Engine starts a fresh provider session.
 
 Separate sessions remain mandatory for independent verification steps.
 
@@ -634,12 +730,29 @@ Cloud product catalog:
 worker_catalog
   worker_type_id
   display_name
+  description
   engine_family
-  profile_definition_id
-  visible
+  visibility_state
   release_stage
+  capabilities_json
   sort_order
 ~~~
+
+Each active catalog entry is joined to its active Tool Profile definition.
+Workspace receives visible entries eligible for its Cloud-selected channel;
+it cannot request a different channel. Profile release resolution is separate,
+so a Worker can still render while its Profile is unavailable and must remain
+unrunnable until a trusted compatible release is selected. A catalog entry can be created only by a platform
+administrator through the approved catalog operation, which creates its
+logical Worker and Profile definition together. Workspace users cannot create
+catalog entries. Each release remains signed, immutable, and independently
+validated before local activation.
+
+The v8 product-capability list is closed and validated by Cloud and Workspace.
+Workspace maps declared capabilities through fixed permission policy; a Tool
+Profile cannot grant itself filesystem or general shell access. A new catalog
+entry can use the existing Workspace UI and generic Engine once its approved
+Profile release is available.
 
 ### 21.2 Tool Profile definitions
 
@@ -714,6 +827,15 @@ Cloud does not receive:
 - local profile files;
 - provider credentials.
 
+The v8 inventory contract replaces the provider-native
+`worker_runtime_version` field with the Engine and Profile evidence above.
+New assignment snapshots and `worker_assignments` rows record Engine/Profile
+identity. Each assignment stores that snapshot at dispatch, including the
+provider tool version and explicit model, so later Profile promotions cannot
+rewrite the evidence. Run history reads the stored snapshot instead of current
+inventory. The migration renames the v7 assignment version column; no local
+path or secret is included.
+
 ## 23. Observability
 
 Every assignment/probe diagnostic correlates:
@@ -728,6 +850,14 @@ assignment/work request/task IDs
 stable error code
 duration
 ~~~
+
+Workspace persists bounded local Engine/Profile probe records with the
+resolution source, probe stage, stable error code, and failure layer
+(`engine`, `profile`, or `provider_tool`). Engine records also include the
+request/assignment identity where available. Advanced Diagnostics may show
+Workspace and Engine versions, the official integration definition/release,
+and provider CLI name/version. Diagnostics omit signed Profile payloads,
+credential values, prompts, and free-form provider output.
 
 This allows Conclave to distinguish:
 - Engine regression;
@@ -815,7 +945,9 @@ v8 supersedes:
 - Workspace-managed independent ChatGPT/Gemini executable versions;
 - provider integration behavior compiled into separate Worker executables.
 
-Worker Runtime v2 remains historical design/evidence for the process boundary.
+Worker Runtime v2 and its provider-specific binaries remain historical
+design/evidence for the process boundary and migration fixtures only. They are
+not the v8 runtime target.
 
 ## 28. Migration posture
 
@@ -824,7 +956,7 @@ Conclave is still in development.
 Prefer convergence to permanent dual runtime.
 
 Temporary migration may support:
-- current ChatGPT/Gemini binaries;
+- existing ChatGPT/Gemini v2 provider binaries as migration-only fallbacks;
 - new generic Engine + profiles.
 
 Release gate:

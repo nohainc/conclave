@@ -39,14 +39,17 @@ function workflowResultDatabase(): D1Database {
         if (sql.includes("SELECT wr.input_json")) {
           return {
             inputJson: JSON.stringify({ originalRequest: "Research this" }),
-            settingsJson: null,
+            snapshotJson: JSON.stringify({
+              originalRequest: "Research this",
+              resolvedBindings: {},
+            }),
           };
         }
         if (sql.includes("SELECT a.created_at")) {
           return {
             artifact_created_at: "2026-01-01T00:00:02.000Z",
             worker_id: "worker-test",
-            worker_runtime_version: "1.0.0",
+            engine_version: "1.0.0",
             assignment_started_at: "2026-01-01T00:00:00.000Z",
             permission_snapshot_json: JSON.stringify({
               providerToolVersion: "2.0.0",

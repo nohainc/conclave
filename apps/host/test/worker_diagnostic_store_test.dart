@@ -32,6 +32,16 @@ void main() {
           'apiKey': 'secret-key-value',
           'providerToolName': 'Codex CLI',
           'providerToolVersion': '1.2.3',
+          'workspaceVersion': '8.2.0',
+          'engineVersion': '1.3.0',
+          'profileDefinitionId': 'chatgpt-codex',
+          'profileReleaseVersion': 9,
+          'profileResolutionSource': 'stable',
+          'probeStage': 'live',
+          'failureLayer': 'provider_tool',
+          'durationMs': 345,
+          'errorCode': 'provider_auth_required',
+          'profilePayload': {'secret': 'profile-private-value'},
         },
       }),
       workerTypeId: 'chatgpt',
@@ -46,9 +56,19 @@ void main() {
     expect(report, contains('assignment-1'));
     expect(report, contains('Codex CLI'));
     expect(report, contains('1.2.3'));
+    expect(report, contains('8.2.0'));
+    expect(report, contains('1.3.0'));
+    expect(report, contains('chatgpt-codex'));
+    expect(report, contains('"profileReleaseVersion":9'));
+    expect(report, contains('"profileResolutionSource":"stable"'));
+    expect(report, contains('"probeStage":"live"'));
+    expect(report, contains('"failureLayer":"provider_tool"'));
+    expect(report, contains('"durationMs":345'));
+    expect(report, contains('provider_auth_required'));
     expect(report, isNot(contains('full sensitive prompt')));
     expect(report, isNot(contains('private source text')));
     expect(report, isNot(contains('secret-key-value')));
+    expect(report, isNot(contains('profile-private-value')));
     expect(report, isNot(contains('do something private')));
   });
 

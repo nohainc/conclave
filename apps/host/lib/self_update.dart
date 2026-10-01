@@ -122,7 +122,7 @@ class HostReleaseClient {
     final owned = await _request(
       cloudUri.replace(
         scheme: _httpScheme(cloudUri),
-        pathSegments: ['api', 'worker-releases', 'trust'],
+        pathSegments: ['api', 'release-trust'],
       ),
       authToken: authToken,
     );
@@ -135,22 +135,31 @@ class HostReleaseClient {
       if (decoded is! Map ||
           decoded['revokedKeyIds'] is! List ||
           decoded['revokedWorkers'] is! List ||
-          decoded['revokedWorkspaceReleases'] is! List) {
+          decoded['revokedWorkspaceReleases'] is! List ||
+          decoded['revokedToolProfiles'] is! List) {
         throw const FormatException('release trust response is invalid');
       }
       final digests = <String>{};
       final releases = <String>{};
       for (final row in [
         ...decoded['revokedWorkers'] as List,
-        ...decoded['revokedWorkspaceReleases'] as List
+        ...decoded['revokedWorkspaceReleases'] as List,
+        ...decoded['revokedToolProfiles'] as List,
       ].whereType<Map>()) {
         if (row['packageDigest'] is String) {
           digests.add(row['packageDigest'] as String);
+        } else if (row['payloadDigest'] is String) {
+          digests.add(row['payloadDigest'] as String);
         }
         if (row['workerTypeId'] is String && row['version'] is String) {
           releases.add('${row['workerTypeId']}@${row['version']}');
         } else if (row['version'] is String) {
           releases.add('workspace@${row['version']}');
+        } else if (row['profileDefinitionId'] is String &&
+            row['releaseVersion'] is int) {
+          releases.add(
+            '${row['profileDefinitionId']}@${row['releaseVersion']}',
+          );
         }
       }
       policy.updateRevocations(

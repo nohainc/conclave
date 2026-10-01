@@ -131,6 +131,22 @@ export const routeHandlers = {
   handleRevokeWorkerRelease: handlers.handleRevokeWorkerRelease,
   handleGetReleaseTrustState: handlers.handleGetReleaseTrustState,
   handleRevokeReleaseSigningKey: handlers.handleRevokeReleaseSigningKey,
+  handleResolveToolProfileChannels: handlers.handleResolveToolProfileChannels,
+  handleSetWorkspaceToolProfileChannel:
+    handlers.handleSetWorkspaceToolProfileChannel,
+  handleCreateToolProfileDefinition: handlers.handleCreateToolProfileDefinition,
+  handleCreateApprovedLogicalWorker: handlers.handleCreateApprovedLogicalWorker,
+  handleCreateDraftToolProfileRelease:
+    handlers.handleCreateDraftToolProfileRelease,
+  handleUpdateDraftToolProfileRelease:
+    handlers.handleUpdateDraftToolProfileRelease,
+  handlePublishDraftToolProfileRelease:
+    handlers.handlePublishDraftToolProfileRelease,
+  handlePromoteToolProfileRelease: handlers.handlePromoteToolProfileRelease,
+  handleChangeToolProfileReleaseLifecycle:
+    handlers.handleChangeToolProfileReleaseLifecycle,
+  handleListToolProfileReleases: handlers.handleListToolProfileReleases,
+  handleListToolProfileReleaseAudit: handlers.handleListToolProfileReleaseAudit,
   handleListWorkspaceProjectGrants: handlers.handleListWorkspaceProjectGrants,
   handleCreateWorkspaceProjectGrant: handlers.handleCreateWorkspaceProjectGrant,
   handleListProjectWorkspaces: handlers.handleListProjectWorkspaces,

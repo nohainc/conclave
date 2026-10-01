@@ -53,6 +53,8 @@ void main() {
         '${home.path}/Library/Application Support/Conclave/Workspace/State');
     expect(paths.adaptersDirectory.path,
         '${home.path}/Library/Application Support/Conclave/Workspace/Adapters');
+    expect(paths.profilesDirectory.path,
+        '${home.path}/Library/Application Support/Conclave/Workspace/Profiles');
     expect(paths.updatesDirectory.path,
         '${home.path}/Library/Application Support/Conclave/Workspace/Updates');
     expect(paths.logsFile.path,
@@ -141,6 +143,7 @@ void main() {
       paths.applicationSupportDirectory,
       paths.stateDirectory,
       paths.adaptersDirectory,
+      paths.profilesDirectory,
       paths.updatesDirectory,
       paths.logsDirectory,
     ]) {

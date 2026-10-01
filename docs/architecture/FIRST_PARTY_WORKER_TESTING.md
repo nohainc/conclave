@@ -2,6 +2,11 @@
 
 > **Superseded.** The procedures below preserve v7/v2 migration evidence. Architecture v8 testing must exercise the generic CLI Worker Engine, Tool Profile schema/fixture harness, Profile lifecycle/rollback, and real provider acceptance defined by `docs/roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md`. Retain this document only as predecessor evidence.
 
+For current work, start with the v8 plan's fixture harness (Phase 22) and real
+Profile acceptance pipeline (Phase 23). The commands and protocol terminology
+below apply only to the predecessor implementation and must not be used to
+create or validate a new provider-specific Worker executable.
+
 This document defines the verification pyramid for the first-party ChatGPT and
 Gemini Workers. Deterministic tests use fake CLIs and never need provider
 accounts, tokens, or billable requests. Live-provider checks are explicitly

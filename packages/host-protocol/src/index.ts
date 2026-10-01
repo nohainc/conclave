@@ -364,8 +364,13 @@ export const AssignmentSnapshotSchema = z
     workerId: nonEmptyStr,
     configuredWorkerId: nonEmptyStr.optional(),
     workerTypeId: nonEmptyStr.optional(),
-    resolvedWorkerVersion: nonEmptyStr,
-    workerRuntimeVersion: nonEmptyStr.optional(),
+    engineVersion: nonEmptyStr.max(64),
+    profileDefinitionId: nonEmptyStr.max(96),
+    profileReleaseVersion: z
+      .number()
+      .int()
+      .positive()
+      .max(Number.MAX_SAFE_INTEGER),
     providerToolName: z.string().max(128).nullable().optional(),
     providerToolVersion: z.string().max(128).nullable().optional(),
     credentialProfileId: nonEmptyStr.optional(),

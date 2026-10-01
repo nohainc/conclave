@@ -15,13 +15,18 @@ import 'workspace_paths.dart';
 import 'worker_readiness.dart';
 import 'worker_version_store.dart';
 import 'worker_release_catalog.dart';
+import 'tool_profile_catalog.dart';
+import 'tool_profile_release_store.dart';
 
 export 'configured_worker_registry.dart';
 export 'release_trust_roots.dart';
 export 'worker_release_manifest.dart';
 export 'worker_release_verifier.dart';
+export 'tool_profile_release_verifier.dart';
 export 'worker_version_store.dart';
 export 'worker_release_catalog.dart';
+export 'tool_profile_catalog.dart';
+export 'tool_profile_release_store.dart';
 export 'worker_candidate_validator.dart';
 export 'workspace_paths.dart';
 
@@ -246,6 +251,8 @@ class Host {
     V7AdapterPackageStore? adapterPackageStore,
     this.workerVersionStore,
     this.workerReleaseCatalog,
+    this.toolProfileReleaseStore,
+    this.toolProfileCatalog,
     LocalConfiguredWorkerRegistry? localWorkerRegistry,
     this.workerReadinessMonitor,
     this.workerShutdownHandler,
@@ -284,6 +291,8 @@ class Host {
   final V7AdapterPackageStore adapterPackageStore;
   final WorkerVersionStore? workerVersionStore;
   final WorkerReleaseCatalog? workerReleaseCatalog;
+  final ToolProfileReleaseStore? toolProfileReleaseStore;
+  final ToolProfileCatalogClient? toolProfileCatalog;
   final LocalConfiguredWorkerRegistry? localWorkerRegistry;
   final WorkerReadinessMonitor? workerReadinessMonitor;
   final Future<void> Function()? workerShutdownHandler;
@@ -353,6 +362,7 @@ class Host {
     _running = false;
     await workerReadinessMonitor?.dispose();
     workerReleaseCatalog?.close();
+    toolProfileCatalog?.close();
     for (final subscription in _signalSubscriptions) {
       await subscription.cancel();
     }

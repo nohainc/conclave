@@ -17,7 +17,9 @@ function worker(
     activationState: "enabled",
     readinessState: "ready",
     readinessIssueCode: null,
-    workerRuntimeVersion: "2.0.0",
+    engineVersion: "1.0.0",
+    profileDefinitionId: "chatgpt-codex",
+    profileReleaseVersion: 1,
     providerToolName: "codex",
     providerToolVersion: "1.0.0",
     capabilities: ["code"],
@@ -59,14 +61,20 @@ describe("Workspace Worker inventory domain", () => {
     expect(() =>
       validateWorkspaceWorkerInventory({
         ...worker("worker-a", "workspace-a"),
-        workerRuntimeVersion: "v".repeat(129),
+        engineVersion: "v".repeat(65),
       }),
-    ).toThrow(/workerRuntimeVersion/);
+    ).toThrow(/engineVersion/);
     expect(() =>
       validateWorkspaceWorkerInventory({
         ...worker("worker-a", "workspace-a"),
         capabilities: ["code", "code"],
       }),
     ).toThrow(/capabilities must be unique/);
+    expect(() =>
+      validateWorkspaceWorkerInventory({
+        ...worker("worker-a", "workspace-a"),
+        providerToolName: "/Users/example/codex",
+      }),
+    ).toThrow(/providerToolName/);
   });
 });

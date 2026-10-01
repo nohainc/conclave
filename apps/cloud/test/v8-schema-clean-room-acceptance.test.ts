@@ -1,43 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const migrationFiles = [
-  "0001_conclave_v6.sql",
-  "0002_workstream_integrations.sql",
-  "0003_usage_audit_observability.sql",
-  "0004_chat_workstream_mapping.sql",
-  "0005_execution_foundation.sql",
-  "0007_project_settings.sql",
-  "0010_workspace_project_grant_policy.sql",
-  "0011_project_invitations.sql",
-  "0012_remove_project_repository.sql",
-  "0013_configured_workers.sql",
-  "0014_configured_worker_runtime_state.sql",
-  "0015_configured_worker_assignments.sql",
-  "0016_worker_first_execution_policy.sql",
-  "0017_configured_worker_observability.sql",
-  "0018_migrate_legacy_ai_accounts.sql",
-  "0019_worker_assignment_requester.sql",
-  "0020_workspace_runtime_facts.sql",
-  "0021_workspace_worker_inventory.sql",
-  "0022_v7_adapter_releases.sql",
-  "0023_workspace_runtime_credentials.sql",
-  "0024_v7_worker_scheduling.sql",
-  "0025_v7_assignment_runtime.sql",
-  "0026_remove_v6_configured_workers.sql",
-  "0027_public_key_release_trust.sql",
-  "0028_workspace_pairing_intents.sql",
-  "0031_worker_readiness_state.sql",
-  "0032_worker_inventory_safe_projection.sql",
-  "0033_workstream_worker_usage_policy.sql",
-  "0035_worker_releases.sql",
-  "0036_worker_inventory_v2.sql",
-  "0037_workstream_work_config.sql",
-  "0038_work_request_snapshots.sql",
-  "0039_workstream_runtime_leases.sql",
-];
+const migrationFiles = readdirSync(
+  fileURLToPath(new URL("../migrations-v6/", import.meta.url)),
+)
+  .filter((file) => file.endsWith(".sql"))
+  .sort();
 
 const schema = migrationFiles
   .map((file) =>
@@ -75,41 +45,85 @@ function apply(sql: string): unknown[] {
   ) as unknown[];
 }
 
-describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
-  it("stores native Worker releases by Worker, version, and platform", () => {
-    const columns = apply("PRAGMA table_info(worker_releases);") as {
-      name: string;
-      pk: number;
-    }[];
-    expect(columns.map((column) => column.name)).toEqual(
+describe("v8 Workspace and database lifecycle acceptance", () => {
+  it("bootstraps v8 Profile tables without native provider Worker release tables", () => {
+    const tables = apply(
+      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;",
+    ) as { name: string }[];
+    const tableNames = tables.map((table) => table.name);
+    expect(tableNames).toEqual(
       expect.arrayContaining([
-        "worker_type_id",
-        "version",
-        "platform",
-        "release_channel",
-        "protocol_min",
-        "protocol_max",
-        "state_read_min",
-        "state_read_max",
-        "state_write",
-        "manifest_json",
-        "package_digest",
-        "archive_sha256",
-        "package_r2_key",
-        "is_revoked",
+        "worker_catalog",
+        "tool_profile_definitions",
+        "tool_profile_releases",
+        "tool_profile_release_audit",
+        "tool_profile_channel_pointers",
       ]),
     );
-    expect(
-      columns
-        .filter((column) => column.pk > 0)
-        .sort((left, right) => left.pk - right.pk)
-        .map((column) => column.name),
-    ).toEqual(["worker_type_id", "version", "platform"]);
+    expect(tableNames).not.toContain("worker_releases");
+    expect(tableNames).not.toContain("v7_adapter_releases");
     expect(
       apply(
-        "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'v7_adapter_releases';",
+        "SELECT worker_type_id FROM worker_catalog ORDER BY worker_type_id;",
       ),
-    ).toEqual([{ count: 0 }]);
+    ).toEqual([{ worker_type_id: "chatgpt" }, { worker_type_id: "gemini" }]);
+  });
+
+  it("keeps the optional v8 development seed limited to logical identities", () => {
+    const seed = readFileSync(
+      fileURLToPath(new URL("../seed/v6-development.sql", import.meta.url)),
+      "utf8",
+    );
+    expect(
+      apply(`${seed}
+        SELECT (SELECT COUNT(*) FROM worker_catalog) AS workers,
+               (SELECT COUNT(*) FROM tool_profile_definitions) AS profiles,
+               (SELECT COUNT(*) FROM tool_profile_releases) AS releases,
+               (SELECT COUNT(*) FROM execution_workspaces) AS workspaces,
+               (SELECT COUNT(*) FROM work_requests) AS work_requests;`),
+    ).toEqual([
+      { workers: 3, profiles: 3, releases: 0, workspaces: 0, work_requests: 0 },
+    ]);
+  });
+
+  it("maps the testing-only fixture CLI Worker to its v1 Profile release", () => {
+    const seed = readFileSync(
+      fileURLToPath(new URL("../seed/v6-development.sql", import.meta.url)),
+      "utf8",
+    );
+    const rows = apply(`${seed}
+      SELECT worker.worker_type_id, worker.release_stage,
+             definition.profile_definition_id, definition.provider_tool_name
+        FROM worker_catalog worker
+        JOIN tool_profile_definitions definition
+          ON definition.worker_type_id = worker.worker_type_id
+       WHERE worker.worker_type_id = 'fixture-worker';`);
+    expect(rows).toEqual([
+      {
+        worker_type_id: "fixture-worker",
+        release_stage: "testing",
+        profile_definition_id: "fixture-cli",
+        provider_tool_name: "Fixture CLI",
+      },
+    ]);
+
+    const profile = JSON.parse(
+      readFileSync(
+        fileURLToPath(
+          new URL(
+            "../../../packages/tool-profile/test/fixtures/fixture-cli.v1.json",
+            import.meta.url,
+          ),
+        ),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    expect(profile).toMatchObject({
+      schemaVersion: 1,
+      profileDefinitionId: "fixture-cli",
+      releaseVersion: 1,
+      logicalWorkerTypeId: "fixture-worker",
+    });
   });
 
   it("creates the Workspace release table on the clean v6 baseline", () => {
@@ -133,7 +147,8 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
 
   it("stores pairing intent before any permanent execution Workspace exists", () => {
     const result = apply(`
-      INSERT INTO users VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
+      INSERT INTO users (id, email, display_name, status, created_at, updated_at)
+        VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
       INSERT INTO workspace_pairing_intents
         (pairing_id, owner_user_id, token_hash, created_at, expires_at)
         VALUES ('pair-1', 'u1', 'sha256:token-hash', '2026-01-01', '2026-01-01T00:15:00Z');
@@ -156,7 +171,8 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
     const result = JSON.parse(
       execFileSync("sqlite3", ["-json", ":memory:"], {
         input: `${schemaBeforePairingIntents}
-          INSERT INTO users VALUES ('u1', 'paired@example.test', 'Paired', 'active', '2026-01-01', '2026-01-01');
+          INSERT INTO users (id, email, display_name, status, created_at, updated_at)
+            VALUES ('u1', 'paired@example.test', 'Paired', 'active', '2026-01-01', '2026-01-01');
           INSERT INTO execution_workspaces VALUES ('ws1', 'u1', 'Paired Mac', 'offline', '2026-01-01', '2026-01-02');
           INSERT INTO workspace_runtime_identities
             (id, workspace_id, credential_key_ref, credential_token_hash, created_at, revoked_at)
@@ -186,7 +202,8 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
 
   it("projects paired runtime facts and V7 inventory/activity counts", () => {
     const result = apply(`
-      INSERT INTO users VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
+      INSERT INTO users (id, email, display_name, status, created_at, updated_at)
+        VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
       INSERT INTO execution_workspaces VALUES ('ws1', 'u1', 'Vitalii’s MacBook Pro', 'online', '2026-01-01', '2026-09-26T12:30:00.000Z');
       INSERT INTO workspace_runtime_identities
         (id, workspace_id, credential_key_ref, credential_token_hash, created_at, revoked_at)
@@ -199,13 +216,13 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
       INSERT INTO workers VALUES ('codex', 'Codex', 'active', '2026-01-01', '2026-01-01');
       INSERT INTO workspace_worker_inventory (
         workspace_id, worker_id, owner_user_id, worker_type_id, activation_state,
-        readiness_state, worker_runtime_version, capabilities_json,
+        readiness_state, engine_version, profile_definition_id, profile_release_version, capabilities_json,
         local_concurrency_limit, revision, created_at,
         updated_at, last_seen_at
       ) VALUES
-        ('ws1', 'worker-1', 'u1', 'chatgpt', 'enabled', 'ready', '2.0.0', '[]', 1, 1, 'now', 'now', 'now'),
-        ('ws1', 'worker-2', 'u1', 'chatgpt', 'enabled', 'ready', '2.0.0', '[]', 1, 1, 'now', 'now', 'now'),
-        ('ws1', 'worker-3', 'u1', 'chatgpt', 'enabled', 'ready', '2.0.0', '[]', 1, 1, 'now', 'now', 'now');
+        ('ws1', 'worker-1', 'u1', 'chatgpt', 'enabled', 'ready', '1.0.0', 'chatgpt-codex', 3, '[]', 1, 1, 'now', 'now', 'now'),
+        ('ws1', 'worker-2', 'u1', 'chatgpt', 'enabled', 'ready', '1.0.0', 'chatgpt-codex', 3, '[]', 1, 1, 'now', 'now', 'now'),
+        ('ws1', 'worker-3', 'u1', 'chatgpt', 'enabled', 'ready', '1.0.0', 'chatgpt-codex', 3, '[]', 1, 1, 'now', 'now', 'now');
       INSERT INTO projects (id, owner_user_id, name, created_at, updated_at)
         VALUES ('p1', 'u1', 'Project', 'now', 'now');
       INSERT INTO worker_assignments
@@ -242,11 +259,33 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
     ]);
   });
 
+  it("exposes only v8 runtime evidence in the synchronized Worker inventory", () => {
+    const columns = apply("PRAGMA table_info(workspace_worker_inventory);") as {
+      name: string;
+    }[];
+    const names = columns.map((column) => column.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "activation_state",
+        "readiness_state",
+        "engine_version",
+        "profile_definition_id",
+        "profile_release_version",
+        "provider_tool_name",
+        "provider_tool_version",
+      ]),
+    );
+    expect(names).not.toContain("worker_runtime_version");
+    expect(names).not.toContain("adapter_version");
+    expect(names).not.toContain("provider_tool_path");
+  });
+
   it("forward-migrates legacy assignment and audit attribution, then removes V6 tables", () => {
     const result = JSON.parse(
       execFileSync("sqlite3", ["-json", ":memory:"], {
         input: `${preCleanupSchema}
-          INSERT INTO users VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
+          INSERT INTO users (id, email, display_name, status, created_at, updated_at)
+            VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
           INSERT INTO execution_workspaces VALUES ('ws1', 'u1', 'Workspace', 'online', '2026-01-01', '2026-01-01');
           INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, created_at) VALUES ('rt1', 'ws1', 'ref', '2026-01-01');
           INSERT INTO workers VALUES ('type1', 'Type One', 'active', '2026-01-01', '2026-01-01');
@@ -277,7 +316,8 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
 
   it("validates ownership, grants, workstream policy, and assignment attribution schema without claiming runtime execution", () => {
     const result = apply(`
-      INSERT INTO users VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
+      INSERT INTO users (id, email, display_name, status, created_at, updated_at)
+        VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
       INSERT INTO execution_workspaces VALUES ('ws1', 'u1', 'MacBook Pro', 'online', '2026-01-01', '2026-01-01');
       INSERT INTO workspace_runtime_identities
         (id, workspace_id, credential_key_ref, created_at, revoked_at)
@@ -287,11 +327,11 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
       -- V7 Workspace-owned worker inventory synced from local Conclave Workspace
       INSERT INTO workspace_worker_inventory (
         workspace_id, worker_id, owner_user_id, worker_type_id, activation_state,
-        readiness_state, worker_runtime_version, capabilities_json,
+        readiness_state, engine_version, profile_definition_id, profile_release_version, capabilities_json,
         local_concurrency_limit, revision, created_at, updated_at, last_seen_at
       ) VALUES (
         'ws1', 'v7-codex-1', 'u1', 'chatgpt', 'enabled',
-        'ready', '2.0.0', '["code","repository"]',
+        'ready', '1.0.0', 'chatgpt-codex', 3, '["code","repository"]',
         2, 1, '2026-01-01', '2026-01-01', '2026-01-01'
       );
 

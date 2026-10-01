@@ -15,13 +15,14 @@
 > runtime work. The assignment path still uses legacy V7 adapter machinery;
 > end-to-end acceptance remains open. Workspace does not probe provider CLIs.
 
-## 1. Executive decision
+## Historical v7 decision (not the active runtime target)
 
-V7 is the sole current Worker ownership architecture. It is not yet the
-implemented baseline: Phase 5 production Worker acceptance, Phase 6 full
+At the v7 baseline, Workspace was the owner of local Worker execution. The v7
+release gates recorded at that time included Phase 5 production Worker
+acceptance, Phase 6 full
 failure/security acceptance, and Phase 7 native macOS `.app` updater recovery
-remain open. See the [current implementation audit](V7_IMPLEMENTATION_AUDIT.md)
-and [release gates](../roadmaps/ARCHITECTURE_V7_COMPLETION.md).
+and are historical. Current runtime status is tracked by the
+[Architecture v8 implementation plan](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
 
 v7 keeps the product model already established by the current application:
 

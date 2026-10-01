@@ -33,6 +33,7 @@ class CliCommandRunner {
       workingDirectory: workingDirectory,
       environment: environment,
       includeParentEnvironment: false,
+      runInShell: false,
     );
     final stdoutFuture = _readBounded(process.stdout, process);
     final stderrFuture = _readBounded(process.stderr, process);

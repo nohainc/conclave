@@ -1,0 +1,19 @@
+name: conclave_cli_worker_engine
+description: Generic isolated CLI Worker Engine for Conclave.
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ">=3.11.0 <4.0.0"
+
+dependencies:
+  crypto: ^3.0.6
+  conclave_cli_worker_runtime:
+    path: ../../packages/conclave_cli_worker_runtime
+  conclave_worker_protocol:
+    path: ../../packages/conclave_worker_protocol
+  conclave_tool_profile_v1:
+    path: ../../packages/tool_profile_v1
+
+dev_dependencies:
+  test: ^1.25.0

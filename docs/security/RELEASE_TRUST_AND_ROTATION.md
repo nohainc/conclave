@@ -1,9 +1,10 @@
 # Workspace, Engine, and Tool Profile Release Trust
 
-Architecture v8 is the active first-party runtime trust contract. Worker Runtime v2 remains predecessor history. Node adapter
-signatures and API routes mentioned below are migration history; native Worker
-releases are verified by Worker type, version, platform, protocol/state
-compatibility, manifest signature, package digest, and archive hash.
+**Current target:** Architecture v8 separates trust for the Workspace
+application, the generic CLI Worker Engine, and immutable Tool Profile
+Releases. Architecture v7 is the historical baseline; Worker Runtime v2 is its
+process-boundary predecessor. Any provider-specific Worker signatures, routes,
+or release records below are migration history only.
 
 ## Trust model
 
@@ -14,8 +15,12 @@ version, channel, platform/architecture, and archive digest. Worker release
 signatures also bind the canonical manifest (excluding its signature field)
 and the package file-tree digest.
 
-Workspace application, CLI Worker Engine, and Tool Profile release classes use explicit trust separation. Workspace application signing material must never be reused for Engine/Profile release signing. Worker releases must use the dedicated Worker signing trust class; do not reuse the Workspace application signing seed or treat a legacy adapter key as interchangeable. They share the public-key trust-root configuration
-format, but a key for one release class must not be reused for the other.
+Workspace application, CLI Worker Engine, and Tool Profile release classes use
+explicit trust separation. Workspace application signing material must never
+be reused for Engine/Profile release signing. Profile signing must not use the
+historical per-Worker signing trust class. They share the public-key trust-root
+configuration format, but a key for one release class must not be reused for
+the other.
 Apple Developer ID signing and notarization verify macOS origin/platform
 requirements; Conclave release metadata verification remains required.
 
@@ -71,8 +76,9 @@ installed clients until a recovery distribution path is available.
 - Revoke a compromised key ID or publisher immediately in Cloud trust state;
   clients refresh revocation state before release checks/admission.
 - Revoke an individual Workspace app release through the host-release revoke
-  endpoint and a Worker release through the Worker release revoke endpoint.
-  Include an actionable reason. The V7 adapter-version revoke route is legacy.
+  endpoint. Profile release, publisher, or signing-key revocations use the
+  shared `/api/release-trust` mechanism and are checked before Profile
+  admission. Historical Worker-release revoke routes are unavailable in v8.
 - Release revocation prevents future install/update admission. It does not
   terminate an already-running process; follow the incident response plan for
   active work and publish a replacement immutable release when safe.
@@ -86,7 +92,10 @@ Cloud, compare digests, and verify the signature/admission before reporting
 success. A workflow dispatch is not production evidence until its run succeeds
 against the intended Cloud environment. See [Workspace release operations](../deployment/WORKSPACE_RELEASES.md).
 
-## Worker Runtime v2 trust refinement
+## Historical Worker Runtime v2 trust refinement
+
+The following records the predecessor package model only; it is not the v8
+trust or release contract.
 
 ADR-017 makes first-party Worker artifacts native platform executables. Trust verification therefore binds the Worker Type, Worker version, platform/architecture, protocol range, Worker-state schema compatibility, permissions, executable path, package digest and archive hash in addition to normal publisher/key metadata.
 
@@ -118,3 +127,39 @@ Tool Profile signing
 ~~~
 
 These may use separate keys or carefully scoped publisher/key classes, but a compromised Profile-signing credential must not authorize a Workspace application release.
+
+# Tool Profile Release v1 signing envelope
+
+Tool Profiles are executable policy. Workspace admits an official Profile only
+after recomputing the SHA-256 digest of the canonical Profile JSON and verifying
+its Ed25519 signature against a bundled publisher/key ID trust root. The signing
+message is UTF-8:
+
+~~~text
+conclave-tool-profile-release-v1\n<canonical envelope JSON>
+~~~
+
+The canonical envelope JSON has these fields: `domain`, `publisher`,
+`signingKeyId`, `payloadDigest`, `profileDefinitionId`, `releaseVersion`,
+`logicalWorkerTypeId`, `engineFamily`, `schemaVersion`,
+`engineCompatibility`, `providerToolName`, and `providerCompatibility`. The
+digest is over canonical JSON for the entire validated Profile v1 payload, so
+all execution behavior is covered. The envelope repeats release identity and
+compatibility claims so Workspace can compare them with the response/database
+metadata before launch. `providerCompatibility` is the Profile's
+`providerTool.supportedVersions` array.
+
+Lifecycle state, channel, promotion pointers, audit fields, display name, and
+timestamps are unsigned registry metadata. They cannot override signed
+identity or broaden signed behavior. Workspace accepts only testing, beta, or
+stable channel responses, checks the selected logical Worker and metadata
+against the signed Profile, and rejects revoked payload digests, release IDs,
+publishers, and signing key IDs. Key rotation adds a new key ID/public key to
+the Workspace trust roots; revoking an old key ID immediately prevents new
+admission of releases signed by that key. A Profile release is identified for
+revocation as `<profileDefinitionId>@<releaseVersion>`.
+
+The release signer must construct the envelope from the validated immutable
+payload and the publisher/key identity used to sign it. Re-labeling a signature
+with another key ID or publisher invalidates the signature. Database lifecycle
+updates do not require re-signing because they do not change the envelope.

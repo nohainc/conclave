@@ -225,8 +225,8 @@ state is independent from local readiness.
 That is necessary but not sufficient before deleting the compatibility
 architecture.
 
-`apps/cloud/test/v7-schema-lifecycle-acceptance.test.ts` remains explicitly a
-schema/lifecycle test. The migration-safety gate is
+The former schema test has moved to the v8 clean-room gate at
+`apps/cloud/test/v8-schema-clean-room-acceptance.test.ts`. The migration-safety gate is
 `apps/cloud/test/v7-runtime-e2e.acceptance.test.ts`: it syncs a locally created
 Worker through `workspace.hello` and authoritative inventory, enables Cloud
 scheduling, dispatches a real workflow task through the Project scheduler and

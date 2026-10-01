@@ -122,8 +122,12 @@ interface ForgeTerminalEvent {
   readonly resultArtifactId?: string;
   readonly finalText?: string;
   readonly workerId?: string | null;
-  readonly workerRuntimeVersion?: string | null;
+  readonly workerTypeId?: string | null;
+  readonly engineVersion?: string | null;
+  readonly profileDefinitionId?: string | null;
+  readonly profileReleaseVersion?: number | null;
   readonly providerToolVersion?: string | null;
+  readonly model?: string | null;
   readonly error?: string;
 }
 
@@ -179,12 +183,25 @@ function isForgeTerminalEvent(value: unknown): value is ForgeTerminalEvent {
     (record.workerId === undefined ||
       record.workerId === null ||
       typeof record.workerId === "string") &&
-    (record.workerRuntimeVersion === undefined ||
-      record.workerRuntimeVersion === null ||
-      typeof record.workerRuntimeVersion === "string") &&
+    (record.workerTypeId === undefined ||
+      record.workerTypeId === null ||
+      typeof record.workerTypeId === "string") &&
+    (record.engineVersion === undefined ||
+      record.engineVersion === null ||
+      typeof record.engineVersion === "string") &&
+    (record.profileDefinitionId === undefined ||
+      record.profileDefinitionId === null ||
+      typeof record.profileDefinitionId === "string") &&
+    (record.profileReleaseVersion === undefined ||
+      record.profileReleaseVersion === null ||
+      (Number.isSafeInteger(record.profileReleaseVersion) &&
+        Number(record.profileReleaseVersion) > 0)) &&
     (record.providerToolVersion === undefined ||
       record.providerToolVersion === null ||
       typeof record.providerToolVersion === "string") &&
+    (record.model === undefined ||
+      record.model === null ||
+      typeof record.model === "string") &&
     (record.error === undefined || typeof record.error === "string")
   );
 }
@@ -576,10 +593,11 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         ),
       );
       for (const result of results) {
-        const cancellationRequested = await (this.env as ExecutionEnv)
-          .CONCLAVE_DB.prepare(
-            "SELECT cancel_requested_at AS cancelRequestedAt FROM work_requests WHERE id = ?1",
-          )
+        const cancellationRequested = await (
+          this.env as ExecutionEnv
+        ).CONCLAVE_DB.prepare(
+          "SELECT cancel_requested_at AS cancelRequestedAt FROM work_requests WHERE id = ?1",
+        )
           .bind(params.workRequestId)
           .first<{ cancelRequestedAt: string | null }>();
         const resultStatus = cancellationRequested?.cancelRequestedAt
@@ -815,8 +833,13 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             startedAt,
             completedAt,
             workerId: terminal.payload.workerId ?? null,
-            workerRuntimeVersion: terminal.payload.workerRuntimeVersion ?? null,
+            workerTypeId: terminal.payload.workerTypeId ?? null,
+            engineVersion: terminal.payload.engineVersion ?? null,
+            profileDefinitionId: terminal.payload.profileDefinitionId ?? null,
+            profileReleaseVersion:
+              terminal.payload.profileReleaseVersion ?? null,
             providerToolVersion: terminal.payload.providerToolVersion ?? null,
+            model: terminal.payload.model ?? null,
           };
           return { task, status: "completed", output: stepResult, stepResult };
         }
@@ -870,7 +893,9 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       .prepare(
         `SELECT a.created_at AS artifact_created_at,
                 wa.workspace_worker_id AS worker_id,
-                wa.worker_version AS worker_runtime_version,
+                wa.worker_id AS worker_type_id,
+                wa.model AS model,
+                wa.engine_version AS engine_version,
                 wa.created_at AS assignment_started_at,
                 wa.permission_snapshot_json AS permission_snapshot_json
          FROM artifacts a
@@ -910,16 +935,27 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           : fallbackStartedAt,
       completedAt,
       workerId: typeof row.worker_id === "string" ? row.worker_id : null,
-      workerRuntimeVersion:
-        typeof row.worker_runtime_version === "string"
-          ? row.worker_runtime_version
-          : typeof permissionSnapshot.workerRuntimeVersion === "string"
-            ? permissionSnapshot.workerRuntimeVersion
-            : null,
+      workerTypeId:
+        typeof row.worker_type_id === "string" ? row.worker_type_id : null,
+      engineVersion:
+        typeof permissionSnapshot.profileDefinitionId === "string" &&
+        typeof row.engine_version === "string"
+          ? row.engine_version
+          : null,
+      profileDefinitionId:
+        typeof permissionSnapshot.profileDefinitionId === "string"
+          ? permissionSnapshot.profileDefinitionId
+          : null,
+      profileReleaseVersion:
+        Number.isSafeInteger(permissionSnapshot.profileReleaseVersion) &&
+        Number(permissionSnapshot.profileReleaseVersion) > 0
+          ? Number(permissionSnapshot.profileReleaseVersion)
+          : null,
       providerToolVersion:
         typeof permissionSnapshot.providerToolVersion === "string"
           ? permissionSnapshot.providerToolVersion
           : null,
+      model: typeof row.model === "string" ? row.model : null,
       artifacts: [artifactId],
     };
   }

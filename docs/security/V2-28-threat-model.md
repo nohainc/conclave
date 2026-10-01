@@ -60,3 +60,44 @@ outbound queue so WebSocket and long-poll cannot concurrently consume work.
 
 The executable security and release checks are listed in the
 [Workspace lifecycle production validation runbook](../operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md).
+
+## Architecture v8 Tool Profile and schema evolution addendum
+
+Tool Profiles are signed behavior policy interpreted by the local CLI Worker
+Engine. The relevant trust flow is:
+
+~~~text
+official Profile author/signing key
+-> immutable signed Profile Release
+-> Workspace signature/digest/schema admission
+-> constrained Engine interpreter
+-> one discovered Provider CLI
+~~~
+
+The Profile signer is trusted to publish approved behavior, but signed data
+must not grant the Engine additional execution authority. The Engine remains
+the enforcement boundary for executable selection, shell prohibition,
+environment allowlists, filesystem scope, deadlines, output bounds, selectors,
+and process cleanup.
+
+| Threat | Required control |
+| --- | --- |
+| Malicious or compromised Profile broadens execution | Strict versioned schema; closed placeholders/actions; structured argv; hard-coded Engine limits; signature/digest and logical Worker identity checks. |
+| New schema is interpreted differently by old Workspace/Engine versions | Reject unknown schema versions and fields; bind schema version and behavior to the signed payload; require declared Engine compatibility. |
+| v2 loosens validation or silently changes v1 meaning | Keep independent strict validators/interpreters per schema version; preserve v1 validation and fixtures; no permissive fallback or reinterpretation. |
+| Complex selectors/rules exhaust CPU or memory | Fixed grammar, depth/count/byte bounds, output limits, and adversarial tests before release. |
+| Convenience scripting enables arbitrary commands or data access | Do not support expressions, scripts, recursion, arbitrary helper processes, or unrestricted filesystem/network access. Add only reviewed finite primitives with explicit threat analysis. |
+
+### Required Profile schema change review
+
+Before adding Profile behavior absent from v1, document the concrete missing
+primitive and establish whether it is generic across integrations. Update this
+threat model before implementation. Add Profile schema v2 only when a bounded
+generic primitive cannot be added compatibly and safely to v1. A v2 reader must
+not weaken or reinterpret v1: each version has a strict parser, finite
+interpreter, version-specific fixtures, and fail-closed handling for unknown
+versions/fields. Profile signing, digest, lifecycle admission, and Engine
+compatibility checks apply independently to every version.
+
+No Profile v2 is defined or admitted by this addendum. The normative current
+contract remains [Tool Profile v1](../specifications/TOOL_PROFILE_V1.md).

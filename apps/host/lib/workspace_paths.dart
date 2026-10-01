@@ -55,6 +55,14 @@ class WorkspacePaths {
   Directory get workersDirectory =>
       Directory('${applicationSupportDirectory.path}/Workers');
 
+  /// Immutable signed Tool Profile material managed independently of Engines.
+  Directory get profilesDirectory =>
+      Directory('${applicationSupportDirectory.path}/Profiles');
+
+  /// Materialized app-bundled generic Engine executables.
+  Directory get enginesDirectory =>
+      Directory('${applicationSupportDirectory.path}/Engines');
+
   Directory workerStateDirectory(String workerId) {
     if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$').hasMatch(workerId) ||
         workerId == '.' ||
@@ -97,6 +105,8 @@ class WorkspacePaths {
       stateDirectory,
       adaptersDirectory,
       workersDirectory,
+      profilesDirectory,
+      enginesDirectory,
       updatesDirectory,
       logsDirectory,
     ]) {

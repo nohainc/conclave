@@ -11,8 +11,12 @@ const stepResult = (text: string) => ({
   startedAt: "2026-01-01T00:00:00.000Z",
   completedAt: "2026-01-01T00:00:01.000Z",
   workerId: "worker-test",
-  workerRuntimeVersion: "1.0.0",
+  workerTypeId: "chatgpt",
+  engineVersion: "1.0.0",
+  profileDefinitionId: "chatgpt-codex",
+  profileReleaseVersion: 1,
   providerToolVersion: null,
+  model: null,
 });
 
 describe("Work v1 prompt profiles", () => {
@@ -30,7 +34,9 @@ describe("Work v1 prompt profiles", () => {
       currentWorkstreamContext: "Must not be inherited.",
     });
 
-    expect(prompt).toContain("Original request:\nInvestigate login redirect");
+    expect(prompt).toContain(
+      "Run-specific user request:\nInvestigate login redirect",
+    );
     expect(prompt).toContain("Attachment (text/plain): trace.txt\ntrace body");
     expect(prompt).toContain("Project instructions:");
     expect(prompt).toContain("Workstream instructions:");
@@ -141,7 +147,7 @@ describe("Work v1 prompt profiles", () => {
     expect(prompt).toContain("Implementation result:");
     expect(prompt).toContain("Test result:");
     expect(prompt).toContain("Current Workstream filesystem:");
-    expect(prompt).toContain("fresh stateless assignment");
+    expect(prompt).toContain("fresh isolated assignment");
     expect(prompt).not.toContain("Must not be inherited");
   });
 
@@ -187,6 +193,13 @@ describe("Work v1 prompt profiles", () => {
       expect(() =>
         renderWorkStepPrompt(workflow, step, {
           originalRequest: "Do the work.",
+          stepResults: Object.fromEntries(
+            step.inputsFrom.map((inputKind) => [
+              inputKind,
+              stepResult(`${inputKind} evidence`),
+            ]),
+          ),
+          currentWorkstreamContext: "Current Workstream files.",
         }),
       ).not.toThrow();
     }

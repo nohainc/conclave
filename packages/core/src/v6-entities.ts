@@ -120,8 +120,12 @@ export interface StepResult {
   readonly startedAt: string;
   readonly completedAt: string;
   readonly workerId: string | null;
-  readonly workerRuntimeVersion: string | null;
+  readonly workerTypeId: string | null;
+  readonly engineVersion: string | null;
+  readonly profileDefinitionId: string | null;
+  readonly profileReleaseVersion: number | null;
   readonly providerToolVersion: string | null;
+  readonly model: string | null;
   readonly artifacts?: readonly string[];
   readonly changedFiles?: readonly string[];
   readonly testStatus?: "passed" | "failed" | "blocked" | "not_run";
@@ -556,8 +560,7 @@ export function validateWorkRequest(
     }
     validateBuiltinWorkflowDefinition(request.snapshot.workflowSnapshot);
     for (const step of request.snapshot.workflowSnapshot.steps) {
-      const bindingId =
-        request.workflowId === "direct" ? "direct" : step.kind;
+      const bindingId = request.workflowId === "direct" ? "direct" : step.kind;
       if (
         request.snapshot.promptProfileVersions[step.kind] !==
           step.promptProfileVersion ||

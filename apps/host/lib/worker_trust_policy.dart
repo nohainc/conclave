@@ -83,6 +83,20 @@ class WorkerTrustPolicy {
   Set<String> get revokedKeyIds => Set.unmodifiable(_revokedKeyIds);
   Set<String> get revokedReleaseIds => Set.unmodifiable(_revokedReleaseIds);
 
+  bool hasTrustedSigningKey(String publisher, String signingKeyId) =>
+      trustedPublicKeys[publisher]?.containsKey(signingKeyId) ?? false;
+
+  bool isToolProfileReleaseRevoked({
+    required String publisher,
+    required String signingKeyId,
+    required String digest,
+    required String releaseId,
+  }) =>
+      _revokedDigests.contains(digest) ||
+      _revokedPublishers.contains(publisher) ||
+      _revokedKeyIds.contains(signingKeyId) ||
+      _revokedReleaseIds.contains(releaseId);
+
   void updateRevocations({
     Set<String> digests = const {},
     Set<String> publishers = const {},
@@ -111,6 +125,32 @@ class WorkerTrustPolicy {
       signingKeyId: signingKeyId,
       signature: signature,
       message: utf8.encode('conclave-workspace-release-v1\n$digest'),
+    );
+  }
+
+  /// Verifies a signed Tool Profile Release envelope. Lifecycle state is
+  /// checked by the caller; it is deliberately absent from signed behavior.
+  Future<bool> verifyToolProfileRelease({
+    required String publisher,
+    required String signingKeyId,
+    required String digest,
+    required String releaseId,
+    required String signature,
+    required String message,
+  }) async {
+    if (isToolProfileReleaseRevoked(
+      publisher: publisher,
+      signingKeyId: signingKeyId,
+      digest: digest,
+      releaseId: releaseId,
+    )) {
+      return false;
+    }
+    return _verifySignature(
+      publisher: publisher,
+      signingKeyId: signingKeyId,
+      signature: signature,
+      message: utf8.encode(message),
     );
   }
 

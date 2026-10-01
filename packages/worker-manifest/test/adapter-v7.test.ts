@@ -37,7 +37,7 @@ const manifest = {
   releaseChannel: "stable",
 };
 
-describe("Architecture v7 adapter manifest and protocol", () => {
+describe("Migration-only Architecture v7 adapter manifest and protocol", () => {
   it("parses a signed adapter integration manifest", () => {
     expect(parseV7AdapterManifest(manifest)).toMatchObject({
       workerTypeId: "codex",

@@ -1,0 +1,11 @@
+{
+  "versionFixture": "version/supported.txt",
+  "versionExitCode": 0,
+  "commandExitCodes": {},
+  "configFiles": {
+    ".gemini/antigravity-cli/settings.json": "{\"modelProvider\":\"gemini\"}"
+  },
+  "environment": {
+    "GEMINI_API_KEY": "fixture-key-not-real"
+  }
+}

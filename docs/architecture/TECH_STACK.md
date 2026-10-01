@@ -1,6 +1,7 @@
 # Conclave AX Technology Stack
 
-**Status:** Current v7 architecture; production readiness gates remain open
+**Status:** Architecture v8 is the active target. Architecture v7 is the
+historical baseline; Worker Runtime v2 is its process-boundary predecessor.
 
 ## Stack summary
 
@@ -9,15 +10,15 @@
 | Conclave AX | Flutter + Dart, Web |
 | Cloud | TypeScript + Cloudflare |
 | Conclave Workspace | Flutter + Dart desktop/background runtime |
-| Local Worker Protocol | versioned provider-neutral NDJSON protocol |
-| First-party Workers | standalone Dart AOT console executables |
+| Local Worker Protocol | Protocol 4.0, versioned NDJSON between Workspace and Engine |
+| First-party local execution | Generic Dart AOT CLI Worker Engine plus signed Tool Profiles |
 | Cloud database | Cloudflare D1 |
 | Artifacts/packages | Cloudflare R2 |
 | Durable orchestration | Cloudflare Workflows |
 | Workspace connectivity | Durable Objects + WebSocket |
 | AX-to-Cloud product boundary | HTTPS APIs + browser realtime, human session |
 | Workspace-to-Cloud runtime boundary | Workspace Runtime Protocol over WSS, HTTPS long-poll fallback |
-| Workspace-to-Worker boundary | Local Worker Protocol over NDJSON stdin/stdout |
+| Workspace-to-Engine boundary | Local Worker Protocol 4.0 over NDJSON stdin/stdout |
 | Web hosting | Cloudflare static assets / Worker deployment |
 | TypeScript tests | Vitest |
 | Dart/Flutter tests | dart test / flutter_test |
@@ -42,7 +43,7 @@ Use:
 - Workers for HTTP/API;
 - Workflows for durable Run orchestration;
 - D1 for relational control-plane state;
-- R2 for artifacts and signed Worker/release packages;
+- R2 for artifacts and signed Engine/Profile release packages;
 - Durable Objects for live Workspace runtime WebSockets and transient coordination.
 
 Do not add PostgreSQL/Redis/Kafka/Kubernetes without measured need.
@@ -58,14 +59,18 @@ The persistent runtime process owns:
 - Workspace enrollment/reconciliation;
 - local configured Worker registry;
 - secure credential integration;
-- Worker release and slot manager;
+- logical Worker registry and Tool Profile resolver/cache;
 - Work Root/Workstream directory lifecycle;
 - child process supervision;
 - local permissions and diagnostics;
 - update lifecycle;
 - minimal local UI/tray behavior.
 
-Worker execution uses separate per-assignment OS child processes by default, retaining crash/cancellation/security isolation while keeping the Cloud connection/runtime stable. First-party ChatGPT and Gemini integrations are standalone independently versioned Dart console executables; the user does not install Node.js or the Dart SDK.
+Worker execution uses a separate CLI Worker Engine process per assignment/probe
+by default, retaining crash/cancellation/security isolation while keeping the
+Cloud connection/runtime stable. The Engine starts the locally installed
+Provider CLI. Users do not install a provider-specific Conclave Worker
+executable, Node.js, or the Dart SDK.
 Workspace owns each Worker's full descendant tree. Assignment cancellation,
 timeout, output overflow, Worker removal, and runtime shutdown first give the
 Worker a brief graceful-stop window to clean up its provider CLI. Workspace
@@ -74,7 +79,7 @@ shutdown completes. Provider CLIs remain in the Workspace-owned process group.
 POSIX process groups are used for force termination, with recursive process
 discovery as fallback; Windows uses process-tree termination.
 
-## Worker Runtime v2 is historical predecessor implementation. Architecture v8 standardizes first-party local CLI execution on one standalone Dart AOT **CLI Worker Engine** plus signed Tool Profiles.
+## Architecture v8 local execution target
 
 Preferred local runtime:
 
@@ -86,7 +91,17 @@ Conclave Workspace (Flutter/Dart)
 -> provider CLI
 ~~~
 
-The Engine is a separate console executable, not a Flutter plugin and not provider-specific. Tool Profiles are immutable signed configuration releases stored/distributed by Cloud and cached/verified by Workspace. Provider-specific command lines, event mappings, sessions, and compatibility belong in Profiles when representable by Tool Profile v1.
+The Engine is a separate generic console executable, not a Flutter plugin and
+not provider-specific. Tool Profile Releases are immutable signed
+configurations distributed by Cloud and cached/verified by Workspace.
+Provider-specific arguments, event mappings, sessions, and compatibility
+belong in Profiles when representable by Tool Profile v1.
+
+**Migration boundary:** Worker Runtime v2 provider-specific Dart binaries,
+release records, and their test suites are retained only as migration
+references until the v8 real-provider, update/rollback, and Work v1 acceptance
+gates pass. They are not the active architecture target and must not be extended
+for new CLI integrations. Remove them in the v8 cleanup phase after acceptance.
 
 ## Cross-language contracts
 
@@ -152,9 +167,9 @@ Local Workspace secure store stores personal secrets by default.
 Do not persist plaintext credentials in D1, assignment payloads, logs, or artifacts.
 
 
-## V7 implementation status
+## Historical Architecture v7 status
 
-The current product model is V7: Workspace-owned local Workers, safe Cloud
+At the v7 baseline, the product model used Workspace-owned local Workers, safe Cloud
 inventory, Cloud scheduling controls, Project/Workstream authorization, and
 execution by the owning Workspace. The scheduler no longer needs V6 binding
 records for V7 assignments. Public-key trust and first-party release workflows
@@ -170,15 +185,21 @@ requested passive/live mode, readiness, safe tool version, structured checks,
 stable issue codes, and bounded local diagnostics. Protocol 2.4 execute
 requests carry the remaining assignment timeout so packages can derive CLI
 deadlines and reserve cleanup grace. Provider tokens and account secrets are
-not protocol fields. This describes the legacy source route, not the target
-first-party contract. Local Worker Protocol 3.0 is normative for new first-party
-Worker work; Workspace must not probe provider CLIs directly.
+not protocol fields. This describes the legacy source route, not the current
+first-party contract. Local Worker Protocol 4.0 is normative for first-party
+CLI Worker Engine work; Workspace must not probe provider CLIs directly.
 
 See the [Architecture v7 Completion Plan](../roadmaps/ARCHITECTURE_V7_COMPLETION.md),
 [release operations](../deployment/WORKSPACE_RELEASES.md), and
 [release trust/key rotation](../security/RELEASE_TRUST_AND_ROTATION.md).
 
 
-## Worker Runtime v2 implementation status
+## Architecture v8 implementation status
 
-Worker Runtime v2 is the accepted first-party architecture. Protocol 3.0, Dart Worker packages, native release publication, and local real-provider acceptance components exist. The current Workspace assignment route still uses the legacy V7 Node adapter store/executor, so full Cloud-to-Workspace assignment execution through the Dart Workers is not yet accepted. Candidate activation/update/rollback, real production-path acceptance, and Node cleanup gates remain open. The Node path is migration implementation, not a provider-probing pattern for new Workspace code.
+Architecture v8 is the accepted implementation target. Existing code includes
+the v7/v2 Workspace process boundary and provider-specific Worker artifacts as
+migration baselines; the generic Engine + signed Profile assignment path is
+not yet accepted. Follow the ordered
+[Architecture v8 implementation plan](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md)
+and do not report v8 complete until its real-provider, profile
+activation/update/rollback, Work v1, and cleanup gates pass.

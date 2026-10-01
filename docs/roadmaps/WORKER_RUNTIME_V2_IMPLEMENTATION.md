@@ -1,6 +1,6 @@
 # Worker Runtime v2 Implementation Plan
 
-**Status:** Implementation in progress — Phases 1–17 have initial implementation; first-party assignment routing remains
+**Status:** Historical predecessor plan; superseded for implementation by [Architecture v8](ARCHITECTURE_V8_IMPLEMENTATION.md). Retained as process-boundary and migration evidence.
 **Architecture:** [Worker Runtime v2](../architecture/WORKER_RUNTIME_V2.md)  
 **Decision:** [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md)  
 **Product baseline:** Architecture v7 / ADR-015 ChatGPT + Gemini first-party catalog

@@ -21,7 +21,19 @@ void main() {
       );
       expect(
         () => decodeWorkerFrame(
-          '{"type":"initialize.request","protocolVersion":"3.0","requestId":"1","workerTypeId":"chatgpt","expectedWorkerVersion":"1.0.0","providerSecret":"leak"}',
+          '{"type":"initialize.request","protocolVersion":"4.0","requestId":"1","workerTypeId":"chatgpt","expectedEngineVersion":"1.0.0","profileDefinitionId":"chatgpt-codex","profileReleaseVersion":"1.0.0","profileDigest":"${'a' * 64}","providerSecret":"leak"}',
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => decodeWorkerFrame(
+          '{"type":"initialize.request","protocolVersion":"4.0","requestId":"1","workerTypeId":"chatgpt","expectedEngineVersion":"1.0.0","profileDefinitionId":"chatgpt-codex","profileReleaseVersion":"1.0.0","profileDigest":"not-a-digest"}',
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => decodeWorkerFrame(
+          '{"type":"initialize.request","protocolVersion":"4.0","requestId":"1","workerTypeId":"chatgpt","expectedEngineVersion":"1.0.0","profileDefinitionId":"chatgpt-codex","profileReleaseVersion":"1.0.0","profileDigest":"${'a' * 64}","expectedWorkerVersion":"1.0.0"}',
         ),
         throwsFormatException,
       );
@@ -39,7 +51,7 @@ void main() {
       ]) {
         expect(
           () => decodeWorkerFrame(
-            '{"type":"execute.request","protocolVersion":"3.0","requestId":"1","assignmentId":"a","prompt":"p","model":null,"timeoutMs":1000,"sessionPolicy":"stateless","$forbiddenKey":"blocked"}',
+            '{"type":"execute.request","protocolVersion":"4.0","requestId":"1","assignmentId":"a","prompt":"p","model":null,"timeoutMs":1000,"sessionPolicy":"stateless","$forbiddenKey":"blocked"}',
           ),
           throwsFormatException,
           reason: 'must reject $forbiddenKey',
@@ -51,7 +63,21 @@ void main() {
   test('validates probe mode and bounded probe data', () {
     expect(
       () => decodeWorkerFrame(
-        '{"type":"probe.request","protocolVersion":"3.0","requestId":"1","mode":"quota_free"}',
+        '{"type":"probe.request","protocolVersion":"4.0","requestId":"1","mode":"quota_free"}',
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => ProbeRequest(
+        requestId: 'long-probe',
+        mode: WorkerProbeMode.live,
+        timeoutMs: WorkerProtocolLimits.maxProbeTimeoutMs + 1,
+      ),
+      throwsFormatException,
+    );
+    expect(
+      () => decodeWorkerFrame(
+        '{"type":"probe.request","protocolVersion":"4.0","requestId":"1","mode":"live","timeoutMs":30001}',
       ),
       throwsFormatException,
     );
@@ -72,12 +98,26 @@ void main() {
       ),
       throwsFormatException,
     );
+    expect(
+      () => decodeWorkerFrame(
+        '{"type":"probe.result","requestId":"1","mode":"passive","ready":true,"providerToolName":"/usr/local/bin/codex","providerToolVersion":"1.0","checks":[],"issueCode":null,"diagnostics":null}',
+      ),
+      throwsFormatException,
+      reason: 'probe metadata must not expose executable paths',
+    );
+    expect(
+      () => decodeWorkerFrame(
+        '{"type":"probe.result","requestId":"1","mode":"passive","ready":true,"providerToolName":"codex","providerToolVersion":"token=secret","checks":[],"issueCode":null,"diagnostics":null}',
+      ),
+      throwsFormatException,
+      reason: 'provider version must be a safe token',
+    );
   });
 
   test('requires a logical session key only for durable sessions', () {
     final stateless = <String, Object?>{
       'type': 'execute.request',
-      'protocolVersion': '3.0',
+      'protocolVersion': '4.0',
       'requestId': '1',
       'assignmentId': 'a',
       'prompt': 'p',

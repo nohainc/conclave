@@ -3094,8 +3094,8 @@ class _WorkTimelineCard extends StatelessWidget {
                 final worker = _workerName(step);
                 final details = [
                   worker,
-                  if (step.workerRuntimeVersion != null)
-                    'Worker ${step.workerRuntimeVersion}',
+                  if (step.engineVersion != null)
+                    'Engine ${step.engineVersion}',
                   if (step.providerToolVersion != null)
                     step.providerToolVersion!,
                   if (_elapsed(step.elapsedMs).isNotEmpty)
@@ -3306,8 +3306,8 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                           Text(
                             [
                               _workerName(step),
-                              if (step.workerRuntimeVersion != null)
-                                'Worker ${step.workerRuntimeVersion}',
+                              if (step.engineVersion != null)
+                                'Engine ${step.engineVersion}',
                               if (step.providerToolName != null &&
                                   step.providerToolVersion != null)
                                 '${step.providerToolName} ${step.providerToolVersion}',
@@ -3357,13 +3357,21 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                               if (step.assignmentId != null)
                                 _detailValue(
                                     'Assignment ID', step.assignmentId!),
-                              if (step.workerRuntimeVersion != null)
-                                _detailValue('Worker Runtime version',
-                                    step.workerRuntimeVersion!),
+                              if (step.engineVersion != null)
+                                _detailValue(
+                                    'Engine version', step.engineVersion!),
+                              if (step.profileDefinitionId != null)
+                                _detailValue(
+                                  'Tool Profile',
+                                  '${step.profileDefinitionId}'
+                                      '${step.profileReleaseVersion == null ? '' : '@${step.profileReleaseVersion}'}',
+                                ),
                               if (step.providerToolVersion != null)
                                 _detailValue(
                                     '${step.providerToolName ?? 'Provider tool'} version',
                                     step.providerToolVersion!),
+                              if (step.model != null)
+                                _detailValue('Model', step.model!),
                               if (step.sessionPolicy != null)
                                 _detailValue(
                                   'Session mode',

@@ -1,5 +1,5 @@
 name: conclave_worker_protocol
-description: Local Worker Protocol 3.0 models and validation shared by Workspace and Worker executables.
+description: Local Worker Protocol 4.0 models and validation shared by Workspace and the CLI Worker Engine.
 publish_to: none
 version: 0.1.0
 

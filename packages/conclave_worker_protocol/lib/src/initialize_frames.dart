@@ -23,42 +23,50 @@ final class InitializeRequest extends WorkerFrame {
   InitializeRequest({
     required String requestId,
     required this.workerTypeId,
-    required this.expectedWorkerVersion,
+    required this.expectedEngineVersion,
+    required this.profileDefinitionId,
+    required this.profileReleaseVersion,
+    required this.profileDigest,
     this.protocolVersion = localWorkerProtocolVersion,
   }) : super(requestId: requestId) {
     _validateToken(
-      requestId,
-      'requestId',
-      WorkerProtocolLimits.maxRequestIdLength,
-    );
-    _validateToken(
-      workerTypeId,
-      'workerTypeId',
-      WorkerProtocolLimits.maxWorkerTypeIdLength,
-    );
-    _validateToken(
-      expectedWorkerVersion,
-      'expectedWorkerVersion',
-      WorkerProtocolLimits.maxWorkerVersionLength,
-    );
+        requestId, 'requestId', WorkerProtocolLimits.maxRequestIdLength);
+    _validateToken(workerTypeId, 'workerTypeId',
+        WorkerProtocolLimits.maxWorkerTypeIdLength);
+    _validateToken(expectedEngineVersion, 'expectedEngineVersion',
+        WorkerProtocolLimits.maxEngineVersionLength);
+    _validateToken(profileDefinitionId, 'profileDefinitionId',
+        WorkerProtocolLimits.maxProfileDefinitionIdLength);
+    _validateToken(profileReleaseVersion, 'profileReleaseVersion',
+        WorkerProtocolLimits.maxProfileReleaseVersionLength);
+    if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(profileDigest)) {
+      throw const FormatException(
+          'profileDigest must be a lowercase SHA-256 hex digest');
+    }
     _validateProtocol(protocolVersion);
   }
 
   final String protocolVersion;
   final String workerTypeId;
-  final String expectedWorkerVersion;
+  final String expectedEngineVersion;
+  final String profileDefinitionId;
+  final String profileReleaseVersion;
+  final String profileDigest;
 
   @override
   String get type => 'initialize.request';
 
   @override
   Map<String, Object?> toJson() => {
-    'type': type,
-    'protocolVersion': protocolVersion,
-    'requestId': requestId,
-    'workerTypeId': workerTypeId,
-    'expectedWorkerVersion': expectedWorkerVersion,
-  };
+        'type': type,
+        'protocolVersion': protocolVersion,
+        'requestId': requestId,
+        'workerTypeId': workerTypeId,
+        'expectedEngineVersion': expectedEngineVersion,
+        'profileDefinitionId': profileDefinitionId,
+        'profileReleaseVersion': profileReleaseVersion,
+        'profileDigest': profileDigest,
+      };
 
   factory InitializeRequest.fromJson(Map<String, Object?> json) {
     _expectKeys(json, const {
@@ -66,7 +74,10 @@ final class InitializeRequest extends WorkerFrame {
       'protocolVersion',
       'requestId',
       'workerTypeId',
-      'expectedWorkerVersion',
+      'expectedEngineVersion',
+      'profileDefinitionId',
+      'profileReleaseVersion',
+      'profileDigest',
     });
     _checkType(json, 'initialize.request');
     final protocol = _requiredString(json, 'protocolVersion');
@@ -75,21 +86,18 @@ final class InitializeRequest extends WorkerFrame {
     }
     return InitializeRequest(
       requestId: _boundedString(
-        json,
-        'requestId',
-        WorkerProtocolLimits.maxRequestIdLength,
-      ),
+          json, 'requestId', WorkerProtocolLimits.maxRequestIdLength),
       protocolVersion: protocol,
       workerTypeId: _boundedString(
-        json,
-        'workerTypeId',
-        WorkerProtocolLimits.maxWorkerTypeIdLength,
-      ),
-      expectedWorkerVersion: _boundedString(
-        json,
-        'expectedWorkerVersion',
-        WorkerProtocolLimits.maxWorkerVersionLength,
-      ),
+          json, 'workerTypeId', WorkerProtocolLimits.maxWorkerTypeIdLength),
+      expectedEngineVersion: _boundedString(json, 'expectedEngineVersion',
+          WorkerProtocolLimits.maxEngineVersionLength),
+      profileDefinitionId: _boundedString(json, 'profileDefinitionId',
+          WorkerProtocolLimits.maxProfileDefinitionIdLength),
+      profileReleaseVersion: _boundedString(json, 'profileReleaseVersion',
+          WorkerProtocolLimits.maxProfileReleaseVersionLength),
+      profileDigest: _boundedString(
+          json, 'profileDigest', WorkerProtocolLimits.maxProfileDigestLength),
     );
   }
 }
@@ -98,30 +106,27 @@ final class InitializeResult extends WorkerFrame {
   InitializeResult({
     required super.requestId,
     required this.workerTypeId,
-    required this.workerVersion,
-    required this.stateSchemaVersion,
+    required this.engineVersion,
+    required this.profileDefinitionId,
+    required this.profileReleaseVersion,
+    required this.profileSchemaVersion,
     required Iterable<String> capabilities,
     this.protocolVersion = localWorkerProtocolVersion,
   }) : capabilities = List.unmodifiable(capabilities) {
     _validateToken(
-      requestId,
-      'requestId',
-      WorkerProtocolLimits.maxRequestIdLength,
-    );
-    _validateToken(
-      workerTypeId,
-      'workerTypeId',
-      WorkerProtocolLimits.maxWorkerTypeIdLength,
-    );
-    _validateToken(
-      workerVersion,
-      'workerVersion',
-      WorkerProtocolLimits.maxWorkerVersionLength,
-    );
+        requestId, 'requestId', WorkerProtocolLimits.maxRequestIdLength);
+    _validateToken(workerTypeId, 'workerTypeId',
+        WorkerProtocolLimits.maxWorkerTypeIdLength);
+    _validateToken(engineVersion, 'engineVersion',
+        WorkerProtocolLimits.maxEngineVersionLength);
+    _validateToken(profileDefinitionId, 'profileDefinitionId',
+        WorkerProtocolLimits.maxProfileDefinitionIdLength);
+    _validateToken(profileReleaseVersion, 'profileReleaseVersion',
+        WorkerProtocolLimits.maxProfileReleaseVersionLength);
     _validateProtocol(protocolVersion);
-    if (stateSchemaVersion < 1 ||
-        stateSchemaVersion > WorkerProtocolLimits.maxStateSchemaVersion) {
-      throw const FormatException('stateSchemaVersion is out of range');
+    if (profileSchemaVersion < 1 ||
+        profileSchemaVersion > WorkerProtocolLimits.maxProfileSchemaVersion) {
+      throw const FormatException('profileSchemaVersion is out of range');
     }
     if (this.capabilities.length > WorkerProtocolLimits.maxCapabilities) {
       throw const FormatException('too many Worker capabilities');
@@ -131,22 +136,20 @@ final class InitializeResult extends WorkerFrame {
     }
     for (final capability in this.capabilities) {
       _validateToken(
-        capability,
-        'capability',
-        WorkerProtocolLimits.maxCapabilityLength,
-      );
+          capability, 'capability', WorkerProtocolLimits.maxCapabilityLength);
       if (!RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(capability)) {
         throw const FormatException(
-          'capability must be a stable lowercase identifier',
-        );
+            'capability must be a stable lowercase identifier');
       }
     }
   }
 
   final String protocolVersion;
   final String workerTypeId;
-  final String workerVersion;
-  final int stateSchemaVersion;
+  final String engineVersion;
+  final String profileDefinitionId;
+  final String profileReleaseVersion;
+  final int profileSchemaVersion;
   final List<String> capabilities;
 
   @override
@@ -154,14 +157,16 @@ final class InitializeResult extends WorkerFrame {
 
   @override
   Map<String, Object?> toJson() => {
-    'type': type,
-    'protocolVersion': protocolVersion,
-    'requestId': requestId,
-    'workerTypeId': workerTypeId,
-    'workerVersion': workerVersion,
-    'stateSchemaVersion': stateSchemaVersion,
-    'capabilities': capabilities,
-  };
+        'type': type,
+        'protocolVersion': protocolVersion,
+        'requestId': requestId,
+        'workerTypeId': workerTypeId,
+        'engineVersion': engineVersion,
+        'profileDefinitionId': profileDefinitionId,
+        'profileReleaseVersion': profileReleaseVersion,
+        'profileSchemaVersion': profileSchemaVersion,
+        'capabilities': capabilities,
+      };
 
   factory InitializeResult.fromJson(Map<String, Object?> json) {
     _expectKeys(json, const {
@@ -169,8 +174,10 @@ final class InitializeResult extends WorkerFrame {
       'protocolVersion',
       'requestId',
       'workerTypeId',
-      'workerVersion',
-      'stateSchemaVersion',
+      'engineVersion',
+      'profileDefinitionId',
+      'profileReleaseVersion',
+      'profileSchemaVersion',
       'capabilities',
     });
     _checkType(json, 'initialize.result');
@@ -178,9 +185,9 @@ final class InitializeResult extends WorkerFrame {
     if (protocol != localWorkerProtocolVersion) {
       throw FormatException('unsupported protocol version: $protocol');
     }
-    final rawSchemaVersion = json['stateSchemaVersion'];
+    final rawSchemaVersion = json['profileSchemaVersion'];
     if (rawSchemaVersion is! int) {
-      throw const FormatException('stateSchemaVersion must be an integer');
+      throw const FormatException('profileSchemaVersion must be an integer');
     }
     final rawCapabilities = json['capabilities'];
     if (rawCapabilities is! List ||
@@ -192,22 +199,17 @@ final class InitializeResult extends WorkerFrame {
     }
     return InitializeResult(
       requestId: _boundedString(
-        json,
-        'requestId',
-        WorkerProtocolLimits.maxRequestIdLength,
-      ),
+          json, 'requestId', WorkerProtocolLimits.maxRequestIdLength),
       protocolVersion: protocol,
       workerTypeId: _boundedString(
-        json,
-        'workerTypeId',
-        WorkerProtocolLimits.maxWorkerTypeIdLength,
-      ),
-      workerVersion: _boundedString(
-        json,
-        'workerVersion',
-        WorkerProtocolLimits.maxWorkerVersionLength,
-      ),
-      stateSchemaVersion: rawSchemaVersion,
+          json, 'workerTypeId', WorkerProtocolLimits.maxWorkerTypeIdLength),
+      engineVersion: _boundedString(
+          json, 'engineVersion', WorkerProtocolLimits.maxEngineVersionLength),
+      profileDefinitionId: _boundedString(json, 'profileDefinitionId',
+          WorkerProtocolLimits.maxProfileDefinitionIdLength),
+      profileReleaseVersion: _boundedString(json, 'profileReleaseVersion',
+          WorkerProtocolLimits.maxProfileReleaseVersionLength),
+      profileSchemaVersion: rawSchemaVersion,
       capabilities: rawCapabilities.cast<String>(),
     );
   }
@@ -220,16 +222,14 @@ void _checkType(Map<String, Object?> json, String expected) {
 
 void _expectKeys(Map<String, Object?> json, Set<String> allowed) {
   final unknown = json.keys.where((key) => !allowed.contains(key));
-  if (unknown.isNotEmpty) {
+  if (unknown.isNotEmpty)
     throw FormatException('frame contains unsupported field: ${unknown.first}');
-  }
 }
 
 String _requiredString(Map<String, Object?> json, String key) {
   final value = json[key];
-  if (value is! String || value.trim().isEmpty) {
+  if (value is! String || value.trim().isEmpty)
     throw FormatException('$key must be a non-empty string');
-  }
   return value;
 }
 
@@ -239,14 +239,13 @@ String _boundedString(Map<String, Object?> json, String key, int limit) {
   return value;
 }
 
-void _validateToken(String value, String name, int limit) {
-  if (value.trim().isEmpty || value.length > limit) {
-    throw FormatException('$name is empty or exceeds $limit characters');
+void _validateToken(String value, String name, int maxLength) {
+  if (value.trim().isEmpty || value.length > maxLength) {
+    throw FormatException('$name is empty or exceeds $maxLength characters');
   }
 }
 
 void _validateProtocol(String value) {
-  if (value != localWorkerProtocolVersion) {
+  if (value != localWorkerProtocolVersion)
     throw FormatException('unsupported protocol version: $value');
-  }
 }
