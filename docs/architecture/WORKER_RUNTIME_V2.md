@@ -1,6 +1,6 @@
 # Worker Runtime v2 Architecture
 
-**Status:** Accepted design for implementation  
+**Status:** Historical v7 runtime design; superseded for first-party CLI integration by [Architecture v8](ARCHITECTURE_V8.md) / [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md)  
 **Architecture baseline:** Conclave Architecture v7  
 **Decision:** [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md)
 
@@ -20,6 +20,8 @@ Use *adapter* only when naming a pre-existing legacy symbol or describing
 migration history. New Runtime v2 work uses Worker terminology even when an
 older implementation still has adapter-named files or classes. Provider tools
 remain provider tools; they are not Worker releases or Workers.
+
+> **v8 note:** Runtime v2 proved the correct out-of-process/process-supervision boundary and remains useful implementation history. Architecture v8 keeps that boundary but replaces separate ChatGPT/Gemini executables and per-provider Worker releases with one generic CLI Worker Engine plus signed Tool Profiles. Do not add new provider-specific first-party Worker binaries using this document.
 
 ## Purpose
 
@@ -1014,3 +1016,10 @@ Worker Runtime v2 is complete when:
 8. durable sessions work through fresh Worker processes;
 9. Cloud inventory contains only safe Worker/runtime metadata;
 10. adding a third Worker does not require provider-specific Workspace code.
+
+
+## v8 retained vs superseded
+
+Retained: Workspace-owned execution, isolated child process, provider credentials local, process-tree cancellation, generic Dart runtime primitives, durable provider-session mapping, structured logs/diagnostics, and no provider commands in Workspace.
+
+Superseded: per-provider native Worker executable, per-provider native Worker release/version management, provider behavior compiled into ChatGPT/Gemini Worker packages, and Local Worker Protocol 3.0 executable identity. v8 uses Local Worker Protocol 4.0 with Engine + Profile identity. See [Architecture v8](ARCHITECTURE_V8.md) and the [v8 implementation roadmap](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
