@@ -34,6 +34,9 @@ const migrationFiles = [
   "0033_workstream_worker_usage_policy.sql",
   "0035_worker_releases.sql",
   "0036_worker_inventory_v2.sql",
+  "0037_workstream_work_config.sql",
+  "0038_work_request_snapshots.sql",
+  "0039_workstream_runtime_leases.sql",
 ];
 
 const schema = migrationFiles
@@ -305,24 +308,22 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
       INSERT INTO workstream_execution_policies (workstream_id, mode, primary_workspace_id, require_checkout, max_concurrent_work_requests)
         VALUES ('stream1', 'stateful', 'ws1', 1, 1);
 
-      -- Workflow and work request
-      INSERT INTO workflow_definitions VALUES ('wf1', 'p1', 'Full Cycle', '', 'wfv1', 'u1', '2026-01-01', '2026-01-01');
-      INSERT INTO workflow_versions VALUES ('wfv1', 'wf1', 1, 'u1', '2026-01-01');
-      INSERT INTO workflow_steps VALUES ('step1', 'wfv1', 'Implementation', 'implementation', '["code"]', 'stateful_workstream', 0, '[]', 'none', 1000, '{}');
+      -- Work request stores the immutable built-in selection and snapshot directly.
       INSERT INTO workstream_checkouts VALUES ('checkout1', 'stream1', 'ws1', 'repo1', 'base-sha', 'managed/stream1', 'ready', '2026-01-01', '2026-01-01');
-      INSERT INTO work_requests VALUES ('request1', 'stream1', 'u1', 'stateful', 'wf1', 'wfv1', '{"steps":["step1"]}', 'completed', 'ws1', 'checkout1', '{}', '2026-01-01', '2026-01-01');
-      INSERT INTO runs (id, project_id, workstream_id, work_request_id, workflow_version_id, checkout_id, status, created_at, updated_at)
-        VALUES ('run1', 'p1', 'stream1', 'request1', 'wfv1', 'checkout1', 'completed', '2026-01-01', '2026-01-01');
+      INSERT INTO work_requests (id, workstream_id, requested_by_user_id, mode, workflow_id, workflow_version, workflow_snapshot_json, status, primary_workspace_id, checkout_id, input_json, created_at, updated_at)
+        VALUES ('request1', 'stream1', 'u1', 'stateful', 'full_cycle', 1, '{"id":"full_cycle","version":1}', 'completed', 'ws1', 'checkout1', '{}', '2026-01-01', '2026-01-01');
+      INSERT INTO runs (id, project_id, workstream_id, work_request_id, checkout_id, status, created_at, updated_at)
+        VALUES ('run1', 'p1', 'stream1', 'request1', 'checkout1', 'completed', '2026-01-01', '2026-01-01');
 
       -- Worker Assignment using V7 worker
       INSERT INTO worker_assignments (
-        id, project_id, run_id, workstream_id, work_request_id, workflow_version_id,
+        id, project_id, run_id, workstream_id, work_request_id,
         checkout_id, execution_workspace_id, runtime_identity_id, worker_id,
         workspace_worker_id,
         requested_by_user_id, status, input_json, output_json,
         created_at, updated_at
       ) VALUES (
-        'assignment1', 'p1', 'run1', 'stream1', 'request1', 'wfv1',
+        'assignment1', 'p1', 'run1', 'stream1', 'request1',
         'checkout1', 'ws1', 'runtime1', 'codex', 'v7-codex-1',
         'u1', 'completed', '{}', '{"status":"ok"}',
         '2026-01-01', '2026-01-01'
@@ -334,7 +335,8 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
         (SELECT worker_id FROM worker_assignments WHERE id = 'assignment1') AS assigned_worker,
         (SELECT workspace_worker_id FROM worker_assignments WHERE id = 'assignment1') AS workspace_worker,
         (SELECT status FROM worker_assignments WHERE id = 'assignment1') AS assignment_status,
-        (SELECT COUNT(*) FROM ai_accounts) AS ai_account_count;
+        (SELECT COUNT(*) FROM ai_accounts) AS ai_account_count,
+        (SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('workflow_definitions', 'workflow_versions', 'workflow_steps', 'workflow_step_dependencies')) AS legacy_workflow_catalog_count;
     `);
 
     expect(result).toEqual([
@@ -345,6 +347,7 @@ describe("V7 Workspace-Owned Worker schema and lifecycle acceptance", () => {
         workspace_worker: "v7-codex-1",
         assignment_status: "completed",
         ai_account_count: 0,
+        legacy_workflow_catalog_count: 0,
       },
     ]);
   });

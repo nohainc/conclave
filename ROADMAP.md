@@ -11,6 +11,32 @@ Current product execution architecture (Worker Runtime v2):
 Conclave AX -> Conclave Cloud -> Conclave Workspace -> Worker process -> provider tool
 ```
 
+Work product execution follows the constrained contract:
+
+~~~text
+Conclave defines Steps
+      ↓
+Conclave defines valid built-in Workflows
+      ↓
+Workstream assigns Workers to Direct and Steps
+      ↓
+User selects a Workflow and enters a request
+      ↓
+Cloud snapshots the request and composes Step prompts
+      ↓
+Workspace launches the selected Worker executable
+      ↓
+Workers execute
+~~~
+
+The shared core catalog is authoritative for the closed StepKind set and the
+five versioned built-in Workflows. Workstream configuration contains a default
+Workflow and fixed Direct/Step Worker bindings. Every Work Request captures an
+immutable Workflow, binding, model, instruction, attachment-reference, and
+prompt-profile snapshot. Prompt Profiles are internal Conclave instructions;
+they are not a user-editable template language. See the [Work v1
+Contract](docs/specifications/WORK_V1_CONTRACT.md).
+
 Projects are the collaboration boundary. Workspaces provide machine execution.
 Worker slots are created and managed in Conclave Workspace, belong to exactly
 one Workspace, and synchronize only safe inventory/readiness to Cloud. Provider
@@ -36,6 +62,52 @@ integration packages and multi-instance records require a later migration phase
 and are not part of the v1 product catalog.
 
 ## Active work
+
+The Work composer contract is frozen for v1. Its closed `StepKind` set and
+five built-in `WorkflowId:v1` definitions are authoritative in the
+[Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md). V6 Workflow
+presets and runner models below remain historical implementation details; new
+Work UI and APIs must use the frozen contract. The core domain now represents
+only canonical built-in definitions and fixed StepKind dependencies; the
+AX composer loads the same catalog for selection and display. The generic
+Workflow catalog tables have been removed from the development schema;
+Work Requests carry the selected Workflow ID, version, and immutable snapshot.
+Workstream Work settings use the fixed `defaultWorkflowId` and `direct`/StepKind
+Worker bindings. The former arbitrary role usage policy is dropped by the
+development migration and must be configured again after bootstrap.
+The Work tab submits Direct and one-step Research Work Requests through the
+immutable request snapshot, Cloud scheduler, configured Worker binding, and
+Workspace runtime. Research uses a stateless read assignment and its internal
+prompt requests findings, available sources/references, constraints,
+uncertainties, and recommended next actions.
+Work Requests, step progress, Worker attribution, and final results load from
+the server-backed Workstream history API and survive page reloads and browser
+restarts. The original request remains visible as the first item in each Run
+card. Durable realtime events now refresh Step and Work Request state in the
+active Workstream without polling; reconnect gaps reload the full history.
+The unused generic Workflow SDK and stale database-template repository have
+been removed. Workflow catalog tables remain absent; only the fixed Work v1
+catalog, immutable request snapshots, and materialized task dependencies are
+used for Workflow execution.
+Plan & Implement now runs Plan before Implement, injects the completed Plan
+text into the Implement prompt through the fixed `inputsFrom` handoff. Direct
+uses a durable Workstream-scoped conversation; each Step in a multi-step
+Workflow uses its own durable Work Request-scoped retry session. Implement &
+Verify now runs Implement followed by a separate Verify assignment. Verify
+receives the implementation result, inspects the current Workstream filesystem
+under the active lease with read-only permissions, and never reuses the
+Implement provider session. Full Cycle now runs the fixed Research → Plan →
+Implement → Test → Verify sequence, passing only each step's `inputsFrom`
+results. The timeline uses Verify's text as the final result, shows Worker
+attribution for each Step, and surfaces recognizable Test counts when present.
+Test has a separate read-only contract: it can run existing tests, builds,
+lint, and typechecks, but cannot edit or fix application files. Requests to add
+tests belong to Implement.
+
+This Work v1 orchestration is not yet accepted through Worker Runtime v2. The
+current first-party Workspace assignment route still uses the legacy V7 Node
+adapter store/executor; full Cloud → Workspace → Dart Worker acceptance for the
+built-in Workflows remains open.
 
 The detailed architecture roadmap is:
 

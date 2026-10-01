@@ -54,6 +54,9 @@ const migrationFiles = [
   "0034_worker_setup_readiness.sql",
   "0035_worker_releases.sql",
   "0036_worker_inventory_v2.sql",
+  "0037_workstream_work_config.sql",
+  "0038_work_request_snapshots.sql",
+  "0039_workstream_runtime_leases.sql",
 ];
 
 class LocalD1Statement {
@@ -224,22 +227,16 @@ describe("V7 runtime assignment acceptance", () => {
       INSERT INTO workspace_project_grants (id, project_id, workspace_id, granted_by_user_id, status, scope, allowed_permissions_json, allowed_worker_capabilities_json, concurrency_json, created_at, updated_at)
         VALUES ('grant-e2e', 'project-e2e', 'workspace-v7-e2e', 'owner', 'active', 'project_repository', '["repository:read","repository:write"]', '["code"]', '{"maxConcurrentAssignments":1}', '${now}', '${now}');
       INSERT INTO workstreams VALUES ('workstream-e2e', 'project-e2e', 'Display Workstream Name', 'active', '{}', 'owner', '${now}', '${now}');
-      INSERT INTO workstream_worker_usage_policies (workstream_id, policy_json, updated_by_user_id, updated_at)
-        VALUES ('workstream-e2e', '${JSON.stringify({ version: 1, fallbackPolicy: "configured_only", roles: { implementer: { workerId: "worker-local-v7-e2e", ...(modelId ? { model: modelId } : {}) } } })}', 'owner', '${now}');
+      INSERT INTO workstream_work_configs (workstream_id, config_json, updated_by_user_id, updated_at)
+        VALUES ('workstream-e2e', '${JSON.stringify({ defaultWorkflowId: "direct", bindings: { direct: { workerId: "worker-local-v7-e2e", ...(modelId ? { model: modelId } : {}) } } })}', 'owner', '${now}');
       INSERT INTO workstream_execution_policies (workstream_id, mode, primary_workspace_id, require_checkout, max_concurrent_work_requests, allowed_configured_worker_ids_json, allowed_worker_type_ids_json, allowed_providers_json, allowed_models_json)
         VALUES ('workstream-e2e', 'stateless', NULL, 0, 1, '[]', '["${workerTypeId}"]', '[]', '${JSON.stringify(modelId ? [modelId] : [])}');
       INSERT INTO runs (id, project_id, workstream_id, status, created_at, updated_at)
         VALUES ('run-e2e', 'project-e2e', 'workstream-e2e', 'created', '${now}', '${now}');
-      INSERT INTO workflow_definitions (id, project_id, name, description, current_version_id, created_by_user_id, created_at, updated_at)
-        VALUES ('workflow-e2e', 'project-e2e', 'E2E workflow', '', NULL, 'owner', '${now}', '${now}');
-      INSERT INTO workflow_versions (id, workflow_definition_id, version, created_by_user_id, created_at)
-        VALUES ('workflow-version-e2e', 'workflow-e2e', 1, 'owner', '${now}');
-      INSERT INTO work_requests (id, workstream_id, requested_by_user_id, mode, workflow_definition_id, workflow_version_id, workflow_snapshot_json, status, input_json, created_at, updated_at)
-        VALUES ('request-e2e', 'workstream-e2e', 'owner', 'stateless', 'workflow-e2e', 'workflow-version-e2e', '{}', 'running', '{}', '${now}', '${now}');
-      INSERT INTO workflow_steps (id, workflow_version_id, name, role, required_capabilities_json, execution_class, step_order, independent_from_json, approval, timeout_ms, output_contract_json)
-        VALUES ('step-e2e', 'workflow-version-e2e', 'Fixture execution', 'implementer', '["code"]', 'stateless_read', 0, '[]', 'none', ${assignmentTimeoutMs}, '{}');
-      INSERT INTO workflow_tasks (id, work_request_id, workflow_version_id, workflow_step_id, execution_class, role, required_capabilities_json, approval, timeout_ms, output_contract_json, status, attempt, created_at, updated_at)
-        VALUES ('task-e2e', 'request-e2e', 'workflow-version-e2e', 'step-e2e', 'stateless_read', 'implementer', '["code"]', 'none', ${assignmentTimeoutMs}, '{}', 'queued', 0, '${now}', '${now}');
+      INSERT INTO work_requests (id, workstream_id, requested_by_user_id, mode, workflow_id, workflow_version, workflow_snapshot_json, status, input_json, created_at, updated_at)
+        VALUES ('request-e2e', 'workstream-e2e', 'owner', 'stateless', 'direct', 1, '{"id":"direct","version":1}', 'running', '{}', '${now}', '${now}');
+      INSERT INTO workflow_tasks (id, work_request_id, step_kind, execution_mode, timeout_ms, prompt_profile_version, status, attempt, created_at, updated_at)
+        VALUES ('task-e2e', 'request-e2e', 'implement', 'stateful_workstream', ${assignmentTimeoutMs}, 'work-implement:v1', 'queued', 0, '${now}', '${now}');
     `);
 
       const env = {
@@ -630,7 +627,7 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"fake 
           taskId: "task-e2e",
           task: {
             id: "task-e2e",
-            role: "implementer",
+            role: "implement",
             objective: realProvider
               ? "Reply with exactly OK. Do not use tools."
               : "execute fixture",
@@ -639,6 +636,7 @@ printf '%s\\n' '{"event":"result","result":{"status":"SUCCESS","response":"fake 
             requestedByUserId: "owner",
             ...(modelId ? { model: modelId } : {}),
             workstreamId: "workstream-e2e",
+            workBindingId: "direct",
             executionClass: "stateless_read",
             input: realProvider ? {} : { objective: "acceptance" },
             timeoutMs: assignmentTimeoutMs,

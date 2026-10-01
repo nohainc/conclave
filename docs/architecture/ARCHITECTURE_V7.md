@@ -139,6 +139,27 @@ communicate directly with Cloud.
 
 ### 4.1 Conclave AX
 
+Work uses the closed `StepKind` set and five versioned built-in Workflow
+definitions in the shared core catalog. The user selects a Workflow and enters
+a request; users cannot design Workflow graphs or edit Conclave's internal
+prompts. The Workstream stores a default Workflow and fixed Direct/Step Worker
+bindings. On submission, Cloud snapshots the Workflow, resolved bindings,
+models, instructions, request, attachment references, and prompt-profile
+versions, then renders each Step prompt using the deterministic handoff rules.
+See the [Work v1 Contract](../specifications/WORK_V1_CONTRACT.md).
+
+The target path is AX → Cloud → Workspace → Worker executable. The current
+Workspace assignment route still uses legacy V7 Node adapter machinery, so
+neither Direct nor multi-Step Workflows have completed production-path
+acceptance through Worker Runtime v2. Do not describe current assignments as
+running the native Dart executable until that route is converged.
+
+Work Requests may also carry bounded local file inputs and URL references.
+Cloud validates the `file_input` capability for every resolved Worker; the
+Workspace materializes files inside the request's Workstream-local input
+directory and passes relative references through the provider-neutral Worker
+prompt. Attachment handling does not add media-specific Workflow definitions.
+
 Conclave AX is the **web application** and human orchestration/control surface. It is not the machine executor and it does not configure provider credentials locally.
 
 It owns UX for:
@@ -667,11 +688,11 @@ local permissions. No provider credential is copied into the package protocol.
 
 ### 12.2 Cloud -> local operational policy
 
-Cloud owns and applies Workstream usage policy, including:
+Cloud owns and applies each Workstream's fixed Work configuration, including:
 
-- role-to-Worker selection and ordered fallback;
-- model selection;
-- Workstream-specific Cloud concurrency ceiling;
+- default built-in Workflow;
+- Worker binding for `direct` and each canonical StepKind;
+- optional model, one fallback Worker, and Step-specific additional instructions;
 - Project/Workstream authorization context.
 
 The Workspace receives assignments and cancellations, not role/model policy as
@@ -709,11 +730,11 @@ Configured Worker
 -> owning Workspace
 -> active Workspace Project Grant
 -> Worker synced + ready
--> Workstream role mapping
+-> canonical Workstream Step binding
 -> selected model/capability compatible
 -> local concurrency available
 -> Cloud scheduling enabled
--> Workstream fallback policy allows Worker
+-> configured primary/fallback Worker
 ```
 
 There is no Workspace-binding search for a configured Worker because Worker already has exactly one Workspace.
@@ -895,9 +916,9 @@ Machine-wide total active executions.
 
 Maximum simultaneous assignments for one configured Worker.
 
-AX Workstream policy sets a Cloud-side limit per task role. The scheduler takes
-the minimum of that limit, any Cloud Worker ceiling, and Workspace-reported
-local concurrency; it never asks Workspace to exceed its local ceiling.
+The scheduler applies Cloud Worker capacity and Workspace-reported local
+concurrency; it never asks Workspace to exceed its local ceiling. Workstream
+configuration does not add arbitrary roles or per-role concurrency fields.
 
 Stateful Workstream mutation lock is an additional independent constraint.
 
@@ -913,16 +934,16 @@ Show:
 - readiness;
 - safe adapter/readiness attention reason.
 
-### Workstream Execution policy
+### Workstream Work settings
 
 AX owners/collaborators can:
 
-- choose Workspace Workers per task role;
-- choose a model per role;
-- order a fallback Worker or allow any eligible Ready Worker;
-- set a Cloud-side concurrency limit.
+- choose the default built-in Workflow;
+- bind `direct`, Research, Plan, Implement, Test, and Verify to Workspace Workers;
+- optionally set a model, fallback Worker, and additional instructions under Advanced.
 
-Workstream scheduling fails closed until a role mapping exists. The Workspace
+Workstream scheduling fails closed until its selected Step has a Worker
+binding. Only the configured primary and fallback Workers are considered. The Workspace
 app reports package readiness and offers provider setup through package-defined
 flows, while Workspace owns local permissions and execution setup.
 
@@ -960,12 +981,9 @@ Action copy should say:
 
 Worker authorization remains Cloud-controlled.
 
-Project grants authorize Workspaces; Workstream Execution settings select:
-
-- role-to-Worker primary and fallback order;
-- model;
-- fallback behavior;
-- Cloud-side concurrency.
+Project grants authorize Workspaces; Workstream Work settings select the
+default Workflow and Worker bindings for `direct` and each canonical StepKind,
+with optional model, fallback, and additional instructions.
 
 Workstream policy can narrow Project policy.
 

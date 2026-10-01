@@ -1,8 +1,7 @@
 import {
-  validateWorkflowVersion,
-  type WorkflowOutputContract,
-  type WorkflowStep,
-  type WorkflowVersion,
+  validateBuiltinWorkflowDefinition,
+  type BuiltinWorkflowDefinition,
+  type BuiltinWorkflowStep,
 } from "./v6-entities.js";
 
 export type WorkflowTaskStatus =
@@ -11,31 +10,29 @@ export type WorkflowTaskStatus =
 export interface PlannedWorkflowTask {
   readonly id: string;
   readonly workRequestId: string;
-  readonly workflowVersionId: string;
-  readonly step: WorkflowStep;
+  readonly step: BuiltinWorkflowStep;
   readonly dependencyTaskIds: readonly string[];
   readonly status: WorkflowTaskStatus;
   readonly attempt: number;
 }
 
 export function planWorkflowTasks(
-  version: WorkflowVersion,
+  version: BuiltinWorkflowDefinition,
   workRequestId: string,
 ): readonly PlannedWorkflowTask[] {
-  validateWorkflowVersion(version);
+  validateBuiltinWorkflowDefinition(version);
   if (!workRequestId) throw new Error("workRequestId is required");
   const ids = new Map(
-    version.steps.map((step) => [step.id, `task-${workRequestId}-${step.id}`]),
+    version.steps.map((step) => [
+      step.kind,
+      `task-${workRequestId}-${step.kind}`,
+    ]),
   );
   return [...version.steps]
-    .sort(
-      (left, right) =>
-        left.order - right.order || left.id.localeCompare(right.id),
-    )
+    .sort((left, right) => left.order - right.order)
     .map((step) => ({
-      id: ids.get(step.id)!,
+      id: ids.get(step.kind)!,
       workRequestId,
-      workflowVersionId: version.id,
       step,
       dependencyTaskIds: step.dependsOn.map((dependency) =>
         ids.get(dependency)!,
@@ -113,18 +110,4 @@ export function markWorkflowTaskResult(
     );
   }
   return next;
-}
-
-export function validateWorkflowOutput(
-  output: unknown,
-  contract: WorkflowOutputContract,
-): void {
-  if (typeof output !== "object" || output === null || Array.isArray(output)) {
-    throw new Error("Workflow task output must be an object");
-  }
-  const record = output as Record<string, unknown>;
-  for (const field of contract.requiredFields) {
-    if (!(field in record))
-      throw new Error(`Workflow task output is missing ${field}`);
-  }
 }

@@ -49,6 +49,11 @@ fallback policy, Cloud scheduling state, and Cloud concurrency ceilings. These
 choices live with Project and Workstream policy, not local Worker setup. See
 [ADR-016](../decisions/ADR-016-ax-owned-worker-usage.md).
 
+The Work composer and its built-in Workflow/step semantics follow the frozen
+[Work v1 Contract](../specifications/WORK_V1_CONTRACT.md). That contract is
+the sole authoritative catalog; the historical V6 Workflow presets are not
+additional Work v1 choices.
+
 ## 2. Conclave Cloud
 
 **Current path:** `apps/cloud`
@@ -68,7 +73,7 @@ choices live with Project and Workstream policy, not local Worker setup. See
 - human authentication;
 - realtime App connections;
 - Workspace Gateway;
-- Worker Type/adapter catalog and signed package registry;
+- built-in Work catalog and signed Worker release registry;
 - synchronized configured Worker inventory;
 - Project/Workstream Worker authorization;
 - assignment scheduling;

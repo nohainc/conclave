@@ -3,6 +3,7 @@ import {
   type AssignmentFailurePayload,
   type AssignmentCancelPayload,
 } from "@conclave/host-protocol";
+import type { WorkstreamBindingId } from "@conclave/core";
 import {
   canonicalExecutionErrorCode,
   executionErrorMessage,
@@ -29,11 +30,14 @@ export interface TaskToDispatch {
   readonly requiresIndependentVerification?: boolean;
   readonly workstreamId?: string;
   readonly workRequestId?: string;
+  readonly workBindingId?: WorkstreamBindingId;
   readonly checkoutId?: string;
   readonly leaseId?: string;
   readonly fencingToken?: number;
   readonly expectedRevision?: string;
   readonly executionClass?: "stateless_read" | "stateful_workstream";
+  /** Restricts Worker/provider access while retaining a Workstream lease. */
+  readonly readOnly?: boolean;
   readonly repository?: {
     readonly repositoryId: string;
     readonly revision: string;
@@ -57,7 +61,7 @@ export interface DispatchAssignmentResult {
   readonly workerId: string;
   readonly agentId: string;
   readonly workerCatalogId: string;
-  readonly status: "dispatched" | "failed";
+  readonly status: "dispatched" | "failed" | "cancelled";
   readonly accepted: boolean;
   readonly error?: string;
 }
@@ -86,8 +90,10 @@ async function dispatchWorkspaceWorkerAssignment(
       excludeIndependenceKeys: params.excludeIndependenceKeys,
       model: task.model,
       executionClass: task.executionClass,
+      readOnly: task.readOnly,
       workstreamId: task.workstreamId,
       workRequestId: task.workRequestId,
+      workBindingId: task.workBindingId,
       expectedRevision: task.expectedRevision,
     },
     new Date(),
@@ -179,6 +185,30 @@ async function dispatchWorkspaceWorkerAssignment(
       now,
     )
     .run();
+  const workRequestId = target.workRequestId ?? task.workRequestId;
+  if (workRequestId) {
+    const cancellation = await env.CONCLAVE_DB.prepare(
+      "SELECT cancel_requested_at FROM work_requests WHERE id = ?1 AND status IN ('running', 'cancelled')",
+    )
+      .bind(workRequestId)
+      .first<{ cancel_requested_at: string | null }>();
+    if (cancellation?.cancel_requested_at) {
+      await recordAssignmentCancelled(env.CONCLAVE_DB, assignmentId, {
+        status: "cancelled",
+        reason: "Work Request cancellation was requested before dispatch",
+      });
+      return {
+        assignmentId,
+        attemptId,
+        workerId: target.workerId,
+        agentId: target.workspaceRuntimeIdentityId,
+        workerCatalogId: target.workerTypeId,
+        status: "cancelled",
+        accepted: false,
+        error: "Work assignment cancelled before dispatch",
+      };
+    }
+  }
   const workspaceOwner = await env.CONCLAVE_DB.prepare(
     "SELECT owner_user_id FROM execution_workspaces WHERE id = ?1",
   )
@@ -201,7 +231,7 @@ async function dispatchWorkspaceWorkerAssignment(
     });
   }
   await env.CONCLAVE_DB.prepare(
-    "UPDATE workflow_tasks SET status = 'running', updated_at = ?1 WHERE id = ?2 AND status IN ('queued', 'waiting')",
+    "UPDATE workflow_tasks SET status = 'running', started_at = COALESCE(started_at, ?1), updated_at = ?1 WHERE id = ?2 AND status IN ('queued', 'waiting')",
   )
     .bind(now, taskId)
     .run();
@@ -218,6 +248,7 @@ async function dispatchWorkspaceWorkerAssignment(
       fencingToken: target.fencingToken ?? task.fencingToken,
       expectedRevision: target.expectedRevision ?? task.expectedRevision,
       executionClass: target.executionClass,
+      readOnly: target.readOnly,
       executionWorkspaceId: target.workspaceId,
       workspaceRuntimeId: target.workspaceRuntimeIdentityId,
       projectId: target.projectId,
@@ -411,7 +442,7 @@ export async function recordAssignmentResult(
 
   await db
     .prepare(
-      "UPDATE workflow_tasks SET status = 'completed', output_json = ?1, updated_at = ?2 WHERE id = ?3",
+      "UPDATE workflow_tasks SET status = 'completed', output_json = ?1, finished_at = ?2, updated_at = ?2 WHERE id = ?3",
     )
     .bind(JSON.stringify(result), now, existing.task_id)
     .run();
@@ -459,7 +490,7 @@ export async function recordAssignmentError(
 
   await db
     .prepare(
-      "UPDATE workflow_tasks SET status = 'failed', error = ?1, updated_at = ?2 WHERE id = ?3",
+      "UPDATE workflow_tasks SET status = 'failed', error = ?1, finished_at = ?2, updated_at = ?2 WHERE id = ?3",
     )
     .bind(normalizedFailure.error.message, now, existing.task_id)
     .run();
@@ -486,7 +517,7 @@ export async function recordAssignmentCancelled(
   }
   await db
     .prepare(
-      "UPDATE workflow_tasks SET status = 'cancelled', updated_at = ?1 WHERE id = ?2",
+      "UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE id = ?2",
     )
     .bind(now, existing.task_id)
     .run();
@@ -507,9 +538,8 @@ export async function cancelTaskAssignment(
   assignmentId: string,
   reason: string,
 ): Promise<{ cancelled: boolean }> {
-  const now = new Date().toISOString();
   const row = await env.CONCLAVE_DB.prepare(
-    `SELECT execution_workspace_id, runtime_identity_id, run_id, task_id,
+    `SELECT execution_workspace_id, runtime_identity_id, run_id, task_id, status,
             attempt_id, workspace_worker_id, idempotency_key
        FROM worker_assignments
       WHERE id = ?1 AND execution_workspace_id = ?2`,
@@ -517,46 +547,39 @@ export async function cancelTaskAssignment(
     .bind(assignmentId, workspaceId)
     .first<Record<string, unknown>>();
   if (!row) return { cancelled: false };
-  await env.CONCLAVE_DB.prepare(
-    `UPDATE worker_assignments SET status = 'cancelled', updated_at = ?1
-      WHERE id = ?2 AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
-  )
-    .bind(now, assignmentId)
-    .run();
-  await env.CONCLAVE_DB.prepare(
-    `UPDATE workflow_tasks SET status = 'cancelled', updated_at = ?1 WHERE id = ?2`,
-  )
-    .bind(now, String(row.task_id))
-    .run();
+  if (row.status === "cancelled") return { cancelled: true };
+  if (["completed", "failed"].includes(String(row.status)))
+    return { cancelled: false };
   const gatewayNamespace = env.CONCLAVE_WORKSPACE_GATEWAY;
-  if (gatewayNamespace) {
-    try {
-      const stub = gatewayNamespace.get(
-        gatewayNamespace.idFromName(workspaceId),
-      );
-      const cancelPayload: AssignmentCancelPayload = {
+  if (!gatewayNamespace) return { cancelled: false };
+  try {
+    const stub = gatewayNamespace.get(
+      gatewayNamespace.idFromName(workspaceId),
+    );
+    const cancelPayload: AssignmentCancelPayload = {
+      assignmentId,
+      reason,
+      deadlineMs: Date.now() + 10_000,
+    };
+    const response = await stub.fetch("http://gateway/cancel-assignment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        executionWorkspaceId: String(row.execution_workspace_id),
+        workspaceRuntimeId: String(row.runtime_identity_id),
+        workerId: String(row.workspace_worker_id),
+        runId: String(row.run_id),
+        taskId: String(row.task_id),
+        attemptId: String(row.attempt_id),
         assignmentId,
-        reason,
-        deadlineMs: Date.now() + 5000,
-      };
-      await stub.fetch("http://gateway/cancel-assignment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          executionWorkspaceId: String(row.execution_workspace_id),
-          workspaceRuntimeId: String(row.runtime_identity_id),
-          workerId: String(row.workspace_worker_id),
-          runId: String(row.run_id),
-          taskId: String(row.task_id),
-          attemptId: String(row.attempt_id),
-          assignmentId,
-          idempotencyKey: String(row.idempotency_key),
-          payload: cancelPayload,
-        }),
-      });
-    } catch {
-      // Reconciliation on reconnect will deliver the terminal assignment state.
-    }
+        idempotencyKey: String(row.idempotency_key),
+        payload: cancelPayload,
+      }),
+    });
+    if (!response.ok) return { cancelled: false };
+    const acknowledgement = (await response.json()) as { cancelled?: unknown };
+    return { cancelled: acknowledgement.cancelled === true };
+  } catch {
+    return { cancelled: false };
   }
-  return { cancelled: true };
 }

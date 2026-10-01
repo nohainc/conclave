@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
 import {
   routeWorkerRequest,
   type WorkerRouteDependencies,
@@ -31,6 +32,21 @@ function request(path: string, method = "GET"): Request {
 }
 
 describe("Worker API routes", () => {
+  it("serves the shared core Workflow catalog to AX", async () => {
+    const response = await routeWorkerRequest(
+      request("/api/workflows/catalog"),
+      {} as Parameters<typeof routeWorkerRequest>[1],
+      undefined,
+      {} as WorkerRouteHandlers,
+      dependencies,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      workflows: Object.values(BUILTIN_WORKFLOW_CATALOG),
+    });
+  });
+
   it("removes Workspace-scoped Architecture v2 Worker endpoints", async () => {
     const handlers = {} as WorkerRouteHandlers;
     for (const [path, method] of [

@@ -1,5 +1,9 @@
 # V6 Work Composer and Timeline
 
+> **Historical V6 design.** The composer details below preserve the original
+> implementation context. For current Work v1 semantics and the sole built-in
+> Workflow catalog, see the [Work v1 Contract](../specifications/WORK_V1_CONTRACT.md).
+
 ## Purpose
 
 V6 separates discussion from execution. A Workstream's Discuss surface is for
@@ -11,7 +15,8 @@ an explicit Work request with Run.
 The Work composer contains:
 
 - request text;
-- an immutable-version Workflow selector;
+- a selector over the fixed built-in Workflow versions defined by the Work v1
+  contract (the V6 implementation's broader selector is historical);
 - optional references;
 - an explicit Run action.
 

@@ -243,6 +243,7 @@ String serializeV7AdapterFrame(Map<String, Object?> value) {
         'timeoutMs',
         'sessionPolicy',
         'sessionKey',
+        'readOnly',
       },
     _ => throw FormatException('unexpected adapter request type: $type'),
   };
@@ -303,6 +304,7 @@ String serializeV7AdapterFrame(Map<String, Object?> value) {
               (!_nonEmpty(value['sessionKey'], max: 256) ||
                   !const {'2.4', '2.5', '2.6'}
                       .contains(value['protocolVersion']))) ||
+          (value['readOnly'] != null && value['readOnly'] is! bool) ||
           (const {'2.5', '2.6'}.contains(value['protocolVersion']) &&
               (!_nonEmpty(value['sessionPolicy'], max: 32) ||
                   !const {'stateless', 'durable_session'}

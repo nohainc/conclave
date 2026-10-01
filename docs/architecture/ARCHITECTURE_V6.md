@@ -1,6 +1,6 @@
 # Conclave AX Architecture v6 — Collaborative Workstreams and Isolated Execution
 
-**Status:** Proposed — WD-0 filesystem invariants accepted
+**Status:** Historical and superseded by Architecture v7 and the Work v1 Contract
 **Date:** 2026-09-24  
 **Builds on:** Architecture v5 Project-Centric Workspaces
 
@@ -316,6 +316,12 @@ Project owner may override all Workstream settings.
 
 ## 12. Workflow definitions
 
+> **Historical V6 design.** This section describes the earlier extensible
+> Workflow model and is not the Work v1 contract. Work v1 has a closed set of
+> StepKinds and five fixed built-in Workflows, defined only in the
+> [Work v1 Contract](../specifications/WORK_V1_CONTRACT.md). Do not use the
+> presets below as current AX choices or extend them for new Work v1 work.
+
 v6 replaces hard-coded orchestration shape with versioned Workflow Definitions.
 
 A Workflow Definition is provider-independent.
@@ -363,9 +369,12 @@ Examples:
 
 If a Workflow contains one or more stateful_workstream steps, the stateful segment is serialized.
 
-### 12.2 Built-in Workflow presets
+### 12.2 Historical Workflow presets
 
-Initial presets:
+The following list records the historical V6 presets only. It is superseded
+for Work v1 by the authoritative fixed catalog in the
+[Work v1 Contract](../specifications/WORK_V1_CONTRACT.md):
+
 1. Research
 2. Review
 3. Implementation
@@ -693,24 +702,14 @@ Membership never broadens beyond Project role.
 - edited_at;
 - deleted_at.
 
-### workflow_definitions
+### Workflow catalog (historical model)
 
-- id;
-- scope: system or project;
-- project_id nullable;
-- name;
-- description;
-- status.
-
-### workflow_versions
-
-- id;
-- workflow_definition_id;
-- version;
-- steps_json;
-- created_at.
-
-Run snapshots the exact Workflow version.
+V6 proposed project-owned Workflow definitions and editable versions. That
+catalog was never part of the active clean development schema and is
+superseded by Work v1's code-versioned built-in catalog. Work Requests retain
+their selected Workflow ID, version, and immutable snapshot; the active schema
+does not include `workflow_definitions` or `workflow_versions`. See the
+[Work v1 Contract](../specifications/WORK_V1_CONTRACT.md).
 
 ### workstream_execution_policies
 

@@ -352,6 +352,8 @@ export const AssignmentSnapshotSchema = z
     executionClass: z
       .enum(["stateless_read", "stateful_workstream"])
       .optional(),
+    /** Read-only execution can still hold a Workstream lease for filesystem access. */
+    readOnly: z.boolean().optional(),
     workspaceId: nonEmptyStr,
     projectId: nonEmptyStr,
     runId: nonEmptyStr,

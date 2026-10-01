@@ -10,6 +10,46 @@ class StudioFixtureDataSource implements StudioDataSource {
   final bool authenticated;
 
   @override
+  Future<String> createWorkRequest({
+    required String workstreamId,
+    required String workflowId,
+    required String prompt,
+    List<Map<String, dynamic>> attachments = const [],
+  }) async =>
+      throw UnimplementedError('Work Request fixture is not configured');
+
+  @override
+  Future<List<String>> validateWorkRequestEligibility({
+    required String workstreamId,
+    required String workflowId,
+    List<Map<String, dynamic>> attachments = const [],
+  }) async =>
+      const [];
+
+  @override
+  Future<StudioWorkRequestStatus> loadWorkRequest({
+    required String workRequestId,
+  }) async =>
+      throw UnimplementedError('Work Request fixture is not configured');
+
+  @override
+  Future<List<StudioWorkRequest>> loadWorkstreamWorkRequests({
+    required String workstreamId,
+    bool activeOnly = false,
+  }) async =>
+      const [];
+
+  @override
+  Future<void> retryWorkRequestStep({
+    required String workRequestId,
+    required String stepKind,
+    String? sessionStrategy,
+  }) async {}
+
+  @override
+  Future<void> cancelWorkRequest({required String workRequestId}) async {}
+
+  @override
   @override
   Future<StudioSession> loadSession() async =>
       StudioSession(authenticated: authenticated);
@@ -297,7 +337,7 @@ class StudioFixtureDataSource implements StudioDataSource {
     required String workstreamId,
     String? name,
     String? status,
-    Map<String, dynamic>? executionPolicy,
+    Map<String, dynamic>? workConfig,
   }) async =>
       StudioWorkstream(
         id: workstreamId,
@@ -309,11 +349,10 @@ class StudioFixtureDataSource implements StudioDataSource {
         primaryWorkspace: 'Not selected',
         currentCheckpoint: 'Not started',
         queueStatus: 'Idle',
-        executionPolicy: executionPolicy ??
+        workConfig: workConfig ??
             const {
-              'version': 1,
-              'fallbackPolicy': 'configured_only',
-              'roles': <String, dynamic>{},
+              'defaultWorkflowId': 'full_cycle',
+              'bindings': <String, dynamic>{},
             },
       );
 
@@ -322,6 +361,10 @@ class StudioFixtureDataSource implements StudioDataSource {
 
   @override
   Future<List<StudioWorker>> loadWorkspaceWorkerInventory() async => const [];
+
+  @override
+  Future<List<StudioBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async =>
+      const [];
 
   @override
   Future<void> setWorkspaceWorkerScheduling(

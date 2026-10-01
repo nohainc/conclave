@@ -107,57 +107,6 @@ CREATE TABLE discussion_messages (
 );
 CREATE INDEX idx_v6_discussion_messages_workstream ON discussion_messages(workstream_id, created_at);
 
--- Versioned workflow contract.
-CREATE TABLE workflow_definitions (
-  id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
-  current_version_id TEXT,
-  created_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE workflow_versions (
-  id TEXT PRIMARY KEY,
-  workflow_definition_id TEXT NOT NULL REFERENCES workflow_definitions(id) ON DELETE CASCADE,
-  version INTEGER NOT NULL CHECK (version > 0),
-  created_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-  created_at TEXT NOT NULL,
-  UNIQUE (workflow_definition_id, version)
-);
-CREATE UNIQUE INDEX idx_v6_workflow_current_version
-  ON workflow_definitions(current_version_id);
-
-CREATE TABLE workflow_steps (
-  id TEXT PRIMARY KEY,
-  workflow_version_id TEXT NOT NULL REFERENCES workflow_versions(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  role TEXT NOT NULL,
-  required_capabilities_json TEXT NOT NULL DEFAULT '[]',
-  execution_class TEXT NOT NULL CHECK (execution_class IN ('stateless_read', 'stateful_workstream')),
-  step_order INTEGER NOT NULL CHECK (step_order >= 0),
-  independent_from_json TEXT NOT NULL DEFAULT '[]',
-  approval TEXT NOT NULL CHECK (approval IN ('none', 'human', 'project_owner')),
-  timeout_ms INTEGER NOT NULL CHECK (timeout_ms >= 1000),
-  output_contract_json TEXT NOT NULL DEFAULT '{}',
-  UNIQUE (workflow_version_id, id),
-  UNIQUE (workflow_version_id, step_order)
-);
-
-CREATE TABLE workflow_step_dependencies (
-  workflow_version_id TEXT NOT NULL,
-  step_id TEXT NOT NULL,
-  depends_on_step_id TEXT NOT NULL,
-  PRIMARY KEY (workflow_version_id, step_id, depends_on_step_id),
-  CHECK (step_id <> depends_on_step_id),
-  FOREIGN KEY (workflow_version_id, step_id)
-    REFERENCES workflow_steps(workflow_version_id, id) ON DELETE CASCADE,
-  FOREIGN KEY (workflow_version_id, depends_on_step_id)
-    REFERENCES workflow_steps(workflow_version_id, id) ON DELETE CASCADE
-);
-
 CREATE TABLE workstream_execution_policies (
   workstream_id TEXT PRIMARY KEY REFERENCES workstreams(id) ON DELETE CASCADE,
   mode TEXT NOT NULL CHECK (mode IN ('stateless', 'stateful')),
@@ -187,8 +136,8 @@ CREATE TABLE work_requests (
   workstream_id TEXT NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
   requested_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   mode TEXT NOT NULL CHECK (mode IN ('stateless', 'stateful')),
-  workflow_definition_id TEXT NOT NULL REFERENCES workflow_definitions(id) ON DELETE RESTRICT,
-  workflow_version_id TEXT NOT NULL REFERENCES workflow_versions(id) ON DELETE RESTRICT,
+  workflow_id TEXT NOT NULL CHECK (workflow_id IN ('direct', 'research', 'plan_implement', 'implement_verify', 'full_cycle')),
+  workflow_version INTEGER NOT NULL CHECK (workflow_version > 0),
   workflow_snapshot_json TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'waiting', 'completed', 'failed', 'cancelled')),
   primary_workspace_id TEXT REFERENCES execution_workspaces(id) ON DELETE RESTRICT,
@@ -252,7 +201,6 @@ CREATE TABLE runs (
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   workstream_id TEXT REFERENCES workstreams(id) ON DELETE SET NULL,
   work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
-  workflow_version_id TEXT REFERENCES workflow_versions(id) ON DELETE SET NULL,
   checkout_id TEXT REFERENCES workstream_checkouts(id) ON DELETE SET NULL,
   execution_lease_id TEXT REFERENCES workstream_execution_leases(id) ON DELETE SET NULL,
   status TEXT NOT NULL CHECK (status IN ('created', 'running', 'paused', 'completed', 'failed', 'cancelled')),
@@ -266,7 +214,6 @@ CREATE TABLE worker_assignments (
   run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
   workstream_id TEXT REFERENCES workstreams(id) ON DELETE SET NULL,
   work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
-  workflow_version_id TEXT REFERENCES workflow_versions(id) ON DELETE SET NULL,
   checkout_id TEXT REFERENCES workstream_checkouts(id) ON DELETE SET NULL,
   execution_lease_id TEXT REFERENCES workstream_execution_leases(id) ON DELETE SET NULL,
   execution_workspace_id TEXT NOT NULL REFERENCES execution_workspaces(id) ON DELETE RESTRICT,
@@ -286,7 +233,6 @@ CREATE TABLE artifacts (
   run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
   workstream_id TEXT REFERENCES workstreams(id) ON DELETE SET NULL,
   work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
-  workflow_version_id TEXT REFERENCES workflow_versions(id) ON DELETE SET NULL,
   checkout_id TEXT REFERENCES workstream_checkouts(id) ON DELETE SET NULL,
   execution_lease_id TEXT REFERENCES workstream_execution_leases(id) ON DELETE SET NULL,
   assignment_id TEXT REFERENCES worker_assignments(id) ON DELETE SET NULL,
@@ -299,27 +245,21 @@ CREATE INDEX idx_v6_runs_workstream ON runs(workstream_id, created_at);
 CREATE INDEX idx_v6_assignments_work_request ON worker_assignments(work_request_id, created_at);
 CREATE INDEX idx_v6_artifacts_work_request ON artifacts(work_request_id, created_at);
 
--- Materialized, immutable-version task graph for the v6 Workflow runner.
+-- Materialized execution tasks preserve the Work Request's selected snapshot.
 CREATE TABLE workflow_tasks (
   id TEXT PRIMARY KEY,
   work_request_id TEXT NOT NULL REFERENCES work_requests(id) ON DELETE CASCADE,
-  workflow_version_id TEXT NOT NULL REFERENCES workflow_versions(id) ON DELETE RESTRICT,
-  workflow_step_id TEXT NOT NULL,
-  execution_class TEXT NOT NULL CHECK (execution_class IN ('stateless_read', 'stateful_workstream')),
-  role TEXT NOT NULL,
-  required_capabilities_json TEXT NOT NULL DEFAULT '[]',
-  approval TEXT NOT NULL CHECK (approval IN ('none', 'human', 'project_owner')),
+  step_kind TEXT NOT NULL CHECK (step_kind IN ('research', 'plan', 'implement', 'test', 'verify')),
+  execution_mode TEXT NOT NULL CHECK (execution_mode IN ('stateless_read', 'stateful_workstream')),
   timeout_ms INTEGER NOT NULL CHECK (timeout_ms >= 1000),
-  output_contract_json TEXT NOT NULL DEFAULT '{}',
+  prompt_profile_version TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'waiting', 'completed', 'failed', 'cancelled')),
   attempt INTEGER NOT NULL DEFAULT 0 CHECK (attempt >= 0),
   output_json TEXT,
   error TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  UNIQUE (work_request_id, workflow_step_id),
-  FOREIGN KEY (workflow_version_id, workflow_step_id)
-    REFERENCES workflow_steps(workflow_version_id, id) ON DELETE RESTRICT
+  UNIQUE (work_request_id, step_kind)
 );
 CREATE TABLE workflow_task_dependencies (
   task_id TEXT NOT NULL REFERENCES workflow_tasks(id) ON DELETE CASCADE,

@@ -23,6 +23,8 @@ export const RealtimeEventPayloadSchema = z
     findingId: id.optional(),
     verificationId: id.optional(),
     workRequestId: id.optional(),
+    workstreamId: id.optional(),
+    stepKind: id.optional(),
     checkoutId: id.optional(),
     leaseId: id.optional(),
     integrationId: id.optional(),

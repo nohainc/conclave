@@ -66,7 +66,7 @@ function db(
           return this;
         },
         async first<T>() {
-          if (query.includes("workstream_execution_leases")) return lease as T;
+          if (query.includes("workstream_runtime_leases")) return lease as T;
           return query.includes("project_memberships") ? ({ role } as T) : null;
         },
         async all<T>() {
@@ -78,16 +78,14 @@ function db(
 }
 
 describe("V7 Project execution scheduler", () => {
-  it("uses the AX Workstream role binding for Worker, model, and Cloud limit", async () => {
+  it("uses the AX Step binding for Worker and model", async () => {
     const configured = candidate({
-      worker_usage_policy_json: JSON.stringify({
-        version: 1,
-        fallbackPolicy: "configured_only",
-        roles: {
-          implementer: {
+      workstream_work_config_json: JSON.stringify({
+        defaultWorkflowId: "full_cycle",
+        bindings: {
+          implement: {
             workerId: "worker-a",
             model: "gpt-5.6-codex",
-            cloudConcurrencyLimit: 1,
           },
         },
       }),
@@ -98,6 +96,7 @@ describe("V7 Project execution scheduler", () => {
       role: "Implementer",
       capabilities: ["repository"],
       workstreamId: "workstream-a",
+      workBindingId: "implement" as const,
     });
     expect(result).toMatchObject({
       workerId: "worker-a",
@@ -113,7 +112,7 @@ describe("V7 Project execution scheduler", () => {
       model: "gpt-5.6-codex",
       selectionExplanation: {
         worker: {
-          role: "Implementer",
+          workBindingId: "implement",
           workerRuntimeVersion: "1.0.0",
           providerToolName: "Codex CLI",
           providerToolVersion: "0.44.0",
@@ -130,18 +129,20 @@ describe("V7 Project execution scheduler", () => {
         role: "implementer",
         capabilities: ["repository"],
         workstreamId: "workstream-a",
+        workBindingId: "implement",
       },
     );
     expect(atLimit).toBeNull();
   });
 
-  it("requires AX to configure a Workstream role before dispatch", async () => {
+  it("requires AX to configure a Workstream Step before dispatch", async () => {
     const result = await selectProjectExecutionTarget(db([candidate()]), {
       projectId: "project-a",
       requesterUserId: "user-a",
       role: "reviewer",
       capabilities: ["repository"],
       workstreamId: "workstream-a",
+      workBindingId: "verify",
     });
     expect(result).toBeNull();
   });
@@ -149,8 +150,9 @@ describe("V7 Project execution scheduler", () => {
   it("treats Workstream Worker Type policy as product IDs", async () => {
     const configured = {
       ...candidate(),
-      worker_usage_policy_json: JSON.stringify({
-        roles: { implementer: { workerId: "worker-a" } },
+      workstream_work_config_json: JSON.stringify({
+        defaultWorkflowId: "full_cycle",
+        bindings: { implement: { workerId: "worker-a" } },
       }),
     };
     const request = {
@@ -159,6 +161,7 @@ describe("V7 Project execution scheduler", () => {
       role: "implementer",
       capabilities: ["repository"],
       workstreamId: "workstream-a",
+      workBindingId: "implement" as const,
     };
     const legacyPackageIdPolicy = await selectProjectExecutionTarget(
       db([{ ...configured, allowed_worker_type_ids_json: '["codex"]' }]),

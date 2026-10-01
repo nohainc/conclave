@@ -12,7 +12,16 @@ Future<void> main() {
     identity: const WorkerIdentity(
       workerTypeId: 'gemini',
       workerVersion: workerVersion,
-      capabilities: ['initialize', 'probe', 'execute', 'durable_session'],
+      capabilities: [
+        'initialize',
+        'probe',
+        'execute',
+        'durable_session',
+        'authorized_context_read',
+        'workstream_write',
+        'text',
+        'local_file',
+      ],
     ),
     onProbe: service.probe,
     onExecute: service.execute,

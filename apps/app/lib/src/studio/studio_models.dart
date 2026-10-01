@@ -172,6 +172,55 @@ String _string(Map<String, dynamic> json, String key, [String fallback = '—'])
   return value == null ? fallback : value.toString();
 }
 
+class StudioBuiltinWorkflow {
+  const StudioBuiltinWorkflow({
+    required this.id,
+    required this.version,
+    required this.name,
+    required this.description,
+    required this.steps,
+    required this.snapshot,
+  });
+
+  final String id;
+  final int version;
+  final String name;
+  final String description;
+  final List<StudioBuiltinWorkflowStep> steps;
+  final Map<String, dynamic> snapshot;
+  String get reference => '$id:v$version';
+
+  factory StudioBuiltinWorkflow.fromJson(Map<String, dynamic> json) =>
+      StudioBuiltinWorkflow(
+        id: _string(json, 'id', ''),
+        version: json['version'] as int? ?? 1,
+        name: _string(json, 'name', ''),
+        description: _string(json, 'description', ''),
+        steps: (json['steps'] as List? ?? const [])
+            .whereType<Map>()
+            .map((step) => StudioBuiltinWorkflowStep.fromJson(
+                Map<String, dynamic>.from(step)))
+            .toList(),
+        snapshot: Map<String, dynamic>.from(json),
+      );
+}
+
+class StudioBuiltinWorkflowStep {
+  const StudioBuiltinWorkflowStep({
+    required this.kind,
+    required this.order,
+  });
+
+  final String kind;
+  final int order;
+
+  factory StudioBuiltinWorkflowStep.fromJson(Map<String, dynamic> json) =>
+      StudioBuiltinWorkflowStep(
+        kind: _string(json, 'kind', ''),
+        order: json['order'] as int? ?? 0,
+      );
+}
+
 List<String> _strings(Map<String, dynamic> json, String key) =>
     List<String>.from(json[key] as List? ?? const []);
 
@@ -375,11 +424,9 @@ class StudioWorkstream {
     required this.primaryWorkspace,
     required this.currentCheckpoint,
     required this.queueStatus,
-    this.executionPolicy = const {
-      'version': 1,
-      'fallbackPolicy': 'configured_only',
-      'roles': <String, dynamic>{},
-    },
+    this.workConfig = const {},
+    this.canConfigureWork = false,
+    this.canExecuteWork = false,
     this.archived = false,
   });
 
@@ -392,7 +439,9 @@ class StudioWorkstream {
   final String primaryWorkspace;
   final String currentCheckpoint;
   final String queueStatus;
-  final Map<String, dynamic> executionPolicy;
+  final Map<String, dynamic> workConfig;
+  final bool canConfigureWork;
+  final bool canExecuteWork;
   final bool archived;
 
   factory StudioWorkstream.fromJson(Map<String, dynamic> json) =>
@@ -406,13 +455,11 @@ class StudioWorkstream {
         primaryWorkspace: _string(json, 'primaryWorkspace', 'Not selected'),
         currentCheckpoint: _string(json, 'currentCheckpoint', 'Not started'),
         queueStatus: _string(json, 'queueStatus', 'Idle'),
-        executionPolicy: json['executionPolicy'] is Map
-            ? Map<String, dynamic>.from(json['executionPolicy'] as Map)
-            : const {
-                'version': 1,
-                'fallbackPolicy': 'configured_only',
-                'roles': <String, dynamic>{},
-              },
+        workConfig: json['workConfig'] is Map
+            ? Map<String, dynamic>.from(json['workConfig'] as Map)
+            : const {},
+        canConfigureWork: json['canConfigureWork'] == true,
+        canExecuteWork: json['canExecuteWork'] == true,
         archived: json['archived'] == true,
       );
 }
@@ -583,9 +630,11 @@ class StudioWorker {
     required this.workerTypeId,
     required this.status,
     required this.readinessState,
+    this.activationState = 'enabled',
     this.attentionReasonCode,
     required this.localConcurrencyLimit,
     required this.capabilities,
+    this.inputCapabilities = const [],
     this.adapterVersion,
   });
 
@@ -594,10 +643,12 @@ class StudioWorker {
   final String workerTypeId;
   final String status;
   final String readinessState;
+  final String activationState;
   final String? attentionReasonCode;
   final int localConcurrencyLimit;
   final String? adapterVersion;
   final List<String> capabilities;
+  final List<String> inputCapabilities;
 
   factory StudioWorker.fromJson(Map<String, dynamic> json) => StudioWorker(
         id: _string(json, 'id'),
@@ -605,10 +656,13 @@ class StudioWorker {
         workerTypeId: _string(json, 'workerTypeId'),
         status: _string(json, 'status', 'needs_attention'),
         readinessState: _string(json, 'readinessState', 'test_failed'),
-        attentionReasonCode: json['attentionReasonCode']?.toString(),
+        activationState: _string(json, 'activationState', 'enabled'),
+        attentionReasonCode: json['readinessIssueCode']?.toString() ??
+            json['attentionReasonCode']?.toString(),
         localConcurrencyLimit: json['localConcurrencyLimit'] as int? ?? 1,
         adapterVersion: json['adapterVersion']?.toString(),
         capabilities: _strings(json, 'capabilities'),
+        inputCapabilities: _strings(json, 'inputCapabilities'),
       );
 }
 

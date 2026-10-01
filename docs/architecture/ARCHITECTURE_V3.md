@@ -361,5 +361,3 @@ Cloudflare remains the Cloud control-plane platform:
 - [Architecture v3 Implementation Roadmap](../roadmaps/ARCHITECTURE_V3_IMPLEMENTATION.md)
 - [Authentication and Multi-User](../specifications/AUTHENTICATION_MULTIUSER.md)
 - [Studio Chat and Projects](../specifications/STUDIO_CHAT_PROJECTS.md)
-- [Multi-Worker Orchestration](../specifications/MULTI_WORKER_ORCHESTRATION.md)
-- [Domain Specification](../specifications/DOMAIN_SPECIFICATION.md)

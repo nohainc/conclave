@@ -18,7 +18,7 @@ export type CoordinatorRequestRow = {
   mode: "stateless" | "stateful";
   status: string;
   primaryWorkspaceId: string;
-  checkoutId: string;
+  checkoutId: string | null;
   createdAt: string;
 };
 
@@ -26,7 +26,7 @@ export type CoordinatorLeaseRow = {
   id: string;
   workstreamId: string;
   workRequestId: string;
-  checkoutId: string;
+  checkoutId?: string;
   workspaceId: string;
   fencingToken: number;
   status: "active" | "released" | "expired";
@@ -34,7 +34,7 @@ export type CoordinatorLeaseRow = {
   baseRevision?: string;
 };
 
-export const WORKSTREAM_LEASE_MS = 60_000;
+export const WORKSTREAM_LEASE_MS = 20 * 60_000;
 
 export function selectNextStatefulRequest(
   rows: readonly CoordinatorRequestRow[],
@@ -130,10 +130,10 @@ export class WorkstreamExecutionCoordinator implements DurableObject {
   private async status(): Promise<Response> {
     const workstreamId = await this.workstreamId();
     const active = await this.env.CONCLAVE_DB.prepare(
-      `SELECT id, work_request_id AS workRequestId, checkout_id AS checkoutId,
+      `SELECT id, work_request_id AS workRequestId,
               workspace_id AS workspaceId, fencing_token AS fencingToken,
               status, expires_at AS expiresAt
-       FROM workstream_execution_leases
+       FROM workstream_runtime_leases
        WHERE workstream_id = ?1 AND status = 'active'
        LIMIT 1`,
     )
@@ -183,7 +183,10 @@ export class WorkstreamExecutionCoordinator implements DurableObject {
         "UPDATE work_requests SET status = 'cancelled', updated_at = ?1 WHERE id = ?2 AND status = 'queued'",
       ).bind(now, workRequestId),
       this.env.CONCLAVE_DB.prepare(
-        "UPDATE runs SET status = 'cancelled', updated_at = ?1 WHERE work_request_id = ?2 AND status = 'created'",
+        "UPDATE runs SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status = 'created'",
+      ).bind(now, workRequestId),
+      this.env.CONCLAVE_DB.prepare(
+        "UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status IN ('queued', 'waiting')",
       ).bind(now, workRequestId),
     ]);
     await this.reconcile();
@@ -201,7 +204,7 @@ export class WorkstreamExecutionCoordinator implements DurableObject {
       return conflict("Stale or expired lease");
     const expiresAt = new Date(Date.now() + WORKSTREAM_LEASE_MS).toISOString();
     await this.env.CONCLAVE_DB.prepare(
-      "UPDATE workstream_execution_leases SET expires_at = ?1 WHERE id = ?2 AND status = 'active'",
+      "UPDATE workstream_runtime_leases SET expires_at = ?1 WHERE id = ?2 AND status = 'active'",
     )
       .bind(expiresAt, lease.id)
       .run();
@@ -229,25 +232,9 @@ export class WorkstreamExecutionCoordinator implements DurableObject {
           ? "cancelled"
           : "completed";
     const now = new Date().toISOString();
-    if (this.env.CONCLAVE_WORKSPACE_GATEWAY) {
-      const gateway = this.env.CONCLAVE_WORKSPACE_GATEWAY.getByName(
-        lease.workspaceId,
-      );
-      await gateway.fetch("https://workspace-gateway/finalize-checkout", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          checkoutId: lease.checkoutId,
-          workRequestId: lease.workRequestId,
-          baseRevision: lease.baseRevision,
-          outcome: status === "completed" ? "success" : status,
-          message: `Workstream checkpoint for ${lease.workRequestId}`,
-        }),
-      });
-    }
     await this.env.CONCLAVE_DB.batch([
       this.env.CONCLAVE_DB.prepare(
-        "UPDATE workstream_execution_leases SET status = 'released', released_at = ?1 WHERE id = ?2 AND status = 'active'",
+        "UPDATE workstream_runtime_leases SET status = 'released', released_at = ?1 WHERE id = ?2 AND status = 'active'",
       ).bind(now, lease.id),
       this.env.CONCLAVE_DB.prepare(
         "UPDATE work_requests SET status = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'running'",
@@ -264,7 +251,7 @@ export class WorkstreamExecutionCoordinator implements DurableObject {
     const workstreamId = await this.workstreamId();
     const now = new Date().toISOString();
     await this.env.CONCLAVE_DB.prepare(
-      `UPDATE workstream_execution_leases SET status = 'expired', released_at = ?1
+      `UPDATE workstream_runtime_leases SET status = 'expired', released_at = ?1
        WHERE workstream_id = ?2 AND status = 'active' AND expires_at <= ?1`,
     )
       .bind(now, workstreamId)
@@ -272,20 +259,20 @@ export class WorkstreamExecutionCoordinator implements DurableObject {
     await this.env.CONCLAVE_DB.prepare(
       `UPDATE work_requests SET status = 'failed', updated_at = ?1
        WHERE workstream_id = ?2 AND status = 'running'
-         AND id IN (SELECT work_request_id FROM workstream_execution_leases
+         AND id IN (SELECT work_request_id FROM workstream_runtime_leases
                     WHERE workstream_id = ?2 AND status = 'expired' AND released_at = ?1)`,
     )
       .bind(now, workstreamId)
       .run();
     const active = await this.env.CONCLAVE_DB.prepare(
-      "SELECT id FROM workstream_execution_leases WHERE workstream_id = ?1 AND status = 'active' LIMIT 1",
+      "SELECT id FROM workstream_runtime_leases WHERE workstream_id = ?1 AND status = 'active' LIMIT 1",
     )
       .bind(workstreamId)
       .first<{ id: string }>();
     if (!active) await this.startNext(workstreamId);
     if (fromAlarm) {
       const nextExpiry = await this.env.CONCLAVE_DB.prepare(
-        "SELECT MIN(expires_at) AS expiresAt FROM workstream_execution_leases WHERE workstream_id = ?1 AND status = 'active'",
+        "SELECT MIN(expires_at) AS expiresAt FROM workstream_runtime_leases WHERE workstream_id = ?1 AND status = 'active'",
       )
         .bind(workstreamId)
         .first<{ expiresAt: string | null }>();
@@ -308,7 +295,7 @@ export class WorkstreamExecutionCoordinator implements DurableObject {
     const next = selectNextStatefulRequest(rows.results);
     if (!next) return;
     const tokenRow = await this.env.CONCLAVE_DB.prepare(
-      "SELECT MAX(fencing_token) AS maxToken FROM workstream_execution_leases WHERE workstream_id = ?1",
+      "SELECT MAX(fencing_token) AS maxToken FROM workstream_runtime_leases WHERE workstream_id = ?1",
     )
       .bind(workstreamId)
       .first<{ maxToken: number | null }>();
@@ -324,13 +311,12 @@ export class WorkstreamExecutionCoordinator implements DurableObject {
         "UPDATE runs SET status = 'running', updated_at = ?1 WHERE work_request_id = ?2 AND status = 'created'",
       ).bind(now, next.id),
       this.env.CONCLAVE_DB.prepare(
-        `INSERT INTO workstream_execution_leases
-         (id, workstream_id, checkout_id, work_request_id, workspace_id, fencing_token, status, acquired_at, expires_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', ?7, ?8)`,
+        `INSERT INTO workstream_runtime_leases
+         (id, workstream_id, work_request_id, workspace_id, fencing_token, status, acquired_at, expires_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?7)`,
       ).bind(
         leaseId,
         workstreamId,
-        next.checkoutId,
         next.id,
         next.primaryWorkspaceId,
         token,
@@ -358,11 +344,10 @@ export class WorkstreamExecutionCoordinator implements DurableObject {
   ) {
     return this.env.CONCLAVE_DB.prepare(
       `SELECT l.id, l.workstream_id AS workstreamId, l.work_request_id AS workRequestId,
-              checkout_id AS checkoutId, workspace_id AS workspaceId,
+              workspace_id AS workspaceId,
               fencing_token AS fencingToken, l.status, l.expires_at AS expiresAt,
-              c.revision AS baseRevision
-       FROM workstream_execution_leases l
-       JOIN workstream_checkouts c ON c.id = l.checkout_id
+              NULL AS baseRevision
+       FROM workstream_runtime_leases l
        WHERE l.id = ?1 AND l.work_request_id = ?2 AND l.fencing_token = ?3`,
     )
       .bind(leaseId, workRequestId, token)

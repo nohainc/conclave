@@ -67,10 +67,12 @@ export interface WorkRequest {
   readonly workstreamId: string;
   readonly requestedByUserId: string;
   readonly mode: WorkRequestMode;
-  readonly workflowDefinitionId: string;
-  readonly workflowVersionId: string;
+  readonly workflowId: WorkflowId;
+  readonly workflowVersion: number;
   /** Immutable copy selected when the Work Request was created. */
-  readonly workflowVersionSnapshot: WorkflowVersion;
+  readonly workflowSnapshot: BuiltinWorkflowDefinition;
+  /** Immutable execution and prompt inputs captured when submitted. */
+  readonly snapshot?: WorkRequestSnapshot;
   readonly status: WorkRequestStatus;
   readonly primaryWorkspaceId: string | null;
   /**
@@ -83,158 +85,247 @@ export interface WorkRequest {
   readonly updatedAt: string;
 }
 
-export interface WorkflowDefinition {
-  readonly id: string;
-  readonly projectId: string;
+export interface WorkRequestSnapshot {
+  readonly schemaVersion: 1;
+  readonly originalRequest: string;
+  readonly attachmentReferences: readonly unknown[];
+  readonly workflowId: WorkflowId;
+  readonly workflowVersion: number;
+  readonly workflowSnapshot: BuiltinWorkflowDefinition;
+  readonly resolvedBindings: Readonly<
+    Partial<Record<WorkstreamBindingId, WorkstreamStepBinding>>
+  >;
+  readonly projectInstructions: string;
+  readonly workstreamInstructions: string;
+  readonly stepAdditionalInstructions: Partial<Record<StepKind, string>>;
+  readonly promptProfileVersions: Partial<Record<StepKind, string>>;
+}
+
+export const STEP_KINDS = [
+  "research",
+  "plan",
+  "implement",
+  "test",
+  "verify",
+] as const;
+export type StepKind = (typeof STEP_KINDS)[number];
+
+/**
+ * Conclave-owned transport for a completed Workflow Step. Workers return plain
+ * text; structured fields here are attribution or metadata Conclave can verify.
+ */
+export interface StepResult {
+  readonly text: string;
+  readonly status: "completed" | "failed" | "cancelled";
+  readonly startedAt: string;
+  readonly completedAt: string;
+  readonly workerId: string | null;
+  readonly workerRuntimeVersion: string | null;
+  readonly providerToolVersion: string | null;
+  readonly artifacts?: readonly string[];
+  readonly changedFiles?: readonly string[];
+  readonly testStatus?: "passed" | "failed" | "blocked" | "not_run";
+}
+
+export const WORKFLOW_IDS = [
+  "direct",
+  "research",
+  "plan_implement",
+  "implement_verify",
+  "full_cycle",
+] as const;
+export type WorkflowId = (typeof WORKFLOW_IDS)[number];
+export const WORKSTREAM_BINDING_IDS = ["direct", ...STEP_KINDS] as const;
+export type WorkstreamBindingId = (typeof WORKSTREAM_BINDING_IDS)[number];
+
+export interface WorkstreamStepBinding {
+  readonly workerId?: string;
+  readonly model?: string;
+  readonly fallbackWorkerId?: string;
+  readonly additionalInstructions?: string;
+}
+
+/** Fixed Workstream execution choices; arbitrary task roles are not allowed. */
+export interface WorkstreamWorkConfig {
+  readonly defaultWorkflowId: WorkflowId;
+  readonly workstreamInstructions?: string;
+  readonly bindings: Readonly<
+    Partial<Record<WorkstreamBindingId, WorkstreamStepBinding>>
+  >;
+}
+
+export const DEFAULT_WORKSTREAM_WORK_CONFIG: WorkstreamWorkConfig = {
+  defaultWorkflowId: "full_cycle",
+  bindings: {},
+};
+
+export type WorkflowExecutionMode = "stateless_read" | "stateful_workstream";
+export type WorkflowExecutionClass = "analysis" | "workspace_action";
+export type WorkflowCapability =
+  | "authorized_context_read"
+  | "workstream_write"
+  | "test_execution"
+  | "independent_verification";
+export type WorkflowReadWritePolicy = "read_only" | "write_workstream";
+export type WorkflowResultSemantics =
+  | "evidence_summary"
+  | "implementation_plan"
+  | "workstream_changes"
+  | "test_report"
+  | "verification_report";
+
+export interface BuiltinWorkflowStep {
+  readonly kind: StepKind;
+  readonly order: number;
+  readonly executionMode: WorkflowExecutionMode;
+  readonly executionClass: WorkflowExecutionClass;
+  readonly requiredCapabilities: readonly WorkflowCapability[];
+  readonly readWritePolicy: WorkflowReadWritePolicy;
+  readonly timeoutMs: number;
+  readonly promptProfileVersion: string;
+  /** Fixed by the built-in definition; users cannot author dependencies. */
+  readonly dependsOn: readonly StepKind[];
+  /** Results from these fixed upstream steps are included as inputs. */
+  readonly inputsFrom: readonly StepKind[];
+  readonly resultSemantics: WorkflowResultSemantics;
+}
+
+export interface BuiltinWorkflowDefinition {
+  readonly id: WorkflowId;
+  readonly version: number;
   readonly name: string;
   readonly description: string;
-  readonly currentVersionId: string | null;
-  readonly createdByUserId: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
+  readonly steps: readonly BuiltinWorkflowStep[];
 }
 
-export interface WorkflowVersion {
-  readonly id: string;
-  readonly workflowDefinitionId: string;
-  readonly version: number;
-  readonly steps: readonly WorkflowStep[];
-  readonly createdByUserId: string;
-  readonly createdAt: string;
-}
-
-export type WorkflowExecutionClass = "stateless_read" | "stateful_workstream";
-export type WorkflowApproval = "none" | "human" | "project_owner";
-
-export interface WorkflowOutputContract {
-  readonly contentType: string;
-  readonly requiredFields: readonly string[];
-  readonly artifactTypes: readonly string[];
-}
-
-export interface WorkflowStep {
-  readonly id: string;
-  readonly name: string;
-  readonly role: string;
-  readonly requiredCapabilities: readonly string[];
-  readonly executionClass: WorkflowExecutionClass;
-  readonly order: number;
-  readonly dependsOn: readonly string[];
-  readonly independentFrom: readonly string[];
-  readonly approval: WorkflowApproval;
-  readonly timeoutMs: number;
-  readonly outputContract: WorkflowOutputContract;
-}
-
-export const BUILT_IN_WORKFLOW_NAMES = [
-  "Research",
-  "Review",
-  "Implementation",
-  "Implementation + Test + Review",
-  "Research + Implementation",
-  "Full Cycle",
-] as const;
-export type BuiltInWorkflowName = (typeof BUILT_IN_WORKFLOW_NAMES)[number];
-
-const builtInStep = (
-  id: string,
-  name: string,
-  role: string,
-  executionClass: WorkflowExecutionClass,
+const builtinStep = (
+  kind: StepKind,
   order: number,
-  dependsOn: readonly string[] = [],
-): WorkflowStep => ({
-  id,
-  name,
-  role,
-  requiredCapabilities: [],
-  executionClass,
+  dependsOn: readonly StepKind[] = [],
+  inputsFrom: readonly StepKind[] = dependsOn,
+): BuiltinWorkflowStep => ({
+  kind,
   order,
-  dependsOn,
-  independentFrom: [],
-  approval: "none",
+  executionMode:
+    kind === "research" || kind === "plan"
+      ? "stateless_read"
+      : "stateful_workstream",
+  executionClass:
+    kind === "research" || kind === "plan" ? "analysis" : "workspace_action",
+  requiredCapabilities:
+    kind === "research"
+      ? ["authorized_context_read"]
+      : kind === "plan"
+        ? ["authorized_context_read"]
+        : kind === "implement"
+          ? ["workstream_write"]
+          : kind === "test"
+            ? ["authorized_context_read", "test_execution"]
+            : ["authorized_context_read", "independent_verification"],
+  readWritePolicy: kind === "implement" ? "write_workstream" : "read_only",
   timeoutMs: 15 * 60 * 1000,
-  outputContract: {
-    contentType: "application/json",
-    requiredFields: ["summary"],
-    artifactTypes: [],
-  },
+  promptProfileVersion: `${kind}:v1`,
+  dependsOn,
+  inputsFrom,
+  resultSemantics: (
+    {
+      research: "evidence_summary",
+      plan: "implementation_plan",
+      implement: "workstream_changes",
+      test: "test_report",
+      verify: "verification_report",
+    } satisfies Record<StepKind, WorkflowResultSemantics>
+  )[kind],
 });
 
-const builtInVersion = (
-  name: BuiltInWorkflowName,
-  steps: readonly WorkflowStep[],
-): WorkflowVersion => ({
-  id: `builtin-${name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}-v1`,
-  workflowDefinitionId: `builtin-${name.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}`,
+const builtin = (
+  id: WorkflowId,
+  name: string,
+  description: string,
+  kinds: readonly StepKind[],
+): BuiltinWorkflowDefinition => ({
+  id,
   version: 1,
-  steps,
-  createdByUserId: "system",
-  createdAt: "2026-01-01T00:00:00.000Z",
+  name,
+  description,
+  steps: kinds.map((kind, order) => {
+    const preceding = kinds.slice(0, order);
+    const inputsFrom = preceding.filter((prior) => {
+      switch (kind) {
+        case "research":
+          return false;
+        case "plan":
+          return prior === "research";
+        case "implement":
+          return prior === "research" || prior === "plan";
+        case "test":
+          return prior === "plan" || prior === "implement";
+        case "verify":
+          return true;
+      }
+    });
+    return builtinStep(
+      kind,
+      order,
+      order === 0 ? [] : [kinds[order - 1]!],
+      inputsFrom,
+    );
+  }),
 });
 
-/** Immutable built-in workflow versions used by the initial runner. */
-export const BUILT_IN_WORKFLOW_VERSIONS: Readonly<
-  Record<BuiltInWorkflowName, WorkflowVersion>
+/** Current version for each built-in ID; immutable history is below. */
+export const BUILTIN_WORKFLOWS: Readonly<
+  Record<WorkflowId, BuiltinWorkflowDefinition>
 > = {
-  Research: builtInVersion("Research", [
-    builtInStep("research", "Research", "research", "stateless_read", 0),
+  direct: builtin("direct", "Direct", "Implement the requested work.", [
+    "implement",
   ]),
-  Review: builtInVersion("Review", [
-    builtInStep("review", "Review", "review", "stateless_read", 0),
-  ]),
-  Implementation: builtInVersion("Implementation", [
-    builtInStep(
-      "implementation",
-      "Implementation",
-      "implementation",
-      "stateful_workstream",
-      0,
-    ),
-  ]),
-  "Implementation + Test + Review": builtInVersion(
-    "Implementation + Test + Review",
-    [
-      builtInStep(
-        "implementation",
-        "Implementation",
-        "implementation",
-        "stateful_workstream",
-        0,
-      ),
-      builtInStep("test", "Test", "test", "stateless_read", 1, [
-        "implementation",
-      ]),
-      builtInStep("review", "Review", "review", "stateless_read", 2, ["test"]),
-    ],
+  research: builtin(
+    "research",
+    "Research",
+    "Gather evidence relevant to the request.",
+    ["research"],
   ),
-  "Research + Implementation": builtInVersion("Research + Implementation", [
-    builtInStep("research", "Research", "research", "stateless_read", 0),
-    builtInStep(
-      "implementation",
-      "Implementation",
-      "implementation",
-      "stateful_workstream",
-      1,
-      ["research"],
-    ),
-  ]),
-  "Full Cycle": builtInVersion("Full Cycle", [
-    builtInStep("research", "Research", "research", "stateless_read", 0),
-    builtInStep(
-      "implementation",
-      "Implementation",
-      "implementation",
-      "stateful_workstream",
-      1,
-      ["research"],
-    ),
-    builtInStep("test", "Test", "test", "stateless_read", 2, [
-      "implementation",
-    ]),
-    builtInStep("review", "Review", "review", "stateless_read", 3, ["test"]),
-  ]),
+  plan_implement: builtin(
+    "plan_implement",
+    "Plan & Implement",
+    "One Worker creates a plan, then a Worker carries it out.",
+    ["plan", "implement"],
+  ),
+  implement_verify: builtin(
+    "implement_verify",
+    "Implement & Verify",
+    "One Worker performs the work, another independently checks it.",
+    ["implement", "verify"],
+  ),
+  full_cycle: builtin(
+    "full_cycle",
+    "Full Cycle",
+    "Research, plan, implement, test, and verify the result.",
+    ["research", "plan", "implement", "test", "verify"],
+  ),
 };
+
+/**
+ * Authoritative immutable definitions keyed by stable release reference.
+ * Keep older entries when a Workflow gets a newer version so saved Work
+ * Request snapshots remain verifiable and executable.
+ */
+export const BUILTIN_WORKFLOW_CATALOG: Readonly<
+  Record<string, BuiltinWorkflowDefinition>
+> = {
+  "direct:v1": BUILTIN_WORKFLOWS.direct,
+  "research:v1": BUILTIN_WORKFLOWS.research,
+  "plan_implement:v1": BUILTIN_WORKFLOWS.plan_implement,
+  "implement_verify:v1": BUILTIN_WORKFLOWS.implement_verify,
+  "full_cycle:v1": BUILTIN_WORKFLOWS.full_cycle,
+};
+
+export function builtinWorkflowReference(
+  definition: Pick<BuiltinWorkflowDefinition, "id" | "version">,
+): string {
+  return `${definition.id}:v${definition.version}`;
+}
 
 export interface WorkstreamExecutionPolicy {
   readonly mode: WorkRequestMode;
@@ -440,18 +531,47 @@ export function validateWorkRequest(
   required(request.id, "WorkRequest id");
   required(request.workstreamId, "WorkRequest workstreamId");
   required(request.requestedByUserId, "WorkRequest requestedByUserId");
-  required(request.workflowDefinitionId, "WorkRequest workflowDefinitionId");
-  required(request.workflowVersionId, "WorkRequest workflowVersionId");
+  required(request.workflowId, "WorkRequest workflowId");
+  positive(request.workflowVersion, "WorkRequest workflowVersion");
   if (
-    request.workflowVersionSnapshot.id !== request.workflowVersionId ||
-    request.workflowVersionSnapshot.workflowDefinitionId !==
-      request.workflowDefinitionId
+    request.workflowSnapshot.id !== request.workflowId ||
+    request.workflowSnapshot.version !== request.workflowVersion
   ) {
     throw new DomainInvariantError(
       "WorkRequest workflow snapshot must match its selected version",
     );
   }
-  validateWorkflowVersion(request.workflowVersionSnapshot);
+  validateBuiltinWorkflowDefinition(request.workflowSnapshot);
+  if (request.snapshot) {
+    if (
+      request.snapshot.schemaVersion !== 1 ||
+      request.snapshot.workflowId !== request.workflowId ||
+      request.snapshot.workflowVersion !== request.workflowVersion ||
+      request.snapshot.workflowSnapshot.id !== request.workflowId ||
+      request.snapshot.workflowSnapshot.version !== request.workflowVersion
+    ) {
+      throw new DomainInvariantError(
+        "WorkRequest execution snapshot must match its selected Workflow",
+      );
+    }
+    validateBuiltinWorkflowDefinition(request.snapshot.workflowSnapshot);
+    for (const step of request.snapshot.workflowSnapshot.steps) {
+      const bindingId =
+        request.workflowId === "direct" ? "direct" : step.kind;
+      if (
+        request.snapshot.promptProfileVersions[step.kind] !==
+          step.promptProfileVersion ||
+        !Object.prototype.hasOwnProperty.call(
+          request.snapshot.resolvedBindings,
+          bindingId,
+        )
+      ) {
+        throw new DomainInvariantError(
+          "WorkRequest snapshot is missing a resolved Step input",
+        );
+      }
+    }
+  }
   if (request.mode === "stateful") {
     if (policy.mode !== "stateful" || !policy.primaryWorkspaceId) {
       throw new DomainInvariantError(
@@ -476,111 +596,108 @@ export function validateWorkRequest(
   }
 }
 
-export function validateWorkflowVersion(version: WorkflowVersion): void {
-  required(version.id, "WorkflowVersion id");
-  required(
-    version.workflowDefinitionId,
-    "WorkflowVersion workflowDefinitionId",
-  );
-  positive(version.version, "WorkflowVersion version");
-  const stepIds = new Set(version.steps.map((step) => step.id));
-  const orders = version.steps.map((step) => step.order);
-  if (stepIds.size !== version.steps.length) {
-    throw new DomainInvariantError("WorkflowStep id must be unique");
-  }
-  if (new Set(orders).size !== orders.length) {
-    throw new DomainInvariantError("WorkflowStep order must be unique");
-  }
-  for (const step of version.steps) {
-    required(step.id, "WorkflowStep id");
-    required(step.name, "WorkflowStep name");
-    required(step.role, "WorkflowStep role");
-    positive(step.timeoutMs, "WorkflowStep timeoutMs");
-    if (!Number.isInteger(step.order) || step.order < 0) {
-      throw new DomainInvariantError("WorkflowStep order must be non-negative");
-    }
-    for (const dependencyId of step.dependsOn) {
-      if (!stepIds.has(dependencyId)) {
-        throw new DomainInvariantError(
-          "WorkflowStep dependency must reference a step in the version",
-        );
-      }
-    }
-    for (const independentId of step.independentFrom) {
-      if (!stepIds.has(independentId) || independentId === step.id) {
-        throw new DomainInvariantError(
-          "WorkflowStep independence must reference another step in the version",
-        );
-      }
-      if (step.dependsOn.includes(independentId)) {
-        throw new DomainInvariantError(
-          "WorkflowStep cannot be both dependent and independent",
-        );
-      }
-    }
-  }
-
-  const byId = new Map(version.steps.map((step) => [step.id, step]));
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-  const visit = (stepId: string): void => {
-    if (visiting.has(stepId)) {
-      throw new DomainInvariantError(
-        "WorkflowStep dependencies contain a cycle",
-      );
-    }
-    if (visited.has(stepId)) return;
-    visiting.add(stepId);
-    const step = byId.get(stepId)!;
-    for (const dependencyId of step.dependsOn) {
-      visit(dependencyId);
-    }
-    visiting.delete(stepId);
-    visited.add(stepId);
-  };
-  for (const step of version.steps) visit(step.id);
-
-  for (const step of version.steps) {
-    for (const dependencyId of step.dependsOn) {
-      const dependency = byId.get(dependencyId)!;
-      if (dependency.order >= step.order) {
-        throw new DomainInvariantError(
-          "WorkflowStep dependencies must execute before the dependent step",
-        );
-      }
-    }
-  }
-
-  for (const step of version.steps) {
-    if (
-      step.executionClass === "stateful_workstream" &&
-      step.independentFrom.some((stepId) => {
-        const other = byId.get(stepId);
-        return other?.executionClass === "stateful_workstream";
-      })
-    ) {
-      throw new DomainInvariantError(
-        "Stateful Workstream steps cannot be marked independent",
-      );
-    }
-  }
-}
-
-/** Editing a workflow creates a new immutable, monotonically newer version. */
-export function validateNextWorkflowVersion(
-  previous: WorkflowVersion,
-  next: WorkflowVersion,
+export function validateBuiltinWorkflowDefinition(
+  definition: BuiltinWorkflowDefinition,
 ): void {
-  validateWorkflowVersion(previous);
-  validateWorkflowVersion(next);
-  if (next.workflowDefinitionId !== previous.workflowDefinitionId) {
+  if (!definition || typeof definition !== "object") {
+    throw new DomainInvariantError("Built-in Workflow must be an object");
+  }
+  const exactKeys = (value: object, expected: readonly string[]): boolean => {
+    const actual = Object.keys(value).sort();
+    return (
+      actual.length === expected.length &&
+      actual.every((key, index) => key === [...expected].sort()[index])
+    );
+  };
+  if (
+    !exactKeys(definition, ["id", "version", "name", "description", "steps"])
+  ) {
     throw new DomainInvariantError(
-      "Workflow versions must belong to the same definition",
+      "Built-in Workflow definition has unsupported fields",
     );
   }
-  if (next.id === previous.id || next.version !== previous.version + 1) {
+  required(definition.id, "BuiltinWorkflowDefinition id");
+  required(definition.name, "BuiltinWorkflowDefinition name");
+  required(definition.description, "BuiltinWorkflowDefinition description");
+  positive(definition.version, "BuiltinWorkflowDefinition version");
+  if (!WORKFLOW_IDS.includes(definition.id)) {
+    throw new DomainInvariantError("Unsupported built-in Workflow ID");
+  }
+  const canonical =
+    BUILTIN_WORKFLOW_CATALOG[builtinWorkflowReference(definition)];
+  if (!canonical) {
+    throw new DomainInvariantError("Unsupported built-in Workflow version");
+  }
+  if (
+    definition.name !== canonical.name ||
+    definition.description !== canonical.description ||
+    !Array.isArray(definition.steps) ||
+    definition.steps.length !== canonical.steps.length
+  ) {
     throw new DomainInvariantError(
-      "Editing a Workflow must create the next immutable version",
+      "Built-in Workflow definition must match its canonical version",
+    );
+  }
+  for (const [index, step] of definition.steps.entries()) {
+    if (
+      !step ||
+      typeof step !== "object" ||
+      !exactKeys(step, [
+        "kind",
+        "order",
+        "executionMode",
+        "executionClass",
+        "requiredCapabilities",
+        "readWritePolicy",
+        "timeoutMs",
+        "promptProfileVersion",
+        "dependsOn",
+        "inputsFrom",
+        "resultSemantics",
+      ])
+    ) {
+      throw new DomainInvariantError(
+        "Built-in Workflow step has unsupported fields",
+      );
+    }
+    const expected = canonical.steps[index]!;
+    if (
+      step.kind !== expected.kind ||
+      step.order !== index ||
+      step.executionMode !== expected.executionMode ||
+      step.executionClass !== expected.executionClass ||
+      step.readWritePolicy !== expected.readWritePolicy ||
+      step.resultSemantics !== expected.resultSemantics ||
+      !Array.isArray(step.requiredCapabilities) ||
+      step.requiredCapabilities.length !==
+        expected.requiredCapabilities.length ||
+      step.requiredCapabilities.some(
+        (capability: WorkflowCapability, capabilityIndex: number) =>
+          capability !== expected.requiredCapabilities[capabilityIndex],
+      ) ||
+      step.timeoutMs !== expected.timeoutMs ||
+      step.promptProfileVersion !== expected.promptProfileVersion ||
+      !Array.isArray(step.dependsOn) ||
+      step.dependsOn.length !== expected.dependsOn.length ||
+      step.dependsOn.some(
+        (kind: StepKind, dependencyIndex: number) =>
+          kind !== expected.dependsOn[dependencyIndex],
+      ) ||
+      !Array.isArray(step.inputsFrom) ||
+      step.inputsFrom.length !== expected.inputsFrom.length ||
+      step.inputsFrom.some(
+        (kind: StepKind, inputIndex: number) =>
+          kind !== expected.inputsFrom[inputIndex],
+      )
+    ) {
+      throw new DomainInvariantError(
+        "Built-in Workflow definition must match its canonical version",
+      );
+    }
+    positive(step.timeoutMs, "BuiltinWorkflowStep timeoutMs");
+    required(
+      step.promptProfileVersion,
+      "BuiltinWorkflowStep promptProfileVersion",
     );
   }
 }

@@ -4,7 +4,6 @@ import {
   D1ProjectRepository,
   D1WorkerRepository,
   D1ExtensionRepository,
-  D1WorkflowTemplateRepository,
   D1CredentialRepository,
   D1RetentionPolicyRepository,
   D1HumanApprovalRepository,
@@ -146,7 +145,7 @@ describe("Cloudflare persistence adapters", () => {
     });
   });
 
-  it("reconstructs versioned extensions and workflow templates", async () => {
+  it("reconstructs versioned extensions", async () => {
     const extension = await new D1ExtensionRepository(
       new FakeDb([
         {
@@ -170,38 +169,6 @@ describe("Cloudflare persistence adapters", () => {
       version: "1.0.0",
       manifest: { permissions: ["repo.read"] },
     });
-
-    const templates = await new D1WorkflowTemplateRepository(
-      new FakeDb([
-        [
-          {
-            row_id: "workspace-1:forge:1",
-            organization_id: "workspace-1",
-            template_id: "forge",
-            name: "Forge",
-            version: 1,
-            template_json: '{"steps":["research"]}',
-            status: "active",
-            created_by_user_id: "user-1",
-            created_at: "now",
-            updated_at: "now",
-          },
-          {
-            row_id: "workspace-1:forge:2",
-            organization_id: "workspace-1",
-            template_id: "forge",
-            name: "Forge",
-            version: 2,
-            template_json: '{"steps":["research","review"]}',
-            status: "active",
-            created_by_user_id: "user-1",
-            created_at: "now",
-            updated_at: "now",
-          },
-        ],
-      ]),
-    ).listByOrganization("workspace-1");
-    expect(templates.map((template) => template.version)).toEqual([1, 2]);
   });
 
   it("reads security-sensitive records from tenant tables", async () => {

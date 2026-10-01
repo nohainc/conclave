@@ -122,8 +122,6 @@ importers:
         specifier: ^4.1.11
         version: 4.6.5
 
-  packages/sdk: {}
-
   packages/security: {}
 
   packages/worker-manifest:

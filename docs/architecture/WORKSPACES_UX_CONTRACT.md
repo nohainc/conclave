@@ -152,31 +152,44 @@ Workspace lifecycle actions, and local Worker setup are not part of the AX UX.
 Project/Workstream owners and collaborators choose actual usage in each
 Workstream's Execution settings.
 
-### `WorkstreamWorkerUsagePolicy`
+### `WorkstreamWorkConfig`
 
 ~~~json
 {
-  "version": 1,
-  "fallbackPolicy": "configured_only",
-  "roles": {
-    "implementer": {
+  "defaultWorkflowId": "full_cycle",
+  "workstreamInstructions": "Keep changes focused and include regression coverage.",
+  "bindings": {
+    "direct": { "workerId": "stable-worker-id" },
+    "research": { "workerId": "stable-worker-id" },
+    "plan": { "workerId": "stable-worker-id" },
+    "implement": { "workerId": "stable-worker-id" },
+    "test": { "workerId": "stable-worker-id" },
+    "verify": {
       "workerId": "stable-worker-id",
-      "fallbackWorkerIds": [],
       "model": "provider-model-id",
-      "cloudConcurrencyLimit": 1
+      "fallbackWorkerId": "another-stable-worker-id",
+      "additionalInstructions": "Check the migration path."
     }
   }
 }
 ~~~
 
-AX stores this versioned policy in Cloud. Worker IDs are checked against active
-Project Workspace Grants. Policy selection controls scheduling enablement,
-primary/fallback ordering, model, and the Cloud concurrency ceiling; the
-Workspace's local readiness and concurrency remain execution safety checks.
-A Workstream assignment without a role mapping is not dispatched. With
-`configured_only`, only listed Workers are considered. With
-`configured_then_any`, listed Workers are preferred and other eligible,
-Cloud-enabled Workers may be used as fallback.
+AX stores this constrained configuration in Cloud. Binding names are fixed to
+`direct` and the five Work v1 StepKinds; arbitrary roles and dependencies are
+not configurable. Worker IDs are checked against active Project Workspace
+Grants. A Workstream assignment without the selected Step binding is not
+dispatched. Only the configured primary and optional fallback are considered.
+Project instructions remain in Project settings. Workstream instructions are
+editable in Workstream settings, and Step additional instructions are available
+in that Step's advanced binding options. The prompt renderer adds these after
+Conclave's fixed Step guidance; users cannot edit its internal profiles or the
+handoff data.
+
+For an unconfigured Workstream, AX may offer one-click suggested bindings:
+ChatGPT for Direct, Implement, and Test, with Gemini for Research, Plan, and
+Verify when both are Ready; if only one of those product Workers is Ready, AX
+may offer to bind it to every Step. Suggestions are saved as ordinary editable
+bindings and are not architectural defaults or execution requirements.
 
 Connection mode is read-only transport information. Render the display-ready
 mode as `Connected · WebSocket` or `Connected · HTTPS fallback`; the fallback
@@ -231,7 +244,7 @@ returned to AX.
 | Local permissions and Worker-reported provider readiness | Conclave Workspace | Show only safe readiness/attention summary |
 | Local concurrency ceiling | Conclave Workspace | Display only when useful; Cloud cannot increase it |
 | Cloud scheduling state and concurrency limits | Cloud | AX selects them in Workstream Execution settings |
-| Workspace-to-Project grants and Workstream usage policy | Cloud | AX owns authorization, Worker role/model/fallback choices, and limits |
+| Workspace-to-Project grants and Workstream Work config | Cloud | AX owns authorization, default Workflow, and canonical Step Worker bindings |
 | Active assignments, run attribution, audit | Cloud | Summarize activity; retain detailed audit views as needed |
 | Work Root, local files, process state, logs | Conclave Workspace | Do not expose local paths or secrets in ordinary AX UI |
 
@@ -373,9 +386,20 @@ registered machines and synchronized Workers. It may display
 `WebSocket` or `HTTPS fallback` as the observed connection mode. Workspace
 registration, recovery, sign-in, local Worker management and transport
 selection live in Conclave Workspace. Project membership, Workspace Grants and
-Workstream Worker usage policies remain Cloud/AX collaboration concerns. AX
-configures role-to-Worker and model selection, fallback behavior, and Cloud
-concurrency; Workspace supplies readiness and enforces local limits.
+Workstream Work config remains a Cloud/AX collaboration concern. AX configures
+the default built-in Workflow and canonical Step-to-Worker bindings, with
+optional model, fallback, and additional instructions; Workspace supplies
+readiness and enforces local limits.
+
+The Workstream **Execution** tab presents the default Workflow and a simple
+Worker row for Direct, Research, Plan, Implement, Test, and Verify. Each row
+shows the selected Worker and its readiness. Model preferences, fallback
+Workers, Project/Workstream instructions, and Step instructions belong under a
+collapsed **Advanced** section. The interface does not expose arbitrary role
+policies, Workflow dependencies, execution classes, or prompt templates.
+The shared built-in catalog and the internal Step Prompt Profiles are defined
+by the [Work v1 Contract](../specifications/WORK_V1_CONTRACT.md); prompt
+profiles are not an editable template language.
 
 See [ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md).
 
@@ -398,7 +422,7 @@ ADR-014 refines the desktop side of this UX contract:
 - A connected installation cannot switch to another Conclave user. Explicit
   Disconnect and Release ownership are required before an ownership change.
 - Connected installations may launch/reconnect automatically at OS login. AX
-  shows read-only machine and Worker readiness. Worker usage policy remains
+  shows read-only machine and Worker readiness. Workstream Work config remains
   editable in AX Workstreams.
 
 See [ADR-014](../decisions/ADR-014-workspace-desktop-lifecycle.md).

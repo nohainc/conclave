@@ -201,7 +201,7 @@ provider tool path, auth strategy, credential status, model preference, local
 permission summary, or adapter version. Workspace authoritative snapshots
 remove omitted slots and their Cloud scheduling records.
 
-Model choice, Project/Workstream role, and remote scheduling policy are not
+Model choice, Project/Workstream Step binding, and remote scheduling policy are not
 local Worker slot identity or provider authentication concerns. Their ownership
 continues to follow the current AX/Cloud execution contracts.
 

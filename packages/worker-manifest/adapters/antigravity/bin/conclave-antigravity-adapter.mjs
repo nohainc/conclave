@@ -72,7 +72,12 @@ function boundedText(value, maxBytes) {
   return bytes.subarray(0, maxBytes).toString("utf8");
 }
 
-function cliArgs(model, deadlineAt, providerSessionId = null) {
+function cliArgs(
+  model,
+  deadlineAt,
+  providerSessionId = null,
+  readOnly = false,
+) {
   const timeoutSeconds = Math.max(
     1,
     Math.floor((deadlineAt - Date.now() - CLI_CLEANUP_GRACE_MS) / 1000),
@@ -83,6 +88,7 @@ function cliArgs(model, deadlineAt, providerSessionId = null) {
     "--output-format",
     "stream-json",
     "--sandbox",
+    ...(readOnly ? ["--mode=plan"] : []),
     "--print-timeout",
     `${timeoutSeconds}s`,
   ];
@@ -176,6 +182,7 @@ async function runCli(
   timeoutMs,
   sessionPolicy = "stateless",
   sessionKey = null,
+  readOnly = false,
 ) {
   if (sessionPolicy === "durable_session" && !sessionKey) {
     throw new Error("Durable sessions require a logical session key.");
@@ -194,7 +201,7 @@ async function runCli(
   let progressSent = false;
   let observedSessionId = null;
   const result = await cliTool
-    .runStream(cliArgs(model, deadlineAt, priorSessionId), {
+    .runStream(cliArgs(model, deadlineAt, priorSessionId, readOnly), {
       stdin: `${JSON.stringify({ event: "user", message: { content: prompt } })}\n`,
       timeoutMs: Number.POSITIVE_INFINITY,
       deadlineAt: cliDeadlineAt,
@@ -464,6 +471,7 @@ async function handle(frame) {
           frame.timeoutMs,
           sessionPolicy,
           frame.sessionKey ?? null,
+          frame.readOnly === true,
         );
         send("result", {
           requestId,

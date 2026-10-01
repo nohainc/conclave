@@ -16,6 +16,7 @@ import type {
   WorkerAvailability,
   WorkerCostMetadata,
   V4ResolvedExecutionTarget,
+  WorkstreamBindingId,
 } from "@conclave/core";
 import {
   canonicalExecutionErrorCode,
@@ -49,6 +50,7 @@ interface ForgeExecutionEnv {
   readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
   readonly CONCLAVE_TEST_COMMAND?: string;
   readonly CONCLAVE_HOST_GATEWAY?: DurableObjectNamespace;
+  readonly CONCLAVE_WORKSPACE_GATEWAY?: DurableObjectNamespace;
 }
 
 interface ForgeExecutionContext {
@@ -61,6 +63,12 @@ interface ForgeExecutionContext {
   readonly projectId: string;
   readonly repositoryId: string;
   readonly revision: string;
+  readonly workstreamId?: string;
+  readonly workRequestId?: string;
+  readonly workBindingId?: WorkstreamBindingId;
+  readonly executionClass?: "stateless_read" | "stateful_workstream";
+  readonly effectiveWorkerPrompt?: string;
+  readonly sessionPolicy?: "stateless";
 }
 
 interface ForgeExecutionRecord {
@@ -634,9 +642,23 @@ class HostGatewayForgeWorker implements ForgeWorker {
     const task = {
       id: request.taskId,
       role,
-      objective,
+      objective: this.context.effectiveWorkerPrompt
+        ? `${this.context.effectiveWorkerPrompt}\n\nCurrent execution detail:\n${objective}`
+        : objective,
       capabilities,
       contextArtifactIds: request.context.map((item) => item.artifactId),
+      ...(this.context.workstreamId
+        ? { workstreamId: this.context.workstreamId }
+        : {}),
+      ...(this.context.workRequestId
+        ? { workRequestId: this.context.workRequestId }
+        : {}),
+      ...(this.context.workBindingId
+        ? { workBindingId: this.context.workBindingId }
+        : {}),
+      ...(this.context.executionClass
+        ? { executionClass: this.context.executionClass }
+        : {}),
       timeoutMs: this.deadline(request),
       repository: {
         repositoryId: request.repositoryId,
@@ -647,6 +669,9 @@ class HostGatewayForgeWorker implements ForgeWorker {
         message: request.message,
         context: request.context,
       },
+      ...(this.context.sessionPolicy
+        ? { sessionPolicy: this.context.sessionPolicy }
+        : {}),
     };
     const dispatched = await this.dispatch(request, task);
     if (!dispatched.accepted) {
@@ -722,6 +747,7 @@ class HostGatewayForgeWorker implements ForgeWorker {
       contextArtifactIds: readonly string[];
       timeoutMs: number;
       input: Record<string, unknown>;
+      sessionPolicy?: "stateless";
     },
   ): Promise<DispatchAssignmentResult> {
     if (this.executionTarget) {
@@ -730,10 +756,14 @@ class HostGatewayForgeWorker implements ForgeWorker {
     const dispatcherEnv = this.env as unknown as AssignmentDispatcherEnv;
     if (this.env.CONCLAVE_HOST_GATEWAY) {
       return dispatchTaskAssignment(dispatcherEnv, {
-        workspaceId: this.context.organizationId,
+        workspaceId: this.context.workstreamId
+          ? ""
+          : this.context.organizationId,
         runId: request.runId,
         taskId: request.taskId,
-        explicitWorkerId: this.worker.id,
+        ...(!this.context.workstreamId
+          ? { explicitWorkerId: this.worker.id }
+          : {}),
         task,
       });
     }
@@ -766,7 +796,7 @@ class HostGatewayForgeWorker implements ForgeWorker {
           workspaceId: this.context.organizationId,
           runId: request.runId,
           taskId: request.taskId,
-          workerId: this.worker.id,
+          ...(!this.context.workstreamId ? { workerId: this.worker.id } : {}),
           task,
         }),
       },
@@ -804,6 +834,7 @@ class HostGatewayForgeWorker implements ForgeWorker {
       contextArtifactIds: readonly string[];
       timeoutMs: number;
       input: Record<string, unknown>;
+      sessionPolicy?: "stateless";
     },
   ): Promise<DispatchAssignmentResult> {
     const target = this.executionTarget!;
@@ -1027,7 +1058,9 @@ export async function readExecutionContext(
             p.repository_id,
             g.id AS goal_id, g.created_by_user_id,
             r.goal_id AS run_goal_id,
-            r.project_id AS run_project_id
+            r.project_id AS run_project_id,
+            r.workstream_id AS run_workstream_id,
+            r.work_request_id AS run_work_request_id
      FROM projects p
      JOIN goals g ON g.project_id = p.id
      LEFT JOIN runs r ON r.id = ?2
@@ -1040,6 +1073,8 @@ export async function readExecutionContext(
       goal_id: string;
       run_goal_id: string | null;
       run_project_id: string | null;
+      run_workstream_id: string | null;
+      run_work_request_id: string | null;
       created_by_user_id: string | null;
     }>();
   if (!project)
@@ -1081,6 +1116,34 @@ export async function readExecutionContext(
     projectId: String(params.projectId ?? project.project_id),
     repositoryId: params.repositoryId.trim(),
     revision: String(params.revision ?? "HEAD"),
+    ...(typeof project.run_workstream_id === "string"
+      ? { workstreamId: project.run_workstream_id }
+      : {}),
+    ...(typeof params.workRequestId === "string"
+      ? { workRequestId: params.workRequestId }
+      : typeof project.run_work_request_id === "string"
+        ? { workRequestId: project.run_work_request_id }
+        : {}),
+    ...(typeof params.workBindingId === "string" &&
+    ["direct", "research", "plan", "implement", "test", "verify"].includes(
+      params.workBindingId,
+    )
+      ? { workBindingId: params.workBindingId as WorkstreamBindingId }
+      : {}),
+    ...(typeof params.workflowStep === "object" &&
+    params.workflowStep !== null &&
+    (params.workflowStep as Record<string, unknown>).executionMode ===
+      "stateful_workstream"
+      ? { executionClass: "stateful_workstream" as const }
+      : { executionClass: "stateless_read" as const }),
+    ...(typeof params.effectiveWorkerPrompt === "string"
+      ? { effectiveWorkerPrompt: params.effectiveWorkerPrompt.slice(0, 96_000) }
+      : {}),
+    ...(typeof params.workflowStep === "object" &&
+    params.workflowStep !== null &&
+    (params.workflowStep as Record<string, unknown>).kind === "verify"
+      ? { sessionPolicy: "stateless" as const }
+      : {}),
   };
 }
 
@@ -1261,6 +1324,183 @@ export async function executeForgeService(
   }
 }
 
+async function executeBoundWorkStepAssignment(
+  env: ForgeExecutionEnv,
+  params: Record<string, unknown>,
+): Promise<{
+  text: string;
+  workerId: string | null;
+  workerRuntimeVersion: string | null;
+  providerToolVersion: string | null;
+}> {
+  const workRequestId = String(params.workRequestId ?? "");
+  const workflowStep =
+    params.workflowStep && typeof params.workflowStep === "object"
+      ? (params.workflowStep as Record<string, unknown>)
+      : {};
+  const stepKind =
+    typeof workflowStep.kind === "string" ? workflowStep.kind : "";
+  const executionMode =
+    workflowStep.executionMode === "stateful_workstream"
+      ? "stateful_workstream"
+      : workflowStep.executionMode === "stateless_read"
+        ? "stateless_read"
+        : null;
+  const readOnly = workflowStep.readWritePolicy === "read_only";
+  const requiredCapabilities = Array.isArray(workflowStep.requiredCapabilities)
+    ? workflowStep.requiredCapabilities.filter(
+        (capability): capability is string => typeof capability === "string",
+      )
+    : [];
+  if (
+    !["research", "plan", "implement", "test", "verify"].includes(stepKind) ||
+    !executionMode ||
+    !["read_only", "write_workstream"].includes(
+      String(workflowStep.readWritePolicy),
+    ) ||
+    requiredCapabilities.length === 0
+  ) {
+    throw new Error("Work Step execution contract is invalid");
+  }
+  const row = await env.CONCLAVE_DB.prepare(
+    `SELECT wr.workstream_id AS workstreamId, wr.requested_by_user_id AS requesterUserId,
+            wr.status AS workRequestStatus, wr.cancel_requested_at AS cancelRequestedAt,
+            ws.project_id AS projectId
+       FROM work_requests wr JOIN workstreams ws ON ws.id = wr.workstream_id
+      WHERE wr.id = ?1`,
+  )
+    .bind(workRequestId)
+    .first<{
+      workstreamId: string;
+      requesterUserId: string;
+      workRequestStatus: string;
+      cancelRequestedAt: string | null;
+      projectId: string;
+    }>();
+  if (!row || !workRequestId) throw new Error("Work Request was not found");
+  if (row.workRequestStatus === "cancelled" || row.cancelRequestedAt)
+    throw new WorkAssignmentCancelledError();
+  const prompt =
+    typeof params.effectiveWorkerPrompt === "string"
+      ? params.effectiveWorkerPrompt
+      : "";
+  if (!prompt.trim()) throw new Error("Work Step prompt is empty");
+  const taskId = String(params.taskId ?? `${stepKind}-${workRequestId}`);
+  // Direct keeps one conversation for this Workstream's Direct binding.
+  // Multi-step Workflows isolate a durable retry session by Work Request and
+  // Step, so Verify never resumes Implement's provider conversation.
+  const baseSessionKey =
+    params.workBindingId === "direct"
+      ? `workstream:${row.workstreamId}:direct:work-conversation`
+      : `work-request:${workRequestId}:${stepKind}`;
+  const sessionKey =
+    params.retryStepKind === stepKind && params.retrySessionStrategy === "fresh"
+      ? `${baseSessionKey}:retry-fresh-${Number(params.retryNumber) || 1}`
+      : baseSessionKey;
+  const dispatched = await dispatchTaskAssignment(
+    env as unknown as AssignmentDispatcherEnv,
+    {
+      workspaceId: String(params.organizationId ?? ""),
+      runId: String(params.runId ?? ""),
+      taskId,
+      task: {
+        id: taskId,
+        role: stepKind,
+        objective: prompt,
+        capabilities: requiredCapabilities,
+        input: { prompt },
+        timeoutMs:
+          typeof workflowStep.timeoutMs === "number"
+            ? workflowStep.timeoutMs
+            : 15 * 60_000,
+        sessionPolicy: "durable_session",
+        sessionKey,
+        projectId: row.projectId,
+        requestedByUserId: row.requesterUserId,
+        workstreamId: row.workstreamId,
+        workRequestId,
+        workBindingId:
+          params.workBindingId === "direct"
+            ? "direct"
+            : (stepKind as WorkstreamBindingId),
+        executionClass: executionMode,
+        readOnly,
+      },
+    },
+  );
+  if (dispatched.status === "cancelled")
+    throw new WorkAssignmentCancelledError();
+  if (!dispatched.accepted)
+    throw new Error(dispatched.error ?? `${stepKind} Worker dispatch failed`);
+  const timeoutMs =
+    typeof workflowStep.timeoutMs === "number"
+      ? workflowStep.timeoutMs
+      : 15 * 60_000;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const assignment = await env.CONCLAVE_DB.prepare(
+      `SELECT wa.status, wa.output_json, wa.error_json,
+              wa.workspace_worker_id AS workerId, wa.worker_version AS workerRuntimeVersion,
+              i.provider_tool_version AS providerToolVersion
+       FROM worker_assignments wa
+       LEFT JOIN workspace_worker_inventory i ON i.worker_id = wa.workspace_worker_id
+       WHERE wa.id = ?1`,
+    )
+      .bind(dispatched.assignmentId)
+      .first<{
+        status: string;
+        output_json: string | null;
+        error_json: string | null;
+        workerId: string | null;
+        workerRuntimeVersion: string | null;
+        providerToolVersion: string | null;
+      }>();
+    if (assignment?.status === "completed" && assignment.output_json) {
+      const output = JSON.parse(assignment.output_json) as Record<
+        string,
+        unknown
+      >;
+      const nested =
+        typeof output.output === "object" && output.output !== null
+          ? (output.output as Record<string, unknown>)
+          : output;
+      const text =
+        typeof nested.text === "string"
+          ? nested.text
+          : typeof nested.finalAnswer === "string"
+            ? nested.finalAnswer
+            : typeof nested.summary === "string"
+              ? nested.summary
+              : null;
+      if (text?.trim())
+        return {
+          text: text.slice(0, 96_000),
+          workerId: assignment.workerId,
+          workerRuntimeVersion: assignment.workerRuntimeVersion,
+          providerToolVersion: assignment.providerToolVersion,
+        };
+      throw new Error("Work Step completed without final answer text");
+    }
+    if (assignment?.status === "cancelled") {
+      throw new WorkAssignmentCancelledError();
+    }
+    if (assignment?.status === "failed") {
+      throw new Error(
+        assignment.error_json ?? "Worker assignment failed",
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error("Work Step assignment timed out");
+}
+
+class WorkAssignmentCancelledError extends Error {
+  constructor() {
+    super("Work assignment was cancelled");
+    this.name = "WorkAssignmentCancelledError";
+  }
+}
+
 export class ConclaveForgeExecutionService {
   constructor(private readonly env: ForgeExecutionEnv) {}
 
@@ -1401,35 +1641,51 @@ export class ConclaveForgeExecutionService {
     executionId: string,
   ): Promise<void> {
     const runId = String(params.runId ?? "");
-    let resultArtifactId: string;
+    let resultArtifactId: string | undefined;
+    let workStepResult:
+      Awaited<ReturnType<typeof executeBoundWorkStepAssignment>> | undefined;
     try {
       if (
         !this.env.CONCLAVE_API &&
         !this.env.CONCLAVE_API_BASE_URL &&
-        !this.env.CONCLAVE_HOST_GATEWAY
+        !this.env.CONCLAVE_HOST_GATEWAY &&
+        !this.env.CONCLAVE_WORKSPACE_GATEWAY
       ) {
         throw new Error(
-          "CONCLAVE_HOST_GATEWAY, CONCLAVE_API, or CONCLAVE_API_BASE_URL is not configured",
+          "Workspace Gateway, Host Gateway, or internal API is not configured",
         );
       }
-      resultArtifactId = await executeForgeService(
-        this.env,
-        params,
-        executionId,
-      );
+      if (
+        ["direct", "research", "plan", "implement", "test", "verify"].includes(
+          String(params.workBindingId),
+        ) &&
+        typeof params.workRequestId === "string"
+      ) {
+        workStepResult = await executeBoundWorkStepAssignment(this.env, params);
+      } else {
+        resultArtifactId = await executeForgeService(
+          this.env,
+          params,
+          executionId,
+        );
+      }
     } catch (error) {
+      const cancelled = error instanceof WorkAssignmentCancelledError;
+      const message = cancelled
+        ? "Work assignment was cancelled"
+        : error instanceof Error
+          ? error.message
+          : "Forge execution failed";
       await this.updateExecution(executionId, {
-        status: "failed",
-        error:
-          error instanceof Error ? error.message : "Forge execution failed",
+        status: cancelled ? "cancelled" : "failed",
+        error: message,
       });
       await this.notifyBestEffort(runId, {
         eventId: crypto.randomUUID(),
         runId,
         executionId,
-        status: "failed",
-        error:
-          error instanceof Error ? error.message : "Forge execution failed",
+        status: cancelled ? "cancelled" : "failed",
+        error: message,
       });
       return;
     }
@@ -1445,7 +1701,15 @@ export class ConclaveForgeExecutionService {
       runId,
       executionId,
       status: "completed",
-      resultArtifactId,
+      ...(resultArtifactId ? { resultArtifactId } : {}),
+      ...(workStepResult
+        ? {
+            finalText: workStepResult.text,
+            workerId: workStepResult.workerId,
+            workerRuntimeVersion: workStepResult.workerRuntimeVersion,
+            providerToolVersion: workStepResult.providerToolVersion,
+          }
+        : {}),
     });
   }
 

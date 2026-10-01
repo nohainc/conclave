@@ -1,3 +1,5 @@
+import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
+
 export type RouteHandler = (...args: unknown[]) => Promise<Response>;
 export type WorkerRouteHandlers = Record<string, RouteHandler>;
 
@@ -270,6 +272,9 @@ export async function routeWorkerRequest(
     }
     if (request.method === "POST" && url.pathname === "/api/workspaces") {
       return await handlers.handleCreateWorkspace!(request, env, ctx);
+    }
+    if (request.method === "GET" && url.pathname === "/api/workflows/catalog") {
+      return deps.json({ workflows: Object.values(BUILTIN_WORKFLOW_CATALOG) });
     }
     if (request.method === "GET" && url.pathname === "/api/v7/workers") {
       return await handlers.handleListWorkspaceWorkerInventory!(
@@ -1105,25 +1110,66 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
-    const workRequestMatch = url.pathname.match(
+    const createWorkRequestMatch = url.pathname.match(
       /^\/api\/workstreams\/([^/]+)\/work-requests$/,
     );
-    if (request.method === "POST" && workRequestMatch?.[1]) {
+    const validateWorkRequestMatch = url.pathname.match(
+      /^\/api\/workstreams\/([^/]+)\/work-requests\/validate$/,
+    );
+    if (request.method === "POST" && validateWorkRequestMatch?.[1]) {
+      return await handlers.handleValidateWorkRequest!(
+        request,
+        env,
+        validateWorkRequestMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "POST" && createWorkRequestMatch?.[1]) {
       return await handlers.handleCreateWorkRequest!(
         request,
         env,
-        workRequestMatch[1],
+        createWorkRequestMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "GET" && createWorkRequestMatch?.[1]) {
+      return await handlers.handleListWorkRequests!(
+        request,
+        env,
+        createWorkRequestMatch[1],
         ctx,
       );
     }
     const cancelWorkRequestMatch = url.pathname.match(
       /^\/api\/work-requests\/([^/]+)\/cancel$/,
     );
+    const retryWorkRequestMatch = url.pathname.match(
+      /^\/api\/work-requests\/([^/]+)\/retry$/,
+    );
+    const workRequestMatch = url.pathname.match(
+      /^\/api\/work-requests\/([^/]+)$/,
+    );
+    if (request.method === "GET" && workRequestMatch?.[1]) {
+      return await handlers.handleGetWorkRequest!(
+        request,
+        env,
+        workRequestMatch[1],
+        ctx,
+      );
+    }
     if (request.method === "POST" && cancelWorkRequestMatch?.[1]) {
       return await handlers.handleCancelWorkRequest!(
         request,
         env,
         cancelWorkRequestMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "POST" && retryWorkRequestMatch?.[1]) {
+      return await handlers.handleRetryWorkRequest!(
+        request,
+        env,
+        retryWorkRequestMatch[1],
         ctx,
       );
     }

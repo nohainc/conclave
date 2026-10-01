@@ -49,16 +49,14 @@ void main() {
     expect(find.text('Members'), findsOneWidget);
 
     // Verify Workstreams Tab contents
-    expect(
-        find.text('Each Workstream is one focused area of team work.'),
+    expect(find.text('Each Workstream is one focused area of team work.'),
         findsOneWidget);
     expect(find.byTooltip('Create Workstream'), findsOneWidget);
 
     // Switch to Workspaces Tab
     await tester.tap(find.text('Workspaces'));
     await tester.pumpAndSettle();
-    expect(
-        find.text('Workspaces provide execution capacity for your project.'),
+    expect(find.text('Workspaces provide execution capacity for your project.'),
         findsOneWidget);
     expect(find.byTooltip('Connect Workspace'), findsOneWidget);
 
@@ -182,8 +180,7 @@ void main() {
     expect(find.text('Run'), findsOneWidget);
   });
 
-  testWidgets('collaborator can explicitly run Work',
-      (tester) async {
+  testWidgets('collaborator can explicitly run Work', (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     String? submittedWork;
     await tester.pumpWidget(MaterialApp(
@@ -212,7 +209,10 @@ void main() {
             onBackToProject: _noop,
             onArchive: _noop,
             onProvisionCheckout: _noop,
-            onRunWork: (work) => submittedWork = work,
+            onRunWork: (work, _) async {
+              submittedWork = work;
+              return 'request-1';
+            },
             initialTab: 1,
           ),
         ),
@@ -291,16 +291,19 @@ void main() {
     expect(find.text('Cancel'), findsOneWidget);
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'The login failure reproduces on a fresh checkout.'),
+        find.widgetWithText(
+            TextField, 'The login failure reproduces on a fresh checkout.'),
         'The login failure reproduces on a fresh checkout. (Updated)');
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
-    expect(find.text('The login failure reproduces on a fresh checkout. (Updated)'),
+    expect(
+        find.text(
+            'The login failure reproduces on a fresh checkout. (Updated)'),
         findsOneWidget);
 
     // Test sending another message via Enter key (appears at the bottom)
-    await tester.enterText(find.byType(TextField).last,
-        'Line 1\nLine 2 details');
+    await tester.enterText(
+        find.byType(TextField).last, 'Line 1\nLine 2 details');
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(find.text('Line 1\nLine 2 details'), findsOneWidget);
@@ -497,7 +500,8 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets('Workspaces tab renders workspace items and invokes onOpenWorkspace',
+  testWidgets(
+      'Workspaces tab renders workspace items and invokes onOpenWorkspace',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     String? openedWorkspaceId;
@@ -602,7 +606,8 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets('Creating workstream with duplicate name shows warning and stays on dialog',
+  testWidgets(
+      'Creating workstream with duplicate name shows warning and stays on dialog',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     var createdCount = 0;
@@ -650,7 +655,8 @@ void main() {
     await tester.tap(find.byTooltip('Create Workstream'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Create Workstream'), findsNWidgets(2)); // Title and Button
+    expect(
+        find.text('Create Workstream'), findsNWidgets(2)); // Title and Button
 
     // Enter existing name (case-insensitive)
     await tester.enterText(find.byType(TextField).first, 'frontend design');
@@ -658,7 +664,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify warning is displayed and dialog is still visible
-    expect(find.text('A workstream with this name already exists.'), findsOneWidget);
+    expect(find.text('A workstream with this name already exists.'),
+        findsOneWidget);
     expect(find.text('Create Workstream'), findsNWidgets(2));
     expect(createdCount, 0);
 
@@ -669,7 +676,8 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets('Connecting duplicate workspace shows warning and stays on dialog',
+  testWidgets(
+      'Connecting duplicate workspace shows warning and stays on dialog',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     var requestedCount = 0;
@@ -715,7 +723,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify warning is displayed and dialog is still visible
-    expect(find.text('This Workspace is already connected to this Project.'), findsOneWidget);
+    expect(find.text('This Workspace is already connected to this Project.'),
+        findsOneWidget);
     expect(find.text('Connect Workspace'), findsOneWidget);
     expect(requestedCount, 0);
 
@@ -773,7 +782,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify warning is displayed and dialog is still visible
-    expect(find.text('This user is already a member of the Project.'), findsOneWidget);
+    expect(find.text('This user is already a member of the Project.'),
+        findsOneWidget);
     expect(find.text('Share Project'), findsOneWidget);
     expect(inviteCount, 0);
 

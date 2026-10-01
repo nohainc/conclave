@@ -7,7 +7,6 @@ packages:
   - packages/persistence
   - packages/worker-manifest
   - packages/protocol
-  - packages/sdk
   - packages/security
   - apps/cloud
   - apps/site

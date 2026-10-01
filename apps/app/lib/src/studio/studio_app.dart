@@ -2327,6 +2327,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       project: project,
       workstream: workstream,
       dataSource: widget.dataSource,
+      realtimeEvents: realtimeClient.events,
       currentUserId: store.auth.viewer?.id ?? snapshot.viewer?.id,
       onBackToProject: () => _navigateTo(StudioNavigation.project(project.id)),
       onArchive: () async {
@@ -2364,6 +2365,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
           if (mounted) _showSnackBar(error.toString());
         }
       },
+      onRunWork: (prompt, workflowId, attachments) =>
+          widget.dataSource.createWorkRequest(
+        workstreamId: workstream.id,
+        workflowId: workflowId,
+        prompt: prompt,
+        attachments: attachments,
+      ),
     );
   }
 

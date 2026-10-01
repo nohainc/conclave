@@ -136,6 +136,16 @@ export const REALTIME_EVENT_OPTIONAL_ENVELOPE_FIELDS = [
 ] as const;
 export const DURABLE_REALTIME_EVENT_TYPES = [
   "chat.message.created",
+  "work_request.created",
+  "work_request.started",
+  "work_request.completed",
+  "work_request.failed",
+  "work_request.cancelled",
+  "step.queued",
+  "step.running",
+  "step.completed",
+  "step.failed",
+  "step.cancelled",
   "run.started",
   "run.paused",
   "run.resumed",

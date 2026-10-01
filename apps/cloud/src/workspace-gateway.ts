@@ -213,6 +213,10 @@ async function findWorkspaceRuntimeIdentity(
 }
 
 export class WorkspaceGateway implements DurableObject {
+  private readonly pendingCancelAcks = new Map<
+    string,
+    { resolve: (payload: Record<string, unknown>) => void; timer: ReturnType<typeof setTimeout> }
+  >();
   private socket: WebSocket | null = null;
   private socketConnectedAt: string | null = null;
   private executionWorkspaceId: string | null = null;
@@ -1174,6 +1178,12 @@ export class WorkspaceGateway implements DurableObject {
             },
           );
         }
+        const pending = this.pendingCancelAcks.get(message.assignmentId!);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pending.resolve(payload);
+          this.pendingCancelAcks.delete(message.assignmentId!);
+        }
         return;
       }
       default:
@@ -1639,6 +1649,17 @@ export class WorkspaceGateway implements DurableObject {
     const body = (await request.json()) as WorkspaceAssignmentCorrelation & {
       payload: unknown;
     };
+    const assignmentId = body.assignmentId;
+    if (this.pendingCancelAcks.has(assignmentId))
+      return Response.json({ error: "Cancellation is already in progress" }, { status: 409 });
+    let timer: ReturnType<typeof setTimeout>;
+    const ackPromise = new Promise<Record<string, unknown>>((resolve, reject) => {
+      timer = setTimeout(() => {
+        this.pendingCancelAcks.delete(assignmentId);
+        reject(new Error("Timed out waiting for Workspace process cancellation"));
+      }, 15_000);
+      this.pendingCancelAcks.set(assignmentId, { resolve, timer });
+    });
     this.send({
       protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
       protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
@@ -1648,7 +1669,17 @@ export class WorkspaceGateway implements DurableObject {
       ...body,
       payload: body.payload,
     });
-    return Response.json({ delivered: true });
+    try {
+      const acknowledgement = await ackPromise;
+      if (acknowledgement.cancelled !== true)
+        return Response.json({ cancelled: false, ...acknowledgement }, { status: 409 });
+      return Response.json({ cancelled: true, ...acknowledgement });
+    } catch (error) {
+      return Response.json(
+        { error: error instanceof Error ? error.message : "Cancellation was not acknowledged" },
+        { status: 504 },
+      );
+    }
   }
 
   private send(message: Record<string, unknown>): void {

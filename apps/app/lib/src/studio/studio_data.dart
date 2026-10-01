@@ -8,6 +8,158 @@ import '../platform/http_client_stub.dart'
     if (dart.library.html) '../platform/http_client_web.dart' as platform;
 import 'studio_models.dart';
 
+class StudioWorkRequestStatus {
+  const StudioWorkRequestStatus({
+    required this.status,
+    this.text,
+    this.error,
+    this.errorCode,
+    this.errorMessage,
+    this.workflowId,
+    this.workflowVersion,
+    this.workflowName,
+    this.requestedByUserId,
+    this.requestedByName,
+    this.originalRequest,
+    this.createdAt,
+    this.steps = const [],
+  });
+
+  final String status;
+  final String? text;
+  final String? error;
+  final String? errorCode;
+  final String? errorMessage;
+  final String? workflowId;
+  final int? workflowVersion;
+  final String? workflowName;
+  final String? requestedByUserId;
+  final String? requestedByName;
+  final String? originalRequest;
+  final String? createdAt;
+  final List<StudioWorkRequestStep> steps;
+}
+
+class StudioWorkRequestStep {
+  const StudioWorkRequestStep({
+    required this.kind,
+    required this.status,
+    required this.workerId,
+    this.workerTypeId,
+    this.workerRuntimeVersion,
+    this.providerToolName,
+    this.providerToolVersion,
+    this.testSummary,
+    this.startedAt,
+    this.updatedAt,
+    this.elapsedMs,
+    this.completedAt,
+    this.resultText,
+    this.assignmentId,
+    this.sessionPolicy,
+    this.errorCode,
+    this.errorMessage,
+    this.retrySessionStrategy,
+  });
+
+  final String kind;
+  final String status;
+  final String? workerId;
+  final String? workerTypeId;
+  final String? workerRuntimeVersion;
+  final String? providerToolName;
+  final String? providerToolVersion;
+  final String? testSummary;
+  final String? startedAt;
+  final String? updatedAt;
+  final int? elapsedMs;
+  final String? completedAt;
+  final String? resultText;
+  final String? assignmentId;
+  final String? sessionPolicy;
+  final String? errorCode;
+  final String? errorMessage;
+  final String? retrySessionStrategy;
+
+  factory StudioWorkRequestStep.fromJson(Map<String, dynamic> json) =>
+      StudioWorkRequestStep(
+        kind: json['kind']?.toString() ?? 'implement',
+        status: json['status']?.toString() ?? 'queued',
+        workerId: json['workerId']?.toString(),
+        workerTypeId: json['workerTypeId']?.toString(),
+        workerRuntimeVersion: json['workerRuntimeVersion']?.toString(),
+        providerToolName: json['providerToolName']?.toString(),
+        providerToolVersion: json['providerToolVersion']?.toString(),
+        testSummary: json['testSummary']?.toString(),
+        startedAt: json['startedAt']?.toString(),
+        updatedAt: json['updatedAt']?.toString(),
+        elapsedMs: json['elapsedMs'] as int?,
+        completedAt: json['completedAt']?.toString(),
+        resultText: json['resultText']?.toString(),
+        assignmentId: json['assignmentId']?.toString(),
+        sessionPolicy: json['sessionPolicy']?.toString(),
+        errorCode: json['errorCode']?.toString(),
+        errorMessage: json['errorMessage']?.toString(),
+        retrySessionStrategy: json['retrySessionStrategy']?.toString(),
+      );
+}
+
+class StudioWorkRequest {
+  const StudioWorkRequest({
+    required this.id,
+    required this.requestedByName,
+    required this.prompt,
+    required this.workflowId,
+    required this.workflowVersion,
+    required this.status,
+    required this.createdAt,
+    required this.steps,
+    this.finalText,
+    this.error,
+  });
+
+  final String id;
+  final String requestedByName;
+  final String prompt;
+  final String workflowId;
+  final int workflowVersion;
+  final String status;
+  final String createdAt;
+  final List<StudioWorkRequestStep> steps;
+  final String? finalText;
+  final String? error;
+
+  String? get testSummary {
+    for (final step in steps) {
+      if (step.kind == 'test' && step.testSummary != null) {
+        return step.testSummary;
+      }
+    }
+    return null;
+  }
+
+  factory StudioWorkRequest.fromJson(Map<String, dynamic> json) {
+    final steps = (json['steps'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => StudioWorkRequestStep.fromJson(
+              Map<String, dynamic>.from(item),
+            ))
+        .toList();
+    return StudioWorkRequest(
+      id: json['id']?.toString() ?? '',
+      requestedByName: json['requestedByName']?.toString() ?? 'Team member',
+      prompt: json['prompt']?.toString() ?? '',
+      workflowId: json['workflowId']?.toString() ?? 'direct',
+      workflowVersion: json['workflowVersion'] as int? ?? 1,
+      status: json['status']?.toString() ?? 'queued',
+      createdAt: json['createdAt']?.toString() ?? '',
+      steps: steps,
+      finalText: json['finalText']?.toString(),
+      error: json['error']?.toString(),
+    );
+  }
+}
+
 abstract interface class StudioDataSource {
   Future<StudioSession> loadSession();
   Future<void> logout();
@@ -110,9 +262,41 @@ abstract interface class StudioDataSource {
     required String workstreamId,
     String? name,
     String? status,
-    Map<String, dynamic>? executionPolicy,
+    Map<String, dynamic>? workConfig,
   });
   Future<void> deleteWorkstream({required String workstreamId});
+  Future<String> createWorkRequest({
+    required String workstreamId,
+    required String workflowId,
+    required String prompt,
+    List<Map<String, dynamic>> attachments = const [],
+  }) async =>
+      throw UnimplementedError('Work Request execution is not available');
+  Future<List<String>> validateWorkRequestEligibility({
+    required String workstreamId,
+    required String workflowId,
+    List<Map<String, dynamic>> attachments = const [],
+  }) async =>
+      const [];
+  Future<StudioWorkRequestStatus> loadWorkRequest({
+    required String workRequestId,
+  }) async =>
+      throw UnimplementedError('Work Request status is not available');
+  Future<void> retryWorkRequestStep({
+    required String workRequestId,
+    required String stepKind,
+    String? sessionStrategy,
+  }) async =>
+      throw UnimplementedError('Work Request retry is not available');
+  Future<void> cancelWorkRequest({
+    required String workRequestId,
+  }) async =>
+      throw UnimplementedError('Work Request cancellation is not available');
+  Future<List<StudioWorkRequest>> loadWorkstreamWorkRequests({
+    required String workstreamId,
+    bool activeOnly = false,
+  }) async =>
+      const [];
   Future<List<StudioDiscussionMessage>> loadDiscussionMessages({
     required String workstreamId,
   }) async =>
@@ -130,6 +314,8 @@ abstract interface class StudioDataSource {
   }) async =>
       throw UnimplementedError('Discussion messages are not available');
   Future<List<StudioWorker>> loadWorkspaceWorkerInventory() async => const [];
+  Future<List<StudioBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async =>
+      const [];
   Future<void> setWorkspaceWorkerScheduling(
           {required String workerId, required String action}) async =>
       throw UnimplementedError('Workspace Worker scheduling is not available');
@@ -309,6 +495,16 @@ class StudioApiClient implements StudioDataSource {
   }
 
   @override
+  Future<List<StudioBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async {
+    final body = await _getJson(Uri.parse('$baseUrl/workflows/catalog'));
+    return (body['workflows'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) =>
+            StudioBuiltinWorkflow.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  @override
   Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
     required String projectId,
   }) async {
@@ -414,7 +610,7 @@ class StudioApiClient implements StudioDataSource {
     required String workstreamId,
     String? name,
     String? status,
-    Map<String, dynamic>? executionPolicy,
+    Map<String, dynamic>? workConfig,
   }) async {
     final response = await client.patch(
       Uri.parse('$baseUrl/workstreams/$workstreamId'),
@@ -422,7 +618,7 @@ class StudioApiClient implements StudioDataSource {
       body: jsonEncode({
         if (name != null) 'name': name,
         if (status != null) 'status': status,
-        if (executionPolicy != null) 'executionPolicy': executionPolicy,
+        if (workConfig != null) 'workConfig': workConfig,
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -460,6 +656,214 @@ class StudioApiClient implements StudioDataSource {
         statusCode: response.statusCode,
       );
     }
+  }
+
+  @override
+  Future<String> createWorkRequest({
+    required String workstreamId,
+    required String workflowId,
+    required String prompt,
+    List<Map<String, dynamic>> attachments = const [],
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/workstreams/$workstreamId/work-requests'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        'workflowId': workflowId,
+        'input': {'originalRequest': prompt, 'attachments': attachments},
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      if (response.statusCode == 422) {
+        try {
+          final body = jsonDecode(response.body);
+          if (body is Map && body['issues'] is List) {
+            final name = body['workflowName']?.toString() ?? workflowId;
+            final messages = (body['issues'] as List)
+                .whereType<Map>()
+                .map((issue) => issue['message'])
+                .whereType<String>()
+                .toList(growable: false);
+            if (messages.isNotEmpty) {
+              throw StudioApiException(
+                'Cannot run $name\n${messages.map((message) => '• $message').join('\n')}',
+                statusCode: 422,
+              );
+            }
+          }
+        } on StudioApiException {
+          rethrow;
+        } on FormatException {
+          // Fall through to the status-only error below.
+        }
+      }
+      throw StudioApiException(
+        'Work request failed (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+    final body = jsonDecode(response.body);
+    final request = body is Map ? body['workRequest'] : null;
+    if (request is! Map || request['id'] is! String) {
+      throw const StudioApiException('Work request response is malformed');
+    }
+    return request['id'] as String;
+  }
+
+  @override
+  Future<List<String>> validateWorkRequestEligibility({
+    required String workstreamId,
+    required String workflowId,
+    List<Map<String, dynamic>> attachments = const [],
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/workstreams/$workstreamId/work-requests/validate'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        'workflowId': workflowId,
+        'attachments': attachments
+            .map((attachment) => {
+                  'kind': attachment['kind'],
+                  'mediaType': attachment['mediaType'],
+                })
+            .toList(growable: false),
+      }),
+    );
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } on FormatException {
+      throw const StudioApiException('Work eligibility response is malformed');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+        'Work eligibility check failed (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+    if (decoded is! Map) {
+      throw const StudioApiException('Work eligibility response is malformed');
+    }
+    final issues = decoded['issues'];
+    if (issues is! List) return const [];
+    return issues
+        .whereType<Map>()
+        .map((issue) => issue['message'])
+        .whereType<String>()
+        .toList(growable: false);
+  }
+
+  @override
+  Future<StudioWorkRequestStatus> loadWorkRequest({
+    required String workRequestId,
+  }) async {
+    final body =
+        await _getJson(Uri.parse('$baseUrl/work-requests/$workRequestId'));
+    final request = body['workRequest'];
+    final result = body['result'];
+    final resultMap = result is Map
+        ? Map<String, dynamic>.from(result)
+        : const <String, dynamic>{};
+    final requestMap = request is Map
+        ? Map<String, dynamic>.from(request)
+        : const <String, dynamic>{};
+    final steps = (body['steps'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => StudioWorkRequestStep.fromJson(
+              Map<String, dynamic>.from(item),
+            ))
+        .toList(growable: false);
+    return StudioWorkRequestStatus(
+      status: requestMap['status']?.toString() ?? 'unknown',
+      text: resultMap['text']?.toString(),
+      errorCode: body['errorCode']?.toString(),
+      errorMessage: body['errorMessage']?.toString(),
+      error: body['errorCode'] is String
+          ? 'Run failed (${body['errorCode']}).'
+          : null,
+      workflowId: requestMap['workflowId']?.toString(),
+      workflowVersion: requestMap['workflowVersion'] as int?,
+      workflowName: requestMap['workflowName']?.toString(),
+      requestedByUserId: requestMap['requestedByUserId']?.toString(),
+      requestedByName: requestMap['requestedByName']?.toString(),
+      originalRequest: requestMap['originalRequest']?.toString(),
+      createdAt: requestMap['createdAt']?.toString(),
+      steps: steps,
+    );
+  }
+
+  @override
+  Future<void> retryWorkRequestStep({
+    required String workRequestId,
+    required String stepKind,
+    String? sessionStrategy,
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/work-requests/$workRequestId/retry'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        'stepKind': stepKind,
+        if (sessionStrategy != null) 'sessionStrategy': sessionStrategy,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+        'Step retry failed (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  @override
+  Future<void> cancelWorkRequest({required String workRequestId}) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/work-requests/$workRequestId/cancel'),
+      headers: _headers(contentType: 'application/json'),
+      body: '{}',
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StudioApiException(
+        'Run cancellation failed (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  @override
+  Future<List<StudioWorkRequest>> loadWorkstreamWorkRequests({
+    required String workstreamId,
+    bool activeOnly = false,
+  }) async {
+    const pageSize = 100;
+    final records = <StudioWorkRequest>[];
+    String? beforeCreatedAt;
+    String? beforeId;
+    while (true) {
+      final uri = Uri.parse('$baseUrl/workstreams/$workstreamId/work-requests')
+          .replace(queryParameters: {
+        'limit': '$pageSize',
+        if (activeOnly) 'activeOnly': 'true',
+        if (beforeCreatedAt != null) 'beforeCreatedAt': beforeCreatedAt,
+        if (beforeId != null) 'beforeId': beforeId,
+      });
+      final body = await _getJson(uri);
+      final page = (body['workRequests'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) => StudioWorkRequest.fromJson(
+                Map<String, dynamic>.from(item),
+              ))
+          .toList();
+      records.addAll(page);
+      final cursor = body['nextCursor'];
+      if (cursor is! Map ||
+          cursor['createdAt'] is! String ||
+          cursor['id'] is! String) {
+        break;
+      }
+      beforeCreatedAt = cursor['createdAt'] as String;
+      beforeId = cursor['id'] as String;
+    }
+    return records.reversed.toList();
   }
 
   @override

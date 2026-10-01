@@ -128,12 +128,17 @@ function boundedText(value, maxBytes) {
   return bytes.subarray(0, maxBytes).toString("utf8");
 }
 
-function cliArgs(model, providerSessionId, durableSession = false) {
+function cliArgs(
+  model,
+  providerSessionId,
+  durableSession = false,
+  readOnly = false,
+) {
   const args = [
     "--ask-for-approval",
     "never",
     "--sandbox",
-    "workspace-write",
+    readOnly ? "read-only" : "workspace-write",
     "exec",
     "--json",
     "--color",
@@ -169,6 +174,7 @@ async function runCli(
   timeoutMs,
   sessionPolicy = "stateless",
   sessionKey = null,
+  readOnly = false,
 ) {
   if (sessionPolicy === "durable_session" && !sessionKey) {
     throw new Error("Durable sessions require a logical session key.");
@@ -184,7 +190,12 @@ async function runCli(
   let cliError = null;
   const result = await cliTool
     .runStream(
-      cliArgs(model, priorSessionId, sessionPolicy === "durable_session"),
+      cliArgs(
+        model,
+        priorSessionId,
+        sessionPolicy === "durable_session",
+        readOnly,
+      ),
       {
         stdin: prompt,
         timeoutMs: Number.POSITIVE_INFINITY,
@@ -455,6 +466,7 @@ async function handle(frame) {
           frame.timeoutMs,
           sessionPolicy,
           frame.sessionKey ?? null,
+          frame.readOnly === true,
         );
         send("result", {
           requestId,

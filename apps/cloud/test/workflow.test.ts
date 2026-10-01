@@ -1,17 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { ConclaveRunWorkflow } from "../src/workflow.js";
-import { BUILT_IN_WORKFLOW_VERSIONS } from "@conclave/core";
+import { BUILTIN_WORKFLOWS } from "@conclave/core";
 
 function workflow(
   terminalEvents: readonly Record<string, unknown>[],
   executionId = "forge-execution-1",
   stepNames: string[] = [],
+  db?: D1Database,
 ) {
   const service = {
     fetch: async () => Response.json({ executionId }, { status: 202 }),
   };
   const env = {
     CONCLAVE_FORGE_EXECUTION: service,
+    ...(db ? { CONCLAVE_DB: db } : {}),
   } as unknown as Env;
   const instance = new ConclaveRunWorkflow({} as never, env);
   const queue = [...terminalEvents];
@@ -29,6 +31,43 @@ function workflow(
   return { instance, step };
 }
 
+function workflowResultDatabase(): D1Database {
+  const query = (sql: string) => {
+    const statement = {
+      bind: (..._values: unknown[]) => statement,
+      first: async () => {
+        if (sql.includes("SELECT wr.input_json")) {
+          return {
+            inputJson: JSON.stringify({ originalRequest: "Research this" }),
+            settingsJson: null,
+          };
+        }
+        if (sql.includes("SELECT a.created_at")) {
+          return {
+            artifact_created_at: "2026-01-01T00:00:02.000Z",
+            worker_id: "worker-test",
+            worker_runtime_version: "1.0.0",
+            assignment_started_at: "2026-01-01T00:00:00.000Z",
+            permission_snapshot_json: JSON.stringify({
+              providerToolVersion: "2.0.0",
+            }),
+          };
+        }
+        if (sql.includes("SELECT * FROM artifacts")) {
+          return { inline_content: "Research result text" };
+        }
+        return null;
+      },
+      run: async () => ({ success: true }),
+    };
+    return statement;
+  };
+  return {
+    prepare: query,
+    batch: async () => [],
+  } as unknown as D1Database;
+}
+
 const params = {
   runId: "run-1",
   goalId: "goal-1",
@@ -37,7 +76,7 @@ const params = {
 };
 
 describe("durable Forge lifecycle", () => {
-  it("runs an immutable WorkflowVersion instead of fixed research/planning stages", async () => {
+  it("runs a built-in Work v1 Workflow instead of fixed research/planning stages", async () => {
     const stepNames: string[] = [];
     const { instance, step } = workflow(
       [
@@ -46,17 +85,19 @@ describe("durable Forge lifecycle", () => {
           runId: "run-1",
           executionId: "forge-execution-1",
           status: "completed",
+          resultArtifactId: "artifact-research",
         },
       ],
       "forge-execution-1",
       stepNames,
+      workflowResultDatabase(),
     );
     const result = await instance.run(
       {
         payload: {
           ...params,
           workRequestId: "work-request-1",
-          workflowVersion: BUILT_IN_WORKFLOW_VERSIONS.Research,
+          builtinWorkflow: BUILTIN_WORKFLOWS.research,
         },
       } as never,
       step,

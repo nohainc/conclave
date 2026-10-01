@@ -23,6 +23,81 @@ Map<String, Object?> _safeAdapterProbeConfig(Map<String, Object?> config) => {
         if (config[key] is String) key: config[key] as String,
     };
 
+Future<void> _materializeWorkRequestInputs({
+  required Directory workstreamDirectory,
+  required Map<String, Object?> payload,
+}) async {
+  final rawRequestId = payload['workRequestId'];
+  final inputValue = payload['input'];
+  if (inputValue is! Map || inputValue['attachments'] is! List) return;
+  final attachments = inputValue['attachments'] as List;
+  if (attachments.length > 10) {
+    throw StateError('too many Work Request attachments');
+  }
+  if (rawRequestId is! String ||
+      !RegExp(r'^work-request-[0-9a-f-]{36}$').hasMatch(rawRequestId)) {
+    if (attachments.any((value) => value is Map && value['kind'] == 'file')) {
+      throw StateError('invalid Work Request attachment scope');
+    }
+    return;
+  }
+  final root = Directory(
+      '${workstreamDirectory.path}${Platform.pathSeparator}.conclave');
+  final inputs = Directory('${root.path}${Platform.pathSeparator}inputs');
+  final requestDirectory =
+      Directory('${inputs.path}${Platform.pathSeparator}$rawRequestId');
+  for (final directory in [root, inputs, requestDirectory]) {
+    final type =
+        await FileSystemEntity.type(directory.path, followLinks: false);
+    if (type == FileSystemEntityType.link ||
+        (type != FileSystemEntityType.notFound &&
+            type != FileSystemEntityType.directory)) {
+      throw StateError('unsafe Work Request input directory');
+    }
+    if (type == FileSystemEntityType.notFound) await directory.create();
+  }
+  var totalBytes = 0;
+  for (var index = 0; index < attachments.length; index++) {
+    final value = attachments[index];
+    if (value is! Map || value['kind'] != 'file') continue;
+    final encoded = value['contentBase64'];
+    if (encoded is! String || encoded.length > 2 * 1024 * 1024) {
+      throw StateError('invalid Work Request file input');
+    }
+    late final List<int> bytes;
+    try {
+      bytes = base64.decode(encoded);
+    } on FormatException {
+      throw StateError('invalid Work Request file input');
+    }
+    if (bytes.length > 1024 * 1024 || value['sizeBytes'] != bytes.length) {
+      throw StateError('Work Request file input exceeds size limits');
+    }
+    totalBytes += bytes.length;
+    if (totalBytes > 1024 * 1024) {
+      throw StateError('Work Request file inputs exceed total size limit');
+    }
+    final target = File(
+        '${requestDirectory.path}${Platform.pathSeparator}file-${(index + 1).toString().padLeft(3, '0')}');
+    final type = await FileSystemEntity.type(target.path, followLinks: false);
+    if (type == FileSystemEntityType.link ||
+        (type != FileSystemEntityType.notFound &&
+            type != FileSystemEntityType.file)) {
+      throw StateError('unsafe Work Request input file');
+    }
+    if (type == FileSystemEntityType.file) {
+      final existing = await target.readAsBytes();
+      if (existing.length != bytes.length ||
+          !List<int>.generate(bytes.length, (i) => existing[i] ^ bytes[i])
+              .every((value) => value == 0)) {
+        throw StateError('Work Request input changed across assignment retry');
+      }
+    } else {
+      await target.writeAsBytes(bytes, flush: true);
+    }
+  }
+}
+
 /// Provider-independent guidance attached to every Workstream execution.
 /// It describes the local directory contract without exposing paths or
 /// turning Git operations into a Conclave-managed subsystem.
@@ -300,6 +375,7 @@ class WorkerProcessExecutor {
     String? model,
     String sessionPolicy = 'stateless',
     String? sessionKey,
+    bool readOnly = false,
     Duration timeout = const Duration(minutes: 5),
     int maxStdoutBytes = 4 * 1024 * 1024,
     int maxStderrBytes = 1024 * 1024,
@@ -389,6 +465,7 @@ class WorkerProcessExecutor {
         model: model,
         sessionPolicy: sessionPolicy,
         sessionKey: sessionKey,
+        readOnly: readOnly,
         timeout: remaining,
         maxStdoutBytes: maxStdoutBytes,
         maxStderrBytes: maxStderrBytes,
@@ -416,6 +493,7 @@ class WorkerProcessExecutor {
     required String? model,
     required String sessionPolicy,
     required String? sessionKey,
+    required bool readOnly,
     required Duration timeout,
     required int maxStdoutBytes,
     required int maxStderrBytes,
@@ -641,6 +719,7 @@ class WorkerProcessExecutor {
         if (model != null && model.isNotEmpty) 'model': model,
         if (const {'2.5', '2.6'}.contains(spec.protocolVersion))
           'sessionPolicy': sessionPolicy,
+        if (readOnly) 'readOnly': true,
         if (sessionKey != null) 'sessionKey': sessionKey,
         if (const {'2.4', '2.5', '2.6'}.contains(spec.protocolVersion))
           'timeoutMs': max(1, remaining.inMilliseconds),
@@ -1346,6 +1425,10 @@ class WorkerAssignmentHandler {
         projectId: projectId,
         workstreamId: workstreamId,
       );
+      await _materializeWorkRequestInputs(
+        workstreamDirectory: directory,
+        payload: context.payload,
+      );
       runtimeSpec = runtimeSpec.copyWith(workingDirectory: directory.path);
     }
     return (runtimeSpec, v7Adapter);
@@ -1408,6 +1491,8 @@ class WorkerAssignmentHandler {
               config: v7Adapter.config,
               model: _resolveV7Model(workerPayload, v7Adapter),
               sessionPolicy: _v7SessionPolicy(workerPayload),
+              readOnly: context.payload['readOnly'] == true ||
+                  context.payload['executionClass'] == 'stateless_read',
               timeout: Duration(
                 milliseconds: context.payload['timeoutMs'] as int,
               ),

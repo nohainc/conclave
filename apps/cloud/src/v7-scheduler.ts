@@ -1,4 +1,7 @@
-import { resolveEffectivePermissions } from "@conclave/core";
+import {
+  resolveEffectivePermissions,
+  type WorkstreamBindingId,
+} from "@conclave/core";
 
 export interface ProjectExecutionSelectionRequest {
   readonly projectId: string;
@@ -10,8 +13,11 @@ export interface ProjectExecutionSelectionRequest {
   readonly excludeIndependenceKeys?: readonly string[];
   readonly model?: string;
   readonly executionClass?: "stateless_read" | "stateful_workstream";
+  /** Read-only capability policy independent of Workstream lease ownership. */
+  readonly readOnly?: boolean;
   readonly workstreamId?: string;
   readonly workRequestId?: string;
+  readonly workBindingId?: WorkstreamBindingId;
   readonly expectedRevision?: string;
 }
 
@@ -32,6 +38,7 @@ export interface V7ExecutionTarget {
   readonly permissionSnapshot: Record<string, unknown>;
   readonly selectionExplanation: Record<string, unknown>;
   readonly executionClass: "stateless_read" | "stateful_workstream";
+  readonly readOnly: boolean;
   readonly workstreamId?: string;
   readonly workRequestId?: string;
   readonly checkoutId?: string;
@@ -159,28 +166,21 @@ export async function selectProjectExecutionTarget(
     workstreamId: string;
     workRequestId: string;
     workspaceId: string;
-    checkoutId: string;
     leaseId: string;
     fencingToken: number;
-    expectedRevision: string;
   } | null = null;
   if (executionClass === "stateful_workstream") {
     if (!request.workstreamId || !request.workRequestId) return null;
     statefulLease = await db
       .prepare(
         `SELECT wr.workstream_id AS workstreamId, wr.id AS workRequestId,
-              wr.primary_workspace_id AS workspaceId, wr.checkout_id AS checkoutId,
-              l.id AS leaseId, l.fencing_token AS fencingToken,
-              c.revision AS expectedRevision, p.primary_workspace_id AS primaryWorkspaceId
+              wr.primary_workspace_id AS workspaceId,
+              l.id AS leaseId, l.fencing_token AS fencingToken
        FROM work_requests wr
-       JOIN workstream_execution_leases l ON l.work_request_id = wr.id
+       JOIN workstream_runtime_leases l ON l.work_request_id = wr.id
         AND l.workstream_id = wr.workstream_id AND l.status = 'active'
-       JOIN workstream_checkouts c ON c.id = wr.checkout_id
-        AND c.workstream_id = wr.workstream_id AND c.status = 'ready'
-       JOIN workstream_execution_policies p ON p.workstream_id = wr.workstream_id
        WHERE wr.id = ?1 AND wr.workstream_id = ?2
          AND wr.mode = 'stateful' AND wr.status = 'running'
-         AND wr.primary_workspace_id = p.primary_workspace_id
        LIMIT 1`,
       )
       .bind(request.workRequestId, request.workstreamId)
@@ -191,10 +191,8 @@ export async function selectProjectExecutionTarget(
           workstreamId: String(row.workstreamId),
           workRequestId: String(row.workRequestId),
           workspaceId: String(row.workspaceId),
-          checkoutId: String(row.checkoutId),
           leaseId: String(row.leaseId),
           fencingToken: number(row.fencingToken),
-          expectedRevision: String(row.expectedRevision),
         };
       });
     if (
@@ -215,7 +213,8 @@ export async function selectProjectExecutionTarget(
             ep.allowed_worker_type_ids_json,
             ep.allowed_providers_json,
             ep.allowed_models_json,
-            usage.policy_json AS worker_usage_policy_json,
+            usage.config_json AS workstream_work_config_json,
+            wr.snapshot_json AS work_request_snapshot_json,
             ew.name AS workspace_name, ew.owner_user_id, ew.status AS workspace_status,
             wri.id AS runtime_identity_id,
             i.worker_id, i.worker_type_id,
@@ -236,7 +235,8 @@ export async function selectProjectExecutionTarget(
      FROM workspace_project_grants g
      LEFT JOIN workstream_execution_policies ep ON ep.workstream_id = ?4
      JOIN execution_workspaces ew ON ew.id = g.workspace_id
-     LEFT JOIN workstream_worker_usage_policies usage ON usage.workstream_id = ?4
+     LEFT JOIN workstream_work_configs usage ON usage.workstream_id = ?4
+     LEFT JOIN work_requests wr ON wr.id = ?5 AND wr.workstream_id = ?4
      JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
      JOIN workspace_worker_inventory i ON i.workspace_id = ew.id
      JOIN v7_worker_scheduling vs ON vs.worker_id = i.worker_id
@@ -252,6 +252,7 @@ export async function selectProjectExecutionTarget(
       request.requesterUserId,
       now.toISOString(),
       request.workstreamId ?? "",
+      request.workRequestId ?? "",
     )
     .all<Row>()
     .catch(() => ({ results: [] as Row[] }));
@@ -259,23 +260,32 @@ export async function selectProjectExecutionTarget(
   const excluded = new Set(request.excludeIndependenceKeys ?? []);
   const rejected: Array<Record<string, unknown>> = [];
   const liveWorkspaceChecks = new Map<string, Promise<boolean>>();
+  const bindingFor = (row: Row): Record<string, unknown> => {
+    const config = object(row.workstream_work_config_json);
+    const configBindings =
+      config.bindings && typeof config.bindings === "object"
+        ? (config.bindings as Record<string, unknown>)
+        : {};
+    const snapshot = object(row.work_request_snapshot_json);
+    const snapshotBindings =
+      snapshot.resolvedBindings && typeof snapshot.resolvedBindings === "object"
+        ? (snapshot.resolvedBindings as Record<string, unknown>)
+        : {};
+    const bindings = request.workRequestId ? snapshotBindings : configBindings;
+    const raw = request.workBindingId
+      ? bindings[request.workBindingId]
+      : undefined;
+    return raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  };
   const candidates = [...(v7Rows.results ?? [])].sort((left, right) => {
     const preference = (row: Row): number => {
-      const policy = object(row.worker_usage_policy_json);
-      const roles =
-        policy.roles && typeof policy.roles === "object"
-          ? (policy.roles as Record<string, unknown>)
-          : {};
-      const binding = roles[request.role.trim().toLowerCase()];
-      if (!binding || typeof binding !== "object")
-        return Number.MAX_SAFE_INTEGER;
-      const value = binding as Record<string, unknown>;
+      const value = bindingFor(row);
       const preferred = [
         ...(typeof value.workerId === "string" ? [value.workerId] : []),
-        ...(Array.isArray(value.fallbackWorkerIds)
-          ? value.fallbackWorkerIds.filter(
-              (id): id is string => typeof id === "string",
-            )
+        ...(typeof value.fallbackWorkerId === "string"
+          ? [value.fallbackWorkerId]
           : []),
       ];
       const index = preferred.indexOf(String(row.worker_id));
@@ -294,25 +304,12 @@ export async function selectProjectExecutionTarget(
     const workspaceId = String(row.workspace_id);
     const workerId = String(row.worker_id);
     const workerTypeId = String(row.worker_type_id);
-    const usagePolicy = object(row.worker_usage_policy_json);
-    const roleBindings =
-      usagePolicy.roles && typeof usagePolicy.roles === "object"
-        ? (usagePolicy.roles as Record<string, unknown>)
-        : {};
-    const rawRoleBinding = roleBindings[request.role.trim().toLowerCase()];
-    const roleBinding =
-      rawRoleBinding && typeof rawRoleBinding === "object"
-        ? (rawRoleBinding as Record<string, unknown>)
-        : {};
-    const hasRoleBinding = Object.keys(roleBinding).length > 0;
+    const binding = bindingFor(row);
+    const hasBinding = Object.keys(binding).length > 0;
     const preferredWorkerIds = [
-      ...(typeof roleBinding.workerId === "string"
-        ? [roleBinding.workerId]
-        : []),
-      ...(Array.isArray(roleBinding.fallbackWorkerIds)
-        ? roleBinding.fallbackWorkerIds.filter(
-            (id): id is string => typeof id === "string",
-          )
+      ...(typeof binding.workerId === "string" ? [binding.workerId] : []),
+      ...(typeof binding.fallbackWorkerId === "string"
+        ? [binding.fallbackWorkerId]
         : []),
     ];
     const capabilities = strings(row.capabilities_json).map((value) =>
@@ -327,13 +324,11 @@ export async function selectProjectExecutionTarget(
     const provider = String(row.provider ?? "unknown");
     const selectedModel =
       request.workstreamId &&
-      typeof roleBinding.model === "string" &&
-      roleBinding.model.trim().length > 0
-        ? roleBinding.model
+      typeof binding.model === "string" &&
+      binding.model.trim().length > 0
+        ? binding.model
         : (request.model ??
-          (typeof roleBinding.model === "string"
-            ? roleBinding.model
-            : undefined));
+          (typeof binding.model === "string" ? binding.model : undefined));
     const independenceKey = `${provider}:${workerTypeId}`;
     const concurrency = object(row.concurrency_json);
     const maxConcurrent = Math.min(
@@ -341,9 +336,6 @@ export async function selectProjectExecutionTarget(
       row.cloud_concurrency_limit == null
         ? 1024
         : number(row.cloud_concurrency_limit, 1024),
-      roleBinding.cloudConcurrencyLimit == null
-        ? 1024
-        : number(roleBinding.cloudConcurrencyLimit, 1024),
       number(concurrency.maxConcurrentAssignments, 1024),
     );
 
@@ -384,8 +376,8 @@ export async function selectProjectExecutionTarget(
       reject("worker_runtime_unavailable");
       continue;
     }
-    if (request.workstreamId && !hasRoleBinding) {
-      reject("workstream_role_policy_missing");
+    if (request.workstreamId && !hasBinding) {
+      reject("workstream_step_binding_missing");
       continue;
     }
     if (request.workspaceId && request.workspaceId !== workspaceId) {
@@ -393,22 +385,14 @@ export async function selectProjectExecutionTarget(
       continue;
     }
     if (
-      typeof roleBinding.workspaceId === "string" &&
-      roleBinding.workspaceId !== workspaceId
-    ) {
-      reject("workstream_role_workspace_mismatch");
-      continue;
-    }
-    if (
       request.workstreamId &&
-      usagePolicy.fallbackPolicy === "configured_only" &&
       (preferredWorkerIds.length === 0 ||
         !preferredWorkerIds.includes(workerId))
     ) {
       reject(
         preferredWorkerIds.length === 0
-          ? "no_worker_selected_for_role"
-          : "worker_not_selected_for_role",
+          ? "no_worker_selected_for_step"
+          : "worker_not_selected_for_step",
       );
       continue;
     }
@@ -471,13 +455,26 @@ export async function selectProjectExecutionTarget(
     // project membership and grant policy; the Worker enforces its own local
     // permission boundary when accepting/executing the assignment.
     const workerPermissions = grantPermissions;
-    const permissions = resolveEffectivePermissions({
+    const resolvedPermissions = resolveEffectivePermissions({
       projectMemberPermissions: projectPermissions(membership.role),
       workspaceGrantPermissions: grantPermissions,
       workerManifestPermissions: workerPermissions,
       workspaceLocalPermissions: workerPermissions,
       projectPolicyPermissions: projectPermissions(membership.role),
     });
+    // Read-only steps may keep the active Workstream lease so they inspect its
+    // current filesystem, while dropping repository writes. Test alone retains
+    // shell execution so it can run validation commands inside the read-only
+    // provider sandbox.
+    const canRunTestCommands = request.capabilities.includes("test_execution");
+    const permissions =
+      executionClass === "stateless_read" || request.readOnly === true
+        ? resolvedPermissions.filter(
+            (permission) =>
+              permission !== "repository:write" &&
+              (permission !== "shell:execute" || canRunTestCommands),
+          )
+        : resolvedPermissions;
     if (permissions.length === 0) {
       reject("effective_permission_intersection_empty");
       continue;
@@ -575,11 +572,10 @@ export async function selectProjectExecutionTarget(
               : null,
           activationState: row.local_worker_activation_state,
           readinessState: row.local_worker_readiness_state,
-          role: request.role,
+          workBindingId: request.workBindingId ?? null,
           selection: preferredWorkerIds.includes(workerId)
             ? "configured_preference"
             : "eligible_fallback",
-          fallbackPolicy: usagePolicy.fallbackPolicy ?? "configured_only",
         },
         filters: [
           "project_authorized",
@@ -590,21 +586,19 @@ export async function selectProjectExecutionTarget(
           "cloud_scheduling_enabled",
           "permissions_intersected",
           "capacity_available",
-          ...(statefulLease
-            ? ["primary_workspace", "checkout_ready", "lease_active"]
-            : []),
+          ...(statefulLease ? ["primary_workspace", "lease_active"] : []),
         ],
         rejectedAlternatives: rejected,
       },
       executionClass,
+      readOnly:
+        executionClass === "stateless_read" || request.readOnly === true,
       ...(statefulLease
         ? {
             workstreamId: statefulLease.workstreamId,
             workRequestId: statefulLease.workRequestId,
-            checkoutId: statefulLease.checkoutId,
             leaseId: statefulLease.leaseId,
             fencingToken: statefulLease.fencingToken,
-            expectedRevision: statefulLease.expectedRevision,
           }
         : request.expectedRevision
           ? { expectedRevision: request.expectedRevision }

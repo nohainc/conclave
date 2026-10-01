@@ -19,7 +19,6 @@ import {
   D1ProjectRepository,
   D1WorkerRepository,
   D1ExtensionRepository,
-  D1WorkflowTemplateRepository,
   D1CredentialRepository,
   D1RetentionPolicyRepository,
   D1HumanApprovalRepository,
@@ -51,7 +50,6 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
   readonly credentials: D1CredentialRepository;
   readonly retentionPolicies: D1RetentionPolicyRepository;
   readonly extensions: D1ExtensionRepository;
-  readonly workflowTemplates: D1WorkflowTemplateRepository;
   readonly humanApprovals: D1HumanApprovalRepository;
 
   constructor(db: D1DatabaseLike) {
@@ -75,7 +73,6 @@ export class D1PersistenceRepositories implements PersistenceRepositories {
     this.credentials = new D1CredentialRepository(db);
     this.retentionPolicies = new D1RetentionPolicyRepository(db);
     this.extensions = new D1ExtensionRepository(db);
-    this.workflowTemplates = new D1WorkflowTemplateRepository(db);
     this.humanApprovals = new D1HumanApprovalRepository(db);
   }
 

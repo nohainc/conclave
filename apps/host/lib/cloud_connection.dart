@@ -317,6 +317,7 @@ class HostCloudConnection {
   int _heartbeatCount = 0;
   Map<String, Object?>? syncResponse;
   final _activeAssignments = <String>{};
+  final _cancelledBeforeStart = <String>{};
   final _pendingAssignmentsDuringSync = <Map<String, dynamic>>[];
   final _lastEphemeralWorkerEvent = <String, DateTime>{};
 
@@ -1261,6 +1262,23 @@ class HostCloudConnection {
       }
       return;
     }
+    if (_cancelledBeforeStart.remove(context.assignmentId)) {
+      await _recordAssignment(
+        context.assignmentId,
+        AssignmentStatus.cancelled,
+        context: context,
+        result: const {'reason': 'Cancelled before Worker launch'},
+      );
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.cancelled',
+        correlation,
+        {
+          'status': 'cancelled',
+          'reason': 'Cancelled before Worker launch',
+        },
+      )));
+      return;
+    }
     await _recordAssignment(context.assignmentId, AssignmentStatus.received,
         context: context);
 
@@ -1273,9 +1291,27 @@ class HostCloudConnection {
       return;
     }
 
+    _activeAssignments.add(context.assignmentId);
     await _recordAssignment(context.assignmentId, AssignmentStatus.running,
         context: context);
-    _activeAssignments.add(context.assignmentId);
+    if (_cancelledBeforeStart.remove(context.assignmentId)) {
+      await _recordAssignment(
+        context.assignmentId,
+        AssignmentStatus.cancelled,
+        context: context,
+        result: const {'reason': 'Cancelled before Worker launch'},
+      );
+      _activeAssignments.remove(context.assignmentId);
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.cancelled',
+        correlation,
+        {
+          'status': 'cancelled',
+          'reason': 'Cancelled before Worker launch',
+        },
+      )));
+      return;
+    }
     socket.send(jsonEncode(_assignmentEnvelope(
       'assignment.ack',
       correlation,
@@ -1374,6 +1410,32 @@ class HostCloudConnection {
     if (_activeAssignments.contains(assignmentId) &&
         assignmentCancellationHandler != null) {
       cancelled = await assignmentCancellationHandler!(assignmentId, reason);
+    }
+    if (!cancelled) {
+      final previous = (await assignmentJournal?.reconcile())?[assignmentId];
+      final terminal = previous != null &&
+          {
+            AssignmentStatus.completed,
+            AssignmentStatus.failed,
+            AssignmentStatus.cancelled,
+            AssignmentStatus.reconciled,
+          }.contains(previous.status);
+      if (!terminal) {
+        if (_cancelledBeforeStart.length >= 1024) {
+          _cancelledBeforeStart.remove(_cancelledBeforeStart.first);
+        }
+        _cancelledBeforeStart.add(assignmentId);
+        cancelled = true;
+      }
+    }
+    if (cancelled &&
+        _activeAssignments.contains(assignmentId) &&
+        assignmentCancellationHandler != null) {
+      // Close the narrow interval between adding the assignment to the active
+      // set and the Worker executor reserving its process slot.
+      if (await assignmentCancellationHandler!(assignmentId, reason)) {
+        _cancelledBeforeStart.remove(assignmentId);
+      }
     }
     final alreadyTerminated = !_activeAssignments.contains(assignmentId);
     socket.send(jsonEncode(_assignmentEnvelope(

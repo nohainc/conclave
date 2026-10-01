@@ -11,11 +11,18 @@ import {
   markWorkflowTaskResult,
   planWorkflowTasks,
   readyWorkflowTasks,
-  validateWorkflowOutput,
-  validateWorkflowVersion,
+  validateBuiltinWorkflowDefinition,
   type PlannedWorkflowTask,
-  type WorkflowVersion,
+  type BuiltinWorkflowDefinition,
+  type StepKind,
+  type StepResult,
+  type WorkRequestSnapshot,
 } from "@conclave/core";
+import {
+  renderWorkStepPrompt,
+  workStepPromptInputs,
+} from "./workflow-prompts.js";
+import { createEventPublisher } from "./event-publisher.js";
 
 export interface ConclaveWorkflowParams {
   readonly runId: string;
@@ -32,10 +39,15 @@ export interface ConclaveWorkflowParams {
   readonly startPaused?: boolean;
   /** Defaults to the local single-worker path; cloud API workers are opt-in. */
   readonly executionMode?: "single_worker" | "multi_worker";
-  /** Immutable v6 product workflow snapshot. When present, the data-driven runner is used. */
-  readonly workflowVersion?: WorkflowVersion;
+  /** Immutable Work v1 catalog definition. When present, the fixed-step runner is used. */
+  readonly builtinWorkflow?: BuiltinWorkflowDefinition;
   readonly workRequestId?: string;
+  readonly workstreamId?: string;
+  readonly projectId?: string;
   readonly input?: Record<string, unknown>;
+  readonly retryStepKind?: StepKind;
+  readonly retrySessionStrategy?: "resume" | "fresh";
+  readonly retryNumber?: number;
 }
 
 export interface ConclaveWorkflowCheckpoint {
@@ -87,6 +99,7 @@ interface ForgeExecutionService {
 
 type ExecutionEnv = Env & {
   readonly CONCLAVE_FORGE_EXECUTION?: ForgeExecutionService;
+  readonly CONCLAVE_WORKSTREAM_COORDINATOR?: DurableObjectNamespace;
 };
 
 interface RunControlEvent {
@@ -107,6 +120,10 @@ interface ForgeTerminalEvent {
   readonly executionId: string;
   readonly status: "completed" | "failed" | "cancelled" | "needs_input";
   readonly resultArtifactId?: string;
+  readonly finalText?: string;
+  readonly workerId?: string | null;
+  readonly workerRuntimeVersion?: string | null;
+  readonly providerToolVersion?: string | null;
   readonly error?: string;
 }
 
@@ -158,6 +175,16 @@ function isForgeTerminalEvent(value: unknown): value is ForgeTerminalEvent {
       record.status === "needs_input") &&
     (record.resultArtifactId === undefined ||
       typeof record.resultArtifactId === "string") &&
+    (record.finalText === undefined || typeof record.finalText === "string") &&
+    (record.workerId === undefined ||
+      record.workerId === null ||
+      typeof record.workerId === "string") &&
+    (record.workerRuntimeVersion === undefined ||
+      record.workerRuntimeVersion === null ||
+      typeof record.workerRuntimeVersion === "string") &&
+    (record.providerToolVersion === undefined ||
+      record.providerToolVersion === null ||
+      typeof record.providerToolVersion === "string") &&
     (record.error === undefined || typeof record.error === "string")
   );
 }
@@ -177,6 +204,26 @@ function isForgeExecutionStatus(value: unknown): value is ForgeExecutionStatus {
       typeof record.resultArtifactId === "string") &&
     (record.error === undefined || typeof record.error === "string")
   );
+}
+
+function parseWorkflowStepResult(value: unknown): StepResult | null {
+  if (typeof value !== "string") return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      return null;
+    }
+    const result = parsed as Partial<StepResult>;
+    return result.status === "completed" && typeof result.text === "string"
+      ? (result as StepResult)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function validateMachineEvidence(
@@ -229,6 +276,56 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       .run();
   }
 
+  private async finishWorkRequest(
+    params: ConclaveWorkflowParams,
+    status: "completed" | "failed" | "cancelled",
+  ): Promise<void> {
+    if (!params.workRequestId || !params.workstreamId) return;
+    const runtimeEnv = this.env as ExecutionEnv;
+    const db = runtimeEnv.CONCLAVE_DB;
+    const namespace = runtimeEnv.CONCLAVE_WORKSTREAM_COORDINATOR;
+    if (!db) return;
+    const request = await db
+      .prepare(
+        "SELECT mode FROM work_requests WHERE id = ?1 AND workstream_id = ?2",
+      )
+      .bind(params.workRequestId, params.workstreamId)
+      .first<{ mode: string }>();
+    if (request?.mode === "stateless") {
+      const now = new Date().toISOString();
+      await db
+        .prepare(
+          "UPDATE work_requests SET status = ?1, updated_at = ?2 WHERE id = ?3 AND status IN ('queued', 'running')",
+        )
+        .bind(status, now, params.workRequestId)
+        .run();
+      return;
+    }
+    if (!namespace) return;
+    const lease = await db
+      .prepare(
+        `SELECT id, fencing_token AS fencingToken FROM workstream_runtime_leases
+       WHERE work_request_id = ?1 AND workstream_id = ?2 AND status = 'active' LIMIT 1`,
+      )
+      .bind(params.workRequestId, params.workstreamId)
+      .first<{ id: string; fencingToken: number }>();
+    if (!lease) return;
+    const stub = namespace.getByName(params.workstreamId);
+    await stub.fetch("https://workstream-coordinator/complete", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-workstream-id": params.workstreamId,
+      },
+      body: JSON.stringify({
+        workRequestId: params.workRequestId,
+        leaseId: lease.id,
+        fencingToken: lease.fencingToken,
+        status,
+      }),
+    });
+  }
+
   private async persistWorkflowTasks(
     params: ConclaveWorkflowParams,
     tasks: readonly PlannedWorkflowTask[],
@@ -240,23 +337,19 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       db
         .prepare(
           `INSERT INTO workflow_tasks
-         (id, work_request_id, workflow_version_id, workflow_step_id, execution_class,
-          role, required_capabilities_json, approval, timeout_ms, output_contract_json,
+         (id, work_request_id, step_kind, execution_mode,
+          timeout_ms, prompt_profile_version,
           status, attempt, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'queued', 0, ?11, ?11)
-         ON CONFLICT(work_request_id, workflow_step_id) DO NOTHING`,
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'queued', 0, ?7, ?7)
+         ON CONFLICT(work_request_id, step_kind) DO NOTHING`,
         )
         .bind(
           task.id,
           task.workRequestId,
-          task.workflowVersionId,
-          task.step.id,
-          task.step.executionClass,
-          task.step.role,
-          JSON.stringify(task.step.requiredCapabilities),
-          task.step.approval,
+          task.step.kind,
+          task.step.executionMode,
           task.step.timeoutMs,
-          JSON.stringify(task.step.outputContract),
+          task.step.promptProfileVersion,
           now,
         ),
       ...task.dependencyTaskIds.map((dependencyId) =>
@@ -271,21 +364,78 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     if (statements.length > 0) await db.batch(statements);
   }
 
+  private async publishWorkEvent(
+    params: ConclaveWorkflowParams,
+    type:
+      | "work_request.started"
+      | "work_request.completed"
+      | "work_request.failed"
+      | "work_request.cancelled"
+      | "step.queued"
+      | "step.running"
+      | "step.completed"
+      | "step.failed"
+      | "step.cancelled",
+    options: { status: string; stepKind?: StepKind; attempt?: number },
+  ): Promise<void> {
+    const workRequestId = params.workRequestId;
+    const workstreamId = params.workstreamId;
+    const workspaceId = params.organizationId;
+    if (!workRequestId || !workstreamId || !workspaceId) return;
+    try {
+      const projectId =
+        params.projectId ??
+        (
+          await (this.env as ExecutionEnv).CONCLAVE_DB.prepare(
+            "SELECT project_id AS projectId FROM workstreams WHERE id = ?1",
+          )
+            .bind(workstreamId)
+            .first<{ projectId: string }>()
+        )?.projectId;
+      if (!projectId) return;
+      const stepSuffix = options.stepKind ? `:step:${options.stepKind}` : "";
+      const attemptSuffix = options.attempt
+        ? `:attempt:${options.attempt}`
+        : "";
+      await createEventPublisher(this.env).publish({
+        type,
+        workspaceId,
+        projectId,
+        runId: params.runId,
+        idempotencyKey: `work-request:${workRequestId}:${type}${stepSuffix}${attemptSuffix}`,
+        payload: {
+          entityId: options.stepKind ?? workRequestId,
+          workRequestId,
+          workstreamId,
+          ...(options.stepKind ? { stepKind: options.stepKind } : {}),
+          status: options.status,
+        },
+      });
+    } catch (error) {
+      console.error(`Failed to publish ${type}`, error);
+    }
+  }
+
   private async persistWorkflowTaskState(
     task: PlannedWorkflowTask,
     output?: unknown,
     error?: string,
+    status: PlannedWorkflowTask["status"] = task.status,
+    attempt: number = task.attempt,
   ): Promise<void> {
     const db = (this.env as ExecutionEnv).CONCLAVE_DB;
     if (!db) return;
     await db
       .prepare(
         `UPDATE workflow_tasks SET status = ?1, attempt = ?2, output_json = ?3,
-       error = ?4, updated_at = ?5 WHERE id = ?6`,
+       error = ?4, updated_at = ?5,
+       started_at = CASE WHEN ?1 = 'running' THEN COALESCE(started_at, ?5) ELSE started_at END,
+       finished_at = CASE WHEN ?1 IN ('completed', 'failed', 'cancelled') THEN ?5 ELSE finished_at END
+       WHERE id = ?6`,
       )
       .bind(
-        task.status,
-        task.attempt,
+        status,
+        attempt,
         output === undefined ? null : JSON.stringify(output),
         error ?? null,
         new Date().toISOString(),
@@ -298,11 +448,77 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     params: ConclaveWorkflowParams,
     step: WorkflowStep,
   ): Promise<ConclaveWorkflowCheckpoint> {
-    const version = params.workflowVersion!;
-    validateWorkflowVersion(version);
+    const definition = params.builtinWorkflow!;
+    validateBuiltinWorkflowDefinition(definition);
     const workRequestId = params.workRequestId ?? `run-${params.runId}`;
-    let tasks = [...planWorkflowTasks(version, workRequestId)];
+    const promptInput = await this.loadWorkRequestPromptInput(params);
+    let tasks = [...planWorkflowTasks(definition, workRequestId)];
+    const stepResults: Partial<Record<StepKind, StepResult>> = {};
+    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    if (db && params.workRequestId) {
+      const requestMode = await db
+        .prepare("SELECT mode FROM work_requests WHERE id = ?1")
+        .bind(params.workRequestId)
+        .first<{ mode: string }>();
+      if (requestMode?.mode === "stateless") {
+        const now = new Date().toISOString();
+        await db.batch([
+          db
+            .prepare(
+              "UPDATE work_requests SET status = 'running', updated_at = ?1 WHERE id = ?2 AND status = 'queued'",
+            )
+            .bind(now, params.workRequestId),
+          db
+            .prepare(
+              "UPDATE runs SET status = 'running', updated_at = ?1 WHERE work_request_id = ?2 AND status = 'created'",
+            )
+            .bind(now, params.workRequestId),
+        ]);
+      }
+    }
     await this.persistWorkflowTasks(params, tasks);
+    if (params.retryStepKind && db && params.workRequestId) {
+      const persistedRows = await db
+        .prepare(
+          `SELECT step_kind AS kind, status, attempt, output_json AS outputJson
+           FROM workflow_tasks WHERE work_request_id = ?1`,
+        )
+        .bind(params.workRequestId)
+        .all<Record<string, unknown>>();
+      const persistedByKind = new Map(
+        (persistedRows.results ?? []).map((row) => [String(row.kind), row]),
+      );
+      tasks = tasks.map((task) => {
+        const persisted = persistedByKind.get(task.step.kind);
+        if (persisted?.status !== "completed") return task;
+        const output = parseWorkflowStepResult(persisted.outputJson);
+        if (!output) {
+          throw new Error(
+            `Completed ${task.step.kind} result is unavailable for retry`,
+          );
+        }
+        stepResults[task.step.kind] = output;
+        return {
+          ...task,
+          status: "completed",
+          attempt:
+            typeof persisted.attempt === "number" ? persisted.attempt : 0,
+        };
+      });
+    }
+    await this.publishWorkEvent(params, "work_request.started", {
+      status: "running",
+    });
+    await Promise.all(
+      tasks
+        .filter((task) => task.status === "queued")
+        .map((task) =>
+          this.publishWorkEvent(params, "step.queued", {
+            stepKind: task.step.kind,
+            status: "queued",
+          }),
+        ),
+    );
     const started: ConclaveWorkflowCheckpoint = {
       runId: params.runId,
       goalId: params.goalId,
@@ -318,82 +534,130 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         const failed = tasks.find(
           (task) => task.status === "failed" || task.status === "cancelled",
         );
+        const status = failed?.status === "cancelled" ? "cancelled" : "failed";
+        await this.persistTerminalRun(params.runId, status);
+        await this.finishWorkRequest(params, status);
+        if (status === "failed") {
+          await this.publishWorkEvent(params, "work_request.failed", {
+            status: "failed",
+          });
+        }
         return {
           ...started,
-          stage: failed?.status === "cancelled" ? "cancelled" : "failed",
-          status: failed?.status === "cancelled" ? "cancelled" : "failed",
-          workflowStepId: failed?.step.id,
+          stage: status,
+          status,
+          workflowStepId: failed?.step.kind,
           failureReason: failed
-            ? `Workflow step ${failed.step.name} ${failed.status}`
+            ? `Workflow step ${failed.step.kind} ${failed.status}`
             : "Workflow has no runnable steps",
         };
       }
       // Stateful Workstream steps are never concurrent. Independent stateless
       // steps can share one durable Workflow batch.
       const batch = ready.some(
-        (task) => task.step.executionClass === "stateful_workstream",
+        (task) => task.step.executionMode === "stateful_workstream",
       )
         ? [
             ready.find(
-              (task) => task.step.executionClass === "stateful_workstream",
+              (task) => task.step.executionMode === "stateful_workstream",
             )!,
           ]
         : ready;
       const results = await Promise.all(
-        batch.map((task) => this.runWorkflowTask(params, task, step)),
+        batch.map((task) =>
+          this.runWorkflowTask(
+            params,
+            definition,
+            task,
+            promptInput,
+            step,
+            stepResults,
+          ),
+        ),
       );
       for (const result of results) {
+        const cancellationRequested = await (this.env as ExecutionEnv)
+          .CONCLAVE_DB.prepare(
+            "SELECT cancel_requested_at AS cancelRequestedAt FROM work_requests WHERE id = ?1",
+          )
+          .bind(params.workRequestId)
+          .first<{ cancelRequestedAt: string | null }>();
+        const resultStatus = cancellationRequested?.cancelRequestedAt
+          ? "cancelled"
+          : result.status;
+        if (resultStatus === "completed" && result.stepResult) {
+          stepResults[result.task.step.kind] = result.stepResult;
+        }
         tasks = [
-          ...markWorkflowTaskResult(tasks, result.task.id, result.status),
+          ...markWorkflowTaskResult(tasks, result.task.id, resultStatus),
         ];
+        const persistedTask = tasks.find((task) => task.id === result.task.id)!;
         await this.persistWorkflowTaskState(
-          result.task,
+          persistedTask,
           result.output,
           result.error,
         );
-        if (result.status === "failed" || result.status === "cancelled") {
+        if (resultStatus === "completed" || resultStatus === "failed") {
+          await this.publishWorkEvent(
+            params,
+            resultStatus === "completed" ? "step.completed" : "step.failed",
+            { stepKind: result.task.step.kind, status: resultStatus },
+          );
+        }
+        if (resultStatus === "failed" || resultStatus === "cancelled") {
           const failed = tasks.find(
             (candidate) => candidate.id === result.task.id,
           )!;
+          await this.persistTerminalRun(params.runId, resultStatus);
+          await this.finishWorkRequest(params, resultStatus);
+          if (resultStatus === "failed") {
+            await this.publishWorkEvent(params, "work_request.failed", {
+              status: "failed",
+            });
+          } else {
+            await this.publishWorkEvent(params, "step.cancelled", {
+              stepKind: result.task.step.kind,
+              status: "cancelled",
+            });
+            await this.publishWorkEvent(params, "work_request.cancelled", {
+              stepKind: result.task.step.kind,
+              status: "cancelled",
+            });
+          }
           return {
             ...started,
-            stage: result.status,
-            status: result.status,
-            workflowStepId: failed.step.id,
+            stage: resultStatus,
+            status: resultStatus,
+            workflowStepId: failed.step.kind,
             failureReason:
               result.error ??
-              `Workflow step ${failed.step.name} ${result.status}`,
+              `Workflow step ${failed.step.kind} ${resultStatus}`,
           };
         }
       }
     }
     await this.persistTerminalRun(params.runId, "completed");
+    await this.finishWorkRequest(params, "completed");
+    await this.publishWorkEvent(params, "work_request.completed", {
+      status: "completed",
+    });
     return { ...started, stage: "completed", status: "completed" };
   }
 
   private async runWorkflowTask(
     params: ConclaveWorkflowParams,
+    definition: BuiltinWorkflowDefinition,
     task: PlannedWorkflowTask,
+    promptInput: Record<string, unknown>,
     workflowStep: WorkflowStep,
+    stepResults: Partial<Record<StepKind, StepResult>>,
   ): Promise<{
     task: PlannedWorkflowTask;
     status: "completed" | "failed" | "cancelled";
     output?: unknown;
+    stepResult?: StepResult;
     error?: string;
   }> {
-    if (task.step.approval !== "none") {
-      const approval = await workflowStep.waitForEvent<ApprovalEvent>(
-        `workflow:approval:${task.step.id}`,
-        { type: "run-approval", timeout: "365 days" },
-      );
-      if (!isApprovalEvent(approval.payload) || !approval.payload.approved) {
-        return {
-          task,
-          status: "cancelled",
-          error: "Workflow approval was rejected",
-        };
-      }
-    }
     const service = (this.env as ExecutionEnv).CONCLAVE_FORGE_EXECUTION;
     if (!service)
       return {
@@ -402,17 +666,77 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         error: "Forge execution service is not configured",
       };
     let attempt = 0;
+    const startedAt = new Date().toISOString();
     while (attempt < 3) {
       attempt += 1;
+      await this.persistWorkflowTaskState(
+        task,
+        undefined,
+        undefined,
+        "running",
+        attempt,
+      );
+      await this.publishWorkEvent(params, "step.running", {
+        stepKind: task.step.kind,
+        attempt,
+        status: "running",
+      });
       try {
         const execution = await workflowStep.do(
-          `workflow:${task.step.id}:execute:${attempt}`,
+          `workflow:${task.step.kind}:execute:${attempt}`,
           {
             ...stepConfig,
             timeout:
               `${Math.max(1, Math.ceil(task.step.timeoutMs / 1000))} seconds` as `${number} seconds`,
           },
           async () => {
+            const workBindingId =
+              definition.id === "direct" ? "direct" : task.step.kind;
+            const promptInputs = workStepPromptInputs(
+              { ...promptInput, workRequestId: params.workRequestId },
+              stepResults,
+            );
+            const workConfig =
+              typeof promptInput.workConfig === "object" &&
+              promptInput.workConfig !== null
+                ? (promptInput.workConfig as Record<string, unknown>)
+                : {};
+            const bindings =
+              typeof workConfig.bindings === "object" &&
+              workConfig.bindings !== null
+                ? (workConfig.bindings as Record<string, unknown>)
+                : {};
+            const stepBinding =
+              typeof bindings[workBindingId] === "object" &&
+              bindings[workBindingId] !== null
+                ? (bindings[workBindingId] as Record<string, unknown>)
+                : {};
+            const configuredInstructions =
+              typeof stepBinding.additionalInstructions === "string"
+                ? stepBinding.additionalInstructions
+                : "";
+            const requestInstructions =
+              promptInputs.stepInstructions?.[task.step.kind] ?? "";
+            const mergedInstructions = [
+              requestInstructions,
+              configuredInstructions,
+            ]
+              .filter((value) => value.trim().length > 0)
+              .join("\n\n");
+            const prompt = renderWorkStepPrompt(definition, task.step, {
+              ...promptInputs,
+              stepInstructions: {
+                ...promptInputs.stepInstructions,
+                ...(mergedInstructions
+                  ? { [task.step.kind]: mergedInstructions }
+                  : {}),
+              },
+            });
+            const {
+              workConfig: _workConfig,
+              workRequestSnapshot: _workRequestSnapshot,
+              ...workerInput
+            } = promptInput;
             const response = await service.fetch(
               "https://conclave.internal/execute",
               {
@@ -421,7 +745,12 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
                 body: JSON.stringify({
                   ...params,
                   workflowStep: task.step,
-                  input: params.input ?? {},
+                  workBindingId,
+                  effectiveWorkerPrompt: prompt,
+                  input: {
+                    ...workerInput,
+                    effectiveWorkerPrompt: prompt,
+                  },
                 }),
               },
             );
@@ -436,8 +765,11 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           },
         );
         const terminal = await workflowStep.waitForEvent<ForgeTerminalEvent>(
-          `workflow:${task.step.id}:terminal:${attempt}`,
-          { type: "forge-terminal", timeout: "5 minutes" },
+          `workflow:${task.step.kind}:terminal:${attempt}`,
+          {
+            type: "forge-terminal",
+            timeout: `${Math.ceil(task.step.timeoutMs / 60_000) + 1} minutes`,
+          },
         );
         if (
           !isForgeTerminalEvent(terminal.payload) ||
@@ -452,7 +784,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         }
         if (terminal.payload.status === "needs_input") {
           const input = await workflowStep.waitForEvent<{ payload?: string }>(
-            `workflow:${task.step.id}:needs-input`,
+            `workflow:${task.step.kind}:needs-input`,
             { type: "workflow-input", timeout: "365 days" },
           );
           if (!input?.payload)
@@ -464,7 +796,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           continue;
         }
         if (terminal.payload.status !== "completed") {
-          if (attempt < 3) continue;
+          if (definition.id !== "direct" && attempt < 3) continue;
           return {
             task,
             status:
@@ -472,14 +804,48 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             error: terminal.payload.error,
           };
         }
-        const output = {
-          summary: task.step.name,
-          resultArtifactId: terminal.payload.resultArtifactId,
+        if (
+          typeof terminal.payload.finalText === "string" &&
+          terminal.payload.finalText.trim()
+        ) {
+          const completedAt = new Date().toISOString();
+          const stepResult: StepResult = {
+            text: terminal.payload.finalText,
+            status: "completed",
+            startedAt,
+            completedAt,
+            workerId: terminal.payload.workerId ?? null,
+            workerRuntimeVersion: terminal.payload.workerRuntimeVersion ?? null,
+            providerToolVersion: terminal.payload.providerToolVersion ?? null,
+          };
+          return { task, status: "completed", output: stepResult, stepResult };
+        }
+        if (!terminal.payload.resultArtifactId) {
+          return {
+            task,
+            status: "failed",
+            error: "Workflow Step completed without a final answer artifact",
+          };
+        }
+        const stepResult = await this.readWorkflowStepResult(
+          terminal.payload.resultArtifactId,
+          startedAt,
+        );
+        if (!stepResult?.text.trim()) {
+          return {
+            task,
+            status: "failed",
+            error: "Workflow Step final answer text is unavailable",
+          };
+        }
+        return {
+          task,
+          status: "completed",
+          output: stepResult,
+          stepResult,
         };
-        validateWorkflowOutput(output, task.step.outputContract);
-        return { task, status: "completed", output };
       } catch (error) {
-        if (attempt >= 3)
+        if (definition.id === "direct" || attempt >= 3)
           return {
             task,
             status: "failed",
@@ -494,12 +860,232 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     };
   }
 
+  private async readWorkflowStepResult(
+    artifactId: string,
+    fallbackStartedAt: string,
+  ): Promise<StepResult | null> {
+    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    if (!db) return null;
+    const row = await db
+      .prepare(
+        `SELECT a.created_at AS artifact_created_at,
+                wa.workspace_worker_id AS worker_id,
+                wa.worker_version AS worker_runtime_version,
+                wa.created_at AS assignment_started_at,
+                wa.permission_snapshot_json AS permission_snapshot_json
+         FROM artifacts a
+         LEFT JOIN worker_assignments wa ON wa.id = a.assignment_id
+         WHERE a.id = ?1`,
+      )
+      .bind(artifactId)
+      .first<Record<string, unknown>>();
+    if (!row) return null;
+    const text = await this.readWorkflowArtifactText(artifactId);
+    if (!text.trim()) return null;
+    let permissionSnapshot: Record<string, unknown> = {};
+    if (typeof row.permission_snapshot_json === "string") {
+      try {
+        const parsed: unknown = JSON.parse(row.permission_snapshot_json);
+        if (
+          typeof parsed === "object" &&
+          parsed !== null &&
+          !Array.isArray(parsed)
+        ) {
+          permissionSnapshot = parsed as Record<string, unknown>;
+        }
+      } catch {
+        // Attribution remains nullable if the assignment snapshot is malformed.
+      }
+    }
+    const completedAt =
+      typeof row.artifact_created_at === "string"
+        ? row.artifact_created_at
+        : new Date().toISOString();
+    return {
+      text,
+      status: "completed",
+      startedAt:
+        typeof row.assignment_started_at === "string"
+          ? row.assignment_started_at
+          : fallbackStartedAt,
+      completedAt,
+      workerId: typeof row.worker_id === "string" ? row.worker_id : null,
+      workerRuntimeVersion:
+        typeof row.worker_runtime_version === "string"
+          ? row.worker_runtime_version
+          : typeof permissionSnapshot.workerRuntimeVersion === "string"
+            ? permissionSnapshot.workerRuntimeVersion
+            : null,
+      providerToolVersion:
+        typeof permissionSnapshot.providerToolVersion === "string"
+          ? permissionSnapshot.providerToolVersion
+          : null,
+      artifacts: [artifactId],
+    };
+  }
+
+  private async readWorkflowArtifactText(artifactId: string): Promise<string> {
+    const maxBytes = 24_000;
+    const env = this.env as Env & {
+      readonly CONCLAVE_ARTIFACTS?: R2Bucket;
+    };
+    const artifact = await env.CONCLAVE_DB.prepare(
+      "SELECT * FROM artifacts WHERE id = ?1",
+    )
+      .bind(artifactId)
+      .first<Record<string, unknown>>();
+    if (!artifact) return "";
+    if (typeof artifact.inline_content === "string") {
+      return artifact.inline_content.length <= maxBytes
+        ? artifact.inline_content
+        : `${artifact.inline_content.slice(0, maxBytes)}\n[Step result truncated by Conclave.]`;
+    }
+    if (typeof artifact.storage_key !== "string" || !env.CONCLAVE_ARTIFACTS) {
+      return "";
+    }
+    const object = await env.CONCLAVE_ARTIFACTS.get(artifact.storage_key);
+    if (!object) return "";
+    const reader = object.body.getReader();
+    const decoder = new TextDecoder();
+    let content = "";
+    let bytesRead = 0;
+    let truncated = false;
+    try {
+      while (bytesRead < maxBytes) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const remaining = maxBytes - bytesRead;
+        const chunk = value.subarray(0, remaining);
+        content += decoder.decode(chunk, { stream: true });
+        bytesRead += chunk.byteLength;
+        if (chunk.byteLength < value.byteLength) {
+          truncated = true;
+          break;
+        }
+      }
+      if (object.size > bytesRead) truncated = true;
+      content += decoder.decode();
+      if (truncated) {
+        await reader.cancel();
+        content += "\n[Step result truncated by Conclave.]";
+      }
+      return content;
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  private async loadWorkRequestPromptInput(
+    params: ConclaveWorkflowParams,
+  ): Promise<Record<string, unknown>> {
+    const callerInput = params.input ?? {};
+    if (!params.workRequestId) return callerInput;
+    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    if (!db) return callerInput;
+    const row = await db
+      .prepare(
+        `SELECT wr.input_json AS inputJson, wr.snapshot_json AS snapshotJson
+         FROM work_requests wr
+         WHERE wr.id = ?1`,
+      )
+      .bind(params.workRequestId)
+      .first<{
+        inputJson: string;
+        snapshotJson: string | null;
+      }>();
+    if (!row) return callerInput;
+    const parseRecord = (value: string | null | undefined) => {
+      if (!value) return {};
+      try {
+        const parsed: unknown = JSON.parse(value);
+        return typeof parsed === "object" &&
+          parsed !== null &&
+          !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : {};
+      } catch {
+        return {};
+      }
+    };
+    const persistedInput = parseRecord(row.inputJson);
+    const snapshot = parseRecord(row.snapshotJson);
+    const resolvedBindings =
+      typeof snapshot.resolvedBindings === "object" &&
+      snapshot.resolvedBindings !== null &&
+      !Array.isArray(snapshot.resolvedBindings)
+        ? snapshot.resolvedBindings
+        : {};
+    const workstreamInstructions =
+      typeof snapshot.workstreamInstructions === "string"
+        ? snapshot.workstreamInstructions
+        : "";
+    return {
+      ...callerInput,
+      ...persistedInput,
+      originalRequest:
+        typeof snapshot.originalRequest === "string"
+          ? snapshot.originalRequest
+          : "",
+      projectInstructions:
+        typeof snapshot.projectInstructions === "string"
+          ? snapshot.projectInstructions
+          : "",
+      workstreamInstructions,
+      stepInstructions:
+        typeof snapshot.stepAdditionalInstructions === "object" &&
+        snapshot.stepAdditionalInstructions !== null
+          ? snapshot.stepAdditionalInstructions
+          : {},
+      workConfig: { bindings: resolvedBindings, workstreamInstructions },
+      workRequestSnapshot: snapshot,
+    };
+  }
+
+  private async loadWorkRequestSnapshot(
+    workRequestId: string,
+  ): Promise<WorkRequestSnapshot | null> {
+    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    if (!db) return null;
+    const row = await db
+      .prepare(
+        `SELECT snapshot_json AS snapshotJson,
+                workflow_snapshot_json AS workflowSnapshotJson
+         FROM work_requests WHERE id = ?1`,
+      )
+      .bind(workRequestId)
+      .first<{ snapshotJson: string | null; workflowSnapshotJson: string }>();
+    if (!row?.snapshotJson) return null;
+    try {
+      const snapshot = JSON.parse(row.snapshotJson) as WorkRequestSnapshot;
+      const workflowSnapshot = JSON.parse(
+        row.workflowSnapshotJson,
+      ) as BuiltinWorkflowDefinition;
+      if (snapshot.schemaVersion !== 1) return null;
+      validateBuiltinWorkflowDefinition(workflowSnapshot);
+      if (
+        snapshot.workflowId !== workflowSnapshot.id ||
+        snapshot.workflowVersion !== workflowSnapshot.version
+      ) {
+        return null;
+      }
+      return { ...snapshot, workflowSnapshot };
+    } catch {
+      return null;
+    }
+  }
+
   override async run(
     event: WorkflowEvent<ConclaveWorkflowParams>,
     step: WorkflowStep,
   ): Promise<ConclaveWorkflowCheckpoint> {
-    const params = event.payload;
-    if (params.workflowVersion) return this.runVersioned(params, step);
+    let params = event.payload;
+    if (params.workRequestId) {
+      const snapshot = await this.loadWorkRequestSnapshot(params.workRequestId);
+      if (snapshot) {
+        params = { ...params, builtinWorkflow: snapshot.workflowSnapshot };
+      }
+    }
+    if (params.builtinWorkflow) return this.runVersioned(params, step);
     const started = await step.do(
       "checkpoint:intake",
       stepConfig,

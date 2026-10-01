@@ -137,7 +137,16 @@ async function publishOne({
     platform,
     protocol: { min: "3.0", max: "3.0" },
     stateSchema: { readMin: 1, readMax: 1, write: 1 },
-    capabilities: ["initialize", "probe", "execute", "durable_session"],
+    capabilities: [
+      "initialize",
+      "probe",
+      "execute",
+      "durable_session",
+      "authorized_context_read",
+      "workstream_write",
+      "text",
+      "local_file",
+    ],
     permissions: [
       workerTypeId === "chatgpt" ? "network:openai" : "network:google",
       "credentials:read",

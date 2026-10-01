@@ -285,29 +285,14 @@ Cloud sends opaque:
 
 Runtime resolves it locally.
 
-## 6. Workflow engine
+## 6. Workflow engine (superseded)
 
-Current `ConclaveRunWorkflow` hardcodes:
-- intake;
-- research;
-- planning;
-- implementation;
-- verification.
-
-This is useful history but too rigid for Workstream-specific work.
-
-### v6 action
-
-Keep Cloudflare Workflow as durable execution infrastructure, but drive it from versioned WorkflowDefinition data.
-
-A Workflow runner should interpret a snapshot:
-- steps;
-- dependencies;
-- stateless/stateful execution class;
-- approval gates;
-- completion criteria.
-
-Do not encode provider/model names into Workflow definitions.
+This audit proposed project-authored, data-driven WorkflowDefinitions. Work v1
+replaces that proposal with five code-versioned built-in Workflows and fixed
+StepKind semantics. Cloud still uses its durable Workflow service for
+orchestration, but users cannot create definitions, edit task ordering, attach
+approval steps, or configure generic output contracts. See the
+[Work v1 Contract](../specifications/WORK_V1_CONTRACT.md).
 
 ## 7. Project UX
 

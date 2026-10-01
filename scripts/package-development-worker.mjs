@@ -3,7 +3,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeArchive, digestPackage } from "./release/publish-worker-releases.mjs";
+import {
+  makeArchive,
+  digestPackage,
+} from "./release/publish-worker-releases.mjs";
 
 function currentPlatform() {
   const platform =
@@ -43,7 +46,16 @@ async function packageWorker({ workerTypeId, version, root, platform }) {
     platform,
     protocol: { min: "3.0", max: "3.0" },
     stateSchema: { readMin: 1, readMax: 1, write: 1 },
-    capabilities: ["initialize", "probe", "execute", "durable_session"],
+    capabilities: [
+      "initialize",
+      "probe",
+      "execute",
+      "durable_session",
+      "authorized_context_read",
+      "workstream_write",
+      "text",
+      "local_file",
+    ],
     permissions: [
       workerTypeId === "chatgpt" ? "network:openai" : "network:google",
       "credentials:read",
@@ -87,9 +99,14 @@ async function main() {
   });
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   main().catch((error) => {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(
+      `${error instanceof Error ? error.message : String(error)}\n`,
+    );
     process.exitCode = 1;
   });
 }

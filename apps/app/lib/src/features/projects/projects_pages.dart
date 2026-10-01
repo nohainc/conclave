@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../studio/studio_data.dart';
 import '../../studio/studio_models.dart';
+import '../../studio/work_request_file_picker_stub.dart'
+    if (dart.library.html) '../../studio/work_request_file_picker_web.dart'
+    as work_request_files;
 
 class ProjectPage extends StatelessWidget {
   const ProjectPage({
@@ -1383,6 +1388,7 @@ class WorkstreamPage extends StatefulWidget {
     required this.onProvisionCheckout,
     this.onRename,
     this.onRunWork,
+    this.realtimeEvents,
     this.initialTab = 0,
   });
 
@@ -1394,7 +1400,9 @@ class WorkstreamPage extends StatefulWidget {
   final VoidCallback onArchive;
   final VoidCallback onProvisionCheckout;
   final Future<void> Function(String name)? onRename;
-  final ValueChanged<String>? onRunWork;
+  final Future<String> Function(String prompt, String workflowId,
+      List<Map<String, dynamic>> attachments)? onRunWork;
+  final Stream<Map<String, dynamic>>? realtimeEvents;
   final int initialTab;
 
   @override
@@ -1406,13 +1414,27 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   late TabController _tabController;
   final _requestController = TextEditingController();
   final _discussionController = TextEditingController();
-  String _workflow = 'Full Cycle';
+  late final TextEditingController _workstreamInstructionsController;
+  String _workflow = '';
+  List<StudioBuiltinWorkflow> _workflowCatalog = const [];
+  bool _loadingWorkflows = true;
+  String? _workflowCatalogError;
   final List<_DiscussionItem> _discussion = [];
+  List<StudioWorkRequest> _workTimeline = const [];
+  bool _loadingWorkTimeline = true;
+  bool _refreshingWorkTimeline = false;
+  bool _workTimelineRefreshPending = false;
+  String? _workTimelineError;
+  String? _workSubmitError;
+  StreamSubscription<Map<String, dynamic>>? _workEventSubscription;
+  bool _submittingWork = false;
+  List<Map<String, dynamic>> _workAttachments = [];
+  List<StudioWorker> _projectWorkers = const [];
   List<StudioWorker> _eligibleWorkers = const [];
   Map<String, String> _projectWorkspaceNames = const {};
-  late Map<String, dynamic> _usagePolicy;
-  bool _loadingUsage = true;
-  bool _savingUsage = false;
+  late Map<String, dynamic> _workConfig;
+  bool _loadingWorkChoices = true;
+  bool _savingWorkConfig = false;
 
   @override
   void initState() {
@@ -1422,15 +1444,60 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       initialIndex: widget.initialTab.clamp(0, 2),
       vsync: this,
     );
-    _usagePolicy = Map<String, dynamic>.from(widget.workstream.executionPolicy);
+    _workConfig = Map<String, dynamic>.from(widget.workstream.workConfig);
+    _workstreamInstructionsController = TextEditingController(
+      text: _workConfig['workstreamInstructions']?.toString() ?? '',
+    );
     _loadDiscussion();
-    _loadUsageChoices();
+    _refreshWorkTimeline();
+    _subscribeToWorkEvents();
+    _loadWorkChoices();
+    _loadWorkflowCatalog();
   }
 
-  Future<void> _loadUsageChoices() async {
+  Future<void> _loadWorkflowCatalog() async {
     final ds = widget.dataSource;
     if (ds == null) {
-      setState(() => _loadingUsage = false);
+      setState(() {
+        _loadingWorkflows = false;
+        _workflowCatalogError = 'Workflow catalog is unavailable.';
+      });
+      return;
+    }
+    try {
+      final workflows = await ds.loadBuiltinWorkflowCatalog();
+      if (!mounted) return;
+      setState(() {
+        _workflowCatalog = workflows;
+        _loadingWorkflows = false;
+        _workflowCatalogError =
+            workflows.isEmpty ? 'No built-in Workflows are available.' : null;
+        _workflow =
+            workflows.isEmpty ? '' : _workstreamDefaultReference(workflows);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingWorkflows = false;
+        _workflowCatalogError = 'Could not load the Workflow catalog.';
+      });
+    }
+  }
+
+  String _workstreamDefaultReference(List<StudioBuiltinWorkflow> workflows) {
+    if (workflows.isEmpty) return '';
+    final defaultId = _workConfig['defaultWorkflowId']?.toString();
+    return workflows
+            .where((workflow) => workflow.id == defaultId)
+            .map((workflow) => workflow.reference)
+            .firstOrNull ??
+        workflows.first.reference;
+  }
+
+  Future<void> _loadWorkChoices() async {
+    final ds = widget.dataSource;
+    if (ds == null) {
+      setState(() => _loadingWorkChoices = false);
       return;
     }
     try {
@@ -1447,14 +1514,19 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         names[id] = (grant['workspaceName'] ?? grant['name'] ?? id).toString();
       }
       setState(() {
-        _eligibleWorkers = (loaded[0] as List<StudioWorker>)
+        _projectWorkers = (loaded[0] as List<StudioWorker>)
             .where((worker) => names.containsKey(worker.workspaceId))
             .toList();
+        _eligibleWorkers = _projectWorkers
+            .where((worker) =>
+                worker.activationState == 'enabled' &&
+                worker.readinessState == 'ready')
+            .toList();
         _projectWorkspaceNames = names;
-        _loadingUsage = false;
+        _loadingWorkChoices = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loadingUsage = false);
+      if (mounted) setState(() => _loadingWorkChoices = false);
     }
   }
 
@@ -1496,21 +1568,51 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     if (oldWidget.initialTab != widget.initialTab) {
       _tabController.animateTo(widget.initialTab.clamp(0, 2));
     }
-    if (oldWidget.workstream.executionPolicy !=
-        widget.workstream.executionPolicy) {
-      _usagePolicy =
-          Map<String, dynamic>.from(widget.workstream.executionPolicy);
+    if (oldWidget.workstream.workConfig != widget.workstream.workConfig) {
+      _workConfig = Map<String, dynamic>.from(widget.workstream.workConfig);
+      _workstreamInstructionsController.text =
+          _workConfig['workstreamInstructions']?.toString() ?? '';
+      if (_workflowCatalog.isNotEmpty) {
+        _workflow = _workstreamDefaultReference(_workflowCatalog);
+      }
+    }
+    if (oldWidget.realtimeEvents != widget.realtimeEvents) {
+      _workEventSubscription?.cancel();
+      _subscribeToWorkEvents();
     }
   }
 
+  void _subscribeToWorkEvents() {
+    _workEventSubscription = widget.realtimeEvents?.listen((event) {
+      final type = event['type'];
+      if (type == 'reconnect.required') {
+        unawaited(_refreshWorkTimeline());
+        return;
+      }
+      if (type is! String ||
+          !(type.startsWith('work_request.') || type.startsWith('step.'))) {
+        return;
+      }
+      final payload = event['payload'];
+      if (payload is! Map || payload['workstreamId'] != widget.workstream.id) {
+        return;
+      }
+      unawaited(_refreshWorkTimeline(activeOnly: true));
+    });
+  }
+
   bool get _canExecute =>
-      widget.project.role == 'owner' || widget.project.role == 'collaborator';
+      widget.project.role == 'owner' || widget.workstream.canExecuteWork;
+  bool get _canConfigureWork =>
+      widget.project.role == 'owner' || widget.workstream.canConfigureWork;
 
   @override
   void dispose() {
+    _workEventSubscription?.cancel();
     _tabController.dispose();
     _requestController.dispose();
     _discussionController.dispose();
+    _workstreamInstructionsController.dispose();
     super.dispose();
   }
 
@@ -1537,7 +1639,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
               _discuss(context)
             else if (_tabController.index == 1)
               _work(context),
-            if (_tabController.index == 2) _executionPolicyView(),
+            if (_tabController.index == 2) _workConfigView(),
           ],
         ),
       );
@@ -1616,230 +1718,503 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   Widget _work(BuildContext context) => _WorkComposer(
         requestController: _requestController,
         workflow: _workflow,
+        workflowCatalog: _workflowCatalog,
+        loadingWorkflows: _loadingWorkflows,
+        workflowCatalogError: _workflowCatalogError,
         canExecute: _canExecute,
+        workTimeline: _workTimeline,
+        loadingTimeline: _loadingWorkTimeline,
+        timelineError: _workTimelineError,
+        submitError: _workSubmitError,
+        submitting: _submittingWork,
+        attachments: _workAttachments,
+        onAddFiles: _addWorkFiles,
+        onAddReference: _addWorkReference,
+        onRemoveAttachment: (index) => setState(() {
+          _workAttachments.removeAt(index);
+        }),
+        onRefresh: _refreshWorkTimeline,
+        onShowRunDetails: widget.dataSource == null ? null : _showRunDetails,
+        onRetryStep: widget.dataSource == null ? null : _retryWorkRequestStep,
+        onCancelRun:
+            widget.dataSource == null ? null : _cancelFailedWorkRequest,
         onWorkflowChanged: (value) => setState(() => _workflow = value),
         onRun: _runWork,
       );
 
-  Widget _executionPolicyView() {
-    final roles = _usagePolicy['roles'] is Map
-        ? Map<String, dynamic>.from(_usagePolicy['roles'] as Map)
+  Widget _workConfigView() {
+    final bindings = _workConfig['bindings'] is Map
+        ? Map<String, dynamic>.from(_workConfig['bindings'] as Map)
         : <String, dynamic>{};
-    final fallback =
-        _usagePolicy['fallbackPolicy']?.toString() ?? 'configured_only';
+    final defaultWorkflowId = _workConfig['defaultWorkflowId']?.toString() ??
+        _workflowCatalog.firstOrNull?.id ??
+        '';
+    final chatgptWorker = _preferredReadyWorker('chatgpt');
+    final geminiWorker = _preferredReadyWorker('gemini');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Worker usage for this Workstream',
-            style: Theme.of(context).textTheme.titleMedium),
+        Text('Execution', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 16),
+        Text('Default workflow', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 6),
-        const Text(
-          'Choose the Workspace Worker, model, fallback behavior, and Cloud concurrency ceiling for each task role. The selected Worker must be Ready on its Workspace.',
-        ),
-        const SizedBox(height: 14),
-        DropdownButtonFormField<String>(
-          initialValue: fallback,
-          decoration:
-              const InputDecoration(labelText: 'Scheduling and fallback'),
-          items: const [
-            DropdownMenuItem(
-              value: 'configured_only',
-              child: Text('Use only selected Workers'),
-            ),
-            DropdownMenuItem(
-              value: 'configured_then_any',
-              child:
-                  Text('Prefer selected Workers, then use any eligible Worker'),
-            ),
-          ],
-          onChanged: !_canExecute || _savingUsage
-              ? null
-              : (value) {
-                  if (value != null) {
-                    setState(() => _usagePolicy = {
-                          ..._usagePolicy,
-                          'fallbackPolicy': value,
-                          'roles': roles,
-                        });
-                  }
-                },
-        ),
-        const SizedBox(height: 12),
-        if (_loadingUsage)
+        if (_loadingWorkflows)
           const LinearProgressIndicator()
-        else if (_eligibleWorkers.isEmpty)
-          const Text(
-              'Grant a Workspace to this Project and configure a Worker before selecting execution capacity.')
-        else if (roles.isEmpty)
-          const Text(
-              'No role preferences yet. Add a role to choose its Workspace Worker and model.')
-        else
-          ...roles.entries.map((entry) {
-            final binding = entry.value is Map
-                ? Map<String, dynamic>.from(entry.value as Map)
+        else if (_workflowCatalog.isNotEmpty)
+          DropdownButtonFormField<String>(
+            itemHeight: null,
+            initialValue: defaultWorkflowId,
+            decoration: const InputDecoration(labelText: 'Default Workflow'),
+            items: _workflowCatalog
+                .map((workflow) => DropdownMenuItem(
+                      value: workflow.id,
+                      child: _workflowOption(context, workflow),
+                    ))
+                .toList(),
+            onChanged: !_canConfigureWork || _savingWorkConfig
+                ? null
+                : (value) {
+                    if (value != null) {
+                      setState(() => _workConfig = {
+                            ..._workConfig,
+                            'defaultWorkflowId': value,
+                          });
+                    }
+                  },
+          ),
+        const SizedBox(height: 12),
+        Text('Workers', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 6),
+        if (_loadingWorkChoices)
+          const LinearProgressIndicator()
+        else ...[
+          if (_projectWorkers.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Grant a Workspace to this Project and install a Worker to configure Steps.',
+              ),
+            )
+          else if (_eligibleWorkers.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'No Workers are Ready yet. Check sign-in and enablement in Workspace settings.',
+              ),
+            ),
+          if (bindings.isEmpty && chatgptWorker != null && geminiWorker != null)
+            _recommendedSetupCard(chatgptWorker, geminiWorker),
+          if (bindings.isEmpty && chatgptWorker != null && geminiWorker == null)
+            _singleWorkerSetupCard(chatgptWorker),
+          if (bindings.isEmpty && geminiWorker != null && chatgptWorker == null)
+            _singleWorkerSetupCard(geminiWorker),
+          ...const [
+            'direct',
+            'research',
+            'plan',
+            'implement',
+            'test',
+            'verify',
+          ].map((bindingId) {
+            final raw = bindings[bindingId];
+            final binding = raw is Map
+                ? Map<String, dynamic>.from(raw)
                 : <String, dynamic>{};
-            final selected = _eligibleWorkers
-                .where((worker) => worker.id == binding['workerId'])
+            final configuredWorkerId = binding['workerId']?.toString() ?? '';
+            final selectedId = _eligibleWorkers
+                    .any((worker) => worker.id == configuredWorkerId)
+                ? configuredWorkerId
+                : '';
+            final selectedWorker = _projectWorkers
+                .where((worker) => worker.id == configuredWorkerId)
                 .firstOrNull;
-            final model = binding['model']?.toString();
-            final limit = binding['cloudConcurrencyLimit']?.toString();
-            final workerLabel = selected == null
-                ? 'Any eligible Worker'
-                : '${_usageWorkerName(selected)} · ${_projectWorkspaceNames[selected.workspaceId] ?? selected.workspaceId}';
-            return Card(
-              child: ListTile(
-                title: Text(entry.key),
-                subtitle: Text([
-                  workerLabel,
-                  if (model != null && model.isNotEmpty) 'Model: $model',
-                  if (limit != null) 'Cloud limit: $limit concurrent',
-                ].join(' · ')),
-                trailing: Wrap(
-                  spacing: 4,
-                  children: [
-                    IconButton(
-                      tooltip: 'Edit role usage',
-                      onPressed: !_canExecute || _savingUsage
+            final status = selectedWorker == null
+                ? (configuredWorkerId.isEmpty ? 'Not assigned' : 'Unavailable')
+                : _workerReadinessLabel(selectedWorker);
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  SizedBox(
+                      width: 100, child: Text(_stepDisplayName(bindingId))),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: selectedId,
+                      decoration: const InputDecoration(
+                        labelText: 'Worker',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '',
+                          child: Text('Choose a Worker'),
+                        ),
+                        ..._eligibleWorkers.map((worker) => DropdownMenuItem(
+                              value: worker.id,
+                              child: Text(
+                                '${_workerDisplayName(worker)} · ${_projectWorkspaceNames[worker.workspaceId] ?? worker.workspaceId}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            )),
+                      ],
+                      onChanged: !_canConfigureWork || _savingWorkConfig
                           ? null
-                          : () => _editUsageRole(entry.key, binding),
-                      icon: const Icon(Icons.edit_outlined),
+                          : (value) => _setStepBinding(
+                                bindingId,
+                                value == null || value.isEmpty
+                                    ? <String, dynamic>{}
+                                    : {...binding, 'workerId': value},
+                              ),
                     ),
-                    IconButton(
-                      tooltip: 'Remove role',
-                      onPressed: !_canExecute || _savingUsage
-                          ? null
-                          : () {
-                              final next = Map<String, dynamic>.from(roles)
-                                ..remove(entry.key);
-                              _saveUsagePolicy(
-                                  {..._usagePolicy, 'roles': next});
-                            },
-                      icon: const Icon(Icons.delete_outline),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 110,
+                    child: Text(
+                      status,
+                      textAlign: TextAlign.end,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: status == 'Ready'
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.error,
+                          ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             );
           }),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
+        ],
+        const SizedBox(height: 12),
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: const Text('Advanced'),
           children: [
-            OutlinedButton.icon(
-              onPressed: !_canExecute || _savingUsage || _loadingUsage
-                  ? null
-                  : () => _editUsageRole('', const {}),
-              icon: const Icon(Icons.add),
-              label: const Text('Add role'),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Project instructions',
+                  style: Theme.of(context).textTheme.titleSmall),
             ),
-            FilledButton.icon(
-              onPressed: !_canExecute || _savingUsage
-                  ? null
-                  : () => _saveUsagePolicy(_usagePolicy),
-              icon: _savingUsage
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.save_outlined),
-              label: const Text('Save usage policy'),
+            const SizedBox(height: 4),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(widget.project.instructions.trim().isEmpty
+                  ? 'None set'
+                  : widget.project.instructions),
+            ),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text('Edit these in Project settings.'),
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _workstreamInstructionsController,
+              minLines: 2,
+              maxLines: 5,
+              maxLength: 4000,
+              enabled: _canConfigureWork && !_savingWorkConfig,
+              decoration: const InputDecoration(
+                labelText: 'Workstream instructions',
+                helperText: 'Applied to every Step.',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) => setState(() => _workConfig = {
+                    ..._workConfig,
+                    'workstreamInstructions': value,
+                  }),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Step settings',
+                  style: Theme.of(context).textTheme.titleSmall),
+            ),
+            ...const [
+              'direct',
+              'research',
+              'plan',
+              'implement',
+              'test',
+              'verify',
+            ].map((bindingId) {
+              final raw = bindings[bindingId];
+              final binding = raw is Map
+                  ? Map<String, dynamic>.from(raw)
+                  : <String, dynamic>{};
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(_stepDisplayName(bindingId)),
+                subtitle: Text(_stepAdvancedSummary(binding)),
+                trailing: TextButton(
+                  onPressed: !_canConfigureWork || _savingWorkConfig
+                      ? null
+                      : () => _editStepBinding(bindingId, binding),
+                  child: const Text('Configure'),
+                ),
+              );
+            }),
+            const ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('Concurrency'),
+              subtitle: Text('Work Requests are queued for this Workstream.'),
             ),
           ],
         ),
-        if (!_canExecute)
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: !_canConfigureWork || _savingWorkConfig
+              ? null
+              : () => _saveWorkConfig(_workConfig),
+          icon: _savingWorkConfig
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.save_outlined),
+          label: const Text('Save Work settings'),
+        ),
+        if (!_canConfigureWork)
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
-                'A Project owner or collaborator can change Worker usage.'),
+                'Only the Project owner or assigned Workstream lead can change Work settings.'),
           ),
       ],
     );
   }
 
-  String _usageWorkerName(StudioWorker worker) => switch (worker.workerTypeId) {
+  String _stepDisplayName(String bindingId) => switch (bindingId) {
+        'direct' => 'Direct',
+        'research' => 'Research',
+        'plan' => 'Plan',
+        'implement' => 'Implement',
+        'test' => 'Test',
+        _ => 'Verify',
+      };
+
+  String _workerReadinessLabel(StudioWorker worker) {
+    if (worker.activationState != 'enabled') return 'Disabled';
+    if (worker.readinessState == 'ready') return 'Ready';
+    if (worker.attentionReasonCode == 'sign_in_required' ||
+        worker.readinessState == 'sign_in_required') {
+      return 'Needs sign-in';
+    }
+    return 'Needs attention';
+  }
+
+  String _stepAdvancedSummary(Map<String, dynamic> binding) {
+    final details = <String>[];
+    if ((binding['additionalInstructions']?.toString().trim().isNotEmpty ??
+        false)) {
+      details.add('Step instructions');
+    }
+    if ((binding['model']?.toString().trim().isNotEmpty ?? false)) {
+      details.add('Model: ${binding['model']}');
+    }
+    if ((binding['fallbackWorkerId']?.toString().trim().isNotEmpty ?? false)) {
+      details.add('Fallback set');
+    }
+    return details.isEmpty
+        ? 'Instructions, model, and fallback'
+        : details.join(' · ');
+  }
+
+  StudioWorker? _preferredReadyWorker(String workerTypeId) {
+    final matching = _eligibleWorkers
+        .where((worker) => worker.workerTypeId == workerTypeId)
+        .toList()
+      ..sort((a, b) {
+        final workspaceCompare = (_projectWorkspaceNames[a.workspaceId] ?? '')
+            .compareTo(_projectWorkspaceNames[b.workspaceId] ?? '');
+        if (workspaceCompare != 0) return workspaceCompare;
+        return a.id.compareTo(b.id);
+      });
+    return matching.firstOrNull;
+  }
+
+  Widget _recommendedSetupCard(
+    StudioWorker chatgptWorker,
+    StudioWorker geminiWorker,
+  ) =>
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Set up Work',
+                  style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 4),
+              const Text('Recommended'),
+              const SizedBox(height: 12),
+              ...const [
+                ('Direct', 'chatgpt'),
+                ('Research', 'gemini'),
+                ('Plan', 'gemini'),
+                ('Implement', 'chatgpt'),
+                ('Test', 'chatgpt'),
+                ('Verify', 'gemini'),
+              ].map((step) {
+                final worker =
+                    step.$2 == 'chatgpt' ? chatgptWorker : geminiWorker;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(step.$1)),
+                      Text(_workerDisplayName(worker)),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: !_canConfigureWork || _savingWorkConfig
+                    ? null
+                    : () => _applySuggestedWorkerSetup({
+                          'direct': chatgptWorker,
+                          'research': geminiWorker,
+                          'plan': geminiWorker,
+                          'implement': chatgptWorker,
+                          'test': chatgptWorker,
+                          'verify': geminiWorker,
+                        }),
+                child: _savingWorkConfig
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Use recommended'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  Widget _singleWorkerSetupCard(StudioWorker worker) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Set up Work with ${_workerDisplayName(worker)} for every Step',
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: !_canConfigureWork || _savingWorkConfig
+                    ? null
+                    : () => _applySuggestedWorkerSetup({
+                          for (final id in const [
+                            'direct',
+                            'research',
+                            'plan',
+                            'implement',
+                            'test',
+                            'verify',
+                          ])
+                            id: worker,
+                        }),
+                child: _savingWorkConfig
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : Text('Use ${_workerDisplayName(worker)} for all'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  Future<void> _applySuggestedWorkerSetup(
+    Map<String, StudioWorker> assignments,
+  ) async {
+    final bindings = <String, dynamic>{
+      for (final entry in assignments.entries)
+        entry.key: {'workerId': entry.value.id},
+    };
+    await _saveWorkConfig({..._workConfig, 'bindings': bindings});
+  }
+
+  void _setStepBinding(String bindingId, Map<String, dynamic> binding) {
+    final bindings = _workConfig['bindings'] is Map
+        ? Map<String, dynamic>.from(_workConfig['bindings'] as Map)
+        : <String, dynamic>{};
+    final cleaned = Map<String, dynamic>.from(binding)
+      ..removeWhere((key, value) => value == null || value == '');
+    if (cleaned.isEmpty) {
+      bindings.remove(bindingId);
+    } else {
+      bindings[bindingId] = cleaned;
+    }
+    setState(() => _workConfig = {..._workConfig, 'bindings': bindings});
+  }
+
+  String _workerDisplayName(StudioWorker worker) =>
+      switch (worker.workerTypeId) {
         'chatgpt' => 'ChatGPT',
         'gemini' => 'Gemini',
         _ => worker.workerTypeId,
       };
 
-  Future<void> _editUsageRole(
-    String existingRole,
+  Future<void> _editStepBinding(
+    String bindingId,
     Map<String, dynamic> current,
   ) async {
-    final roleController = TextEditingController(text: existingRole);
     final modelController =
         TextEditingController(text: current['model']?.toString() ?? '');
+    final instructionsController = TextEditingController(
+      text: current['additionalInstructions']?.toString() ?? '',
+    );
     final eligibleWorkerIds =
         _eligibleWorkers.map((worker) => worker.id).toSet();
     var selectedWorker = current['workerId']?.toString() ?? '';
     if (!eligibleWorkerIds.contains(selectedWorker)) selectedWorker = '';
-    var fallbackWorker = (current['fallbackWorkerIds'] as List?)
-            ?.whereType<String>()
-            .firstOrNull ??
-        '';
+    var fallbackWorker = current['fallbackWorkerId']?.toString() ?? '';
     if (!eligibleWorkerIds.contains(fallbackWorker) ||
         fallbackWorker == selectedWorker) {
       fallbackWorker = '';
     }
-    final concurrencyController = TextEditingController(
-      text: current['cloudConcurrencyLimit']?.toString() ?? '1',
-    );
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text(
-              existingRole.isEmpty ? 'Add role usage' : 'Edit $existingRole'),
+          title: Text('${_stepDisplayName(bindingId)} settings'),
           content: SizedBox(
             width: 460,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextField(
-                    controller: roleController,
-                    enabled: existingRole.isEmpty,
-                    decoration: const InputDecoration(labelText: 'Task role'),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedWorker,
-                    decoration: const InputDecoration(
-                        labelText: 'Preferred Workspace Worker'),
-                    items: [
-                      const DropdownMenuItem(
-                          value: '', child: Text('Choose a Worker')),
-                      ..._eligibleWorkers.map((worker) => DropdownMenuItem(
-                            value: worker.id,
-                            child: Text(
-                                '${_usageWorkerName(worker)} · ${_projectWorkspaceNames[worker.workspaceId] ?? worker.workspaceId}'),
-                          )),
-                    ],
-                    onChanged: (value) => setDialogState(() {
-                      selectedWorker = value ?? '';
-                      if (fallbackWorker == selectedWorker) fallbackWorker = '';
-                    }),
-                  ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: fallbackWorker,
-                    decoration:
-                        const InputDecoration(labelText: 'Fallback Worker'),
+                    decoration: const InputDecoration(
+                        labelText: 'Fallback Worker (optional)'),
                     items: [
                       const DropdownMenuItem(
-                          value: '', child: Text('No ordered fallback')),
+                          value: '', child: Text('No fallback')),
                       ..._eligibleWorkers
                           .where((worker) => worker.id != selectedWorker)
                           .map((worker) => DropdownMenuItem(
                                 value: worker.id,
                                 child: Text(
-                                    '${_usageWorkerName(worker)} · ${_projectWorkspaceNames[worker.workspaceId] ?? worker.workspaceId}'),
+                                    '${_workerDisplayName(worker)} · ${_projectWorkspaceNames[worker.workspaceId] ?? worker.workspaceId}'),
                               )),
                     ],
                     onChanged: (value) =>
                         setDialogState(() => fallbackWorker = value ?? ''),
                   ),
-                  const SizedBox(height: 12),
                   TextField(
                     controller: modelController,
                     decoration:
@@ -1847,10 +2222,15 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    controller: concurrencyController,
-                    keyboardType: TextInputType.number,
+                    controller: instructionsController,
+                    minLines: 2,
+                    maxLines: 5,
+                    maxLength: 4000,
                     decoration: const InputDecoration(
-                        labelText: 'Cloud concurrency limit'),
+                      labelText: 'Step instructions (optional)',
+                      helperText:
+                          'Added to this Step. Conclave manages its built-in guidance.',
+                    ),
                   ),
                 ],
               ),
@@ -1862,14 +2242,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                 child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
-                final limit = int.tryParse(concurrencyController.text.trim());
-                if (roleController.text.trim().isEmpty ||
-                    selectedWorker.isEmpty ||
-                    limit == null ||
-                    limit < 1 ||
-                    limit > 1024) {
-                  return;
-                }
                 Navigator.pop(dialogContext, true);
               },
               child: const Text('Save'),
@@ -1879,55 +2251,399 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       ),
     );
     if (saved == true && mounted) {
-      final roles = _usagePolicy['roles'] is Map
-          ? Map<String, dynamic>.from(_usagePolicy['roles'] as Map)
-          : <String, dynamic>{};
-      final role = roleController.text.trim().toLowerCase();
-      final model = modelController.text.trim();
-      roles[role] = {
+      final binding = <String, dynamic>{
         if (selectedWorker.isNotEmpty) 'workerId': selectedWorker,
-        if (fallbackWorker.isNotEmpty) 'fallbackWorkerIds': [fallbackWorker],
-        if (model.isNotEmpty) 'model': model,
-        'cloudConcurrencyLimit': int.parse(concurrencyController.text.trim()),
+        if (fallbackWorker.isNotEmpty) 'fallbackWorkerId': fallbackWorker,
       };
-      await _saveUsagePolicy({..._usagePolicy, 'roles': roles});
+      final model = modelController.text.trim();
+      final instructions = instructionsController.text.trim();
+      if (model.isNotEmpty) binding['model'] = model;
+      if (instructions.isNotEmpty) {
+        binding['additionalInstructions'] = instructions;
+      }
+      _setStepBinding(bindingId, binding);
     }
-    roleController.dispose();
     modelController.dispose();
-    concurrencyController.dispose();
+    instructionsController.dispose();
   }
 
-  Future<void> _saveUsagePolicy(Map<String, dynamic> policy) async {
+  Future<void> _saveWorkConfig(Map<String, dynamic> config) async {
+    if (!_canConfigureWork) return;
     final ds = widget.dataSource;
     if (ds == null) return;
-    setState(() => _savingUsage = true);
+    setState(() => _savingWorkConfig = true);
     try {
       final updated = await ds.updateWorkstream(
         workstreamId: widget.workstream.id,
-        executionPolicy: policy,
+        workConfig: config,
       );
       if (!mounted) return;
       setState(() {
-        _usagePolicy = Map<String, dynamic>.from(updated.executionPolicy);
-        _savingUsage = false;
+        _workConfig = Map<String, dynamic>.from(updated.workConfig);
+        _workstreamInstructionsController.text =
+            _workConfig['workstreamInstructions']?.toString() ?? '';
+        _savingWorkConfig = false;
       });
+      final defaultId = _workConfig['defaultWorkflowId']?.toString();
+      final selectedDefault = _workflowCatalog
+          .where((workflow) => workflow.id == defaultId)
+          .map((workflow) => workflow.reference)
+          .firstOrNull;
+      if (selectedDefault != null) _workflow = selectedDefault;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Worker usage policy saved')),
+        const SnackBar(content: Text('Work settings saved')),
       );
     } catch (error) {
       if (!mounted) return;
-      setState(() => _savingUsage = false);
+      setState(() => _savingWorkConfig = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save Worker usage policy: $error')),
+        SnackBar(content: Text('Could not save Work settings: $error')),
       );
     }
   }
 
-  void _runWork() {
-    final text = _requestController.text.trim();
-    if (!_canExecute || text.isEmpty) return;
-    _requestController.clear();
-    widget.onRunWork?.call(text);
+  Future<void> _runWork() async {
+    final text = _requestController.text;
+    final requestText = text.trim().isEmpty
+        ? 'Please use the attached inputs to complete the request.'
+        : text;
+    final submit = widget.onRunWork;
+    final dataSource = widget.dataSource;
+    if (!_canExecute ||
+        (text.trim().isEmpty && _workAttachments.isEmpty) ||
+        submit == null ||
+        _submittingWork) {
+      return;
+    }
+    setState(() {
+      _submittingWork = true;
+      _workSubmitError = null;
+    });
+    try {
+      final workflowId = _workflow.split(':').first;
+      if (dataSource != null) {
+        final issues = await dataSource.validateWorkRequestEligibility(
+          workstreamId: widget.workstream.id,
+          workflowId: workflowId,
+          attachments: _workAttachments,
+        );
+        if (issues.isNotEmpty) {
+          final workflowName = _workflowCatalog
+                  .where((definition) => definition.id == workflowId)
+                  .map((definition) => definition.name)
+                  .firstOrNull ??
+              workflowId;
+          if (mounted) {
+            setState(() => _workSubmitError =
+                'Cannot run $workflowName\n${issues.map((issue) => '• $issue').join('\n')}');
+          }
+          return;
+        }
+      }
+      final workRequestId =
+          await submit(requestText, workflowId, _workAttachments);
+      if (!mounted) return;
+      _requestController.clear();
+      setState(() {
+        _workAttachments = [];
+        _workTimeline = [
+          ..._workTimeline,
+          StudioWorkRequest(
+            id: workRequestId,
+            requestedByName: 'You',
+            prompt: requestText,
+            workflowId: workflowId,
+            workflowVersion: 1,
+            status: 'queued',
+            createdAt: DateTime.now().toUtc().toIso8601String(),
+            steps: const [],
+          ),
+        ];
+      });
+      if (dataSource != null) {
+        await _refreshWorkTimeline();
+      }
+    } catch (error) {
+      if (mounted) {
+        final message = error is StudioApiException &&
+                error.message.startsWith('Cannot run ')
+            ? error.message
+            : 'Could not run Work: $error';
+        setState(() => _workSubmitError = message);
+      }
+    } finally {
+      if (mounted) setState(() => _submittingWork = false);
+    }
+  }
+
+  Future<void> _addWorkFiles() async {
+    try {
+      final selected = await work_request_files.pickWorkRequestFiles();
+      final currentBytes = _workAttachments.fold<int>(
+        0,
+        (sum, item) => sum + (item['sizeBytes'] as int? ?? 0),
+      );
+      final selectedBytes = selected.fold<int>(
+        0,
+        (sum, item) => sum + (item['sizeBytes'] as int? ?? 0),
+      );
+      if (_workAttachments.length + selected.length > 10 ||
+          currentBytes + selectedBytes > 1024 * 1024 ||
+          selected
+              .any((item) => (item['sizeBytes'] as int? ?? 0) > 1024 * 1024)) {
+        throw const FormatException(
+          'Choose up to 10 files, with each file and the total under 1 MB.',
+        );
+      }
+      if (mounted && selected.isNotEmpty) {
+        setState(() => _workAttachments = [..._workAttachments, ...selected]);
+      }
+    } on UnsupportedError catch (error) {
+      if (mounted) setState(() => _workSubmitError = error.message.toString());
+    } on FormatException catch (error) {
+      if (mounted) setState(() => _workSubmitError = error.message.toString());
+    }
+  }
+
+  Future<void> _addWorkReference() async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add a link'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(hintText: 'https://example.com'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Add link'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || value.isEmpty) return;
+    if (_workAttachments.length >= 10) {
+      if (mounted) {
+        setState(() => _workSubmitError =
+            'A Work Request can include up to 10 attachments.');
+      }
+      return;
+    }
+    final uri = Uri.tryParse(value);
+    if (uri == null ||
+        (uri.scheme != 'https' && uri.scheme != 'http') ||
+        uri.host.isEmpty ||
+        value.length > 2048) {
+      if (mounted) {
+        setState(() => _workSubmitError =
+            'Enter a valid http or https link (up to 2,048 characters).');
+      }
+      return;
+    }
+    if (mounted) {
+      setState(() => _workAttachments = [
+            ..._workAttachments,
+            {
+              'kind': 'url',
+              'name': uri.host,
+              'url': uri.toString(),
+              'mediaType': 'text/uri-list',
+              'sizeBytes': 0,
+            },
+          ]);
+    }
+  }
+
+  Future<void> _refreshWorkTimeline({bool activeOnly = false}) async {
+    final dataSource = widget.dataSource;
+    if (dataSource == null) {
+      if (_loadingWorkTimeline) {
+        setState(() => _loadingWorkTimeline = false);
+      }
+      return;
+    }
+    if (_refreshingWorkTimeline) {
+      _workTimelineRefreshPending = true;
+      return;
+    }
+    _refreshingWorkTimeline = true;
+    try {
+      final requests = await dataSource.loadWorkstreamWorkRequests(
+        workstreamId: widget.workstream.id,
+        activeOnly: activeOnly,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (activeOnly) {
+          final updatedById = {
+            for (final request in requests) request.id: request
+          };
+          _workTimeline = [
+            for (final existing in _workTimeline)
+              updatedById.remove(existing.id) ?? existing,
+            ...updatedById.values,
+          ]..sort((left, right) => left.createdAt.compareTo(right.createdAt));
+        } else {
+          _workTimeline = requests;
+        }
+        _loadingWorkTimeline = false;
+        _workTimelineError = null;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _loadingWorkTimeline = false;
+          _workTimelineError = error.toString();
+        });
+      }
+    } finally {
+      _refreshingWorkTimeline = false;
+      if (_workTimelineRefreshPending && mounted) {
+        _workTimelineRefreshPending = false;
+        unawaited(_refreshWorkTimeline(activeOnly: activeOnly));
+      }
+    }
+  }
+
+  Future<void> _showRunDetails(String workRequestId) async {
+    final dataSource = widget.dataSource;
+    if (dataSource == null) return;
+    final details = dataSource.loadWorkRequest(workRequestId: workRequestId);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => FutureBuilder<StudioWorkRequestStatus>(
+        future: details,
+        builder: (context, snapshot) {
+          final height = MediaQuery.sizeOf(context).height * 0.88;
+          if (snapshot.hasError) {
+            return SizedBox(
+              height: height,
+              child: const Center(child: Text('Could not load Run details.')),
+            );
+          }
+          if (!snapshot.hasData) {
+            return SizedBox(
+              height: height,
+              child: const Center(child: CircularProgressIndicator()),
+            );
+          }
+          return _WorkRequestDetailsSheet(
+            details: snapshot.data!,
+            onRetryStep: (step) => _retryWorkRequestStep(
+              workRequestId,
+              step,
+              closeDetails: true,
+            ),
+            onCancelRun: () => _cancelFailedWorkRequest(
+              workRequestId,
+              closeDetails: true,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _retryWorkRequestStep(
+      String workRequestId, StudioWorkRequestStep step,
+      {bool closeDetails = false}) async {
+    final dataSource = widget.dataSource;
+    if (dataSource == null) return;
+    String? sessionStrategy;
+    if (step.kind == 'implement') {
+      final resumeRecommended = const {
+        'provider_unavailable',
+        'authentication_required',
+        'quota_exhausted',
+        'worker_not_ready',
+        'cli_not_found',
+        'unsupported_cli_version',
+        'model_not_supported',
+        'permission_denied',
+      }.contains(step.errorCode);
+      final recommendation = resumeRecommended
+          ? 'The failure looks like it happened before the Worker completed a turn. Resuming is recommended.'
+          : 'The failure may have happened after work began. Starting fresh is recommended.';
+      sessionStrategy = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Retry Implement'),
+          content: Text(
+            '$recommendation\n\nChoose how the retry should use provider context.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, 'resume'),
+              child: Text(
+                resumeRecommended
+                    ? 'Resume previous session · Recommended'
+                    : 'Resume previous session',
+              ),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, 'fresh'),
+              child: Text(
+                resumeRecommended ? 'Start fresh' : 'Start fresh · Recommended',
+              ),
+            ),
+          ],
+        ),
+      );
+      if (sessionStrategy == null) return;
+    }
+    try {
+      await dataSource.retryWorkRequestStep(
+        workRequestId: workRequestId,
+        stepKind: step.kind,
+        sessionStrategy: sessionStrategy,
+      );
+      if (!mounted) return;
+      if (closeDetails) Navigator.of(context).pop();
+      unawaited(_refreshWorkTimeline());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Retrying ${step.kind} Step.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not retry this Step. Check Worker readiness.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _cancelFailedWorkRequest(
+    String workRequestId, {
+    bool closeDetails = false,
+  }) async {
+    final dataSource = widget.dataSource;
+    if (dataSource == null) return;
+    try {
+      await dataSource.cancelWorkRequest(workRequestId: workRequestId);
+      if (!mounted) return;
+      if (closeDetails) Navigator.of(context).pop();
+      unawaited(_refreshWorkTimeline());
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Run cancelled.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not cancel this Run.')),
+      );
+    }
   }
 
   Future<void> _sendDiscussion() async {
@@ -2021,20 +2737,73 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   }
 }
 
+Widget _workflowOption(
+  BuildContext context,
+  StudioBuiltinWorkflow workflow,
+) =>
+    SizedBox(
+      height: 54,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(workflow.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text(
+            workflow.description,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+
 class _WorkComposer extends StatelessWidget {
   const _WorkComposer({
     required this.requestController,
     required this.workflow,
+    required this.workflowCatalog,
+    required this.loadingWorkflows,
+    required this.workflowCatalogError,
     required this.canExecute,
+    required this.workTimeline,
+    required this.loadingTimeline,
+    required this.timelineError,
+    required this.submitError,
+    required this.submitting,
+    required this.attachments,
+    required this.onAddFiles,
+    required this.onAddReference,
+    required this.onRemoveAttachment,
+    required this.onRefresh,
+    required this.onShowRunDetails,
+    required this.onRetryStep,
+    required this.onCancelRun,
     required this.onWorkflowChanged,
     required this.onRun,
   });
 
   final TextEditingController requestController;
   final String workflow;
+  final List<StudioBuiltinWorkflow> workflowCatalog;
+  final bool loadingWorkflows;
+  final String? workflowCatalogError;
   final bool canExecute;
+  final List<StudioWorkRequest> workTimeline;
+  final bool loadingTimeline;
+  final String? timelineError;
+  final String? submitError;
+  final bool submitting;
+  final List<Map<String, dynamic>> attachments;
+  final Future<void> Function() onAddFiles;
+  final Future<void> Function() onAddReference;
+  final ValueChanged<int> onRemoveAttachment;
+  final Future<void> Function() onRefresh;
+  final ValueChanged<String>? onShowRunDetails;
+  final Future<void> Function(String, StudioWorkRequestStep)? onRetryStep;
+  final Future<void> Function(String)? onCancelRun;
   final ValueChanged<String> onWorkflowChanged;
-  final VoidCallback onRun;
+  final Future<void> Function() onRun;
 
   @override
   Widget build(BuildContext context) => _ProjectPanel(
@@ -2046,7 +2815,7 @@ class _WorkComposer extends StatelessWidget {
             controller: requestController,
             minLines: 3,
             maxLines: 6,
-            enabled: canExecute,
+            enabled: canExecute && !submitting,
             decoration: const InputDecoration(
               labelText: 'What should Conclave do?',
               hintText:
@@ -2054,33 +2823,90 @@ class _WorkComposer extends StatelessWidget {
               border: OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            isExpanded: true,
-            initialValue: workflow,
-            decoration: const InputDecoration(labelText: 'Workflow'),
-            items: const [
-              DropdownMenuItem(value: 'Research', child: Text('Research')),
-              DropdownMenuItem(value: 'Review', child: Text('Review')),
-              DropdownMenuItem(
-                  value: 'Implementation', child: Text('Implementation')),
-              DropdownMenuItem(
-                  value: 'Implementation + Test + Review',
-                  child: Text('Implementation + Test + Review')),
-              DropdownMenuItem(
-                  value: 'Research + Implementation',
-                  child: Text('Research + Implementation')),
-              DropdownMenuItem(value: 'Full Cycle', child: Text('Full Cycle')),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              OutlinedButton.icon(
+                onPressed: canExecute && !submitting ? onAddFiles : null,
+                icon: const Icon(Icons.attach_file),
+                label: const Text('Add files'),
+              ),
+              OutlinedButton.icon(
+                onPressed: canExecute && !submitting ? onAddReference : null,
+                icon: const Icon(Icons.link),
+                label: const Text('Add link'),
+              ),
+              for (var i = 0; i < attachments.length; i++)
+                InputChip(
+                  avatar: Icon(attachments[i]['kind'] == 'url'
+                      ? Icons.link
+                      : Icons.insert_drive_file),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 220),
+                    child: Text(
+                      (attachments[i]['name'] ?? 'Attachment').toString(),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  onDeleted: canExecute && !submitting
+                      ? () => onRemoveAttachment(i)
+                      : null,
+                ),
             ],
-            onChanged: canExecute
-                ? (value) {
-                    if (value != null) onWorkflowChanged(value);
-                  }
-                : null,
           ),
+          if (attachments.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Up to 10 attachments. Files total 1 MB; links are passed as references.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          const SizedBox(height: 12),
+          if (loadingWorkflows)
+            const LinearProgressIndicator()
+          else if (workflowCatalogError != null)
+            Text(workflowCatalogError!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error))
+          else ...[
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              itemHeight: null,
+              initialValue: workflow,
+              decoration: const InputDecoration(labelText: 'Workflow'),
+              items: workflowCatalog
+                  .map((definition) => DropdownMenuItem(
+                        value: definition.reference,
+                        child: _workflowOption(context, definition),
+                      ))
+                  .toList(),
+              onChanged: canExecute
+                  ? (value) {
+                      if (value != null) onWorkflowChanged(value);
+                    }
+                  : null,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              workflowCatalog
+                      .where((definition) => definition.reference == workflow)
+                      .map((definition) =>
+                          '${definition.description}\n${definition.steps.map((step) => step.kind).join(' → ')}')
+                      .firstOrNull ??
+                  '',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
           const SizedBox(height: 14),
           FilledButton.icon(
-            onPressed: canExecute ? onRun : null,
+            onPressed: canExecute &&
+                    !submitting &&
+                    !loadingWorkflows &&
+                    workflowCatalogError == null
+                ? () => onRun()
+                : null,
             icon: const Icon(Icons.play_arrow),
             label: const Text('Run'),
           ),
@@ -2090,7 +2916,491 @@ class _WorkComposer extends StatelessWidget {
               child: Text(
                   'Viewer access can read the workstream but cannot run Work.'),
             ),
+          if (submitting) ...[
+            const SizedBox(height: 10),
+            const LinearProgressIndicator(),
+            const SizedBox(height: 6),
+            const Text('Checking Worker setup and starting Work…'),
+          ],
+          if (submitError != null) ...[
+            const SizedBox(height: 10),
+            Text(submitError!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
+          const SizedBox(height: 22),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Work history',
+                    style: Theme.of(context).textTheme.titleMedium),
+              ),
+              IconButton(
+                tooltip: 'Refresh Work history',
+                onPressed: () => onRefresh(),
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          if (loadingTimeline && workTimeline.isEmpty)
+            const LinearProgressIndicator()
+          else if (timelineError != null && workTimeline.isEmpty)
+            Text('Could not load Work history: $timelineError',
+                style: TextStyle(color: Theme.of(context).colorScheme.error))
+          else if (workTimeline.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text('Submitted Work requests will appear here.'),
+            )
+          else ...[
+            const SizedBox(height: 20),
+            ...workTimeline.map((request) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _WorkTimelineCard(
+                    request: request,
+                    workflowCatalog: workflowCatalog,
+                    onShowRunDetails: onShowRunDetails,
+                    onRetryStep: onRetryStep,
+                    onCancelRun: onCancelRun,
+                  ),
+                )),
+          ],
         ]),
+      );
+}
+
+class _WorkTimelineCard extends StatelessWidget {
+  const _WorkTimelineCard({
+    required this.request,
+    required this.workflowCatalog,
+    required this.onShowRunDetails,
+    required this.onRetryStep,
+    required this.onCancelRun,
+  });
+
+  final StudioWorkRequest request;
+  final List<StudioBuiltinWorkflow> workflowCatalog;
+  final ValueChanged<String>? onShowRunDetails;
+  final Future<void> Function(String, StudioWorkRequestStep)? onRetryStep;
+  final Future<void> Function(String)? onCancelRun;
+
+  String get _workflowName =>
+      workflowCatalog
+          .where((workflow) =>
+              workflow.id == request.workflowId &&
+              workflow.version == request.workflowVersion)
+          .map((workflow) => workflow.name)
+          .firstOrNull ??
+      request.workflowId;
+
+  String _stepName(String kind) => switch (kind) {
+        'implement' => 'Implement',
+        'research' => 'Research',
+        'plan' => 'Plan',
+        'test' => 'Test',
+        'verify' => 'Verify',
+        _ => kind,
+      };
+
+  String _elapsed(int? milliseconds) {
+    if (milliseconds == null) return '';
+    final seconds = milliseconds ~/ 1000;
+    final minutes = seconds ~/ 60;
+    final remainder = seconds % 60;
+    return minutes > 0 ? '${minutes}m ${remainder}s' : '${remainder}s';
+  }
+
+  IconData _statusIcon(String status) => switch (status) {
+        'completed' => Icons.check_circle,
+        'running' => Icons.circle,
+        'failed' => Icons.error,
+        'cancelled' => Icons.cancel,
+        _ => Icons.circle_outlined,
+      };
+
+  String _stepStatusLabel(String status) => switch (status) {
+        'completed' => 'done',
+        'running' => 'running',
+        'failed' => 'failed',
+        'cancelled' => 'cancelled',
+        _ => 'waiting',
+      };
+
+  String _workerName(StudioWorkRequestStep step) => switch (step.workerTypeId) {
+        'chatgpt' => 'ChatGPT',
+        'gemini' => 'Gemini',
+        _ => step.providerToolName ??
+            step.workerTypeId?.split('.').last ??
+            (step.workerId == null ? 'Worker pending' : 'Configured Worker'),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final timestamp = DateTime.tryParse(request.createdAt)?.toLocal();
+    final timeLabel = timestamp == null
+        ? ''
+        : '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} '
+            '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
+    final cancelledSteps =
+        request.steps.where((step) => step.status == 'cancelled').toList();
+    final overall = request.status == 'cancelled'
+        ? 'Cancelled${cancelledSteps.isEmpty ? '' : ' during ${_stepName(cancelledSteps.first.kind)}'}'
+        : request.status[0].toUpperCase() + request.status.substring(1);
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Expanded(
+                child: Text(request.requestedByName,
+                    style: Theme.of(context).textTheme.titleSmall),
+              ),
+              Text(timeLabel, style: Theme.of(context).textTheme.bodySmall),
+            ]),
+            const SizedBox(height: 8),
+            SelectableText(request.prompt),
+            const SizedBox(height: 14),
+            Text('$_workflowName · $overall',
+                style: Theme.of(context).textTheme.titleSmall),
+            if (request.steps.isEmpty &&
+                (request.status == 'queued' ||
+                    request.status == 'running')) ...[
+              const SizedBox(height: 8),
+              const Text('Preparing Worker assignment…'),
+            ],
+            if (request.steps.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ...request.steps.map((step) {
+                final worker = _workerName(step);
+                final details = [
+                  worker,
+                  if (step.workerRuntimeVersion != null)
+                    'Worker ${step.workerRuntimeVersion}',
+                  if (step.providerToolVersion != null)
+                    step.providerToolVersion!,
+                  if (_elapsed(step.elapsedMs).isNotEmpty)
+                    _elapsed(step.elapsedMs),
+                ].join(' · ');
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Icon(_statusIcon(step.status),
+                            size: 17,
+                            color: step.status == 'failed'
+                                ? colors.error
+                                : step.status == 'completed'
+                                    ? colors.primary
+                                    : colors.secondary),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(_stepName(step.kind))),
+                        Text(_stepStatusLabel(step.status)),
+                      ]),
+                      if (step.status == 'running' ||
+                          step.status == 'completed' ||
+                          step.status == 'failed')
+                        Padding(
+                          padding: const EdgeInsets.only(left: 25, top: 2),
+                          child: Text(details,
+                              style: Theme.of(context).textTheme.bodySmall),
+                        ),
+                      if (step.status == 'failed') ...[
+                        Padding(
+                          padding: const EdgeInsets.only(left: 25, top: 6),
+                          child: Text(
+                            step.errorMessage ??
+                                'This Step could not be completed.',
+                            style: TextStyle(color: colors.error),
+                          ),
+                        ),
+                        if (request.status == 'failed' && onRetryStep != null)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16),
+                            child: TextButton.icon(
+                              onPressed: () => onRetryStep!(request.id, step),
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry step'),
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
+                );
+              }),
+            ],
+            if (request.testSummary != null) ...[
+              const SizedBox(height: 8),
+              Text('Tests · ${request.testSummary}',
+                  style: Theme.of(context).textTheme.bodySmall),
+            ],
+            if (request.finalText != null && request.finalText!.isNotEmpty) ...[
+              const Divider(height: 24),
+              Text('Conclave · $overall · $_workflowName',
+                  style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 6),
+              SelectableText(request.finalText!),
+            ] else if (request.status == 'failed' && request.error != null) ...[
+              const Divider(height: 24),
+              Text('Conclave · Failed',
+                  style: TextStyle(
+                      color: colors.error, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              SelectableText(request.error!),
+            ],
+            if ((request.status == 'queued' ||
+                    request.status == 'running' ||
+                    request.status == 'failed') &&
+                onCancelRun != null) ...[
+              const SizedBox(height: 4),
+              TextButton.icon(
+                onPressed: () => onCancelRun!(request.id),
+                icon: const Icon(Icons.cancel_outlined),
+                label: const Text('Cancel run'),
+              ),
+            ],
+            if (onShowRunDetails != null) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () => onShowRunDetails!(request.id),
+                icon: const Icon(Icons.subject),
+                label: const Text('Run details'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkRequestDetailsSheet extends StatelessWidget {
+  const _WorkRequestDetailsSheet({
+    required this.details,
+    required this.onRetryStep,
+    required this.onCancelRun,
+  });
+
+  final StudioWorkRequestStatus details;
+  final Future<void> Function(StudioWorkRequestStep step) onRetryStep;
+  final Future<void> Function() onCancelRun;
+
+  String _stepName(String kind) => switch (kind) {
+        'research' => 'Research',
+        'plan' => 'Plan',
+        'implement' => 'Implement',
+        'test' => 'Test',
+        'verify' => 'Verify',
+        _ => kind,
+      };
+
+  String _workerName(StudioWorkRequestStep step) => switch (step.workerTypeId) {
+        'chatgpt' => 'ChatGPT',
+        'gemini' => 'Gemini',
+        _ => step.providerToolName ?? step.workerTypeId ?? 'Worker',
+      };
+
+  String _timestamp(String? value) {
+    if (value == null) return '—';
+    final parsed = DateTime.tryParse(value)?.toLocal();
+    if (parsed == null) return '—';
+    return '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')} '
+        '${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}:${parsed.second.toString().padLeft(2, '0')}';
+  }
+
+  String _duration(int? milliseconds) {
+    if (milliseconds == null) return '—';
+    final seconds = milliseconds ~/ 1000;
+    final minutes = seconds ~/ 60;
+    final remainder = seconds % 60;
+    return minutes > 0 ? '${minutes}m ${remainder}s' : '${remainder}s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final workflow = details.workflowName ?? details.workflowId ?? 'Workflow';
+    final version = details.workflowVersion;
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.88,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text('Run details',
+                      style: Theme.of(context).textTheme.titleLarge),
+                ),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+              children: [
+                Text(
+                  '$workflow${version == null ? '' : ' · v$version'} · ${details.status}',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                if (details.requestedByName?.isNotEmpty == true) ...[
+                  const SizedBox(height: 6),
+                  Text('Requested by ${details.requestedByName}'),
+                ],
+                const SizedBox(height: 16),
+                Text('Original request',
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 6),
+                SelectableText(details.originalRequest?.isNotEmpty == true
+                    ? details.originalRequest!
+                    : 'No request text was recorded.'),
+                const SizedBox(height: 20),
+                for (final step in details.steps) ...[
+                  Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(_stepName(step.kind),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium),
+                              ),
+                              Text(step.status),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            [
+                              _workerName(step),
+                              if (step.workerRuntimeVersion != null)
+                                'Worker ${step.workerRuntimeVersion}',
+                              if (step.providerToolName != null &&
+                                  step.providerToolVersion != null)
+                                '${step.providerToolName} ${step.providerToolVersion}',
+                              if (step.providerToolName != null &&
+                                  step.providerToolVersion == null)
+                                step.providerToolName!,
+                            ].join(' · '),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 18,
+                            runSpacing: 6,
+                            children: [
+                              Text('Started · ${_timestamp(step.startedAt)}'),
+                              Text('Ended · ${_timestamp(step.completedAt)}'),
+                              Text('Duration · ${_duration(step.elapsedMs)}'),
+                            ],
+                          ),
+                          if (step.resultText?.isNotEmpty == true) ...[
+                            const Divider(height: 24),
+                            Text('Result',
+                                style: Theme.of(context).textTheme.titleSmall),
+                            const SizedBox(height: 6),
+                            SelectableText(step.resultText!),
+                          ] else if (step.status == 'failed') ...[
+                            const Divider(height: 24),
+                            Text(
+                              step.errorMessage ??
+                                  'This Step did not produce a result.',
+                              style: TextStyle(color: colors.error),
+                            ),
+                            if (details.status == 'failed') ...[
+                              const SizedBox(height: 12),
+                              FilledButton.icon(
+                                onPressed: () => onRetryStep(step),
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Retry step'),
+                              ),
+                            ],
+                          ],
+                          ExpansionTile(
+                            tilePadding: EdgeInsets.zero,
+                            childrenPadding: EdgeInsets.zero,
+                            title: const Text('Advanced technical details'),
+                            children: [
+                              if (step.assignmentId != null)
+                                _detailValue(
+                                    'Assignment ID', step.assignmentId!),
+                              if (step.workerRuntimeVersion != null)
+                                _detailValue('Worker Runtime version',
+                                    step.workerRuntimeVersion!),
+                              if (step.providerToolVersion != null)
+                                _detailValue(
+                                    '${step.providerToolName ?? 'Provider tool'} version',
+                                    step.providerToolVersion!),
+                              if (step.sessionPolicy != null)
+                                _detailValue(
+                                  'Session mode',
+                                  step.sessionPolicy == 'durable_session'
+                                      ? 'Durable session'
+                                      : 'Stateless',
+                                ),
+                              if (step.retrySessionStrategy != null)
+                                _detailValue(
+                                  'Last retry session',
+                                  step.retrySessionStrategy == 'fresh'
+                                      ? 'Started fresh'
+                                      : 'Resumed previous session',
+                                ),
+                              if (step.errorCode != null)
+                                _detailValue(
+                                    'Stable error code', step.errorCode!),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                if (details.errorCode != null &&
+                    details.steps.every((step) => step.errorCode == null))
+                  Text('Run error code: ${details.errorCode}'),
+                if (details.status == 'failed' ||
+                    details.status == 'queued' ||
+                    details.status == 'running') ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: onCancelRun,
+                    icon: const Icon(Icons.cancel_outlined),
+                    label: const Text('Cancel run'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailValue(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: 180, child: Text(label)),
+            Expanded(child: SelectableText(value)),
+          ],
+        ),
       );
 }
 

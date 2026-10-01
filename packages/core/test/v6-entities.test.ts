@@ -8,15 +8,16 @@ import {
   type WorkstreamExecutionLease,
   type WorkstreamExecutionPolicy,
   type WorkstreamCheckpoint,
-  type WorkflowVersion,
+  type BuiltinWorkflowDefinition,
+  BUILTIN_WORKFLOWS,
+  BUILTIN_WORKFLOW_CATALOG,
   deserializeV6Entity,
   serializeV6Entity,
-  validateNextWorkflowVersion,
+  validateBuiltinWorkflowDefinition,
   validateWorkRequest,
   validateWorkstream,
   validateWorkstreamCheckpoints,
   validateWorkstreamLeases,
-  validateWorkflowVersion,
   canDiscussWorkstream,
   canExecuteWorkstream,
   canManageWorkstream,
@@ -164,34 +165,9 @@ describe("v6 Workstream domain", () => {
       workstreamId: "workstream-1",
       requestedByUserId: "collaborator-1",
       mode: "stateful",
-      workflowDefinitionId: "workflow-1",
-      workflowVersionId: "workflow-version-1",
-      workflowVersionSnapshot: {
-        id: "workflow-version-1",
-        workflowDefinitionId: "workflow-1",
-        version: 1,
-        steps: [
-          {
-            id: "implementation",
-            name: "Implementation",
-            role: "implementation",
-            requiredCapabilities: [],
-            executionClass: "stateful_workstream",
-            order: 0,
-            dependsOn: [],
-            independentFrom: [],
-            approval: "none",
-            timeoutMs: 900000,
-            outputContract: {
-              contentType: "application/json",
-              requiredFields: ["summary"],
-              artifactTypes: [],
-            },
-          },
-        ],
-        createdByUserId: "owner-1",
-        createdAt: "2026-01-01T00:00:00.000Z",
-      },
+      workflowId: "direct",
+      workflowVersion: 1,
+      workflowSnapshot: BUILTIN_WORKFLOWS.direct,
       status: "queued",
       primaryWorkspaceId: "workspace-1",
       checkoutId: "checkout-1",
@@ -263,78 +239,81 @@ describe("v6 Workstream domain", () => {
     expect(() => deserializeV6Entity("[]")).toThrow(/must be an object/);
   });
 
-  it("validates DAGs, cycles, stateful ordering, and immutable versions", () => {
-    const step = (
-      id: string,
-      order: number,
-      executionClass: "stateless_read" | "stateful_workstream",
-      dependsOn: readonly string[] = [],
-    ): WorkflowVersion["steps"][number] => ({
-      id,
-      name: id,
-      role: id,
-      requiredCapabilities: [],
-      executionClass,
-      order,
-      dependsOn,
-      independentFrom: [],
-      approval: "none",
-      timeoutMs: 1000,
-      outputContract: {
-        contentType: "application/json",
-        requiredFields: [],
-        artifactTypes: [],
-      },
-    });
-    const version: WorkflowVersion = {
-      id: "workflow-version-2",
-      workflowDefinitionId: "workflow-1",
-      version: 2,
+  it("admits only canonical built-in Workflows and fixed step semantics", () => {
+    expect(Object.values(BUILTIN_WORKFLOWS)).toEqual(
+      Object.values(BUILTIN_WORKFLOW_CATALOG),
+    );
+    for (const definition of Object.values(BUILTIN_WORKFLOWS)) {
+      expect(() => validateBuiltinWorkflowDefinition(definition)).not.toThrow();
+      for (const step of definition.steps) {
+        expect(step).toMatchObject({
+          executionClass: expect.any(String),
+          requiredCapabilities: expect.any(Array),
+          readWritePolicy: expect.any(String),
+          timeoutMs: expect.any(Number),
+          promptProfileVersion: expect.any(String),
+          inputsFrom: expect.any(Array),
+          resultSemantics: expect.any(String),
+        });
+      }
+    }
+    expect(
+      BUILTIN_WORKFLOWS.full_cycle.steps.map((step) => [
+        step.kind,
+        step.inputsFrom,
+      ]),
+    ).toEqual([
+      ["research", []],
+      ["plan", ["research"]],
+      ["implement", ["research", "plan"]],
+      ["test", ["plan", "implement"]],
+      ["verify", ["research", "plan", "implement", "test"]],
+    ]);
+    expect(BUILTIN_WORKFLOWS.implement_verify.steps[1]?.inputsFrom).toEqual([
+      "implement",
+    ]);
+    const custom: BuiltinWorkflowDefinition = {
+      ...BUILTIN_WORKFLOWS.implement_verify,
       steps: [
-        step("research", 0, "stateless_read"),
-        step("implementation", 1, "stateful_workstream", ["research"]),
+        {
+          ...BUILTIN_WORKFLOWS.implement_verify.steps[0]!,
+          kind: "research",
+        },
       ],
-      createdByUserId: "owner-1",
-      createdAt: "2026-01-01T00:00:00.000Z",
     };
-    expect(() => validateWorkflowVersion(version)).not.toThrow();
-    expect(() =>
-      validateWorkflowVersion({
-        ...version,
-        steps: [
-          step("research", 0, "stateless_read", ["implementation"]),
-          step("implementation", 1, "stateful_workstream", ["research"]),
-        ],
-      }),
-    ).toThrow(/cycle/);
-    expect(() =>
-      validateWorkflowVersion({
-        ...version,
-        steps: [
-          step("implementation", 0, "stateful_workstream", ["research"]),
-          step("research", 1, "stateless_read"),
-        ],
-      }),
-    ).toThrow(/execute before/);
-    expect(() =>
-      validateNextWorkflowVersion(
-        { ...version, id: "workflow-version-1", version: 1 },
-        version,
-      ),
-    ).not.toThrow();
-    expect(() =>
-      validateNextWorkflowVersion(version, { ...version, id: version.id }),
-    ).toThrow(/next immutable version/);
+    expect(() => validateBuiltinWorkflowDefinition(custom)).toThrow(
+      /canonical version/,
+    );
+    const openEndedRole = {
+      ...BUILTIN_WORKFLOWS.direct,
+      steps: [
+        {
+          ...BUILTIN_WORKFLOWS.direct.steps[0]!,
+          role: "senior_magic_reviewer",
+        },
+      ],
+    } as unknown as BuiltinWorkflowDefinition;
+    expect(() => validateBuiltinWorkflowDefinition(openEndedRole)).toThrow(
+      /unsupported fields/,
+    );
   });
 
-  it("ships all requested built-in workflow versions", async () => {
-    const { BUILT_IN_WORKFLOW_NAMES, BUILT_IN_WORKFLOW_VERSIONS } =
-      await import("../src/index.js");
-    expect(Object.keys(BUILT_IN_WORKFLOW_VERSIONS)).toEqual([
-      ...BUILT_IN_WORKFLOW_NAMES,
-    ]);
-    for (const version of Object.values(BUILT_IN_WORKFLOW_VERSIONS)) {
-      expect(() => validateWorkflowVersion(version)).not.toThrow();
-    }
+  it("snapshots the selected built-in Workflow version", () => {
+    const request: WorkRequest = {
+      id: "request-1",
+      workstreamId: "workstream-1",
+      requestedByUserId: "collaborator-1",
+      mode: "stateful",
+      workflowId: "direct",
+      workflowVersion: 1,
+      workflowSnapshot: BUILTIN_WORKFLOWS.direct,
+      status: "queued",
+      primaryWorkspaceId: "workspace-1",
+      checkoutId: null,
+      input: {},
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(() => validateWorkRequest(request, statefulPolicy)).not.toThrow();
   });
 });

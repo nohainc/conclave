@@ -61,7 +61,7 @@ Responsibilities:
 - Projects;
 - Workstreams;
 - collaboration;
-- Worker usage policy;
+- Workstream default Workflow and canonical Step bindings;
 - model selection;
 - assignment creation;
 - operational read models.

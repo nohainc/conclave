@@ -6,6 +6,11 @@
 > and [WORKSTREAM_WORKING_DIRECTORIES.md](./WORKSTREAM_WORKING_DIRECTORIES.md):
 > a Workstream directory is resolved from Project ID + Workstream ID, and
 > repositories are Worker-managed. This document is retained for history only.
+>
+> The V6 extensible Workflow proposal is also superseded. Do not restore
+> project-authored definitions, open-ended Step roles, configurable approval
+> steps, or generic Workflow output contracts. Work v1 is defined by the
+> [Work v1 Contract](../specifications/WORK_V1_CONTRACT.md).
 
 **Status:** Proposed  
 **Architecture:** [ARCHITECTURE_V6.md](../architecture/ARCHITECTURE_V6.md)  
@@ -72,7 +77,7 @@ One active architecture remains before v6 features.
 
 ## V6-1 — Define Workstream domain
 
-### Add
+### Add (historical proposal; superseded by Work v1)
 - Workstream;
 - WorkstreamStatus;
 - WorkstreamAccessPolicy;
@@ -80,9 +85,8 @@ One active architecture remains before v6 features.
 - DiscussionMessage;
 - WorkRequest;
 - WorkRequestStatus;
-- WorkflowDefinition;
-- WorkflowVersion;
-- WorkflowStep;
+- BuiltinWorkflowDefinition;
+- immutable Work Request Workflow snapshot;
 - WorkstreamExecutionPolicy;
 - WorkstreamWorkingDirectoryState;
 - WorkstreamExecutionLease.
@@ -103,55 +107,24 @@ Core fully describes v6 without UI/storage assumptions.
 
 ---
 
-## V6-2 — Define Workflow contract
+## V6-2 — Define Workflow contract (superseded)
 
-### Goal
-Replace hardcoded orchestration shape with versioned workflows.
-
-### Schema
-WorkflowStep:
-- id/name;
-- role;
-- requiredCapabilities;
-- executionClass: stateless_read | stateful_workstream;
-- dependsOn;
-- independentFrom;
-- approval;
-- timeout;
-- outputContract.
-
-### Built-ins
-- Research;
-- Review;
-- Implementation;
-- Implementation + Test + Review;
-- Research + Implementation;
-- Full Cycle.
-
-### Versioning
-- immutable versions;
-- Work Request snapshots exact version;
-- editing creates next version.
-
-### Tests
-- DAG validation;
-- dependency cycle;
-- invalid stateful ordering;
-- snapshot immutability.
-
-### Exit
-Workflow runner can execute data, not hardcoded stage names.
+This proposal for project-created Workflow definitions with arbitrary roles,
+`independentFrom`, approval steps, and output contracts was superseded before
+release. Do not implement it. Work v1 defines exactly five built-in Workflow
+IDs, closed StepKinds, fixed dependencies, and immutable Work Request
+snapshots. The active contract is
+[Work v1](../specifications/WORK_V1_CONTRACT.md).
 
 ---
 
-## V6-3 — Clean v6 schema
+## V6-3 — Clean v6 schema (historical proposal; superseded)
 
 ### Create/replace
 - workstreams;
 - optional workstream_memberships;
 - discussion_messages;
-- workflow_definitions;
-- workflow_versions;
+- built-in Workflow catalog in shared code, not database tables;
 - workstream_execution_policies;
 - work_requests;
 - workstream_execution_leases;
@@ -177,7 +150,9 @@ Pre-production:
 - ID-only path invariants represented in runtime tests.
 
 ### Exit
-Persistence matches v6 directly.
+Persistence matches v6 directly. The active Work v1 schema deliberately omits
+user-authored Workflow catalog tables and stores each selected Workflow
+snapshot on the Work Request.
 
 ---
 
@@ -451,32 +426,13 @@ Scheduler respects mutable-state topology.
 
 ---
 
-## V6-12 — Workflow runner
+## V6-12 — Workflow runner (superseded)
 
-### Goal
-Drive Runs from WorkflowVersion.
-
-### Runner
-- create Tasks from steps;
-- preserve dependencies;
-- route stateless/stateful;
-- approvals;
-- needs-input;
-- result contracts.
-
-### Cloudflare Workflow
-Keep durable orchestration, but stop hardcoding research/planning/implementation/verification as the only path.
-
-### Tests
-- all built-ins;
-- failure propagation;
-- approval;
-- retry;
-- cancellation;
-- multi-worker independence.
-
-### Exit
-Workflows are product data with immutable versions.
+Work v1 now uses the shared five-entry built-in catalog. Each Work Request
+stores its immutable Workflow snapshot; Cloud materializes the fixed steps and
+their task dependencies. Cloudflare Workflows remain the durable execution
+mechanism, not a user-authored workflow interpreter. See the
+[Work v1 Contract](../specifications/WORK_V1_CONTRACT.md).
 
 ---
 

@@ -88,17 +88,24 @@ import {
   type ChatMessageKind,
   assembleChatContext,
   validateWorkRequest,
-  validateWorkflowVersion,
+  validateBuiltinWorkflowDefinition,
+  BUILTIN_WORKFLOWS,
   canDiscussWorkstream,
   canExecuteWorkstream,
   canManageWorkstream,
   canViewWorkstream,
   DEFAULT_WORKSTREAM_ACCESS_POLICY,
   type WorkRequest,
+  type WorkRequestSnapshot,
   type ProjectMembership,
   type Workstream,
   type WorkstreamExecutionPolicy,
-  type WorkflowVersion,
+  type BuiltinWorkflowDefinition,
+  type WorkflowId,
+  type StepKind,
+  WORKFLOW_IDS,
+  WORKSTREAM_BINDING_IDS,
+  WORKER_INPUT_CAPABILITIES,
 } from "@conclave/core";
 import {
   canonicalExecutionErrorCode,
@@ -680,17 +687,18 @@ async function handleRunRequest(
   if (expectedCommitSha && !/^[a-f0-9]{7,64}$/i.test(expectedCommitSha)) {
     throw new HttpError(400, "commitSha must be a hexadecimal Git commit SHA");
   }
-  let workflowVersion: WorkflowVersion | undefined;
-  const workflowVersionValue =
-    body.workflowVersionSnapshot ?? body.workflowVersion;
-  if (workflowVersionValue && typeof workflowVersionValue === "object") {
+  let builtinWorkflow: BuiltinWorkflowDefinition | undefined;
+  const builtinWorkflowValue = body.builtinWorkflow;
+  if (builtinWorkflowValue && typeof builtinWorkflowValue === "object") {
     try {
-      workflowVersion = workflowVersionValue as WorkflowVersion;
-      validateWorkflowVersion(workflowVersion);
+      builtinWorkflow = builtinWorkflowValue as BuiltinWorkflowDefinition;
+      validateBuiltinWorkflowDefinition(builtinWorkflow);
     } catch (error) {
       throw new HttpError(
         400,
-        error instanceof Error ? error.message : "Invalid WorkflowVersion",
+        error instanceof Error
+          ? error.message
+          : "Invalid built-in Workflow definition",
       );
     }
   }
@@ -727,7 +735,7 @@ async function handleRunRequest(
     ...(body.input && typeof body.input === "object"
       ? { input: body.input as Record<string, unknown> }
       : {}),
-    ...(workflowVersion ? { workflowVersion } : {}),
+    ...(builtinWorkflow ? { builtinWorkflow } : {}),
   };
   const run = await createOrGetRun(env, params);
   try {
@@ -4937,91 +4945,127 @@ async function handleCreateChatMessage(
 // V6 Workstream Discuss / Work API
 // =========================================================================
 
-function normalizeWorkstreamWorkerUsagePolicy(value: unknown): {
-  policy: Record<string, unknown>;
+function normalizeWorkstreamWorkConfig(value: unknown): {
+  config: Record<string, unknown>;
   workerIds: string[];
 } {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new HttpError(400, "executionPolicy must be an object");
+    throw new HttpError(400, "workConfig must be an object");
   }
   const input = value as Record<string, unknown>;
   if (
-    input.version !== 1 ||
-    !["configured_only", "configured_then_any"].includes(
-      String(input.fallbackPolicy),
+    Object.keys(input).some(
+      (key) =>
+        !["defaultWorkflowId", "workstreamInstructions", "bindings"].includes(
+          key,
+        ),
     ) ||
-    !input.roles ||
-    typeof input.roles !== "object" ||
-    Array.isArray(input.roles)
+    typeof input.defaultWorkflowId !== "string" ||
+    !WORKFLOW_IDS.includes(input.defaultWorkflowId as WorkflowId) ||
+    !input.bindings ||
+    typeof input.bindings !== "object" ||
+    Array.isArray(input.bindings)
   ) {
-    throw new HttpError(400, "executionPolicy is invalid");
+    throw new HttpError(400, "workConfig is invalid");
   }
-  const roles = input.roles as Record<string, unknown>;
-  if (Object.keys(roles).length > 64)
-    throw new HttpError(400, "executionPolicy has too many roles");
+  const bindings = input.bindings as Record<string, unknown>;
+  if (
+    Object.keys(bindings).some(
+      (bindingId) =>
+        !WORKSTREAM_BINDING_IDS.includes(
+          bindingId as (typeof WORKSTREAM_BINDING_IDS)[number],
+        ),
+    )
+  ) {
+    throw new HttpError(400, "workConfig contains an unsupported binding");
+  }
   const workerIds = new Set<string>();
-  const normalizedRoles: Record<string, Record<string, unknown>> = {};
-  for (const [rawRole, rawBinding] of Object.entries(roles)) {
-    const role = rawRole.trim().toLowerCase();
+  const normalizedBindings: Record<string, Record<string, unknown>> = {};
+  let workstreamInstructions: string | undefined;
+  if (input.workstreamInstructions !== undefined) {
     if (
-      !role ||
-      role.length > 80 ||
+      typeof input.workstreamInstructions !== "string" ||
+      input.workstreamInstructions.length > 4000
+    ) {
+      throw new HttpError(400, "workConfig workstreamInstructions is invalid");
+    }
+    const instructions = input.workstreamInstructions.trim();
+    if (instructions) workstreamInstructions = instructions;
+  }
+  for (const [bindingId, rawBinding] of Object.entries(bindings)) {
+    if (
       !rawBinding ||
       typeof rawBinding !== "object" ||
       Array.isArray(rawBinding)
     ) {
-      throw new HttpError(400, "executionPolicy role binding is invalid");
+      throw new HttpError(400, `workConfig ${bindingId} binding is invalid`);
     }
     const binding = rawBinding as Record<string, unknown>;
     const normalized: Record<string, unknown> = {};
-    for (const key of ["workspaceId", "workerId", "model"] as const) {
+    if (
+      Object.keys(binding).some(
+        (key) =>
+          ![
+            "workerId",
+            "model",
+            "fallbackWorkerId",
+            "additionalInstructions",
+          ].includes(key),
+      )
+    ) {
+      throw new HttpError(
+        400,
+        `workConfig ${bindingId} has unsupported fields`,
+      );
+    }
+    for (const key of ["workerId", "model", "fallbackWorkerId"] as const) {
       if (binding[key] !== undefined) {
         const max = key === "model" ? 160 : 200;
-        if (typeof binding[key] !== "string" || binding[key].length > max) {
-          throw new HttpError(400, `executionPolicy ${key} is invalid`);
+        if (
+          typeof binding[key] !== "string" ||
+          binding[key].length > max ||
+          (binding[key] as string).trim().length === 0
+        ) {
+          throw new HttpError(400, `workConfig ${key} is invalid`);
         }
         normalized[key] = binding[key].trim();
       }
     }
-    if (typeof normalized.workerId === "string")
-      workerIds.add(normalized.workerId);
-    if (binding.fallbackWorkerIds !== undefined) {
+    if (typeof normalized.workerId !== "string") {
+      throw new HttpError(400, `workConfig ${bindingId} requires workerId`);
+    }
+    workerIds.add(normalized.workerId);
+    if (
+      normalized.workerId &&
+      normalized.workerId === normalized.fallbackWorkerId
+    ) {
+      throw new HttpError(
+        400,
+        "A fallback Worker must differ from its primary",
+      );
+    }
+    if (binding.additionalInstructions !== undefined) {
       if (
-        !Array.isArray(binding.fallbackWorkerIds) ||
-        binding.fallbackWorkerIds.length > 32 ||
-        binding.fallbackWorkerIds.some(
-          (id) => typeof id !== "string" || id.length > 200,
-        )
+        typeof binding.additionalInstructions !== "string" ||
+        binding.additionalInstructions.length > 4000
       ) {
         throw new HttpError(
           400,
-          "executionPolicy fallbackWorkerIds is invalid",
+          "workConfig additionalInstructions is invalid",
         );
       }
-      normalized.fallbackWorkerIds = [...new Set(binding.fallbackWorkerIds)];
-      for (const id of normalized.fallbackWorkerIds as string[])
-        workerIds.add(id);
+      const instructions = binding.additionalInstructions.trim();
+      if (instructions) normalized.additionalInstructions = instructions;
     }
-    if (binding.cloudConcurrencyLimit !== undefined) {
-      if (
-        !Number.isInteger(binding.cloudConcurrencyLimit) ||
-        Number(binding.cloudConcurrencyLimit) < 1 ||
-        Number(binding.cloudConcurrencyLimit) > 1024
-      ) {
-        throw new HttpError(
-          400,
-          "executionPolicy cloudConcurrencyLimit must be between 1 and 1024",
-        );
-      }
-      normalized.cloudConcurrencyLimit = Number(binding.cloudConcurrencyLimit);
-    }
-    normalizedRoles[role] = normalized;
+    if (typeof normalized.fallbackWorkerId === "string")
+      workerIds.add(normalized.fallbackWorkerId);
+    normalizedBindings[bindingId] = normalized;
   }
   return {
-    policy: {
-      version: 1,
-      fallbackPolicy: input.fallbackPolicy,
-      roles: normalizedRoles,
+    config: {
+      defaultWorkflowId: input.defaultWorkflowId,
+      ...(workstreamInstructions ? { workstreamInstructions } : {}),
+      bindings: normalizedBindings,
     },
     workerIds: [...workerIds],
   };
@@ -5041,10 +5085,9 @@ function workstreamMetadata(
     status: String(row.status),
     lead: row.leadUserId ?? row.lead_user_id ?? null,
     accessPolicy,
-    executionPolicy: parseJson(row.executionPolicyJson ?? row.policyJson, {
-      version: 1,
-      fallbackPolicy: "configured_only",
-      roles: {},
+    workConfig: parseJson(row.workConfigJson ?? row.configJson, {
+      defaultWorkflowId: "full_cycle",
+      bindings: {},
     }),
     primaryWorkspace:
       accessPolicy.primaryWorkspaceId ??
@@ -5091,7 +5134,7 @@ export async function handleListProjectWorkstreams(
   projectId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeRequest(
+  const context = await authorizeRequest(
     request,
     env,
     "project:read",
@@ -5108,17 +5151,57 @@ export async function handleListProjectWorkstreams(
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT id, project_id AS projectId, name, status,
             access_policy_json AS accessPolicyJson,
-            usage.policy_json AS executionPolicyJson,
+            usage.config_json AS workConfigJson,
             lead_user_id AS leadUserId,
             created_at AS createdAt, updated_at AS updatedAt
      FROM workstreams
-     LEFT JOIN workstream_worker_usage_policies usage ON usage.workstream_id = workstreams.id
+     LEFT JOIN workstream_work_configs usage ON usage.workstream_id = workstreams.id
      WHERE project_id = ?1 ORDER BY created_at ASC`,
   )
     .bind(projectId)
     .all<Record<string, unknown>>();
 
-  const raw = (rows.results ?? []).map(workstreamMetadata);
+  const membership = await env.CONCLAVE_DB.prepare(
+    `SELECT id, project_id AS projectId, user_id AS userId, role,
+            created_at AS createdAt, updated_at AS updatedAt
+       FROM project_memberships WHERE project_id = ?1 AND user_id = ?2`,
+  )
+    .bind(projectId, context.userId)
+    .first<ProjectMembership>();
+  const raw = (rows.results ?? []).map((row) => {
+    const leadUserId = String(row.leadUserId ?? "");
+    const createdAt = String(row.createdAt ?? "");
+    const workstream: Workstream = {
+      id: String(row.id),
+      projectId: String(row.projectId),
+      name: String(row.name),
+      status: String(row.status) as Workstream["status"],
+      accessPolicy: {
+        ...DEFAULT_WORKSTREAM_ACCESS_POLICY,
+        ...parseJson(row.accessPolicyJson, {}),
+      },
+      lead: {
+        userId: leadUserId,
+        assignedAt: createdAt,
+        assignedByUserId: leadUserId,
+      },
+      createdAt,
+      updatedAt: String(row.updatedAt ?? ""),
+    };
+    return {
+      ...workstreamMetadata(row),
+      canConfigureWork: canManageWorkstream(
+        context.userId,
+        membership,
+        workstream,
+      ),
+      canExecuteWork: canExecuteWorkstream(
+        context.userId,
+        membership,
+        workstream,
+      ),
+    };
+  });
   const workstreams = sortWorkstreams(raw, settings.workstreamOrder);
   return json({ workstreams });
 }
@@ -5181,16 +5264,19 @@ export async function handleCreateWorkstream(
   ]);
   return json(
     {
-      workstream: workstreamMetadata({
-        id,
-        projectId,
-        name,
-        status: "active",
-        accessPolicyJson: JSON.stringify(accessPolicy),
-        leadUserId: context.userId,
-        createdAt: now,
-        updatedAt: now,
-      }),
+      workstream: {
+        ...workstreamMetadata({
+          id,
+          projectId,
+          name,
+          status: "active",
+          accessPolicyJson: JSON.stringify(accessPolicy),
+          leadUserId: context.userId,
+          createdAt: now,
+          updatedAt: now,
+        }),
+        canConfigureWork: true,
+      },
     },
     { status: 201 },
   );
@@ -5231,11 +5317,11 @@ export async function handleUpdateWorkstream(
   if (typeof accessPolicy !== "object" || accessPolicy === null) {
     throw new HttpError(400, "accessPolicy must be an object");
   }
-  const rawExecutionPolicy = body.executionPolicy;
-  let executionPolicy: Record<string, unknown> | undefined;
-  if (rawExecutionPolicy !== undefined) {
-    const normalized = normalizeWorkstreamWorkerUsagePolicy(rawExecutionPolicy);
-    executionPolicy = normalized.policy;
+  const rawWorkConfig = body.workConfig;
+  let workConfig: Record<string, unknown> | undefined;
+  if (rawWorkConfig !== undefined) {
+    const normalized = normalizeWorkstreamWorkConfig(rawWorkConfig);
+    workConfig = normalized.config;
     if (normalized.workerIds.length > 0) {
       const grants = await env.CONCLAVE_DB.prepare(
         `SELECT i.worker_id FROM workspace_worker_inventory i
@@ -5280,41 +5366,26 @@ export async function handleUpdateWorkstream(
   )
     .bind(name, status, JSON.stringify(accessPolicy), now, workstreamId)
     .run();
-  if (executionPolicy !== undefined) {
+  if (workConfig !== undefined) {
     await env.CONCLAVE_DB.prepare(
-      `INSERT INTO workstream_worker_usage_policies
-         (workstream_id, policy_json, updated_by_user_id, updated_at)
+      `INSERT INTO workstream_work_configs
+         (workstream_id, config_json, updated_by_user_id, updated_at)
        VALUES (?1, ?2, ?3, ?4)
-       ON CONFLICT(workstream_id) DO UPDATE SET policy_json = excluded.policy_json,
+       ON CONFLICT(workstream_id) DO UPDATE SET config_json = excluded.config_json,
          updated_by_user_id = excluded.updated_by_user_id, updated_at = excluded.updated_at`,
     )
-      .bind(workstreamId, JSON.stringify(executionPolicy), context.userId, now)
+      .bind(workstreamId, JSON.stringify(workConfig), context.userId, now)
       .run();
-    const roles = executionPolicy.roles as Record<
+    const bindings = workConfig.bindings as Record<
       string,
       Record<string, unknown>
     >;
     const selectedWorkerIds = new Set<string>();
-    for (const binding of Object.values(roles)) {
+    for (const binding of Object.values(bindings)) {
       if (typeof binding.workerId === "string")
         selectedWorkerIds.add(binding.workerId);
-      for (const id of Array.isArray(binding.fallbackWorkerIds)
-        ? binding.fallbackWorkerIds
-        : []) {
-        if (typeof id === "string") selectedWorkerIds.add(id);
-      }
-    }
-    if (executionPolicy.fallbackPolicy === "configured_then_any") {
-      const fallbackWorkers = await env.CONCLAVE_DB.prepare(
-        `SELECT DISTINCT i.worker_id FROM workspace_worker_inventory i
-         JOIN workspace_project_grants g ON g.workspace_id = i.workspace_id
-         WHERE g.project_id = ?1 AND g.status = 'active'
-           AND (g.expires_at IS NULL OR g.expires_at > ?2)`,
-      )
-        .bind(workstream.projectId, now)
-        .all<{ worker_id: string }>();
-      for (const row of fallbackWorkers.results ?? [])
-        selectedWorkerIds.add(row.worker_id);
+      if (typeof binding.fallbackWorkerId === "string")
+        selectedWorkerIds.add(binding.fallbackWorkerId);
     }
     for (const workerId of selectedWorkerIds) {
       await env.CONCLAVE_DB.prepare(
@@ -5335,27 +5406,49 @@ export async function handleUpdateWorkstream(
         .run();
     }
   }
-  const savedPolicyJson =
-    executionPolicy === undefined
+  const savedWorkConfigJson =
+    workConfig === undefined
       ? await env.CONCLAVE_DB.prepare(
-          "SELECT policy_json FROM workstream_worker_usage_policies WHERE workstream_id = ?1",
+          "SELECT config_json FROM workstream_work_configs WHERE workstream_id = ?1",
         )
           .bind(workstreamId)
-          .first<{ policy_json: string }>()
-          .then((row) => row?.policy_json)
-      : JSON.stringify(executionPolicy);
+          .first<{ config_json: string }>()
+          .then((row) => row?.config_json)
+      : JSON.stringify(workConfig);
+  const member = await env.CONCLAVE_DB.prepare(
+    `SELECT id, project_id AS projectId, user_id AS userId, role,
+            created_at AS createdAt, updated_at AS updatedAt
+       FROM project_memberships WHERE project_id = ?1 AND user_id = ?2`,
+  )
+    .bind(workstream.projectId, context.userId)
+    .first<ProjectMembership>();
+  const updatedWorkstream: Workstream = {
+    ...workstream,
+    name,
+    status: status as Workstream["status"],
+    accessPolicy: accessPolicy as Workstream["accessPolicy"],
+    updatedAt: now,
+  };
   return json({
-    workstream: workstreamMetadata({
-      id: workstream.id,
-      projectId: workstream.projectId,
-      name,
-      status,
-      accessPolicyJson: JSON.stringify(accessPolicy),
-      executionPolicyJson: savedPolicyJson,
-      leadUserId: workstream.lead.userId,
-      createdAt: workstream.createdAt,
-      updatedAt: now,
-    }),
+    workstream: {
+      ...workstreamMetadata({
+        id: workstream.id,
+        projectId: workstream.projectId,
+        name,
+        status,
+        accessPolicyJson: JSON.stringify(accessPolicy),
+        workConfigJson: savedWorkConfigJson,
+        leadUserId: workstream.lead.userId,
+        createdAt: workstream.createdAt,
+        updatedAt: now,
+      }),
+      canConfigureWork: true,
+      canExecuteWork: canExecuteWorkstream(
+        context.userId,
+        member,
+        updatedWorkstream,
+      ),
+    },
     updatedByUserId: context.userId,
   });
 }
@@ -5809,6 +5902,434 @@ async function handleEditDiscussionMessage(
   return json({ message: { ...message, body: content, references, editedAt } });
 }
 
+type WorkEligibilityIssue = {
+  stepKind: string;
+  workerTypeId: string | null;
+  code: string;
+  message: string;
+};
+
+function eligibilityMessage(
+  stepKind: string,
+  workerTypeId: string | null,
+  code: string,
+  readinessIssueCode?: string | null,
+): string {
+  const step = stepKind[0]?.toUpperCase() + stepKind.slice(1);
+  const worker = workerTypeId
+    ? `${workerTypeId === "chatgpt" ? "ChatGPT" : workerTypeId === "gemini" ? "Gemini" : workerTypeId} Worker`
+    : "Worker";
+  if (code === "binding_missing") return `${step}: choose a Worker.`;
+  if (code === "worker_missing")
+    return `${step}: the configured Worker is no longer available.`;
+  if (code === "project_workspace_grant_missing")
+    return `${step}: grant this Project access to the Worker's Workspace.`;
+  if (code === "worker_disabled") return `${step}: ${worker} is disabled.`;
+  if (code === "worker_not_ready") {
+    if (
+      readinessIssueCode === "sign_in_required" ||
+      readinessIssueCode === "provider_authentication_required"
+    ) {
+      return `${step}: ${worker} needs sign-in.`;
+    }
+    return `${step}: ${worker} is not Ready${readinessIssueCode ? ` (${readinessIssueCode.replaceAll("_", " ")})` : ""}.`;
+  }
+  if (code === "worker_scheduling_disabled")
+    return `${step}: ${worker} is not enabled for scheduling.`;
+  if (code === "capability_missing")
+    return `${step}: ${worker} does not have the capability required by this Step.`;
+  if (code === "capability_not_granted")
+    return `${step}: the Project Workspace grant does not allow this Step's capability.`;
+  if (code === "permission_not_granted")
+    return `${step}: the Project Workspace grant does not allow the access this Step needs.`;
+  if (code === "worker_not_allowed_by_grant")
+    return `${step}: this Worker is not included in the Project Workspace grant.`;
+  if (code === "worker_not_allowed_by_workstream")
+    return `${step}: this Worker is not allowed by the Workstream execution policy.`;
+  if (code === "worker_type_not_allowed_by_workstream")
+    return `${step}: this Worker type is not allowed by the Workstream execution policy.`;
+  if (code === "workspace_offline")
+    return `${step}: the Worker's Workspace is offline.`;
+  if (code === "workspace_mismatch")
+    return `${step}: all Steps in this Workflow must use Workers from the same Workspace.`;
+  if (code === "workspace_not_primary")
+    return `${step}: the Worker must be on this Workstream's primary Workspace.`;
+  if (code === "worker_runtime_unavailable")
+    return `${step}: the Worker has no available runtime release.`;
+  if (code === "model_not_allowed")
+    return `${step}: the selected model is not allowed by this Workstream.`;
+  if (code === "model_required")
+    return `${step}: choose a model allowed by this Workstream.`;
+  if (code === "runtime_coordinator_unavailable")
+    return "Workstream execution coordination is unavailable. Try again later.";
+  return `${step}: ${worker} is not eligible to run this Work.`;
+}
+
+async function validateWorkflowWorkerEligibility(
+  env: SecurityEnv,
+  projectId: string,
+  workstreamId: string,
+  workflow: BuiltinWorkflowDefinition,
+  bindings: Record<string, { workerId?: string; model?: string }>,
+  attachments: readonly unknown[] = [],
+): Promise<{
+  issues: WorkEligibilityIssue[];
+  primaryWorkspaceId: string | null;
+}> {
+  const issues: WorkEligibilityIssue[] = [];
+  let primaryWorkspaceId: string | null = null;
+  const now = new Date().toISOString();
+  for (const step of workflow.steps) {
+    const bindingId = workflow.id === "direct" ? "direct" : step.kind;
+    const binding = bindings[bindingId];
+    if (!binding?.workerId) {
+      issues.push({
+        stepKind: step.kind,
+        workerTypeId: null,
+        code: "binding_missing",
+        message: eligibilityMessage(step.kind, null, "binding_missing"),
+      });
+      continue;
+    }
+    const row = await env.CONCLAVE_DB.prepare(
+      `SELECT i.workspace_id AS workspaceId, i.worker_type_id AS workerTypeId,
+              i.activation_state AS activationState, i.readiness_state AS readinessState,
+              i.readiness_issue_code AS readinessIssueCode, i.capabilities_json AS capabilitiesJson,
+              i.worker_runtime_version AS workerRuntimeVersion,
+              vs.state AS schedulingState,
+              g.id AS grantId, g.status AS grantStatus, g.expires_at AS grantExpiresAt,
+              g.allowed_worker_ids_json AS allowedWorkerIdsJson,
+              g.allowed_worker_capabilities_json AS grantCapabilitiesJson,
+              g.allowed_permissions_json AS grantPermissionsJson,
+              ep.allowed_models_json AS allowedModelsJson,
+              ep.primary_workspace_id AS primaryWorkspaceId,
+              ep.allowed_configured_worker_ids_json AS allowedWorkstreamWorkerIdsJson,
+              ep.allowed_worker_type_ids_json AS allowedWorkstreamWorkerTypesJson,
+              ep.allowed_providers_json AS allowedWorkstreamProvidersJson,
+              ew.status AS workspaceStatus,
+              wri.id AS runtimeIdentityId
+         FROM workspace_worker_inventory i
+         LEFT JOIN v7_worker_scheduling vs ON vs.worker_id = i.worker_id
+         LEFT JOIN workspace_project_grants g
+           ON g.workspace_id = i.workspace_id AND g.project_id = ?2
+         LEFT JOIN workstream_execution_policies ep ON ep.workstream_id = ?3
+         LEFT JOIN execution_workspaces ew ON ew.id = i.workspace_id
+         LEFT JOIN workspace_runtime_identities wri ON wri.workspace_id = i.workspace_id AND wri.revoked_at IS NULL
+        WHERE i.worker_id = ?1`,
+    )
+      .bind(binding.workerId, projectId, workstreamId)
+      .first<Record<string, unknown>>();
+    if (!row) {
+      const code = "worker_missing";
+      issues.push({
+        stepKind: step.kind,
+        workerTypeId: null,
+        code,
+        message: eligibilityMessage(step.kind, null, code),
+      });
+      continue;
+    }
+    const workerTypeId = String(row.workerTypeId);
+    const push = (code: string) =>
+      issues.push({
+        stepKind: step.kind,
+        workerTypeId,
+        code,
+        message: eligibilityMessage(
+          step.kind,
+          workerTypeId,
+          code,
+          row.readinessIssueCode == null
+            ? null
+            : String(row.readinessIssueCode),
+        ),
+      });
+    if (
+      row.grantId == null ||
+      row.grantStatus !== "active" ||
+      (row.grantExpiresAt != null && String(row.grantExpiresAt) <= now)
+    )
+      push("project_workspace_grant_missing");
+    if (row.activationState !== "enabled") push("worker_disabled");
+    if (row.readinessState !== "ready") push("worker_not_ready");
+    if (row.schedulingState !== "enabled") push("worker_scheduling_disabled");
+    if (
+      typeof row.workerRuntimeVersion !== "string" ||
+      !row.workerRuntimeVersion
+    )
+      push("worker_runtime_unavailable");
+    if (row.workspaceStatus !== "online") push("workspace_offline");
+    if (row.runtimeIdentityId == null) push("workspace_offline");
+    const capabilities = parseJson<unknown[]>(row.capabilitiesJson, []).filter(
+      (value): value is string => typeof value === "string",
+    );
+    const requiredCapabilities = [...step.requiredCapabilities];
+    if (
+      !requiredCapabilities.every((capability) =>
+        capabilities.includes(capability),
+      )
+    )
+      push("capability_missing");
+    const grantCapabilities = parseJson<unknown[]>(
+      row.grantCapabilitiesJson,
+      [],
+    ).filter((value): value is string => typeof value === "string");
+    if (
+      grantCapabilities.length > 0 &&
+      !requiredCapabilities.every((capability) =>
+        grantCapabilities.includes(capability),
+      )
+    )
+      push("capability_not_granted");
+    const receivesAttachments =
+      step.kind === "research" || step.kind === "implement";
+    const requiredInputCapabilities = [
+      "text",
+      ...(receivesAttachments
+        ? attachmentRequiredCapabilities(attachments)
+        : []),
+    ];
+    const availableInputCapabilities = capabilities.filter((capability) =>
+      (WORKER_INPUT_CAPABILITIES as readonly string[]).includes(capability),
+    );
+    for (const capability of requiredInputCapabilities) {
+      if (!availableInputCapabilities.includes(capability)) {
+        issues.push({
+          stepKind: step.kind,
+          workerTypeId,
+          code: "input_capability_missing",
+          message: inputCapabilityMessage(step.kind, workerTypeId, capability),
+        });
+      }
+      if (
+        grantCapabilities.length > 0 &&
+        !grantCapabilities.includes(capability)
+      ) {
+        issues.push({
+          stepKind: step.kind,
+          workerTypeId,
+          code: "input_capability_not_granted",
+          message: inputCapabilityMessage(
+            step.kind,
+            workerTypeId,
+            capability,
+            true,
+          ),
+        });
+      }
+    }
+    const grantPermissions = parseJson<unknown[]>(
+      row.grantPermissionsJson,
+      [],
+    ).filter((value): value is string => typeof value === "string");
+    const requiredPermissions = new Set<string>(["repository:read"]);
+    if (step.requiredCapabilities.includes("workstream_write"))
+      requiredPermissions.add("repository:write");
+    if (step.requiredCapabilities.includes("test_execution"))
+      requiredPermissions.add("shell:execute");
+    if (
+      ![...requiredPermissions].every((permission) =>
+        grantPermissions.includes(permission),
+      )
+    )
+      push("permission_not_granted");
+    const allowedWorkerIds = parseJson<unknown[]>(
+      row.allowedWorkerIdsJson,
+      [],
+    ).filter((value): value is string => typeof value === "string");
+    if (
+      allowedWorkerIds.length > 0 &&
+      !allowedWorkerIds.includes(binding.workerId)
+    )
+      push("worker_not_allowed_by_grant");
+    const allowedWorkstreamWorkerIds = parseJson<unknown[]>(
+      row.allowedWorkstreamWorkerIdsJson,
+      [],
+    ).filter((value): value is string => typeof value === "string");
+    if (
+      allowedWorkstreamWorkerIds.length > 0 &&
+      !allowedWorkstreamWorkerIds.includes(binding.workerId)
+    )
+      push("worker_not_allowed_by_workstream");
+    const allowedWorkstreamTypes = parseJson<unknown[]>(
+      row.allowedWorkstreamWorkerTypesJson,
+      [],
+    ).filter((value): value is string => typeof value === "string");
+    if (
+      allowedWorkstreamTypes.length > 0 &&
+      !allowedWorkstreamTypes.includes(workerTypeId)
+    )
+      push("worker_type_not_allowed_by_workstream");
+    const allowedProviders = parseJson<unknown[]>(
+      row.allowedWorkstreamProvidersJson,
+      [],
+    ).filter((value): value is string => typeof value === "string");
+    if (allowedProviders.length > 0 && !allowedProviders.includes(workerTypeId))
+      push("worker_type_not_allowed_by_workstream");
+    const allowedModels = parseJson<unknown[]>(
+      row.allowedModelsJson,
+      [],
+    ).filter((value): value is string => typeof value === "string");
+    if (allowedModels.length > 0 && !binding.model?.trim())
+      push("model_required");
+    else if (
+      binding.model?.trim() &&
+      allowedModels.length > 0 &&
+      !allowedModels.includes(binding.model)
+    )
+      push("model_not_allowed");
+    if (primaryWorkspaceId == null)
+      primaryWorkspaceId = String(row.workspaceId);
+    else if (primaryWorkspaceId !== String(row.workspaceId))
+      push("workspace_mismatch");
+    if (
+      row.primaryWorkspaceId != null &&
+      String(row.primaryWorkspaceId) !== String(row.workspaceId)
+    )
+      push("workspace_not_primary");
+  }
+  return { issues, primaryWorkspaceId };
+}
+
+function attachmentRequiredCapabilities(
+  attachments: readonly unknown[],
+): string[] {
+  const required = new Set<string>();
+  for (const value of attachments) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const attachment = value as Record<string, unknown>;
+    if (attachment.kind !== "file") continue;
+    required.add("local_file");
+    const mediaType =
+      typeof attachment.mediaType === "string"
+        ? attachment.mediaType.toLowerCase()
+        : "";
+    if (mediaType.startsWith("text/")) required.add("text");
+    else if (mediaType.startsWith("image/")) required.add("image");
+    else if (mediaType.startsWith("audio/")) required.add("audio");
+    else if (mediaType.startsWith("video/")) required.add("video");
+  }
+  return [...required];
+}
+
+function inputCapabilityMessage(
+  stepKind: string,
+  workerTypeId: string,
+  capability: string,
+  grantDenied = false,
+): string {
+  const step = stepKind[0]?.toUpperCase() + stepKind.slice(1);
+  const worker =
+    workerTypeId === "chatgpt"
+      ? "ChatGPT Worker"
+      : workerTypeId === "gemini"
+        ? "Gemini Worker"
+        : `${workerTypeId} Worker`;
+  const input = capability === "local_file" ? "local file" : capability;
+  return grantDenied
+    ? `${step} ${worker} is not granted ${input} input by the Project Workspace grant.`
+    : `${step} ${worker} does not support ${input} input.`;
+}
+
+async function handleValidateWorkRequest(
+  request: Request,
+  env: SecurityEnv,
+  workstreamId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const { context, projectId } = await authorizeWorkstreamAccess(
+    request,
+    env,
+    workstreamId,
+    "execute",
+    accessContext,
+  );
+  const membership = await env.CONCLAVE_DB.prepare(
+    "SELECT role FROM project_memberships WHERE project_id = ?1 AND user_id = ?2",
+  )
+    .bind(projectId, context.userId)
+    .first<{ role: "owner" | "collaborator" | "viewer" }>();
+  if (
+    !membership ||
+    (membership.role !== "owner" && membership.role !== "collaborator")
+  )
+    throw new HttpError(
+      403,
+      "Only a Project owner or collaborator with Work execution access can submit Work",
+    );
+  const row = await env.CONCLAVE_DB.prepare(
+    `SELECT wc.config_json AS configJson FROM workstreams ws
+       LEFT JOIN workstream_work_configs wc ON wc.workstream_id = ws.id WHERE ws.id = ?1`,
+  )
+    .bind(workstreamId)
+    .first<{ configJson: string | null }>();
+  const config = parseJson<Record<string, unknown>>(row?.configJson, {
+    defaultWorkflowId: "full_cycle",
+    bindings: {},
+  });
+  const body = (await request.json()) as Record<string, unknown>;
+  const workflowId = requiredString(
+    body.workflowId ?? config.defaultWorkflowId,
+    "workflowId",
+  ) as WorkflowId;
+  const workflow = BUILTIN_WORKFLOWS[workflowId];
+  if (!workflow) throw new HttpError(400, "Unsupported workflowId");
+  if (body.attachments !== undefined && !Array.isArray(body.attachments)) {
+    throw new HttpError(400, "attachments must be an array");
+  }
+  const attachments = Array.isArray(body.attachments) ? body.attachments : [];
+  if (attachments.length > 10)
+    throw new HttpError(400, "At most 10 attachments are allowed");
+  const rawBindings =
+    config.bindings &&
+    typeof config.bindings === "object" &&
+    !Array.isArray(config.bindings)
+      ? (config.bindings as Record<string, unknown>)
+      : {};
+  const bindings: Record<string, { workerId?: string; model?: string }> = {};
+  for (const [key, value] of Object.entries(rawBindings)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const candidate = value as Record<string, unknown>;
+    bindings[key] = {
+      ...(typeof candidate.workerId === "string"
+        ? { workerId: candidate.workerId }
+        : {}),
+      ...(typeof candidate.model === "string"
+        ? { model: candidate.model }
+        : {}),
+    };
+  }
+  const { issues } = await validateWorkflowWorkerEligibility(
+    env,
+    projectId,
+    workstreamId,
+    workflow,
+    bindings,
+    attachments,
+  );
+  if (
+    !env.CONCLAVE_WORKSTREAM_COORDINATOR &&
+    workflow.steps.some((step) => step.executionMode === "stateful_workstream")
+  ) {
+    issues.push({
+      stepKind: workflow.steps[0]?.kind ?? "implement",
+      workerTypeId: null,
+      code: "runtime_coordinator_unavailable",
+      message: eligibilityMessage(
+        "Work",
+        null,
+        "runtime_coordinator_unavailable",
+      ),
+    });
+  }
+  return json({
+    eligible: issues.length === 0,
+    workflowId,
+    workflowName: workflow.name,
+    issues,
+  });
+}
+
 async function handleCreateWorkRequest(
   request: Request,
   env: SecurityEnv,
@@ -5827,78 +6348,342 @@ async function handleCreateWorkRequest(
   )
     .bind(projectId, context.userId)
     .first<{ role: "owner" | "collaborator" | "viewer" }>();
-  if (!membership || membership.role === "viewer")
+  if (
+    !membership ||
+    (membership.role !== "owner" && membership.role !== "collaborator")
+  )
     throw new HttpError(
       403,
-      "Project membership with execute access is required",
+      "Only a Project owner or collaborator with Work execution access can submit Work",
     );
   const body = (await request.json()) as Record<string, unknown>;
-  const mode =
+  const requestedMode =
     body.mode === "stateful"
       ? "stateful"
       : body.mode === "stateless"
         ? "stateless"
         : null;
-  if (!mode) throw new HttpError(400, "mode must be stateless or stateful");
-  const workflowDefinitionId = requiredString(
-    body.workflowDefinitionId,
-    "workflowDefinitionId",
+  const workConfigRow = await env.CONCLAVE_DB.prepare(
+    `SELECT wc.config_json AS configJson, p.settings_json AS settingsJson
+     FROM workstreams ws
+     JOIN projects p ON p.id = ws.project_id
+     LEFT JOIN workstream_work_configs wc ON wc.workstream_id = ws.id
+     WHERE ws.id = ?1`,
+  )
+    .bind(workstreamId)
+    .first<{ configJson: string | null; settingsJson: string | null }>();
+  const workConfig = parseJson<Record<string, unknown>>(
+    workConfigRow?.configJson,
+    { defaultWorkflowId: "full_cycle", bindings: {} },
   );
-  const workflowVersionId = requiredString(
-    body.workflowVersionId,
-    "workflowVersionId",
+  const workflowId = requiredString(
+    body.workflowId ?? workConfig.defaultWorkflowId,
+    "workflowId",
+  ) as WorkflowId;
+  const canonicalWorkflow = BUILTIN_WORKFLOWS[workflowId];
+  if (!canonicalWorkflow) throw new HttpError(400, "Unsupported workflowId");
+  const mode =
+    workflowId === "direct"
+      ? "stateful"
+      : canonicalWorkflow.steps.some(
+            (step) => step.executionMode === "stateful_workstream",
+          )
+        ? "stateful"
+        : "stateless";
+  if (requestedMode && requestedMode !== mode) {
+    throw new HttpError(
+      400,
+      `The ${workflowId} Workflow requires ${mode} mode`,
+    );
+  }
+  const workflowVersion = Number(
+    body.workflowVersion ?? canonicalWorkflow.version,
   );
-  const snapshotValue = body.workflowVersionSnapshot ?? body.workflowVersion;
+  if (!Number.isInteger(workflowVersion) || workflowVersion < 1)
+    throw new HttpError(400, "workflowVersion must be a positive integer");
+  const snapshotValue = body.workflowSnapshot ?? canonicalWorkflow;
   if (!snapshotValue || typeof snapshotValue !== "object")
-    throw new HttpError(400, "workflowVersionSnapshot is required");
-  const workflowSnapshot = snapshotValue as WorkflowVersion;
+    throw new HttpError(400, "workflowSnapshot is invalid");
+  const workflowSnapshot = snapshotValue as BuiltinWorkflowDefinition;
   try {
-    validateWorkflowVersion(workflowSnapshot);
+    validateBuiltinWorkflowDefinition(workflowSnapshot);
+    if (
+      workflowSnapshot.id !== workflowId ||
+      workflowSnapshot.version !== workflowVersion
+    )
+      throw new Error(
+        "Workflow snapshot does not match the selected built-in version",
+      );
   } catch (error) {
     throw new HttpError(
       400,
-      error instanceof Error ? error.message : "Invalid workflow version",
+      error instanceof Error ? error.message : "Invalid built-in Workflow",
     );
   }
-  const persistedWorkflowVersion = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workflow_definition_id AS workflowDefinitionId, version
-     FROM workflow_versions
-     WHERE id = ?1 AND workflow_definition_id = ?2`,
-  )
-    .bind(workflowVersionId, workflowDefinitionId)
-    .first<{ id: string; workflowDefinitionId: string; version: number }>();
-  if (!persistedWorkflowVersion)
-    throw new HttpError(404, "Workflow version not found");
-  if (persistedWorkflowVersion.version !== workflowSnapshot.version)
-    throw new HttpError(
-      409,
-      "Workflow version snapshot does not match the stored version",
+  const submittedInput =
+    body.input && typeof body.input === "object" && !Array.isArray(body.input)
+      ? (body.input as Record<string, unknown>)
+      : {};
+  const originalRequest =
+    [
+      submittedInput.originalRequest,
+      submittedInput.request,
+      submittedInput.objective,
+      body.originalRequest,
+      body.request,
+      body.objective,
+    ].find(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length > 0,
+    ) ?? "";
+  const requestInput: Record<string, unknown> = {
+    ...submittedInput,
+    originalRequest:
+      typeof submittedInput.originalRequest === "string"
+        ? submittedInput.originalRequest
+        : originalRequest,
+  };
+  const submittedAttachments = submittedInput.attachments ?? body.attachments;
+  if (
+    submittedAttachments !== undefined &&
+    !Array.isArray(submittedAttachments)
+  ) {
+    throw new HttpError(400, "attachments must be an array");
+  }
+  const rawAttachments = Array.isArray(submittedAttachments)
+    ? submittedAttachments
+    : [];
+  if (rawAttachments.length > 10)
+    throw new HttpError(400, "At most 10 attachments are allowed");
+  let attachmentBytes = 0;
+  const normalizedAttachments = rawAttachments.map((attachment, index) => {
+    if (
+      !attachment ||
+      typeof attachment !== "object" ||
+      Array.isArray(attachment)
+    )
+      throw new HttpError(400, `Attachment ${index + 1} is invalid`);
+    const value = attachment as Record<string, unknown>;
+    const kind =
+      value.kind === "url" ? "url" : value.kind === "file" ? "file" : null;
+    const name =
+      typeof value.name === "string"
+        ? value.name.replace(/[\\/\\x00-\\x1f]/g, "_").slice(0, 255)
+        : "Attachment";
+    const mediaType =
+      typeof value.mediaType === "string" && value.mediaType.length <= 128
+        ? value.mediaType
+        : "application/octet-stream";
+    if (!kind)
+      throw new HttpError(
+        400,
+        `Attachment ${index + 1} has an unsupported type`,
+      );
+    if (kind === "url") {
+      if (typeof value.url !== "string" || value.url.length > 2048)
+        throw new HttpError(400, `Link ${index + 1} is invalid`);
+      let url: URL;
+      try {
+        url = new URL(value.url);
+      } catch {
+        throw new HttpError(400, `Link ${index + 1} is invalid`);
+      }
+      if (
+        (url.protocol !== "http:" && url.protocol !== "https:") ||
+        url.username ||
+        url.password
+      )
+        throw new HttpError(
+          400,
+          `Link ${index + 1} must be an http or https URL without embedded credentials`,
+        );
+      return {
+        kind,
+        name,
+        mediaType: "text/uri-list",
+        sizeBytes: 0,
+        url: url.toString(),
+      };
+    }
+    if (
+      typeof value.contentBase64 !== "string" ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+        value.contentBase64,
+      )
+    )
+      throw new HttpError(400, `File ${index + 1} is invalid`);
+    let decodedLength: number;
+    try {
+      decodedLength = atob(value.contentBase64).length;
+    } catch {
+      throw new HttpError(400, `File ${index + 1} is invalid`);
+    }
+    if (decodedLength > 1024 * 1024 || value.sizeBytes !== decodedLength)
+      throw new HttpError(
+        400,
+        `File ${index + 1} exceeds the 1 MB limit or has an invalid size`,
+      );
+    attachmentBytes += decodedLength;
+    if (attachmentBytes > 1024 * 1024)
+      throw new HttpError(400, "Attachments exceed the 1 MB total limit");
+    return {
+      kind,
+      name,
+      mediaType,
+      sizeBytes: decodedLength,
+      contentBase64: value.contentBase64,
+    };
+  });
+  requestInput.attachments = normalizedAttachments;
+  const attachmentReferences = normalizedAttachments.map(
+    ({ contentBase64: _contentBase64, ...reference }) => reference,
+  );
+  const configuredBindings =
+    workConfig.bindings &&
+    typeof workConfig.bindings === "object" &&
+    !Array.isArray(workConfig.bindings)
+      ? (workConfig.bindings as Record<string, unknown>)
+      : {};
+  const resolvedBindings: Record<
+    string,
+    {
+      workerId?: string;
+      model?: string;
+      fallbackWorkerId?: string;
+      additionalInstructions?: string;
+    }
+  > = {};
+  const stepAdditionalInstructions: WorkRequestSnapshot["stepAdditionalInstructions"] =
+    {};
+  const promptProfileVersions: WorkRequestSnapshot["promptProfileVersions"] =
+    {};
+  for (const step of workflowSnapshot.steps) {
+    const bindingId = workflowId === "direct" ? "direct" : step.kind;
+    const rawBinding = configuredBindings[bindingId];
+    const configuredBinding =
+      rawBinding && typeof rawBinding === "object" && !Array.isArray(rawBinding)
+        ? (rawBinding as Record<string, unknown>)
+        : {};
+    const resolvedBinding: {
+      workerId?: string;
+      model?: string;
+      fallbackWorkerId?: string;
+      additionalInstructions?: string;
+    } = {};
+    if (typeof configuredBinding.workerId === "string") {
+      resolvedBinding.workerId = configuredBinding.workerId;
+    }
+    if (typeof configuredBinding.model === "string") {
+      resolvedBinding.model = configuredBinding.model;
+    }
+    if (typeof configuredBinding.fallbackWorkerId === "string") {
+      resolvedBinding.fallbackWorkerId = configuredBinding.fallbackWorkerId;
+    }
+    if (typeof configuredBinding.additionalInstructions === "string") {
+      resolvedBinding.additionalInstructions =
+        configuredBinding.additionalInstructions;
+      stepAdditionalInstructions[step.kind] =
+        configuredBinding.additionalInstructions;
+    }
+    resolvedBindings[bindingId] = resolvedBinding;
+    promptProfileVersions[step.kind] = step.promptProfileVersion;
+  }
+  const eligibility = await validateWorkflowWorkerEligibility(
+    env,
+    projectId,
+    workstreamId,
+    workflowSnapshot,
+    resolvedBindings,
+    normalizedAttachments,
+  );
+  if (eligibility.issues.length > 0) {
+    return json(
+      {
+        error: "work_request_ineligible",
+        workflowId,
+        workflowName: workflowSnapshot.name,
+        issues: eligibility.issues,
+      },
+      { status: 422 },
     );
+  }
+  if (!env.CONCLAVE_WORKSTREAM_COORDINATOR && mode === "stateful") {
+    throw new HttpError(503, "Workstream runtime coordination is unavailable");
+  }
+  if (eligibility.primaryWorkspaceId) {
+    if (
+      body.primaryWorkspaceId !== undefined &&
+      body.primaryWorkspaceId !== eligibility.primaryWorkspaceId
+    ) {
+      throw new HttpError(
+        400,
+        "Work execution must use the configured Worker Workspace",
+      );
+    }
+    body.primaryWorkspaceId = eligibility.primaryWorkspaceId;
+  }
+  const projectSettings = parseJson<Record<string, unknown>>(
+    workConfigRow?.settingsJson,
+    {},
+  );
+  const projectInstructions =
+    typeof projectSettings.instructions === "string"
+      ? projectSettings.instructions
+      : "";
+  const workstreamInstructions =
+    typeof workConfig.workstreamInstructions === "string"
+      ? workConfig.workstreamInstructions
+      : "";
+  const snapshot: WorkRequestSnapshot = {
+    schemaVersion: 1,
+    originalRequest,
+    attachmentReferences,
+    workflowId,
+    workflowVersion,
+    workflowSnapshot,
+    resolvedBindings,
+    projectInstructions,
+    workstreamInstructions,
+    stepAdditionalInstructions,
+    promptProfileVersions,
+  };
   const policyRow = await env.CONCLAVE_DB.prepare(
     "SELECT mode, primary_workspace_id AS primaryWorkspaceId, require_checkout AS requireCheckout, max_concurrent_work_requests AS maxConcurrentWorkRequests FROM workstream_execution_policies WHERE workstream_id = ?1",
   )
     .bind(workstreamId)
     .first<WorkstreamExecutionPolicy>();
-  const policy: WorkstreamExecutionPolicy = policyRow ?? {
-    mode,
-    primaryWorkspaceId:
-      typeof body.primaryWorkspaceId === "string"
-        ? body.primaryWorkspaceId
-        : null,
-    // WD-17: stateful Work resolves the local ID-derived Workstream directory;
-    // legacy checkout provisioning is not part of the active request path.
-    requireCheckout: false,
-    maxConcurrentWorkRequests: 1,
-  };
+  const policy: WorkstreamExecutionPolicy =
+    workflowId === "direct" || workflowId === "research"
+      ? {
+          mode,
+          primaryWorkspaceId:
+            typeof body.primaryWorkspaceId === "string"
+              ? body.primaryWorkspaceId
+              : null,
+          requireCheckout: false,
+          maxConcurrentWorkRequests: 1,
+        }
+      : (policyRow ?? {
+          mode,
+          primaryWorkspaceId:
+            typeof body.primaryWorkspaceId === "string"
+              ? body.primaryWorkspaceId
+              : null,
+          // WD-17: stateful Work resolves the local ID-derived Workstream directory;
+          // legacy checkout provisioning is not part of the active request path.
+          requireCheckout: false,
+          maxConcurrentWorkRequests: 1,
+        });
   const now = new Date().toISOString();
   const workRequest: WorkRequest = {
     id: `work-request-${crypto.randomUUID()}`,
     workstreamId,
     requestedByUserId: context.userId,
     mode,
-    workflowDefinitionId,
-    workflowVersionId,
-    workflowVersionSnapshot: workflowSnapshot,
+    workflowId,
+    workflowVersion,
+    workflowSnapshot,
+    snapshot,
     status: "queued",
     primaryWorkspaceId:
       typeof body.primaryWorkspaceId === "string"
@@ -5907,10 +6692,7 @@ async function handleCreateWorkRequest(
     // Ignore the historical client field. Runtime CWD is derived from the
     // immutable Project/Workstream IDs on the Workspace.
     checkoutId: null,
-    input:
-      body.input && typeof body.input === "object"
-        ? (body.input as Record<string, unknown>)
-        : {},
+    input: requestInput,
     createdAt: now,
     updatedAt: now,
   };
@@ -5926,16 +6708,17 @@ async function handleCreateWorkRequest(
   await env.CONCLAVE_DB.batch([
     env.CONCLAVE_DB.prepare(
       `INSERT INTO work_requests
-       (id, workstream_id, requested_by_user_id, mode, workflow_definition_id, workflow_version_id, workflow_snapshot_json, status, primary_workspace_id, checkout_id, input_json, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'queued', ?8, ?9, ?10, ?11, ?11)`,
+       (id, workstream_id, requested_by_user_id, mode, workflow_id, workflow_version, workflow_snapshot_json, snapshot_json, status, primary_workspace_id, checkout_id, input_json, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'queued', ?9, ?10, ?11, ?12, ?12)`,
     ).bind(
       workRequest.id,
       workstreamId,
       context.userId,
       mode,
-      workflowDefinitionId,
-      workflowVersionId,
+      workflowId,
+      workflowVersion,
       JSON.stringify(workflowSnapshot),
+      JSON.stringify(snapshot),
       workRequest.primaryWorkspaceId,
       workRequest.checkoutId,
       JSON.stringify(workRequest.input),
@@ -5943,14 +6726,13 @@ async function handleCreateWorkRequest(
     ),
     env.CONCLAVE_DB.prepare(
       `INSERT INTO runs
-       (id, project_id, workstream_id, work_request_id, workflow_version_id, checkout_id, status, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'created', ?7, ?7)`,
+       (id, project_id, workstream_id, work_request_id, checkout_id, status, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, 'created', ?6, ?6)`,
     ).bind(
       runId,
       projectId,
       workstreamId,
       workRequest.id,
-      workflowVersionId,
       workRequest.checkoutId,
       now,
     ),
@@ -5963,10 +6745,27 @@ async function handleCreateWorkRequest(
       projectId,
       context.userId,
       workRequest.id,
-      JSON.stringify({ workstreamId, runId, workflowVersionId }),
+      JSON.stringify({ workstreamId, runId, workflowId, workflowVersion }),
       now,
     ),
   ]);
+  try {
+    await createEventPublisher(env).publish({
+      type: "work_request.created",
+      workspaceId: workRequest.primaryWorkspaceId!,
+      projectId,
+      runId,
+      idempotencyKey: `work-request:${workRequest.id}:created`,
+      payload: {
+        entityId: workRequest.id,
+        workRequestId: workRequest.id,
+        workstreamId,
+        status: "queued",
+      },
+    });
+  } catch (error) {
+    console.error("Failed to publish work_request.created", error);
+  }
   if (mode === "stateful" && env.CONCLAVE_WORKSTREAM_COORDINATOR) {
     const coordinator =
       env.CONCLAVE_WORKSTREAM_COORDINATOR.getByName(workstreamId);
@@ -5984,6 +6783,17 @@ async function handleCreateWorkRequest(
       throw new HttpError(503, "Workstream execution coordinator unavailable");
     }
   }
+  await createOrGetRun(env, {
+    runId,
+    goalId: workRequest.id,
+    idempotencyKey: workRequest.id,
+    organizationId: workRequest.primaryWorkspaceId!,
+    workRequestId: workRequest.id,
+    workstreamId,
+    projectId,
+    builtinWorkflow: workflowSnapshot,
+    input: requestInput,
+  });
   return json(
     {
       workRequest,
@@ -5993,6 +6803,767 @@ async function handleCreateWorkRequest(
   );
 }
 
+async function handleRetryWorkRequest(
+  request: Request,
+  env: SecurityEnv,
+  workRequestId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const parent = await env.CONCLAVE_DB.prepare(
+    "SELECT workstream_id AS workstreamId FROM work_requests WHERE id = ?1",
+  )
+    .bind(workRequestId)
+    .first<{ workstreamId: string }>();
+  if (!parent) throw new HttpError(404, "Work Request not found");
+  const { context, projectId } = await authorizeWorkstreamAccess(
+    request,
+    env,
+    parent.workstreamId,
+    "execute",
+    accessContext,
+  );
+  const membership = await env.CONCLAVE_DB.prepare(
+    "SELECT role FROM project_memberships WHERE project_id = ?1 AND user_id = ?2",
+  )
+    .bind(projectId, context.userId)
+    .first<{ role: string }>();
+  if (!membership || membership.role === "viewer")
+    throw new HttpError(
+      403,
+      "Project membership with execute access is required",
+    );
+  const row = await env.CONCLAVE_DB.prepare(
+    `SELECT wr.workstream_id AS workstreamId, wr.mode, wr.status,
+            wr.workflow_id AS workflowId, wr.workflow_version AS workflowVersion,
+            wr.workflow_snapshot_json AS workflowSnapshotJson,
+            wr.snapshot_json AS snapshotJson, wr.input_json AS inputJson,
+            wr.primary_workspace_id AS primaryWorkspaceId,
+            ws.project_id AS projectId
+       FROM work_requests wr JOIN workstreams ws ON ws.id = wr.workstream_id
+      WHERE wr.id = ?1`,
+  )
+    .bind(workRequestId)
+    .first<Record<string, unknown>>();
+  if (!row) throw new HttpError(404, "Work Request not found");
+  if (row.status !== "failed")
+    throw new HttpError(409, "Only a failed Work Request can be retried");
+
+  const body = parseJson<Record<string, unknown>>(await request.text(), {});
+  const stepKind = body.stepKind;
+  if (
+    typeof stepKind !== "string" ||
+    !["research", "plan", "implement", "test", "verify"].includes(stepKind)
+  )
+    throw new HttpError(400, "A valid failed Step is required");
+  const workflow = parseJson<BuiltinWorkflowDefinition>(
+    String(row.workflowSnapshotJson),
+    {} as BuiltinWorkflowDefinition,
+  );
+  const step = workflow.steps?.find((candidate) => candidate.kind === stepKind);
+  if (!step) throw new HttpError(400, "Step is not part of this Workflow");
+  const failedTask = await env.CONCLAVE_DB.prepare(
+    `SELECT wt.status, wt.error,
+            (SELECT wa.error_json FROM worker_assignments wa
+              WHERE wa.task_id = wt.id ORDER BY wa.created_at DESC, wa.id DESC LIMIT 1)
+              AS assignmentErrorJson
+       FROM workflow_tasks wt
+      WHERE wt.work_request_id = ?1 AND wt.step_kind = ?2`,
+  )
+    .bind(workRequestId, stepKind)
+    .first<{
+      status: string;
+      error: string | null;
+      assignmentErrorJson: string | null;
+    }>();
+  if (failedTask?.status !== "failed")
+    throw new HttpError(409, "Only a failed Step can be retried");
+
+  const retrySessionStrategy = body.sessionStrategy;
+  if (
+    stepKind === "implement" &&
+    retrySessionStrategy !== "resume" &&
+    retrySessionStrategy !== "fresh"
+  )
+    throw new HttpError(
+      400,
+      "Choose whether the Implement retry resumes the previous session or starts fresh",
+    );
+  if (stepKind !== "implement" && retrySessionStrategy !== undefined)
+    throw new HttpError(400, "Session strategy only applies to Implement");
+
+  const snapshot = parseJson<Record<string, unknown>>(
+    String(row.snapshotJson),
+    {},
+  );
+  const bindings =
+    typeof snapshot.resolvedBindings === "object" &&
+    snapshot.resolvedBindings !== null
+      ? (snapshot.resolvedBindings as Record<
+          string,
+          { workerId?: string; model?: string }
+        >)
+      : {};
+  const attachmentInput = parseJson<Record<string, unknown>>(
+    String(row.inputJson),
+    {},
+  );
+  const eligibility = await validateWorkflowWorkerEligibility(
+    env,
+    String(row.projectId),
+    String(row.workstreamId),
+    { ...workflow, steps: [step] },
+    bindings,
+    Array.isArray(attachmentInput.attachments)
+      ? attachmentInput.attachments
+      : [],
+  );
+  if (eligibility.issues.length > 0) {
+    return json(
+      { error: "work_request_ineligible", issues: eligibility.issues },
+      { status: 422 },
+    );
+  }
+
+  const latestRuns = await env.CONCLAVE_DB.prepare(
+    "SELECT COUNT(*) AS count FROM runs WHERE work_request_id = ?1",
+  )
+    .bind(workRequestId)
+    .first<{ count: number }>();
+  const retryNumber = Math.max(1, Number(latestRuns?.count ?? 1));
+  const runId = `run-${workRequestId}-retry-${retryNumber}`;
+  const now = new Date().toISOString();
+  const assignmentError = parseJson<Record<string, unknown>>(
+    failedTask.assignmentErrorJson,
+    {},
+  );
+  const assignmentErrorDetail =
+    typeof assignmentError.error === "object" && assignmentError.error !== null
+      ? (assignmentError.error as Record<string, unknown>)
+      : {};
+  const errorCode = canonicalExecutionErrorCode(
+    assignmentErrorDetail.code ?? failedTask.error ?? "execution_failed",
+  );
+  const retryPolicy = {
+    manualRetry: {
+      stepKind,
+      errorCode,
+      retryNumber,
+      ...(stepKind === "implement"
+        ? { sessionStrategy: retrySessionStrategy }
+        : {}),
+    },
+  };
+  const reservation = await env.CONCLAVE_DB.prepare(
+    "UPDATE work_requests SET status = 'queued', updated_at = ?1 WHERE id = ?2 AND status = 'failed'",
+  )
+    .bind(now, workRequestId)
+    .run();
+  if (reservation.meta.changes !== 1)
+    throw new HttpError(409, "This Work Request is already being retried");
+  try {
+    await env.CONCLAVE_DB.batch([
+      env.CONCLAVE_DB.prepare(
+        `UPDATE workflow_tasks SET status = 'queued', output_json = NULL,
+              error = NULL, started_at = NULL, finished_at = NULL, updated_at = ?1
+        WHERE work_request_id = ?2 AND step_kind = ?3 AND status = 'failed'`,
+      ).bind(now, workRequestId, stepKind),
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO runs
+       (id, project_id, workstream_id, work_request_id, checkout_id,
+        policy_snapshot_json, status, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, NULL, ?5, 'created', ?6, ?6)`,
+      ).bind(
+        runId,
+        projectId,
+        String(row.workstreamId),
+        workRequestId,
+        JSON.stringify(retryPolicy),
+        now,
+      ),
+    ]);
+  } catch (error) {
+    await env.CONCLAVE_DB.prepare(
+      "UPDATE work_requests SET status = 'failed', updated_at = ?1 WHERE id = ?2 AND status = 'queued'",
+    )
+      .bind(new Date().toISOString(), workRequestId)
+      .run();
+    throw error;
+  }
+
+  if (row.mode === "stateful") {
+    if (!env.CONCLAVE_WORKSTREAM_COORDINATOR)
+      throw new HttpError(
+        503,
+        "Workstream runtime coordination is unavailable",
+      );
+    const coordinator = env.CONCLAVE_WORKSTREAM_COORDINATOR.getByName(
+      String(row.workstreamId),
+    );
+    const response = await coordinator.fetch(
+      new Request("https://workstream-coordinator/enqueue", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-workstream-id": String(row.workstreamId),
+        },
+        body: JSON.stringify({ workRequestId }),
+      }),
+    );
+    if (!response.ok)
+      throw new HttpError(
+        503,
+        "Workstream runtime coordination is unavailable",
+      );
+  }
+
+  await createOrGetRun(env, {
+    runId,
+    goalId: workRequestId,
+    idempotencyKey: `${workRequestId}-retry-${retryNumber}`,
+    organizationId: String(row.primaryWorkspaceId),
+    workRequestId,
+    workstreamId: String(row.workstreamId),
+    projectId,
+    builtinWorkflow: workflow,
+    input: attachmentInput,
+    retryStepKind: stepKind as StepKind,
+    ...(stepKind === "implement"
+      ? { retrySessionStrategy: retrySessionStrategy as "resume" | "fresh" }
+      : {}),
+    retryNumber,
+  });
+  return json(
+    { workRequestId, runId, stepKind, retryNumber, status: "queued" },
+    { status: 202 },
+  );
+}
+
+async function handleGetWorkRequest(
+  request: Request,
+  env: SecurityEnv,
+  workRequestId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const row = await env.CONCLAVE_DB.prepare(
+    `SELECT wr.id, wr.workstream_id AS workstreamId,
+            wr.requested_by_user_id AS requestedByUserId,
+            u.display_name AS requestedByName,
+            wr.workflow_id AS workflowId, wr.workflow_version AS workflowVersion,
+            wr.workflow_snapshot_json AS workflowSnapshotJson,
+            wr.input_json AS inputJson, wr.snapshot_json AS snapshotJson,
+            wr.status, wr.created_at AS createdAt, wr.updated_at AS updatedAt
+       FROM work_requests wr JOIN users u ON u.id = wr.requested_by_user_id
+      WHERE wr.id = ?1`,
+  )
+    .bind(workRequestId)
+    .first<Record<string, unknown>>();
+  if (!row) throw new HttpError(404, "Work Request not found");
+  await authorizeWorkstreamAccess(
+    request,
+    env,
+    String(row.workstreamId),
+    "view",
+    accessContext,
+  );
+  const task = await env.CONCLAVE_DB.prepare(
+    `SELECT output_json AS outputJson, error
+     FROM workflow_tasks WHERE work_request_id = ?1
+     ORDER BY created_at DESC, id DESC LIMIT 1`,
+  )
+    .bind(workRequestId)
+    .first<{ outputJson: string | null; error: string | null }>();
+  let result: unknown = null;
+  if (task?.outputJson) {
+    try {
+      result = JSON.parse(task.outputJson);
+    } catch {
+      result = null;
+    }
+  }
+  const input = parseJson<Record<string, unknown>>(String(row.inputJson), {});
+  const snapshot = parseJson<Record<string, unknown>>(
+    String(row.snapshotJson),
+    {},
+  );
+  const workflow = parseJson<Record<string, unknown>>(
+    String(row.workflowSnapshotJson),
+    {},
+  );
+  const latestRun = await env.CONCLAVE_DB.prepare(
+    `SELECT policy_snapshot_json AS policySnapshotJson
+       FROM runs WHERE work_request_id = ?1
+      ORDER BY created_at DESC, id DESC LIMIT 1`,
+  )
+    .bind(workRequestId)
+    .first<{ policySnapshotJson: string | null }>();
+  const latestRunPolicy = parseJson<Record<string, unknown>>(
+    latestRun?.policySnapshotJson,
+    {},
+  );
+  const manualRetry =
+    typeof latestRunPolicy.manualRetry === "object" &&
+    latestRunPolicy.manualRetry !== null
+      ? (latestRunPolicy.manualRetry as Record<string, unknown>)
+      : {};
+  const bindings =
+    typeof snapshot.resolvedBindings === "object" &&
+    snapshot.resolvedBindings !== null
+      ? (snapshot.resolvedBindings as Record<string, unknown>)
+      : {};
+  const taskRows = await env.CONCLAVE_DB.prepare(
+    `SELECT wt.id AS taskId, wt.step_kind AS kind, wt.status,
+            wt.output_json AS outputJson, wt.error, wt.attempt,
+            wt.started_at AS startedAt, wt.finished_at AS finishedAt,
+            wa.id AS assignmentId, wa.workspace_worker_id AS workerId,
+            wa.worker_version AS workerRuntimeVersion,
+            wa.session_policy AS sessionPolicy,
+            wa.created_at AS assignmentCreatedAt,
+            wa.updated_at AS assignmentUpdatedAt,
+            wa.permission_snapshot_json AS permissionSnapshotJson,
+            wa.error_json AS assignmentErrorJson,
+            wi.worker_type_id AS workerTypeId,
+            wi.provider_tool_name AS providerToolName,
+            wi.provider_tool_version AS providerToolVersion
+       FROM workflow_tasks wt
+       JOIN work_requests wr ON wr.id = wt.work_request_id
+       LEFT JOIN worker_assignments wa ON wa.id = (
+         SELECT wa2.id FROM worker_assignments wa2
+          WHERE wa2.task_id = wt.id
+          ORDER BY wa2.created_at DESC, wa2.id DESC LIMIT 1
+       )
+       LEFT JOIN workspace_worker_inventory wi ON wi.worker_id = COALESCE(
+         wa.workspace_worker_id,
+         json_extract(wr.snapshot_json, '$.resolvedBindings.' ||
+           CASE WHEN wr.workflow_id = 'direct' THEN 'direct' ELSE wt.step_kind END || '.workerId')
+       )
+      WHERE wt.work_request_id = ?1
+      ORDER BY wt.created_at, wt.id`,
+  )
+    .bind(workRequestId)
+    .all<Record<string, unknown>>();
+  const taskByKind = new Map(
+    (taskRows.results ?? []).map((value) => [String(value.kind), value]),
+  );
+  const workflowSteps = Array.isArray(workflow.steps) ? workflow.steps : [];
+  const steps = workflowSteps.flatMap((value) => {
+    if (!value || typeof value !== "object") return [];
+    const definition = value as Record<string, unknown>;
+    const kind = String(definition.kind ?? "implement");
+    const task = taskByKind.get(kind);
+    const bindingId = row.workflowId === "direct" ? "direct" : kind;
+    const bindingValue = bindings[bindingId];
+    const binding =
+      typeof bindingValue === "object" && bindingValue !== null
+        ? (bindingValue as Record<string, unknown>)
+        : {};
+    const output = parseJson<Record<string, unknown>>(
+      typeof task?.outputJson === "string" ? task.outputJson : null,
+      {},
+    );
+    const permissionSnapshot = parseJson<Record<string, unknown>>(
+      typeof task?.permissionSnapshotJson === "string"
+        ? task.permissionSnapshotJson
+        : null,
+      {},
+    );
+    const assignmentError = parseJson<Record<string, unknown>>(
+      typeof task?.assignmentErrorJson === "string"
+        ? task.assignmentErrorJson
+        : null,
+      {},
+    );
+    const assignmentErrorValue = assignmentError.error;
+    const assignmentErrorObject =
+      typeof assignmentErrorValue === "object" && assignmentErrorValue !== null
+        ? (assignmentErrorValue as Record<string, unknown>)
+        : {};
+    const rawErrorCode =
+      typeof assignmentErrorObject.code === "string"
+        ? assignmentErrorObject.code
+        : typeof task?.error === "string"
+          ? task.error
+          : null;
+    const errorCode = rawErrorCode
+      ? canonicalExecutionErrorCode(rawErrorCode)
+      : null;
+    const startedAt =
+      (typeof task?.startedAt === "string" ? task.startedAt : null) ??
+      (typeof output.startedAt === "string" ? output.startedAt : null) ??
+      (typeof task?.assignmentCreatedAt === "string"
+        ? task.assignmentCreatedAt
+        : null);
+    const finishedAt =
+      (typeof task?.finishedAt === "string" ? task.finishedAt : null) ??
+      (typeof output.completedAt === "string" ? output.completedAt : null) ??
+      (typeof task?.assignmentUpdatedAt === "string" &&
+      ["completed", "failed", "cancelled"].includes(String(task.status))
+        ? task.assignmentUpdatedAt
+        : null);
+    const startMs = startedAt ? Date.parse(startedAt) : NaN;
+    const endMs = finishedAt ? Date.parse(finishedAt) : Date.now();
+    const elapsedMs = Number.isFinite(startMs)
+      ? Math.max(0, endMs - startMs)
+      : null;
+    const resolvedWorkerId =
+      typeof binding.workerId === "string" ? binding.workerId : null;
+    return [
+      {
+        kind,
+        status: String(
+          task?.status ?? (row.status === "queued" ? "queued" : "waiting"),
+        ),
+        workerId: task?.workerId ?? resolvedWorkerId,
+        workerTypeId: task?.workerTypeId ?? null,
+        workerRuntimeVersion:
+          task?.workerRuntimeVersion ??
+          (typeof output.workerRuntimeVersion === "string"
+            ? output.workerRuntimeVersion
+            : null),
+        providerToolName:
+          (typeof permissionSnapshot.providerToolName === "string"
+            ? permissionSnapshot.providerToolName
+            : null) ??
+          task?.providerToolName ??
+          null,
+        providerToolVersion:
+          (typeof permissionSnapshot.providerToolVersion === "string"
+            ? permissionSnapshot.providerToolVersion
+            : null) ??
+          task?.providerToolVersion ??
+          (typeof output.providerToolVersion === "string"
+            ? output.providerToolVersion
+            : null),
+        startedAt,
+        completedAt: finishedAt,
+        elapsedMs,
+        resultText:
+          typeof output.text === "string" ? output.text.slice(0, 24_000) : null,
+        assignmentId:
+          typeof task?.assignmentId === "string" ? task.assignmentId : null,
+        sessionPolicy:
+          typeof task?.sessionPolicy === "string" ? task.sessionPolicy : null,
+        errorCode,
+        errorMessage: errorCode ? executionErrorMessage(errorCode) : null,
+        ...(manualRetry.stepKind === kind &&
+        (manualRetry.sessionStrategy === "resume" ||
+          manualRetry.sessionStrategy === "fresh")
+          ? { retrySessionStrategy: manualRetry.sessionStrategy }
+          : {}),
+      },
+    ];
+  });
+  const errorCode =
+    [...steps]
+      .reverse()
+      .map((step) => step.errorCode)
+      .find((code) => code !== null) ?? null;
+  return json({
+    workRequest: {
+      id: String(row.id),
+      requestedByUserId: String(row.requestedByUserId),
+      requestedByName: String(row.requestedByName ?? "Team member"),
+      status: String(row.status),
+      workflowId: String(row.workflowId),
+      workflowVersion: Number(row.workflowVersion),
+      workflowName:
+        typeof workflow.name === "string"
+          ? workflow.name
+          : String(row.workflowId),
+      originalRequest: String(input.originalRequest ?? input.request ?? ""),
+      createdAt: String(row.createdAt),
+      updatedAt: String(row.updatedAt),
+    },
+    workflowSnapshot: workflow,
+    steps,
+    result,
+    errorCode,
+    errorMessage: errorCode ? executionErrorMessage(errorCode) : null,
+  });
+}
+
+function summarizeTestCounts(text: string): string | null {
+  const counts: string[] = [];
+  for (const status of ["failed", "passed", "skipped"] as const) {
+    const matches = text.matchAll(
+      new RegExp(`\\b(\\d+)\\s+(?:tests?\\s+)?${status}\\b`, "gi"),
+    );
+    const match = [...matches].at(-1);
+    if (match) counts.push(`${match[1]} ${status}`);
+  }
+  return counts.length > 0 ? counts.join(", ") : null;
+}
+
+async function handleListWorkRequests(
+  request: Request,
+  env: SecurityEnv,
+  workstreamId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  await authorizeWorkstreamAccess(
+    request,
+    env,
+    workstreamId,
+    "view",
+    accessContext,
+  );
+  const url = new URL(request.url);
+  const rawLimit = Number(url.searchParams.get("limit") ?? 100);
+  const limit = Number.isInteger(rawLimit)
+    ? Math.min(100, Math.max(1, rawLimit))
+    : 100;
+  const beforeCreatedAt = url.searchParams.get("beforeCreatedAt");
+  const beforeId = url.searchParams.get("beforeId");
+  const activeOnly = url.searchParams.get("activeOnly") === "true";
+  const recentCutoff = new Date(Date.now() - 15 * 60_000).toISOString();
+  const page = await env.CONCLAVE_DB.prepare(
+    `SELECT wr.id, wr.requested_by_user_id AS requestedByUserId,
+            u.display_name AS requestedByName, wr.workflow_id AS workflowId,
+            wr.workflow_version AS workflowVersion,
+            wr.workflow_snapshot_json AS workflowSnapshotJson,
+            wr.snapshot_json AS snapshotJson, wr.input_json AS inputJson,
+            wr.status, wr.created_at AS createdAt, wr.updated_at AS updatedAt
+       FROM work_requests wr
+       JOIN users u ON u.id = wr.requested_by_user_id
+      WHERE wr.workstream_id = ?1
+        AND (?2 IS NULL OR wr.created_at < ?2 OR (wr.created_at = ?2 AND wr.id < ?3))
+        AND (?4 = 0 OR wr.status IN ('queued', 'running', 'waiting') OR wr.updated_at >= ?5)
+      ORDER BY wr.created_at DESC, wr.id DESC LIMIT ?6`,
+  )
+    .bind(
+      workstreamId,
+      beforeCreatedAt,
+      beforeId,
+      activeOnly ? 1 : 0,
+      recentCutoff,
+      limit,
+    )
+    .all<Record<string, unknown>>();
+  const requests = page.results ?? [];
+  if (requests.length === 0)
+    return json({ workRequests: [], nextCursor: null });
+  const ids = requests.map((row) => String(row.id));
+  const placeholders = ids.map((_, index) => `?${index + 1}`).join(", ");
+  const desiredWorkerIds = new Set<string>();
+  for (const row of requests) {
+    const requestSnapshot = parseJson<Record<string, unknown>>(
+      typeof row.snapshotJson === "string" ? row.snapshotJson : null,
+      {},
+    );
+    const requestBindings = requestSnapshot.resolvedBindings;
+    if (typeof requestBindings !== "object" || requestBindings === null)
+      continue;
+    for (const value of Object.values(requestBindings)) {
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        typeof (value as Record<string, unknown>).workerId === "string"
+      ) {
+        desiredWorkerIds.add(
+          (value as Record<string, unknown>).workerId as string,
+        );
+      }
+    }
+  }
+  const desiredWorkers = new Map<string, Record<string, unknown>>();
+  if (desiredWorkerIds.size > 0) {
+    const workerPlaceholders = [...desiredWorkerIds]
+      .map((_, index) => `?${index + 1}`)
+      .join(", ");
+    const workerRows = await env.CONCLAVE_DB.prepare(
+      `SELECT worker_id AS workerId, worker_type_id AS workerTypeId,
+              worker_runtime_version AS workerRuntimeVersion,
+              provider_tool_name AS providerToolName,
+              provider_tool_version AS providerToolVersion
+         FROM workspace_worker_inventory WHERE worker_id IN (${workerPlaceholders})`,
+    )
+      .bind(...desiredWorkerIds)
+      .all<Record<string, unknown>>();
+    for (const worker of workerRows.results ?? []) {
+      desiredWorkers.set(String(worker.workerId), worker);
+    }
+  }
+  const taskRows = await env.CONCLAVE_DB.prepare(
+    `SELECT wt.work_request_id AS workRequestId, wt.step_kind AS kind,
+            wt.status, wt.output_json AS outputJson, wt.error,
+            COALESCE(wt.started_at, wt.created_at) AS startedAt,
+            COALESCE(wt.finished_at, wt.updated_at) AS updatedAt,
+            wa.error_json AS assignmentErrorJson,
+            wa.workspace_worker_id AS workerId, wa.worker_version AS workerRuntimeVersion,
+            wi.worker_type_id AS workerTypeId,
+            wi.provider_tool_name AS providerToolName,
+            wi.provider_tool_version AS providerToolVersion
+       FROM workflow_tasks wt
+       JOIN work_requests wr ON wr.id = wt.work_request_id
+       LEFT JOIN worker_assignments wa ON wa.id = (
+         SELECT wa2.id FROM worker_assignments wa2
+          WHERE wa2.task_id = wt.id
+          ORDER BY wa2.created_at DESC, wa2.id DESC LIMIT 1
+       )
+       LEFT JOIN workspace_worker_inventory wi ON wi.worker_id = COALESCE(
+         wa.workspace_worker_id,
+         json_extract(wr.snapshot_json, '$.resolvedBindings.' ||
+           CASE WHEN wr.workflow_id = 'direct' THEN 'direct' ELSE wt.step_kind END || '.workerId')
+       )
+      WHERE wt.work_request_id IN (${placeholders})
+      ORDER BY wt.created_at, wt.id`,
+  )
+    .bind(...ids)
+    .all<Record<string, unknown>>();
+  const tasksByRequest = new Map<string, Record<string, unknown>[]>();
+  for (const task of taskRows.results ?? []) {
+    const key = String(task.workRequestId);
+    const values = tasksByRequest.get(key) ?? [];
+    values.push(task);
+    tasksByRequest.set(key, values);
+  }
+  const workRequests = requests.map((row) => {
+    const id = String(row.id);
+    const input = parseJson<Record<string, unknown>>(String(row.inputJson), {});
+    const workflow = parseJson<Record<string, unknown>>(
+      String(row.workflowSnapshotJson),
+      {},
+    );
+    const snapshot = parseJson<Record<string, unknown>>(
+      typeof row.snapshotJson === "string" ? row.snapshotJson : null,
+      {},
+    );
+    const bindings =
+      typeof snapshot.resolvedBindings === "object" &&
+      snapshot.resolvedBindings !== null
+        ? (snapshot.resolvedBindings as Record<string, unknown>)
+        : {};
+    const persistedTasks = tasksByRequest.get(id) ?? [];
+    const taskByKind = new Map(
+      persistedTasks.map((task) => [String(task.kind), task]),
+    );
+    const workflowSteps = Array.isArray(workflow.steps) ? workflow.steps : [];
+    const steps = workflowSteps.flatMap((value) => {
+      if (!value || typeof value !== "object") return [];
+      const definition = value as Record<string, unknown>;
+      const kind = String(definition.kind ?? "implement");
+      const task = taskByKind.get(kind);
+      const bindingId = row.workflowId === "direct" ? "direct" : kind;
+      const bindingValue = bindings[bindingId];
+      const binding =
+        typeof bindingValue === "object" && bindingValue !== null
+          ? (bindingValue as Record<string, unknown>)
+          : {};
+      const desiredWorker =
+        typeof binding.workerId === "string"
+          ? desiredWorkers.get(binding.workerId)
+          : undefined;
+      const output =
+        typeof task?.outputJson === "string"
+          ? parseJson<Record<string, unknown>>(task.outputJson, {})
+          : {};
+      const testSummary =
+        kind === "test" && typeof output.text === "string"
+          ? summarizeTestCounts(output.text)
+          : null;
+      const assignmentError = parseJson<Record<string, unknown>>(
+        typeof task?.assignmentErrorJson === "string"
+          ? task.assignmentErrorJson
+          : null,
+        {},
+      );
+      const assignmentErrorValue = assignmentError.error;
+      const assignmentErrorDetail =
+        typeof assignmentErrorValue === "object" &&
+        assignmentErrorValue !== null
+          ? (assignmentErrorValue as Record<string, unknown>)
+          : {};
+      const stableErrorCode =
+        typeof assignmentErrorDetail.code === "string"
+          ? canonicalExecutionErrorCode(assignmentErrorDetail.code)
+          : typeof task?.error === "string"
+            ? canonicalExecutionErrorCode(task.error)
+            : null;
+      const created = task?.startedAt
+        ? Date.parse(String(task.startedAt))
+        : NaN;
+      const updated = task?.updatedAt
+        ? Date.parse(String(task.updatedAt))
+        : Date.now();
+      const finished = ["completed", "failed", "cancelled"].includes(
+        String(task?.status),
+      );
+      return [
+        {
+          kind,
+          status: String(
+            task?.status ?? (row.status === "queued" ? "queued" : "waiting"),
+          ),
+          workerId: task?.workerId ?? binding.workerId ?? null,
+          workerTypeId:
+            task?.workerTypeId ?? desiredWorker?.workerTypeId ?? null,
+          workerRuntimeVersion:
+            task?.workerRuntimeVersion ??
+            desiredWorker?.workerRuntimeVersion ??
+            null,
+          providerToolName:
+            task?.providerToolName ?? desiredWorker?.providerToolName ?? null,
+          providerToolVersion:
+            task?.providerToolVersion ??
+            desiredWorker?.providerToolVersion ??
+            null,
+          startedAt: task?.startedAt ?? null,
+          updatedAt: task?.updatedAt ?? null,
+          elapsedMs: Number.isFinite(created)
+            ? Math.max(0, (finished ? updated : Date.now()) - created)
+            : null,
+          finalText: typeof output.text === "string" ? output.text : null,
+          ...(testSummary ? { testSummary } : {}),
+          errorCode: stableErrorCode,
+          errorMessage: stableErrorCode
+            ? executionErrorMessage(stableErrorCode)
+            : null,
+          error: typeof task?.error === "string" ? task.error : null,
+        },
+      ];
+    });
+    const terminalStep = steps.at(-1);
+    const finalText =
+      row.status === "completed" && terminalStep?.status === "completed"
+        ? terminalStep.finalText
+        : null;
+    const stepError = [...steps]
+      .reverse()
+      .map((step) => step.error)
+      .find(
+        (error): error is string =>
+          typeof error === "string" && error.length > 0,
+      );
+    const errorCode = stepError ? canonicalExecutionErrorCode(stepError) : null;
+    return {
+      id,
+      requestedByName: String(row.requestedByName ?? "Team member"),
+      prompt: String(input.originalRequest ?? input.request ?? ""),
+      workflowId: String(row.workflowId),
+      workflowVersion: Number(row.workflowVersion),
+      status: String(row.status),
+      createdAt: String(row.createdAt),
+      updatedAt: String(row.updatedAt),
+      steps: steps.map(({ finalText: _text, error: _error, ...step }) => step),
+      ...(finalText ? { finalText } : {}),
+      ...(errorCode
+        ? {
+            errorCode,
+            error:
+              "A Step could not be completed. Open Run details for the safe error code.",
+          }
+        : {}),
+    };
+  });
+  const last = requests.at(-1)!;
+  return json({
+    workRequests,
+    nextCursor:
+      requests.length === limit
+        ? { createdAt: String(last.createdAt), id: String(last.id) }
+        : null,
+  });
+}
+
 async function handleCancelWorkRequest(
   request: Request,
   env: SecurityEnv,
@@ -6000,16 +7571,16 @@ async function handleCancelWorkRequest(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const row = await env.CONCLAVE_DB.prepare(
-    "SELECT workstream_id AS workstreamId, mode, status FROM work_requests WHERE id = ?1",
+    "SELECT workstream_id AS workstreamId, mode, status, cancel_requested_at AS cancelRequestedAt FROM work_requests WHERE id = ?1",
   )
     .bind(workRequestId)
-    .first<{ workstreamId: string; mode: string; status: string }>();
+    .first<{
+      workstreamId: string;
+      mode: string;
+      status: string;
+      cancelRequestedAt: string | null;
+    }>();
   if (!row) throw new HttpError(404, "Work Request not found");
-  if (row.mode !== "stateful")
-    throw new HttpError(
-      400,
-      "Only stateful Work Requests can be cancelled here",
-    );
   await authorizeWorkstreamAccess(
     request,
     env,
@@ -6017,21 +7588,127 @@ async function handleCancelWorkRequest(
     "execute",
     accessContext,
   );
-  if (!env.CONCLAVE_WORKSTREAM_COORDINATOR)
-    throw new HttpError(503, "Workstream execution coordinator unavailable");
-  const coordinator = env.CONCLAVE_WORKSTREAM_COORDINATOR.getByName(
-    row.workstreamId,
-  );
-  return coordinator.fetch(
-    new Request("https://workstream-coordinator/cancel", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-workstream-id": row.workstreamId,
-      },
-      body: JSON.stringify({ workRequestId }),
-    }),
-  );
+  if (row.status === "cancelled")
+    return json({ workRequestId, status: "cancelled" });
+  if (row.status === "failed") {
+    const now = new Date().toISOString();
+    await env.CONCLAVE_DB.batch([
+      env.CONCLAVE_DB.prepare(
+        "UPDATE work_requests SET status = 'cancelled', updated_at = ?1 WHERE id = ?2 AND status = 'failed'",
+      ).bind(now, workRequestId),
+      env.CONCLAVE_DB.prepare(
+        `UPDATE runs SET status = 'cancelled', finished_at = ?1, updated_at = ?1
+          WHERE id = (SELECT id FROM runs WHERE work_request_id = ?2 AND status = 'failed'
+                     ORDER BY created_at DESC, id DESC LIMIT 1)`,
+      ).bind(now, workRequestId),
+      env.CONCLAVE_DB.prepare(
+        `UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1, updated_at = ?1
+          WHERE work_request_id = ?2 AND status IN ('queued', 'waiting')`,
+      ).bind(now, workRequestId),
+    ]);
+    return json({ workRequestId, status: "cancelled" });
+  }
+  if (row.status === "queued" && row.mode === "stateful") {
+    if (!env.CONCLAVE_WORKSTREAM_COORDINATOR)
+      throw new HttpError(503, "Workstream execution coordinator unavailable");
+    const coordinator = env.CONCLAVE_WORKSTREAM_COORDINATOR.getByName(
+      row.workstreamId,
+    );
+    return coordinator.fetch(
+      new Request("https://workstream-coordinator/cancel", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-workstream-id": row.workstreamId,
+        },
+        body: JSON.stringify({ workRequestId }),
+      }),
+    );
+  }
+  if (row.status === "queued") {
+    const now = new Date().toISOString();
+    await env.CONCLAVE_DB.batch([
+      env.CONCLAVE_DB.prepare(
+        "UPDATE work_requests SET status = 'cancelled', updated_at = ?1 WHERE id = ?2 AND status = 'queued'",
+      ).bind(now, workRequestId),
+      env.CONCLAVE_DB.prepare(
+        "UPDATE runs SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status = 'created'",
+      ).bind(now, workRequestId),
+      env.CONCLAVE_DB.prepare(
+        "UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status IN ('queued', 'waiting')",
+      ).bind(now, workRequestId),
+    ]);
+    return json({ workRequestId, status: "cancelled" });
+  }
+  if (row.status !== "running")
+    throw new HttpError(409, "This Work Request cannot be cancelled");
+
+  const requestedAt = row.cancelRequestedAt ?? new Date().toISOString();
+  await env.CONCLAVE_DB.prepare(
+    "UPDATE work_requests SET cancel_requested_at = COALESCE(cancel_requested_at, ?1), updated_at = ?1 WHERE id = ?2 AND status = 'running'",
+  )
+    .bind(requestedAt, workRequestId)
+    .run();
+
+  const active = await env.CONCLAVE_DB.prepare(
+    `SELECT wa.id AS assignmentId, wa.execution_workspace_id AS workspaceId,
+            wa.status AS assignmentStatus
+       FROM workflow_tasks wt
+       JOIN worker_assignments wa ON wa.task_id = wt.id
+      WHERE wt.work_request_id = ?1 AND wt.status = 'running'
+        AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')
+      ORDER BY wa.created_at DESC LIMIT 1`,
+  )
+    .bind(workRequestId)
+    .first<{
+      assignmentId: string;
+      workspaceId: string;
+      assignmentStatus: string;
+    }>();
+  if (active) {
+    const cancellation = await cancelTaskAssignment(
+      env as unknown as AssignmentDispatcherEnv,
+      active.workspaceId,
+      active.assignmentId,
+      "Work Request cancelled from Work chat",
+    );
+    if (!cancellation.cancelled)
+      throw new HttpError(
+        503,
+        "Workspace did not confirm that the Worker process tree stopped. The Run remains active; retry cancellation.",
+      );
+  }
+
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      "UPDATE work_requests SET status = 'cancelled', updated_at = ?1 WHERE id = ?2 AND status = 'running'",
+    ).bind(now, workRequestId),
+    env.CONCLAVE_DB.prepare(
+      "UPDATE runs SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status IN ('created', 'running')",
+    ).bind(now, workRequestId),
+    env.CONCLAVE_DB.prepare(
+      "UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status IN ('queued', 'waiting')",
+    ).bind(now, workRequestId),
+  ]);
+  if (!active) {
+    await env.CONCLAVE_DB.prepare(
+      "UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status = 'running'",
+    )
+      .bind(now, workRequestId)
+      .run();
+    const run = await env.CONCLAVE_DB.prepare(
+      "SELECT id FROM runs WHERE work_request_id = ?1 ORDER BY created_at DESC LIMIT 1",
+    )
+      .bind(workRequestId)
+      .first<{ id: string }>();
+    if (run && env.CONCLAVE_RUN_WORKFLOW) {
+      const instanceId = await resolveWorkflowInstanceId(env, run.id);
+      const instance = await env.CONCLAVE_RUN_WORKFLOW.get(instanceId);
+      await instance.terminate();
+    }
+  }
+  return json({ workRequestId, status: "cancelled" });
 }
 
 // =========================================================================
@@ -8020,6 +9697,11 @@ export async function handleListWorkspaceWorkerInventory(
           ? null
           : String(row.readiness_issue_code),
       capabilities: parseArray(row.capabilities_json),
+      inputCapabilities: parseArray(row.capabilities_json).filter(
+        (capability): capability is string =>
+          typeof capability === "string" &&
+          (WORKER_INPUT_CAPABILITIES as readonly string[]).includes(capability),
+      ),
       localConcurrencyLimit: Number(row.local_concurrency_limit),
       workerRuntimeVersion:
         row.worker_runtime_version == null
@@ -10283,6 +11965,8 @@ async function handleStudioSnapshot(
       `SELECT ws.id, ws.project_id AS projectId, ws.name, ws.status,
               ws.access_policy_json AS accessPolicyJson,
               ws.lead_user_id AS leadUserId,
+              pm.id AS membershipId,
+              pm.role AS memberRole,
               ws.created_at AS createdAt, ws.updated_at AS updatedAt
        FROM workstreams ws
        JOIN project_memberships pm ON pm.project_id = ws.project_id
@@ -10295,7 +11979,41 @@ async function handleStudioSnapshot(
     for (const row of workstreamRows.results ?? []) {
       const projectWorkstreams =
         workstreamsByProject.get(String(row.projectId)) ?? [];
-      projectWorkstreams.push(workstreamMetadata(row));
+      projectWorkstreams.push({
+        ...workstreamMetadata(row),
+        canConfigureWork:
+          row.memberRole === "owner" ||
+          (row.memberRole === "collaborator" &&
+            String(row.leadUserId) === context.userId),
+        canExecuteWork: canExecuteWorkstream(
+          context.userId,
+          {
+            id: String(row.membershipId ?? ""),
+            projectId: String(row.projectId),
+            userId: context.userId,
+            role: String(row.memberRole) as ProjectMembership["role"],
+            createdAt: String(row.createdAt ?? ""),
+            updatedAt: String(row.updatedAt ?? ""),
+          },
+          {
+            id: String(row.id),
+            projectId: String(row.projectId),
+            name: String(row.name),
+            status: String(row.status) as Workstream["status"],
+            accessPolicy: {
+              ...DEFAULT_WORKSTREAM_ACCESS_POLICY,
+              ...parseJson(row.accessPolicyJson, {}),
+            },
+            lead: {
+              userId: String(row.leadUserId),
+              assignedAt: String(row.createdAt),
+              assignedByUserId: String(row.leadUserId),
+            },
+            createdAt: String(row.createdAt),
+            updatedAt: String(row.updatedAt),
+          },
+        ),
+      });
       workstreamsByProject.set(String(row.projectId), projectWorkstreams);
     }
     return json({
@@ -12724,7 +14442,11 @@ export {
   handleListDiscussionMessages,
   handleCreateDiscussionMessage,
   handleEditDiscussionMessage,
+  handleValidateWorkRequest,
   handleCreateWorkRequest,
+  handleRetryWorkRequest,
+  handleGetWorkRequest,
+  handleListWorkRequests,
   handleCancelWorkRequest,
   handleGetChat,
   handleUpdateChat,

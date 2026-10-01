@@ -141,6 +141,7 @@ export const workspaceRuntimeEnvelopeSchema = z
           snapshot: z
             .object({
               workerTypeId: WorkspaceProductWorkerTypeIdSchema,
+              readOnly: z.boolean().optional(),
               sessionPolicy: z
                 .enum(["stateless", "durable_session"])
                 .optional(),

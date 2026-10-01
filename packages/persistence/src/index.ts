@@ -250,16 +250,6 @@ export interface ExtensionRecord extends EntityRecord {
   readonly status: "active" | "disabled" | "pending_review";
 }
 
-export interface WorkflowTemplateRecord extends EntityRecord {
-  readonly organizationId: string;
-  readonly templateId: string;
-  readonly name: string;
-  readonly version: number;
-  readonly template: JsonValue;
-  readonly status: "draft" | "active" | "archived";
-  readonly createdByUserId: string;
-}
-
 export interface HumanApprovalRecord {
   readonly id: string;
   readonly organizationId: string;
@@ -346,11 +336,6 @@ export interface RetentionPolicyRepository {
   save(record: RetentionPolicyRecord): Promise<void>;
 }
 export type ExtensionRepository = Repository<ExtensionRecord>;
-export interface WorkflowTemplateRepository extends Repository<WorkflowTemplateRecord> {
-  listByOrganization(
-    organizationId: string,
-  ): Promise<readonly WorkflowTemplateRecord[]>;
-}
 export interface HumanApprovalRepository {
   get(id: string): Promise<HumanApprovalRecord | null>;
   save(record: HumanApprovalRecord): Promise<void>;
@@ -377,7 +362,6 @@ export interface PersistenceRepositories {
   readonly credentials: EncryptedCredentialRepository;
   readonly retentionPolicies: RetentionPolicyRepository;
   readonly extensions: ExtensionRepository;
-  readonly workflowTemplates: WorkflowTemplateRepository;
   readonly humanApprovals: HumanApprovalRepository;
 }
 
