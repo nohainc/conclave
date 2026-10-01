@@ -74,39 +74,19 @@ shutdown completes. Provider CLIs remain in the Workspace-owned process group.
 POSIX process groups are used for force termination, with recursive process
 discovery as fallback; Windows uses process-tree termination.
 
-## Worker Runtime v2
+## Worker Runtime v2 is historical predecessor implementation. Architecture v8 standardizes first-party local CLI execution on one standalone Dart AOT **CLI Worker Engine** plus signed Tool Profiles.
 
-First-party Worker Types are implemented as signed standalone Dart native
-executables managed by Conclave Workspace.
-
-Preferred first-party structure:
+Preferred local runtime:
 
 ~~~text
 Conclave Workspace (Flutter/Dart)
--> Local Worker Protocol 3.0
--> Dart Worker executable
--> provider CLI/tool
+-> Local Worker Protocol 4.0
+-> generic Dart CLI Worker Engine
+-> signed Tool Profile
+-> provider CLI
 ~~~
 
-Workspace installs, verifies, activates, supervises, updates and rolls back
-Worker executables. A Worker owns provider CLI discovery, version/auth checks,
-environment interpretation, execution, output parsing, provider session IDs
-and provider-specific diagnostics.
-
-The first-party Workers are console applications, not Flutter plugins. They
-compile with `dart compile exe` into self-contained platform/architecture
-artifacts. No Node.js or Dart SDK is required on the user machine.
-
-Third-party Workers may use another implementation language only when they
-still satisfy the same signed Worker release, process isolation, protocol,
-permission and update contracts.
-
-Worker versions are independent from both Workspace and provider CLI versions.
-Workspace may keep multiple verified Worker versions installed and atomically
-switch/rollback the active version.
-
-See [ADR-017](../decisions/ADR-017-standalone-dart-worker-executables.md) and
-[Worker Runtime v2](WORKER_RUNTIME_V2.md).
+The Engine is a separate console executable, not a Flutter plugin and not provider-specific. Tool Profiles are immutable signed configuration releases stored/distributed by Cloud and cached/verified by Workspace. Provider-specific command lines, event mappings, sessions, and compatibility belong in Profiles when representable by Tool Profile v1.
 
 ## Cross-language contracts
 
