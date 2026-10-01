@@ -1,6 +1,6 @@
 # ADR-017: Standalone Versioned Dart Worker Executables
 
-**Status:** Accepted for implementation  
+**Status:** Superseded for first-party provider implementation by [ADR-018](ADR-018-generic-cli-worker-engine-and-tool-profiles.md); retained as historical process-boundary evidence  
 **Date:** 2026-09-30  
 **Builds on:** ADR-003, ADR-012, ADR-015, ADR-016, Architecture v7  
 **Refines:** ADR-012's legacy package implementation details and ADR-015 first-party Worker runtime implementation
@@ -49,7 +49,7 @@ the Worker.
 
 ## Decision
 
-### 1. Keep Architecture v7 and the current Workspace product version line
+### 1. Historical v7/v2 decision
 
 This change does **not** create Architecture v8.
 
@@ -482,3 +482,8 @@ but preserving unreleased legacy implementation state is not a requirement.
 - [ADR-015](ADR-015-first-party-worker-v1-contract.md)
 - [Technology Stack](../architecture/TECH_STACK.md)
 - [Dart native executable documentation](https://dart.dev/tools/dart-compile)
+
+
+## Architecture v8 supersession
+
+ADR-018 and Architecture v8 retain the strongest ADR-017 decisions—out-of-process execution, Dart-native runtime, Workspace supervision, provider credentials staying local, provider-neutral protocol, process-tree cancellation, and no provider commands in Workspace—but replace **one native Worker executable per provider** with **one generic CLI Worker Engine plus signed Tool Profiles**. New CLI integrations must follow v8 rather than adding another provider-specific Worker binary.
