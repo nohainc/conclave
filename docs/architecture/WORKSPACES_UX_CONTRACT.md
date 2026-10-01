@@ -4,12 +4,9 @@
 
 **Applies to:** Conclave AX and its Cloud read models.
 
-**Architecture:** v7, Workspace-owned Workers.
+**Architecture:** v8, Workspace-owned logical Workers with a generic CLI Worker Engine and signed Tool Profiles.
 
-**Runtime contract:** First-party Worker version is `workerRuntimeVersion`.
-Provider tool name/version are Worker-reported safe diagnostics; provider tool
-paths are local-only. Workspace does not probe provider CLIs directly. Legacy
-`adapterVersion` fields describe the superseded Node migration implementation.
+**Runtime contract:** safe runtime evidence distinguishes `engineVersion`, `profileDefinitionId`, `profileReleaseVersion`, and provider tool name/version. Provider tool paths are local-only. Workspace does not probe provider CLIs directly; the generic Engine does so through the admitted Profile.
 
 ## Product contract
 
@@ -106,7 +103,9 @@ workspaceId
 status               // ready | needs_attention | disabled | removed
 readinessState       // independent Worker-reported health; never replaced by disabled
 attentionReasonCode? // set for actionable non-ready states
-workerRuntimeVersion?
+engineVersion?
+profileDefinitionId?
+profileReleaseVersion?
 providerToolName?
 providerToolVersion?
 capabilities
@@ -426,3 +425,8 @@ ADR-014 refines the desktop side of this UX contract:
   editable in AX Workstreams.
 
 See [ADR-014](../decisions/ADR-014-workspace-desktop-lifecycle.md).
+
+
+## Architecture v8 UX invariant
+
+Normal AX/Workspace UX remains Worker-centric. Profile JSON, Profile lifecycle controls, Engine/Profile compatibility, and arbitrary executable selection are not normal user concepts. Advanced Diagnostics may expose Engine/Profile versions for support and incident analysis.
