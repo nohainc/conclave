@@ -1153,7 +1153,7 @@ Remove provider-specific native Worker runtime version semantics once migrated.
 Profile definition/release, provider tool name/version, capabilities, readiness,
 activation, and concurrency. Cloud persists and returns only these bounded
 fields, and scheduling requires Engine plus Profile release evidence. Migration
-`0048_safe_worker_inventory_v8.sql` removes the obsolete provider-native
+`0049_safe_worker_inventory_v8.sql` removes the obsolete provider-native
 `worker_runtime_version` column and renames the assignment version column.
 Assignment/run history displays the execution evidence frozen at dispatch,
 independent of current inventory/Profile promotion.
@@ -1295,13 +1295,22 @@ A clean database has no requirement for provider-specific Worker binaries.
 
 ## Phase 30 implementation evidence
 
-- Forward migration `0049_remove_native_worker_release_catalog.sql` drops the
+- Production migration testing exposed that the applied `0001` migration had
+  later been edited for the built-in Work v1 schema without a forward
+  migration. Existing databases retained versioned-workflow columns, leaving
+  the `0038` snapshot trigger with references to absent fields. New forward
+  migration `0048_reconcile_work_v1_runtime_schema.sql` rebuilds only empty
+  legacy Work tables, aborts if Work/dependent rows exist, and recreates the
+  immutability trigger against the v8 columns.
+- Forward migration `0050_remove_native_worker_release_catalog.sql` drops the
   obsolete `worker_releases` table. The earlier v7 adapter table is already
   removed by the migration chain; neither is present after a clean v8 bootstrap.
-- Migrations `0044`–`0048` provide the v8 logical Worker catalog, immutable
+- Migrations `0044`–`0047` provide the v8 logical Worker catalog, immutable
   Tool Profile release domain, channel pointers, audit trail, and safe v8
-  Worker/assignment evidence. Clean-room checks now apply the full ordered
-  migration directory and assert the v8 fields and release tables.
+  Worker/assignment evidence. Migrations `0048`–`0050` reconcile the legacy
+  Work schema, update inventory evidence, and remove native Worker releases.
+  Clean-room checks apply the full ordered migration directory and assert the
+  v8 fields and release tables.
 - The optional `seed/v6-development.sql` contains only logical Worker and
   Profile Definition identities. It seeds no Profiles, Workspaces, credentials,
   assignments, or historical Work/Run data.

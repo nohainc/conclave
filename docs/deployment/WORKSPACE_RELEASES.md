@@ -92,7 +92,7 @@ Profile Releases described above.
 The manually dispatched [V7 adapter release workflow](../../.github/workflows/release-v7-adapter.yml)
 is retained only as migration history. Its releases are no longer part of the
 Cloud catalog. Migration `0035_worker_releases.sql` drops
-`v7_adapter_releases`; migration `0049_remove_native_worker_release_catalog.sql`
+`v7_adapter_releases`; migration `0050_remove_native_worker_release_catalog.sql`
 drops the native Worker package catalog. Neither release table is recreated.
 
 For a publish run, provide `source` as a repository-relative adapter package

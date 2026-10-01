@@ -58,8 +58,9 @@ const migrationFiles = [
   "0038_work_request_snapshots.sql",
   "0039_workstream_runtime_leases.sql",
   "0041_workflow_task_timing.sql",
-  "0048_safe_worker_inventory_v8.sql",
-  "0049_remove_native_worker_release_catalog.sql",
+  "0048_reconcile_work_v1_runtime_schema.sql",
+  "0049_safe_worker_inventory_v8.sql",
+  "0050_remove_native_worker_release_catalog.sql",
 ];
 
 class LocalD1Statement {
