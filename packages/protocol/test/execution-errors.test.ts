@@ -17,11 +17,11 @@ describe("canonical execution error taxonomy", () => {
     }
   });
 
-  it("normalizes unknown implementation errors to an internal code", () => {
+  it("normalizes unknown implementation errors to a generic failure", () => {
     expect(isExecutionErrorCode("permission_denied")).toBe(true);
     expect(isExecutionErrorCode("tool_permission_denied")).toBe(false);
     expect(canonicalExecutionErrorCode("codex_cli_error")).toBe(
-      "internal_adapter_error",
+      "execution_failed",
     );
   });
 });

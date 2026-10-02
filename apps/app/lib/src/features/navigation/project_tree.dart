@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../navigation/studio_navigation.dart';
-import '../../studio/studio_models.dart';
-import 'studio_shell_context.dart';
+import '../../navigation/ax_navigation.dart';
+import '../../ax/ax_models.dart';
+import 'ax_shell_context.dart';
 
 /// Interactive Project Tree component for the Conclave AX App Sidebar.
 class ProjectTree extends StatelessWidget {
@@ -16,11 +16,11 @@ class ProjectTree extends StatelessWidget {
     this.compact = false,
   });
 
-  final StudioShellContext shellContext;
-  final ValueChanged<StudioNavigation> onNavigateTo;
+  final AxShellContext shellContext;
+  final ValueChanged<AxNavigation> onNavigateTo;
   final ValueChanged<String> onToggleProjectExpanded;
   final VoidCallback onCreateProject;
-  final ValueChanged<StudioProject>? onCreateWorkstream;
+  final ValueChanged<AxProject>? onCreateWorkstream;
   final bool compact;
 
   @override
@@ -45,10 +45,9 @@ class ProjectTree extends StatelessWidget {
     );
   }
 
-  Widget _buildProjectItem(BuildContext context, StudioProject project) {
-    final isProjectFocused =
-        shellContext.navigation.projectId == project.id &&
-            shellContext.navigation.kind == StudioRouteKind.project;
+  Widget _buildProjectItem(BuildContext context, AxProject project) {
+    final isProjectFocused = shellContext.navigation.projectId == project.id &&
+        shellContext.navigation.kind == AxRouteKind.project;
     final isExpanded = shellContext.isProjectExpanded(project.id);
     final visibleWorkstreams = project.workstreams
         .where((w) => w.status.toLowerCase() != 'archived')
@@ -60,29 +59,25 @@ class ProjectTree extends StatelessWidget {
         Container(
           margin: const EdgeInsets.only(bottom: 2),
           decoration: BoxDecoration(
-            color: isProjectFocused
-                ? const Color(0xff29283c)
-                : Colors.transparent,
+            color:
+                isProjectFocused ? const Color(0xff29283c) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: InkWell(
             onTap: () {
               onToggleProjectExpanded(project.id);
-              onNavigateTo(StudioNavigation.project(project.id));
+              onNavigateTo(AxNavigation.project(project.id));
               if (compact) Scaffold.maybeOf(context)?.closeDrawer();
             },
             borderRadius: BorderRadius.circular(8),
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 8, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               child: Row(
                 children: [
                   ConclaveFolderIcon(
                     isExpanded: isExpanded,
                     size: 16,
-                    color: isProjectFocused
-                        ? Colors.white
-                        : Colors.white54,
+                    color: isProjectFocused ? Colors.white : Colors.white54,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -91,9 +86,7 @@ class ProjectTree extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: isProjectFocused
-                            ? Colors.white
-                            : Colors.white70,
+                        color: isProjectFocused ? Colors.white : Colors.white70,
                         fontSize: 12.5,
                         fontWeight: isProjectFocused
                             ? FontWeight.w600
@@ -106,20 +99,19 @@ class ProjectTree extends StatelessWidget {
             ),
           ),
         ),
-
         if (isExpanded)
           ...visibleWorkstreams.map(
             (workstream) {
               final isWorkstreamSelected =
                   shellContext.navigation.workstreamId == workstream.id ||
-                  shellContext.selectedWorkstream?.id == workstream.id;
+                      shellContext.selectedWorkstream?.id == workstream.id;
               final statusIndicator =
                   _buildWorkstreamStatusIndicator(workstream.status);
 
               return InkWell(
                 onTap: () {
-                  onNavigateTo(StudioNavigation.workstream(
-                      project.id, workstream.id));
+                  onNavigateTo(
+                      AxNavigation.workstream(project.id, workstream.id));
                   if (compact) Scaffold.maybeOf(context)?.closeDrawer();
                 },
                 borderRadius: BorderRadius.circular(6),
@@ -301,7 +293,8 @@ class _FolderPainter extends CustomPainter {
         ..lineTo(4.5, 10.5)
         ..arcToPoint(const Offset(6.5, 9.5), radius: const Radius.circular(1.5))
         ..lineTo(20, 9.5)
-        ..arcToPoint(const Offset(21.8, 11.5), radius: const Radius.circular(1.5))
+        ..arcToPoint(const Offset(21.8, 11.5),
+            radius: const Radius.circular(1.5))
         ..lineTo(19.8, 17.8)
         ..arcToPoint(const Offset(18, 19.8), radius: const Radius.circular(1.8))
         ..lineTo(4, 19.8)
@@ -317,4 +310,3 @@ class _FolderPainter extends CustomPainter {
   bool shouldRepaint(_FolderPainter oldDelegate) =>
       oldDelegate.isExpanded != isExpanded || oldDelegate.color != color;
 }
-

@@ -18,10 +18,6 @@ const workstreams = readFileSync(
   fileURLToPath(new URL("../src/routes/workstreams.ts", import.meta.url)),
   "utf8",
 );
-const work = readFileSync(
-  fileURLToPath(new URL("../src/routes/work.ts", import.meta.url)),
-  "utf8",
-);
 const entrypoint = readFileSync(
   fileURLToPath(new URL("../src/index.ts", import.meta.url)),
   "utf8",
@@ -69,15 +65,6 @@ describe("Project lifecycle integrity", () => {
     expect(body).toContain("if (!auditWorkspaceId)");
   });
 
-  it("preserves Project instructions in the snapshot", () => {
-    const start = work.indexOf("async function handleStudioSnapshot");
-    const end = work.indexOf("async function handleProjectReadModel", start);
-    const body = work.slice(start, end);
-
-    expect(body).toContain("instructions:");
-    expect(body).toContain("settings,");
-  });
-
   it("guards duplicate names, grants, and invitations across lifecycle changes", () => {
     const all = `${projects}\n${workstreams}\n${workspaces}`;
     expect(all).toContain("LOWER(TRIM(name)) = LOWER(TRIM(?2))");
@@ -100,7 +87,6 @@ describe("Project lifecycle integrity", () => {
 
     expect(body).toContain("DELETE FROM workstream_current_checkpoints");
     expect(body).toContain("DELETE FROM workstream_diff_artifacts");
-    expect(body).toContain("DELETE FROM workstream_execution_leases");
     expect(body).toContain("DELETE FROM runs WHERE project_id = ?1");
     expect(body).toContain("DELETE FROM work_requests");
     expect(body).toContain("DELETE FROM workstream_checkouts");

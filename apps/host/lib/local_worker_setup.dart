@@ -1,4 +1,4 @@
-import 'configured_worker_registry.dart';
+import 'local_worker_registry.dart';
 import 'local_worker_permissions.dart';
 import 'tool_profile_catalog.dart';
 
@@ -6,9 +6,9 @@ import 'tool_profile_catalog.dart';
 class LocalWorkerSetupService {
   const LocalWorkerSetupService({required this.registry});
 
-  final LocalConfiguredWorkerRegistry registry;
+  final LocalWorkerRegistry registry;
 
-  Future<LocalConfiguredWorker> createCatalogWorker({
+  Future<LocalWorker> createCatalogWorker({
     required LogicalWorkerCatalogEntry entry,
     required List<String> permissions,
   }) {

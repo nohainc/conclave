@@ -41,16 +41,18 @@ function database(firstResult: unknown): DatabaseAdapter {
 
 describe("current authorization model", () => {
   it("authorizes actions from current Project roles only", () => {
-    expect(() => authorize(context, "projects:write", "project-1")).not.toThrow();
+    expect(() =>
+      authorize(context, "projects:write", "project-1"),
+    ).not.toThrow();
     expect(() => authorize(context, "runs:control", "project-1")).toThrow(
       AuthorizationError,
     );
     expect(() => authorize(context, "projects:write", "project-2")).toThrow(
       AuthorizationError,
     );
-    expect(() => authorize(context, "projects:read", "unrelated-project")).toThrow(
-      AuthorizationError,
-    );
+    expect(() =>
+      authorize(context, "projects:read", "unrelated-project"),
+    ).toThrow(AuthorizationError);
   });
 
   it("rechecks Project membership and ownership in the database", async () => {
@@ -62,13 +64,22 @@ describe("current authorization model", () => {
       authorizeProjectOwner(db, context, "project-1"),
     ).resolves.toBeUndefined();
     await expect(
-      authorizeProjectMembership(database(null), context, "project-1", "projects:read"),
+      authorizeProjectMembership(
+        database(null),
+        context,
+        "project-1",
+        "projects:read",
+      ),
     ).rejects.toBeInstanceOf(AuthorizationError);
   });
 
   it("authorizes Workspace access by ownership, not membership role", async () => {
     await expect(
-      authorizeWorkspaceOwner(database({ id: "workspace-1" }), context, "workspace-1"),
+      authorizeWorkspaceOwner(
+        database({ id: "workspace-1" }),
+        context,
+        "workspace-1",
+      ),
     ).resolves.toBeUndefined();
     await expect(
       authorizeWorkspaceOwner(database(null), context, "workspace-1"),
@@ -88,13 +99,14 @@ describe("current authorization model", () => {
       prepare: () => {
         const statement: DatabaseStatement = {
           bind: () => statement,
-          first: async <T>() => ({
-            id: "user-1",
-            email: "one@example.test",
-            display_name: "User One",
-            avatar_url: null,
-            status: "active",
-          }) as T,
+          first: async <T>() =>
+            ({
+              id: "user-1",
+              email: "one@example.test",
+              display_name: "User One",
+              avatar_url: null,
+              status: "active",
+            }) as T,
           all: async <T>() =>
             (++call === 1
               ? { results: [{ project_id: "project-1", role: "owner" }] }
@@ -120,11 +132,17 @@ describe("current authorization model", () => {
 describe("security token utilities", () => {
   it("hashes tokens and computes package digests", async () => {
     expect(await hashToken("token")).toMatch(/^[a-f0-9]{64}$/);
-    expect(await computePackageDigest("content")).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(await computePackageDigest("content")).toMatch(
+      /^sha256:[a-f0-9]{64}$/,
+    );
   });
 
   it("extracts bearer credentials", () => {
-    expect(extractBearerToken(new Headers({ authorization: "Bearer abc" }))).toBe("abc");
-    expect(extractBearerToken(new Headers({ authorization: "Basic abc" }))).toBeNull();
+    expect(
+      extractBearerToken(new Headers({ authorization: "Bearer abc" })),
+    ).toBe("abc");
+    expect(
+      extractBearerToken(new Headers({ authorization: "Basic abc" })),
+    ).toBeNull();
   });
 });

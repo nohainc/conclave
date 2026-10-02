@@ -7,14 +7,12 @@
     "dev": "wrangler dev",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
-    "check:startup": "wrangler check startup"
+    "types:check": "WRANGLER_LOG_PATH=${TMPDIR:-/tmp}/conclave-wrangler.log WRANGLER_WRITE_LOGS=false wrangler types --check --config wrangler.jsonc"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.5",
     "@conclave/host-protocol": "workspace:*",
     "@conclave/core": "workspace:*",
-    "@conclave/orchestration": "workspace:*",
-    "@conclave/persistence": "workspace:*",
     "@conclave/protocol": "workspace:*",
     "@conclave/security": "workspace:*",
     "@conclave/tool-profile": "workspace:*",

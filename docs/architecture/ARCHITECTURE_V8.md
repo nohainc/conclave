@@ -30,6 +30,39 @@ Conclave CLI Worker Engine
 provider CLI
 ~~~
 
+## Architecture contract
+
+The sole v8 execution path is:
+
+~~~text
+AX → Cloud → Workspace → CLI Worker Engine → signed Tool Profile → provider CLI
+~~~
+
+The following are explicit architecture exclusions, not deferred extension
+points or compatibility targets:
+
+~~~yaml
+prohibitions:
+  provider_specific_worker_executable: true
+  browser_or_web_ai_worker: true
+  interactive_connector: true
+  conclave_managed_provider_credentials: true
+  agent_or_host_runtime: true
+  configured_worker_product_entity: true
+  pre_v8_goal_phase_task_orchestration: true
+  compatibility_api_for_unreleased_architecture: true
+~~~
+
+In v8, a provider CLI is invoked only by the generic CLI Worker Engine under a
+signed Tool Profile. Provider authentication remains in the provider CLI's
+local installation. Workspace is the machine-side runtime; Agent and Host are
+not runtime entities. Work v1 owns its bounded Workflow and Step orchestration.
+Unreleased architecture versions receive no API aliases or compatibility
+surface.
+
+The v8 architecture guard checks that this contract remains present alongside
+the assignment path and schema invariants.
+
 ### 1.1 Canonical v8 terminology
 
 Use these terms for v8 architecture, implementation, tests, and operations:
@@ -1016,4 +1049,4 @@ All may still expose the same logical Worker/Work orchestration abstraction.
 
 Architecture v8 succeeds when adding or fixing a normal supported CLI
 integration usually means publishing a tested signed Profile release rather
-than rebuilding a native Worker executable.
+than rebuilding the generic CLI Worker Engine.

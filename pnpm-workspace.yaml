@@ -3,8 +3,6 @@ packages:
   # their native package managers and are intentionally not workspace entries.
   - packages/host-protocol
   - packages/core
-  - packages/orchestration
-  - packages/persistence
   - packages/tool-profile
   - packages/protocol
   - packages/security

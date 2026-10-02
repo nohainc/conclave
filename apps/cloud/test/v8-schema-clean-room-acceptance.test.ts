@@ -58,6 +58,11 @@ describe("v8 clean D1 schema acceptance", () => {
     expect(tableNames).not.toContain("chat_workstream_migrations");
     expect(tableNames).not.toContain("workspace_worker_installations");
     expect(tableNames).not.toContain("worker_attribution_audit_archive");
+    expect(tableNames).not.toContain("run_external_executions");
+    expect(tableNames).not.toContain("workstream_execution_leases");
+    expect(tableNames).not.toContain("workstream_integrations");
+    expect(tableNames).not.toContain("workstream_audit_log");
+    expect(tableNames).not.toContain("workstream_observability_metrics");
     const grantColumns = apply(
       "PRAGMA table_info(workspace_project_grants);",
     ) as {
@@ -70,6 +75,22 @@ describe("v8 clean D1 schema acceptance", () => {
       name: string;
     }[];
     expect(policyColumns.map(({ name }) => name)).toContain("budget_json");
+    expect(policyColumns.map(({ name }) => name)).not.toContain(
+      "allowed_providers_json",
+    );
+    const assignmentColumns = apply(
+      "PRAGMA table_info(worker_assignments);",
+    ) as { name: string }[];
+    expect(assignmentColumns.map(({ name }) => name)).toContain(
+      "worker_type_id",
+    );
+    expect(assignmentColumns.map(({ name }) => name)).not.toContain(
+      "worker_id",
+    );
+    const runColumns = apply("PRAGMA table_info(runs);") as { name: string }[];
+    expect(runColumns.map(({ name }) => name)).not.toContain(
+      "execution_lease_id",
+    );
     expect(
       apply(
         "SELECT worker_type_id FROM worker_catalog ORDER BY worker_type_id;",
@@ -158,7 +179,7 @@ describe("v8 clean D1 schema acceptance", () => {
       "PRAGMA foreign_key_list(worker_assignments);",
     ) as { from: string; table: string; to: string }[];
     expect(
-      workerForeignKey.find(({ from }) => from === "worker_id"),
+      workerForeignKey.find(({ from }) => from === "worker_type_id"),
     ).toMatchObject({ table: "worker_catalog", to: "worker_type_id" });
   });
 });

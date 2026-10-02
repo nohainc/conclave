@@ -26,7 +26,7 @@ export interface ExecutionTarget {
   readonly workspaceId: string;
   readonly workspaceRuntimeIdentityId: string;
   readonly workspaceProjectGrantId: string;
-  /** Configured Worker identity selected for this assignment. */
+  /** Local Worker identity selected for this assignment. */
   readonly workerId: string;
   /** Product Worker Type ID reported by Workspace and selected by policy. */
   readonly workerTypeId: string;
@@ -211,9 +211,7 @@ export async function selectProjectExecutionTarget(
             g.allowed_worker_ids_json, g.allowed_worker_capabilities_json,
             g.allowed_permissions_json, g.network_policy_json,
             g.concurrency_json, g.requires_step_up, g.expires_at,
-            ep.allowed_configured_worker_ids_json AS allowed_workspace_worker_ids_json,
             ep.allowed_worker_type_ids_json,
-            ep.allowed_providers_json,
             ep.allowed_models_json,
             usage.config_json AS workstream_work_config_json,
             wr.snapshot_json AS work_request_snapshot_json,
@@ -229,7 +227,6 @@ export async function selectProjectExecutionTarget(
             i.readiness_state AS local_worker_readiness_state,
             vs.state AS cloud_scheduling_state,
             vs.cloud_concurrency_limit,
-            i.worker_type_id AS provider,
             i.local_concurrency_limit AS local_concurrency_limit,
             (SELECT COUNT(*) FROM worker_assignments wa
              WHERE wa.execution_workspace_id = g.workspace_id
@@ -324,7 +321,6 @@ export async function selectProjectExecutionTarget(
     const grantCapabilities = strings(row.allowed_worker_capabilities_json).map(
       (value) => value.toLowerCase(),
     );
-    const provider = String(row.provider ?? "unknown");
     const selectedModel =
       request.workstreamId &&
       typeof binding.model === "string" &&
@@ -332,7 +328,7 @@ export async function selectProjectExecutionTarget(
         ? binding.model
         : (request.model ??
           (typeof binding.model === "string" ? binding.model : undefined));
-    const independenceKey = `${provider}:${workerTypeId}`;
+    const independenceKey = workerTypeId;
     const concurrency = object(row.concurrency_json);
     const maxConcurrent = Math.min(
       number(row.local_concurrency_limit, 1024),
@@ -428,16 +424,8 @@ export async function selectProjectExecutionTarget(
       reject("worker_not_allowed_by_grant");
       continue;
     }
-    if (!allowedByJson(row, "allowed_workspace_worker_ids_json", workerId)) {
-      reject("worker_not_allowed_by_workstream");
-      continue;
-    }
     if (!allowedByJson(row, "allowed_worker_type_ids_json", workerTypeId)) {
       reject("worker_type_not_allowed_by_workstream");
-      continue;
-    }
-    if (!allowedByJson(row, "allowed_providers_json", provider)) {
-      reject("provider_not_allowed_by_workstream");
       continue;
     }
     const allowedModels = strings(row.allowed_models_json);
@@ -507,7 +495,6 @@ export async function selectProjectExecutionTarget(
     const permissionSnapshot = {
       projectId: request.projectId,
       workspaceId,
-      configuredWorkerId: workerId,
       workerId,
       workerTypeId,
       grantId: String(row.grant_id),
@@ -531,9 +518,7 @@ export async function selectProjectExecutionTarget(
       networkPolicy: object(row.network_policy_json),
       concurrency,
       workstreamPolicy: {
-        allowedWorkerIds: strings(row.allowed_workspace_worker_ids_json),
         allowedWorkerTypeIds: strings(row.allowed_worker_type_ids_json),
-        allowedProviders: strings(row.allowed_providers_json),
         allowedModels,
       },
       ...(request.expectedRevision

@@ -6,8 +6,8 @@ These rules are canonical for AI-assisted development in this repository.
 1. Read `ARCHITECTURE.md`, `ROADMAP.md`, and relevant ADRs/specifications before changing architecture or public contracts.
 2. Work in small, independently reviewable phases. Do not combine unrelated refactors with feature work.
 3. Prefer explicit domain types and interfaces over provider-specific logic.
-4. Treat Conclave Core as provider-independent. Provider, local-model, coding-agent, and CI integrations execute behind Worker boundaries; humans contribute through product workflows.
-5. For Worker Runtime v2, use **Worker release/package**, **Worker runtime version**, **Worker process**, and **Local Worker Protocol**. Use adapter terminology only when identifying existing legacy implementation, migration history, or a literal legacy symbol that has not yet been renamed. Do not introduce new adapter-named Runtime v2 code, tests, APIs, or documentation.
+4. Treat Conclave Core as provider-independent. Provider, local-model, coding-agent, and CI integrations execute through the CLI Worker Engine and signed Tool Profiles; humans contribute through product workflows.
+5. Follow the v8 contract in `docs/architecture/ARCHITECTURE_V8.md`: logical Workers resolve through signed Tool Profiles to provider CLIs under the generic CLI Worker Engine. Do not introduce provider-specific Worker executables, browser-based provider access, managed provider credentials, legacy runtime entities, or compatibility APIs for unreleased architectures.
 6. AI models may propose state changes; Conclave owns persistent state and validates transitions.
 7. Do not trust natural-language claims such as "tests pass". Where possible, collect executable evidence.
 8. Never store API keys or credentials in plaintext application tables.

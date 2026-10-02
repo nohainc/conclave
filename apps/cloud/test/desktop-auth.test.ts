@@ -918,7 +918,7 @@ describe("desktop human authentication", () => {
     sqlite.exec("PRAGMA foreign_keys = OFF");
     sqlite
       .prepare(
-        "INSERT INTO worker_assignments (id, project_id, execution_workspace_id, runtime_identity_id, worker_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'running', ?, ?)",
+        "INSERT INTO worker_assignments (id, project_id, execution_workspace_id, runtime_identity_id, worker_type_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'running', ?, ?)",
       )
       .run(
         "assignment-active",

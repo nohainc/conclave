@@ -23,7 +23,7 @@ const requiredContractText = [
   "`AssignmentStatus`",
   "`ErrorCode`",
   "These are canonical domain concepts, not a shared message envelope.",
-  "apps/app/lib/src/studio/studio_data.dart",
+  "apps/app/lib/src/ax/ax_data.dart",
   "apps/cloud/src/workspace-gateway.ts",
   "apps/host/lib/worker_executor.dart",
 ];
@@ -83,7 +83,6 @@ for (const file of sourceFiles) {
       `${file}: Cloud assignment selection/dispatch references a provider package ID`,
     );
   }
-
 }
 
 if (violations.length > 0) {

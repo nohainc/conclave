@@ -104,13 +104,13 @@ same authoritative owner, the exact installation/Workspace/runtime binding,
 and no active assignments. Cloud first fences the Workspace from scheduling,
 then revokes runtime identities, disconnects the Gateway, revokes Project
 grants, clears installation bindings, and records an audit event. It does not
-delete local Worker/provider credentials, adapters, or Work Root files. A
+delete local Worker records, provider CLI sign-in state, or Work Root files. A
 different account can register the stable installation ID only after this
 explicit release succeeds.
 
 Reset local Workspace has published fixed semantics: it removes local
-registration/runtime identity, configured Workers and their provider
-credentials, installed adapters, and the desktop human session. It preserves
+registration/runtime identity, local Worker registry entries, and the desktop
+human session. It preserves
 the stable installation ID and owner binding, Work Root metadata/content,
 launch-at-login, management preferences, and other local files. Disconnect
 also preserves its non-secret registration and cached owner metadata so the

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'cloud_connection.dart';
-import 'configured_worker_registry.dart';
+import 'local_worker_registry.dart';
 import 'host_configuration.dart';
 import 'secure_credentials.dart';
 import 'platform_runtime.dart';
@@ -13,7 +13,7 @@ import 'worker_readiness.dart';
 import 'tool_profile_catalog.dart';
 import 'tool_profile_release_store.dart';
 
-export 'configured_worker_registry.dart';
+export 'local_worker_registry.dart';
 export 'release_trust_roots.dart';
 export 'tool_profile_release_verifier.dart';
 export 'tool_profile_catalog.dart';
@@ -237,7 +237,7 @@ class Host {
     SecureCredentialStore? credentialStore,
     this.toolProfileReleaseStore,
     this.toolProfileCatalog,
-    LocalConfiguredWorkerRegistry? localWorkerRegistry,
+    LocalWorkerRegistry? localWorkerRegistry,
     this.workerReadinessMonitor,
     this.workerShutdownHandler,
     String Function(String)? redactLog,
@@ -248,7 +248,7 @@ class Host {
         localWorkerRegistry = localWorkerRegistry ??
             (config.workspaceId == null
                 ? null
-                : LocalConfiguredWorkerRegistry(
+                : LocalWorkerRegistry(
                     dataDirectory: config.dataDirectory,
                     workspaceId: config.workspaceId!,
                   )),
@@ -264,7 +264,7 @@ class Host {
   final SecureCredentialStore credentialStore;
   final ToolProfileReleaseStore? toolProfileReleaseStore;
   final ToolProfileCatalogClient? toolProfileCatalog;
-  final LocalConfiguredWorkerRegistry? localWorkerRegistry;
+  final LocalWorkerRegistry? localWorkerRegistry;
   final WorkerReadinessMonitor? workerReadinessMonitor;
   final Future<void> Function()? workerShutdownHandler;
   final HostCloudConnection? cloudConnection;

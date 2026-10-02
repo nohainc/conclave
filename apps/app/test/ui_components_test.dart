@@ -7,9 +7,9 @@ import 'package:conclave_app/src/features/common/code_block_view.dart';
 import 'package:conclave_app/src/features/common/command_palette.dart';
 import 'package:conclave_app/src/features/common/toast_overlay.dart';
 import 'package:conclave_app/src/features/execution/task_pipeline_dag.dart';
-import 'package:conclave_app/src/navigation/studio_navigation.dart';
-import 'package:conclave_app/src/studio/studio_models.dart';
-import 'studio_fixture_snapshot.dart';
+import 'package:conclave_app/src/navigation/ax_navigation.dart';
+import 'package:conclave_app/src/ax/ax_models.dart';
+import 'ax_fixture_snapshot.dart';
 
 void main() {
   group('UI & UX Feature Components', () {
@@ -77,7 +77,7 @@ void main() {
         (WidgetTester tester) async {
       String? selectedTaskId;
       final tasks = [
-        const StudioTask(
+        const AxTask(
           id: 'task-1',
           title: 'Research architecture',
           phase: 'Research',
@@ -87,12 +87,12 @@ void main() {
           progress: 1.0,
           dependencies: [],
         ),
-        const StudioTask(
+        const AxTask(
           id: 'task-2',
           title: 'Implement feature',
           phase: 'Implementation',
           status: TaskStatus.running,
-          worker: 'conclave.forge',
+          worker: 'conclave.implement',
           detail: 'In progress',
           progress: 0.5,
           dependencies: ['task-1'],
@@ -123,8 +123,8 @@ void main() {
 
     testWidgets('renders CommandPaletteDialog and filters actions',
         (WidgetTester tester) async {
-      StudioNavigation? navigatedTo;
-      final snapshot = studioFixtureSnapshot();
+      AxNavigation? navigatedTo;
+      final snapshot = axFixtureSnapshot();
 
       await tester.pumpWidget(
         MaterialApp(
@@ -153,7 +153,7 @@ void main() {
 
       await tester.tap(find.byType(ListTile).first);
       await tester.pumpAndSettle();
-      expect(navigatedTo?.kind, StudioRouteKind.workspaces);
+      expect(navigatedTo?.kind, AxRouteKind.workspaces);
 
       // Search for Profile & Security
       await tester.enterText(find.byType(TextField), 'Profile');
@@ -162,19 +162,19 @@ void main() {
       expect(find.text('Profile & Security'), findsOneWidget);
       await tester.tap(find.text('Profile & Security'));
       await tester.pumpAndSettle();
-      expect(navigatedTo?.kind, StudioRouteKind.profileSecurity);
+      expect(navigatedTo?.kind, AxRouteKind.profileSecurity);
     });
 
     testWidgets('CommandPaletteDialog supports keyboard navigation',
         (WidgetTester tester) async {
-      StudioNavigation? navigatedTo;
+      AxNavigation? navigatedTo;
 
       await tester.pumpWidget(
         MaterialApp(
           theme: ConclaveBrand.lightTheme(),
           home: Scaffold(
             body: CommandPaletteDialog(
-              snapshot: studioFixtureSnapshot(),
+              snapshot: axFixtureSnapshot(),
               onSelectProject: (_) {},
               onNavigateTo: (route) => navigatedTo = route,
               onToggleTheme: () {},
@@ -188,7 +188,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
 
-      expect(navigatedTo?.kind, StudioRouteKind.workspaces);
+      expect(navigatedTo?.kind, AxRouteKind.workspaces);
     });
   });
 }

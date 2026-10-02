@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../brand.dart';
-import '../../navigation/studio_navigation.dart';
-import '../../studio/studio_models.dart';
+import '../../navigation/ax_navigation.dart';
+import '../../ax/ax_models.dart';
 import '../common/command_palette.dart';
 
 /// Full-page search view rendered in the main workspace content area.
@@ -19,8 +19,8 @@ class SearchPage extends StatelessWidget {
   });
 
   final String query;
-  final StudioSnapshot snapshot;
-  final ValueChanged<StudioNavigation> onNavigateTo;
+  final AxSnapshot snapshot;
+  final ValueChanged<AxNavigation> onNavigateTo;
   final ValueChanged<String> onSelectProject;
   final VoidCallback onClearSearch;
   final VoidCallback? onToggleTheme;
@@ -36,7 +36,7 @@ class SearchPage extends StatelessWidget {
         category: 'Navigation',
         onSelect: () {
           onClearSearch();
-          onNavigateTo(const StudioNavigation.home());
+          onNavigateTo(const AxNavigation.home());
         },
       ),
       CommandPaletteAction(
@@ -46,7 +46,7 @@ class SearchPage extends StatelessWidget {
         category: 'Navigation',
         onSelect: () {
           onClearSearch();
-          onNavigateTo(const StudioNavigation.workspaces());
+          onNavigateTo(const AxNavigation.workspaces());
         },
       ),
       CommandPaletteAction(
@@ -56,7 +56,7 @@ class SearchPage extends StatelessWidget {
         category: 'Navigation',
         onSelect: () {
           onClearSearch();
-          onNavigateTo(const StudioNavigation.profileSecurity());
+          onNavigateTo(const AxNavigation.profileSecurity());
         },
       ),
     ];
@@ -109,8 +109,7 @@ class SearchPage extends StatelessWidget {
           category: 'Workstreams',
           onSelect: () {
             onClearSearch();
-            onNavigateTo(
-                StudioNavigation.workstream(project.id, workstream.id));
+            onNavigateTo(AxNavigation.workstream(project.id, workstream.id));
           },
         ));
       }
@@ -130,7 +129,7 @@ class SearchPage extends StatelessWidget {
         category: 'Runs',
         onSelect: () {
           onClearSearch();
-          onNavigateTo(StudioNavigation.run(
+          onNavigateTo(AxNavigation.run(
             projectId,
             activeRun.id,
             workstreamId: activeRun.workstreamId,
@@ -148,7 +147,7 @@ class SearchPage extends StatelessWidget {
         category: 'Workspaces',
         onSelect: () {
           onClearSearch();
-          onNavigateTo(StudioNavigation.workspaces(workspaceId: workspace.id));
+          onNavigateTo(AxNavigation.workspaces(workspaceId: workspace.id));
         },
       ));
     }

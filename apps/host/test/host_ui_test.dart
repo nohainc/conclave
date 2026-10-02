@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_host/configured_worker_registry.dart';
+import 'package:conclave_host/local_worker_registry.dart';
 import 'package:conclave_host/cloud_connection.dart';
 import 'package:conclave_host/desktop_auth.dart';
 import 'package:conclave_host/main.dart';
@@ -62,7 +62,7 @@ class _MemoryCredentialStore implements SecureCredentialStore {
   Future<void> delete(String key) async => values.remove(key);
 }
 
-class _FakeWorkerRegistry extends LocalConfiguredWorkerRegistry {
+class _FakeWorkerRegistry extends LocalWorkerRegistry {
   _FakeWorkerRegistry(this.workers)
       : super(
           dataDirectory: Directory('/tmp'),
@@ -70,20 +70,16 @@ class _FakeWorkerRegistry extends LocalConfiguredWorkerRegistry {
           platform: _TestPlatformRuntime(),
         );
 
-  final List<LocalConfiguredWorker> workers;
+  final List<LocalWorker> workers;
 
   @override
-  Future<List<LocalConfiguredWorker>> list(
-          {bool includeRemoved = false}) async =>
-      workers
-          .where((w) => includeRemoved || w.status != LocalWorkerStatus.removed)
-          .toList();
+  Future<List<LocalWorker>> list({bool includeRemoved = false}) async => workers
+      .where((w) => includeRemoved || w.status != LocalWorkerStatus.removed)
+      .toList();
 
   @override
-  Future<LocalConfiguredWorker> update(
-      String id,
-      LocalConfiguredWorker Function(LocalConfiguredWorker current)
-          updater) async {
+  Future<LocalWorker> update(
+      String id, LocalWorker Function(LocalWorker current) updater) async {
     final idx = workers.indexWhere((w) => w.id == id);
     if (idx != -1) {
       workers[idx] = updater(workers[idx]);
@@ -93,10 +89,10 @@ class _FakeWorkerRegistry extends LocalConfiguredWorkerRegistry {
   }
 }
 
-LocalConfiguredWorker _disabledChatGptWorker({
+LocalWorker _disabledChatGptWorker({
   required WorkerReadinessState readinessState,
 }) =>
-    LocalConfiguredWorker(
+    LocalWorker(
       id: 'w-chatgpt-disabled',
       workspaceId: 'ws-test',
       workerTypeId: 'chatgpt',
@@ -192,7 +188,7 @@ void main() {
     Future<void> Function()? onRetry,
     Future<void> Function()? onExportDiagnostics,
     Future<void> Function(String path)? onChangeWorkRoot,
-    LocalConfiguredWorkerRegistry? localWorkerRegistry,
+    LocalWorkerRegistry? localWorkerRegistry,
     Future<void> Function({LocalWorkerProbeMode mode, String? workerTypeId})?
         onReadinessCheck,
     SecureCredentialStore? credentialStore,
@@ -1250,14 +1246,14 @@ void main() {
     expect(find.text('Configure'), findsNWidgets(2));
   });
 
-  testWidgets('fixed catalog rows merge configured Worker status by type',
+  testWidgets('fixed catalog rows merge local Worker status by type',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final chatGptWorker = LocalConfiguredWorker(
+    final chatGptWorker = LocalWorker(
       id: 'w-chatgpt',
       workspaceId: 'ws-test',
       workerTypeId: 'chatgpt',
@@ -1277,7 +1273,7 @@ void main() {
       lastLiveTestDetails:
           'Test failed (execution_test_failed)\nThe local check did not complete.',
     );
-    final geminiWorker = LocalConfiguredWorker(
+    final geminiWorker = LocalWorker(
       id: 'w-gemini',
       workspaceId: 'ws-test',
       workerTypeId: 'gemini',
@@ -1518,7 +1514,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final worker = LocalConfiguredWorker(
+    final worker = LocalWorker(
       id: 'w-chatgpt-toggle',
       workspaceId: 'ws-test',
       workerTypeId: 'chatgpt',
@@ -1576,7 +1572,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final unknownWorker = LocalConfiguredWorker(
+    final unknownWorker = LocalWorker(
       id: 'w-unknown',
       workspaceId: 'ws-test',
       workerTypeId: 'internal-tool',
@@ -1612,13 +1608,13 @@ void main() {
   });
 
   group('deriveLocalWorkerHealth', () {
-    LocalConfiguredWorker makeWorker({
+    LocalWorker makeWorker({
       LocalWorkerStatus status = LocalWorkerStatus.ready,
       WorkerReadinessState readinessState = WorkerReadinessState.ready,
       List<String> permissions = const ['workstream_filesystem'],
       String? readinessIssueCode,
     }) {
-      return LocalConfiguredWorker(
+      return LocalWorker(
         id: 'worker-1',
         workspaceId: 'ws-1',
         workerTypeId: 'chatgpt',

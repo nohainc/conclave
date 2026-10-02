@@ -60,7 +60,7 @@ Future<void> main() async {
 ''');
 
     final firstProcess = await Process.start(
-      Platform.resolvedExecutable,
+      Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
       [firstWorkerScript.path],
       workingDirectory: firstDirectory.path,
       runInShell: false,
@@ -109,7 +109,7 @@ Future<void> main() async {
 }
 ''');
     final secondProcess = await Process.start(
-      Platform.resolvedExecutable,
+      Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
       [secondWorkerScript.path],
       workingDirectory: secondScope.workingDirectory.path,
       runInShell: false,

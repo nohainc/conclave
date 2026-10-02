@@ -1,13 +1,49 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   BUILTIN_WORKFLOWS,
   type BuiltinWorkflowDefinition,
 } from "@conclave/core";
+
+const selectionCalls: Record<string, unknown>[] = [];
+vi.mock("../src/scheduler.js", () => ({
+  selectProjectExecutionTarget: vi.fn(
+    async (_db: unknown, request: Record<string, unknown>) => {
+      selectionCalls.push(request);
+      return {
+        projectId: request.projectId,
+        workspaceId: "workspace-fixture",
+        workspaceRuntimeIdentityId: "workspace-runtime-fixture",
+        workspaceProjectGrantId: "grant-fixture",
+        workerId: request.workerId ?? "workspace-worker-fixture",
+        workerTypeId: "chatgpt",
+        engineVersion: "engine-fixture",
+        profileDefinitionId: "chatgpt-codex",
+        profileReleaseVersion: 1,
+        providerToolName: "codex",
+        providerToolVersion: "cli-fixture",
+        model: request.model ?? "fixture-model",
+        effectivePermissions: ["workstream.read"],
+        permissionSnapshot: {
+          profileDefinitionId: "chatgpt-codex",
+          profileReleaseVersion: 1,
+          providerToolVersion: "cli-fixture",
+        },
+        selectionExplanation: { source: "fixture" },
+        executionClass: request.executionClass,
+        readOnly: request.readOnly,
+        workstreamId: request.workstreamId,
+        workRequestId: request.workRequestId,
+      };
+    },
+  ),
+}));
+
+import { recordAssignmentResult } from "../src/assignment-dispatcher.js";
 import { ConclaveRunWorkflow } from "../src/workflow.js";
 
 const requestText = "Improve the sample Workstream behavior";
 const workerBindings = {
-  direct: { workerId: "worker-direct" },
+  direct: { workerId: "worker-direct", model: "fixture-model" },
   research: { workerId: "worker-research" },
   plan: { workerId: "worker-plan" },
   implement: { workerId: "worker-implement" },
@@ -15,29 +51,29 @@ const workerBindings = {
   verify: { workerId: "worker-verify" },
 };
 
+type FixtureAssignment = {
+  status: string;
+  task_id: string;
+  output_json: string | null;
+  error_json: string | null;
+  workspace_worker_id: string;
+  worker_type_id: string;
+  engine_version: string;
+  model: string;
+  permission_snapshot_json: string;
+  created_at: string;
+};
+
 function createAcceptanceRun(
   definition: BuiltinWorkflowDefinition,
   options: { cancelAfterFirstStep?: boolean } = {},
 ) {
-  const calls: Record<string, unknown>[] = [];
+  selectionCalls.length = 0;
+  const gatewayCalls: Record<string, unknown>[] = [];
   const taskWrites: { sql: string; values: unknown[] }[] = [];
-  let terminalIndex = 0;
+  const assignments = new Map<string, FixtureAssignment>();
   let cancellationChecks = 0;
-  const terminalEvents = definition.steps.map((step, index) => ({
-    eventId: `event-${index + 1}`,
-    runId: "run-v8-acceptance",
-    executionId: "execution-v8-acceptance",
-    status: "completed",
-    finalText: `completed ${step.kind}`,
-    workerId: `workspace-worker-${step.kind}`,
-    workerTypeId: "chatgpt",
-    engineVersion: "1.0.0-test",
-    profileDefinitionId: "chatgpt-codex",
-    profileReleaseVersion: 1,
-    providerToolVersion: "0.1.0-test",
-    model: null,
-  }));
-  const database = {
+  const dbObject = {
     prepare(sql: string) {
       let values: unknown[] = [];
       const statement = {
@@ -55,10 +91,42 @@ function createAcceptanceRun(
               }),
             } as T;
           }
-          if (sql.includes("SELECT mode FROM work_requests")) {
+          if (sql.includes("SELECT mode FROM work_requests"))
             return { mode: "stateless" } as T;
+          if (sql.includes("SELECT wr.workstream_id AS workstreamId")) {
+            return {
+              workstreamId: "workstream-fixture",
+              requesterUserId: "user-fixture",
+              workRequestStatus: "running",
+              cancelRequestedAt: null,
+              projectId: "project-fixture",
+            } as T;
           }
-          if (sql.includes("cancel_requested_at")) {
+          if (sql.includes("SELECT status, task_id FROM worker_assignments")) {
+            const row = assignments.get(String(values[0]));
+            return row
+              ? ({ status: row.status, task_id: row.task_id } as T)
+              : null;
+          }
+          if (sql.includes("FROM worker_assignments wa WHERE wa.id")) {
+            const row = assignments.get(String(values[0]));
+            if (!row) return null;
+            return {
+              assignmentId: values[0],
+              status: row.status,
+              outputJson: row.output_json,
+              errorJson: row.error_json,
+              workerId: row.workspace_worker_id,
+              workerTypeId: row.worker_type_id,
+              engineVersion: row.engine_version,
+              model: row.model,
+              permissionSnapshotJson: row.permission_snapshot_json,
+              startedAt: row.created_at,
+            } as T;
+          }
+          if (sql.includes("SELECT owner_user_id FROM execution_workspaces"))
+            return { owner_user_id: "workspace-owner-fixture" } as T;
+          if (sql.includes("cancel_requested_at AS cancelRequestedAt")) {
             cancellationChecks += 1;
             return {
               cancelRequestedAt:
@@ -69,8 +137,46 @@ function createAcceptanceRun(
           }
           return null;
         },
+        async all<T>() {
+          return { results: [] as T[] };
+        },
         async run() {
           taskWrites.push({ sql, values });
+          if (sql.includes("INSERT INTO worker_assignments")) {
+            assignments.set(String(values[0]), {
+              status: "created",
+              task_id: String(values[5]),
+              workspace_worker_id: String(values[10]),
+              worker_type_id: String(values[9]),
+              engine_version: String(values[11]),
+              model: String(values[12]),
+              permission_snapshot_json: String(values[15]),
+              created_at: String(values[20]),
+              output_json: null,
+              error_json: null,
+            });
+          } else if (
+            sql.includes("UPDATE worker_assignments SET status = 'dispatched'")
+          ) {
+            const row = assignments.get(String(values[1]));
+            if (row?.status === "created") row.status = "dispatched";
+          } else if (
+            sql.includes("UPDATE worker_assignments SET status = 'completed'")
+          ) {
+            const row = assignments.get(String(values[2]));
+            if (row) {
+              row.status = "completed";
+              row.output_json = String(values[0]);
+            }
+          } else if (
+            sql.includes("UPDATE worker_assignments SET status = 'failed'")
+          ) {
+            const row = assignments.get(String(values[2]));
+            if (row) {
+              row.status = "failed";
+              row.error_json = String(values[0]);
+            }
+          }
           return { success: true };
         },
       };
@@ -79,24 +185,40 @@ function createAcceptanceRun(
     async batch() {
       return [];
     },
-  } as unknown as D1Database;
-  const executionService = {
-    async fetch(_input: RequestInfo | URL, init?: RequestInit) {
-      calls.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-      return Response.json(
-        { executionId: "execution-v8-acceptance" },
-        {
-          status: 202,
-        },
-      );
+  };
+  const database = dbObject as unknown as D1Database;
+  const gatewayStub = {
+    async fetch(input: RequestInfo | URL, init?: RequestInit) {
+      const url = String(input);
+      if (url.endsWith("/status")) {
+        return Response.json({
+          online: true,
+          workspaceRuntimeId: "workspace-runtime-fixture",
+          executionWorkspaceId: "workspace-fixture",
+        });
+      }
+      const envelope = JSON.parse(String(init?.body)) as Record<
+        string,
+        unknown
+      >;
+      gatewayCalls.push(envelope);
+      const assignmentId = String(envelope.assignmentId);
+      const snapshot = (
+        envelope.payload as { snapshot: Record<string, unknown> }
+      ).snapshot;
+      await recordAssignmentResult(database, assignmentId, {
+        text: `completed ${String(snapshot.role)}`,
+      } as never);
+      return Response.json({ accepted: true });
     },
   };
+  const gateway = {
+    idFromName: (name: string) => name,
+    get: () => gatewayStub,
+  } as unknown as DurableObjectNamespace;
   const instance = new ConclaveRunWorkflow(
     {} as never,
-    {
-      CONCLAVE_DB: database,
-      CONCLAVE_FORGE_EXECUTION: executionService,
-    } as never,
+    { CONCLAVE_DB: database, CONCLAVE_WORKSPACE_GATEWAY: gateway } as never,
   );
   const step = {
     do: async <T>(
@@ -104,21 +226,18 @@ function createAcceptanceRun(
       _config: unknown,
       callback: () => Promise<T>,
     ) => callback(),
-    waitForEvent: async <T>() =>
-      ({
-        payload: terminalEvents[terminalIndex++],
-      }) as { payload: T },
+    sleep: async () => undefined,
   } as unknown as import("cloudflare:workers").WorkflowStep;
-  return { instance, step, calls, taskWrites };
+  return { instance, step, taskWrites, gatewayCalls };
 }
 
 const workflowCases = Object.values(BUILTIN_WORKFLOWS);
 
-describe("Work v1 regression acceptance over the v8 Worker boundary", () => {
+describe("Work v1 acceptance through the shared assignment dispatcher", () => {
   it.each(workflowCases)(
-    "executes the real $name workflow snapshot",
+    "executes the real $name Workflow snapshot through Workspace Gateway fixtures",
     async (definition) => {
-      const { instance, step, calls, taskWrites } =
+      const { instance, step, taskWrites, gatewayCalls } =
         createAcceptanceRun(definition);
       const result = await instance.run(
         {
@@ -126,8 +245,8 @@ describe("Work v1 regression acceptance over the v8 Worker boundary", () => {
             runId: "run-v8-acceptance",
             goalId: "goal-v8-acceptance",
             idempotencyKey: `key-${definition.id}`,
-            requireCiEvidence: false,
             workRequestId: "request-v8-acceptance",
+            organizationId: "workspace-fixture",
             builtinWorkflow: definition,
           },
         } as never,
@@ -135,57 +254,58 @@ describe("Work v1 regression acceptance over the v8 Worker boundary", () => {
       );
 
       expect(result.status).toBe("completed");
-      expect(calls.map((call) => call.workBindingId)).toEqual(
+      expect(selectionCalls).toHaveLength(definition.steps.length);
+      expect(gatewayCalls).toHaveLength(definition.steps.length);
+      expect(selectionCalls.map((call) => call.workBindingId)).toEqual(
         definition.steps.map((item) =>
           definition.id === "direct" ? "direct" : item.kind,
         ),
       );
-      expect(
-        calls.map(
-          (call) => (call.workflowStep as Record<string, unknown>).kind,
+      expect(selectionCalls.map((call) => call.workerId)).toEqual(
+        definition.steps.map(
+          (item) =>
+            workerBindings[
+              definition.id === "direct"
+                ? "direct"
+                : (item.kind as keyof typeof workerBindings)
+            ].workerId,
         ),
-      ).toEqual(definition.steps.map((item) => item.kind));
-      for (const [index, item] of definition.steps.entries()) {
-        const call = calls[index]!;
-        const workflowStep = call.workflowStep as Record<string, unknown>;
-        expect(workflowStep.readWritePolicy).toBe(
-          item.kind === "implement" ? "write_workstream" : "read_only",
-        );
-        expect(call.workBindingId).not.toContain("codex");
-        const prompt = String(call.effectiveWorkerPrompt);
-        for (const inputKind of item.inputsFrom) {
+      );
+      for (const [index, envelope] of gatewayCalls.entries()) {
+        const payload = envelope.payload as {
+          snapshot: Record<string, unknown>;
+        };
+        const assignment = payload.snapshot;
+        expect(assignment).toMatchObject({
+          role: definition.steps[index]!.kind,
+          requestedByUserId: "user-fixture",
+          projectId: "project-fixture",
+          workRequestId: "request-v8-acceptance",
+          sessionPolicy: "durable_session",
+        });
+        const prompt = String(assignment.objective);
+        for (const inputKind of definition.steps[index]!.inputsFrom) {
           const label =
             inputKind === "implement"
               ? "Implementation"
               : inputKind[0]!.toUpperCase() + inputKind.slice(1);
           expect(prompt).toContain(`${label} result:\ncompleted ${inputKind}`);
         }
-        if (item.kind === "verify") {
+        if (definition.steps[index]!.kind === "verify") {
           expect(prompt).toContain("fresh isolated assignment");
-          expect(workflowStep.readWritePolicy).toBe("read_only");
+          expect(assignment.readOnly).toBe(true);
         }
       }
       expect(
         taskWrites.filter(({ sql }) =>
           sql.includes("UPDATE workflow_tasks SET status"),
         ),
-      ).toHaveLength(definition.steps.length * 2);
-      expect(workerBindings).toEqual(
-        expect.objectContaining({
-          implement: { workerId: "worker-implement" },
-          verify: { workerId: "worker-verify" },
-        }),
-      );
-      for (const binding of Object.values(workerBindings)) {
-        expect(binding).toHaveProperty("workerId");
-        expect(binding).not.toHaveProperty("profileDefinitionId");
-        expect(binding).not.toHaveProperty("engineVersion");
-      }
+      ).toHaveLength(definition.steps.length * 4);
     },
   );
 
-  it("stops downstream steps when cancellation is recorded after a running step", async () => {
-    const { instance, step, calls } = createAcceptanceRun(
+  it("stops downstream steps when cancellation is recorded after an assignment completes", async () => {
+    const { instance, step, gatewayCalls } = createAcceptanceRun(
       BUILTIN_WORKFLOWS.plan_implement,
       { cancelAfterFirstStep: true },
     );
@@ -195,15 +315,14 @@ describe("Work v1 regression acceptance over the v8 Worker boundary", () => {
           runId: "run-v8-acceptance",
           goalId: "goal-v8-acceptance",
           idempotencyKey: "key-cancel",
-          requireCiEvidence: false,
           workRequestId: "request-v8-acceptance",
+          organizationId: "workspace-fixture",
           builtinWorkflow: BUILTIN_WORKFLOWS.plan_implement,
         },
       } as never,
       step,
     );
-
     expect(result.status).toBe("cancelled");
-    expect(calls.map((call) => call.workBindingId)).toEqual(["plan"]);
+    expect(gatewayCalls).toHaveLength(1);
   });
 });

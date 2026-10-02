@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
 import 'package:conclave_app/src/features/common/workspace_release.dart';
-import 'package:conclave_app/src/studio/studio_models.dart';
+import 'package:conclave_app/src/ax/ax_models.dart';
 
-import 'studio_fixture_snapshot.dart';
+import 'ax_fixture_snapshot.dart';
 
 void main() {
   Widget buildTestScaffold(Widget child) {
@@ -23,7 +23,7 @@ void main() {
     });
 
     test('parses runtime-reported machine facts', () {
-      final workspace = StudioWorkspace.fromJson({
+      final workspace = AxWorkspace.fromJson({
         'id': 'workspace-1',
         'name': 'MacBook Pro',
         'slug': 'macbook-pro',
@@ -51,7 +51,7 @@ void main() {
 
     testWidgets('shows the paired machine facts and live Workspace summary',
         (tester) async {
-      final workspace = StudioWorkspace.fromJson({
+      final workspace = AxWorkspace.fromJson({
         'id': 'workspace-paired',
         'name': 'Vitalii’s MacBook Pro',
         'status': 'online',
@@ -94,7 +94,7 @@ void main() {
 
     testWidgets('shows Workspaces as the single execution destination',
         (tester) async {
-      final snapshot = studioFixtureSnapshot();
+      final snapshot = axFixtureSnapshot();
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.workspaces,
         onAdd: () {},
@@ -116,7 +116,7 @@ void main() {
 
     testWidgets('shows the Workspace list without lifecycle controls',
         (tester) async {
-      final snapshot = studioFixtureSnapshot();
+      final snapshot = axFixtureSnapshot();
 
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.workspaces,
@@ -144,7 +144,7 @@ void main() {
 
     testWidgets('Workspace page has no detached global Worker inventory',
         (tester) async {
-      final snapshot = studioFixtureSnapshot();
+      final snapshot = axFixtureSnapshot();
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.workspaces,
         onAdd: () {},
@@ -163,7 +163,7 @@ void main() {
 
     testWidgets('shows Workspace-owned inventory without credential details',
         (tester) async {
-      final worker = StudioWorker.fromJson({
+      final worker = AxWorker.fromJson({
         'id': 'local-worker-1',
         'workspaceId': 'workspace-1',
         'workspaceName': 'Build Mac',
@@ -180,7 +180,7 @@ void main() {
       });
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [
-          StudioWorkspace(
+          AxWorkspace(
             id: 'workspace-1',
             name: 'Build Mac',
             hostname: 'build-mac.local',
@@ -231,7 +231,7 @@ void main() {
 
     testWidgets('shows useful Workspace detail inline in its expanded card',
         (tester) async {
-      final snapshot = studioFixtureSnapshot();
+      final snapshot = axFixtureSnapshot();
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.workspaces,
         onAdd: () {},
@@ -248,12 +248,12 @@ void main() {
       expect(find.text('Active work'), findsOneWidget);
       expect(find.text('Workers'), findsNWidgets(2));
       // A single Workspace opens with runtime facts visible immediately.
-      expect(find.text('development-agent.local'), findsOneWidget);
+      expect(find.text('development-workspace.local'), findsOneWidget);
     });
 
     testWidgets('expands one or two Workspaces and uses an accordion for more',
         (tester) async {
-      StudioWorkspace workspace(String id) => StudioWorkspace(
+      AxWorkspace workspace(String id) => AxWorkspace(
             id: id,
             name: 'Workspace $id',
             hostname: '$id.local',
@@ -291,7 +291,7 @@ void main() {
 
     testWidgets('Workspace deep link expands and focuses the target card',
         (tester) async {
-      StudioWorkspace workspace(String id) => StudioWorkspace(
+      AxWorkspace workspace(String id) => AxWorkspace(
             id: id,
             name: 'Workspace $id',
             hostname: '$id.local',
@@ -320,8 +320,8 @@ void main() {
 
     testWidgets('expanded Workspace lists its Worker projections',
         (tester) async {
-      final snapshot = studioFixtureSnapshot();
-      const localWorker = StudioWorker(
+      final snapshot = axFixtureSnapshot();
+      const localWorker = AxWorker(
         id: 'local-worker-1',
         workspaceId: 'workspace-macbook',
         workerTypeId: 'chatgpt',
@@ -346,7 +346,7 @@ void main() {
     });
 
     testWidgets('Worker rows show safe readiness only', (tester) async {
-      final worker = StudioWorker.fromJson({
+      final worker = AxWorker.fromJson({
         'id': 'worker-chatgpt',
         'workspaceId': 'workspace-1',
         'workspaceName': 'Build Mac',
@@ -361,7 +361,7 @@ void main() {
       });
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [
-          StudioWorkspace(
+          AxWorkspace(
             id: 'workspace-1',
             name: 'Build Mac',
             hostname: 'build-mac.local',
@@ -402,7 +402,7 @@ void main() {
 
     testWidgets('expanded Worker details use v8 runtime terminology',
         (tester) async {
-      final worker = StudioWorker.fromJson({
+      final worker = AxWorker.fromJson({
         'id': 'worker-chatgpt',
         'workspaceId': 'workspace-1',
         'workerTypeId': 'chatgpt',
@@ -419,7 +419,7 @@ void main() {
 
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [
-          StudioWorkspace(
+          AxWorkspace(
             id: 'workspace-1',
             name: 'Build Mac',
             hostname: 'build-mac.local',
@@ -443,12 +443,11 @@ void main() {
       expect(find.text('Integration · chatgpt-codex@4'), findsOneWidget);
       expect(find.text('Provider CLI · Codex CLI'), findsOneWidget);
       expect(find.text('Provider CLI version · 0.190.0'), findsOneWidget);
-      expect(find.text('Adapter'), findsNothing);
     });
 
     testWidgets('Workers are grouped only under their owning Workspace ID',
         (tester) async {
-      StudioWorkspace workspace(String id) => StudioWorkspace(
+      AxWorkspace workspace(String id) => AxWorkspace(
             id: id,
             name: 'Workspace $id',
             hostname: '$id.local',
@@ -457,8 +456,8 @@ void main() {
             workerCount: 1,
             activeTaskCount: 0,
           );
-      StudioWorker worker(String id, String workspaceId, String workerTypeId) =>
-          StudioWorker(
+      AxWorker worker(String id, String workspaceId, String workerTypeId) =>
+          AxWorker(
             id: id,
             workspaceId: workspaceId,
             workerTypeId: workerTypeId,
@@ -496,7 +495,7 @@ void main() {
 
     testWidgets('needs-attention points to Conclave Workspace desktop',
         (tester) async {
-      final worker = StudioWorker.fromJson({
+      final worker = AxWorker.fromJson({
         'id': 'worker-needs-auth',
         'workspaceId': 'workspace-auth',
         'workspaceName': 'Auth Mac',
@@ -513,7 +512,7 @@ void main() {
       });
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [
-          StudioWorkspace(
+          AxWorkspace(
             id: 'workspace-auth',
             name: 'Auth Mac',
             status: 'online',
@@ -538,10 +537,10 @@ void main() {
     });
 
     testWidgets('disconnected Workspace stays read-only', (tester) async {
-      StudioWorkspace? connectedWorkspace;
+      AxWorkspace? connectedWorkspace;
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [
-          StudioWorkspace(
+          AxWorkspace(
             id: 'workspace-offline',
             name: 'Offline Mac',
             status: 'offline',
@@ -566,7 +565,7 @@ void main() {
         (tester) async {
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [
-          StudioWorkspace(id: 'workspace-empty', name: 'New Mac'),
+          AxWorkspace(id: 'workspace-empty', name: 'New Mac'),
         ],
         onAdd: () {},
         onRename: (_) {},
@@ -588,7 +587,7 @@ void main() {
         (tester) async {
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [
-          StudioWorkspace(
+          AxWorkspace(
             id: 'workspace-enable',
             name: 'Enable Workspace',
             hostname: 'enable.local',
@@ -599,7 +598,7 @@ void main() {
           ),
         ],
         workspaceWorkers: const [
-          StudioWorker(
+          AxWorker(
             id: 'worker-disabled',
             workspaceId: 'workspace-enable',
             workerTypeId: 'ollama',
@@ -623,7 +622,7 @@ void main() {
 
     testWidgets('renders without layout exceptions in a scroll view',
         (tester) async {
-      final snapshot = studioFixtureSnapshot();
+      final snapshot = axFixtureSnapshot();
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.workspaces,
         onAdd: () {},

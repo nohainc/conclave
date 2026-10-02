@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { validateProjectMemberships, type ProjectMembership } from "../src/index.js";
+import {
+  validateProjectMemberships,
+  type ProjectMembership,
+} from "../src/index.js";
 
 const membership = (
   userId: string,

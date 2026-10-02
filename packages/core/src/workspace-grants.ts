@@ -1,14 +1,9 @@
 /** Project authorization to execute work through a Workspace. */
 
 export type WorkspaceProjectGrantStatus =
-  | "active"
-  | "suspended"
-  | "revoked"
-  | "expired";
+  "active" | "suspended" | "revoked" | "expired";
 export type WorkspaceProjectGrantScope =
-  | "project_repository"
-  | "selected_paths"
-  | "full_workspace";
+  "project_repository" | "selected_paths" | "full_workspace";
 
 export interface WorkspaceRepositoryMapping {
   readonly repositoryId: string;

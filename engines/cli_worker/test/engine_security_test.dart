@@ -188,7 +188,8 @@ void main() {
       expect(
         await read(),
         isNull,
-        reason: 'Legacy unpartitioned state must start a fresh provider session',
+        reason:
+            'Legacy unpartitioned state must start a fresh provider session',
       );
       await store.write(
         sessionKey: 'logical-session',

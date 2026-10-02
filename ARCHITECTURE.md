@@ -13,6 +13,12 @@ Conclave AX
 -> provider CLI
 ~~~
 
+## v8 architecture contract
+
+Architecture v8 has one execution path: AX → Cloud → Workspace → CLI Worker Engine → signed Tool Profile → provider CLI. The explicit exclusions in the
+[v8 architecture contract](docs/architecture/ARCHITECTURE_V8.md#architecture-contract)
+are normative and checked by `scripts/verify-v8-architecture.mjs`.
+
 ## Product model
 
 - **Conclave AX** is the human application for Projects, Workstreams, Discuss, Work, Workspace grants, Worker bindings, results, and audit.

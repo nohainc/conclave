@@ -10,7 +10,6 @@ The checked-in Worker configurations expect these production resources:
 
 - D1 database: `conclave-v8-production`;
 - R2 bucket: `conclave-artifacts-production`;
-- execution Worker service: `conclave-forge-execution`;
 - app Worker: `conclave-ax-app`.
 
 Do not reuse development D1 databases or R2 buckets for production.
@@ -30,12 +29,10 @@ delete it until the v8 app has been deployed and its production checks pass.
 
 ## Required deployment order
 
-1. Confirm the production preflight passes for both Wrangler configurations:
+1. Confirm the production app Worker preflight passes:
 
    ```sh
    node scripts/verify-production-security.mjs
-   node scripts/verify-production-security.mjs \
-     apps/cloud/forge-execution.wrangler.jsonc
    ```
 
 2. Apply D1 migrations remotely:
@@ -45,8 +42,8 @@ delete it until the v8 app has been deployed and its production checks pass.
      --remote --config infra/cloudflare/app.wrangler.jsonc
    ```
 
-3. Deploy the Forge Worker, then the app Worker. The app binds to the Forge
-   service by name and serves the Flutter web assets at the custom domain.
+3. Deploy the app Worker. It runs Cloud Workflows and dispatches assignments
+   through the Workspace Gateway.
 
 The GitHub Actions deployment workflow performs steps 1–3 after Flutter tests
 and the browser-secret scan pass.
@@ -63,8 +60,6 @@ Before production login:
 - configure Better Auth GitHub and Google OAuth credentials as Cloudflare
   Worker secrets;
 - create or provision Conclave Workspace memberships through the application;
-- configure `CONCLAVE_CI_INGEST_TOKEN`;
-- configure `CONCLAVE_FORGE_CALLBACK_TOKEN`;
 - configure production Cloud, Workspace runtime, and release-signing secrets;
 - rotate all values that were used for development or tests.
 

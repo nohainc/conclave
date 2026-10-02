@@ -1,12 +1,12 @@
 # Conclave AX
 
-Conclave AX is the web-only Flutter application. It owns
-human authentication, Workspaces, Projects, Chats, Runs, Host pairing, Worker
-catalog visibility, Accounts, execution settings, usage, and evidence.
+Conclave AX is the Flutter application for human authentication, Projects,
+Workstreams, Discuss, Work, Workspace access, Worker catalog visibility, and
+account security.
 
 The package intentionally has no native desktop targets. Desktop execution is
-provided by Conclave Host; Conclave AX communicates with Cloud over the existing
-HTTP/realtime surface.
+provided by Conclave Workspace; Conclave AX communicates with Cloud through
+the Human Product Protocol and realtime event stream.
 
 ## Getting Started
 

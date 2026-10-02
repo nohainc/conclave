@@ -1,5 +1,5 @@
 import 'package:conclave_app/src/features/home/home_page.dart';
-import 'package:conclave_app/src/studio/studio_models.dart';
+import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -8,7 +8,7 @@ void main() {
         home: Scaffold(body: SingleChildScrollView(child: child)),
       );
 
-  const project = StudioProject(
+  const project = AxProject(
     id: 'project-1',
     name: 'Project One',
     branch: 'main',
@@ -47,10 +47,10 @@ void main() {
     await tester.pumpWidget(scaffold(HomePage(
       projects: const [project],
       workspaces: const [
-        StudioWorkspace(id: 'workspace-1', name: 'MacBook'),
+        AxWorkspace(id: 'workspace-1', name: 'MacBook'),
       ],
       workers: const [
-        StudioWorker(
+        AxWorker(
           id: 'ready-1',
           workspaceId: 'workspace-1',
           workerTypeId: 'chatgpt',
@@ -59,7 +59,7 @@ void main() {
           localConcurrencyLimit: 1,
           capabilities: [],
         ),
-        StudioWorker(
+        AxWorker(
           id: 'attention-1',
           workspaceId: 'workspace-1',
           workerTypeId: 'gemini',

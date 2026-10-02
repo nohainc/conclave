@@ -1,9 +1,11 @@
 # Conclave AX end-to-end fixture
 
-This deliberately small repository contains one bug for the Forge integration test:
+This deliberately small repository contains a sample defect for execution-path
+acceptance tests:
 
 ```js
 add(2, 3) // incorrectly returns -1
 ```
 
-The Conclave goal is to fix `add`, add regression coverage, and verify the implementation with the repository's real `pnpm test` command.
+The acceptance scenario fixes `add`, adds regression coverage, and verifies the
+implementation with the repository test command.

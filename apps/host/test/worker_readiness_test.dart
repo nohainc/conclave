@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_host/configured_worker_registry.dart';
+import 'package:conclave_host/local_worker_registry.dart';
 import 'package:conclave_host/platform_runtime.dart';
 import 'package:conclave_host/worker_readiness.dart';
 
@@ -44,12 +44,11 @@ void main() {
     expect(assessment.issueCode, 'setup_required');
   });
 
-  test('rechecks configured Workers and syncs changed readiness state',
-      () async {
+  test('rechecks local Workers and syncs changed readiness state', () async {
     final directory = await Directory.systemTemp.createTemp('worker-ready-');
     addTearDown(() => directory.delete(recursive: true));
     var syncs = 0;
-    final registry = LocalConfiguredWorkerRegistry(
+    final registry = LocalWorkerRegistry(
       dataDirectory: directory,
       workspaceId: 'workspace-ready',
       platform: _ReadinessPlatform(),
@@ -85,7 +84,7 @@ void main() {
     expect(updated.status, LocalWorkerStatus.needsAttention);
     await Future<void>.delayed(Duration.zero);
     expect(syncs, 1);
-    final restoredRegistry = LocalConfiguredWorkerRegistry(
+    final restoredRegistry = LocalWorkerRegistry(
       dataDirectory: directory,
       workspaceId: 'workspace-ready',
       platform: _ReadinessPlatform(),
@@ -102,7 +101,7 @@ void main() {
   test('disabled Workers remain disabled and are not probed', () async {
     final directory = await Directory.systemTemp.createTemp('worker-ready-');
     addTearDown(() => directory.delete(recursive: true));
-    final registry = LocalConfiguredWorkerRegistry(
+    final registry = LocalWorkerRegistry(
       dataDirectory: directory,
       workspaceId: 'workspace-disabled',
       platform: _ReadinessPlatform(),
@@ -142,7 +141,7 @@ void main() {
         await Directory.systemTemp.createTemp('worker-live-test-');
     addTearDown(() => directory.delete(recursive: true));
     var nextId = 0;
-    final registry = LocalConfiguredWorkerRegistry(
+    final registry = LocalWorkerRegistry(
       dataDirectory: directory,
       workspaceId: 'workspace-live-test',
       platform: _ReadinessPlatform(),
@@ -193,7 +192,7 @@ void main() {
       () async {
     final directory = await Directory.systemTemp.createTemp('gemini-probe-');
     addTearDown(() => directory.delete(recursive: true));
-    final registry = LocalConfiguredWorkerRegistry(
+    final registry = LocalWorkerRegistry(
       dataDirectory: directory,
       workspaceId: 'workspace-gemini-probe',
       platform: _ReadinessPlatform(),
@@ -243,7 +242,7 @@ void main() {
       () async {
     final directory = await Directory.systemTemp.createTemp('worker-details-');
     addTearDown(() => directory.delete(recursive: true));
-    final registry = LocalConfiguredWorkerRegistry(
+    final registry = LocalWorkerRegistry(
       dataDirectory: directory,
       workspaceId: 'workspace-test-details',
       platform: _ReadinessPlatform(),
@@ -282,7 +281,7 @@ void main() {
   test('startup quarantines cached Ready until live checks pass', () async {
     final directory = await Directory.systemTemp.createTemp('worker-ready-');
     addTearDown(() => directory.delete(recursive: true));
-    final registry = LocalConfiguredWorkerRegistry(
+    final registry = LocalWorkerRegistry(
       dataDirectory: directory,
       workspaceId: 'workspace-startup',
       platform: _ReadinessPlatform(),

@@ -40,7 +40,7 @@ void main() {
         session['compatibleFormatIds'] = compatibleFormatIds;
         final provider = profile['providerTool']! as Map<String, Object?>;
         const providerScript =
-            'workers/fixture_cli/tool/antigravity_profile_provider.dart';
+            'packages/tool-profile/test/fixtures/provider-cli/antigravity_profile_provider.dart';
         provider['executableCandidates'] = ['dart'];
         (provider['discovery']! as Map<String, Object?>)['standardLocations'] =
             <String>[];

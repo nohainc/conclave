@@ -1,1 +1,10 @@
-{"type":"initialize.request","protocolVersion":"4.0","requestId":"init-1","workerTypeId":"chatgpt","expectedEngineVersion":"1.0.0","profileDefinitionId":"chatgpt-codex","profileReleaseVersion":"1.4.2","profileDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+{
+  "type": "initialize.request",
+  "protocolVersion": "4.0",
+  "requestId": "init-1",
+  "workerTypeId": "chatgpt",
+  "expectedEngineVersion": "1.0.0",
+  "profileDefinitionId": "chatgpt-codex",
+  "profileReleaseVersion": "1.4.2",
+  "profileDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

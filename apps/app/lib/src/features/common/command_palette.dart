@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../brand.dart';
-import '../../navigation/studio_navigation.dart';
-import '../../studio/studio_models.dart';
+import '../../navigation/ax_navigation.dart';
+import '../../ax/ax_models.dart';
 
 /// Item in the command palette search results
 class CommandPaletteAction {
@@ -31,9 +31,9 @@ class CommandPaletteDialog extends StatefulWidget {
     required this.onToggleTheme,
   });
 
-  final StudioSnapshot snapshot;
+  final AxSnapshot snapshot;
   final ValueChanged<String> onSelectProject;
-  final ValueChanged<StudioNavigation> onNavigateTo;
+  final ValueChanged<AxNavigation> onNavigateTo;
   final VoidCallback onToggleTheme;
 
   @override
@@ -72,7 +72,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         category: 'Navigation',
         onSelect: () {
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-          widget.onNavigateTo(const StudioNavigation.home());
+          widget.onNavigateTo(const AxNavigation.home());
         },
       ),
       CommandPaletteAction(
@@ -82,7 +82,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         category: 'Navigation',
         onSelect: () {
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-          widget.onNavigateTo(const StudioNavigation.workspaces());
+          widget.onNavigateTo(const AxNavigation.workspaces());
         },
       ),
       CommandPaletteAction(
@@ -92,7 +92,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         category: 'Navigation',
         onSelect: () {
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-          widget.onNavigateTo(const StudioNavigation.profileSecurity());
+          widget.onNavigateTo(const AxNavigation.profileSecurity());
         },
       ),
       CommandPaletteAction(
@@ -131,7 +131,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
           onSelect: () {
             if (Navigator.of(context).canPop()) Navigator.of(context).pop();
             widget.onNavigateTo(
-                StudioNavigation.workstream(project.id, workstream.id));
+                AxNavigation.workstream(project.id, workstream.id));
           },
         ));
       }
@@ -150,7 +150,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         category: 'Runs',
         onSelect: () {
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-          widget.onNavigateTo(StudioNavigation.run(
+          widget.onNavigateTo(AxNavigation.run(
             projectId,
             activeRun.id,
             workstreamId: activeRun.workstreamId,
@@ -168,8 +168,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         category: 'Workspaces',
         onSelect: () {
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-          widget.onNavigateTo(
-              StudioNavigation.workspaces(workspaceId: workspace.id));
+          widget
+              .onNavigateTo(AxNavigation.workspaces(workspaceId: workspace.id));
         },
       ));
     }

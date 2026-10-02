@@ -286,7 +286,7 @@ const configCheck = z
       .string()
       .min(1)
       .max(512)
-      .regex(/^[A-Za-z0-9._\/-]+$/)
+      .regex(/^[A-Za-z0-9./-]+$/)
       .refine(
         (path) =>
           !path.startsWith("/") &&
@@ -481,7 +481,10 @@ const profileSchema = z
             message: "Compatibility must include the current session format",
           });
         }
-        if (new Set(session.compatibleFormatIds).size !== session.compatibleFormatIds.length) {
+        if (
+          new Set(session.compatibleFormatIds).size !==
+          session.compatibleFormatIds.length
+        ) {
           context.addIssue({
             code: "custom",
             path: ["compatibleFormatIds"],

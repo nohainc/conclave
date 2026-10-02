@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../studio/studio_models.dart';
+import '../../ax/ax_models.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({
@@ -17,10 +17,10 @@ class HomePage extends StatelessWidget {
     required this.onOpenArchivedProjects,
   });
 
-  final List<StudioProject> projects;
-  final List<StudioWorkspace> workspaces;
-  final List<StudioWorker> workers;
-  final StudioRun? run;
+  final List<AxProject> projects;
+  final List<AxWorkspace> workspaces;
+  final List<AxWorker> workers;
+  final AxRun? run;
   final int openFindingCount;
   final VoidCallback onOpenWorkspaces;
   final ValueChanged<String> onOpenProject;
@@ -154,10 +154,10 @@ class _EstablishedHome extends StatelessWidget {
     required this.onOpenArchivedProjects,
   });
 
-  final List<StudioProject> projects;
-  final List<StudioWorkspace> workspaces;
-  final List<StudioWorker> workers;
-  final StudioRun? run;
+  final List<AxProject> projects;
+  final List<AxWorkspace> workspaces;
+  final List<AxWorker> workers;
+  final AxRun? run;
   final int openFindingCount;
   final VoidCallback onOpenWorkspaces;
   final ValueChanged<String> onOpenProject;

@@ -8,20 +8,9 @@ coverage/
 .env
 .env.*
 !.env.example
-apps/flutter_app/.dart_tool/
-apps/flutter_app/build/
-apps/flutter_app/.flutter-plugins
-apps/flutter_app/.flutter-plugins-dependencies
-apps/flutter_app/.packages
-apps/flutter_app/pubspec.lock
-
-# Dart and Flutter generated state for the V3 desktop applications.
+# Dart and Flutter generated state.
 **/.dart_tool/
 **/build/
 apps/site/.astro/
 apps/site/dist/
-apps/agent_app/pubspec.lock
-apps/agent_engine/pubspec.lock
-apps/host/assets/adapters/*.tgz
-apps/host/assets/adapters/*.json
 apps/host/assets/engines/conclave_cli_worker_engine*

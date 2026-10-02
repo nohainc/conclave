@@ -8,12 +8,12 @@ import 'package:conclave_app/src/features/navigation/app_menu.dart';
 import 'package:conclave_app/src/features/navigation/app_sidebar.dart';
 import 'package:conclave_app/src/features/navigation/app_top_hud.dart';
 import 'package:conclave_app/src/features/navigation/project_tree.dart';
-import 'package:conclave_app/src/features/navigation/studio_shell_context.dart';
-import 'package:conclave_app/src/navigation/studio_navigation.dart';
-import 'package:conclave_app/src/studio/studio_models.dart';
+import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
+import 'package:conclave_app/src/navigation/ax_navigation.dart';
+import 'package:conclave_app/src/ax/ax_models.dart';
 
 void main() {
-  const wsRunning = StudioWorkstream(
+  const wsRunning = AxWorkstream(
     id: 'ws-1',
     projectId: 'p-1',
     name: 'Authentication redesign',
@@ -25,7 +25,7 @@ void main() {
     queueStatus: 'Running',
   );
 
-  const wsIdle = StudioWorkstream(
+  const wsIdle = AxWorkstream(
     id: 'ws-2',
     projectId: 'p-1',
     name: 'Scheduler',
@@ -37,7 +37,7 @@ void main() {
     queueStatus: 'Idle',
   );
 
-  const testProject = StudioProject(
+  const testProject = AxProject(
     id: 'p-1',
     name: 'Conclave AX',
     branch: 'main',
@@ -45,8 +45,8 @@ void main() {
     workstreams: [wsRunning, wsIdle],
   );
 
-  const testAgent = StudioWorkspace(
-    id: 'agent-1',
+  const testWorkspace = AxWorkspace(
+    id: 'worker-1',
     name: 'MacBook Pro',
     hostname: 'macbook-pro.local',
     status: 'connected',
@@ -55,15 +55,15 @@ void main() {
     activeTaskCount: 1,
   );
 
-  const baseShellContext = StudioShellContext(
-    navigation: StudioNavigation.workstream('p-1', 'ws-1'),
+  const baseShellContext = AxShellContext(
+    navigation: AxNavigation.workstream('p-1', 'ws-1'),
     projects: [testProject],
     selectedProject: testProject,
     selectedWorkstream: wsRunning,
     expandedProjectIds: {'p-1'},
     viewerDisplayName: 'Vitalii Noha',
     viewerEmail: 'vitalii@conclave.ax',
-    workspaces: [testAgent],
+    workspaces: [testWorkspace],
   );
 
   Widget wrapWithMaterial(Widget child, {ThemeData? theme}) {
@@ -121,7 +121,6 @@ void main() {
       expect(find.text('Workers'), findsNothing);
       expect(find.text('Usage'), findsNothing);
       expect(find.text('Profile & Security'), findsNothing);
-      expect(find.text('Agents'), findsNothing);
       expect(find.text('Catalog'), findsNothing);
       expect(find.text('New chat'), findsNothing);
       expect(find.text('ACTIVE GOALS'), findsNothing);
@@ -129,7 +128,7 @@ void main() {
 
     testWidgets('avatar and name click navigates to Profile & Security',
         (tester) async {
-      StudioNavigation? target;
+      AxNavigation? target;
       await tester.pumpWidget(
         wrapWithMaterial(
           SizedBox(
@@ -150,7 +149,7 @@ void main() {
 
       // Tap user profile tile
       await tester.tap(find.text('Vitalii Noha'));
-      expect(target, const StudioNavigation.profileSecurity());
+      expect(target, const AxNavigation.profileSecurity());
     });
   });
 
@@ -158,7 +157,7 @@ void main() {
     testWidgets(
         'menu contains Workspaces, Archived Projects, Appearance, Downloads, Documentation, About Conclave AX, Log out in correct order',
         (tester) async {
-      StudioNavigation? navigated;
+      AxNavigation? navigated;
       bool aboutOpened = false;
       Uri? openedUrl;
       bool loggedOut = false;
@@ -204,7 +203,7 @@ void main() {
       // 1. Workspaces
       await tester.tap(find.text('Workspaces'));
       await tester.pumpAndSettle();
-      expect(navigated, const StudioNavigation.workspaces());
+      expect(navigated, const AxNavigation.workspaces());
 
       // Re-open and test Archived Projects
       await tester.tap(find.byTooltip('Application menu'));
@@ -301,7 +300,7 @@ void main() {
     testWidgets('project row expands/collapses and navigates independently',
         (tester) async {
       String? toggledProjectId;
-      StudioNavigation? navigated;
+      AxNavigation? navigated;
 
       await tester.pumpWidget(
         wrapWithMaterial(
@@ -334,12 +333,12 @@ void main() {
         matching: find.text('Conclave AX'),
       ));
       expect(toggledProjectId, 'p-1');
-      expect(navigated, const StudioNavigation.project('p-1'));
+      expect(navigated, const AxNavigation.project('p-1'));
     });
 
     testWidgets('selecting a workstream triggers navigation with active state',
         (tester) async {
-      StudioNavigation? navigated;
+      AxNavigation? navigated;
 
       await tester.pumpWidget(
         wrapWithMaterial(
@@ -361,7 +360,7 @@ void main() {
 
       // Tap on idle workstream 'Scheduler'
       await tester.tap(find.text('Scheduler'));
-      expect(navigated, const StudioNavigation.workstream('p-1', 'ws-2'));
+      expect(navigated, const AxNavigation.workstream('p-1', 'ws-2'));
     });
   });
 
@@ -541,7 +540,7 @@ void main() {
   });
 }
 
-void _dummyNav(StudioNavigation _) {}
+void _dummyNav(AxNavigation _) {}
 void _dummyToggle(String _) {}
 void _dummyAction() {}
 void _dummyExternal(Uri _) {}

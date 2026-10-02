@@ -10,7 +10,7 @@ external JSPromise<JSAny?> _register(JSString baseUrl, JSString name);
 @JS('conclavePasskey.signIn')
 external JSPromise<JSAny?> _signIn(JSString baseUrl);
 
-final class _WebStudioPasskeyBrowser implements StudioPasskeyBrowser {
+final class _WebAxPasskeyBrowser implements AxPasskeyBrowser {
   @override
   Future<void> register(String baseUrl, String name) =>
       _register(baseUrl.toJS, name.toJS).toDart;
@@ -19,4 +19,4 @@ final class _WebStudioPasskeyBrowser implements StudioPasskeyBrowser {
   Future<void> signIn(String baseUrl) => _signIn(baseUrl.toJS).toDart;
 }
 
-StudioPasskeyBrowser createStudioPasskeyBrowser() => _WebStudioPasskeyBrowser();
+AxPasskeyBrowser createAxPasskeyBrowser() => _WebAxPasskeyBrowser();

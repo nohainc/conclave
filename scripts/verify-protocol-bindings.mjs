@@ -48,12 +48,6 @@ for (const message of [
     );
   }
 }
-if (
-  schema.$defs.assignmentSnapshot.required.includes("resolvedWorkerVersion")
-) {
-  throw new Error("assignment snapshot still requires a legacy Worker version");
-}
-
 const generatedFiles = [protocolTs, hostTs, dart];
 const forbiddenGeneratedTokens = [
   "AGENT_PROTOCOL_",
@@ -82,19 +76,8 @@ for (const code of schema["x-execution-error-codes"]) {
     throw new Error(`generated execution error bindings are missing ${code}`);
   }
 }
-for (const type of schema["x-message-types"]) {
-  if (
-    !protocolTs.includes(JSON.stringify(type)) ||
-    !dart.includes(`'${type}'`)
-  ) {
-    throw new Error(`generated product protocol bindings are missing ${type}`);
-  }
-}
 for (const type of schema["x-host-protocol"].messageTypes) {
-  if (
-    !protocolTs.includes(JSON.stringify(type)) ||
-    !hostTs.includes(JSON.stringify(type))
-  ) {
+  if (!hostTs.includes(JSON.stringify(type))) {
     throw new Error(
       `generated Workspace protocol bindings are missing ${type}`,
     );
@@ -103,10 +86,7 @@ for (const type of schema["x-host-protocol"].messageTypes) {
 for (const type of schema["x-realtime-events"].durableTypes.concat(
   schema["x-realtime-events"].ephemeralTypes,
 )) {
-  if (
-    !protocolTs.includes(JSON.stringify(type)) ||
-    !hostTs.includes(JSON.stringify(type))
-  ) {
+  if (!protocolTs.includes(JSON.stringify(type))) {
     throw new Error(`generated realtime event bindings are missing ${type}`);
   }
 }

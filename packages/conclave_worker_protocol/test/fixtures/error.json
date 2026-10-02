@@ -1,1 +1,8 @@
-{"type":"error","requestId":"execute-1","assignmentId":"assignment-1","code":"provider_tool_unavailable","message":"The local provider tool could not be found.","retryable":false}
+{
+  "type": "error",
+  "requestId": "execute-1",
+  "assignmentId": "assignment-1",
+  "code": "provider_tool_unavailable",
+  "message": "The local provider tool could not be found.",
+  "retryable": false
+}

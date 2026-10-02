@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../studio/studio_models.dart';
+import '../../ax/ax_models.dart';
 
 /// Overview tab displaying the list of enrolled Workspaces.
 class WorkspacesOverview extends StatelessWidget {
@@ -11,8 +11,8 @@ class WorkspacesOverview extends StatelessWidget {
     this.onOpenDownloads,
   });
 
-  final List<StudioWorkspace> workspaces;
-  final ValueChanged<StudioWorkspace> onSelectWorkspace;
+  final List<AxWorkspace> workspaces;
+  final ValueChanged<AxWorkspace> onSelectWorkspace;
   final VoidCallback? onOpenDownloads;
 
   @override

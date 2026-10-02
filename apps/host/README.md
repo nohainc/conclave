@@ -107,8 +107,8 @@ CONCLAVE_ENROLLMENT_TOKEN='conclave_enroll_...' \
 
 The supported product-facing Worker slots are **ChatGPT**, powered by Codex
 CLI (`codex`), and **Gemini**, powered by Antigravity CLI (`agy`). Each
-Workspace has one stable slot of each type and at most one configured Worker
-per slot. The corresponding CLI owns sign-in, credential storage, and billing
+Workspace has one local Worker slot for each logical Worker Type. The
+corresponding CLI owns sign-in, credential storage, and billing
 mode; Conclave checks whether the CLI can execute and does not request or store
 provider credentials. See [ADR-015](../../docs/decisions/ADR-015-first-party-worker-v1-contract.md).
 

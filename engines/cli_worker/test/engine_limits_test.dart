@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 void main() {
   final repository = Directory.current.parent.parent;
   final fixture =
-      '${repository.path}/workers/fixture_cli/tool/fixture_provider.dart';
+      '${repository.path}/packages/tool-profile/test/fixtures/provider-cli/fixture_provider.dart';
   final runner = const CliStreamingRunner(
     maxStdoutBytes: 128 * 1024,
     maxStderrBytes: 1024,

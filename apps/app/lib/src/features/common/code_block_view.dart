@@ -30,9 +30,13 @@ class _CodeBlockViewState extends State<CodeBlockView> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? ConclaveBrand.darkCodeBackground : ConclaveBrand.lightCodeBackground;
-    final borderColor = isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
-    final codeTextColor = isDark ? const Color(0xffe2e8f0) : const Color(0xff1e293b);
+    final bgColor = isDark
+        ? ConclaveBrand.darkCodeBackground
+        : ConclaveBrand.lightCodeBackground;
+    final borderColor =
+        isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
+    final codeTextColor =
+        isDark ? const Color(0xffe2e8f0) : const Color(0xff1e293b);
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -49,8 +53,11 @@ class _CodeBlockViewState extends State<CodeBlockView> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: borderColor)),
-              color: isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
+              color: isDark
+                  ? ConclaveBrand.darkSurface
+                  : ConclaveBrand.lightSurface,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(7)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -61,21 +68,28 @@ class _CodeBlockViewState extends State<CodeBlockView> {
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.5,
-                    color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                    color: isDark
+                        ? ConclaveBrand.darkInkMuted
+                        : ConclaveBrand.lightInkMuted,
                   ),
                 ),
                 InkWell(
                   onTap: _copyCode,
                   borderRadius: BorderRadius.circular(4),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           _copied ? Icons.check_rounded : Icons.copy_rounded,
                           size: 13,
-                          color: _copied ? ConclaveBrand.success : (isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted),
+                          color: _copied
+                              ? ConclaveBrand.success
+                              : (isDark
+                                  ? ConclaveBrand.darkInkMuted
+                                  : ConclaveBrand.lightInkMuted),
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -83,7 +97,11 @@ class _CodeBlockViewState extends State<CodeBlockView> {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
-                            color: _copied ? ConclaveBrand.success : (isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted),
+                            color: _copied
+                                ? ConclaveBrand.success
+                                : (isDark
+                                    ? ConclaveBrand.darkInkMuted
+                                    : ConclaveBrand.lightInkMuted),
                           ),
                         ),
                       ],
@@ -135,11 +153,12 @@ class MarkdownMessageBody extends StatelessWidget {
         }
         return SelectableText(
           part.content,
-          style: textStyle ?? TextStyle(
-            fontSize: 13.5,
-            height: 1.45,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
+          style: textStyle ??
+              TextStyle(
+                fontSize: 13.5,
+                height: 1.45,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
         );
       }).toList(),
     );
@@ -197,7 +216,9 @@ class MarkdownMessageBody extends StatelessWidget {
       ));
     }
 
-    return snippets.isEmpty ? [_ParsedSnippet(content: raw, isCode: false)] : snippets;
+    return snippets.isEmpty
+        ? [_ParsedSnippet(content: raw, isCode: false)]
+        : snippets;
   }
 }
 

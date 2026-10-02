@@ -520,7 +520,7 @@ async function safeRecord(
   }
 }
 
-/** Keep OAuth callbacks on this Studio origin and prevent open redirects. */
+/** Keep OAuth callbacks on this AX origin and prevent open redirects. */
 export function safeAuthReturnTo(
   request: Request,
   value: string | null,

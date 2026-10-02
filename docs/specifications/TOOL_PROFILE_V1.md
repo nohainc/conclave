@@ -788,7 +788,7 @@ Tool Profile v1 is not:
 - a Workflow language;
 - a prompt-template product;
 - user-editable v8 functionality;
-- arbitrary plugin code;
+- arbitrary third-party executable extensions;
 - a permission bypass mechanism;
 - a replacement for future non-CLI Engine families.
 

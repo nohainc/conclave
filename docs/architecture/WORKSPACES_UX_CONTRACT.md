@@ -17,10 +17,11 @@ The top-level execution-capacity page is **Workspaces**. Each Workspace card gro
 
 ## Workspace overview model
 
-AX may assemble a `StudioWorkspaceOverview` from multiple Cloud responses. The UI contract is independent of the physical endpoint layout.
+AX may assemble a `WorkspaceOverview` from focused Cloud responses. The UI
+contract is independent of the physical endpoint layout.
 
 ~~~text
-StudioWorkspaceOverview {
+WorkspaceOverview {
   workspace: WorkspaceSummary
   runtime: WorkspaceRuntimeSummary
   workers: List<WorkspaceWorkerSummary>

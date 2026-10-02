@@ -246,8 +246,12 @@ describe("realtime gateway contract", () => {
         projectId: "project-2",
       }),
     ).resolves.toEqual({ allowed: false, reason: "project_access_denied" });
-    expect(queries.some((query) => query.includes("workspace_project_grants"))).toBe(true);
-    expect(queries.some((query) => query.includes("workspace_memberships"))).toBe(false);
+    expect(
+      queries.some((query) => query.includes("workspace_project_grants")),
+    ).toBe(true);
+    expect(
+      queries.some((query) => query.includes("workspace_memberships")),
+    ).toBe(false);
   });
 
   it("revalidates suspended users and removed subscriptions", async () => {

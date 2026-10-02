@@ -73,7 +73,7 @@ the sole authoritative catalog.
 - realtime App connections;
 - Workspace Gateway;
 - built-in Work catalog, logical Worker catalog, and signed Tool Profile release registry;
-- synchronized configured Worker inventory;
+- synchronized logical Worker inventory and readiness;
 - Project/Workstream Worker authorization;
 - assignment scheduling;
 - audit/evidence;
@@ -109,7 +109,7 @@ latter speaks only the Workspace Runtime Protocol with Conclave Workspace.
 - platform/architecture/runtime reporting;
 - local Work Root and Workstream directories;
 - local logical Worker registry;
-- local provider authentication/secure credentials;
+- provider CLI-owned local sign-in;
 - CLI Worker Engine and signed Tool Profile cache/admission;
 - local permission approval;
 - child-process supervision;
@@ -119,7 +119,9 @@ latter speaks only the Workspace Runtime Protocol with Conclave Workspace.
 
 One normal Conclave Workspace installation runs per machine/OS-user installation.
 
-Configured Workers are created/authenticated locally and belong to exactly one Workspace. Safe Worker readiness is synchronized to Cloud; AX Workstream policy determines how that capacity is used.
+Each logical Worker Type has one local Worker slot in a Workspace. Provider
+CLIs own their sign-in; safe Worker readiness is synchronized to Cloud, and AX
+Workstream policy determines how that capacity is used.
 
 Conclave Workspace is background-first. Human desktop authentication is
 distinct from Workspace runtime participation and from Worker/provider
@@ -146,8 +148,8 @@ The frozen first-party v1 product catalog contains two Logical Workers:
 - **ChatGPT**, resolved by the `chatgpt-codex` Tool Profile Definition to Codex CLI (`codex`);
 - **Gemini**, resolved by the `gemini-antigravity` Tool Profile Definition to Antigravity CLI (`agy`).
 
-Each Workspace has one stable slot for each type and at most one configured
-Worker per slot. The CLI owns provider authentication and billing mode; Conclave
+Each Workspace has one stable local slot for each type. The provider CLI owns
+sign-in and billing mode; Conclave
 does not ask the user to choose subscription versus API-key authentication or
 store the provider credentials. See the
 [Worker catalog contract v1](../specifications/FIRST_PARTY_WORKER_CATALOG_V1.md).
@@ -159,10 +161,10 @@ and Local Worker Protocol 4.0. The Engine is the sole production CLI Worker
 runtime. Real-provider acceptance and remaining release gates are tracked in
 the current v8 implementation plan.
 
-A configured Worker:
+A local Worker slot:
 - belongs to exactly one Workspace;
-- has one local authentication/configuration context;
-- is displayed using its fixed product type name, without a configurable Worker name;
+- uses its fixed logical Worker Type name;
+- relies on provider CLI-owned local sign-in;
 - does not own model defaults or allow-lists; model choice comes from the Work/Assignment;
 - is synchronized to Cloud as safe metadata/readiness;
 - does not connect directly to Conclave Cloud.

@@ -58,7 +58,7 @@ export interface DispatchAssignmentResult {
   readonly assignmentId: string;
   readonly attemptId: string;
   readonly workerId: string;
-  readonly agentId: string;
+  readonly workspaceRuntimeId: string;
   readonly workerCatalogId: string;
   readonly status: "dispatched" | "failed" | "cancelled";
   readonly accepted: boolean;
@@ -125,7 +125,7 @@ async function dispatchWorkspaceWorkerAssignment(
       assignmentId: "",
       attemptId: "",
       workerId: "",
-      agentId: "",
+      workspaceRuntimeId: "",
       workerCatalogId: "",
       status: "failed",
       accepted: false,
@@ -153,7 +153,7 @@ async function dispatchWorkspaceWorkerAssignment(
     `INSERT INTO worker_assignments
        (id, project_id, execution_workspace_id, workspace_project_grant_id,
         run_id, task_id, attempt_id, requested_by_user_id, runtime_identity_id,
-        worker_id, workspace_worker_id, engine_version,
+        worker_type_id, workspace_worker_id, engine_version,
         model, config_json, effective_permissions_json,
         permission_snapshot_json, timeout_ms, session_policy, idempotency_key, status,
         input_json, created_at, updated_at)
@@ -200,7 +200,7 @@ async function dispatchWorkspaceWorkerAssignment(
         assignmentId,
         attemptId,
         workerId: target.workerId,
-        agentId: target.workspaceRuntimeIdentityId,
+        workspaceRuntimeId: target.workspaceRuntimeIdentityId,
         workerCatalogId: target.workerTypeId,
         status: "cancelled",
         accepted: false,
@@ -291,7 +291,7 @@ async function dispatchWorkspaceWorkerAssignment(
       assignmentId,
       attemptId,
       workerId: target.workerId,
-      agentId: target.workspaceRuntimeIdentityId,
+      workspaceRuntimeId: target.workspaceRuntimeIdentityId,
       workerCatalogId: target.workerTypeId,
       status: "failed",
       accepted: false,
@@ -339,7 +339,7 @@ async function dispatchWorkspaceWorkerAssignment(
       assignmentId,
       attemptId,
       workerId: target.workerId,
-      agentId: target.workspaceRuntimeIdentityId,
+      workspaceRuntimeId: target.workspaceRuntimeIdentityId,
       workerCatalogId: target.workerTypeId,
       status: "failed",
       accepted: false,
@@ -350,7 +350,7 @@ async function dispatchWorkspaceWorkerAssignment(
     assignmentId,
     attemptId,
     workerId: target.workerId,
-    agentId: target.workspaceRuntimeIdentityId,
+    workspaceRuntimeId: target.workspaceRuntimeIdentityId,
     workerCatalogId: target.workerTypeId,
     status: "dispatched",
     accepted: true,
@@ -358,7 +358,7 @@ async function dispatchWorkspaceWorkerAssignment(
 }
 
 /**
- * Creates an Attempt and WorkerAssignment in D1 and dispatches the task over the Host Gateway.
+ * Creates a Worker Assignment in D1 and dispatches the workflow step over the Workspace Gateway.
  */
 export async function dispatchTaskAssignment(
   env: AssignmentDispatcherEnv,
@@ -380,7 +380,7 @@ export async function dispatchTaskAssignment(
       assignmentId: "",
       attemptId: "",
       workerId: "",
-      agentId: "",
+      workspaceRuntimeId: "",
       workerCatalogId: "",
       status: "failed",
       accepted: false,
@@ -392,14 +392,14 @@ export async function dispatchTaskAssignment(
     sessionPolicy,
     ...(sessionKey !== undefined ? { sessionKey } : {}),
   };
-  // Every assignment carries the authenticated Project requester so V7
-  // selection, grants, and the immutable target snapshot are evaluated.
+  // Every assignment carries the authenticated Project requester so Workspace
+  // selection, grants, and the immutable assignment target are evaluated.
   if (!normalizedTask.projectId || !normalizedTask.requestedByUserId) {
     return {
       assignmentId: "",
       attemptId: "",
       workerId: "",
-      agentId: "",
+      workspaceRuntimeId: "",
       workerCatalogId: "",
       status: "failed",
       accepted: false,
@@ -530,7 +530,7 @@ export async function recordAssignmentCancelled(
 }
 
 /**
- * Cancels a running task assignment across Cloud and Agent.
+ * Cancels a running task assignment across Cloud and Workspace.
  */
 export async function cancelTaskAssignment(
   env: AssignmentDispatcherEnv,

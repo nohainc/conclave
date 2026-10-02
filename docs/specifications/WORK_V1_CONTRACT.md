@@ -435,12 +435,13 @@ rebootstrapped rather than upgraded through a compatibility layer.
 
 Direct Work Requests use the configured `direct` Worker binding and are
 serialized by a Workstream runtime lease. Cloud dispatches the assignment to
-the selected Worker's Workspace; the Workspace starts the native Worker
-executable. Work Requests, step progress, Worker/provider version attribution,
+the selected Worker's Workspace; the Workspace starts the generic CLI Worker
+Engine, which resolves the signed Tool Profile and starts the provider CLI.
+Work Requests, step progress, Worker/provider version attribution,
 timing, and final results are available to AX through the Workstream history
 API. The timeline reconstructs from Cloud after page reload or browser restart,
-and each Run retains its original request text. Direct requests do not pass
-through the legacy multi-role Forge runner.
+and each Run retains its original request text. Direct requests use the same
+assignment dispatcher and Workspace execution path as Workflow Steps.
 
 Work lifecycle changes publish durable Cloud realtime events: `work_request`
 creation/start/completion/failure/cancellation and Step
@@ -482,7 +483,7 @@ The binding IDs are fixed to `direct`, `research`, `plan`, `implement`, `test`,
 and `verify`. `direct` configures the one-step Direct Workflow; the remaining
 IDs configure the corresponding canonical Step across built-in Workflows. A
 missing binding fails closed when that Step is scheduled. Cloud considers the
-configured Worker and, if present, its one fallback Worker. Model and
+selected logical Worker and, if present, its one fallback Worker. Model and
 additional instructions are optional and remain attached to the selected
 binding. No arbitrary role names, role-specific concurrency values, or
 fallback-to-any policy are part of this contract.

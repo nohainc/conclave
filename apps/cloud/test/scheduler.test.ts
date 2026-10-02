@@ -41,12 +41,9 @@ function candidate(overrides: Record<string, unknown> = {}) {
     local_worker_activation_state: "enabled",
     local_worker_readiness_state: "ready",
     cloud_scheduling_state: "enabled",
-    provider: "chatgpt",
     local_concurrency_limit: 2,
     active_assignments: 0,
-    allowed_workspace_worker_ids_json: "[]",
     allowed_worker_type_ids_json: "[]",
-    allowed_providers_json: "[]",
     allowed_models_json: "[]",
     ...overrides,
   };
@@ -246,7 +243,7 @@ describe("Project execution scheduler", () => {
     });
   });
 
-  it("narrows candidate Workers based on Workstream execution policy", async () => {
+  it("narrows candidate Workers by Workstream type and model policy", async () => {
     const currentWorker = {
       grant_id: "grant-current",
       project_id: "project-current",
@@ -284,30 +281,7 @@ describe("Project execution scheduler", () => {
       active_assignments: 0,
     };
 
-    // 1. Rejected if allowed_workspace_worker_ids_json excludes this worker
-    await expect(
-      selectProjectExecutionTarget(
-        db(
-          [
-            {
-              ...currentWorker,
-              allowed_workspace_worker_ids_json: JSON.stringify([
-                "other-worker",
-              ]),
-            },
-          ],
-          "collaborator",
-        ),
-        {
-          projectId: "project-current",
-          requesterUserId: "user-requester",
-          role: "implementer",
-          capabilities: ["code"],
-        },
-      ),
-    ).resolves.toBeNull();
-
-    // 2. Rejected if allowed_worker_type_ids_json excludes this worker type
+    // 1. Rejected if allowed_worker_type_ids_json excludes this worker type
     await expect(
       selectProjectExecutionTarget(
         db(
@@ -328,7 +302,7 @@ describe("Project execution scheduler", () => {
       ),
     ).resolves.toBeNull();
 
-    // 3. Rejected if allowed_models_json excludes requested model
+    // 2. Rejected if allowed_models_json excludes requested model
     await expect(
       selectProjectExecutionTarget(
         db(
@@ -350,16 +324,13 @@ describe("Project execution scheduler", () => {
       ),
     ).resolves.toBeNull();
 
-    // 4. Allowed when matching policy
+    // 3. Allowed when matching policy
     await expect(
       selectProjectExecutionTarget(
         db(
           [
             {
               ...currentWorker,
-              allowed_workspace_worker_ids_json: JSON.stringify([
-                "worker-chatgpt-1",
-              ]),
               allowed_worker_type_ids_json: JSON.stringify(["chatgpt"]),
               allowed_models_json: JSON.stringify(["gpt-5.5"]),
             },

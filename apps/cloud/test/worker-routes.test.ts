@@ -19,10 +19,6 @@ const dependencies: WorkerRouteDependencies = {
       headers: { "content-type": "application/json", ...init?.headers },
     }),
   requireSameOriginForCookieMutation: () => undefined,
-  testAuthenticationEnabled: () => false,
-  runProjectId: async () => undefined,
-  authorizeRequest: async () => undefined,
-  resolveWorkflowInstanceId: async () => "workflow",
   errorMessage: (error) => String(error),
   HttpError: TestRouteError,
 };

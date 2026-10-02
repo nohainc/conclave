@@ -203,7 +203,8 @@ void main() {
     );
   });
 
-  test('reopens safely after a runtime interruption and quarantines failed rollback',
+  test(
+      'reopens safely after a runtime interruption and quarantines failed rollback',
       () async {
     final repository = await createRepository();
     addTearDown(() => repository.delete(recursive: true));

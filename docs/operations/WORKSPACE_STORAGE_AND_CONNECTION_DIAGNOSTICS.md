@@ -28,8 +28,8 @@ The default layout is:
 The local Worker registry contains Worker IDs, catalog type IDs, activation,
 local permissions, concurrency, readiness, and bounded CLI diagnostics. Cloud
 or its verified local catalog cache defines available logical Workers and
-their Profiles. On a local registry schema change, Workspace resets only
-`State/configured-workers.json`; setup recreates slots from the catalog.
+their Profiles. On a local registry schema change, Workspace resets only the
+local Worker registry; setup recreates slots from the catalog.
 
 Runtime credentials remain in macOS Keychain. Provider sign-in remains owned by
 the installed provider CLI and is not copied into Workspace state. Credentials

@@ -159,20 +159,26 @@ class EngineProfile {
         throw const FormatException('probe.live is invalid');
       }
       final liveMap = Map<String, Object?>.from(live);
-      _expectOnly(liveMap, const {
-        'timeoutMs',
-        'expectedFinalText',
-      }, 'probe.live');
+      _expectOnly(
+          liveMap,
+          const {
+            'timeoutMs',
+            'expectedFinalText',
+          },
+          'probe.live');
       final expected = liveMap['expectedFinalText'];
       if (expected is! Map ||
           expected['kind'] != 'exact' ||
           expected['value'] != 'OK') {
         throw const FormatException('probe live expectation is Engine-owned');
       }
-      _expectOnly(Map<String, Object?>.from(expected), const {
-        'kind',
-        'value',
-      }, 'probe.live.expectedFinalText');
+      _expectOnly(
+          Map<String, Object?>.from(expected),
+          const {
+            'kind',
+            'value',
+          },
+          'probe.live.expectedFinalText');
     }
     _validateEnvironmentNames(env);
     _validateRules(
@@ -185,14 +191,17 @@ class EngineProfile {
     _validateErrorRules(errors['mappings']);
     _validateConfigChecks(passive['configChecks']);
     final session = _object(json['session'], 'session');
-    _expectOnly(session, const {
-      'supported',
-      'formatId',
-      'compatibleFormatIds',
-      'extract',
-      'resumeArguments',
-      'requireObservedIdMatch',
-    }, 'session');
+    _expectOnly(
+        session,
+        const {
+          'supported',
+          'formatId',
+          'compatibleFormatIds',
+          'extract',
+          'resumeArguments',
+          'requireObservedIdMatch',
+        },
+        'session');
     if (session['supported'] is! bool ||
         session['requireObservedIdMatch'] is! bool) {
       throw const FormatException('session policy is invalid');
@@ -304,9 +313,7 @@ void _validateSelector(Object? value) {
       value.length > 256 ||
       !RegExp(r'^\$(?:\.[A-Za-z_][A-Za-z0-9_]*)+$').hasMatch(value) ||
       value.split('.').length - 1 > 16 ||
-      value
-          .split('.')
-          .any(
+      value.split('.').any(
             (part) =>
                 const {'__proto__', 'prototype', 'constructor'}.contains(part),
           )) {
@@ -471,9 +478,9 @@ void _validateEnvironmentNames(Map<String, Object?> environment) {
 /// when an official Profile explicitly declares them. Host and Conclave
 /// credentials are never available to provider processes.
 bool isReservedEnvironmentName(String name) => RegExp(
-  r'^(?:CONCLAVE_|CLOUD_|WORKER_|WORKSPACE_|SECRET_STORE_)|^(?:CONCLAVE_API_KEY|CONCLAVE_CLOUD_TOKEN|CLOUD_API_KEY|CLOUD_TOKEN|WORKER_TOKEN|WORKSPACE_TOKEN)$',
-  caseSensitive: false,
-).hasMatch(name);
+      r'^(?:CONCLAVE_|CLOUD_|WORKER_|WORKSPACE_|SECRET_STORE_)|^(?:CONCLAVE_API_KEY|CONCLAVE_CLOUD_TOKEN|CLOUD_API_KEY|CLOUD_TOKEN|WORKER_TOKEN|WORKSPACE_TOKEN)$',
+      caseSensitive: false,
+    ).hasMatch(name);
 
 bool engineVersionCompatible(EngineProfile profile, String version) {
   final range = _object(
@@ -593,11 +600,9 @@ class _SemanticVersion implements Comparable<_SemanticVersion> {
       if (prerelease.isEmpty && other.prerelease.isEmpty) return 0;
       return prerelease.isEmpty ? 1 : -1;
     }
-    for (
-      var index = 0;
-      index < prerelease.length && index < other.prerelease.length;
-      index++
-    ) {
+    for (var index = 0;
+        index < prerelease.length && index < other.prerelease.length;
+        index++) {
       final left = prerelease[index];
       final right = other.prerelease[index];
       final leftNumeric = RegExp(r'^[0-9]+$').hasMatch(left);
@@ -605,10 +610,10 @@ class _SemanticVersion implements Comparable<_SemanticVersion> {
       final order = leftNumeric && rightNumeric
           ? _compareNumericIdentifiers(left, right)
           : leftNumeric
-          ? -1
-          : rightNumeric
-          ? 1
-          : left.compareTo(right);
+              ? -1
+              : rightNumeric
+                  ? 1
+                  : left.compareTo(right);
       if (order != 0) return order;
     }
     return prerelease.length.compareTo(other.prerelease.length);

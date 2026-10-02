@@ -1,4 +1,4 @@
-class StudioPasskeyBrowser {
+class AxPasskeyBrowser {
   Future<void> register(String baseUrl, String name) async {
     throw UnsupportedError('Passkeys are available in Conclave AX Web.');
   }
@@ -8,4 +8,4 @@ class StudioPasskeyBrowser {
   }
 }
 
-StudioPasskeyBrowser createStudioPasskeyBrowser() => StudioPasskeyBrowser();
+AxPasskeyBrowser createAxPasskeyBrowser() => AxPasskeyBrowser();

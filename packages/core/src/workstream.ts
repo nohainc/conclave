@@ -5,7 +5,7 @@
  * module intentionally contains no UI, D1, transport, or provider types.
  */
 
-import { DomainInvariantError } from "./entities.js";
+import { DomainInvariantError } from "./domain-error.js";
 import type { ProjectMembership, ProjectRole } from "./project.js";
 
 export type WorkstreamStatus =

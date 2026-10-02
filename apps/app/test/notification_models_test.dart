@@ -38,7 +38,7 @@ void main() {
       'runId': 'run-2',
       'payload': {'prompt': 'Choose the deployment target.'},
     });
-    expect(notification?.kind, StudioNotificationKind.approvalRequired);
+    expect(notification?.kind, AxNotificationKind.approvalRequired);
     expect(notification?.message, 'Choose the deployment target.');
     expect(
       notificationFromRealtimeEvent({'type': 'assignment.progress'}),
@@ -48,7 +48,7 @@ void main() {
 
   test('maps operational attention events to prioritized destinations', () {
     final events = <Map<String, dynamic>>[
-      {'type': 'host.offline'},
+      {'type': 'workspace.offline'},
       {
         'type': 'credential.expired',
         'payload': {'workspaceId': 'workspace-1', 'workerId': 'worker-1'},
@@ -61,7 +61,7 @@ void main() {
     ];
     final notifications = events
         .map(notificationFromRealtimeEvent)
-        .whereType<StudioNotification>()
+        .whereType<AxNotification>()
         .toList();
 
     expect(notifications.map((item) => item.title), [
@@ -70,14 +70,14 @@ void main() {
       'Worker connection failed',
       'Invitation received',
     ]);
-    expect(notifications[0].target, StudioNotificationTarget.workspaces);
-    expect(notifications[1].priority, StudioNotificationPriority.high);
-    expect(notifications[1].target, StudioNotificationTarget.workspace);
+    expect(notifications[0].target, AxNotificationTarget.workspaces);
+    expect(notifications[1].priority, AxNotificationPriority.high);
+    expect(notifications[1].target, AxNotificationTarget.workspace);
     expect(notifications[1].workspaceId, 'workspace-1');
     expect(notifications[1].workerId, 'worker-1');
-    expect(notifications[2].target, StudioNotificationTarget.workspace);
+    expect(notifications[2].target, AxNotificationTarget.workspace);
     expect(notifications[2].workspaceId, 'workspace-2');
     expect(notifications[2].workerId, 'worker-2');
-    expect(notifications[3].target, StudioNotificationTarget.workspace);
+    expect(notifications[3].target, AxNotificationTarget.workspace);
   });
 }

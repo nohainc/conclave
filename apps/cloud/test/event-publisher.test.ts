@@ -94,9 +94,8 @@ function createHarness(options: { duplicate?: boolean } = {}) {
 }
 
 const baseEvent = {
-  type: "chat.message.created",
+  type: "work_request.created",
   workspaceId: "workspace-1",
-  chatId: "chat-1",
   payload: { entityId: "message-1", summary: "hello" },
 };
 

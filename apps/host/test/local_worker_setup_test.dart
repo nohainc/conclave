@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_host/configured_worker_registry.dart';
+import 'package:conclave_host/local_worker_registry.dart';
 import 'package:conclave_host/local_worker_permissions.dart';
 import 'package:conclave_host/local_worker_setup.dart';
 import 'package:conclave_host/platform_runtime.dart';
@@ -41,13 +41,13 @@ class _TestPlatformRuntime implements PlatformRuntime {
 
 void main() {
   late Directory directory;
-  late LocalConfiguredWorkerRegistry registry;
+  late LocalWorkerRegistry registry;
   var workerSequence = 0;
 
   setUp(() async {
     workerSequence = 0;
     directory = await Directory.systemTemp.createTemp('conclave-worker-setup-');
-    registry = LocalConfiguredWorkerRegistry(
+    registry = LocalWorkerRegistry(
       dataDirectory: directory,
       workspaceId: 'workspace-1',
       platform: _TestPlatformRuntime(),

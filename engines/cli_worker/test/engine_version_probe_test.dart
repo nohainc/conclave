@@ -40,7 +40,7 @@ void main() {
           <String>[];
       (provider['versionProbe']! as Map<String, Object?>)['arguments'] = [
         'run',
-        'workers/fixture_cli/tool/fixture_provider.dart',
+        'packages/tool-profile/test/fixtures/provider-cli/fixture_provider.dart',
         '--version',
       ];
       final passive =

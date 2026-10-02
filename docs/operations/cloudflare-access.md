@@ -2,7 +2,7 @@
 
 Cloudflare Access is optional infrastructure protection for staging,
 administrative, debug, and other internal environments. It is not the human
-authentication boundary for production Studio. Production users sign in through
+authentication boundary for production AX. Production users sign in through
 Better Auth at `/api/auth/*`, and Conclave resolves that session to its own
 Workspace and authorization model.
 
@@ -12,7 +12,7 @@ Workspace and authorization model.
 2. In Zero Trust, create an Access application for that internal hostname.
 3. Protect only the intended staging, admin, debug, or internal routes and
    keep the policy scoped to the appropriate operators.
-4. Keep production Studio public and verify that disabling this Access
+4. Keep production AX public and verify that disabling this Access
    application does not affect Better Auth login or Conclave authorization.
 
 ## Machine-to-machine API calls
@@ -27,7 +27,7 @@ production application-auth path.
 Local manual development can use the explicit `/api/dev/sign-in` helper. It is
 available only when `CONCLAVE_ENVIRONMENT=development` and redirects into the
 normal Better Auth GitHub or Google flow; it does not synthesize a user or
-session. Automated tests inject a test authentication adapter instead.
+session. Automated tests inject a test authentication function instead.
 
 For an authenticated local Access simulation, Wrangler supports an `access.dev`
 configuration with a test identity. Keep that configuration local and do not

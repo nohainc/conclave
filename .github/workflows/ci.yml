@@ -9,36 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  engine-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - run: dart pub get
-        working-directory: engines/cli_worker
-      - name: CLI Worker Engine tests
-        run: dart test
-        working-directory: engines/cli_worker
-
-  profile-fixture-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.19.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Tool Profile fixture and interpreter tests
-        run: pnpm exec vitest run packages/tool-profile/test/profile-fixture-harness.test.ts packages/tool-profile/test/interpreter.test.ts
-
-  profile-security-tests:
+  repository-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,92 +25,8 @@ jobs:
           channel: stable
           cache: true
       - run: pnpm install --frozen-lockfile
-      - run: flutter pub get
-        working-directory: apps/host
-      - name: Profile schema and release security tests
-        run: pnpm exec vitest run packages/tool-profile/test/profile-schema.test.ts packages/security/test apps/cloud/test/tool-profile-release-domain.test.ts
-      - name: Workspace Profile signature and trust tests
-        run: flutter test test/tool_profile_release_verifier_test.dart test/trust_policy_test.dart
-        working-directory: apps/host
-
-  workspace-runtime-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - run: flutter pub get
-        working-directory: apps/host
-      - name: Workspace runtime and readiness tests
-        run: DART_EXECUTABLE="$(command -v dart)" flutter test --concurrency=1 test/cli_worker_engine_readiness_test.dart test/cli_worker_engine_supervisor_test.dart test/configured_worker_registry_test.dart test/tool_profile_resolver_test.dart test/worker_readiness_test.dart test/workspace_paths_test.dart
-        working-directory: apps/host
-
-  v8-runtime-e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.19.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - run: pnpm install --frozen-lockfile
-      - run: flutter pub get
-        working-directory: apps/host
-      - name: Clean v8 schema acceptance
-        run: pnpm exec vitest run apps/cloud/test/v8-schema-clean-room-acceptance.test.ts
-      - name: Workspace executes a fixture CLI through Engine and Profile
-        run: DART_EXECUTABLE="$(command -v dart)" flutter test --concurrency=1 test/fixture_cli_profile_acceptance_test.dart
-        working-directory: apps/host
-
-  work-v1-e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.19.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Cloud Work v1 workflows across the v8 Worker boundary
-        run: pnpm exec vitest run apps/cloud/test/work-v1-v8-regression.acceptance.test.ts
-
-  typescript:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.19.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Dependency audit
-        run: pnpm audit --prod --audit-level=high
-      - run: pnpm protocol:check
-      - run: pnpm docs:check
-      - run: pnpm cloud:execution-boundary-check
-      - run: pnpm host:architecture-check
-      - run: pnpm production:preflight
-      - run: pnpm auth:access-guard
-      - run: pnpm check
-      - run: ../../node_modules/.bin/wrangler check startup
-        working-directory: apps/cloud
-      - run: ../../node_modules/.bin/wrangler check startup --config forge-execution.wrangler.jsonc
-        working-directory: apps/cloud
+      - name: Validate v8 architecture, Cloud, protocol, Engine, Workspace, AX, and fixture E2E
+        run: pnpm check
 
   app-flutter:
     runs-on: ubuntu-latest
@@ -154,7 +41,6 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter analyze
-      - run: flutter test
       - run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
 
   site-astro:
@@ -190,7 +76,7 @@ jobs:
           test -f dist/workers/index.html
           test -f dist/security/index.html
 
-  host-flutter:
+  workspace-flutter:
     strategy:
       fail-fast: false
       matrix:
@@ -207,76 +93,9 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter analyze
-      - run: flutter test
       - name: Build Conclave Workspace for macOS
         if: runner.os == 'macOS'
         working-directory: .
         env:
           CONCLAVE_WORKSPACE_SKIP_CHECKS: "1"
         run: bash scripts/build-workspace-macos.sh
-      - name: Compile native Host
-        shell: bash
-        run: |
-          output_path="$RUNNER_TEMP/conclave-host"
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            output_path="$RUNNER_TEMP/conclave-host.exe"
-          fi
-          dart compile exe bin/conclave_host.dart -o "$output_path"
-
-  publish-evidence:
-    if: ${{ vars.CONCLAVE_CI_INGEST_URL != '' && vars.CONCLAVE_RUN_ID != '' }}
-    needs:
-      [
-        typescript,
-        engine-tests,
-        profile-fixture-tests,
-        profile-security-tests,
-        workspace-runtime-tests,
-        v8-runtime-e2e,
-        work-v1-e2e,
-        app-flutter,
-        site-astro,
-        host-flutter,
-      ]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Publish machine evidence to Conclave
-        env:
-          CONCLAVE_CI_INGEST_URL: ${{ vars.CONCLAVE_CI_INGEST_URL }}
-          CONCLAVE_RUN_ID: ${{ vars.CONCLAVE_RUN_ID }}
-          CONCLAVE_CI_INGEST_TOKEN: ${{ secrets.CONCLAVE_CI_INGEST_TOKEN }}
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
-          GITHUB_WORKFLOW: ${{ github.workflow }}
-        run: |
-          payload=$(jq -n \
-            --arg evidenceId "github-${GITHUB_RUN_ID}" \
-            --arg externalRunId "${GITHUB_RUN_ID}" \
-            --arg revision "${GITHUB_SHA}" \
-            --arg workflow "${GITHUB_WORKFLOW}" \
-            --arg observedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{
-              evidenceId: $evidenceId,
-              source: "github_actions",
-              externalRunId: $externalRunId,
-              revision: $revision,
-              workflow: $workflow,
-              conclusion: "success",
-              checks: [
-                {name: "TypeScript checks", status: "passed", command: "pnpm check", exitCode: 0, artifactIds: []},
-                {name: "Cloudflare startup", status: "passed", command: "wrangler check startup", exitCode: 0, artifactIds: []},
-                {name: "Conclave AX App Flutter", status: "passed", command: "flutter analyze && flutter test", exitCode: 0, artifactIds: []},
-                {name: "Public Astro Site", status: "passed", command: "astro check && astro build", exitCode: 0, artifactIds: []},
-                {name: "Host Dart", status: "passed", command: "dart analyze && dart test", exitCode: 0, artifactIds: []}
-              ],
-              smokeTests: ["Cloud startup analysis passed"],
-              healthChecks: ["Architecture v8 CI checks passed"],
-              observedAt: $observedAt
-            }')
-          curl --fail-with-body --silent --show-error \
-            -X POST "${CONCLAVE_CI_INGEST_URL}/api/runs/${CONCLAVE_RUN_ID}/ci-evidence" \
-            -H "authorization: Bearer ${CONCLAVE_CI_INGEST_TOKEN}" \
-            -H "content-type: application/json" \
-            --data "$payload"

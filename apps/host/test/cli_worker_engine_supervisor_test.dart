@@ -106,6 +106,7 @@ Future<_Setup> _setup() async {
     workstream: workstream,
     supervisor: CliWorkerEngineSupervisor(
       engineExecutable: Platform.environment['DART_EXECUTABLE'] ??
+          Platform.environment['DART_EXECUTABLE'] ??
           Platform.resolvedExecutable,
       engineArgumentsPrefix: [script.path],
     ),

@@ -453,7 +453,7 @@ void main() {
       // Configure a local worker
       final localWsStore = LocalWorkspaceIdentityStore(tempDir);
       final localWsId = await localWsStore.getOrCreate();
-      final workerRegistry = LocalConfiguredWorkerRegistry(
+      final workerRegistry = LocalWorkerRegistry(
         dataDirectory: tempDir,
         workspaceId: localWsId,
         platform: _TestPlatformRuntime(),
@@ -611,7 +611,7 @@ void main() {
       final localWsStore = LocalWorkspaceIdentityStore(tempDir);
       final localWsId = await localWsStore.getOrCreate();
 
-      final registry = LocalConfiguredWorkerRegistry(
+      final registry = LocalWorkerRegistry(
         dataDirectory: tempDir,
         workspaceId: localWsId,
         platform: _TestPlatformRuntime(),

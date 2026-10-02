@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_host/cli_worker_engine_supervisor.dart';
-import 'package:conclave_host/configured_worker_registry.dart';
+import 'package:conclave_host/local_worker_registry.dart';
 import 'package:conclave_host/tool_profile_catalog.dart';
 import 'package:conclave_host/tool_profile_release_store.dart';
 import 'package:conclave_host/worker_readiness.dart';
@@ -31,7 +31,7 @@ void main() {
       ).readAsString(),
     ) as Map<String, Object?>;
     final providerScript =
-        '$repository/workers/fixture_cli/tool/fixture_provider.dart';
+        '$repository/packages/tool-profile/test/fixtures/provider-cli/fixture_provider.dart';
     final provider = profile['providerTool']! as Map<String, Object?>;
     provider['executableCandidates'] = ['dart'];
     (provider['discovery']! as Map<String, Object?>)['standardLocations'] =
@@ -93,7 +93,7 @@ void main() {
     );
     await profileStore.activateVersion('chatgpt-codex', 2);
 
-    final registry = LocalConfiguredWorkerRegistry(
+    final registry = LocalWorkerRegistry(
       dataDirectory: Directory('${root.path}/Registry'),
       workspaceId: 'workspace-profile-live',
       idGenerator: () => 'disabled-chatgpt',
@@ -118,7 +118,8 @@ void main() {
     final engine = CliWorkerEngineSupervisor(
       engineExecutable: bundledEngine.existsSync()
           ? bundledEngine.path
-          : Platform.resolvedExecutable,
+          : Platform.environment['DART_EXECUTABLE'] ??
+              Platform.resolvedExecutable,
       engineArgumentsPrefix: bundledEngine.existsSync()
           ? const []
           : ['$repository/engines/cli_worker/bin/conclave_cli_worker.dart'],
@@ -263,7 +264,7 @@ Future<void> main(List<String> arguments) async {
     await profileStore.activateVersion('gemini-antigravity', 1,
         selectAsStable: true);
 
-    final registry = LocalConfiguredWorkerRegistry(
+    final registry = LocalWorkerRegistry(
       dataDirectory: Directory('${root.path}/Registry'),
       workspaceId: 'workspace-gemini-profile-live',
       idGenerator: () => 'disabled-gemini',
@@ -288,7 +289,8 @@ Future<void> main(List<String> arguments) async {
     final engine = CliWorkerEngineSupervisor(
       engineExecutable: bundledEngine.existsSync()
           ? bundledEngine.path
-          : Platform.resolvedExecutable,
+          : Platform.environment['DART_EXECUTABLE'] ??
+              Platform.resolvedExecutable,
       engineArgumentsPrefix: bundledEngine.existsSync()
           ? const []
           : ['$repository/engines/cli_worker/bin/conclave_cli_worker.dart'],

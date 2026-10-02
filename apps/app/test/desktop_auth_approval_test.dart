@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:conclave_app/src/platform/platform_services.dart';
-import 'package:conclave_app/src/studio/studio_app.dart';
-import 'package:conclave_app/src/studio/studio_models.dart';
+import 'package:conclave_app/src/ax/ax_app.dart';
+import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'studio_fixture_data.dart';
+import 'ax_fixture_data.dart';
 
-class _SignedInDesktopAuthFixture extends StudioFixtureDataSource {
+class _SignedInDesktopAuthFixture extends AxFixtureDataSource {
   const _SignedInDesktopAuthFixture();
 
   @override
-  Future<StudioSession> loadSession() async => const StudioSession(
+  Future<AxSession> loadSession() async => const AxSession(
         authenticated: true,
-        viewer: StudioViewer(
+        viewer: AxViewer(
           id: 'user-1',
           displayName: 'Ada Lovelace',
           email: 'ada@example.test',

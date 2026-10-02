@@ -1,7 +1,5 @@
 // GENERATED FILE. Do not edit by hand.
 
-const protocolName = 'conclave.protocol';
-const protocolVersion = '0.1';
 const executionErrorCodes = <String>{
   'worker_not_ready',
   'cli_not_found',
@@ -13,61 +11,23 @@ const executionErrorCodes = <String>{
   'provider_unavailable',
   'timeout',
   'cancelled',
-  'internal_adapter_error',
   'execution_failed',
 };
 const executionErrorMessages = <String, String>{
   'worker_not_ready': 'The selected Worker is not ready on its Workspace.',
   'cli_not_found': 'The required local CLI could not be found.',
-  'authentication_required': 'Sign in to the configured provider on this computer.',
-  'unsupported_cli_version': 'The installed local CLI version is not supported.',
+  'authentication_required':
+      'Sign in to the configured provider on this computer.',
+  'unsupported_cli_version':
+      'The installed local CLI version is not supported.',
   'model_not_supported': 'The selected model is not supported by this Worker.',
-  'permission_denied': 'A local permission required for this assignment was denied.',
+  'permission_denied':
+      'A local permission required for this assignment was denied.',
   'quota_exhausted': 'The provider\'s usage limit has been reached.',
   'provider_unavailable': 'The provider is temporarily unavailable.',
   'timeout': 'The assignment exceeded its time limit.',
   'cancelled': 'The assignment was cancelled.',
-  'internal_adapter_error': 'The local Worker integration needs attention.',
   'execution_failed': 'The assignment could not be completed.',
-};
-const requiredEnvelopeFields = <String>[
-  'protocol',
-  'version',
-  'messageId',
-  'goalId',
-  'runId',
-  'workerId',
-  'createdAt',
-  'messageType',
-  'payload',
-];
-const protocolMessageTypes = <String>{
-  'PlanRequest',
-  'PlanResult',
-  'TaskRequest',
-  'TaskResult',
-  'ResearchResult',
-  'ImplementationResult',
-  'ReviewResult',
-  'TestResult',
-  'VerificationResult',
-  'DecisionResult',
-  'CompletionResult',
-  'RuntimeOperationRequest',
-};
-const protocolMessagePayloadSchemas = <String, String>{
-    'PlanRequest': '#/\$defs/planRequestPayload',
-  'PlanResult': '#/\$defs/planResultPayload',
-  'TaskRequest': '#/\$defs/taskRequestPayload',
-  'TaskResult': '#/\$defs/taskResultPayload',
-  'ResearchResult': '#/\$defs/researchResultPayload',
-  'ImplementationResult': '#/\$defs/implementationResultPayload',
-  'ReviewResult': '#/\$defs/reviewResultPayload',
-  'TestResult': '#/\$defs/testResultPayload',
-  'VerificationResult': '#/\$defs/verificationResultPayload',
-  'DecisionResult': '#/\$defs/decisionResultPayload',
-  'CompletionResult': '#/\$defs/completionResultPayload',
-  'RuntimeOperationRequest': '#/\$defs/runtimeOperationPayload',
 };
 
 const hostProtocolName = 'conclave.host-protocol';
@@ -122,15 +82,14 @@ const realtimeEventEnvelopeFields = <String>[
 ];
 const realtimeEventOptionalEnvelopeFields = <String>[
   'projectId',
-  'chatId',
   'runId',
   'taskId',
-  'attemptId',
   'assignmentId',
+  'workstreamId',
+  'attemptId',
   'hostId',
 ];
 const durableRealtimeEventTypes = <String>{
-  'chat.message.created',
   'work_request.created',
   'work_request.started',
   'work_request.completed',
@@ -146,31 +105,15 @@ const durableRealtimeEventTypes = <String>{
   'run.resumed',
   'run.completed',
   'run.failed',
-  'task.started',
-  'task.completed',
-  'task.failed',
-  'attempt.started',
-  'attempt.completed',
-  'attempt.failed',
   'assignment.accepted',
   'assignment.completed',
   'assignment.failed',
   'assignment.cancelled',
   'artifact.created',
-  'finding.created',
-  'finding.resolved',
-  'verification.completed',
-  'host.enrolled',
-  'host.revoked',
-  'account.sharing.changed',
 };
 const ephemeralRealtimeEventTypes = <String>{
   'assignment.progress',
-  'worker.status',
   'stream.delta',
   'tool.invocation.status',
-  'typing',
   'heartbeat',
-  'host.load',
 };
-const realtimeEventPayloadSchema = '#/\$defs/realtimeEventPayload';

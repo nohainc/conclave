@@ -2,11 +2,7 @@ import {
   canonicalReleaseJson,
   verifyEd25519ReleaseSignature,
 } from "../release-trust.js";
-import {
-  extractBearerToken,
-  hashToken,
-  computePackageDigest,
-} from "@conclave/security";
+import { computePackageDigest } from "@conclave/security";
 import { compareSemver } from "@conclave/tool-profile";
 import {
   HttpError,
@@ -19,7 +15,7 @@ import {
 import type { SecurityEnv } from "./handlers.js";
 
 // =========================================================================
-// Agent Releases API Handlers (Architecture v2 Self-Update)
+// Workspace Release API Handlers
 // =========================================================================
 
 export async function handleGetLatestWorkspaceRelease(
@@ -97,7 +93,7 @@ export async function handleGetLatestWorkspaceRelease(
       packageR2Key: latest.packageR2Key,
       signingKeyId: latest.signingKeyId,
       // Workspace releases use the Cloud-managed signing identity. Keep the
-      // publisher explicit so Agents can apply their trust policy rather than
+      // publisher explicit so Workspace can apply its trust policy rather than
       // treating a missing publisher as an unsigned release.
       publisher: "conclave",
       signature: latest.signature,
@@ -170,36 +166,13 @@ export async function handleDownloadWorkspaceRelease(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   if (!testAuthenticationEnabled(env)) {
-    const token = extractBearerToken(request.headers);
-    if (token) {
-      const tokenHash = await hashToken(token);
-      const agent = await env.CONCLAVE_DB.prepare(
-        `SELECT id FROM hosts
-         WHERE auth_token_hash = ?1 AND revoked_at IS NULL
-         LIMIT 1`,
-      )
-        .bind(tokenHash)
-        .first<{ id: string }>();
-      if (!agent) {
-        // Release publishers may use a normal authenticated owner token for
-        // readback. Require an authorized Profile release administrator.
-        await authorizeRequest(
-          request,
-          env,
-          "profiles:release:manage",
-          undefined,
-          ctx,
-        );
-      }
-    } else {
-      await authorizeRequest(
-        request,
-        env,
-        "profiles:release:manage",
-        undefined,
-        ctx,
-      );
-    }
+    await authorizeRequest(
+      request,
+      env,
+      "profiles:release:manage",
+      undefined,
+      ctx,
+    );
   }
   const row = await env.CONCLAVE_DB.prepare(
     `SELECT package_r2_key, package_digest, is_revoked, revocation_reason,
@@ -253,7 +226,7 @@ export async function handleDownloadWorkspaceRelease(
   const object = await bucket.get(row.package_r2_key);
   if (!object) {
     return json(
-      { error: "Agent package file not found in storage" },
+      { error: "Workspace package file not found in storage" },
       { status: 404 },
     );
   }
@@ -264,7 +237,7 @@ export async function handleDownloadWorkspaceRelease(
   headers.set("ETag", object.httpEtag);
   headers.set(
     "Content-Disposition",
-    `attachment; filename="conclave-agent-${version}.tar.gz"`,
+    `attachment; filename="conclave-workspace-${version}.tar.gz"`,
   );
 
   return new Response(object.body, { headers });
@@ -458,7 +431,7 @@ export async function handlePublishWorkspaceRelease(
     return json({ error: "Storage bucket not configured" }, { status: 500 });
   }
 
-  const r2Key = `agent/releases/${version}/agent-${version}.tar.gz`;
+  const r2Key = `workspace/releases/${version}/workspace-${version}.tar.gz`;
   await bucket.put(r2Key, packageData, {
     httpMetadata: {
       contentType: "application/octet-stream",

@@ -8,34 +8,23 @@ const schema = JSON.parse(
 );
 const host = schema["x-host-protocol"];
 const realtime = schema["x-realtime-events"];
-const messageTypes = schema["x-message-types"];
-const payloads = schema["x-message-payloads"];
 const errorCodes = schema["x-execution-error-codes"];
 const errorMessages = schema["x-execution-error-messages"];
 
 if (
   !host ||
   !realtime ||
-  !Array.isArray(messageTypes) ||
   !Array.isArray(errorCodes) ||
-  !payloads ||
   !errorMessages ||
-  Object.hasOwn(schema, "x-agent-protocol") ||
-  Object.hasOwn(schema, "x-local-protocols") ||
-  Object.hasOwn(schema, "x-worker-protocol")
+  errorCodes.some((code) => !Object.hasOwn(errorMessages, code))
 ) {
-  throw new Error(
-    "current protocol schema metadata is incomplete or contains retired protocols",
-  );
+  throw new Error("current protocol schema metadata is incomplete");
 }
 
 const jsonItems = (items) =>
   items.map((item) => `  ${JSON.stringify(item)},`).join("\n");
 const dartItems = (items) =>
   items.map((item) => `  '${String(item).replaceAll("'", "\\'")}',`).join("\n");
-const tsMessages = messageTypes
-  .map((type) => `  ${type}: ${JSON.stringify(payloads[type])},`)
-  .join("\n");
 const tsErrors = errorCodes
   .map(
     (code) =>
@@ -45,63 +34,45 @@ const tsErrors = errorCodes
 
 const protocolTs = `// GENERATED FILE. Do not edit by hand.
 
-export const PROTOCOL_NAME = ${JSON.stringify(schema.properties.protocol.const)} as const;
-export const PROTOCOL_VERSION = ${JSON.stringify(schema["x-protocol-version"])} as const;
 export const EXECUTION_ERROR_CODES = [
 ${jsonItems(errorCodes)}
 ] as const;
 export const EXECUTION_ERROR_MESSAGES = {
 ${tsErrors}
 } as const;
-export const REQUIRED_ENVELOPE_FIELDS = [
-${jsonItems(schema.required)}
-] as const;
-export const PROTOCOL_MESSAGE_TYPES = [
-${jsonItems(messageTypes)}
-] as const;
-export const PROTOCOL_MESSAGE_PAYLOAD_SCHEMAS = {
-${tsMessages}
-} as const;
 
-${hostTsConstants(host)}
 ${realtimeTsConstants(realtime)}
 `;
 
 const hostTs = `// GENERATED FILE. Do not edit by hand.
 
 ${hostTsConstants(host)}
-${realtimeTsConstants(realtime)}
 `;
 
 const dartProtocol = `// GENERATED FILE. Do not edit by hand.
 
-const protocolName = '${schema.properties.protocol.const}';
-const protocolVersion = '${schema["x-protocol-version"]}';
 const executionErrorCodes = <String>{
 ${dartItems(errorCodes)}
 };
 const executionErrorMessages = <String, String>{
 ${errorCodes.map((code) => `  '${code}': '${String(errorMessages[code]).replaceAll("'", "\\'")}',`).join("\n")}
 };
-const requiredEnvelopeFields = <String>[
-${dartItems(schema.required)}
-];
-const protocolMessageTypes = <String>{
-${dartItems(messageTypes)}
-};
-const protocolMessagePayloadSchemas = <String, String>{
-  ${messageTypes.map((type) => `  '${type}': '${payloads[type].replaceAll("$", "\\$")}',`).join("\n")}
-};
 
 ${hostDartConstants(host)}
 ${realtimeDartConstants(realtime)}
 `;
 
-await writeFile("packages/protocol/src/generated.ts", protocolTs);
-await writeFile("packages/host-protocol/src/generated.ts", hostTs);
+await writeFile(
+  "packages/protocol/src/generated.ts",
+  `${protocolTs.trimEnd()}\n`,
+);
+await writeFile(
+  "packages/host-protocol/src/generated.ts",
+  `${hostTs.trimEnd()}\n`,
+);
 await writeFile(
   "packages/dart/protocol/lib/generated_protocol.dart",
-  dartProtocol,
+  `${dartProtocol.trimEnd()}\n`,
 );
 
 function hostTsConstants(value) {
@@ -134,7 +105,7 @@ ${jsonItems(value.durableTypes)}
 export const EPHEMERAL_REALTIME_EVENT_TYPES = [
 ${jsonItems(value.ephemeralTypes)}
 ] as const;
-export const REALTIME_EVENT_PAYLOAD_SCHEMA = ${JSON.stringify(value.payloadSchema)} as const;`;
+`;
 }
 
 function hostDartConstants(value) {
@@ -167,5 +138,5 @@ ${dartItems(value.durableTypes)}
 const ephemeralRealtimeEventTypes = <String>{
 ${dartItems(value.ephemeralTypes)}
 };
-const realtimeEventPayloadSchema = '${value.payloadSchema.replaceAll("$", "\\$")}';`;
+`;
 }

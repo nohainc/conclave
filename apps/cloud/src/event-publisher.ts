@@ -16,7 +16,6 @@ export interface DomainEventInput {
   readonly type: string;
   readonly workspaceId: string;
   readonly projectId?: string;
-  readonly chatId?: string;
   readonly runId?: string;
   readonly taskId?: string;
   readonly attemptId?: string;
@@ -49,7 +48,6 @@ function eventFromRow(row: Record<string, unknown>): RealtimeEventEnvelope {
     timestamp: String(row.occurred_at),
     workspaceId: String(row.workspace_id),
     ...(row.project_id ? { projectId: String(row.project_id) } : {}),
-    ...(row.chat_id ? { chatId: String(row.chat_id) } : {}),
     ...(row.run_id ? { runId: String(row.run_id) } : {}),
     ...(row.task_id ? { taskId: String(row.task_id) } : {}),
     ...(row.attempt_id ? { attemptId: String(row.attempt_id) } : {}),
@@ -98,7 +96,6 @@ export class CloudEventPublisher implements EventPublisher {
         timestamp: occurredAt,
         workspaceId: input.workspaceId,
         ...(input.projectId ? { projectId: input.projectId } : {}),
-        ...(input.chatId ? { chatId: input.chatId } : {}),
         ...(input.runId ? { runId: input.runId } : {}),
         ...(input.taskId ? { taskId: input.taskId } : {}),
         ...(input.attemptId ? { attemptId: input.attemptId } : {}),
@@ -137,7 +134,6 @@ export class CloudEventPublisher implements EventPublisher {
       timestamp: input.occurredAt,
       workspaceId: input.workspaceId,
       ...(input.projectId ? { projectId: input.projectId } : {}),
-      ...(input.chatId ? { chatId: input.chatId } : {}),
       ...(input.runId ? { runId: input.runId } : {}),
       ...(input.taskId ? { taskId: input.taskId } : {}),
       ...(input.attemptId ? { attemptId: input.attemptId } : {}),
@@ -150,16 +146,15 @@ export class CloudEventPublisher implements EventPublisher {
     try {
       await this.env.CONCLAVE_DB.prepare(
         `INSERT INTO realtime_events
-         (event_id, workspace_id, project_id, chat_id, run_id, task_id,
+         (event_id, workspace_id, project_id, run_id, task_id,
           attempt_id, assignment_id, host_id, sequence, event_type,
           payload_json, idempotency_key, occurred_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`,
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
       )
         .bind(
           event.eventId,
           event.workspaceId,
           event.projectId ?? null,
-          event.chatId ?? null,
           event.runId ?? null,
           event.taskId ?? null,
           event.attemptId ?? null,
@@ -189,7 +184,7 @@ export class CloudEventPublisher implements EventPublisher {
   private async fanout(event: RealtimeEventEnvelope): Promise<number> {
     const gateway = this.env.CONCLAVE_REALTIME_GATEWAY;
     if (!gateway) return 0;
-    let members = event.projectId
+    const members = event.projectId
       ? await this.env.CONCLAVE_DB.prepare(
           `SELECT user_id FROM project_memberships
            WHERE project_id = ?1`,

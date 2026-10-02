@@ -59,8 +59,14 @@ export interface ToolProfileAcceptanceEvidence {
 
 const channelNames = new Set<ToolProfileChannel>(["testing", "beta", "stable"]);
 const productCapabilities = new Set([
-  "text", "local_file", "workstream_read", "workstream_write",
-  "durable_session", "image", "audio", "video",
+  "text",
+  "local_file",
+  "workstream_read",
+  "workstream_write",
+  "durable_session",
+  "image",
+  "audio",
+  "video",
 ]);
 const requiredAcceptanceScenarios = [
   "passive_probe",
@@ -248,19 +254,19 @@ function parseProfile(
 }
 
 function rejectPlaintextCredentialMaterial(profile: ToolProfileV1): void {
-  const reservedHostName =
+  const reservedEnvironmentName =
     /^(?:CONCLAVE_|CLOUD_|WORKER_|WORKSPACE_|SECRET_STORE_)/i;
   if (
     profile.environment.passthrough.some((name) =>
-      reservedHostName.test(name),
+      reservedEnvironmentName.test(name),
     ) ||
     Object.keys(profile.environment.set).some((name) =>
-      reservedHostName.test(name),
+      reservedEnvironmentName.test(name),
     )
   ) {
     throw new ToolProfileRegistryError(
       400,
-      "Tool Profile releases cannot request reserved host environment names",
+      "Tool Profile releases cannot request reserved environment variable names",
     );
   }
   const secretName =
@@ -420,34 +426,69 @@ export async function createApprovedLogicalWorker(
 ): Promise<void> {
   validateId(input.workerTypeId, "workerTypeId");
   validateId(input.profileDefinitionId, "profileDefinitionId");
-  if (input.displayName.trim().length < 1 || input.displayName.length > 120 ||
-      input.description.length > 500 || input.providerToolName.trim().length < 1 ||
-      input.providerToolName.length > 64 || !channelNames.has(input.releaseStage) ||
-      !Number.isInteger(input.sortOrder) || input.sortOrder < 0 || input.sortOrder > 10_000 ||
-      input.capabilities.length > 32 || input.capabilities.length === 0 ||
-      input.capabilities.some((capability) => !productCapabilities.has(capability)) ||
-      new Set(input.capabilities).size !== input.capabilities.length) {
-    throw new ToolProfileRegistryError(400, "Logical Worker catalog fields are invalid");
+  if (
+    input.displayName.trim().length < 1 ||
+    input.displayName.length > 120 ||
+    input.description.length > 500 ||
+    input.providerToolName.trim().length < 1 ||
+    input.providerToolName.length > 64 ||
+    !channelNames.has(input.releaseStage) ||
+    !Number.isInteger(input.sortOrder) ||
+    input.sortOrder < 0 ||
+    input.sortOrder > 10_000 ||
+    input.capabilities.length > 32 ||
+    input.capabilities.length === 0 ||
+    input.capabilities.some(
+      (capability) => !productCapabilities.has(capability),
+    ) ||
+    new Set(input.capabilities).size !== input.capabilities.length
+  ) {
+    throw new ToolProfileRegistryError(
+      400,
+      "Logical Worker catalog fields are invalid",
+    );
   }
   const now = new Date().toISOString();
   try {
     await db.batch([
-      db.prepare(`INSERT INTO worker_catalog (
+      db
+        .prepare(
+          `INSERT INTO worker_catalog (
         worker_type_id, display_name, description, lifecycle_state,
         engine_family, visibility_state, release_stage, capabilities_json,
         sort_order, created_at, updated_at
-      ) VALUES (?1, ?2, ?3, 'active', 'cli', 'visible', ?4, ?5, ?6, ?7, ?7)`)
-        .bind(input.workerTypeId, input.displayName.trim(), input.description,
-          input.releaseStage, JSON.stringify(input.capabilities), input.sortOrder, now),
-      db.prepare(`INSERT INTO tool_profile_definitions (
+      ) VALUES (?1, ?2, ?3, 'active', 'cli', 'visible', ?4, ?5, ?6, ?7, ?7)`,
+        )
+        .bind(
+          input.workerTypeId,
+          input.displayName.trim(),
+          input.description,
+          input.releaseStage,
+          JSON.stringify(input.capabilities),
+          input.sortOrder,
+          now,
+        ),
+      db
+        .prepare(
+          `INSERT INTO tool_profile_definitions (
         profile_definition_id, worker_type_id, display_name, provider_tool_name,
         engine_family, schema_version, created_by_user_id, created_at, updated_at
-      ) VALUES (?1, ?2, ?3, ?4, 'cli', 1, ?5, ?6, ?6)`)
-        .bind(input.profileDefinitionId, input.workerTypeId, input.displayName.trim(),
-          input.providerToolName.trim(), input.actorUserId, now),
+      ) VALUES (?1, ?2, ?3, ?4, 'cli', 1, ?5, ?6, ?6)`,
+        )
+        .bind(
+          input.profileDefinitionId,
+          input.workerTypeId,
+          input.displayName.trim(),
+          input.providerToolName.trim(),
+          input.actorUserId,
+          now,
+        ),
     ]);
   } catch {
-    throw new ToolProfileRegistryError(409, "Logical Worker or Profile definition already exists");
+    throw new ToolProfileRegistryError(
+      409,
+      "Logical Worker or Profile definition already exists",
+    );
   }
 }
 
@@ -1031,14 +1072,21 @@ export async function resolveToolProfileChannels(
   db: D1Database,
   workerTypeId?: string,
   channel: ToolProfileChannel = "stable",
-): Promise<{ workers: Record<string, unknown>[]; profiles: Record<string, unknown>[] }> {
+): Promise<{
+  workers: Record<string, unknown>[];
+  profiles: Record<string, unknown>[];
+}> {
   if (workerTypeId !== undefined) validateId(workerTypeId, "workerTypeId");
   if (channel !== undefined && !channelNames.has(channel)) {
     throw new ToolProfileRegistryError(400, "channel is invalid");
   }
   if (workerTypeId === undefined) {
     return {
-      workers: await resolveLogicalWorkerCatalog(db, undefined, channel ?? "stable"),
+      workers: await resolveLogicalWorkerCatalog(
+        db,
+        undefined,
+        channel ?? "stable",
+      ),
       profiles: [],
     };
   }
@@ -1129,9 +1177,11 @@ export async function resolveLogicalWorkerCatalog(
   channel: ToolProfileChannel = "stable",
 ): Promise<Record<string, unknown>[]> {
   if (workerTypeId !== undefined) validateId(workerTypeId, "workerTypeId");
-  if (!channelNames.has(channel)) throw new ToolProfileRegistryError(400, "channel is invalid");
-  const rows = await db.prepare(
-    `SELECT worker.worker_type_id, worker.display_name, worker.description,
+  if (!channelNames.has(channel))
+    throw new ToolProfileRegistryError(400, "channel is invalid");
+  const rows = await db
+    .prepare(
+      `SELECT worker.worker_type_id, worker.display_name, worker.description,
             worker.engine_family, worker.visibility_state, worker.release_stage,
             worker.capabilities_json, worker.sort_order,
             definition.profile_definition_id, definition.provider_tool_name
@@ -1146,26 +1196,41 @@ export async function resolveLogicalWorkerCatalog(
              OR (?1 = 'stable' AND worker.release_stage = 'stable'))
       ORDER BY worker.sort_order, worker.worker_type_id, definition.profile_definition_id
       LIMIT 64`,
-  ).bind(channel, workerTypeId ?? null).all<{
-    worker_type_id: string;
-    display_name: string;
-    description: string;
-    engine_family: string;
-    visibility_state: string;
-    release_stage: string;
-    capabilities_json: string;
-    sort_order: number;
-    profile_definition_id: string;
-    provider_tool_name: string;
-  }>();
+    )
+    .bind(channel, workerTypeId ?? null)
+    .all<{
+      worker_type_id: string;
+      display_name: string;
+      description: string;
+      engine_family: string;
+      visibility_state: string;
+      release_stage: string;
+      capabilities_json: string;
+      sort_order: number;
+      profile_definition_id: string;
+      provider_tool_name: string;
+    }>();
   return (rows.results ?? []).map((row) => {
     let capabilities: unknown;
-    try { capabilities = JSON.parse(row.capabilities_json); } catch {
-      throw new ToolProfileRegistryError(500, "logical Worker metadata is invalid");
+    try {
+      capabilities = JSON.parse(row.capabilities_json);
+    } catch {
+      throw new ToolProfileRegistryError(
+        500,
+        "logical Worker metadata is invalid",
+      );
     }
-    if (!Array.isArray(capabilities) || capabilities.length > 32 ||
-        capabilities.some((value) => typeof value !== "string" || !productCapabilities.has(value))) {
-      throw new ToolProfileRegistryError(500, "logical Worker capabilities are invalid");
+    if (
+      !Array.isArray(capabilities) ||
+      capabilities.length > 32 ||
+      capabilities.some(
+        (value) => typeof value !== "string" || !productCapabilities.has(value),
+      )
+    ) {
+      throw new ToolProfileRegistryError(
+        500,
+        "logical Worker capabilities are invalid",
+      );
     }
     return {
       workerTypeId: row.worker_type_id,

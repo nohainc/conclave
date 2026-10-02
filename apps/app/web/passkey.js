@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  /* global atob, btoa, fetch, navigator, window */
+  /* global atob, btoa, navigator, window */
 
   function base64UrlToBytes(value) {
     const padded =

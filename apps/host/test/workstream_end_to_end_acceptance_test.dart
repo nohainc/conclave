@@ -58,7 +58,7 @@ Future<void> main(List<String> args) async {
     expect(firstDirectory.path, isNot(contains(firstWorkspaceId)));
 
     final firstWorker = await Process.run(
-      Platform.resolvedExecutable,
+      Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
       [workerScript.path, remote.path, 'first-worker'],
       workingDirectory: firstDirectory.path,
     );
@@ -90,7 +90,7 @@ Future<void> main(List<String> args) async {
     );
     expect(secondWorkerScope.workingDirectory.path, firstDirectory.path);
     final continuation = await Process.run(
-      Platform.resolvedExecutable,
+      Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
       [workerScript.path, remote.path, 'second-worker'],
       workingDirectory: secondWorkerScope.workingDirectory.path,
     );
@@ -122,7 +122,7 @@ Future<void> main(List<String> args) async {
     expect(secondWorkstreamScope.workingDirectory.path,
         isNot(firstDirectory.path));
     final parallel = await Process.run(
-      Platform.resolvedExecutable,
+      Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
       [workerScript.path, remote.path, 'parallel-worker'],
       workingDirectory: secondWorkstreamScope.workingDirectory.path,
     );
@@ -160,7 +160,7 @@ Future<void> main(List<String> args) async {
     );
     expect(reenrolledScope.workingDirectory.path, firstDirectory.path);
     final reentry = await Process.run(
-      Platform.resolvedExecutable,
+      Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
       [workerScript.path, remote.path, 'reenrolled-worker'],
       workingDirectory: reenrolledScope.workingDirectory.path,
     );

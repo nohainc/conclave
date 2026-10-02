@@ -8,7 +8,6 @@ import {
   requiredString,
   securityContext,
   securityEnv,
-  testAuthenticationEnabled,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
 
@@ -338,10 +337,7 @@ export async function handleDeleteProject(
        WHERE workstream_id IN (${workstreamFilter})`,
       `DELETE FROM workstream_diff_artifacts
        WHERE workstream_id IN (${workstreamFilter})`,
-      "DELETE FROM workstream_integrations WHERE project_id = ?1",
       `DELETE FROM workstream_checkpoints
-       WHERE workstream_id IN (${workstreamFilter})`,
-      `DELETE FROM workstream_execution_leases
        WHERE workstream_id IN (${workstreamFilter})`,
       "DELETE FROM worker_assignments WHERE project_id = ?1",
       "DELETE FROM runs WHERE project_id = ?1",
@@ -355,8 +351,6 @@ export async function handleDeleteProject(
        WHERE workstream_id IN (${workstreamFilter})`,
       `DELETE FROM discussion_messages
        WHERE workstream_id IN (${workstreamFilter})`,
-      "DELETE FROM workstream_audit_log WHERE project_id = ?1",
-      "DELETE FROM workstream_observability_metrics WHERE project_id = ?1",
       "DELETE FROM workstreams WHERE project_id = ?1",
       "DELETE FROM workspace_project_grants WHERE project_id = ?1",
       "DELETE FROM project_invitations WHERE project_id = ?1",

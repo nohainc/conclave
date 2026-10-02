@@ -18,7 +18,6 @@ export {
   type TaskToDispatch,
   type AssignmentDispatcherEnv,
 } from "./assignment-dispatcher.js";
-export { handleConnectorRequest } from "./interactive-connector.js";
 export {
   IdentityService,
   identityService,
@@ -77,8 +76,6 @@ export const routeHandlers = {
     handlers.handleRegisterWorkspaceFromDesktop,
   handleRotateDesktopHumanSession: handlers.handleRotateDesktopHumanSession,
   handleCompleteStepUp: handlers.handleCompleteStepUp,
-  handleConnectorRequest: handlers.handleConnectorRequest,
-  handleConnectorTaskRequest: handlers.handleConnectorTaskRequest,
   handleListWorkspaces: handlers.handleListWorkspaces,
   handleCreateWorkspace: handlers.handleCreateWorkspace,
   handleCreateWorkspacePairingIntent:
@@ -93,8 +90,6 @@ export const routeHandlers = {
   handleUploadArtifact: handlers.handleUploadArtifact,
   handleGetArtifact: handlers.handleGetArtifact,
   handleExportWorkspaceAudit: handlers.handleExportWorkspaceAudit,
-  handleCreateWorkspaceBackup: handlers.handleCreateWorkspaceBackup,
-  handleVerifyWorkspaceBackup: handlers.handleVerifyWorkspaceBackup,
   handleWorkspaceGatewayConnect: handlers.handleWorkspaceGatewayConnect,
   handleWorkspaceRuntimeTransport: handlers.handleWorkspaceRuntimeTransport,
   handleListWorkspaceEnrollments: handlers.handleListWorkspaceEnrollments,
@@ -160,19 +155,12 @@ export const routeHandlers = {
   handleRetryWorkRequest: handlers.handleRetryWorkRequest,
   handleValidateWorkRequest: handlers.handleValidateWorkRequest,
   handleCancelWorkRequest: handlers.handleCancelWorkRequest,
-  handleStudioSnapshot: handlers.handleStudioSnapshot,
-  handleProjectReadModel: handlers.handleProjectReadModel,
-  handleRunCommand: handlers.handleRunCommand,
 } as unknown as WorkerRouteHandlers;
 
 const routeDependencies = {
   json: handlers.json,
   requireSameOriginForCookieMutation:
     handlers.requireSameOriginForCookieMutation,
-  testAuthenticationEnabled: handlers.testAuthenticationEnabled,
-  runProjectId: handlers.runProjectId,
-  authorizeRequest: handlers.authorizeRequest,
-  resolveWorkflowInstanceId: handlers.resolveWorkflowInstanceId,
   errorMessage: handlers.errorMessage,
   HttpError: handlers.HttpError,
 } as unknown as WorkerRouteDependencies;

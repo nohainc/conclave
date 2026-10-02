@@ -53,22 +53,30 @@ class ToastOverlay extends StatelessWidget {
             switch (toast.type) {
               case ToastType.success:
                 accentColor = ConclaveBrand.success;
-                bgColor = isDark ? ConclaveBrand.successWashDark : ConclaveBrand.successWash;
+                bgColor = isDark
+                    ? ConclaveBrand.successWashDark
+                    : ConclaveBrand.successWash;
                 icon = Icons.check_circle_outline_rounded;
                 break;
               case ToastType.warning:
                 accentColor = ConclaveBrand.warning;
-                bgColor = isDark ? ConclaveBrand.warningWashDark : ConclaveBrand.warningWash;
+                bgColor = isDark
+                    ? ConclaveBrand.warningWashDark
+                    : ConclaveBrand.warningWash;
                 icon = Icons.warning_amber_rounded;
                 break;
               case ToastType.error:
                 accentColor = ConclaveBrand.error;
-                bgColor = isDark ? ConclaveBrand.errorWashDark : ConclaveBrand.errorWash;
+                bgColor = isDark
+                    ? ConclaveBrand.errorWashDark
+                    : ConclaveBrand.errorWash;
                 icon = Icons.error_outline_rounded;
                 break;
               case ToastType.info:
                 accentColor = ConclaveBrand.info;
-                bgColor = isDark ? ConclaveBrand.infoWashDark : ConclaveBrand.infoWash;
+                bgColor = isDark
+                    ? ConclaveBrand.infoWashDark
+                    : ConclaveBrand.infoWash;
                 icon = Icons.info_outline_rounded;
                 break;
             }
@@ -78,9 +86,12 @@ class ToastOverlay extends StatelessWidget {
               constraints: const BoxConstraints(maxWidth: 380),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
+                color: isDark
+                    ? ConclaveBrand.darkSurface
+                    : ConclaveBrand.lightSurface,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: accentColor.withValues(alpha: 0.4), width: 1.2),
+                border: Border.all(
+                    color: accentColor.withValues(alpha: 0.4), width: 1.2),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
@@ -107,7 +118,9 @@ class ToastOverlay extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
+                        color: isDark
+                            ? ConclaveBrand.darkInk
+                            : ConclaveBrand.lightInk,
                       ),
                     ),
                   ),
@@ -116,9 +129,11 @@ class ToastOverlay extends StatelessWidget {
                     icon: const Icon(Icons.copy_rounded, size: 15),
                     tooltip: 'Copy message',
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                    constraints:
+                        const BoxConstraints(minWidth: 24, minHeight: 24),
                     splashRadius: 14,
-                    color: isDark ? const Color(0xffb8a9fe) : ConclaveBrand.accent,
+                    color:
+                        isDark ? const Color(0xffb8a9fe) : ConclaveBrand.accent,
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: toast.message));
                     },
@@ -127,9 +142,12 @@ class ToastOverlay extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.close_rounded, size: 16),
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                    constraints:
+                        const BoxConstraints(minWidth: 24, minHeight: 24),
                     splashRadius: 14,
-                    color: isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted,
+                    color: isDark
+                        ? ConclaveBrand.darkInkMuted
+                        : ConclaveBrand.lightInkMuted,
                     onPressed: () => onDismiss(toast.id),
                   ),
                 ],

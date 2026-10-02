@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/features/projects/projects_pages.dart';
-import 'package:conclave_app/src/studio/studio_data.dart';
-import 'package:conclave_app/src/studio/studio_models.dart';
+import 'package:conclave_app/src/ax/ax_data.dart';
+import 'package:conclave_app/src/ax/ax_models.dart';
 
-import 'studio_fixture_data.dart';
+import 'ax_fixture_data.dart';
 
 void main() {
   testWidgets(
@@ -18,7 +18,7 @@ void main() {
       home: Scaffold(
         body: SingleChildScrollView(
           child: ProjectPage(
-            project: const StudioProject(
+            project: const AxProject(
               id: 'project-1',
               name: 'Project One',
               description: 'Shared space for Project One',
@@ -26,7 +26,7 @@ void main() {
               branch: 'main',
               lastActivity: 'today',
             ),
-            dataSource: const StudioFixtureDataSource(),
+            dataSource: const AxFixtureDataSource(),
             onOpenWorkstream: (_) {},
             onEdit: () {},
             onArchive: () {},
@@ -75,14 +75,14 @@ void main() {
 
   testWidgets('Project page updates description when switching projects',
       (tester) async {
-    const p1 = StudioProject(
+    const p1 = AxProject(
       id: 'project-1',
       name: 'Project One',
       description: 'First project description',
       branch: '',
       lastActivity: 'today',
     );
-    const p2 = StudioProject(
+    const p2 = AxProject(
       id: 'project-2',
       name: 'Project Two',
       description: 'Second project description',
@@ -95,7 +95,7 @@ void main() {
         body: SingleChildScrollView(
           child: ProjectPage(
             project: p1,
-            dataSource: const StudioFixtureDataSource(),
+            dataSource: const AxFixtureDataSource(),
             onOpenWorkstream: (_) {},
             onEdit: () {},
             onArchive: () {},
@@ -113,7 +113,7 @@ void main() {
         body: SingleChildScrollView(
           child: ProjectPage(
             project: p2,
-            dataSource: const StudioFixtureDataSource(),
+            dataSource: const AxFixtureDataSource(),
             onOpenWorkstream: (_) {},
             onEdit: () {},
             onArchive: () {},
@@ -134,14 +134,14 @@ void main() {
       home: Scaffold(
         body: SingleChildScrollView(
           child: WorkstreamPage(
-            project: StudioProject(
+            project: AxProject(
               id: 'project-1',
               name: 'Project One',
               branch: '',
               lastActivity: 'today',
               role: 'viewer',
             ),
-            workstream: StudioWorkstream(
+            workstream: AxWorkstream(
               id: 'workstream-1',
               projectId: 'project-1',
               name: 'Research',
@@ -186,14 +186,14 @@ void main() {
       home: Scaffold(
         body: SingleChildScrollView(
           child: WorkstreamPage(
-            project: const StudioProject(
+            project: const AxProject(
               id: 'project-1',
               name: 'Project One',
               branch: '',
               lastActivity: 'today',
               role: 'collaborator',
             ),
-            workstream: const StudioWorkstream(
+            workstream: const AxWorkstream(
               id: 'workstream-1',
               projectId: 'project-1',
               name: 'Implementation',
@@ -243,14 +243,14 @@ void main() {
       home: Scaffold(
         body: SingleChildScrollView(
           child: WorkstreamPage(
-            project: const StudioProject(
+            project: const AxProject(
               id: 'project-1',
               name: 'Project One',
               branch: '',
               lastActivity: 'today',
               role: 'collaborator',
             ),
-            workstream: const StudioWorkstream(
+            workstream: const AxWorkstream(
               id: 'workstream-1',
               projectId: 'project-1',
               name: 'Implementation',
@@ -296,14 +296,14 @@ void main() {
       home: Scaffold(
         body: SingleChildScrollView(
           child: WorkstreamPage(
-            project: StudioProject(
+            project: AxProject(
               id: 'project-1',
               name: 'Project One',
               branch: '',
               lastActivity: 'today',
               role: 'collaborator',
             ),
-            workstream: StudioWorkstream(
+            workstream: AxWorkstream(
               id: 'workstream-1',
               projectId: 'project-1',
               name: 'Research',
@@ -371,15 +371,15 @@ void main() {
       'WorkstreamPage loads and persists discussions via dataSource and updates when switching workstreams',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
-    const dataSource = StudioFixtureDataSource();
-    const project = StudioProject(
+    const dataSource = AxFixtureDataSource();
+    const project = AxProject(
       id: 'project-1',
       name: 'Project One',
       branch: '',
       lastActivity: 'today',
       role: 'collaborator',
     );
-    const ws1 = StudioWorkstream(
+    const ws1 = AxWorkstream(
       id: 'ws-1',
       projectId: 'project-1',
       name: 'Alpha Workstream',
@@ -390,7 +390,7 @@ void main() {
       currentCheckpoint: 'main',
       queueStatus: 'Idle',
     );
-    const ws2 = StudioWorkstream(
+    const ws2 = AxWorkstream(
       id: 'ws-2',
       projectId: 'project-1',
       name: 'Beta Workstream',
@@ -464,7 +464,7 @@ void main() {
       'Workstream rename keeps its position and Move Up/Down reorders correctly',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
-    const ws1 = StudioWorkstream(
+    const ws1 = AxWorkstream(
       id: 'ws-1',
       projectId: 'p-1',
       name: 'Alpha Workstream',
@@ -475,7 +475,7 @@ void main() {
       currentCheckpoint: 'main',
       queueStatus: 'Idle',
     );
-    const ws2 = StudioWorkstream(
+    const ws2 = AxWorkstream(
       id: 'ws-2',
       projectId: 'p-1',
       name: 'Beta Workstream',
@@ -486,7 +486,7 @@ void main() {
       currentCheckpoint: 'main',
       queueStatus: 'Idle',
     );
-    const ws3 = StudioWorkstream(
+    const ws3 = AxWorkstream(
       id: 'ws-3',
       projectId: 'p-1',
       name: 'Gamma Workstream',
@@ -498,7 +498,7 @@ void main() {
       queueStatus: 'Idle',
     );
 
-    const project = StudioProject(
+    const project = AxProject(
       id: 'p-1',
       name: 'Test Project',
       branch: 'main',
@@ -511,7 +511,7 @@ void main() {
         body: SingleChildScrollView(
           child: ProjectPage(
             project: project,
-            dataSource: const StudioFixtureDataSource(),
+            dataSource: const AxFixtureDataSource(),
             onOpenWorkstream: (_) {},
             onEdit: () {},
             onArchive: () {},
@@ -566,7 +566,7 @@ void main() {
       home: Scaffold(
         body: SingleChildScrollView(
           child: ProjectPage(
-            project: const StudioProject(
+            project: const AxProject(
               id: 'p-1',
               name: 'Test Project',
               branch: 'main',
@@ -589,11 +589,11 @@ void main() {
     await tester.pumpAndSettle();
 
     // Check workspace title displayed cleanly without icons or status chips
-    expect(find.text('Production Host'), findsOneWidget);
+    expect(find.text('Production Workspace'), findsOneWidget);
     expect(find.byIcon(Icons.computer_outlined), findsNothing);
 
     // Tap on workspace
-    await tester.tap(find.text('Production Host'));
+    await tester.tap(find.text('Production Workspace'));
     await tester.pumpAndSettle();
 
     expect(openedWorkspaceId, 'ws-prod');
@@ -604,13 +604,13 @@ void main() {
   testWidgets('Project instructions can be edited and saved without error',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
-    StudioProject? updatedProject;
+    AxProject? updatedProject;
 
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: SingleChildScrollView(
           child: ProjectPage(
-            project: const StudioProject(
+            project: const AxProject(
               id: 'p-1',
               name: 'Test Project',
               description: 'Initial description',
@@ -618,7 +618,7 @@ void main() {
               branch: 'main',
               lastActivity: 'today',
             ),
-            dataSource: const StudioFixtureDataSource(),
+            dataSource: const AxFixtureDataSource(),
             onOpenWorkstream: (_) {},
             onEdit: () {},
             onArchive: () {},
@@ -672,13 +672,13 @@ void main() {
       home: Scaffold(
         body: SingleChildScrollView(
           child: ProjectPage(
-            project: const StudioProject(
+            project: const AxProject(
               id: 'p-1',
               name: 'Test Project',
               branch: 'main',
               lastActivity: 'today',
               workstreams: [
-                StudioWorkstream(
+                AxWorkstream(
                   id: 'ws-1',
                   projectId: 'p-1',
                   name: 'Frontend Design',
@@ -741,7 +741,7 @@ void main() {
       home: Scaffold(
         body: SingleChildScrollView(
           child: ProjectPage(
-            project: const StudioProject(
+            project: const AxProject(
               id: 'p-1',
               name: 'Test Project',
               branch: 'main',
@@ -798,7 +798,7 @@ void main() {
       home: Scaffold(
         body: SingleChildScrollView(
           child: ProjectPage(
-            project: const StudioProject(
+            project: const AxProject(
               id: 'p-1',
               name: 'Test Project',
               branch: 'main',
@@ -844,7 +844,7 @@ void main() {
   });
 }
 
-class _WorkspaceTestDataSource extends StudioFixtureDataSource {
+class _WorkspaceTestDataSource extends AxFixtureDataSource {
   @override
   Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
     required String projectId,
@@ -853,12 +853,12 @@ class _WorkspaceTestDataSource extends StudioFixtureDataSource {
         {
           'id': 'grant-1',
           'workspaceId': 'ws-prod',
-          'workspaceName': 'Production Host',
+          'workspaceName': 'Production Workspace',
         }
       ];
 }
 
-class _DuplicateTestDataSource extends StudioFixtureDataSource {
+class _DuplicateTestDataSource extends AxFixtureDataSource {
   _DuplicateTestDataSource({
     this.onCreateWorkstream,
     this.onRequestWorkspace,
@@ -870,8 +870,8 @@ class _DuplicateTestDataSource extends StudioFixtureDataSource {
   final VoidCallback? onInviteMember;
 
   @override
-  Future<List<StudioWorkspace>> loadWorkspaces() async => const [
-        StudioWorkspace(
+  Future<List<AxWorkspace>> loadWorkspaces() async => const [
+        AxWorkspace(
           id: 'ws-1',
           name: 'MacBook Pro',
           slug: 'macbook-pro',
@@ -893,11 +893,11 @@ class _DuplicateTestDataSource extends StudioFixtureDataSource {
       ];
 
   @override
-  Future<List<StudioProjectMember>> loadProjectMembers({
+  Future<List<AxProjectMember>> loadProjectMembers({
     required String projectId,
   }) async =>
       const [
-        StudioProjectMember(
+        AxProjectMember(
           userId: 'u-alice',
           email: 'alice@example.com',
           displayName: 'Alice',
@@ -907,7 +907,7 @@ class _DuplicateTestDataSource extends StudioFixtureDataSource {
       ];
 
   @override
-  Future<StudioWorkstream> createWorkstream({
+  Future<AxWorkstream> createWorkstream({
     required String projectId,
     required String name,
     String? brief,
@@ -915,7 +915,7 @@ class _DuplicateTestDataSource extends StudioFixtureDataSource {
     String? primaryWorkspace,
   }) async {
     onCreateWorkstream?.call();
-    return StudioWorkstream(
+    return AxWorkstream(
       id: 'ws-new',
       projectId: projectId,
       name: name,
@@ -947,14 +947,14 @@ class _DuplicateTestDataSource extends StudioFixtureDataSource {
   }
 }
 
-class _WorkHistoryDataSource extends StudioFixtureDataSource {
+class _WorkHistoryDataSource extends AxFixtureDataSource {
   _WorkHistoryDataSource(this.requests);
 
-  List<StudioWorkRequest> requests;
+  List<AxWorkRequest> requests;
   final List<bool> activeOnlyCalls = [];
 
   @override
-  Future<List<StudioWorkRequest>> loadWorkstreamWorkRequests({
+  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests({
     required String workstreamId,
     bool activeOnly = false,
   }) async {
@@ -963,10 +963,10 @@ class _WorkHistoryDataSource extends StudioFixtureDataSource {
   }
 }
 
-class _WorkFormDataSource extends StudioFixtureDataSource {
+class _WorkFormDataSource extends AxFixtureDataSource {
   @override
-  Future<List<StudioBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async => [
-        StudioBuiltinWorkflow.fromJson({
+  Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async => [
+        AxBuiltinWorkflow.fromJson({
           'id': 'direct',
           'version': 1,
           'name': 'Direct',
@@ -978,7 +978,7 @@ class _WorkFormDataSource extends StudioFixtureDataSource {
       ];
 }
 
-StudioWorkRequest _workRequest(String id, String prompt) => StudioWorkRequest(
+AxWorkRequest _workRequest(String id, String prompt) => AxWorkRequest(
       id: id,
       requestedByName: 'Owner',
       prompt: prompt,

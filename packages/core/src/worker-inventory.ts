@@ -1,4 +1,4 @@
-import { DomainInvariantError } from "./entities.js";
+import { DomainInvariantError } from "./domain-error.js";
 
 export type WorkerActivationState = "enabled" | "disabled";
 export type WorkerReadinessState =

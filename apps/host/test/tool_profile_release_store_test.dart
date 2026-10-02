@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:conclave_host/tool_profile_release_store.dart';
 import 'package:conclave_host/tool_profile_catalog.dart';
 import 'package:conclave_host/worker_trust_policy.dart';
-import 'package:conclave_host/configured_worker_registry.dart';
+import 'package:conclave_host/local_worker_registry.dart';
 import 'package:test/test.dart';
 
 import 'support/ed25519_release_fixture.dart';
@@ -228,12 +228,12 @@ void main() {
       expect(entries.single.workerTypeId, 'fixture-worker');
       expect(
           catalog.profileDefinitionForWorker('fixture-worker'), 'fixture-cli');
-      final registry = LocalConfiguredWorkerRegistry(
+      final registry = LocalWorkerRegistry(
         dataDirectory: Directory('${temporary.path}/workspace'),
         workspaceId: 'workspace-fixture',
       );
-      final configured = await registry.create(catalogEntry: entries.single);
-      expect(configured.workerTypeId, 'fixture-worker');
+      final worker = await registry.create(catalogEntry: entries.single);
+      expect(worker.workerTypeId, 'fixture-worker');
       catalog.close();
 
       final restarted = ToolProfileCatalogClient(

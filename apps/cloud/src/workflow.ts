@@ -4,10 +4,6 @@ import {
   type WorkflowStep,
 } from "cloudflare:workers";
 import {
-  parseMachineCheckEvidence,
-  type MachineCheckEvidence,
-} from "@conclave/protocol";
-import {
   markWorkflowTaskResult,
   planWorkflowTasks,
   readyWorkflowTasks,
@@ -23,23 +19,18 @@ import {
   workStepPromptInputs,
 } from "./workflow-prompts.js";
 import { createEventPublisher } from "./event-publisher.js";
+import {
+  dispatchTaskAssignment,
+  type AssignmentDispatcherEnv,
+} from "./assignment-dispatcher.js";
+import type { WorkstreamBindingId } from "@conclave/core";
 
 export interface ConclaveWorkflowParams {
   readonly runId: string;
   readonly goalId: string;
   readonly idempotencyKey: string;
   readonly organizationId?: string;
-  readonly repositoryId?: string;
-  readonly revision?: string;
-  readonly expectedCommitSha?: string;
-  readonly expectedChecks?: readonly string[];
-  readonly allowedWorkflows?: readonly string[];
-  readonly requireApproval?: boolean;
-  readonly requireCiEvidence?: boolean;
-  readonly startPaused?: boolean;
-  /** Defaults to the local single-worker path; cloud API workers are opt-in. */
-  readonly executionMode?: "single_worker" | "multi_worker";
-  /** Immutable Work v1 catalog definition. When present, the fixed-step runner is used. */
+  /** Immutable definition for the Work v1 Cloud Workflow. */
   readonly builtinWorkflow?: BuiltinWorkflowDefinition;
   readonly workRequestId?: string;
   readonly workstreamId?: string;
@@ -54,90 +45,60 @@ export interface ConclaveWorkflowCheckpoint {
   readonly runId: string;
   readonly goalId: string;
   readonly idempotencyKey: string;
-  readonly stage:
-    | "workflow"
-    | "intake"
-    | "research"
-    | "planning"
-    | "implementation"
-    | "verification"
-    | "completed"
-    | "cancelled"
-    | "failed"
-    | "needs_input";
+  readonly stage: "workflow" | "completed" | "cancelled" | "failed";
   readonly status: "active" | "waiting" | "completed" | "cancelled" | "failed";
-  readonly eventId?: string;
-  readonly eventAction?: string;
-  readonly machineEvidence?: Pick<
-    MachineCheckEvidence,
-    | "evidenceId"
-    | "source"
-    | "externalRunId"
-    | "runId"
-    | "repositoryId"
-    | "commitSha"
-    | "workflow"
-    | "conclusion"
-    | "checks"
-    | "coveragePercent"
-    | "previewUrl"
-    | "smokeTests"
-    | "healthChecks"
-    | "observedAt"
-  >;
-  readonly executionId?: string;
-  readonly executionStatus?:
-    "started" | "completed" | "failed" | "cancelled" | "needs_input";
-  readonly resultArtifactId?: string;
   readonly failureReason?: string;
   readonly workflowStepId?: string;
 }
 
-interface ForgeExecutionService {
-  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
-}
-
 type ExecutionEnv = Env & {
-  readonly CONCLAVE_FORGE_EXECUTION?: ForgeExecutionService;
   readonly CONCLAVE_WORKSTREAM_COORDINATOR?: DurableObjectNamespace;
 };
 
-interface RunControlEvent {
-  readonly eventId: string;
-  readonly action: "continue" | "cancel";
+interface AssignmentRow {
+  status: string;
+  outputJson: string | null;
+  errorJson: string | null;
+  workerId: string | null;
+  workerTypeId: string | null;
+  engineVersion: string | null;
+  model: string | null;
+  permissionSnapshotJson: string | null;
+  assignmentId: string;
+  startedAt: string;
 }
 
-interface ApprovalEvent {
-  readonly eventId: string;
-  readonly approved: boolean;
+function workStepSessionKey(params: {
+  readonly workBindingId?: WorkstreamBindingId;
+  readonly workstreamId: string;
+  readonly workRequestId: string;
+  readonly stepKind: string;
+  readonly retryStepKind?: unknown;
+  readonly retrySessionStrategy?: unknown;
+  readonly retryNumber?: unknown;
+}): string {
+  const baseSessionKey =
+    params.workBindingId === "direct"
+      ? `workstream:${params.workstreamId}:direct:work-conversation`
+      : `work-request:${params.workRequestId}:${params.stepKind}`;
+  return params.retryStepKind === params.stepKind &&
+    params.retrySessionStrategy === "fresh"
+    ? `${baseSessionKey}:retry-fresh-${Number(params.retryNumber) || 1}`
+    : baseSessionKey;
 }
 
-type MachineEvidenceEvent = MachineCheckEvidence;
-
-interface ForgeTerminalEvent {
-  readonly eventId: string;
-  readonly runId: string;
-  readonly executionId: string;
-  readonly status: "completed" | "failed" | "cancelled" | "needs_input";
-  readonly resultArtifactId?: string;
-  readonly finalText?: string;
-  readonly workerId?: string | null;
-  readonly workerTypeId?: string | null;
-  readonly engineVersion?: string | null;
-  readonly profileDefinitionId?: string | null;
-  readonly profileReleaseVersion?: number | null;
-  readonly providerToolVersion?: string | null;
-  readonly model?: string | null;
-  readonly error?: string;
-}
-
-interface ForgeExecutionStatus {
-  readonly executionId: string;
-  readonly runId: string;
-  readonly status:
-    "started" | "completed" | "failed" | "cancelled" | "needs_input";
-  readonly resultArtifactId?: string;
-  readonly error?: string;
+function parseJsonRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== "string") return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 const stepConfig = {
@@ -148,80 +109,6 @@ const stepConfig = {
   },
   timeout: "5 minutes" as const,
 } as const;
-
-function isRunControlEvent(value: unknown): value is RunControlEvent {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.eventId === "string" &&
-    (record.action === "continue" || record.action === "cancel")
-  );
-}
-
-function isApprovalEvent(value: unknown): value is ApprovalEvent {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.eventId === "string" && typeof record.approved === "boolean"
-  );
-}
-
-function isForgeTerminalEvent(value: unknown): value is ForgeTerminalEvent {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.eventId === "string" &&
-    typeof record.runId === "string" &&
-    typeof record.executionId === "string" &&
-    (record.status === "completed" ||
-      record.status === "failed" ||
-      record.status === "cancelled" ||
-      record.status === "needs_input") &&
-    (record.resultArtifactId === undefined ||
-      typeof record.resultArtifactId === "string") &&
-    (record.finalText === undefined || typeof record.finalText === "string") &&
-    (record.workerId === undefined ||
-      record.workerId === null ||
-      typeof record.workerId === "string") &&
-    (record.workerTypeId === undefined ||
-      record.workerTypeId === null ||
-      typeof record.workerTypeId === "string") &&
-    (record.engineVersion === undefined ||
-      record.engineVersion === null ||
-      typeof record.engineVersion === "string") &&
-    (record.profileDefinitionId === undefined ||
-      record.profileDefinitionId === null ||
-      typeof record.profileDefinitionId === "string") &&
-    (record.profileReleaseVersion === undefined ||
-      record.profileReleaseVersion === null ||
-      (Number.isSafeInteger(record.profileReleaseVersion) &&
-        Number(record.profileReleaseVersion) > 0)) &&
-    (record.providerToolVersion === undefined ||
-      record.providerToolVersion === null ||
-      typeof record.providerToolVersion === "string") &&
-    (record.model === undefined ||
-      record.model === null ||
-      typeof record.model === "string") &&
-    (record.error === undefined || typeof record.error === "string")
-  );
-}
-
-function isForgeExecutionStatus(value: unknown): value is ForgeExecutionStatus {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.executionId === "string" &&
-    typeof record.runId === "string" &&
-    (record.status === "started" ||
-      record.status === "completed" ||
-      record.status === "failed" ||
-      record.status === "cancelled" ||
-      record.status === "needs_input") &&
-    (record.resultArtifactId === undefined ||
-      typeof record.resultArtifactId === "string") &&
-    (record.error === undefined || typeof record.error === "string")
-  );
-}
 
 function parseWorkflowStepResult(value: unknown): StepResult | null {
   if (typeof value !== "string") return null;
@@ -243,31 +130,6 @@ function parseWorkflowStepResult(value: unknown): StepResult | null {
   }
 }
 
-function validateMachineEvidence(
-  evidence: MachineEvidenceEvent,
-  params: ConclaveWorkflowParams,
-): void {
-  if (evidence.runId !== params.runId)
-    throw new Error("CI evidence does not belong to this run");
-  if (!params.repositoryId || evidence.repositoryId !== params.repositoryId)
-    throw new Error("CI evidence repository does not match this run");
-  if (
-    !params.expectedCommitSha ||
-    evidence.commitSha !== params.expectedCommitSha
-  )
-    throw new Error("CI evidence commit SHA does not match this run");
-  if (
-    params.allowedWorkflows &&
-    !params.allowedWorkflows.includes(evidence.workflow)
-  )
-    throw new Error("CI workflow is not allowed for this run");
-  const checkNames = new Set(evidence.checks.map((check) => check.name));
-  for (const expectedCheck of params.expectedChecks ?? []) {
-    if (!checkNames.has(expectedCheck))
-      throw new Error(`Expected CI check is missing: ${expectedCheck}`);
-  }
-}
-
 export class ConclaveRunWorkflow extends WorkflowEntrypoint<
   Env,
   ConclaveWorkflowParams
@@ -282,12 +144,6 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     await db
       .prepare(
         "UPDATE runs SET status = ?1, finished_at = ?2, updated_at = ?2 WHERE id = ?3",
-      )
-      .bind(status, now, runId)
-      .run();
-    await db
-      .prepare(
-        "UPDATE run_external_executions SET status = ?1, updated_at = ?2 WHERE run_id = ?3 AND execution_kind = 'cloudflare_workflow'",
       )
       .bind(status, now, runId)
       .run();
@@ -676,13 +532,14 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     stepResult?: StepResult;
     error?: string;
   }> {
-    const service = (this.env as ExecutionEnv).CONCLAVE_FORGE_EXECUTION;
-    if (!service)
+    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    if (!db || !params.workRequestId) {
       return {
         task,
         status: "failed",
-        error: "Forge execution service is not configured",
+        error: "Work Request execution context is unavailable",
       };
+    }
     let attempt = 0;
     const startedAt = new Date().toISOString();
     while (attempt < 3) {
@@ -700,12 +557,11 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         status: "running",
       });
       try {
-        const execution = await workflowStep.do(
-          `workflow:${task.step.kind}:execute:${attempt}`,
+        const assignment = await workflowStep.do(
+          `workflow:${task.step.kind}:dispatch:${attempt}`,
           {
             ...stepConfig,
-            timeout:
-              `${Math.max(1, Math.ceil(task.step.timeoutMs / 1000))} seconds` as `${number} seconds`,
+            timeout: "1 minute",
           },
           async () => {
             const workBindingId =
@@ -750,130 +606,216 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
                   : {}),
               },
             });
+            if (!prompt.trim()) throw new Error("Work Step prompt is empty");
+            const context = await db
+              .prepare(
+                `SELECT wr.workstream_id AS workstreamId,
+                      wr.requested_by_user_id AS requesterUserId,
+                      wr.status AS workRequestStatus,
+                      wr.cancel_requested_at AS cancelRequestedAt,
+                      ws.project_id AS projectId
+                 FROM work_requests wr JOIN workstreams ws ON ws.id = wr.workstream_id
+                WHERE wr.id = ?1`,
+              )
+              .bind(params.workRequestId)
+              .first<{
+                workstreamId: string;
+                requesterUserId: string;
+                workRequestStatus: string;
+                cancelRequestedAt: string | null;
+                projectId: string;
+              }>();
+            if (!context) throw new Error("Work Request was not found");
+            if (
+              context.workRequestStatus === "cancelled" ||
+              context.cancelRequestedAt
+            ) {
+              return { status: "cancelled", assignmentId: "", startedAt };
+            }
+            const bindingId = workBindingId as WorkstreamBindingId;
             const {
               workConfig: _workConfig,
-              workRequestSnapshot: _workRequestSnapshot,
+              workRequestSnapshot: _snapshot,
               ...workerInput
             } = promptInput;
-            const response = await service.fetch(
-              "https://conclave.internal/execute",
+            const dispatched = await dispatchTaskAssignment(
+              this.env as unknown as AssignmentDispatcherEnv,
               {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({
-                  ...params,
-                  workflowStep: task.step,
-                  workBindingId,
-                  effectiveWorkerPrompt: prompt,
+                workspaceId: params.organizationId ?? "",
+                runId: params.runId,
+                taskId: task.id,
+                explicitWorkerId:
+                  typeof stepBinding.workerId === "string"
+                    ? stepBinding.workerId
+                    : undefined,
+                explicitAttemptNumber: attempt,
+                task: {
+                  id: task.id,
+                  role: task.step.kind,
+                  objective: prompt,
+                  capabilities: task.step.requiredCapabilities,
                   input: {
                     ...workerInput,
+                    prompt,
                     effectiveWorkerPrompt: prompt,
                   },
-                }),
+                  timeoutMs: task.step.timeoutMs,
+                  sessionPolicy: "durable_session",
+                  sessionKey: workStepSessionKey({
+                    workBindingId: bindingId,
+                    workstreamId: context.workstreamId,
+                    workRequestId: params.workRequestId!,
+                    stepKind: task.step.kind,
+                    retryStepKind: params.retryStepKind,
+                    retrySessionStrategy: params.retrySessionStrategy,
+                    retryNumber: params.retryNumber,
+                  }),
+                  projectId: context.projectId,
+                  requestedByUserId: context.requesterUserId,
+                  workstreamId: context.workstreamId,
+                  workRequestId: params.workRequestId,
+                  workBindingId: bindingId,
+                  executionClass: task.step.executionMode,
+                  readOnly: task.step.readWritePolicy === "read_only",
+                  model:
+                    typeof stepBinding.model === "string"
+                      ? stepBinding.model
+                      : undefined,
+                },
               },
             );
-            if (!response.ok)
+            if (dispatched.status === "cancelled") {
+              return {
+                status: "cancelled",
+                assignmentId: dispatched.assignmentId,
+                startedAt,
+              };
+            }
+            if (!dispatched.accepted || !dispatched.assignmentId) {
               throw new Error(
-                `Workflow step dispatch failed with status ${response.status}`,
+                dispatched.error ?? `${task.step.kind} Worker dispatch failed`,
               );
-            const body = (await response.json()) as { executionId?: unknown };
-            if (typeof body.executionId !== "string")
-              throw new Error("Workflow step returned no executionId");
-            return body.executionId;
-          },
-        );
-        const terminal = await workflowStep.waitForEvent<ForgeTerminalEvent>(
-          `workflow:${task.step.kind}:terminal:${attempt}`,
-          {
-            type: "forge-terminal",
-            timeout: `${Math.ceil(task.step.timeoutMs / 60_000) + 1} minutes`,
-          },
-        );
-        if (
-          !isForgeTerminalEvent(terminal.payload) ||
-          terminal.payload.runId !== params.runId ||
-          terminal.payload.executionId !== execution
-        ) {
-          return {
-            task,
-            status: "failed",
-            error: "Workflow step terminal result correlation failed",
-          };
-        }
-        if (terminal.payload.status === "needs_input") {
-          const input = await workflowStep.waitForEvent<{ payload?: string }>(
-            `workflow:${task.step.kind}:needs-input`,
-            { type: "workflow-input", timeout: "365 days" },
-          );
-          if (!input?.payload)
+            }
             return {
-              task,
-              status: "failed",
-              error: "Workflow step input was not provided",
+              status: "dispatched",
+              assignmentId: dispatched.assignmentId,
+              startedAt,
             };
-          continue;
-        }
-        if (terminal.payload.status !== "completed") {
-          if (definition.id !== "direct" && attempt < 3) continue;
-          return {
-            task,
-            status:
-              terminal.payload.status === "cancelled" ? "cancelled" : "failed",
-            error: terminal.payload.error,
-          };
-        }
-        if (
-          typeof terminal.payload.finalText === "string" &&
-          terminal.payload.finalText.trim()
-        ) {
-          const completedAt = new Date().toISOString();
-          const stepResult: StepResult = {
-            text: terminal.payload.finalText,
-            status: "completed",
-            startedAt,
-            completedAt,
-            workerId: terminal.payload.workerId ?? null,
-            workerTypeId: terminal.payload.workerTypeId ?? null,
-            engineVersion: terminal.payload.engineVersion ?? null,
-            profileDefinitionId: terminal.payload.profileDefinitionId ?? null,
-            profileReleaseVersion:
-              terminal.payload.profileReleaseVersion ?? null,
-            providerToolVersion: terminal.payload.providerToolVersion ?? null,
-            model: terminal.payload.model ?? null,
-          };
-          return { task, status: "completed", output: stepResult, stepResult };
-        }
-        if (!terminal.payload.resultArtifactId) {
-          return {
-            task,
-            status: "failed",
-            error: "Workflow Step completed without a final answer artifact",
-          };
-        }
-        const stepResult = await this.readWorkflowStepResult(
-          terminal.payload.resultArtifactId,
-          startedAt,
+          },
         );
-        if (!stepResult?.text.trim()) {
+        if (assignment.status === "cancelled") {
           return {
             task,
-            status: "failed",
-            error: "Workflow Step final answer text is unavailable",
+            status: "cancelled",
+            error: "Work assignment was cancelled",
           };
         }
-        return {
-          task,
+        let terminal: AssignmentRow | null = null;
+        const pollCount = Math.max(1, Math.ceil(task.step.timeoutMs / 2_000));
+        for (let poll = 0; poll < pollCount; poll += 1) {
+          terminal = await workflowStep.do(
+            `workflow:${task.step.kind}:assignment-status:${attempt}:${poll}`,
+            { ...stepConfig, timeout: "30 seconds" },
+            async () =>
+              db
+                .prepare(
+                  `SELECT wa.id AS assignmentId, wa.status, wa.output_json AS outputJson,
+                      wa.error_json AS errorJson, wa.workspace_worker_id AS workerId,
+                      wa.worker_type_id AS workerTypeId, wa.engine_version AS engineVersion,
+                      wa.model, wa.permission_snapshot_json AS permissionSnapshotJson,
+                      wa.created_at AS startedAt
+                 FROM worker_assignments wa WHERE wa.id = ?1`,
+                )
+                .bind(assignment.assignmentId)
+                .first<AssignmentRow>(),
+          );
+          if (
+            terminal &&
+            ["completed", "failed", "cancelled"].includes(terminal.status)
+          )
+            break;
+          await workflowStep.sleep(
+            `workflow:${task.step.kind}:assignment-wait:${attempt}:${poll}`,
+            "2 seconds",
+          );
+        }
+        if (terminal?.status === "cancelled") {
+          return {
+            task,
+            status: "cancelled",
+            error: "Work assignment was cancelled",
+          };
+        }
+        if (terminal?.status === "failed") {
+          const errorRecord = parseJsonRecord(terminal.errorJson);
+          const errorValue = parseJsonRecord(errorRecord.error);
+          throw new Error(
+            typeof errorValue.message === "string"
+              ? errorValue.message
+              : "Worker assignment failed",
+          );
+        }
+        if (terminal?.status !== "completed" || !terminal.outputJson) {
+          throw new Error("Work Step assignment timed out");
+        }
+        const rawOutput = parseJsonRecord(terminal.outputJson);
+        const nested =
+          typeof rawOutput.output === "object" && rawOutput.output !== null
+            ? (rawOutput.output as Record<string, unknown>)
+            : rawOutput;
+        const finalText =
+          typeof nested.text === "string"
+            ? nested.text
+            : typeof nested.finalAnswer === "string"
+              ? nested.finalAnswer
+              : typeof nested.summary === "string"
+                ? nested.summary
+                : null;
+        if (!finalText?.trim())
+          throw new Error("Work Step completed without final answer text");
+        const evidence = parseJsonRecord(terminal.permissionSnapshotJson);
+        const completedAt = new Date().toISOString();
+        const stepResult: StepResult = {
+          text: finalText.slice(0, 96_000),
           status: "completed",
-          output: stepResult,
-          stepResult,
+          startedAt: terminal.startedAt || startedAt,
+          completedAt,
+          workerId: terminal.workerId,
+          workerTypeId: terminal.workerTypeId,
+          engineVersion:
+            typeof evidence.profileDefinitionId === "string"
+              ? terminal.engineVersion
+              : null,
+          profileDefinitionId:
+            typeof evidence.profileDefinitionId === "string"
+              ? evidence.profileDefinitionId
+              : null,
+          profileReleaseVersion:
+            Number.isSafeInteger(evidence.profileReleaseVersion) &&
+            Number(evidence.profileReleaseVersion) > 0
+              ? Number(evidence.profileReleaseVersion)
+              : null,
+          providerToolVersion:
+            typeof evidence.providerToolVersion === "string"
+              ? evidence.providerToolVersion
+              : null,
+          model: terminal.model,
         };
+        return { task, status: "completed", output: stepResult, stepResult };
       } catch (error) {
-        if (definition.id === "direct" || attempt >= 3)
+        if (
+          error instanceof Error &&
+          error.name === "WorkAssignmentCancelledError"
+        ) {
+          return { task, status: "cancelled", error: error.message };
+        }
+        if (definition.id === "direct" || attempt >= 3) {
           return {
             task,
             status: "failed",
             error: error instanceof Error ? error.message : String(error),
           };
+        }
       }
     }
     return {
@@ -881,134 +823,6 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       status: "failed",
       error: "Workflow step retry limit exceeded",
     };
-  }
-
-  private async readWorkflowStepResult(
-    artifactId: string,
-    fallbackStartedAt: string,
-  ): Promise<StepResult | null> {
-    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
-    if (!db) return null;
-    const row = await db
-      .prepare(
-        `SELECT a.created_at AS artifact_created_at,
-                wa.workspace_worker_id AS worker_id,
-                wa.worker_id AS worker_type_id,
-                wa.model AS model,
-                wa.engine_version AS engine_version,
-                wa.created_at AS assignment_started_at,
-                wa.permission_snapshot_json AS permission_snapshot_json
-         FROM artifacts a
-         LEFT JOIN worker_assignments wa ON wa.id = a.assignment_id
-         WHERE a.id = ?1`,
-      )
-      .bind(artifactId)
-      .first<Record<string, unknown>>();
-    if (!row) return null;
-    const text = await this.readWorkflowArtifactText(artifactId);
-    if (!text.trim()) return null;
-    let permissionSnapshot: Record<string, unknown> = {};
-    if (typeof row.permission_snapshot_json === "string") {
-      try {
-        const parsed: unknown = JSON.parse(row.permission_snapshot_json);
-        if (
-          typeof parsed === "object" &&
-          parsed !== null &&
-          !Array.isArray(parsed)
-        ) {
-          permissionSnapshot = parsed as Record<string, unknown>;
-        }
-      } catch {
-        // Attribution remains nullable if the assignment snapshot is malformed.
-      }
-    }
-    const completedAt =
-      typeof row.artifact_created_at === "string"
-        ? row.artifact_created_at
-        : new Date().toISOString();
-    return {
-      text,
-      status: "completed",
-      startedAt:
-        typeof row.assignment_started_at === "string"
-          ? row.assignment_started_at
-          : fallbackStartedAt,
-      completedAt,
-      workerId: typeof row.worker_id === "string" ? row.worker_id : null,
-      workerTypeId:
-        typeof row.worker_type_id === "string" ? row.worker_type_id : null,
-      engineVersion:
-        typeof permissionSnapshot.profileDefinitionId === "string" &&
-        typeof row.engine_version === "string"
-          ? row.engine_version
-          : null,
-      profileDefinitionId:
-        typeof permissionSnapshot.profileDefinitionId === "string"
-          ? permissionSnapshot.profileDefinitionId
-          : null,
-      profileReleaseVersion:
-        Number.isSafeInteger(permissionSnapshot.profileReleaseVersion) &&
-        Number(permissionSnapshot.profileReleaseVersion) > 0
-          ? Number(permissionSnapshot.profileReleaseVersion)
-          : null,
-      providerToolVersion:
-        typeof permissionSnapshot.providerToolVersion === "string"
-          ? permissionSnapshot.providerToolVersion
-          : null,
-      model: typeof row.model === "string" ? row.model : null,
-      artifacts: [artifactId],
-    };
-  }
-
-  private async readWorkflowArtifactText(artifactId: string): Promise<string> {
-    const maxBytes = 24_000;
-    const env = this.env as Env & {
-      readonly CONCLAVE_ARTIFACTS?: R2Bucket;
-    };
-    const artifact = await env.CONCLAVE_DB.prepare(
-      "SELECT * FROM artifacts WHERE id = ?1",
-    )
-      .bind(artifactId)
-      .first<Record<string, unknown>>();
-    if (!artifact) return "";
-    if (typeof artifact.inline_content === "string") {
-      return artifact.inline_content.length <= maxBytes
-        ? artifact.inline_content
-        : `${artifact.inline_content.slice(0, maxBytes)}\n[Step result truncated by Conclave.]`;
-    }
-    if (typeof artifact.storage_key !== "string" || !env.CONCLAVE_ARTIFACTS) {
-      return "";
-    }
-    const object = await env.CONCLAVE_ARTIFACTS.get(artifact.storage_key);
-    if (!object) return "";
-    const reader = object.body.getReader();
-    const decoder = new TextDecoder();
-    let content = "";
-    let bytesRead = 0;
-    let truncated = false;
-    try {
-      while (bytesRead < maxBytes) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const remaining = maxBytes - bytesRead;
-        const chunk = value.subarray(0, remaining);
-        content += decoder.decode(chunk, { stream: true });
-        bytesRead += chunk.byteLength;
-        if (chunk.byteLength < value.byteLength) {
-          truncated = true;
-          break;
-        }
-      }
-      if (object.size > bytesRead) truncated = true;
-      content += decoder.decode();
-      if (truncated) {
-        await reader.cancel();
-        content += "\n[Step result truncated by Conclave.]";
-      }
-      return content;
-    } finally {
-      reader.releaseLock();
-    }
   }
 
   private async loadWorkRequestPromptInput(
@@ -1117,270 +931,12 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     let params = event.payload;
     if (params.workRequestId) {
       const snapshot = await this.loadWorkRequestSnapshot(params.workRequestId);
-      if (snapshot) {
+      if (snapshot)
         params = { ...params, builtinWorkflow: snapshot.workflowSnapshot };
-      }
     }
-    if (params.builtinWorkflow) return this.runVersioned(params, step);
-    const started = await step.do(
-      "checkpoint:intake",
-      stepConfig,
-      async () => ({
-        runId: params.runId,
-        goalId: params.goalId,
-        idempotencyKey: params.idempotencyKey,
-        stage: "intake" as const,
-        status: "active" as const,
-      }),
-    );
-
-    let controlEvent: RunControlEvent | undefined;
-    if (params.startPaused) {
-      const event = await step.waitForEvent<RunControlEvent>(
-        "wait for initial run control",
-        { type: "run-control", timeout: "365 days" },
-      );
-      if (!isRunControlEvent(event.payload)) {
-        throw new Error("Invalid run-control event payload");
-      }
-      controlEvent = event.payload;
+    if (!params.builtinWorkflow) {
+      throw new Error("A versioned built-in Work v1 Workflow is required");
     }
-    if (controlEvent?.action === "cancel") {
-      return step.do("checkpoint:cancelled", stepConfig, async () => ({
-        ...started,
-        stage: "cancelled" as const,
-        status: "cancelled" as const,
-        eventId: controlEvent.eventId,
-        eventAction: controlEvent.action,
-      }));
-    }
-
-    const research = await step.do(
-      "checkpoint:research",
-      stepConfig,
-      async () => ({
-        ...started,
-        stage: "research" as const,
-        status: "active" as const,
-        ...(controlEvent
-          ? { eventId: controlEvent.eventId, eventAction: controlEvent.action }
-          : {}),
-      }),
-    );
-    if (params.requireApproval) {
-      const approvalEvent = await step.waitForEvent<ApprovalEvent>(
-        "wait for external approval",
-        { type: "run-approval", timeout: "365 days" },
-      );
-      if (!isApprovalEvent(approvalEvent.payload)) {
-        throw new Error("Invalid run-approval event payload");
-      }
-      if (!approvalEvent.payload.approved) {
-        return step.do(
-          "checkpoint:cancelled-after-approval",
-          stepConfig,
-          async () => ({
-            ...research,
-            stage: "cancelled" as const,
-            status: "cancelled" as const,
-            eventId: approvalEvent.payload.eventId,
-            eventAction: "approval_rejected",
-          }),
-        );
-      }
-    }
-
-    const planning = await step.do(
-      "checkpoint:planning",
-      stepConfig,
-      async () => ({
-        ...research,
-        stage: "planning" as const,
-      }),
-    );
-    const implementation = await step.do(
-      "checkpoint:implementation",
-      stepConfig,
-      async () => ({ ...planning, stage: "implementation" as const }),
-    );
-
-    const execution = await step.do("forge:execute", stepConfig, async () => {
-      const service = (this.env as ExecutionEnv).CONCLAVE_FORGE_EXECUTION;
-      if (!service) {
-        throw new Error(
-          "Forge execution service is not configured; refusing to complete a checkpoint-only run",
-        );
-      }
-      const response = await service.fetch(
-        "https://conclave.internal/execute",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(params),
-        },
-      );
-      if (!response.ok) {
-        throw new Error(
-          `Forge execution failed with status ${response.status}`,
-        );
-      }
-      const body = (await response.json()) as { executionId?: unknown };
-      if (typeof body.executionId !== "string") {
-        throw new Error("Forge execution returned no executionId");
-      }
-      return {
-        ...implementation,
-        executionId: body.executionId,
-        executionStatus: "started" as const,
-      };
-    });
-    let forgeTerminal: ForgeTerminalEvent;
-    let reconciliationAttempt = 0;
-    while (true) {
-      let terminalEvent: { payload: ForgeTerminalEvent };
-      try {
-        terminalEvent = await step.waitForEvent<ForgeTerminalEvent>(
-          "wait for Forge terminal result",
-          { type: "forge-terminal", timeout: "5 minutes" },
-        );
-      } catch {
-        const status = await step.do(
-          `forge:reconcile:${reconciliationAttempt}`,
-          stepConfig,
-          async () => {
-            const service = (this.env as ExecutionEnv).CONCLAVE_FORGE_EXECUTION;
-            if (!service) {
-              throw new Error("Forge execution service is not configured");
-            }
-            const response = await service.fetch(
-              `https://conclave.internal/status/${execution.executionId}`,
-            );
-            if (!response.ok) {
-              throw new Error(
-                `Forge status reconciliation failed with status ${response.status}`,
-              );
-            }
-            const body: unknown = await response.json();
-            if (!isForgeExecutionStatus(body)) {
-              throw new Error(
-                "Forge status reconciliation returned invalid data",
-              );
-            }
-            return body;
-          },
-        );
-        reconciliationAttempt += 1;
-        if (status.status === "started") {
-          await step.sleep(
-            `forge:reconcile:wait:${reconciliationAttempt}`,
-            "30 seconds",
-          );
-          continue;
-        }
-        terminalEvent = {
-          payload: {
-            eventId: `reconciled-${execution.executionId}-${reconciliationAttempt}`,
-            runId: status.runId,
-            executionId: status.executionId,
-            status: status.status,
-            ...(status.resultArtifactId
-              ? { resultArtifactId: status.resultArtifactId }
-              : {}),
-            ...(status.error ? { error: status.error } : {}),
-          },
-        };
-      }
-      if (!isForgeTerminalEvent(terminalEvent.payload)) {
-        throw new Error("Invalid Forge terminal event payload");
-      }
-      if (
-        terminalEvent.payload.runId !== params.runId ||
-        terminalEvent.payload.executionId !== execution.executionId
-      ) {
-        throw new Error("Forge terminal event does not match this run");
-      }
-      forgeTerminal = await step.do(
-        `forge:terminal:${terminalEvent.payload.eventId}`,
-        stepConfig,
-        async () => terminalEvent.payload,
-      );
-      if (forgeTerminal.status !== "needs_input") break;
-    }
-
-    if (forgeTerminal.status !== "completed") {
-      return step.do("checkpoint:forge-terminal", stepConfig, async () => {
-        const status =
-          forgeTerminal.status === "failed"
-            ? ("failed" as const)
-            : ("cancelled" as const);
-        await this.persistTerminalRun(params.runId, status);
-        return {
-          ...execution,
-          stage: status,
-          status,
-          executionStatus: forgeTerminal.status,
-          ...(forgeTerminal.error
-            ? { failureReason: forgeTerminal.error }
-            : {}),
-          ...(forgeTerminal.resultArtifactId
-            ? { resultArtifactId: forgeTerminal.resultArtifactId }
-            : {}),
-        };
-      });
-    }
-
-    let machineEvidence: MachineEvidenceEvent | undefined;
-    if (params.requireCiEvidence !== false) {
-      const ciEvent = await step.waitForEvent<MachineEvidenceEvent>(
-        "wait for machine CI evidence",
-        { type: "ci-evidence", timeout: "365 days" },
-      );
-      try {
-        machineEvidence = parseMachineCheckEvidence(ciEvent.payload);
-      } catch (error) {
-        throw new Error(
-          `Invalid CI evidence: ${error instanceof Error ? error.message : "unknown"}`,
-        );
-      }
-      validateMachineEvidence(machineEvidence, params);
-      if (machineEvidence.conclusion !== "success") {
-        throw new Error(
-          `Machine checks concluded ${machineEvidence.conclusion}`,
-        );
-      }
-      const evidenceCheckpoint = await step.do(
-        "checkpoint:machine-evidence",
-        stepConfig,
-        async () => ({
-          ...implementation,
-          stage: "implementation" as const,
-          machineEvidence,
-        }),
-      );
-      machineEvidence = evidenceCheckpoint.machineEvidence;
-    }
-
-    const verification = await step.do(
-      "checkpoint:verification",
-      stepConfig,
-      async () => ({
-        ...implementation,
-        stage: "verification" as const,
-        executionStatus: "completed" as const,
-        ...(forgeTerminal.resultArtifactId
-          ? { resultArtifactId: forgeTerminal.resultArtifactId }
-          : {}),
-        ...(machineEvidence ? { machineEvidence } : {}),
-      }),
-    );
-    return step.do("checkpoint:completed", stepConfig, async () => {
-      await this.persistTerminalRun(params.runId, "completed");
-      return {
-        ...verification,
-        stage: "completed" as const,
-        status: "completed" as const,
-        executionStatus: "completed" as const,
-      };
-    });
+    return this.runVersioned(params, step);
   }
 }

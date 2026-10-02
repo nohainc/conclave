@@ -6,11 +6,11 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:conclave_app/src/features/navigation/app_menu.dart';
-import 'package:conclave_app/src/features/navigation/studio_shell_context.dart';
+import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
 import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
-import 'package:conclave_app/src/navigation/studio_navigation.dart';
-import 'package:conclave_app/src/studio/studio_data.dart';
-import 'package:conclave_app/src/studio/studio_models.dart';
+import 'package:conclave_app/src/navigation/ax_navigation.dart';
+import 'package:conclave_app/src/ax/ax_data.dart';
+import 'package:conclave_app/src/ax/ax_models.dart';
 
 void main() {
   Widget scaffold(Widget child) => MaterialApp(
@@ -19,7 +19,7 @@ void main() {
         ),
       );
 
-  const initialWorkspace = StudioWorkspace(
+  const initialWorkspace = AxWorkspace(
     id: 'workspace-1',
     name: 'MacBook Pro',
     hostname: '—',
@@ -35,7 +35,7 @@ void main() {
     test('Enrollment code is created only on explicit Connect machine action',
         () async {
       final paths = <String>[];
-      final api = StudioApiClient(
+      final api = AxApiClient(
         baseUrl: 'https://cloud.test/api',
         client: MockClient((request) async {
           paths.add(request.url.path);
@@ -80,7 +80,7 @@ void main() {
       expect(find.text('Pairing code'), findsNothing);
 
       // 2. Transition State: Pairing
-      const pairingWorkspace = StudioWorkspace(
+      const pairingWorkspace = AxWorkspace(
         id: 'workspace-1',
         name: 'MacBook Pro',
         hostname: '—',
@@ -105,7 +105,7 @@ void main() {
       expect(find.text('Machine'), findsOneWidget);
 
       // 3. Runtime Connected: Online with automatically populated platform facts
-      const onlineWorkspace = StudioWorkspace(
+      const onlineWorkspace = AxWorkspace(
         id: 'workspace-1',
         name: 'MacBook Pro',
         hostname: 'Vitalii-MacBook-Pro',
@@ -166,8 +166,8 @@ void main() {
             body: Row(
               children: [
                 GlobalAppMenu(
-                  shellContext: const StudioShellContext(
-                    navigation: StudioNavigation.workspaces(),
+                  shellContext: const AxShellContext(
+                    navigation: AxNavigation.workspaces(),
                     workspaces: [initialWorkspace],
                     projects: [],
                     themeMode: ThemeMode.system,
@@ -204,10 +204,10 @@ void main() {
       ];
 
       for (final (os, arch, expectedLabel) in platforms) {
-        final agent = StudioWorkspace(
+        final workspace = AxWorkspace(
           id: 'ws-test',
           name: 'Target Machine',
-          hostname: 'host-1',
+          hostname: 'workspace-node-1',
           status: 'online',
           appVersion: '1.0.0',
           workerCount: 0,
@@ -217,7 +217,7 @@ void main() {
         );
 
         await tester.pumpWidget(scaffold(WorkspacesPage(
-          workspaces: [agent],
+          workspaces: [workspace],
           onAdd: () {},
           onRename: (_) {},
           onUpdate: (_) {},
@@ -232,7 +232,7 @@ void main() {
     test(
         'Re-enrollment refreshes machine facts while preserving logical entity',
         () {
-      final initial = StudioWorkspace.fromJson({
+      final initial = AxWorkspace.fromJson({
         'id': 'workspace-1',
         'name': 'Development Rig',
         'slug': 'development-rig',
@@ -245,7 +245,7 @@ void main() {
       });
 
       // Runtime is revoked and paired with updated hardware/software
-      final reenrolled = StudioWorkspace.fromJson({
+      final reenrolled = AxWorkspace.fromJson({
         'id': 'workspace-1',
         'name': 'Development Rig',
         'slug': 'development-rig',

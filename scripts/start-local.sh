@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Conclave AX - Local Stack Launcher (Production D1 Database)
+# Conclave AX - Local Stack Launcher
 # ==============================================================================
 # Launches 2 dedicated terminal windows in parallel:
-#   1. Backend API: Cloudflare Wrangler connected to remote production D1
-#   2. Frontend Web Studio: Flutter run with Hot Reload ('r'/'R') + Google Chrome
+#   1. Backend API: Cloudflare Wrangler with the local v8 D1 database
+#   2. AX web app: Flutter run with Hot Reload ('r'/'R') + Google Chrome
 #
 # Prints 2 concise status lines on the main terminal and exits immediately.
 # ==============================================================================
@@ -49,25 +49,15 @@ done
 API_URL="http://${API_HOST}:${PORT}"
 WEB_URL="http://localhost:${WEB_PORT}"
 
-WRANGLER_BIN="pnpm exec wrangler"
-if ! command -v pnpm >/dev/null 2>&1; then
-  if command -v npx >/dev/null 2>&1; then
-    WRANGLER_BIN="npx wrangler"
-  else
-    WRANGLER_BIN="wrangler"
-  fi
-fi
-
 # 1. Runner Script for Backend API
 RUNNER_API="/tmp/conclave-api-dev-${PORT}.sh"
 cat << EOF > "${RUNNER_API}"
 #!/usr/bin/env bash
 set -euo pipefail
 cd "${ROOT_DIR}"
-echo -e "\033[1m\033[0;34m[Conclave AX API Backend Logs]\033[0m Target DB: conclave-production (Remote D1) | Base: ${API_URL}\n"
-exec ${WRANGLER_BIN} dev \\
-  --remote \\
-  --config "${ROOT_DIR}/infra/cloudflare/app.wrangler.jsonc" \\
+echo -e "\033[1m\033[0;34m[Conclave AX API Backend Logs]\033[0m Target DB: local conclave-development | Base: ${API_URL}\n"
+exec pnpm exec wrangler dev \\
+  --config "${ROOT_DIR}/apps/cloud/wrangler.jsonc" \\
   --port "${PORT}" \\
   --ip "${IP}" \\
   --var "BETTER_AUTH_URL:${API_URL}" \\
@@ -81,7 +71,7 @@ cat << EOF > "${RUNNER_FLUTTER}"
 #!/usr/bin/env bash
 set -euo pipefail
 cd "${ROOT_DIR}/apps/app"
-echo -e "\033[1m\033[0;32m[Conclave AX Flutter Web Studio]\033[0m Controls: [r] Reload | [R] Restart | [q] Quit\n"
+echo -e "\033[1m\033[0;32m[Conclave AX Flutter Web]\033[0m Controls: [r] Reload | [R] Restart | [q] Quit\n"
 exec flutter run -d "${DEVICE}" --web-port="${WEB_PORT}" --dart-define="CONCLAVE_API_URL=${API_URL}/api"
 EOF
 chmod +x "${RUNNER_FLUTTER}"
@@ -110,8 +100,8 @@ spawn_terminal() {
 
 # Launch both terminals in parallel
 spawn_terminal "${RUNNER_API}" "Conclave AX - API Backend"
-spawn_terminal "${RUNNER_FLUTTER}" "Conclave AX - Web Studio"
+spawn_terminal "${RUNNER_FLUTTER}" "Conclave AX - Web App"
 
 # Print exactly 2 concise lines and exit immediately
 echo -e "${GREEN}✓ Conclave AX started in 2 new terminals (Backend & Frontend in parallel).${RESET}"
-echo -e "${CYAN}• Web App:${RESET} ${BOLD}${WEB_URL}${RESET} | ${CYAN}API:${RESET} ${BOLD}${API_URL}${RESET} (Production D1 via remote Wrangler)"
+echo -e "${CYAN}• Web App:${RESET} ${BOLD}${WEB_URL}${RESET} | ${CYAN}API:${RESET} ${BOLD}${API_URL}${RESET} (local v8 D1)"

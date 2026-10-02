@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:conclave_host/configured_worker_registry.dart';
+import 'package:conclave_host/local_worker_registry.dart';
 import 'package:conclave_host/host_configuration.dart';
 import 'package:conclave_host/tool_profile_catalog.dart';
 import 'package:test/test.dart';
@@ -14,7 +14,7 @@ void main() {
 
     final identityStore = LocalWorkspaceIdentityStore(dataDirectory);
     final localId = await identityStore.getOrCreate();
-    final registry = LocalConfiguredWorkerRegistry(
+    final registry = LocalWorkerRegistry(
       dataDirectory: dataDirectory,
       workspaceId: localId,
     );

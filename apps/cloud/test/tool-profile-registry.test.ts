@@ -59,59 +59,78 @@ describe("Tool Profile release payload admission", () => {
     environment.set = {};
     environment.passthrough = ["WORKSPACE_API_TOKEN"];
     expect(() => validateToolProfileReleasePayload(profile)).toThrow(
-      /reserved host environment names/,
+      /reserved environment variable names/,
     );
   });
 });
 
 describe("approved logical Worker catalog projection", () => {
   it("returns catalog metadata without requiring a published Profile release", async () => {
-    const rows = [{
-      worker_type_id: "fixture-worker",
-      display_name: "Fixture Worker",
-      description: "approved",
-      engine_family: "cli",
-      visibility_state: "visible",
-      release_stage: "testing",
-      capabilities_json: '["text","workstream_read"]',
-      sort_order: 15,
-      profile_definition_id: "fixture-cli",
-      provider_tool_name: "fixture",
-    }];
+    const rows = [
+      {
+        worker_type_id: "fixture-worker",
+        display_name: "Fixture Worker",
+        description: "approved",
+        engine_family: "cli",
+        visibility_state: "visible",
+        release_stage: "testing",
+        capabilities_json: '["text","workstream_read"]',
+        sort_order: 15,
+        profile_definition_id: "fixture-cli",
+        provider_tool_name: "fixture",
+      },
+    ];
     const statement = {
-      bind: vi.fn(function (this: unknown) { return this; }),
+      bind: vi.fn(function (this: unknown) {
+        return this;
+      }),
       all: vi.fn(async () => ({ results: rows })),
     };
     const db = { prepare: vi.fn(() => statement) } as unknown as D1Database;
     const result = await resolveLogicalWorkerCatalog(db, undefined, "testing");
-    expect(result).toEqual([{
-      workerTypeId: "fixture-worker",
-      displayName: "Fixture Worker",
-      description: "approved",
-      engineFamily: "cli",
-      visibilityState: "visible",
-      releaseStage: "testing",
-      capabilities: ["text", "workstream_read"],
-      sortOrder: 15,
-      profileDefinitionId: "fixture-cli",
-      providerToolName: "fixture",
-    }]);
+    expect(result).toEqual([
+      {
+        workerTypeId: "fixture-worker",
+        displayName: "Fixture Worker",
+        description: "approved",
+        engineFamily: "cli",
+        visibilityState: "visible",
+        releaseStage: "testing",
+        capabilities: ["text", "workstream_read"],
+        sortOrder: 15,
+        profileDefinitionId: "fixture-cli",
+        providerToolName: "fixture",
+      },
+    ]);
     expect(statement.bind).toHaveBeenCalledWith("testing", null);
   });
 
   it("fails closed on an unknown product capability", async () => {
     const statement = {
-      bind: vi.fn(function (this: unknown) { return this; }),
-      all: vi.fn(async () => ({ results: [{
-        worker_type_id: "fixture-worker", display_name: "Fixture",
-        description: "", engine_family: "cli", visibility_state: "visible",
-        release_stage: "stable", capabilities_json: '["run_shell"]',
-        sort_order: 1, profile_definition_id: "fixture-cli",
-        provider_tool_name: "fixture",
-      }] })),
+      bind: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      all: vi.fn(async () => ({
+        results: [
+          {
+            worker_type_id: "fixture-worker",
+            display_name: "Fixture",
+            description: "",
+            engine_family: "cli",
+            visibility_state: "visible",
+            release_stage: "stable",
+            capabilities_json: '["run_shell"]',
+            sort_order: 1,
+            profile_definition_id: "fixture-cli",
+            provider_tool_name: "fixture",
+          },
+        ],
+      })),
     };
     const db = { prepare: vi.fn(() => statement) } as unknown as D1Database;
-    await expect(resolveLogicalWorkerCatalog(db)).rejects.toThrow(/capabilities are invalid/);
+    await expect(resolveLogicalWorkerCatalog(db)).rejects.toThrow(
+      /capabilities are invalid/,
+    );
   });
 });
 

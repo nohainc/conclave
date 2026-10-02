@@ -52,14 +52,12 @@ describe("observability", () => {
       assignmentId: "assignment-1",
       hostId: "host-1",
       workerId: "worker-1",
-      credentialProfileId: "profile-1",
     });
 
     expect(record.correlation).toMatchObject({
       requestId: "request-1",
       eventId: "event-1",
       assignmentId: "assignment-1",
-      credentialProfileId: "profile-1",
     });
   });
 

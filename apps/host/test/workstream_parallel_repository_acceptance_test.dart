@@ -83,13 +83,13 @@ Future<void> main(List<String> args) async {
 ''');
 
     final processA = await Process.start(
-      Platform.resolvedExecutable,
+      Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
       [workerScript.path, 'A'],
       workingDirectory: scopeA.workingDirectory.path,
       runInShell: false,
     );
     final processB = await Process.start(
-      Platform.resolvedExecutable,
+      Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
       [workerScript.path, 'B'],
       workingDirectory: scopeB.workingDirectory.path,
       runInShell: false,

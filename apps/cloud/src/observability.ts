@@ -9,7 +9,6 @@ export interface CorrelationContext {
   runtimeId?: string;
   hostId?: string;
   workerId?: string;
-  credentialProfileId?: string;
 }
 
 const SECRET_KEY =

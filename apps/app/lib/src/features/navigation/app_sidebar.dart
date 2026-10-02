@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../brand.dart';
-import '../../navigation/studio_navigation.dart';
-import '../../studio/studio_models.dart';
+import '../../navigation/ax_navigation.dart';
+import '../../ax/ax_models.dart';
 import 'app_menu.dart';
 import 'project_tree.dart';
-import 'studio_shell_context.dart';
+import 'ax_shell_context.dart';
 
 /// Canonical Application Sidebar for Conclave AX.
 class AppSidebar extends StatelessWidget {
@@ -33,11 +33,11 @@ class AppSidebar extends StatelessWidget {
     this.compact = false,
   });
 
-  final StudioShellContext shellContext;
-  final ValueChanged<StudioNavigation> onNavigateTo;
+  final AxShellContext shellContext;
+  final ValueChanged<AxNavigation> onNavigateTo;
   final ValueChanged<String> onToggleProjectExpanded;
   final VoidCallback onCreateProject;
-  final ValueChanged<StudioProject>? onCreateWorkstream;
+  final ValueChanged<AxProject>? onCreateWorkstream;
   final TextEditingController? searchController;
   final FocusNode? searchFocusNode;
   final ValueChanged<String>? onSearchChanged;
@@ -71,7 +71,7 @@ class AppSidebar extends StatelessWidget {
                     message: 'Conclave AX — Home',
                     child: InkWell(
                       onTap: () {
-                        onNavigateTo(const StudioNavigation.home());
+                        onNavigateTo(const AxNavigation.home());
                         if (compact) {
                           Scaffold.maybeOf(sidebarContext)?.closeDrawer();
                         }
@@ -313,7 +313,7 @@ class AppSidebar extends StatelessWidget {
                     waitDuration: const Duration(milliseconds: 600),
                     child: InkWell(
                       onTap: () {
-                        onNavigateTo(const StudioNavigation.profileSecurity());
+                        onNavigateTo(const AxNavigation.profileSecurity());
                         if (compact) {
                           Scaffold.maybeOf(sidebarContext)?.closeDrawer();
                         }
@@ -326,7 +326,7 @@ class AppSidebar extends StatelessWidget {
                             horizontal: 6, vertical: 6),
                         decoration: BoxDecoration(
                           color: shellContext.isNavActive(
-                                  const StudioNavigation.profileSecurity())
+                                  const AxNavigation.profileSecurity())
                               ? const Color(0xff302d4b)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
@@ -354,14 +354,12 @@ class AppSidebar extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   color: shellContext.isNavActive(
-                                          const StudioNavigation
-                                              .profileSecurity())
+                                          const AxNavigation.profileSecurity())
                                       ? Colors.white
                                       : Colors.white70,
                                   fontSize: 11.5,
                                   fontWeight: shellContext.isNavActive(
-                                          const StudioNavigation
-                                              .profileSecurity())
+                                          const AxNavigation.profileSecurity())
                                       ? FontWeight.w600
                                       : FontWeight.w400,
                                 ),
@@ -396,7 +394,7 @@ class AppSidebar extends StatelessWidget {
   Widget _navItem({
     required IconData icon,
     required String label,
-    required StudioNavigation? target,
+    required AxNavigation? target,
     String? badge,
     required BuildContext context,
   }) {
@@ -483,11 +481,11 @@ class AppIconRail extends StatelessWidget {
     this.onToggleCollapse,
   });
 
-  final StudioShellContext shellContext;
-  final ValueChanged<StudioNavigation> onNavigateTo;
+  final AxShellContext shellContext;
+  final ValueChanged<AxNavigation> onNavigateTo;
   final VoidCallback onOpenDrawer;
   final VoidCallback? onCreateProject;
-  final ValueChanged<StudioProject>? onCreateWorkstream;
+  final ValueChanged<AxProject>? onCreateWorkstream;
   final TextEditingController? searchController;
   final FocusNode? searchFocusNode;
   final ValueChanged<String>? onSearchChanged;
@@ -582,7 +580,7 @@ class AppIconRail extends StatelessWidget {
           Tooltip(
             message: 'Conclave AX — Home',
             child: InkWell(
-              onTap: () => onNavigateTo(const StudioNavigation.home()),
+              onTap: () => onNavigateTo(const AxNavigation.home()),
               borderRadius: BorderRadius.circular(8),
               hoverColor: const Color(0xff29283c),
               child: Padding(
@@ -694,22 +692,22 @@ class AppIconRail extends StatelessWidget {
                       isExpanded: true,
                       size: 16,
                       color: shellContext
-                              .isNavActive(StudioNavigation.project(project.id))
+                              .isNavActive(AxNavigation.project(project.id))
                           ? const Color(0xffbcb3ff)
                           : (isDark ? Colors.white70 : Colors.black87),
                     ),
                     onPressed: () =>
-                        onNavigateTo(StudioNavigation.project(project.id)),
+                        onNavigateTo(AxNavigation.project(project.id)),
                     child: Text(
                       project.name,
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: shellContext.isNavActive(
-                                StudioNavigation.project(project.id))
+                        fontWeight: shellContext
+                                .isNavActive(AxNavigation.project(project.id))
                             ? FontWeight.bold
                             : FontWeight.w600,
-                        color: shellContext.isNavActive(
-                                StudioNavigation.project(project.id))
+                        color: shellContext
+                                .isNavActive(AxNavigation.project(project.id))
                             ? const Color(0xffbcb3ff)
                             : (isDark ? Colors.white : Colors.black87),
                       ),
@@ -718,8 +716,8 @@ class AppIconRail extends StatelessWidget {
                   for (final workstream in project.workstreams)
                     MenuItemButton(
                       style: itemStyle(),
-                      onPressed: () => onNavigateTo(StudioNavigation.workstream(
-                          project.id, workstream.id)),
+                      onPressed: () => onNavigateTo(
+                          AxNavigation.workstream(project.id, workstream.id)),
                       child: Padding(
                         padding: const EdgeInsets.only(left: 24),
                         child: Text(
@@ -727,12 +725,12 @@ class AppIconRail extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: shellContext.isNavActive(
-                                    StudioNavigation.workstream(
+                                    AxNavigation.workstream(
                                         project.id, workstream.id))
                                 ? FontWeight.bold
                                 : FontWeight.normal,
                             color: shellContext.isNavActive(
-                                    StudioNavigation.workstream(
+                                    AxNavigation.workstream(
                                         project.id, workstream.id))
                                 ? const Color(0xffbcb3ff)
                                 : (isDark ? Colors.white70 : Colors.black87),
@@ -765,14 +763,13 @@ class AppIconRail extends StatelessWidget {
                 shellContext.viewerEmail ??
                 'Profile & Security',
             child: InkWell(
-              onTap: () =>
-                  onNavigateTo(const StudioNavigation.profileSecurity()),
+              onTap: () => onNavigateTo(const AxNavigation.profileSecurity()),
               borderRadius: BorderRadius.circular(14),
               child: Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: shellContext
-                          .isNavActive(const StudioNavigation.profileSecurity())
+                          .isNavActive(const AxNavigation.profileSecurity())
                       ? Border.all(color: const Color(0xffbcb3ff), width: 2)
                       : null,
                 ),
@@ -814,7 +811,7 @@ class _RailSearchMenuAnchor extends StatefulWidget {
   final FocusNode? searchFocusNode;
   final ValueChanged<String>? onSearchChanged;
   final VoidCallback? onClearSearch;
-  final ValueChanged<StudioNavigation> onNavigateTo;
+  final ValueChanged<AxNavigation> onNavigateTo;
   final bool isDark;
 
   @override
@@ -945,8 +942,8 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
                               focusNode: _focusNode,
                               onChanged: widget.onSearchChanged,
                               onSubmitted: (text) {
-                                widget.onNavigateTo(
-                                    const StudioNavigation.search());
+                                widget
+                                    .onNavigateTo(const AxNavigation.search());
                                 _menuController.close();
                               },
                               style: TextStyle(

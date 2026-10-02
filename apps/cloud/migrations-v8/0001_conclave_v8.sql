@@ -78,9 +78,7 @@ CREATE TABLE workstream_execution_policies (
   primary_workspace_id TEXT REFERENCES execution_workspaces(id) ON DELETE RESTRICT,
   require_checkout INTEGER NOT NULL DEFAULT 0 CHECK (require_checkout IN (0, 1)),
   max_concurrent_work_requests INTEGER NOT NULL CHECK (max_concurrent_work_requests > 0),
-  allowed_configured_worker_ids_json TEXT NOT NULL DEFAULT '[]',
   allowed_worker_type_ids_json TEXT NOT NULL DEFAULT '[]',
-  allowed_providers_json TEXT NOT NULL DEFAULT '[]',
   allowed_models_json TEXT NOT NULL DEFAULT '[]',
   budget_json TEXT
 );
@@ -99,21 +97,6 @@ CREATE TABLE workstream_checkouts (
 CREATE UNIQUE INDEX idx_one_active_checkout
   ON workstream_checkouts(workstream_id)
   WHERE status IN ('provisioning', 'ready', 'stale');
-CREATE TABLE workstream_execution_leases (
-  id TEXT PRIMARY KEY,
-  workstream_id TEXT NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
-  checkout_id TEXT NOT NULL REFERENCES workstream_checkouts(id) ON DELETE RESTRICT,
-  work_request_id TEXT NOT NULL REFERENCES work_requests(id) ON DELETE CASCADE,
-  workspace_id TEXT NOT NULL REFERENCES execution_workspaces(id) ON DELETE RESTRICT,
-  fencing_token INTEGER NOT NULL CHECK (fencing_token > 0),
-  status TEXT NOT NULL CHECK (status IN ('active', 'released', 'expired')),
-  acquired_at TEXT NOT NULL,
-  expires_at TEXT NOT NULL,
-  released_at TEXT,
-  UNIQUE (checkout_id, fencing_token)
-);
-CREATE UNIQUE INDEX idx_one_active_lease
-  ON workstream_execution_leases(checkout_id) WHERE status = 'active';
 CREATE TABLE workstream_checkpoints (
   id TEXT PRIMARY KEY,
   workstream_id TEXT NOT NULL,
@@ -148,7 +131,6 @@ CREATE TABLE runs (
   workstream_id TEXT REFERENCES workstreams(id) ON DELETE SET NULL,
   work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
   checkout_id TEXT REFERENCES workstream_checkouts(id) ON DELETE SET NULL,
-  execution_lease_id TEXT REFERENCES workstream_execution_leases(id) ON DELETE SET NULL,
   status TEXT NOT NULL CHECK (status IN ('created', 'running', 'paused', 'completed', 'failed', 'cancelled')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -160,10 +142,9 @@ CREATE TABLE worker_assignments (
   workstream_id TEXT REFERENCES workstreams(id) ON DELETE SET NULL,
   work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
   checkout_id TEXT REFERENCES workstream_checkouts(id) ON DELETE SET NULL,
-  execution_lease_id TEXT REFERENCES workstream_execution_leases(id) ON DELETE SET NULL,
   execution_workspace_id TEXT NOT NULL REFERENCES execution_workspaces(id) ON DELETE RESTRICT,
   runtime_identity_id TEXT NOT NULL REFERENCES workspace_runtime_identities(id) ON DELETE RESTRICT,
-  worker_id TEXT NOT NULL REFERENCES worker_catalog(worker_type_id) ON DELETE RESTRICT,
+  worker_type_id TEXT NOT NULL REFERENCES worker_catalog(worker_type_id) ON DELETE RESTRICT,
   status TEXT NOT NULL,
   input_json TEXT NOT NULL DEFAULT '{}',
   output_json TEXT,
@@ -178,7 +159,6 @@ CREATE TABLE artifacts (
   workstream_id TEXT REFERENCES workstreams(id) ON DELETE SET NULL,
   work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
   checkout_id TEXT REFERENCES workstream_checkouts(id) ON DELETE SET NULL,
-  execution_lease_id TEXT REFERENCES workstream_execution_leases(id) ON DELETE SET NULL,
   assignment_id TEXT REFERENCES worker_assignments(id) ON DELETE SET NULL,
   content_digest TEXT NOT NULL,
   storage_key TEXT NOT NULL,
@@ -187,65 +167,6 @@ CREATE TABLE artifacts (
 CREATE INDEX idx_runs_workstream ON runs(workstream_id, created_at);
 CREATE INDEX idx_assignments_work_request ON worker_assignments(work_request_id, created_at);
 CREATE INDEX idx_artifacts_work_request ON artifacts(work_request_id, created_at);
-CREATE TABLE workstream_integrations (
-  id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  workstream_id TEXT NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
-  requested_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-  provider TEXT NOT NULL CHECK (provider IN ('github', 'patch')),
-  status TEXT NOT NULL CHECK (status IN (
-    'draft', 'branch_published', 'pr_open', 'merge_ready', 'merged',
-    'patch_exported', 'completed', 'conflict', 'failed'
-  )),
-  branch_name TEXT,
-  base_revision TEXT NOT NULL,
-  head_revision TEXT,
-  pull_request_number INTEGER,
-  pull_request_url TEXT,
-  patch_artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
-  error TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-CREATE INDEX idx_workstream_integrations_workstream
-  ON workstream_integrations(workstream_id, updated_at);
-CREATE UNIQUE INDEX idx_workstream_integrations_pr
-  ON workstream_integrations(provider, pull_request_url)
-  WHERE pull_request_url IS NOT NULL;
-CREATE TABLE workstream_audit_log (
-  id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  workstream_id TEXT NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
-  work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
-  actor_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-  action TEXT NOT NULL CHECK (action IN (
-    'discussion.moderated', 'work_request.created', 'workflow.selected',
-    'account.selected', 'checkout.provisioned', 'checkout.recovered',
-    'lease.acquired', 'lease.released', 'checkpoint.created',
-    'integration.updated'
-  )),
-  target_id TEXT NOT NULL,
-  details_json TEXT NOT NULL DEFAULT '{}',
-  occurred_at TEXT NOT NULL
-);
-CREATE INDEX idx_workstream_audit_time
-  ON workstream_audit_log(workstream_id, occurred_at);
-CREATE TABLE workstream_observability_metrics (
-  id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  workstream_id TEXT NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
-  work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
-  queue_wait_ms INTEGER NOT NULL DEFAULT 0,
-  stateful_duration_ms INTEGER NOT NULL DEFAULT 0,
-  checkout_recovery_attempted INTEGER NOT NULL DEFAULT 0,
-  checkout_recovery_succeeded INTEGER NOT NULL DEFAULT 0,
-  rollback_attempted INTEGER NOT NULL DEFAULT 0,
-  rollback_succeeded INTEGER NOT NULL DEFAULT 0,
-  workspace_id TEXT REFERENCES execution_workspaces(id) ON DELETE SET NULL,
-  recorded_at TEXT NOT NULL
-);
-CREATE INDEX idx_workstream_metrics_time
-  ON workstream_observability_metrics(workstream_id, recorded_at);
 CREATE TABLE workspace_project_grants (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -585,7 +506,6 @@ CREATE TABLE realtime_events (
   event_id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,
   project_id TEXT,
-  chat_id TEXT,
   run_id TEXT,
   task_id TEXT,
   attempt_id TEXT,
@@ -604,18 +524,6 @@ CREATE INDEX idx_realtime_events_workspace_sequence
 CREATE UNIQUE INDEX idx_runs_workflow_instance
   ON runs(workflow_instance_id)
   WHERE workflow_instance_id IS NOT NULL;
-CREATE TABLE run_external_executions (
-  id TEXT PRIMARY KEY,
-  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-  execution_kind TEXT NOT NULL,
-  external_id TEXT NOT NULL,
-  status TEXT NOT NULL,
-  result_artifact_id TEXT,
-  error TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  UNIQUE (run_id, execution_kind)
-);
 CREATE TABLE worker_catalog (
   worker_type_id TEXT PRIMARY KEY,
   display_name TEXT NOT NULL CHECK (length(display_name) BETWEEN 1 AND 128),

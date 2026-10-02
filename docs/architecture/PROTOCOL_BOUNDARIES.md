@@ -41,8 +41,9 @@ actions and display Cloud-authoritative state.
 
 AX MUST NOT open a Workspace Runtime Protocol connection, construct runtime
 messages, or authenticate as a Workspace machine. AX cannot dispatch an
-assignment directly to a Workspace or Worker executable. Cloud authorizes and schedules
-work, then dispatches it through the Workspace Runtime Protocol.
+assignment directly to a Workspace or provider CLI. Cloud authorizes and
+schedules work, then dispatches it through the Workspace Runtime Protocol.
+Workspace executes it with the generic CLI Worker Engine.
 
 The Workspace desktop's owner-authenticated account and registration requests
 remain explicitly scoped management routes on Cloud's human-authenticated HTTP
@@ -175,7 +176,7 @@ unchanged across a boundary.
 
 ## Current schema locations
 
-- Human Product Protocol: AX `apps/app/lib/src/studio/studio_data.dart` and
+- Human Product Protocol: AX `apps/app/lib/src/ax/ax_data.dart` and
   `apps/app/lib/src/realtime/realtime_client.dart`; Cloud
   `apps/cloud/src/routes/handlers.ts` and `apps/cloud/src/realtime-gateway.ts`.
 - Workspace Runtime Protocol: Workspace

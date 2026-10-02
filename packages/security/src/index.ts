@@ -91,7 +91,8 @@ export function authorize(
   // is filtered/owned by its handler. Every other permission needs an explicit
   // Project, Workspace owner, or Profile administrator check.
   if (!projectId) {
-    if (permission === "projects:read" || permission === "projects:manage") return;
+    if (permission === "projects:read" || permission === "projects:manage")
+      return;
     throw new AuthorizationError(permission);
   }
   const role = context.projectRoles[projectId];

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
-import 'package:conclave_app/src/studio/studio_models.dart';
+import 'package:conclave_app/src/ax/ax_models.dart';
 
 void main() {
   testWidgets('empty Workspaces explains desktop-owned registration',
@@ -38,7 +38,7 @@ void main() {
 
   testWidgets('connected Workspace card remains the unit of the page',
       (tester) async {
-    const workspace = StudioWorkspace(
+    const workspace = AxWorkspace(
       id: 'workspace-1',
       name: 'Vitalii’s MacBook Pro',
       status: 'online',
@@ -70,7 +70,7 @@ void main() {
   });
 
   testWidgets('paired offline Workspace stays read-only', (tester) async {
-    const workspace = StudioWorkspace(
+    const workspace = AxWorkspace(
       id: 'workspace-offline',
       name: 'Paired Mac',
       status: 'offline',

@@ -1,4 +1,4 @@
-enum StudioNotificationKind {
+enum AxNotificationKind {
   completed,
   failed,
   approvalRequired,
@@ -8,9 +8,9 @@ enum StudioNotificationKind {
   invitationReceived,
 }
 
-enum StudioNotificationPriority { high, normal, low }
+enum AxNotificationPriority { high, normal, low }
 
-enum StudioNotificationTarget { run, workspaces, workspace }
+enum AxNotificationTarget { run, workspaces, workspace }
 
 /// Filters realtime noise from actionable team notifications. Progress,
 /// discussion, queue, checkout, and lease updates update read models but do
@@ -33,8 +33,8 @@ bool isMeaningfulRealtimeNotification(String type) => {
       'worker.install_failed',
     }.contains(type);
 
-class StudioNotification {
-  const StudioNotification({
+class AxNotification {
+  const AxNotification({
     required this.id,
     required this.kind,
     required this.title,
@@ -50,19 +50,19 @@ class StudioNotification {
   });
 
   final String id;
-  final StudioNotificationKind kind;
+  final AxNotificationKind kind;
   final String title;
   final String message;
   final DateTime createdAt;
-  final StudioNotificationPriority priority;
+  final AxNotificationPriority priority;
   final String? projectId;
   final String? runId;
   final String? workspaceId;
   final String? workerId;
-  final StudioNotificationTarget? target;
+  final AxNotificationTarget? target;
   final bool read;
 
-  StudioNotification markRead() => StudioNotification(
+  AxNotification markRead() => AxNotification(
         id: id,
         kind: kind,
         title: title,
@@ -78,40 +78,39 @@ class StudioNotification {
       );
 }
 
-StudioNotification? notificationFromRealtimeEvent(
+AxNotification? notificationFromRealtimeEvent(
   Map<String, dynamic> event,
 ) {
   final type = event['type'];
   if (type is! String) return null;
   final kind = switch (type) {
-    'run.completed' ||
-    'assignment.completed' =>
-      StudioNotificationKind.completed,
+    'run.completed' || 'assignment.completed' => AxNotificationKind.completed,
     'run.failed' ||
     'task.failed' ||
     'assignment.failed' =>
-      StudioNotificationKind.failed,
+      AxNotificationKind.failed,
     'run.input_required' ||
     'run.approval_required' ||
     'workstream.needs_input' =>
-      StudioNotificationKind.approvalRequired,
-    'workstream.completed' => StudioNotificationKind.completed,
+      AxNotificationKind.approvalRequired,
+    'workstream.completed' => AxNotificationKind.completed,
     'workstream.failed' ||
     'workstream.grant.problem' ||
     'workstream.recovery.required' =>
-      StudioNotificationKind.failed,
-    'workstream.account.problem' =>
-      StudioNotificationKind.workerCredentialProblem,
-    'host.offline' || 'host.stale' => StudioNotificationKind.workspaceOffline,
+      AxNotificationKind.failed,
+    'workstream.account.problem' => AxNotificationKind.workerCredentialProblem,
+    'workspace.offline' ||
+    'workspace.stale' =>
+      AxNotificationKind.workspaceOffline,
     'account.expired' ||
     'credential.expired' =>
-      StudioNotificationKind.workerCredentialProblem,
+      AxNotificationKind.workerCredentialProblem,
     'worker.install.failed' ||
     'worker.install_failed' =>
-      StudioNotificationKind.workerInstallFailed,
+      AxNotificationKind.workerInstallFailed,
     'workspace.invitation.received' ||
     'invitation.received' =>
-      StudioNotificationKind.invitationReceived,
+      AxNotificationKind.invitationReceived,
     _ => null,
   };
   if (kind == null) return null;
@@ -136,17 +135,17 @@ StudioNotification? notificationFromRealtimeEvent(
       _optionalString(payloadMap['summary']) ??
       _optionalString(payloadMap['error']) ??
       switch (kind) {
-        StudioNotificationKind.completed => 'The Run is ready to review.',
-        StudioNotificationKind.failed => 'The Run needs attention.',
-        StudioNotificationKind.approvalRequired =>
+        AxNotificationKind.completed => 'The Run is ready to review.',
+        AxNotificationKind.failed => 'The Run needs attention.',
+        AxNotificationKind.approvalRequired =>
           'A response is needed before the Run can continue.',
-        StudioNotificationKind.workspaceOffline =>
+        AxNotificationKind.workspaceOffline =>
           'A Workspace is offline and may need to reconnect.',
-        StudioNotificationKind.workerCredentialProblem =>
+        AxNotificationKind.workerCredentialProblem =>
           'A Worker connection needs to be re-authenticated.',
-        StudioNotificationKind.workerInstallFailed =>
+        AxNotificationKind.workerInstallFailed =>
           'A Worker could not connect to a Workspace.',
-        StudioNotificationKind.invitationReceived =>
+        AxNotificationKind.invitationReceived =>
           'You received a Workspace invitation.',
       };
   final timestamp =
@@ -155,45 +154,41 @@ StudioNotification? notificationFromRealtimeEvent(
   final eventId = _optionalString(event['eventId']) ??
       '$type:${runId ?? projectId ?? 'workspace'}:${timestamp.microsecondsSinceEpoch}';
   final target = switch (kind) {
-    StudioNotificationKind.completed ||
-    StudioNotificationKind.failed ||
-    StudioNotificationKind.approvalRequired =>
-      StudioNotificationTarget.run,
-      StudioNotificationKind.workspaceOffline =>
-        StudioNotificationTarget.workspaces,
-    StudioNotificationKind.workerCredentialProblem =>
-      StudioNotificationTarget.workspace,
-    StudioNotificationKind.workerInstallFailed =>
-      StudioNotificationTarget.workspace,
-    StudioNotificationKind.invitationReceived =>
-      StudioNotificationTarget.workspace,
+    AxNotificationKind.completed ||
+    AxNotificationKind.failed ||
+    AxNotificationKind.approvalRequired =>
+      AxNotificationTarget.run,
+    AxNotificationKind.workspaceOffline => AxNotificationTarget.workspaces,
+    AxNotificationKind.workerCredentialProblem =>
+      AxNotificationTarget.workspace,
+    AxNotificationKind.workerInstallFailed => AxNotificationTarget.workspace,
+    AxNotificationKind.invitationReceived => AxNotificationTarget.workspace,
   };
 
-  return StudioNotification(
+  return AxNotification(
     id: eventId,
     kind: kind,
     title: switch (kind) {
-      StudioNotificationKind.completed => 'Run completed',
-      StudioNotificationKind.failed => 'Run failed',
-      StudioNotificationKind.approvalRequired => 'Action needed',
-      StudioNotificationKind.workspaceOffline => 'Workspace offline',
-      StudioNotificationKind.workerCredentialProblem =>
-        'Worker connection expired',
-      StudioNotificationKind.workerInstallFailed => 'Worker connection failed',
-      StudioNotificationKind.invitationReceived => 'Invitation received',
+      AxNotificationKind.completed => 'Run completed',
+      AxNotificationKind.failed => 'Run failed',
+      AxNotificationKind.approvalRequired => 'Action needed',
+      AxNotificationKind.workspaceOffline => 'Workspace offline',
+      AxNotificationKind.workerCredentialProblem => 'Worker connection expired',
+      AxNotificationKind.workerInstallFailed => 'Worker connection failed',
+      AxNotificationKind.invitationReceived => 'Invitation received',
     },
     message: message,
     createdAt: timestamp,
     priority: switch (kind) {
-      StudioNotificationKind.approvalRequired ||
-      StudioNotificationKind.failed ||
-      StudioNotificationKind.workerCredentialProblem =>
-        StudioNotificationPriority.high,
-      StudioNotificationKind.workspaceOffline ||
-      StudioNotificationKind.workerInstallFailed ||
-      StudioNotificationKind.invitationReceived =>
-        StudioNotificationPriority.normal,
-      StudioNotificationKind.completed => StudioNotificationPriority.low,
+      AxNotificationKind.approvalRequired ||
+      AxNotificationKind.failed ||
+      AxNotificationKind.workerCredentialProblem =>
+        AxNotificationPriority.high,
+      AxNotificationKind.workspaceOffline ||
+      AxNotificationKind.workerInstallFailed ||
+      AxNotificationKind.invitationReceived =>
+        AxNotificationPriority.normal,
+      AxNotificationKind.completed => AxNotificationPriority.low,
     },
     projectId: projectId,
     runId: runId,

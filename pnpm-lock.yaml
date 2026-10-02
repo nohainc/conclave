@@ -44,12 +44,6 @@ importers:
       '@conclave/host-protocol':
         specifier: workspace:*
         version: link:../../packages/host-protocol
-      '@conclave/orchestration':
-        specifier: workspace:*
-        version: link:../../packages/orchestration
-      '@conclave/persistence':
-        specifier: workspace:*
-        version: link:../../packages/persistence
       '@conclave/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -87,12 +81,7 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@24.13.6)(vite@7.3.6(@types/node@24.13.6)(yaml@2.9.1))
 
-  packages/core:
-    dependencies:
-      '@conclave/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-
+  packages/core: {}
   packages/host-protocol:
     dependencies:
       '@conclave/protocol':
@@ -102,19 +91,6 @@ importers:
         specifier: ^4.1.11
         version: 4.6.5
 
-  packages/orchestration:
-    dependencies:
-      '@conclave/core':
-        specifier: workspace:*
-        version: link:../core
-      '@conclave/persistence':
-        specifier: workspace:*
-        version: link:../persistence
-      '@conclave/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-
-  packages/persistence: {}
 
   packages/protocol:
     dependencies:

@@ -21,7 +21,6 @@
   ],
   "vars": {
     "CONCLAVE_ENVIRONMENT": "production",
-    "CONCLAVE_PLUGIN_PUBLISHER_EMAIL": "vitalii@nohainc.com",
     "BETTER_AUTH_URL": "https://app.conclaveax.com",
     "CONCLAVE_EMAIL_FROM": "auth@auth.earthuc.com",
   },
@@ -37,12 +36,6 @@
     {
       "binding": "CONCLAVE_ARTIFACTS",
       "bucket_name": "conclave-artifacts-production",
-    },
-  ],
-  "services": [
-    {
-      "binding": "CONCLAVE_FORGE_EXECUTION",
-      "service": "conclave-forge-execution",
     },
   ],
   "workflows": [
@@ -62,6 +55,10 @@
         "name": "CONCLAVE_REALTIME_GATEWAY",
         "class_name": "RealtimeGateway",
       },
+      {
+        "name": "CONCLAVE_WORKSTREAM_COORDINATOR",
+        "class_name": "WorkstreamExecutionCoordinator",
+      },
     ],
   },
   "migrations": [
@@ -78,6 +75,10 @@
       "tag": "v3-workspace-and-realtime-gateway",
       "deleted_classes": ["HostGateway"],
       "new_sqlite_classes": ["WorkspaceGateway"],
+    },
+    {
+      "tag": "v8-workstream-coordinator",
+      "new_sqlite_classes": ["WorkstreamExecutionCoordinator"],
     },
   ],
   "routes": [

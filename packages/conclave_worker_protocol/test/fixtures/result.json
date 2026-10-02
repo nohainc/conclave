@@ -1,1 +1,7 @@
-{"type":"result","requestId":"execute-1","assignmentId":"assignment-1","output":"The changes are limited to the protocol package.","artifacts":[]}
+{
+  "type": "result",
+  "requestId": "execute-1",
+  "assignmentId": "assignment-1",
+  "output": "The changes are limited to the protocol package.",
+  "artifacts": []
+}

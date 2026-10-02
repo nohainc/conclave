@@ -13,7 +13,6 @@ The first extracted pages are:
 - `features/projects/projects_pages.dart` for Projects and Project overview;
 - `features/workspace/workspace_settings_page.dart` for Workspace settings.
 
-The compatibility `StudioApp` name and existing `Studio*` domain models remain
-temporarily so this architectural split can proceed without a broad, risky
-rename. Additional feature pages should move behind the same boundary before
-new feature-specific behavior is added to the shell.
+The AX application shell and its domain models use current AX naming. Additional
+feature pages should move behind the same boundary before new feature-specific
+behavior is added to the shell.

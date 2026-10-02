@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../navigation/studio_navigation.dart';
-import 'studio_shell_context.dart';
+import '../../navigation/ax_navigation.dart';
+import 'ax_shell_context.dart';
 
 /// Route-aware breadcrumb widget for Conclave AX HUD.
 class AppBreadcrumb extends StatelessWidget {
@@ -14,8 +14,8 @@ class AppBreadcrumb extends StatelessWidget {
     this.compact = false,
   });
 
-  final StudioShellContext shellContext;
-  final ValueChanged<StudioNavigation> onNavigateTo;
+  final AxShellContext shellContext;
+  final ValueChanged<AxNavigation> onNavigateTo;
   final Color inkColor;
   final Color mutedInk;
   final bool compact;
@@ -27,42 +27,42 @@ class AppBreadcrumb extends StatelessWidget {
     final workstream = shellContext.selectedWorkstream;
 
     final children = switch (nav.kind) {
-      StudioRouteKind.home => [
+      AxRouteKind.home => [
           _breadcrumbText('Home', isCurrent: true),
         ],
-      StudioRouteKind.projects => [
+      AxRouteKind.projects => [
           _breadcrumbText('Projects', isCurrent: true),
         ],
-      StudioRouteKind.project => [
+      AxRouteKind.project => [
           _breadcrumbText(project?.name ?? 'Project', isCurrent: true),
         ],
-      StudioRouteKind.workstream => [
+      AxRouteKind.workstream => [
           if (project != null) ...[
             _breadcrumbLink(
               project.name,
-              () => onNavigateTo(StudioNavigation.project(project.id)),
+              () => onNavigateTo(AxNavigation.project(project.id)),
             ),
             _divider(),
           ] else ...[
             _breadcrumbLink(
               'Home',
-              () => onNavigateTo(const StudioNavigation.home()),
+              () => onNavigateTo(const AxNavigation.home()),
             ),
             _divider(),
           ],
           _breadcrumbText(workstream?.name ?? 'Workstream', isCurrent: true),
         ],
-      StudioRouteKind.run => [
+      AxRouteKind.run => [
           if (project != null) ...[
             _breadcrumbLink(
               project.name,
-              () => onNavigateTo(StudioNavigation.project(project.id)),
+              () => onNavigateTo(AxNavigation.project(project.id)),
             ),
             _divider(),
           ] else ...[
             _breadcrumbLink(
               'Projects',
-              () => onNavigateTo(const StudioNavigation.projects()),
+              () => onNavigateTo(const AxNavigation.projects()),
             ),
             _divider(),
           ],
@@ -70,17 +70,17 @@ class AppBreadcrumb extends StatelessWidget {
             _breadcrumbLink(
               workstream?.name ?? 'Workstream',
               () => onNavigateTo(
-                  StudioNavigation.workstream(project.id, nav.workstreamId!)),
+                  AxNavigation.workstream(project.id, nav.workstreamId!)),
             ),
             _divider(),
           ],
           _breadcrumbText('Run', isCurrent: true),
         ],
-      StudioRouteKind.workspaces => nav.workspaceId != null
+      AxRouteKind.workspaces => nav.workspaceId != null
           ? [
               _breadcrumbLink(
                 'Workspaces',
-                () => onNavigateTo(const StudioNavigation.workspaces()),
+                () => onNavigateTo(const AxNavigation.workspaces()),
               ),
               _divider(),
               _breadcrumbText(
@@ -95,10 +95,10 @@ class AppBreadcrumb extends StatelessWidget {
           : [
               _breadcrumbText('Workspaces', isCurrent: true),
             ],
-      StudioRouteKind.profileSecurity => [
+      AxRouteKind.profileSecurity => [
           _breadcrumbText('Profile & Security', isCurrent: true),
         ],
-      StudioRouteKind.search => [
+      AxRouteKind.search => [
           _breadcrumbText('Search', isCurrent: true),
         ],
       _ => [

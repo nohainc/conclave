@@ -1191,7 +1191,7 @@ class HostCloudConnection {
         _sendAssignmentError(
           socket,
           message,
-          'internal_adapter_error',
+          'execution_failed',
           retryable: true,
         );
       } else if (previous.status == AssignmentStatus.cancelled) {
@@ -1430,7 +1430,6 @@ class HostCloudConnection {
         'engineVersion',
         'profileDefinitionId',
         'profileReleaseVersion',
-        'credentialProfileId',
         'config',
         'permissions',
         'contextRefs',

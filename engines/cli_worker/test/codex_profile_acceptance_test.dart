@@ -18,7 +18,7 @@ void main() {
             as Map<String, Object?>;
     final provider = profile['providerTool']! as Map<String, Object?>;
     const providerScript =
-        'workers/fixture_cli/tool/codex_profile_provider.dart';
+        'packages/tool-profile/test/fixtures/provider-cli/codex_profile_provider.dart';
     provider['executableCandidates'] = ['dart'];
     (provider['discovery']! as Map<String, Object?>)['standardLocations'] =
         <String>[];

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../brand.dart';
 import '../common/external_links.dart';
-import '../../navigation/studio_navigation.dart';
-import 'studio_shell_context.dart';
+import '../../navigation/ax_navigation.dart';
+import 'ax_shell_context.dart';
 
 /// Global application menu anchor (⋯) providing destinations, preferences,
 /// product information, and session logout.
@@ -21,8 +21,8 @@ class GlobalAppMenu extends StatelessWidget {
     this.compact = false,
   });
 
-  final StudioShellContext shellContext;
-  final ValueChanged<StudioNavigation> onNavigateTo;
+  final AxShellContext shellContext;
+  final ValueChanged<AxNavigation> onNavigateTo;
   final VoidCallback? onToggleTheme;
   final ValueChanged<ThemeMode>? onSetThemeMode;
   final VoidCallback onOpenAbout;
@@ -124,7 +124,7 @@ class GlobalAppMenu extends StatelessWidget {
             color: menuIconColor,
           ),
           onPressed: () {
-            onNavigateTo(const StudioNavigation.workspaces());
+            onNavigateTo(const AxNavigation.workspaces());
             if (compact) Scaffold.maybeOf(context)?.closeDrawer();
           },
           child: const Text(

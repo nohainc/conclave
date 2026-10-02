@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
-import 'configured_worker_registry.dart';
+import 'local_worker_registry.dart';
 import 'cli_worker_engine_supervisor.dart';
 import 'tool_profile_release_store.dart';
 import 'tool_profile_release_verifier.dart';
@@ -51,7 +51,7 @@ class WorkerReadinessMonitor {
     this.assessWorker,
   });
 
-  final LocalConfiguredWorkerRegistry registry;
+  final LocalWorkerRegistry registry;
   final ToolProfileReleaseStore? toolProfileReleaseStore;
   final ToolProfileCatalogClient? toolProfileCatalog;
   final CliWorkerEngineSupervisor? cliWorkerEngineSupervisor;
@@ -60,8 +60,8 @@ class WorkerReadinessMonitor {
       profileDiagnosticStoreForWorker;
   final Future<void> Function(String workerTypeId)? ensureToolProfileAvailable;
   final Duration interval;
-  final Future<WorkerReadinessAssessment> Function(
-      LocalConfiguredWorker worker)? assessWorker;
+  final Future<WorkerReadinessAssessment> Function(LocalWorker worker)?
+      assessWorker;
   Timer? _timer;
   Future<void>? _activeCheck;
 
@@ -334,7 +334,7 @@ class WorkerReadinessMonitor {
   }
 
   Future<WorkerReadinessAssessment> _assess(
-    LocalConfiguredWorker worker, {
+    LocalWorker worker, {
     LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
   }) async {
     try {
@@ -394,7 +394,7 @@ class WorkerReadinessMonitor {
   }
 
   Future<WorkerReadinessAssessment> _assessToolProfileWorker(
-    LocalConfiguredWorker worker, {
+    LocalWorker worker, {
     required String profileDefinitionId,
     required LocalWorkerProbeMode mode,
   }) async {
@@ -646,7 +646,7 @@ class WorkerReadinessMonitor {
   }
 
   Future<void> _recordToolProfileDiagnostic(
-    LocalConfiguredWorker worker, {
+    LocalWorker worker, {
     required String runId,
     required LocalWorkerProbeMode mode,
     required int durationMs,

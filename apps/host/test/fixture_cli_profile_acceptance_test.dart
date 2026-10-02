@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_host/cli_worker_engine_supervisor.dart';
-import 'package:conclave_host/configured_worker_registry.dart';
+import 'package:conclave_host/local_worker_registry.dart';
 import 'package:conclave_host/tool_profile_catalog.dart';
 import 'package:conclave_host/tool_profile_release_store.dart';
 import 'package:conclave_host/worker_diagnostic_store.dart';
@@ -101,7 +101,7 @@ void main() {
         'testing',
       );
 
-      final registry = LocalConfiguredWorkerRegistry(
+      final registry = LocalWorkerRegistry(
         dataDirectory: Directory('${root.path}/Registry'),
         workspaceId: 'workspace-third-cli',
         idGenerator: () => 'fixture-worker-local',
@@ -111,7 +111,7 @@ void main() {
         '$repository/apps/host/assets/engines/'
         'conclave_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
       );
-      final dartDirectory = File(Platform.resolvedExecutable).parent.path;
+      final dartDirectory = File(_dartExecutable()).parent.path;
       final inheritedPath = Platform.environment['PATH'] ?? '';
       final engine = CliWorkerEngineSupervisor(
         engineExecutable:

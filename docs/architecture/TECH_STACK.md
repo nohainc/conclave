@@ -51,7 +51,7 @@ See [Protocol Boundaries](PROTOCOL_BOUNDARIES.md).
 
 ## Implementation principles
 
-- Keep Cloud persistence behind `@conclave/persistence` interfaces.
+- Keep D1 persistence owned by Cloud route and service modules; keep Workspace local persistence in the Workspace data directory.
 - Prefer explicit domain types, state machines, immutable assignment snapshots,
   and idempotent commands.
 - Keep scheduling authorization in Cloud and process/filesystem enforcement in

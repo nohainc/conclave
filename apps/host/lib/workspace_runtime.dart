@@ -52,7 +52,7 @@ Future<Host> buildWorkspaceRuntime(
     effectiveConfig.dataDirectory,
   ).getOrCreate(initialIdentity: effectiveConfig.workspaceId);
   HostCloudConnection? connection;
-  final localWorkerRegistry = LocalConfiguredWorkerRegistry(
+  final localWorkerRegistry = LocalWorkerRegistry(
     dataDirectory: effectiveConfig.dataDirectory,
     workspaceId: localWorkspaceId,
     onChanged: () async {

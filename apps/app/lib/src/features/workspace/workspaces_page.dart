@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../studio/studio_models.dart';
+import '../../ax/ax_models.dart';
 
 export 'workspaces_overview.dart';
 
@@ -16,19 +16,19 @@ class WorkspacesPage extends StatefulWidget {
     this.onSelectWorkspace,
     // Retained as optional compatibility inputs while callers are audited.
     VoidCallback? onAdd,
-    ValueChanged<StudioWorkspace>? onRename,
-    ValueChanged<StudioWorkspace>? onUpdate,
-    ValueChanged<StudioWorkspace>? onRevoke,
-    Future<void> Function(StudioWorkspace)? onConnect,
+    ValueChanged<AxWorkspace>? onRename,
+    ValueChanged<AxWorkspace>? onUpdate,
+    ValueChanged<AxWorkspace>? onRevoke,
+    Future<void> Function(AxWorkspace)? onConnect,
     required this.onGrant,
     this.onOpenDownloads,
   });
 
-  final List<StudioWorkspace> workspaces;
-  final List<StudioWorker> workspaceWorkers;
+  final List<AxWorkspace> workspaces;
+  final List<AxWorker> workspaceWorkers;
   final String? initialWorkspaceId;
   final ValueChanged<String?>? onSelectWorkspace;
-  final ValueChanged<StudioWorkspace> onGrant;
+  final ValueChanged<AxWorkspace> onGrant;
   final VoidCallback? onOpenDownloads;
 
   @override
@@ -171,7 +171,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
         },
       );
 
-  void _toggle(StudioWorkspace workspace) {
+  void _toggle(AxWorkspace workspace) {
     final isExpanded = _expanded.contains(workspace.id);
     setState(() {
       if (isExpanded) {
@@ -208,8 +208,8 @@ class _WorkspaceCardBody extends StatelessWidget {
     required this.onOpenDownloads,
   });
 
-  final StudioWorkspace workspace;
-  final List<StudioWorker> workers;
+  final AxWorkspace workspace;
+  final List<AxWorker> workers;
   final VoidCallback onGrant;
   final VoidCallback? onOpenDownloads;
 
@@ -298,7 +298,7 @@ class _WorkspaceCardBody extends StatelessWidget {
 
 class _WorkerRow extends StatefulWidget {
   const _WorkerRow({required this.worker});
-  final StudioWorker worker;
+  final AxWorker worker;
 
   @override
   State<_WorkerRow> createState() => _WorkerRowState();
@@ -492,7 +492,7 @@ class _EmptyWorkspaces extends StatelessWidget {
       );
 }
 
-String _machine(StudioWorkspace workspace) {
+String _machine(AxWorkspace workspace) {
   final os = switch (workspace.platform.toLowerCase()) {
     'macos' => 'macOS',
     'windows' => 'Windows',
@@ -523,4 +523,4 @@ String _statusLabel(String status) => switch (status.toLowerCase()) {
       _ => status,
     };
 
-int _grantCount(StudioWorkspace workspace) => workspace.projectGrantCount;
+int _grantCount(AxWorkspace workspace) => workspace.projectGrantCount;

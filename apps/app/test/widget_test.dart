@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/features/projects/projects_pages.dart';
-import 'package:conclave_app/src/studio/studio_models.dart';
+import 'package:conclave_app/src/ax/ax_models.dart';
 
-import 'studio_fixture_data.dart';
+import 'ax_fixture_data.dart';
 
 void main() {
-  const project = StudioProject(
+  const project = AxProject(
     id: 'project-1',
     name: 'Authentication',
     branch: 'main',
     lastActivity: 'today',
     role: 'collaborator',
   );
-  const workstream = StudioWorkstream(
+  const workstream = AxWorkstream(
     id: 'workstream-1',
     projectId: 'project-1',
     name: 'Login reliability',
@@ -33,7 +33,7 @@ void main() {
         body: SingleChildScrollView(
           child: ProjectPage(
             project: project,
-            dataSource: const StudioFixtureDataSource(),
+            dataSource: const AxFixtureDataSource(),
             onOpenWorkstream: (_) {},
             onEdit: () {},
             onArchive: () {},
@@ -58,8 +58,7 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets('Workstream UI uses product vocabulary',
-      (tester) async {
+  testWidgets('Workstream UI uses product vocabulary', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: SingleChildScrollView(

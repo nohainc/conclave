@@ -6,16 +6,6 @@ export type WorkerRouteHandlers = Record<string, RouteHandler>;
 export interface WorkerRouteDependencies {
   readonly json: (data: unknown, init?: ResponseInit) => Response;
   readonly requireSameOriginForCookieMutation: (request: Request) => void;
-  readonly testAuthenticationEnabled: (env: Env) => boolean;
-  readonly runProjectId: (
-    env: Env,
-    runId: string,
-  ) => Promise<string | undefined>;
-  readonly authorizeRequest: (...args: unknown[]) => Promise<void>;
-  readonly resolveWorkflowInstanceId: (
-    env: Env,
-    runId: string,
-  ) => Promise<string>;
   readonly errorMessage: (error: unknown) => string;
   readonly HttpError: new (...args: unknown[]) => Error;
 }
@@ -188,36 +178,6 @@ export async function routeWorkerRequest(
     }
     if (request.method === "POST" && url.pathname === "/api/session/logout") {
       return await handlers.handleSessionLogout!(request, env, ctx);
-    }
-    const connectorMatch = url.pathname.match(
-      /^\/api\/connector\/(register_session|claim_task|get_task|get_context|get_next_message|submit_candidate|submit_result|submit_finding|report_status|release_task)$/,
-    );
-    if (request.method === "POST" && connectorMatch?.[1]) {
-      return await handlers.handleConnectorRequest!(
-        request,
-        env,
-        connectorMatch[1],
-      );
-    }
-    if (
-      request.method === "POST" &&
-      url.pathname === "/api/connector/tasks/register"
-    ) {
-      return await handlers.handleConnectorTaskRequest!(
-        request,
-        env,
-        undefined,
-      );
-    }
-    const connectorTaskStatusMatch = url.pathname.match(
-      /^\/api\/connector\/tasks\/([^/]+)\/status$/,
-    );
-    if (request.method === "GET" && connectorTaskStatusMatch?.[1]) {
-      return await handlers.handleConnectorTaskRequest!(
-        request,
-        env,
-        connectorTaskStatusMatch[1],
-      );
     }
     if (request.method === "GET" && url.pathname === "/api/workspaces") {
       return await handlers.handleListWorkspaces!(request, env, ctx);
@@ -493,28 +453,6 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
-    const backupMatch = url.pathname.match(
-      /^\/api\/workspaces\/([^/]+)\/backup$/,
-    );
-    if (request.method === "POST" && backupMatch?.[1]) {
-      return await handlers.handleCreateWorkspaceBackup!(
-        request,
-        env,
-        backupMatch[1],
-        ctx,
-      );
-    }
-    const backupRestoreDrillMatch = url.pathname.match(
-      /^\/api\/workspaces\/([^/]+)\/backup\/restore-drill$/,
-    );
-    if (request.method === "POST" && backupRestoreDrillMatch?.[1]) {
-      return await handlers.handleVerifyWorkspaceBackup!(
-        request,
-        env,
-        backupRestoreDrillMatch[1],
-        ctx,
-      );
-    }
     // Workspace runtime Gateway & Protocol routes
     if (
       request.method === "GET" &&
@@ -522,25 +460,23 @@ export async function routeWorkerRequest(
     ) {
       return await handlers.handleWorkspaceGatewayConnect!(request, env);
     }
-    // Execution Workspace enrollments. The old Host enrollment URL is gone;
-    // enrollment is owned by the execution Workspace and has no tenant
-    // membership semantics.
-    const agentEnrollmentsMatch = url.pathname.match(
+    // Enrollment belongs to the Workspace and has no Project membership semantics.
+    const workspaceEnrollmentsMatch = url.pathname.match(
       /^\/api\/workspaces\/([^/]+)\/enrollments$/,
     );
-    if (request.method === "GET" && agentEnrollmentsMatch?.[1]) {
+    if (request.method === "GET" && workspaceEnrollmentsMatch?.[1]) {
       return await handlers.handleListWorkspaceEnrollments!(
         request,
         env,
-        agentEnrollmentsMatch[1],
+        workspaceEnrollmentsMatch[1],
         ctx,
       );
     }
-    if (request.method === "POST" && agentEnrollmentsMatch?.[1]) {
+    if (request.method === "POST" && workspaceEnrollmentsMatch?.[1]) {
       return await handlers.handleCreateWorkspaceEnrollment!(
         request,
         env,
-        agentEnrollmentsMatch[1],
+        workspaceEnrollmentsMatch[1],
         ctx,
       );
     }
@@ -560,7 +496,7 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
-    // Workspace Agents Fleet
+    // Workspace Tool Profile administration
     const toolProfileChannelMatch = url.pathname.match(
       /^\/api\/workspaces\/([^/]+)\/tool-profile-channel$/,
     );
@@ -922,69 +858,6 @@ export async function routeWorkerRequest(
         request,
         env,
         retryWorkRequestMatch[1],
-        ctx,
-      );
-    }
-
-    if (request.method === "GET" && url.pathname === "/api/studio/snapshot") {
-      return await handlers.handleStudioSnapshot!(
-        env,
-        request,
-        url.searchParams.get("projectId"),
-        ctx,
-      );
-    }
-    const projectReadModelMatch = url.pathname.match(
-      /^\/api\/projects\/([^/]+)\/read-model$/,
-    );
-    if (request.method === "GET" && projectReadModelMatch?.[1]) {
-      return await handlers.handleProjectReadModel!(
-        env,
-        request,
-        projectReadModelMatch[1],
-        ctx,
-      );
-    }
-    const runMatch = url.pathname.match(
-      /^\/api\/runs\/([^/]+)(?:\/(pause|resume|restart|cancel|events|ci-evidence|forge-events))?$/,
-    );
-    if (runMatch?.[1] && request.method === "GET" && !runMatch[2]) {
-      const securityEnv = env;
-      const projectId = deps.testAuthenticationEnabled(securityEnv)
-        ? undefined
-        : await deps.runProjectId(securityEnv, runMatch[1]);
-      await deps.authorizeRequest(
-        request,
-        securityEnv,
-        "projects:read",
-        projectId,
-        ctx,
-      );
-      const workflowInstanceId = await deps.resolveWorkflowInstanceId(
-        env,
-        runMatch[1],
-      );
-      const instance = await env.CONCLAVE_RUN_WORKFLOW.get(workflowInstanceId);
-      return deps.json({
-        id: runMatch[1],
-        workflowInstanceId,
-        ...(await instance.status()),
-      });
-    }
-    if (runMatch?.[1] && request.method === "POST" && runMatch[2]) {
-      const command =
-        runMatch[2] === "events"
-          ? "event"
-          : runMatch[2] === "ci-evidence"
-            ? "ci-evidence"
-            : runMatch[2] === "forge-events"
-              ? "forge-terminal"
-              : (runMatch[2] as "pause" | "resume" | "restart" | "cancel");
-      return await handlers.handleRunCommand!(
-        request,
-        env,
-        runMatch[1],
-        command,
         ctx,
       );
     }

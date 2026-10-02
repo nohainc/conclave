@@ -14,8 +14,7 @@ import {
 } from "./realtime-queue.js";
 
 export interface RealtimeScope {
-  kind?:
-    "user" | "project" | "workstream" | "run" | "execution_workspace";
+  kind?: "user" | "project" | "workstream" | "run" | "execution_workspace";
   executionWorkspaceId?: string;
   workspaceId?: string;
   projectId?: string;
@@ -280,25 +279,30 @@ export async function authorizeRealtimeScope(
     )
     .bind(scope.workspaceId, userId)
     .first<{ owner: number }>();
-  if (!owner) return { allowed: false, reason: "execution_workspace_access_denied" };
+  if (!owner)
+    return { allowed: false, reason: "execution_workspace_access_denied" };
 
   if (scope.projectId) {
     const project = await db
-        .prepare(`SELECT 1 AS granted FROM workspace_project_grants
-                  WHERE project_id = ?1 AND workspace_id = ?2 AND status = 'active'`)
-        .bind(scope.projectId, scope.workspaceId)
-        .first<{ granted: number }>();
+      .prepare(
+        `SELECT 1 AS granted FROM workspace_project_grants
+                  WHERE project_id = ?1 AND workspace_id = ?2 AND status = 'active'`,
+      )
+      .bind(scope.projectId, scope.workspaceId)
+      .first<{ granted: number }>();
     if (!project) {
       return { allowed: false, reason: "project_access_denied" };
     }
   }
   if (scope.runId) {
     const run = await db
-        .prepare(`SELECT 1 AS granted FROM runs r
+      .prepare(
+        `SELECT 1 AS granted FROM runs r
                   JOIN workspace_project_grants g ON g.project_id = r.project_id
-                  WHERE r.id = ?1 AND g.workspace_id = ?2 AND g.status = 'active'`)
-        .bind(scope.runId, scope.workspaceId)
-        .first<{ granted: number }>();
+                  WHERE r.id = ?1 AND g.workspace_id = ?2 AND g.status = 'active'`,
+      )
+      .bind(scope.runId, scope.workspaceId)
+      .first<{ granted: number }>();
     if (!run) {
       return { allowed: false, reason: "run_access_denied" };
     }

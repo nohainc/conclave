@@ -20,10 +20,13 @@ class DiffViewer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surfaceColor = isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface;
-    final borderColor = isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
+    final surfaceColor =
+        isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface;
+    final borderColor =
+        isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
     final inkColor = isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk;
-    final mutedInk = isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
+    final mutedInk =
+        isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
 
     final lines = diffContent.split('\n');
 
@@ -41,7 +44,8 @@ class DiffViewer extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper,
+              color:
+                  isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper,
               border: Border(bottom: BorderSide(color: borderColor)),
             ),
             child: Row(
@@ -66,15 +70,21 @@ class DiffViewer extends StatelessWidget {
                 ),
                 if (oldCommit != null && newCommit != null) ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
+                      color: isDark
+                          ? ConclaveBrand.darkSurface
+                          : ConclaveBrand.lightSurface,
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(color: borderColor),
                     ),
                     child: Text(
                       '${oldCommit!.substring(0, oldCommit!.length.clamp(0, 7))} → ${newCommit!.substring(0, newCommit!.length.clamp(0, 7))}',
-                      style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: mutedInk),
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontFamily: 'monospace',
+                          color: mutedInk),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -104,7 +114,8 @@ class DiffViewer extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: lines.map((line) => _buildDiffLine(line, isDark)).toList(),
+                children:
+                    lines.map((line) => _buildDiffLine(line, isDark)).toList(),
               ),
             ),
           ),
@@ -119,17 +130,24 @@ class DiffViewer extends StatelessWidget {
     FontWeight fontWeight = FontWeight.normal;
 
     if (line.startsWith('+')) {
-      bgColor = isDark ? ConclaveBrand.successWashDark.withValues(alpha: 0.4) : ConclaveBrand.successWash;
+      bgColor = isDark
+          ? ConclaveBrand.successWashDark.withValues(alpha: 0.4)
+          : ConclaveBrand.successWash;
       textColor = isDark ? const Color(0xff86efac) : const Color(0xff15803d);
     } else if (line.startsWith('-')) {
-      bgColor = isDark ? ConclaveBrand.errorWashDark.withValues(alpha: 0.4) : ConclaveBrand.errorWash;
+      bgColor = isDark
+          ? ConclaveBrand.errorWashDark.withValues(alpha: 0.4)
+          : ConclaveBrand.errorWash;
       textColor = isDark ? const Color(0xfffca5a5) : const Color(0xffb91c1c);
     } else if (line.startsWith('@@')) {
-      bgColor = isDark ? ConclaveBrand.accentWashDark.withValues(alpha: 0.4) : ConclaveBrand.accentWash;
+      bgColor = isDark
+          ? ConclaveBrand.accentWashDark.withValues(alpha: 0.4)
+          : ConclaveBrand.accentWash;
       textColor = ConclaveBrand.accent;
       fontWeight = FontWeight.w600;
     } else {
-      textColor = isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
+      textColor =
+          isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
     }
 
     return Container(

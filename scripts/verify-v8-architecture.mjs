@@ -2,6 +2,10 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 
 const failures = [];
 
+if (existsSync("workers")) {
+  failures.push("The retired top-level workers/ runtime tree must be absent.");
+}
+
 function readRequired(file) {
   if (!existsSync(file)) {
     failures.push(`Required v8 architecture file is missing: ${file}`);
@@ -12,11 +16,68 @@ function readRequired(file) {
 
 const assignment = readRequired("apps/host/lib/worker_executor.dart");
 const runtime = readRequired("apps/host/lib/workspace_runtime.dart");
+const architecture = readRequired("ARCHITECTURE.md");
+const architectureV8 = readRequired("docs/architecture/ARCHITECTURE_V8.md");
 const schema = readRequired("apps/cloud/migrations-v8/0001_conclave_v8.sql");
+const appRouter = readRequired("apps/cloud/src/routes/router.ts");
+const axData = readRequired("apps/app/lib/src/ax/ax_data.dart");
 const cloudWrangler = readRequired("apps/cloud/wrangler.jsonc");
 const infraWrangler = readRequired("infra/cloudflare/app.wrangler.jsonc");
 const packageJson = JSON.parse(readRequired("package.json") || "{}");
 const ci = readRequired(".github/workflows/ci.yml");
+const deploy = readRequired(".github/workflows/deploy-app.yml");
+const cloudPackage = JSON.parse(
+  readRequired("apps/cloud/package.json") || "{}",
+);
+const workspacePackages = readRequired("pnpm-workspace.yaml");
+const lockfile = readRequired("pnpm-lock.yaml");
+const wranglerTypes = readRequired("apps/cloud/worker-configuration.d.ts");
+
+const canonicalExecutionPath =
+  "AX → Cloud → Workspace → CLI Worker Engine → signed Tool Profile → provider CLI";
+const architectureProhibitions = [
+  [
+    "provider-specific Worker executable",
+    "provider_specific_worker_executable: true",
+  ],
+  ["browser/Web AI Worker", "browser_or_web_ai_worker: true"],
+  ["Interactive Connector", "interactive_connector: true"],
+  [
+    "Conclave-managed provider credentials",
+    "conclave_managed_provider_credentials: true",
+  ],
+  ["Agent/Host runtime", "agent_or_host_runtime: true"],
+  ["ConfiguredWorker product entity", "configured_worker_product_entity: true"],
+  [
+    "pre-v8 Goal/Phase/Task orchestration",
+    "pre_v8_goal_phase_task_orchestration: true",
+  ],
+  [
+    "compatibility API for unreleased architectures",
+    "compatibility_api_for_unreleased_architecture: true",
+  ],
+];
+
+if (!architecture.includes(canonicalExecutionPath)) {
+  failures.push("ARCHITECTURE.md must state the canonical v8 execution path.");
+}
+if (
+  !architecture.includes(
+    "docs/architecture/ARCHITECTURE_V8.md#architecture-contract",
+  )
+) {
+  failures.push(
+    "ARCHITECTURE.md must link to the normative v8 architecture contract.",
+  );
+}
+if (!architectureV8.includes(canonicalExecutionPath)) {
+  failures.push("Architecture v8 must state the canonical v8 execution path.");
+}
+for (const [label, declaration] of architectureProhibitions) {
+  if (!architectureV8.includes(declaration)) {
+    failures.push(`Architecture v8 is missing exclusion: ${label}.`);
+  }
+}
 
 const sourceRoots = [
   "apps/cloud/src",
@@ -30,7 +91,6 @@ const sourceRoots = [
   "packages/dart/protocol/lib",
   "packages/security/src",
   "packages/tool-profile/src",
-  "workers/fixture_cli/lib",
 ].filter(existsSync);
 const sourceExtensions = new Set([
   ".dart",
@@ -43,8 +103,13 @@ const sourceExtensions = new Set([
   ".yml",
 ]);
 const forbiddenArchitecture = [
+  ["Studio AX naming", /\bStudio\w*\b|\/studio\//i],
+  ["Studio snapshot API", /\/api\/studio\/snapshot/i],
+  ["compatibility Project read model", /\/read-model\b/i],
+  ["legacy snapshot API client", /\bloadSnapshot\s*\(/],
   ["V7Adapter", /V7Adapter/],
   ["FirstPartyWorkerPackage", /FirstPartyWorkerPackage/],
+  ["ConfiguredWorker identifier", /\bConfiguredWorker\b|\bconfiguredWorker\w*/],
   ["worker_releases", /worker_releases/i],
   ["worker_versions", /worker_versions/i],
   ["credential_profiles", /credential_profiles/i],
@@ -52,11 +117,35 @@ const forbiddenArchitecture = [
   ["host_workspace_bindings", /host_workspace_bindings/i],
   ["AgentEngine", /AgentEngine/],
   ["workerPlugin", /workerPlugin/i],
+  ["Web AI Worker", /\bWebAiWorker\b|web_ai_worker/i],
+  ["Interactive Connector", /\bInteractiveConnector\b|interactive-connector/i],
+  [
+    "Forge orchestration",
+    /\bForge(?:Execution|Pipeline)\b|forge-execution|forge-terminal|forge-events/i,
+  ],
+  ["connector API route", /\/api\/connector\//i],
+  ["managed provider credential identity", /\bcredentialProfileId\b/],
   [
     "provider-specific Worker executable",
     /provider-specific\s+Worker\s+executable/i,
   ],
 ];
+
+if (existsSync("apps/app/lib/src/studio")) {
+  failures.push("The AX source tree must use current AX naming, not studio/.");
+}
+for (const [label, pattern] of forbiddenArchitecture.slice(0, 3)) {
+  if (pattern.test(appRouter))
+    failures.push(`${label} remains in Cloud routes.`);
+}
+for (const [label, pattern] of [
+  forbiddenArchitecture[0],
+  forbiddenArchitecture[1],
+  forbiddenArchitecture[3],
+]) {
+  if (pattern.test(axData))
+    failures.push(`${label} remains in the AX API client.`);
+}
 
 function* sourceFiles(directory) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -72,7 +161,9 @@ for (const root of sourceRoots) {
     const source = readFileSync(path, "utf8");
     for (const [label, pattern] of forbiddenArchitecture) {
       if (pattern.test(source)) {
-        failures.push(`${path} retains retired architecture reference ${label}.`);
+        failures.push(
+          `${path} retains retired architecture reference ${label}.`,
+        );
       }
     }
   }
@@ -133,6 +224,7 @@ for (const retiredName of [
   "host_releases",
   "worker_releases",
   "worker_versions",
+  "allowed_configured_worker_ids_json",
   "credential_profiles",
   "ai_accounts",
   "host_workspace_bindings",
@@ -158,20 +250,122 @@ for (const name of Object.keys(scripts)) {
     );
   }
 }
-for (const job of [
-  "engine-tests",
-  "profile-fixture-tests",
-  "profile-security-tests",
-  "workspace-runtime-tests",
-  "v8-runtime-e2e",
-  "work-v1-e2e",
+if (!/^ {2}repository-check:/m.test(ci)) {
+  failures.push("CI is missing the consolidated repository-check job.");
+}
+if (
+  /engine-tests|profile-fixture-tests|profile-security-tests|workspace-runtime-tests|v8-runtime-e2e|work-v1-e2e|v7-runtime-e2e|worker-adapters:test|v4-architecture-guard/.test(
+    ci,
+  )
+) {
+  failures.push("CI retains a historical runtime or architecture gate.");
+}
+if (!ci.includes("run: pnpm check")) {
+  failures.push("CI must run the consolidated pnpm check gate.");
+}
+if (!deploy.includes("run: pnpm check")) {
+  failures.push("The production deployment workflow must pass pnpm check.");
+}
+
+for (const check of [
+  "pnpm cloud:schema-check",
+  "pnpm v8:architecture-check",
+  "pnpm protocol:check",
+  "pnpm --dir apps/cloud types:check",
+  "pnpm format:check",
+  "pnpm format:dart:check",
+  "pnpm lint",
+  "pnpm build",
+  "pnpm test",
+  "pnpm check:dart-protocol",
+  "pnpm check:engine",
+  "pnpm check:workspace",
+  "pnpm check:ax",
+  "pnpm check:fixture-e2e",
 ]) {
-  if (!new RegExp(`^  ${job}:`, "m").test(ci)) {
-    failures.push(`CI is missing the current architecture job ${job}.`);
+  if (!scripts.check?.includes(check)) {
+    failures.push(`pnpm check is missing required validation: ${check}.`);
   }
 }
-if (/v7-runtime-e2e|worker-adapters:test|v4-architecture-guard/.test(ci)) {
-  failures.push("CI retains a historical runtime or architecture gate.");
+if (
+  !/wrangler types --check --config wrangler\.jsonc/.test(
+    cloudPackage.scripts?.["types:check"] ?? "",
+  )
+) {
+  failures.push(
+    "Cloud must verify generated Wrangler types without rewriting them.",
+  );
+}
+if (!infraWrangler.includes('"name": "CONCLAVE_WORKSTREAM_COORDINATOR"')) {
+  failures.push(
+    "Production Wrangler configuration is missing the Workstream coordinator binding.",
+  );
+}
+if (!infraWrangler.includes('"class_name": "WorkstreamExecutionCoordinator"')) {
+  failures.push(
+    "Production Wrangler configuration is missing the Workstream coordinator class.",
+  );
+}
+if (!infraWrangler.includes('"tag": "v8-workstream-coordinator"')) {
+  failures.push(
+    "Production Wrangler configuration is missing its Workstream coordinator migration.",
+  );
+}
+for (const binding of [
+  "CONCLAVE_WORKSPACE_GATEWAY",
+  "CONCLAVE_REALTIME_GATEWAY",
+  "CONCLAVE_WORKSTREAM_COORDINATOR",
+  "CONCLAVE_RUN_WORKFLOW",
+]) {
+  if (!wranglerTypes.includes(binding)) {
+    failures.push(`Generated Wrangler types are missing ${binding}.`);
+  }
+}
+if (
+  /CONCLAVE_PLUGIN_PUBLISHER_EMAIL|CONCLAVE_FORGE_EXECUTION|CONCLAVE_FORGE_CALLBACK_TOKEN/.test(
+    `${infraWrangler}\n${cloudWrangler}`,
+  )
+) {
+  failures.push(
+    "Wrangler configuration retains a retired plugin or Forge binding.",
+  );
+}
+if (
+  /forge-execution\.wrangler\.jsonc|forge-execution|CONCLAVE_FORGE_/.test(
+    deploy,
+  )
+) {
+  failures.push(
+    "Production deployment retains retired Forge deployment configuration.",
+  );
+}
+if (
+  /packages\/(?:orchestration|persistence|worker-manifest)/.test(
+    workspacePackages,
+  )
+) {
+  failures.push(
+    "pnpm workspace still includes a package retained only for retired architecture.",
+  );
+}
+if (
+  /packages\/(?:orchestration|persistence|worker-manifest)\//.test(lockfile) ||
+  /@conclave\/(?:orchestration|persistence|worker-manifest)/.test(
+    `${JSON.stringify(packageJson)}\n${JSON.stringify(cloudPackage)}\n${lockfile}`,
+  )
+) {
+  failures.push(
+    "Package manifests or lockfile retain dependencies for retired architecture.",
+  );
+}
+for (const file of [
+  "apps/cloud/forge-execution.wrangler.jsonc",
+  "packages/orchestration/package.json",
+  "packages/persistence/package.json",
+  "packages/worker-manifest/package.json",
+]) {
+  if (existsSync(file))
+    failures.push(`Retired package or deployment file remains: ${file}.`);
 }
 
 if (failures.length > 0) {

@@ -3,25 +3,25 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_app/src/features/navigation/app_sidebar.dart';
-import 'package:conclave_app/src/features/navigation/studio_shell_context.dart';
+import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
 import 'package:conclave_app/src/features/search/search_page.dart';
-import 'package:conclave_app/src/navigation/studio_navigation.dart';
-import 'package:conclave_app/src/studio/studio_models.dart';
+import 'package:conclave_app/src/navigation/ax_navigation.dart';
+import 'package:conclave_app/src/ax/ax_models.dart';
 
 void main() {
   group('Search Control & Search Page', () {
-    late StudioSnapshot sampleSnapshot;
+    late AxSnapshot sampleSnapshot;
 
     setUp(() {
-      sampleSnapshot = StudioSnapshot.empty().copyWith(
+      sampleSnapshot = AxSnapshot.empty().copyWith(
         projects: [
-          const StudioProject(
+          const AxProject(
             id: 'proj-1',
             name: 'Conclave Core',
             branch: 'main',
             lastActivity: 'now',
             workstreams: [
-              StudioWorkstream(
+              AxWorkstream(
                 id: 'ws-1',
                 projectId: 'proj-1',
                 name: 'Authentication redesign',
@@ -32,7 +32,7 @@ void main() {
                 currentCheckpoint: 'checkpoint-1',
                 queueStatus: 'idle',
               ),
-              StudioWorkstream(
+              AxWorkstream(
                 id: 'ws-2',
                 projectId: 'proj-1',
                 name: 'Search page integration',
@@ -45,7 +45,7 @@ void main() {
               ),
             ],
           ),
-          const StudioProject(
+          const AxProject(
             id: 'proj-2',
             name: 'Data Pipeline',
             branch: 'develop',
@@ -61,8 +61,8 @@ void main() {
       final controller = TextEditingController();
       addTearDown(controller.dispose);
 
-      final shellContext = StudioShellContext(
-        navigation: const StudioNavigation.home(),
+      final shellContext = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: sampleSnapshot.projects,
         workspaces: const [],
         unreadNotificationCount: 0,
@@ -120,7 +120,7 @@ void main() {
 
     testWidgets('SearchPage filters snapshot and renders categorized results',
         (tester) async {
-      StudioNavigation? navigatedTarget;
+      AxNavigation? navigatedTarget;
       var searchCleared = false;
 
       await tester.pumpWidget(
@@ -151,7 +151,7 @@ void main() {
       expect(searchCleared, isTrue);
       expect(
         navigatedTarget,
-        const StudioNavigation.workstream('proj-1', 'ws-1'),
+        const AxNavigation.workstream('proj-1', 'ws-1'),
       );
     });
 

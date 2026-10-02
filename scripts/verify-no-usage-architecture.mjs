@@ -10,8 +10,7 @@ const roots = [
   "packages",
 ];
 
-const ignored = new Set([
-]);
+const ignored = new Set([]);
 
 const forbidden = [
   ["StudioRouteKind.usage", /\bStudioRouteKind\.usage\b/],

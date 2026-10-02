@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../brand.dart';
-import '../../navigation/studio_navigation.dart';
-import '../../studio/studio_models.dart';
-import 'studio_shell_context.dart';
+import '../../navigation/ax_navigation.dart';
+import '../../ax/ax_models.dart';
+import 'ax_shell_context.dart';
 
 /// Compact popover showing execution workspace statuses, ready worker counts,
 /// and connection health.
@@ -14,8 +14,8 @@ class ExecutionStatusPopover extends StatelessWidget {
     required this.onNavigateTo,
   });
 
-  final StudioShellContext shellContext;
-  final ValueChanged<StudioNavigation> onNavigateTo;
+  final AxShellContext shellContext;
+  final ValueChanged<AxNavigation> onNavigateTo;
 
   @override
   Widget build(BuildContext context) {
@@ -227,7 +227,7 @@ class ExecutionStatusPopover extends StatelessWidget {
                   if (Navigator.of(context).canPop()) {
                     Navigator.of(context).pop();
                   }
-                  onNavigateTo(const StudioNavigation.workspaces());
+                  onNavigateTo(const AxNavigation.workspaces());
                 },
                 borderRadius: const BorderRadius.vertical(
                   bottom: Radius.circular(12),
@@ -262,7 +262,7 @@ class ExecutionStatusPopover extends StatelessWidget {
   }
 
   Widget _buildWorkspaceRow({
-    required StudioWorkspace ws,
+    required AxWorkspace ws,
     required bool isDark,
     required Color inkColor,
     required Color mutedInk,

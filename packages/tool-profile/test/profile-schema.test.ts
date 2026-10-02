@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- these tests mutate arbitrary JSON fixtures. */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";

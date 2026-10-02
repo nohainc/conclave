@@ -3,7 +3,6 @@ import {
   handleCreateProject,
   handleCreateWorkstream,
   handleGetProject,
-  handleStudioSnapshot,
   handleUpdateProject,
 } from "../src/routes/handlers.js";
 
@@ -65,123 +64,6 @@ describe("Project creation", () => {
       expect.stringContaining("INSERT INTO project_memberships"),
     );
     expect(batchSize).toBe(2);
-  });
-
-  it("serves the Project snapshot from current membership", async () => {
-    const db = {
-      prepare() {
-        return {
-          bind() {
-            return this;
-          },
-          async first() {
-            return null;
-          },
-          async all() {
-            return {
-              results: [
-                {
-                  id: "project-1",
-                  name: "Project without Workspace",
-                  description: null,
-                  repository: null,
-                  lastActivity: "2026-09-24T00:00:00Z",
-                },
-              ],
-            };
-          },
-        };
-      },
-    };
-    const response = await handleStudioSnapshot(
-      {
-        CONCLAVE_ENVIRONMENT: "development",
-        CONCLAVE_DB: db,
-        TEST_AUTHENTICATION: async () => ({
-          userId: "user-1",
-          user: {
-            id: "user-1",
-            email: "owner@example.test",
-            displayName: "Owner",
-            status: "active",
-          },
-          workspaceId: "",
-          projectRoles: { "project-1": "owner" },
-          sessionId: "session-1",
-          clientType: "web",
-        }),
-      } as never,
-      new Request("https://conclave.test/api/studio/snapshot"),
-      null,
-    );
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      workspaceId: null,
-      projects: [{ id: "project-1", name: "Project without Workspace" }],
-    });
-  });
-
-  it("serves all user projects when projectId is provided in snapshot query", async () => {
-    const bindArgs: unknown[][] = [];
-    const db = {
-      prepare() {
-        return {
-          bind(...args: unknown[]) {
-            bindArgs.push(args);
-            return this;
-          },
-          async all() {
-            return {
-              results: [
-                {
-                  id: "project-1",
-                  name: "Project 1",
-                  description: null,
-                  repository: null,
-                  lastActivity: "2026-09-24T00:00:00Z",
-                },
-                {
-                  id: "project-2",
-                  name: "Project 2",
-                  description: null,
-                  repository: null,
-                  lastActivity: "2026-09-24T00:00:00Z",
-                },
-              ],
-            };
-          },
-        };
-      },
-    };
-    const response = await handleStudioSnapshot(
-      {
-        CONCLAVE_ENVIRONMENT: "development",
-        CONCLAVE_DB: db,
-        TEST_AUTHENTICATION: async () => ({
-          userId: "user-1",
-          user: {
-            id: "user-1",
-            email: "owner@example.test",
-            displayName: "Owner",
-            status: "active",
-          },
-          workspaceId: "",
-          projectRoles: { "project-1": "owner", "project-2": "owner" },
-          sessionId: "session-1",
-          clientType: "web",
-        }),
-      } as never,
-      new Request(
-        "https://conclave.test/api/studio/snapshot?projectId=project-1",
-      ),
-      "project-1",
-    );
-
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as { projects: { id: string }[] };
-    expect(body.projects.length).toBe(2);
-    expect(bindArgs[0]).toEqual(["user-1"]);
   });
 
   it("creates a persisted Workstream with a lead membership", async () => {
