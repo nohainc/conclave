@@ -938,4 +938,3 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
     );
   }
 }
-

@@ -322,7 +322,8 @@ class _WorkersTabState extends State<_WorkersTab> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Wrap(spacing: 6, runSpacing: 4, children: [
-                    for (final badge in badges) _CatalogStatusBadge(label: badge)
+                    for (final badge in badges)
+                      _CatalogStatusBadge(label: badge)
                   ]),
                   Padding(
                       padding: const EdgeInsets.only(top: 3),
@@ -423,8 +424,8 @@ class _WorkersTabState extends State<_WorkersTab> {
                               ? const SizedBox(
                                   width: 14,
                                   height: 14,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.restore, size: 16),
                           label: Text(

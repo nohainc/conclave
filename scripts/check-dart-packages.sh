@@ -4,13 +4,52 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "$ROOT"
+
+dart_packages=(
+  packages/dart/protocol
+  packages/conclave_worker_protocol
+  packages/conclave_cli_worker_runtime
+  packages/tool_profile_v1
+  engines/cli_worker
+)
+
+flutter_packages=(
+  apps/workspace
+  apps/app
+)
+
+resolve_dart_package_dependencies() {
+  local package_path="$1"
+  (
+    cd "$ROOT/$package_path"
+    dart pub get
+  )
+}
+
+resolve_flutter_package_dependencies() {
+  local package_path="$1"
+  (
+    cd "$ROOT/$package_path"
+    flutter pub get
+  )
+}
+
+# Resolve every package first so local path dependencies and package configs
+# exist before formatting, analysis, or tests validate the repository.
+for package_path in "${dart_packages[@]}"; do
+  resolve_dart_package_dependencies "$package_path"
+done
+
+for package_path in "${flutter_packages[@]}"; do
+  resolve_flutter_package_dependencies "$package_path"
+done
+
 dart format --output=none --set-exit-if-changed apps/app apps/workspace engines packages
 
 check_dart_package() {
   local package_path="$1"
   (
     cd "$ROOT/$package_path"
-    dart pub get
     dart analyze
     if [[ -d test ]]; then
       dart test
@@ -18,13 +57,7 @@ check_dart_package() {
   )
 }
 
-for package_path in \
-  packages/dart/protocol \
-  packages/conclave_worker_protocol \
-  packages/conclave_cli_worker_runtime \
-  packages/tool_profile_v1 \
-  engines/cli_worker
-do
+for package_path in "${dart_packages[@]}"; do
   check_dart_package "$package_path"
 done
 
@@ -36,7 +69,6 @@ check_flutter_package() {
   fi
   (
     cd "$ROOT/$package_path"
-    flutter pub get
     flutter analyze
     if [[ "$package_path" == "apps/workspace" ]]; then
       DART_EXECUTABLE="$(command -v dart)" flutter test "${test_args[@]}"
@@ -46,5 +78,6 @@ check_flutter_package() {
   )
 }
 
-check_flutter_package apps/workspace
-check_flutter_package apps/app
+for package_path in "${flutter_packages[@]}"; do
+  check_flutter_package "$package_path"
+done
