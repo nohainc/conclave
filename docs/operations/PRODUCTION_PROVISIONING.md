@@ -1,16 +1,16 @@
 # Production provisioning
 
-This runbook provisions the Cloudflare resources required by the v4 app and
-Forge Workers. It does not contain credentials. Run it from the
+This runbook provisions the Cloudflare resources required by Conclave AX and
+Conclave Cloud. It does not contain credentials. Run it from the
 repository root with a scoped Cloudflare API token and account ID.
 
 ## Resource names
 
 The checked-in Worker configurations expect these production resources:
 
-- D1 database: `conclave-production`;
+- D1 database: `conclave-v8-production`;
 - R2 bucket: `conclave-artifacts-production`;
-- Forge Worker service: `conclave-forge-execution`;
+- execution Worker service: `conclave-forge-execution`;
 - app Worker: `conclave-ax-app`.
 
 Do not reuse development D1 databases or R2 buckets for production.
@@ -18,13 +18,15 @@ Do not reuse development D1 databases or R2 buckets for production.
 ## Provision storage
 
 ```sh
-wrangler d1 create conclave-production
+wrangler d1 create conclave-v8-production
 wrangler r2 bucket create conclave-artifacts-production
 ```
 
-If the resources already exist, keep the existing IDs and names. The app
-configuration uses the resource names; D1 migrations are applied by the deploy
-workflow.
+The v8 D1 database has already been provisioned and initialized from
+`apps/cloud/migrations-v8/0001_conclave_v8.sql`. A private copy of production
+rows was imported and checked against the source counts. The previous
+`conclave-production` database remains available as a rollback copy; do not
+delete it until the v8 app has been deployed and its production checks pass.
 
 ## Required deployment order
 
@@ -39,7 +41,7 @@ workflow.
 2. Apply D1 migrations remotely:
 
    ```sh
-   wrangler d1 migrations apply conclave-production \
+   wrangler d1 migrations apply conclave-v8-production \
      --remote --config infra/cloudflare/app.wrangler.jsonc
    ```
 
@@ -63,7 +65,7 @@ Before production login:
 - create or provision Conclave Workspace memberships through the application;
 - configure `CONCLAVE_CI_INGEST_TOKEN`;
 - configure `CONCLAVE_FORGE_CALLBACK_TOKEN`;
-- configure production Worker, Host, and backup/signing secrets;
+- configure production Cloud, Workspace runtime, and release-signing secrets;
 - rotate all values that were used for development or tests.
 
 Never pass these secrets to Flutter through `--dart-define`. The browser uses
@@ -71,9 +73,11 @@ the Better Auth HttpOnly session cookie and same-origin `/api` requests.
 
 ## Release validation
 
-After deployment, execute the [Forge recovery drill](FORGE_RECOVERY_DRILL.md)
-and the tenant/security integration suite. The P0–P25 objective is not closed
-until Host restart, Cloud restart, network loss, reviewer timeout,
-backup/restore, and cross-tenant isolation have been exercised against the
-deployed system. Access protection may be enabled separately for staging,
-admin, debug, or other internal environments.
+After deployment, run the
+[Workspace desktop lifecycle release validation](WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md),
+the current Cloud security and Workspace runtime CI acceptance, and the live
+provider scenarios recorded in the
+[v8 implementation roadmap](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
+Production evidence must identify the candidate build and deployment and must
+not include credentials or provider secrets. Access protection may be enabled
+separately for staging, admin, debug, or other internal environments.

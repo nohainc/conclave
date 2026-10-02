@@ -1,7 +1,6 @@
 # Conclave AX Applications
 
-**Status:** Architecture v8 product/application boundary. Architecture v7 and
-Worker Runtime v2 details are historical predecessor material where noted.
+**Status:** Current Architecture v8 product/application boundary.
 
 Conclave AX has three primary applications and one extension type.
 
@@ -52,8 +51,7 @@ choices live with Project and Workstream policy, not local Worker setup. See
 
 The Work composer and its built-in Workflow/step semantics follow the frozen
 [Work v1 Contract](../specifications/WORK_V1_CONTRACT.md). That contract is
-the sole authoritative catalog; the historical V6 Workflow presets are not
-additional Work v1 choices.
+the sole authoritative catalog.
 
 ## 2. Conclave Cloud
 
@@ -110,7 +108,7 @@ latter speaks only the Workspace Runtime Protocol with Conclave Workspace.
 - persistent Cloud communication with WebSocket primary and HTTPS fallback;
 - platform/architecture/runtime reporting;
 - local Work Root and Workstream directories;
-- local configured Worker registry;
+- local logical Worker registry;
 - local provider authentication/secure credentials;
 - CLI Worker Engine and signed Tool Profile cache/admission;
 - local permission approval;
@@ -157,9 +155,9 @@ store the provider credentials. See the
 Conclave Workspace resolves each Logical Worker to one compatible signed Tool
 Profile Release and starts the generic CLI Worker Engine out of process. The
 Engine invokes the locally installed Provider CLI using structured arguments
-and Local Worker Protocol 4.0. Provider binaries and release tooling from
-Worker Runtime v2 are migration-only until v8 acceptance; they are not the
-architecture target for new integrations.
+and Local Worker Protocol 4.0. The Engine is the sole production CLI Worker
+runtime. Real-provider acceptance and remaining release gates are tracked in
+the current v8 implementation plan.
 
 A configured Worker:
 - belongs to exactly one Workspace;
@@ -182,23 +180,9 @@ Use:
 - Conclave Workspace for the machine-side application/runtime;
 - credential state when referring to local authentication/readiness.
 
-Do not expose AI Account or Credential Profile as a peer product resource.
-Credential state remains local Workspace-owned implementation/security state.
-
-## Historical v4/v5 product terminology
-
-The following names belong to historical architecture documents and are not
-current product surfaces:
-- Conclave AX Studio as a product name;
-- Agent;
-- Agent Engine;
-- Plugin;
-- Connection.
-
-Architecture v5 preceded the configured Worker model. V6 introduced configured
-Workers, and V7 makes them Workspace-owned local execution identities; see
-[ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md).
-
+Provider credentials remain local to provider CLI software and are not Cloud
+product resources. Readiness may report safe credential state without exposing
+credential material.
 
 ## Build and pairing references
 
@@ -214,24 +198,24 @@ Real desktop-to-Cloud smoke:
 CONCLAVE_ENROLLMENT_TOKEN=... bash scripts/test-workspace-cloud-connection.sh
 ~~~
 
-For historical ownership decisions, see [Architecture v7](ARCHITECTURE_V7.md)
-and [V7 Implementation Audit](V7_IMPLEMENTATION_AUDIT.md). New runtime work
-starts from [Architecture v8](ARCHITECTURE_V8.md) and [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md).
+Current ownership and runtime decisions are defined by
+[Architecture v8](ARCHITECTURE_V8.md),
+[ADR-012](../decisions/ADR-012-workspace-owned-local-workers.md), and
+[ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md).
 
 
 ## Workspace authentication and transport
 
-The target desktop ownership/connection model is defined by
-[ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md) and the
-[implementation plan](../roadmaps/WORKSPACE_AUTH_TRANSPORT_IMPLEMENTATION.md).
+The desktop ownership/connection model is defined by
+[ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md).
 WebSocket remains the preferred runtime transport; HTTPS long-poll is the
 fallback. AX is not required for normal Workspace repair or registration.
 
 ## Desktop lifecycle
 
 The canonical Workspace desktop lifecycle is defined by
-[ADR-014](../decisions/ADR-014-workspace-desktop-lifecycle.md) and its
-[implementation plan](../roadmaps/WORKSPACE_DESKTOP_LIFECYCLE_IMPLEMENTATION.md).
+[ADR-014](../decisions/ADR-014-workspace-desktop-lifecycle.md) and the
+[release validation runbook](../operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md).
 The product distinguishes Sign in, Connect/Disconnect Workspace, Lock/Unlock,
 Release ownership, Sign out, and Reset. These actions must not be aliases for
 one another.
@@ -239,9 +223,9 @@ one another.
 
 ## Architecture v8 local runtime refinement
 
-Conclave Workspace launches one generic standalone CLI Worker Engine process
+Conclave Workspace launches one generic CLI Worker Engine process
 per assignment/probe by default. Product-visible ChatGPT/Gemini rows remain
 Logical Workers. Official signed Tool Profile Releases map those identities to
 supported Provider CLI behavior. New normal CLI integrations should be added
 through the Cloud Worker catalog and Tool Profile releases when Profile v1 can
-express them. Existing v2 provider-specific binaries are migration-only.
+express them.

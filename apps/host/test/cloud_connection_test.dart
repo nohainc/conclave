@@ -6,11 +6,9 @@ import 'package:conclave_host/assignment_journal.dart';
 import 'package:conclave_host/cloud_connection.dart';
 import 'package:conclave_protocol/workspace_runtime_protocol.dart'
     show workspaceRuntimeProtocolVersion;
-import 'package:conclave_host/worker_executor.dart';
-import 'package:conclave_host/worker_protocol.dart';
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:conclave_host/workspace_transport.dart';
 import 'package:test/test.dart';
-import 'fixture_copy.dart';
 
 class FakeSocket implements WorkspaceTransport {
   final controller = StreamController<Object?>();
@@ -516,7 +514,7 @@ void main() {
         'packageDigest': 'sha256:abc123',
         'signature': 'sig-1',
         'releaseNotes': 'Security fixes',
-        'minSupportedHostVersion': '0.1.0',
+        'minSupportedWorkspaceVersion': '0.1.0',
       },
     }));
     await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -644,26 +642,21 @@ void main() {
       idempotencyKey: 'idem-1',
       payload: {},
     );
-    connection.reportWorkerNotification(
+    connection.reportWorkerProgress(
       context,
-      const WorkerRpcNotification(
-        method: 'output_delta',
-        params: {
-          'assignmentId': 'assignment-1',
-          'delta': '[REDACTED]',
-          'timestamp': '2026-09-23T00:00:00Z',
-        },
+      WorkerProgress(
+        requestId: 'request-1',
+        assignmentId: 'assignment-1',
+        percentage: 20,
+        message: '[REDACTED]',
       ),
     );
-    connection.reportWorkerNotification(
+    connection.reportWorkerProgress(
       context,
-      const WorkerRpcNotification(
-        method: 'progress',
-        params: {
-          'assignmentId': 'forged-assignment',
-          'percentage': 20,
-          'timestamp': '2026-09-23T00:00:00Z',
-        },
+      WorkerProgress(
+        requestId: 'request-2',
+        assignmentId: 'forged-assignment',
+        percentage: 20,
       ),
     );
     final messages = socket.sent
@@ -827,7 +820,7 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test('reports normalized adapter failures to Cloud without changing codes',
+  test('reports normalized assignment failures to Cloud without changing codes',
       () async {
     final socket = FakeSocket();
     final connection = HostCloudConnection(
@@ -835,7 +828,7 @@ void main() {
       hostId: 'host-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
-      assignmentHandler: (_) async => throw const V7AdapterExecutionFailure(
+      assignmentHandler: (_) async => throw const AssignmentExecutionFailure(
         code: 'quota_exhausted',
         message:
             'The provider rejected this request because a usage limit was reached.',
@@ -847,7 +840,7 @@ void main() {
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.host-protocol',
       'protocolVersion': '4.1',
-      'messageId': 'server-normalized-adapter-error',
+      'messageId': 'server-normalized-engine-error',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
       'workspaceId': 'workspace-1',
@@ -1289,22 +1282,34 @@ void main() {
 
   test('acknowledges cancellation for an already completed assignment',
       () async {
+    final directory = await Directory.systemTemp.createTemp('cancelled-run-');
+    addTearDown(() => directory.delete(recursive: true));
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-done',
+      status: AssignmentStatus.completed,
+      updatedAt: DateTime.now().toUtc(),
+    ));
     final socket = FakeSocket();
     final connection = HostCloudConnection(
-      uri: Uri.parse('wss://cloud.test/host'),
-      hostId: 'host-1',
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
+      hostId: 'runtime-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
+      assignmentJournal: journal,
     );
     await connection.connect();
+    await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.host-protocol',
-      'protocolVersion': '4.1',
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'cancel-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.cancel',
-      'workspaceId': 'workspace-1',
-      'hostId': 'host-1',
+      'executionWorkspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'runtime-1',
       'workerId': 'worker-1',
       'runId': 'run-1',
       'taskId': 'task-1',
@@ -1321,97 +1326,6 @@ void main() {
     expect(
         (ack['payload'] as Map<String, dynamic>)['alreadyTerminated'], isTrue);
     await connection.close();
-  });
-
-  test('runs Forge through Cloud assignment, worker, and journal boundaries',
-      () async {
-    final repository = Directory.current.parent.parent;
-    final fixture = await copyForgeFixture();
-    final socket = FakeSocket();
-    final journalDirectory =
-        await Directory.systemTemp.createTemp('host-journal-');
-    final journal =
-        AssignmentJournal(File('${journalDirectory.path}/assignments.jsonl'));
-    final handler = WorkerAssignmentHandler(
-      executor: WorkerProcessExecutor(),
-      resolve: (_) => WorkerProcessSpec(
-        workerId: 'conclave.forge',
-        executable: 'dart',
-        arguments: ['--disable-analytics', 'run', 'bin/forge_worker.dart'],
-        workingDirectory: '${repository.path}/workers/forge',
-      ),
-    );
-    final connection = HostCloudConnection(
-      uri: Uri.parse('wss://cloud.test/host'),
-      hostId: 'host-1',
-      workspaceId: 'workspace-1',
-      factory: (_) async => socket,
-      assignmentHandler: handler.call,
-      assignmentJournal: journal,
-    );
-    await connection.connect();
-    await completeHandshake(connection, socket);
-    try {
-      socket.controller.add(jsonEncode({
-        'protocol': 'conclave.host-protocol',
-        'protocolVersion': '4.1',
-        'messageId': 'forge-assignment-1',
-        'timestamp': DateTime.now().toUtc().toIso8601String(),
-        'type': 'assignment.start',
-        'workspaceId': 'workspace-1',
-        'hostId': 'host-1',
-        'workerId': 'forge-worker',
-        'runId': 'run-forge-1',
-        'taskId': 'task-forge-1',
-        'attemptId': 'attempt-forge-1',
-        'assignmentId': 'assignment-forge-1',
-        'idempotencyKey': 'idem-forge-1',
-        'payload': {
-          'objective': 'Fix add and verify the implementation',
-          'role': 'implementer',
-          'workerId': 'conclave.forge',
-          'engineVersion': '1.0.0',
-          'profileDefinitionId': 'chatgpt-codex',
-          'profileReleaseVersion': 1,
-          'input': {'repositoryPath': fixture.path},
-          'contextArtifactIds': [],
-          'timeoutMs': 60000,
-        },
-      }));
-      Map<String, dynamic>? result;
-      Map<String, dynamic>? assignmentError;
-      for (var attempt = 0; attempt < 120 && result == null; attempt++) {
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-        for (final message in socket.sent) {
-          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
-          if (decoded['type'] == 'assignment.result') result = decoded;
-          if (decoded['type'] == 'assignment.error') assignmentError = decoded;
-        }
-        if (assignmentError != null) break;
-      }
-      expect(assignmentError, isNull,
-          reason: assignmentError == null ? null : jsonEncode(assignmentError));
-      expect(result, isNotNull);
-      final completedResult = result!;
-      final payload = completedResult['payload'] as Map<String, dynamic>;
-      expect(payload['status'], 'completed');
-      final output = payload['output'] as Map<String, dynamic>;
-      expect(output['accepted'], isTrue);
-      expect(output['input'], {'repositoryPath': fixture.path});
-      final machineTests = await Process.run(
-        'node',
-        ['--test'],
-        workingDirectory: fixture.path,
-      );
-      expect(machineTests.exitCode, 0,
-          reason: '${machineTests.stdout}\n${machineTests.stderr}');
-      expect((await journal.reconcile())['assignment-forge-1']!.status,
-          AssignmentStatus.completed);
-    } finally {
-      await connection.close();
-      await fixture.parent.delete(recursive: true);
-      await journalDirectory.delete(recursive: true);
-    }
   });
 
   test('reconnects after a dropped socket', () async {
@@ -1460,7 +1374,7 @@ void main() {
       () async {
     final first = FakeSocket();
     final recovered = FakeSocket();
-    final cancelled = Completer<String>();
+    final cancellationRequests = <String>[];
     final assignmentStarted = Completer<void>();
     final finishAssignment = Completer<HostAssignmentResult>();
     var factoryCalls = 0;
@@ -1475,7 +1389,7 @@ void main() {
         return finishAssignment.future;
       },
       assignmentCancellationHandler: (assignmentId, reason) async {
-        cancelled.complete('$assignmentId:$reason');
+        cancellationRequests.add('$assignmentId:$reason');
         return true;
       },
       heartbeat: const Duration(hours: 1),
@@ -1536,7 +1450,8 @@ void main() {
       'idempotencyKey': 'idempotency-cancel-after-reconnect',
       'payload': {'reason': 'cancelled after reconnect', 'gracePeriodMs': 100},
     }));
-    expect(await cancelled.future.timeout(const Duration(seconds: 2)),
+    await waitFor(() => cancellationRequests.isNotEmpty);
+    expect(cancellationRequests.first,
         'assignment-still-running:cancelled after reconnect');
     await waitFor(() => recovered.sent.any((message) =>
         (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==

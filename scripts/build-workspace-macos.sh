@@ -21,7 +21,6 @@ command -v ditto >/dev/null 2>&1 || {
 
 MODE="release"
 OPEN_APP="0"
-ALLOW_UNSIGNED_DEVELOPMENT_WORKERS="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,10 +40,6 @@ while [[ $# -gt 0 ]]; do
       CONCLAVE_MACOS_SIGN_IDENTITY="$2"
       shift 2
       ;;
-    --allow-unsigned-development-workers)
-      ALLOW_UNSIGNED_DEVELOPMENT_WORKERS="1"
-      shift
-      ;;
     --open|-o)
       OPEN_APP="1"
       shift
@@ -60,8 +55,6 @@ while [[ $# -gt 0 ]]; do
       echo "  --debug            Build in debug mode"
       echo "  --version, -v VER  Override workspace version"
       echo "  --sign IDENTITY    Developer ID signing identity"
-      echo "  --allow-unsigned-development-workers"
-      echo "                     Enable local unsigned Workers (debug builds only)"
       echo "  --open, -o         Open the built application bundle after build"
       echo "  --help, -h         Show this help message"
       echo ""
@@ -90,20 +83,10 @@ flutter clean
 flutter pub get
 bash "$ROOT/scripts/build-cli-worker-engine.sh"
 
-if [[ "$ALLOW_UNSIGNED_DEVELOPMENT_WORKERS" == "1" && "$MODE" != "debug" ]]; then
-  echo "Unsigned development Workers can only be enabled in a debug Workspace build." >&2
-  exit 1
-fi
-UNSIGNED_WORKER_DEFINE="false"
-if [[ "$ALLOW_UNSIGNED_DEVELOPMENT_WORKERS" == "1" ]]; then
-  UNSIGNED_WORKER_DEFINE="true"
-fi
-
 if [[ "$MODE" == "debug" ]]; then
   flutter build macos --debug \
     --dart-define=CONCLAVE_WORKSPACE_VERSION="$VERSION" \
-    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}" \
-    --dart-define=CONCLAVE_ENABLE_UNSIGNED_DEVELOPMENT_WORKERS="$UNSIGNED_WORKER_DEFINE"
+    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}"
   APP="$HOST_DIR/build/macos/Build/Products/Debug/Conclave Workspace.app"
 else
   flutter build macos --release \

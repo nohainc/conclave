@@ -3,12 +3,7 @@ import 'dart:io';
 
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
-import 'cloud_connection.dart';
 import 'configured_worker_registry.dart';
-import 'first_party_worker_registry.dart';
-import 'v7_adapter_package_store.dart';
-import 'v7_adapter_protocol.dart';
-import 'worker_executor.dart';
 import 'cli_worker_engine_supervisor.dart';
 import 'tool_profile_release_store.dart';
 import 'tool_profile_release_verifier.dart';
@@ -17,7 +12,7 @@ import 'tool_profile_catalog.dart';
 import 'worker_diagnostic_store.dart';
 import 'workspace_enrollment.dart';
 
-export 'v7_adapter_protocol.dart' show LocalWorkerProbeMode;
+enum LocalWorkerProbeMode { passive, live }
 
 class WorkerReadinessAssessment {
   const WorkerReadinessAssessment(
@@ -46,21 +41,17 @@ class WorkerReadinessAssessment {
 class WorkerReadinessMonitor {
   WorkerReadinessMonitor({
     required this.registry,
-    required this.adapterStore,
     this.toolProfileReleaseStore,
     this.toolProfileCatalog,
     this.cliWorkerEngineSupervisor,
     this.workerStateDirectory,
     this.profileDiagnosticStoreForWorker,
     this.ensureToolProfileAvailable,
-    WorkerProcessExecutor? executor,
-    this.readCredential,
     this.interval = const Duration(minutes: 5),
     this.assessWorker,
-  }) : executor = executor ?? WorkerProcessExecutor();
+  });
 
   final LocalConfiguredWorkerRegistry registry;
-  final V7AdapterPackageStore adapterStore;
   final ToolProfileReleaseStore? toolProfileReleaseStore;
   final ToolProfileCatalogClient? toolProfileCatalog;
   final CliWorkerEngineSupervisor? cliWorkerEngineSupervisor;
@@ -68,8 +59,6 @@ class WorkerReadinessMonitor {
   final WorkerDiagnosticStore Function(String workerTypeId)?
       profileDiagnosticStoreForWorker;
   final Future<void> Function(String workerTypeId)? ensureToolProfileAvailable;
-  final WorkerProcessExecutor executor;
-  final Future<String?> Function(String credentialRef)? readCredential;
   final Duration interval;
   final Future<WorkerReadinessAssessment> Function(
       LocalConfiguredWorker worker)? assessWorker;
@@ -137,13 +126,7 @@ class WorkerReadinessMonitor {
   /// used for rollback.
   Future<bool> rollbackToolProfile(String workerTypeId) async {
     final timer = Stopwatch()..start();
-    final profileDefinitionId =
-        toolProfileCatalog?.profileDefinitionForWorker(workerTypeId) ??
-            switch (workerTypeId) {
-              'chatgpt' => 'chatgpt-codex',
-              'gemini' => 'gemini-antigravity',
-              _ => null,
-            };
+    final profileDefinitionId = await _profileDefinitionFor(workerTypeId);
     final store = toolProfileReleaseStore;
     final engine = cliWorkerEngineSupervisor;
     if (profileDefinitionId == null || store == null || engine == null) {
@@ -343,7 +326,7 @@ class WorkerReadinessMonitor {
   String _safeTestDetails(WorkerReadinessAssessment assessment) {
     final issueCode = assessment.issueCode ?? 'execution_test_failed';
     final details = [
-      'Worker Package test failed ($issueCode).',
+      'Tool Profile test failed ($issueCode).',
       assessment.diagnosticDetails ??
           'The package did not return safe diagnostic details.',
     ].join('\n');
@@ -356,120 +339,17 @@ class WorkerReadinessMonitor {
   }) async {
     try {
       final profileDefinitionId =
-          toolProfileCatalog?.profileDefinitionForWorker(worker.workerTypeId);
-      if (profileDefinitionId != null && toolProfileReleaseStore != null) {
-        return await _assessToolProfileWorker(
-          worker,
-          profileDefinitionId: profileDefinitionId,
-          mode: mode,
-        );
-      }
-      final entry =
-          FirstPartyWorkerPackage.forProductWorkerTypeId(worker.workerTypeId);
-      if (entry == null) {
-        return const WorkerReadinessAssessment(
-          WorkerReadinessState.testFailed,
-          issueCode: 'package_unavailable',
-        );
-      }
-      if (const {'chatgpt', 'gemini'}.contains(worker.workerTypeId) &&
-          toolProfileReleaseStore != null) {
-        final legacyDefinitionId = worker.workerTypeId == 'chatgpt'
-            ? 'chatgpt-codex'
-            : 'gemini-antigravity';
-        return await _assessToolProfileWorker(worker,
-            profileDefinitionId: legacyDefinitionId, mode: mode);
-      }
-      var packageAvailable = await adapterStore.hasVerifiedActivePackage(
-        entry.packageId,
-        worker.localPermissions,
-      );
-      if (!packageAvailable) {
-        packageAvailable = await adapterStore.ensureFirstPartyAdapterAvailable(
-          entry.packageId,
-        );
-      }
-      if (!packageAvailable) {
+          await _profileDefinitionFor(worker.workerTypeId);
+      if (profileDefinitionId == null || toolProfileReleaseStore == null) {
         return const WorkerReadinessAssessment(
           WorkerReadinessState.runtimeUnavailable,
-          issueCode: 'package_unavailable',
+          issueCode: 'tool_profile_unavailable',
         );
       }
-      final launch = await adapterStore.resolve(
-        worker: worker,
-        readCredential: readCredential ?? (_) async => null,
-      );
-      if (launch == null) {
-        return const WorkerReadinessAssessment(
-          WorkerReadinessState.runtimeUnavailable,
-          issueCode: 'package_unavailable',
-        );
-      }
-      final result = await executor.checkV7AdapterHealth(
-        launch.processSpec,
-        workerTypeId: launch.workerTypeId,
-        adapterVersion: launch.adapterVersion,
-        healthCheckMode: 'protocol',
-        timeout: mode == LocalWorkerProbeMode.live
-            ? const Duration(seconds: 30)
-            : const Duration(seconds: 20),
-        allowNotReady: true,
+      return await _assessToolProfileWorker(
+        worker,
+        profileDefinitionId: profileDefinitionId,
         mode: mode,
-      );
-      final checks = (result['checks'] as List? ?? const [])
-          .whereType<Map>()
-          .toList(growable: false);
-      final failedCheck =
-          checks.where((check) => check['status'] == 'failed').firstOrNull;
-      final setupCheck = checks
-          .where((check) =>
-              check['status'] == 'skipped' &&
-              check['issueCode'] == 'setup_required')
-          .firstOrNull;
-      final legacyIssue =
-          (result['issues'] as List? ?? const []).whereType<Map>().firstOrNull;
-      final code = (failedCheck?['issueCode'] ??
-          setupCheck?['issueCode'] ??
-          legacyIssue?['code']) as String?;
-      final message = (failedCheck?['diagnostic'] ??
-          setupCheck?['diagnostic'] ??
-          legacyIssue?['message']) as String?;
-      if (result['ready'] == true) {
-        return WorkerReadinessAssessment(
-          setupCheck == null
-              ? WorkerReadinessState.ready
-              : WorkerReadinessState.setupRequired,
-          issueCode: code,
-          diagnosticDetails: message,
-          toolVersion: result['toolVersion'] as String?,
-          replaceToolVersion: true,
-          toolName: result['toolName'] as String?,
-          replaceToolName: true,
-          toolPath: result['toolPath'] as String?,
-          replaceToolPath: true,
-        );
-      }
-      final state = switch (code) {
-        'cli_not_found' ||
-        'package_unavailable' =>
-          WorkerReadinessState.runtimeUnavailable,
-        'setup_required' ||
-        'authentication_required' =>
-          WorkerReadinessState.setupRequired,
-        'permission_configuration_required' =>
-          WorkerReadinessState.setupRequired,
-        _ => WorkerReadinessState.testFailed,
-      };
-      return WorkerReadinessAssessment(
-        state,
-        issueCode: code ?? 'probe_failed',
-        diagnosticDetails: message,
-        toolVersion: result['toolVersion'] as String?,
-        replaceToolVersion: true,
-        toolName: result['toolName'] as String?,
-        replaceToolName: true,
-        toolPath: result['toolPath'] as String?,
-        replaceToolPath: true,
       );
     } on Object catch (error) {
       if (error is CliWorkerEngineProbeException) {
@@ -486,16 +366,31 @@ class WorkerReadinessMonitor {
       final timeout = error is TimeoutException;
       return WorkerReadinessAssessment(
         WorkerReadinessState.runtimeUnavailable,
-        issueCode: timeout ? 'probe_timeout' : 'package_unavailable',
+        issueCode: timeout ? 'probe_timeout' : 'provider_failure',
         diagnosticDetails: timeout
-            ? 'The Worker Package probe timed out.'
-            : error is V7AdapterExecutionFailure &&
-                    error.localDiagnostic != null &&
-                    error.localDiagnostic!.isNotEmpty
-                ? error.localDiagnostic
-                : 'The Worker Package could not complete its probe.',
+            ? 'The Tool Profile probe timed out.'
+            : 'The Tool Profile could not complete its probe.',
       );
     }
+  }
+
+  Future<String?> _profileDefinitionFor(String workerTypeId) async {
+    final catalog = toolProfileCatalog;
+    if (catalog == null) return null;
+    var entries = await catalog.loadCatalog();
+    var entry =
+        entries.where((item) => item.workerTypeId == workerTypeId).firstOrNull;
+    if (entry == null) {
+      try {
+        entries = await catalog.syncCatalog();
+        entry = entries
+            .where((item) => item.workerTypeId == workerTypeId)
+            .firstOrNull;
+      } on Object {
+        // An absent cache entry cannot be replaced by a Workspace-side alias.
+      }
+    }
+    return entry?.profileDefinitionId;
   }
 
   Future<WorkerReadinessAssessment> _assessToolProfileWorker(
@@ -529,55 +424,17 @@ class WorkerReadinessMonitor {
         (await store.releaseState(profileDefinitionId)).selectedChannel;
     late ToolProfileResolution resolution;
     try {
-      resolution = worker.toolVersion == null
-          ? await resolver.resolveBootstrapProfile(
-              logicalWorkerTypeId: worker.workerTypeId,
-              profileDefinitionId: profileDefinitionId,
-              engineVersion: cliWorkerEngineVersion,
-              channel: profileChannel,
-            )
-          : await resolver.resolve(
-              logicalWorkerTypeId: worker.workerTypeId,
-              profileDefinitionId: profileDefinitionId,
-              engineVersion: cliWorkerEngineVersion,
-              providerCliVersion: worker.toolVersion!,
-              channel: profileChannel,
-            );
-      if (!resolution.isAvailable) {
-        resolution = await resolver.resolveBootstrapProfile(
-          logicalWorkerTypeId: worker.workerTypeId,
-          profileDefinitionId: profileDefinitionId,
-          engineVersion: cliWorkerEngineVersion,
-          channel: profileChannel,
-        );
-      }
-      if (!resolution.isAvailable && ensureToolProfileAvailable != null) {
-        await ensureToolProfileAvailable!(worker.workerTypeId);
-        profileChannel =
-            (await store.releaseState(profileDefinitionId)).selectedChannel;
-        resolution = worker.toolVersion == null
-            ? await resolver.resolveBootstrapProfile(
-                logicalWorkerTypeId: worker.workerTypeId,
-                profileDefinitionId: profileDefinitionId,
-                engineVersion: cliWorkerEngineVersion,
-                channel: profileChannel,
-              )
-            : await resolver.resolve(
-                logicalWorkerTypeId: worker.workerTypeId,
-                profileDefinitionId: profileDefinitionId,
-                engineVersion: cliWorkerEngineVersion,
-                providerCliVersion: worker.toolVersion!,
-                channel: profileChannel,
-              );
-        if (!resolution.isAvailable) {
-          resolution = await resolver.resolveBootstrapProfile(
-            logicalWorkerTypeId: worker.workerTypeId,
-            profileDefinitionId: profileDefinitionId,
-            engineVersion: cliWorkerEngineVersion,
-            channel: profileChannel,
-          );
-        }
-      }
+      resolution = await resolver.resolveForWorker(
+        logicalWorkerTypeId: worker.workerTypeId,
+        profileDefinitionId: profileDefinitionId,
+        engineVersion: cliWorkerEngineVersion,
+        providerCliVersion: worker.toolVersion,
+        ensureAvailable: ensureToolProfileAvailable == null
+            ? null
+            : () => ensureToolProfileAvailable!(worker.workerTypeId),
+      );
+      profileChannel =
+          (await store.releaseState(profileDefinitionId)).selectedChannel;
     } on Object catch (error) {
       final issueCode = error is FormatException
           ? 'profile_signature_invalid'

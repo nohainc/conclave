@@ -15,8 +15,6 @@ import 'local_worker_setup.dart';
 import 'local_worker_permissions.dart';
 import 'secure_credentials.dart';
 import 'secure_credentials_flutter.dart';
-import 'v7_adapter_package_store.dart';
-import 'v7_adapter_protocol.dart';
 import 'workspace_enrollment.dart';
 import 'workspace_runtime.dart';
 import 'workspace_lifecycle_store.dart';
@@ -25,6 +23,7 @@ import 'local_management_authenticator.dart';
 import 'copyable_messages.dart';
 import 'cli_worker_engine_supervisor.dart';
 import 'tool_profile_resolver.dart';
+import 'worker_readiness.dart';
 
 export 'copyable_messages.dart' show showCopyableErrorSnackBar;
 
@@ -40,12 +39,6 @@ bool _hasValidCachedDesktopSession(SecureCredentialStore credentialStore) {
     return false;
   }
 }
-
-String? _toolProfileDefinitionId(String workerTypeId) => switch (workerTypeId) {
-      'chatgpt' => 'chatgpt-codex',
-      'gemini' => 'gemini-antigravity',
-      _ => null,
-    };
 
 String? _readUserEmailFromCredentialStore(
     SecureCredentialStore credentialStore) {
@@ -606,7 +599,6 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       connection: host.cloudConnection,
       journal: host.cloudConnection?.assignmentJournal,
       workerRegistry: host.localWorkerRegistry,
-      workerVersionStore: host.workerVersionStore,
       toolProfileReleaseStore: host.toolProfileReleaseStore,
       lastUpdateCheckStatus: status['lastUpdateCheckStatus'] as String?,
       lastUpdateCheckAt: checkAt,
@@ -1276,7 +1268,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp>
           title: const Text('This Workspace is connected.'),
           content: const Text(
             'Disconnect this Workspace before signing out. Disconnecting keeps '
-            'the installation owner and local Workers, credentials, adapters, '
+            'the installation owner and local Workers, credentials, Profiles, '
             'and Work Root.',
           ),
           actions: [
@@ -1556,7 +1548,7 @@ class _ConclaveHostAppState extends State<ConclaveHostApp>
       builder: (context) => AlertDialog(
         title: const Text('Release Workspace from this account?'),
         content: const Text(
-          'This revokes the runtime credential, disconnects Cloud, and releases the installation owner binding so another Conclave account can connect it. Local Workers, provider credentials, adapters, and Work Root files remain on this computer.',
+          'This revokes the runtime credential, disconnects Cloud, and releases the installation owner binding so another Conclave account can connect it. Local Workers, provider credentials, Tool Profiles, and Work Root files remain on this computer.',
         ),
         actions: [
           TextButton(
@@ -1844,8 +1836,8 @@ class _ConclaveHostAppState extends State<ConclaveHostApp>
         title: const Text('Reset Local Workspace?'),
         content: const Text(
           'Reset removes the local Workspace registration and runtime credential, '
-          'configured Workers and their provider credentials, installed adapter '
-          'packages, desktop sign-in session, and local runtime identity. It also '
+          'configured Workers and their provider credentials, desktop sign-in '
+          'session, and local runtime identity. It also '
           'disconnects the Cloud runtime when available.\n\n'
           'The persistent installation ID and its account ownership remain, so '
           'another account cannot claim this installation. Work Root metadata, '
@@ -1917,14 +1909,6 @@ class _ConclaveHostAppState extends State<ConclaveHostApp>
       } else if (!await _requireStepUp('Reset local Workspace')) {
         return;
       }
-      final workers = await lifecycle.host.localWorkerRegistry
-              ?.list(includeRemoved: true) ??
-          const [];
-      for (final worker in workers) {
-        if (worker.credentialRef != null && worker.credentialRef!.isNotEmpty) {
-          await lifecycle.host.credentialStore.delete(worker.credentialRef!);
-        }
-      }
       await lifecycle.host.credentialStore.delete(desktopHumanCredentialKey);
       await HostRegistrationStore(dataDir).clear();
       await LocalWorkspaceIdentityStore(dataDir).clear();
@@ -1936,10 +1920,6 @@ class _ConclaveHostAppState extends State<ConclaveHostApp>
       final workersFile = File(
           '${dataDir.path}${Platform.pathSeparator}configured-workers.json');
       if (await workersFile.exists()) await workersFile.delete();
-      final adaptersDir =
-          Directory('${dataDir.path}${Platform.pathSeparator}adapters');
-      if (await adaptersDir.exists()) await adaptersDir.delete(recursive: true);
-
       final replacement = await buildWorkspaceRuntime(
         HostConfig.fromArgs(
           const [],
@@ -2068,8 +2048,6 @@ class _ConclaveHostAppState extends State<ConclaveHostApp>
       workerRevision: _workerRevision,
       localWorkerRegistry: lifecycle.host.localWorkerRegistry,
       credentialStore: lifecycle.host.credentialStore,
-      adapterPackageStore: lifecycle.host.adapterPackageStore,
-      workerVersionStore: lifecycle.host.workerVersionStore,
       toolProfileReleaseStore: lifecycle.host.toolProfileReleaseStore,
       toolProfileCatalog: lifecycle.host.toolProfileCatalog,
       signedIn: true,
@@ -2559,8 +2537,6 @@ class HostDashboard extends StatefulWidget {
     this.workerRevision = 0,
     this.localWorkerRegistry,
     this.credentialStore = const PlatformSecureCredentialStore(),
-    this.adapterPackageStore,
-    this.workerVersionStore,
     this.toolProfileReleaseStore,
     this.toolProfileCatalog,
     this.signedIn = false,
@@ -2591,8 +2567,6 @@ class HostDashboard extends StatefulWidget {
   final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
   final int workerRevision;
   final SecureCredentialStore credentialStore;
-  final V7AdapterPackageStore? adapterPackageStore;
-  final WorkerVersionStore? workerVersionStore;
   final ToolProfileReleaseStore? toolProfileReleaseStore;
   final ToolProfileCatalogClient? toolProfileCatalog;
   final bool signedIn;
@@ -2843,9 +2817,8 @@ class _HostDashboardState extends State<HostDashboard> {
                     signedIn: effectiveSignedIn,
                     credentialStore: widget.credentialStore,
                     localWorkerRegistry: widget.localWorkerRegistry,
-                    adapterPackageStore: widget.adapterPackageStore,
-                    workerVersionStore: widget.workerVersionStore,
                     toolProfileReleaseStore: widget.toolProfileReleaseStore,
+                    toolProfileCatalog: widget.toolProfileCatalog,
                     onRollbackToolProfile: widget.onRollbackToolProfile,
                     onConnect: widget.onConnect,
                     onRegister: widget.onRegister,
@@ -2946,9 +2919,8 @@ class _WorkspaceTab extends StatefulWidget {
     this.onChangeWorkspaceName,
     required this.credentialStore,
     this.localWorkerRegistry,
-    this.adapterPackageStore,
-    this.workerVersionStore,
     this.toolProfileReleaseStore,
+    this.toolProfileCatalog,
     this.onRollbackToolProfile,
     this.onRetry,
     this.onExportDiagnostics,
@@ -2968,9 +2940,8 @@ class _WorkspaceTab extends StatefulWidget {
   final Future<void> Function(String name)? onChangeWorkspaceName;
   final SecureCredentialStore credentialStore;
   final LocalConfiguredWorkerRegistry? localWorkerRegistry;
-  final V7AdapterPackageStore? adapterPackageStore;
-  final WorkerVersionStore? workerVersionStore;
   final ToolProfileReleaseStore? toolProfileReleaseStore;
+  final ToolProfileCatalogClient? toolProfileCatalog;
   final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
@@ -3215,9 +3186,8 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
           snapshot: widget.snapshot,
           onExportDiagnostics: widget.onExportDiagnostics,
           workerRegistry: widget.localWorkerRegistry,
-          adapterPackageStore: widget.adapterPackageStore,
-          workerVersionStore: widget.workerVersionStore,
           toolProfileReleaseStore: widget.toolProfileReleaseStore,
+          toolProfileCatalog: widget.toolProfileCatalog,
           onRollbackToolProfile: widget.onRollbackToolProfile,
         ),
       ],
@@ -3230,18 +3200,16 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
     required this.snapshot,
     this.onExportDiagnostics,
     this.workerRegistry,
-    this.adapterPackageStore,
-    this.workerVersionStore,
     this.toolProfileReleaseStore,
+    this.toolProfileCatalog,
     this.onRollbackToolProfile,
   });
 
   final HostUiSnapshot snapshot;
   final Future<void> Function()? onExportDiagnostics;
   final LocalConfiguredWorkerRegistry? workerRegistry;
-  final V7AdapterPackageStore? adapterPackageStore;
-  final WorkerVersionStore? workerVersionStore;
   final ToolProfileReleaseStore? toolProfileReleaseStore;
+  final ToolProfileCatalogClient? toolProfileCatalog;
   final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
 
   @override
@@ -3365,6 +3333,7 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
             _RuntimeDiagnostics(
               registry: workerRegistry,
               toolProfileReleaseStore: toolProfileReleaseStore,
+              toolProfileCatalog: toolProfileCatalog,
               onRollbackToolProfile: onRollbackToolProfile,
             ),
             const SizedBox(height: 12),
@@ -3514,11 +3483,13 @@ class _RuntimeDiagnostics extends StatefulWidget {
   const _RuntimeDiagnostics({
     required this.registry,
     required this.toolProfileReleaseStore,
+    required this.toolProfileCatalog,
     required this.onRollbackToolProfile,
   });
 
   final LocalConfiguredWorkerRegistry? registry;
   final ToolProfileReleaseStore? toolProfileReleaseStore;
+  final ToolProfileCatalogClient? toolProfileCatalog;
   final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
 
   @override
@@ -3540,7 +3511,8 @@ class _RuntimeDiagnosticsState extends State<_RuntimeDiagnostics> {
   void didUpdateWidget(covariant _RuntimeDiagnostics oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.registry != widget.registry ||
-        oldWidget.toolProfileReleaseStore != widget.toolProfileReleaseStore) {
+        oldWidget.toolProfileReleaseStore != widget.toolProfileReleaseStore ||
+        oldWidget.toolProfileCatalog != widget.toolProfileCatalog) {
       _load();
     }
   }
@@ -3556,7 +3528,16 @@ class _RuntimeDiagnosticsState extends State<_RuntimeDiagnostics> {
     final workers = await registry.list(includeRemoved: true);
     return Future.wait(workers.map((worker) async {
       Map<String, Object?>? profile;
-      final definitionId = _toolProfileDefinitionId(worker.workerTypeId);
+      final catalog = widget.toolProfileCatalog;
+      final catalogEntry = catalog == null
+          ? null
+          : (await catalog.loadCatalog())
+              .where((entry) => entry.workerTypeId == worker.workerTypeId)
+              .firstOrNull;
+      final definitionId = catalogEntry?.profileDefinitionId;
+      if (catalogEntry != null) {
+        profile = {'displayName': catalogEntry.displayName};
+      }
       final profileStore = widget.toolProfileReleaseStore;
       if (definitionId != null && profileStore != null) {
         try {
@@ -3585,6 +3566,7 @@ class _RuntimeDiagnosticsState extends State<_RuntimeDiagnostics> {
             );
           }
           profile = {
+            'displayName': catalogEntry!.displayName,
             'definitionId': definitionId,
             'source': resolution.source.name,
             'activeVersion': profileState.activeVersion,
@@ -3594,7 +3576,11 @@ class _RuntimeDiagnosticsState extends State<_RuntimeDiagnostics> {
               'releaseVersion': resolution.release!.releaseVersion,
           };
         } on Object {
-          profile = {'definitionId': definitionId, 'source': 'unavailable'};
+          profile = {
+            'displayName': catalogEntry!.displayName,
+            'definitionId': definitionId,
+            'source': 'unavailable',
+          };
         }
       }
       return (worker: worker, profile: profile);
@@ -3639,11 +3625,10 @@ class _RuntimeDiagnosticsState extends State<_RuntimeDiagnostics> {
                 for (final record in records)
                   ExpansionTile(
                     tilePadding: EdgeInsets.zero,
-                    title: Text(switch (record.worker.workerTypeId) {
-                      'chatgpt' => 'ChatGPT',
-                      'gemini' => 'Gemini',
-                      _ => record.worker.name,
-                    }),
+                    title: Text(
+                      record.profile?['displayName'] as String? ??
+                          record.worker.workerTypeId,
+                    ),
                     subtitle: Text(
                       record.worker.workerTypeId,
                     ),
@@ -3798,28 +3783,18 @@ class _WorkersTabState extends State<_WorkersTab> {
   Future<List<LocalConfiguredWorker>>? _workers;
   final Set<String> _updatingWorkerTypes = {};
   List<LogicalWorkerCatalogEntry> _catalogEntries = const [];
-  Timer? _catalogRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadWorkers();
     _loadLogicalWorkerCatalog();
-    _catalogRefreshTimer = Timer.periodic(const Duration(minutes: 10), (_) {
-      unawaited(_loadLogicalWorkerCatalog());
-    });
-  }
-
-  @override
-  void dispose() {
-    _catalogRefreshTimer?.cancel();
-    super.dispose();
   }
 
   Future<void> _loadLogicalWorkerCatalog() async {
     final catalog = widget.toolProfileCatalog;
     if (catalog == null) {
-      if (mounted) setState(() => _catalogEntries = _fallbackLogicalWorkers);
+      if (mounted) setState(() => _catalogEntries = const []);
       return;
     }
     try {
@@ -3835,47 +3810,10 @@ class _WorkersTabState extends State<_WorkersTab> {
       if (mounted) setState(() => _catalogEntries = current);
     } on Object {
       if (mounted && _catalogEntries.isEmpty) {
-        setState(() => _catalogEntries = _fallbackLogicalWorkers);
+        setState(() => _catalogEntries = const []);
       }
     }
   }
-
-  static const _fallbackLogicalWorkers = <LogicalWorkerCatalogEntry>[
-    LogicalWorkerCatalogEntry(
-      workerTypeId: 'chatgpt',
-      displayName: 'ChatGPT',
-      description: '',
-      profileDefinitionId: 'chatgpt-codex',
-      providerToolName: 'codex',
-      engineFamily: 'cli',
-      releaseStage: 'stable',
-      capabilities: [
-        'text',
-        'local_file',
-        'workstream_read',
-        'workstream_write',
-        'durable_session'
-      ],
-      sortOrder: 10,
-    ),
-    LogicalWorkerCatalogEntry(
-      workerTypeId: 'gemini',
-      displayName: 'Gemini',
-      description: '',
-      profileDefinitionId: 'gemini-antigravity',
-      providerToolName: 'agy',
-      engineFamily: 'cli',
-      releaseStage: 'stable',
-      capabilities: [
-        'text',
-        'local_file',
-        'workstream_read',
-        'workstream_write',
-        'durable_session'
-      ],
-      sortOrder: 20,
-    ),
-  ];
 
   @override
   void didUpdateWidget(covariant _WorkersTab oldWidget) {

@@ -6,6 +6,7 @@ import 'package:conclave_host/worker_executor.dart';
 import 'package:conclave_host/workstream_directory.dart';
 import 'package:conclave_host/workstream_path.dart';
 import 'package:test/test.dart';
+import 'support/assignment_worker_fixture.dart';
 
 void main() {
   test('parallel same-repository Workstreams remain isolated', () async {
@@ -15,11 +16,7 @@ void main() {
       pathResolver: WorkstreamPathResolver(root),
     );
     final handler = WorkerAssignmentHandler(
-      executor: WorkerProcessExecutor(),
-      resolve: (workerId) => WorkerProcessSpec(
-        workerId: workerId,
-        executable: 'dart',
-      ),
+      resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
       workstreamDirectoryLifecycle: lifecycle,
     );
     final baseContext = const HostAssignmentContext(
@@ -33,6 +30,7 @@ void main() {
       idempotencyKey: 'idem-1',
       payload: {
         'workerId': 'worker',
+        'workerTypeId': 'test-worker',
         'projectId': 'project-1',
         'workRequestId': 'request-1',
         'executionClass': 'stateful_workstream',
@@ -51,17 +49,17 @@ void main() {
       },
     );
 
-    final specA = await handler.prepareProcessSpec(contextA);
-    final specB = await handler.prepareProcessSpec(contextB);
-    expect(specA.workingDirectory, isNot(specB.workingDirectory));
-    expect(specA.workingDirectory, contains('project-1'));
-    expect(specA.workingDirectory, endsWith('workstream-a'));
-    expect(specB.workingDirectory, endsWith('workstream-b'));
+    final scopeA = await handler.prepareAssignmentScope(contextA);
+    final scopeB = await handler.prepareAssignmentScope(contextB);
+    expect(scopeA.workingDirectory.path, isNot(scopeB.workingDirectory.path));
+    expect(scopeA.workingDirectory.path, contains('project-1'));
+    expect(scopeA.workingDirectory.path, endsWith('workstream-a'));
+    expect(scopeB.workingDirectory.path, endsWith('workstream-b'));
 
-    final repoA =
-        Directory('${specA.workingDirectory}${Platform.pathSeparator}conclave');
-    final repoB =
-        Directory('${specB.workingDirectory}${Platform.pathSeparator}conclave');
+    final repoA = Directory(
+        '${scopeA.workingDirectory.path}${Platform.pathSeparator}conclave');
+    final repoB = Directory(
+        '${scopeB.workingDirectory.path}${Platform.pathSeparator}conclave');
     await repoA.create(recursive: true);
     await repoB.create(recursive: true);
     await _initializeRepository(repoA, 'feature-a');
@@ -85,15 +83,15 @@ Future<void> main(List<String> args) async {
 ''');
 
     final processA = await Process.start(
-      specA.executable,
+      Platform.resolvedExecutable,
       [workerScript.path, 'A'],
-      workingDirectory: specA.workingDirectory,
+      workingDirectory: scopeA.workingDirectory.path,
       runInShell: false,
     );
     final processB = await Process.start(
-      specB.executable,
+      Platform.resolvedExecutable,
       [workerScript.path, 'B'],
-      workingDirectory: specB.workingDirectory,
+      workingDirectory: scopeB.workingDirectory.path,
       runInShell: false,
     );
     unawaited(processA.stdout.drain());
@@ -132,7 +130,7 @@ Future<void> main(List<String> args) async {
 
     // A normal assignment resolves only its own CWD. The other repository is
     // not an input and is not reachable through the runtime's path selection.
-    expect(specA.workingDirectory, isNot(specB.workingDirectory));
+    expect(scopeA.workingDirectory.path, isNot(scopeB.workingDirectory.path));
   });
 }
 

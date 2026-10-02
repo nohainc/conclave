@@ -202,16 +202,6 @@ export class CloudEventPublisher implements EventPublisher {
         )
           .bind(event.workspaceId)
           .all<{ user_id: string }>();
-    if ((members.results ?? []).length === 0) {
-      // Transitional fallback for v4 development databases. Production v5
-      // fanout is derived from Project membership or Workspace ownership.
-      members = await this.env.CONCLAVE_DB.prepare(
-        `SELECT user_id FROM workspace_memberships
-         WHERE workspace_id = ?1 AND status = 'active'`,
-      )
-        .bind(event.workspaceId)
-        .all<{ user_id: string }>();
-    }
     const results = await Promise.all(
       (members.results ?? []).map(async ({ user_id: userId }) => {
         try {

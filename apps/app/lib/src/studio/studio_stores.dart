@@ -7,17 +7,13 @@ class StudioStore {
       : auth = AuthStore(dataSource),
         projects = ProjectStore(dataSource),
         workspaces = WorkspaceStore(dataSource),
-        chats = ChatStore(dataSource),
-        runs = RunStore(dataSource),
-        accounts = AccountStore(dataSource);
+        runs = RunStore(dataSource);
 
   final StudioDataSource dataSource;
   final AuthStore auth;
   final WorkspaceStore workspaces;
   final ProjectStore projects;
-  final ChatStore chats;
   final RunStore runs;
-  final AccountStore accounts;
 
   Future<StudioSnapshot> reload(
       {String? projectId, String? workspaceId}) async {
@@ -26,9 +22,7 @@ class StudioStore {
     auth.replace(snapshot.viewer);
     workspaces.replace(snapshot.workspaces);
     projects.replace(snapshot.projects);
-    chats.replace(snapshot.allChats);
     runs.replace(snapshot.run);
-    accounts.replace(snapshot.accounts);
     return snapshot;
   }
 }
@@ -73,28 +67,6 @@ class WorkspaceStore {
         .map((workspace) => workspace.id == workspaceId ? updated : workspace)
         .toList());
   }
-
-  Future<void> announceUpdate(String workspaceId, String runtimeId,
-          {String? channel, String? version}) =>
-      source.announceWorkspaceUpdate(
-          workspaceId: workspaceId,
-          runtimeId: runtimeId,
-          channel: channel,
-          version: version);
-}
-
-class ChatStore {
-  ChatStore(this.source);
-  final StudioDataSource source;
-  List<StudioChat> items = const [];
-
-  void replace(List<StudioChat> value) => items = List.unmodifiable(value);
-
-  Future<StudioChat> create(String projectId, String title) =>
-      source.createChat(projectId: projectId, title: title);
-  Future<StudioChatMessage> send(
-          String projectId, String chatId, String text) =>
-      source.sendChatMessage(projectId: projectId, chatId: chatId, text: text);
 }
 
 class RunStore {
@@ -106,21 +78,6 @@ class RunStore {
 
   Future<void> control(String runId, String command) =>
       source.controlRun(runId, command);
-}
-
-class AccountStore {
-  AccountStore(this.source);
-  final StudioDataSource source;
-  List<StudioCredentialProfile> items = const [];
-
-  void replace(List<StudioCredentialProfile> value) =>
-      items = List.unmodifiable(value);
-
-  Future<List<StudioCredentialProfile>> refresh(String workspaceId) async {
-    final value = await source.loadCredentialProfiles(workspaceId: workspaceId);
-    replace(value);
-    return value;
-  }
 }
 
 class AuthStore {

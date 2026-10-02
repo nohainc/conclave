@@ -23,45 +23,43 @@ describe("sensitive operation step-up policy", () => {
   it("declares a short fresh-auth window for every sensitive operation", () => {
     expect(Object.keys(STEP_UP_REQUIREMENTS)).toEqual([
       SENSITIVE_OPERATIONS.workspaceOwnershipTransfer,
-      SENSITIVE_OPERATIONS.credentialProfileShare,
-      SENSITIVE_OPERATIONS.hostRevoke,
+      SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke,
       SENSITIVE_OPERATIONS.billingSecurityChange,
-      SENSITIVE_OPERATIONS.apiCredentialShare,
       SENSITIVE_OPERATIONS.fullWorkspaceGrant,
     ]);
-    expect(STEP_UP_REQUIREMENTS[SENSITIVE_OPERATIONS.hostRevoke].maxAgeMs).toBe(
+    expect(STEP_UP_REQUIREMENTS[SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke].maxAgeMs).toBe(
       10 * 60 * 1000,
     );
   });
 
   it("accepts a fresh strong passkey proof", () => {
     expect(
-      isStepUpSatisfied(record(), SENSITIVE_OPERATIONS.hostRevoke, now),
+      isStepUpSatisfied(record(), SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke, now),
     ).toBe(true);
   });
 
   it("rejects missing, expired, stale, and unsupported proofs", () => {
-    expect(isStepUpSatisfied(null, SENSITIVE_OPERATIONS.hostRevoke, now)).toBe(
+    expect(isStepUpSatisfied(null, SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke, now)).toBe(
       false,
     );
     expect(
       isStepUpSatisfied(
         record({ expires_at: "2026-09-23T11:59:59.000Z" }),
-        SENSITIVE_OPERATIONS.hostRevoke,
+        SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke,
         now,
       ),
     ).toBe(false);
     expect(
       isStepUpSatisfied(
         record({ authenticated_at: "2026-09-23T11:49:59.000Z" }),
-        SENSITIVE_OPERATIONS.hostRevoke,
+        SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke,
         now,
       ),
     ).toBe(false);
     expect(
       isStepUpSatisfied(
         record({ method: "totp" }),
-        SENSITIVE_OPERATIONS.hostRevoke,
+        SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke,
         now,
       ),
     ).toBe(true);

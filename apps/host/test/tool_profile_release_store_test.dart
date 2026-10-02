@@ -232,12 +232,7 @@ void main() {
         dataDirectory: Directory('${temporary.path}/workspace'),
         workspaceId: 'workspace-fixture',
       );
-      final configured = await registry.create(
-        name: entries.single.displayName,
-        workerTypeId: entries.single.workerTypeId,
-        approvedCatalogEntry: entries.single,
-        authStrategy: 'browser_auth',
-      );
+      final configured = await registry.create(catalogEntry: entries.single);
       expect(configured.workerTypeId, 'fixture-worker');
       catalog.close();
 

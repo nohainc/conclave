@@ -81,72 +81,6 @@ void main() {
     );
   });
 
-  test('validates a generated Host assignment envelope', () {
-    final parsed = HostProtocolMessage.parse({
-      'protocol': hostProtocolName,
-      'protocolVersion': hostProtocolVersion,
-      'messageId': 'message-1',
-      'timestamp': '2026-09-23T00:00:00Z',
-      'type': 'assignment.start',
-      'workspaceId': 'workspace-1',
-      'hostId': 'host-1',
-      'workerId': 'worker-1',
-      'runId': 'run-1',
-      'taskId': 'task-1',
-      'attemptId': 'attempt-1',
-      'assignmentId': 'assignment-1',
-      'idempotencyKey': 'idempotency-1',
-      'payload': <String, Object?>{
-        'snapshot': <String, Object?>{
-          'assignmentId': 'assignment-1',
-          'workspaceId': 'workspace-1',
-          'projectId': 'project-1',
-          'runId': 'run-1',
-          'taskId': 'task-1',
-          'attemptId': 'attempt-1',
-          'requestedByUserId': 'user-1',
-          'hostId': 'host-1',
-          'workerId': 'worker-1',
-          'resolvedWorkerVersion': '1.0.0',
-          'credentialProfileId': 'credential-1',
-          'config': <String, Object?>{},
-          'sessionPolicy': 'stateless',
-          'permissions': <Object?>[],
-          'contextRefs': <Object?>[],
-          'timeoutMs': 1000,
-          'idempotencyKey': 'idempotency-1',
-        },
-        'input': <String, Object?>{},
-      },
-    });
-    expect(parsed.type, 'assignment.start');
-  });
-
-  test('rejects malformed or oversized Host messages', () {
-    expect(
-      () => HostProtocolMessage.parse({
-        'protocol': hostProtocolName,
-        'protocolVersion': hostProtocolVersion,
-        'messageId': 'message-1',
-        'timestamp': '2026-09-23T00:00:00Z',
-        'type': 'assignment.start',
-        'payload': <String, Object?>{},
-      }),
-      throwsA(isA<ProtocolException>()),
-    );
-    expect(
-      () => HostProtocolMessage.parse({
-        'protocol': hostProtocolName,
-        'protocolVersion': hostProtocolVersion,
-        'messageId': 'message-1',
-        'timestamp': '2026-09-23T00:00:00Z',
-        'type': 'host.heartbeat',
-        'payload': {'padding': 'x' * hostProtocolMaxMessageSizeBytes},
-      }),
-      throwsA(isA<ProtocolException>()),
-    );
-  });
-
   test('round trips durable and ephemeral realtime events', () {
     final event = RealtimeEvent.parse({
       'eventId': 'event-1',
@@ -165,7 +99,8 @@ void main() {
     expect(ephemeralRealtimeEventTypes, contains('stream.delta'));
   });
 
-  test('accepts unknown compatible events and rejects secrets or bad order', () {
+  test('accepts unknown compatible events and rejects secrets or bad order',
+      () {
     final base = <String, Object?>{
       'eventId': 'event-1',
       'type': 'future.new.fact',

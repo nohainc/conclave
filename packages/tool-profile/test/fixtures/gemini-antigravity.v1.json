@@ -175,7 +175,7 @@
   },
   "sandbox": {
     "mappings": {
-      "restricted": ["--sandbox"],
+      "restricted": ["--sandbox", "--mode", "accept-edits"],
       "provider_default": ["--sandbox"],
       "full_access": []
     }

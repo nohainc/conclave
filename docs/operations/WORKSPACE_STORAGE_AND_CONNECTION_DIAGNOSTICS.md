@@ -1,15 +1,9 @@
 # Workspace storage and connection diagnostics
 
-**Migration note:** `Adapters/` and adapter references below document the
-existing V7/V2 storage layout only. They are migration-era package storage,
-not the Architecture v8 runtime model. The v8 target uses a signed Tool Profile
-cache alongside the generic CLI Worker Engine; provider-specific Worker
-binaries and their release storage remain migration-only until v8 acceptance.
-
 Conclave Workspace prepares local storage before contacting Cloud. Work Root,
 runtime state, the log directory, and their permissions are checked locally;
 the app does not request a separate macOS “internet permission.” macOS App
-Sandbox remains disabled because Workspace launches local Worker adapters and
+Sandbox remains disabled because Workspace launches the generic CLI Worker Engine and
 developer tools. Do not enable it without a separate subprocess/filesystem
 design; if sandboxing is introduced, outgoing network access also needs the
 Apple network-client entitlement.
@@ -20,35 +14,45 @@ The default layout is:
 
 ```text
 ~/Library/Application Support/Conclave/Workspace/
-    State/       runtime identity, Workspace registration, Worker metadata,
-                 and assignment journal
-    Work/        Workstream working directories
-    Adapters/    admitted adapter packages
+    State/       runtime identity, Workspace registration, local Worker
+                 registry, and assignment journal
+    Profiles/    verified Tool Profiles and cached logical Worker catalog
+    Engines/     generic CLI Worker Engine
+    Workers/     per-Worker state, sessions, and diagnostics
+    Work/        Workstream working directories (Work Root)
     Updates/     staged Workspace updates
 ~/Library/Logs/Conclave Workspace/
     host.log
 ```
 
-Runtime and Worker credentials remain in macOS Keychain. They are not stored
-in this directory, copied into connection URL parameters, or included in
-diagnostics. Runtime authentication is sent in the WebSocket authorization
-header. `--data-dir` and
-`CONCLAVE_HOST_DATA_DIR` remain supported and keep their state, adapter, update,
-and log directories colocated with the explicit override.
+The local Worker registry contains Worker IDs, catalog type IDs, activation,
+local permissions, concurrency, readiness, and bounded CLI diagnostics. Cloud
+or its verified local catalog cache defines available logical Workers and
+their Profiles. On a local registry schema change, Workspace resets only
+`State/configured-workers.json`; setup recreates slots from the catalog.
+
+Runtime credentials remain in macOS Keychain. Provider sign-in remains owned by
+the installed provider CLI and is not copied into Workspace state. Credentials
+are not stored in this directory, copied into connection URL parameters, or
+included in diagnostics. Runtime authentication is sent in the WebSocket
+authorization header. `--data-dir` and `CONCLAVE_HOST_DATA_DIR` remain
+supported and keep state, updates, and logs colocated with the explicit
+override.
 
 The desktop human session is stored in secure storage separately from the
-runtime credential. Local Worker/provider credentials remain in the local
-secret store. Versioned lifecycle preferences store only desired runtime state,
+runtime credential. Versioned lifecycle preferences store only desired runtime state,
 login-item and lock settings, and non-authoritative owner display metadata;
 they never contain bearer credentials.
 
-At first launch after the layout change, Workspace copies missing legacy state
-from `~/.conclave-host`, moves legacy adapter/update/log directories when the
-new destination is empty, and renames the old default Work Root when the new
-Work Root does not exist. It never overwrites destination files or deletes the
-legacy source. A migration marker makes subsequent launches idempotent. If an
-older Workspace process still holds the legacy runtime lock, close it and
-reopen the updated app to retry migration.
+At first launch after the macOS layout change, Workspace copies missing
+registration and runtime state from `~/.conclave-host`, excluding the local
+Worker registry, old Worker packages, adapter packages, and work directories.
+It moves update and log directories when the new destination is empty, and
+moves the former default Work Root only when the new location is absent.
+Workspace never deletes Work Root. A
+migration marker makes subsequent launches idempotent. If an older Workspace
+process still holds the legacy runtime lock, close it and reopen the updated
+app to retry migration.
 
 ## Connection stages
 

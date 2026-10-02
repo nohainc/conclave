@@ -148,6 +148,32 @@ void main() {
     );
   });
 
+  test('execution policy is bounded and defaults safely for older senders', () {
+    final request = <String, Object?>{
+      'type': 'execute.request',
+      'protocolVersion': '4.0',
+      'requestId': 'policy-1',
+      'assignmentId': 'assignment-1',
+      'prompt': 'inspect the workstream',
+      'model': null,
+      'timeoutMs': 1000,
+      'sessionPolicy': 'stateless',
+    };
+    final legacy = decodeWorkerFrame(jsonEncode(request)) as ExecuteRequest;
+    expect(legacy.executionPolicy, WorkerExecutionPolicy.restricted);
+    final readOnly = decodeWorkerFrame(jsonEncode({
+      ...request,
+      'executionPolicy': 'provider_default',
+    })) as ExecuteRequest;
+    expect(readOnly.executionPolicy, WorkerExecutionPolicy.providerDefault);
+    expect(
+      () => decodeWorkerFrame(
+        jsonEncode({...request, 'executionPolicy': 'full_access'}),
+      ),
+      throwsFormatException,
+    );
+  });
+
   test('enforces frame and prompt bounds', () {
     expect(
       () => decodeWorkerFrame(' ' * (WorkerProtocolLimits.maxFrameBytes + 1)),

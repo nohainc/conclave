@@ -10,7 +10,6 @@ void main() {
     id: 'project-1',
     name: 'Authentication',
     branch: 'main',
-    activeGoals: 0,
     lastActivity: 'today',
     role: 'collaborator',
   );
@@ -26,7 +25,7 @@ void main() {
     queueStatus: 'Idle',
   );
 
-  testWidgets('V6 Project explains team collaboration and Workstreams',
+  testWidgets('Project explains team collaboration and Workstreams',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     await tester.pumpWidget(MaterialApp(
@@ -49,8 +48,7 @@ void main() {
     expect(find.text('Workstreams'), findsOneWidget);
     expect(find.text('Workspaces'), findsOneWidget);
     expect(find.text('Members'), findsOneWidget);
-    expect(
-        find.text('Each Workstream is one focused area of team work.'),
+    expect(find.text('Each Workstream is one focused area of team work.'),
         findsOneWidget);
     expect(find.byTooltip('Create Workstream'), findsOneWidget);
     expect(find.text('Overview'), findsNothing);
@@ -60,7 +58,7 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets('V6 normal Workstream UI uses product vocabulary',
+  testWidgets('Workstream UI uses product vocabulary',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(

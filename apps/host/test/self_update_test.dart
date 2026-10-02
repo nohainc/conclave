@@ -14,7 +14,7 @@ void main() {
     final controller = HostUpdateController(
       cloudUri: Uri.parse('https://cloud.test'),
       currentVersion: '0.1.0',
-      client: const HostReleaseClient(),
+      client: const WorkspaceReleaseClient(),
       updater: HostUpdater(root, requireSignature: false),
       reportStatus: statuses.add,
     );
@@ -25,11 +25,11 @@ void main() {
       'packageR2Key': 'hosts/0.2.0/host.tar.gz',
       'packageDigest': 'sha256:abc123',
       'signature': 'sig-1',
-      'minSupportedHostVersion': '0.1.0',
+      'minSupportedWorkspaceVersion': '0.1.0',
     });
 
     expect(release.version, '0.2.0');
-    expect(release.minSupportedHostVersion, '0.1.0');
+    expect(release.minSupportedWorkspaceVersion, '0.1.0');
     expect(controller.availableRelease?.version, '0.2.0');
     expect(controller.status.phase, 'available');
     expect(statuses, hasLength(1));
@@ -42,7 +42,7 @@ void main() {
     final controller = HostUpdateController(
       cloudUri: Uri.parse('https://cloud.test'),
       currentVersion: '1.2.0',
-      client: const HostReleaseClient(),
+      client: const WorkspaceReleaseClient(),
       updater: HostUpdater(root, requireSignature: false),
     );
     Map<String, Object?> release(String version, {String? minimum}) => {
@@ -51,7 +51,7 @@ void main() {
           'packageR2Key': 'hosts/$version/host.tar.gz',
           'packageDigest': 'sha256:abc123',
           'signature': 'sig-1',
-          if (minimum != null) 'minSupportedHostVersion': minimum,
+          if (minimum != null) 'minSupportedWorkspaceVersion': minimum,
         };
 
     expect(
@@ -94,7 +94,7 @@ void main() {
       request.response.close();
     });
     try {
-      final client = const HostReleaseClient();
+      final client = const WorkspaceReleaseClient();
       final base = Uri.http('127.0.0.1:${server.port}', '/');
       final release = await client.latest(
         cloudUri: base,
@@ -154,7 +154,7 @@ void main() {
       final controller = HostUpdateController(
         cloudUri: Uri.http('127.0.0.1:${server.port}', '/'),
         currentVersion: '5.0.0',
-        client: const HostReleaseClient(),
+        client: const WorkspaceReleaseClient(),
         updater: HostUpdater(root, requireSignature: false),
         reportStatus: (status) => phases.add(status.phase),
         restartBootstrap: (_) async => true,
@@ -208,7 +208,7 @@ void main() {
       final controller = HostUpdateController(
         cloudUri: Uri.http('127.0.0.1:${server.port}', '/'),
         currentVersion: '6.0.0',
-        client: const HostReleaseClient(),
+        client: const WorkspaceReleaseClient(),
         updater: HostUpdater(root, requireSignature: false),
       );
       await controller.apply(healthCheck: (_) async => true);
@@ -310,14 +310,14 @@ void main() {
     final metadata = <String, Object?>{
       'version': '2.0.0',
       'channel': 'stable',
-      'minSupportedHostVersion': null,
+      'minSupportedWorkspaceVersion': null,
       'supportedOS': [Platform.operatingSystem],
       'supportedArch': [
         Platform.version.toLowerCase().contains('arm64') ? 'arm64' : 'x64'
       ],
       'releaseNotes': 'verified update',
     };
-    final signature = await fixture.signHostRelease(
+    final signature = await fixture.signWorkspaceRelease(
       publisher: 'conclave',
       keyId: fixtureKeyId,
       digest: digest,
@@ -525,9 +525,6 @@ void main() {
         ..headers.contentType = ContentType.json
         ..write(jsonEncode({
           'revokedKeyIds': ['key-1'],
-          'revokedWorkers': [
-            {'workerTypeId': 'chatgpt', 'version': '2.0.0'}
-          ],
           'revokedWorkspaceReleases': [],
           'revokedToolProfiles': [
             {
@@ -541,14 +538,14 @@ void main() {
     });
     try {
       final policy = WorkerTrustPolicy();
-      await const HostReleaseClient().refreshRevocations(
+      await const WorkspaceReleaseClient().refreshRevocations(
         cloudUri: Uri.http('127.0.0.1:${server.port}', '/'),
         authToken: null,
         policy: policy,
       );
       expect(await requestPath.future, '/api/release-trust');
       expect(policy.revokedKeyIds, {'key-1'});
-      expect(policy.revokedReleaseIds, {'chatgpt@2.0.0', 'chatgpt-codex@3'});
+      expect(policy.revokedReleaseIds, {'chatgpt-codex@3'});
       expect(policy.revokedDigests, {'revoked-profile-digest'});
     } finally {
       await subscription.cancel();

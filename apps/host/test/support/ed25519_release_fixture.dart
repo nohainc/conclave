@@ -37,42 +37,7 @@ class Ed25519ReleaseFixture {
 
   String get seedBase64 => base64.encode(seed);
 
-  Future<void> signAdapterManifest(
-    Map<String, Object?> manifest,
-    String digest, {
-    String publisher = fixturePublisher,
-    String keyId = fixtureKeyId,
-  }) async {
-    manifest['packageDigest'] = digest;
-    manifest['signingKeyId'] = keyId;
-    manifest['signature'] = '';
-    final unsigned = Map<String, Object?>.from(manifest)..remove('signature');
-    final message = utf8.encode(
-      'conclave-v7-adapter-release-v1\n$digest\n${canonicalJson(unsigned)}',
-    );
-    final signature = await Ed25519().sign(message, keyPair: pair);
-    manifest['signature'] = base64.encode(signature.bytes);
-  }
-
-  Future<void> signWorkerReleaseManifest(
-    Map<String, Object?> manifest, {
-    String publisher = fixturePublisher,
-    String keyId = fixtureKeyId,
-  }) async {
-    manifest['publisher'] = publisher;
-    manifest['signingKeyId'] = keyId;
-    manifest['signature'] = '';
-    final unsigned = Map<String, Object?>.from(manifest)..remove('signature');
-    final signature = await Ed25519().sign(
-      utf8.encode(
-        'conclave-worker-release-manifest-v2\n${canonicalJson(unsigned)}',
-      ),
-      keyPair: pair,
-    );
-    manifest['signature'] = base64.encode(signature.bytes);
-  }
-
-  Future<String> signHostRelease({
+  Future<String> signWorkspaceRelease({
     required String publisher,
     required String keyId,
     required String digest,

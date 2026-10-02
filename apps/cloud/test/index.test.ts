@@ -122,14 +122,9 @@ const env = {
       status: "active",
     },
     workspaceId: "local-development",
-    workspaceRole: "owner",
-    roles: ["owner"],
-    authorizedProjectIds: [],
     projectRoles: {},
     sessionId: "session-local-development",
     clientType: "desktop",
-    organizationId: "local-development",
-    organizationRoles: ["owner"],
   }),
   CONCLAVE_RUN_WORKFLOW: workflowBinding,
   CONCLAVE_DB: identityDb,
@@ -233,7 +228,6 @@ describe("Worker smoke tests", () => {
           authorization: "Bearer wrong-secret",
         },
         body: JSON.stringify({
-          organizationId: "org-1",
           projectId: "project-1",
           workerId: "web-reviewer",
           credentialProfileId: "profile-web-reviewer",
@@ -252,7 +246,6 @@ describe("Worker smoke tests", () => {
           authorization: "Bearer connector-secret",
         },
         body: JSON.stringify({
-          organizationId: "org-1",
           projectId: "project-1",
           workerId: "web-reviewer",
           credentialProfileId: "profile-web-reviewer",
@@ -274,18 +267,13 @@ describe("Worker smoke tests", () => {
       TEST_AUTHENTICATION: undefined,
     } as unknown as Env;
     const response = await worker.fetch(
-      new Request("https://conclave.test/api/runs", {
-        method: "POST",
+      new Request("https://conclave.test/api/projects", {
+        method: "GET",
         headers: {
           "content-type": "application/json",
           "cf-access-authenticated-user-email": "operator@example.com",
           "cf-access-jwt-assertion": "ignored-by-application-auth",
         },
-        body: JSON.stringify({
-          runId: "run-1",
-          goalId: "goal-1",
-          idempotencyKey: "key-1",
-        }),
       }),
       productionEnv,
     );
@@ -300,8 +288,8 @@ describe("Worker smoke tests", () => {
     expect(ciResponse.status).toBe(401);
   });
 
-  it("creates an idempotent durable run and sends control events", async () => {
-    const response = await worker.fetch(
+  it("retires legacy run creation and sends control events for existing runs", async () => {
+    const legacyCreateResponse = await worker.fetch(
       new Request("https://conclave.test/api/runs", {
         method: "POST",
         headers: {
@@ -317,43 +305,7 @@ describe("Worker smoke tests", () => {
       }),
       env,
     );
-    expect(response.status).toBe(202);
-    expect(await response.json()).toEqual({
-      id: "run-1",
-      status: "waiting",
-    });
-    expect(workflowBinding.create).toHaveBeenCalledWith({
-      id: "workflow-goal-1",
-      params: {
-        runId: "run-1",
-        goalId: "goal-1",
-        idempotencyKey: "goal-1",
-        organizationId: "local-development",
-        repositoryId: "repo-1",
-        expectedCommitSha: "abc1234",
-        allowedWorkflows: ["CI"],
-      },
-    });
-
-    workflowBinding.create.mockRejectedValueOnce(new Error("already exists"));
-    const duplicate = await worker.fetch(
-      new Request("https://conclave.test/api/runs", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "idempotency-key": "goal-1",
-        },
-        body: JSON.stringify({
-          runId: "run-1",
-          goalId: "goal-1",
-          repositoryId: "repo-1",
-          commitSha: "abc1234",
-        }),
-      }),
-      env,
-    );
-    expect(duplicate.status).toBe(202);
-    expect(workflowBinding.get).toHaveBeenCalledWith("workflow-goal-1");
+    expect(legacyCreateResponse.status).toBe(404);
 
     const eventResponse = await worker.fetch(
       new Request("https://conclave.test/api/runs/run-1/events", {
@@ -412,7 +364,7 @@ describe("Worker smoke tests", () => {
         CONCLAVE_RUN_WORKFLOW: {
           ...workflowBinding,
           get: vi.fn(async (id: string) => {
-            expect(id).toBe("workflow-goal-1");
+            expect(id).toBe("workflow-run-1");
             return instance;
           }),
         },
@@ -420,7 +372,7 @@ describe("Worker smoke tests", () => {
     );
     expect(await statusResponse.json()).toEqual({
       id: "run-1",
-      workflowInstanceId: "workflow-goal-1",
+      workflowInstanceId: "workflow-run-1",
       status: "waiting",
     });
     await worker.fetch(

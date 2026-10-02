@@ -1,9 +1,7 @@
 export const SENSITIVE_OPERATIONS = {
   workspaceOwnershipTransfer: "workspace.ownership.transfer",
-  credentialProfileShare: "credential.profile.share",
-  hostRevoke: "host.revoke",
+  workspaceEnrollmentRevoke: "workspace.enrollment.revoke",
   billingSecurityChange: "billing.security.change",
-  apiCredentialShare: "api.credential.share",
   fullWorkspaceGrant: "workspace.project_grant.full_workspace",
 } as const;
 
@@ -33,20 +31,12 @@ export const STEP_UP_REQUIREMENTS: Record<
     maxAgeMs: 10 * 60 * 1000,
     methods: ["passkey", "totp"],
   },
-  [SENSITIVE_OPERATIONS.credentialProfileShare]: {
-    maxAgeMs: 10 * 60 * 1000,
-    methods: ["passkey", "totp"],
-  },
-  [SENSITIVE_OPERATIONS.hostRevoke]: {
+  [SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke]: {
     maxAgeMs: 10 * 60 * 1000,
     methods: ["passkey", "totp"],
   },
   [SENSITIVE_OPERATIONS.billingSecurityChange]: {
     maxAgeMs: 5 * 60 * 1000,
-    methods: ["passkey", "totp"],
-  },
-  [SENSITIVE_OPERATIONS.apiCredentialShare]: {
-    maxAgeMs: 10 * 60 * 1000,
     methods: ["passkey", "totp"],
   },
   [SENSITIVE_OPERATIONS.fullWorkspaceGrant]: {

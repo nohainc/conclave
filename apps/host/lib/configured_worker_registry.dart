@@ -5,11 +5,10 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
-import 'first_party_worker_registry.dart';
 import 'tool_profile_catalog.dart';
 import 'platform_runtime.dart';
 
-const _registrySchemaVersion = 17;
+const _registrySchemaVersion = 18;
 
 enum LocalWorkerStatus { needsAttention, ready, disabled, removed }
 
@@ -35,34 +34,17 @@ enum WorkerReadinessState {
   }
 }
 
-enum LocalWorkerCredentialStatus {
-  notRequired,
-  needsAuthentication,
-  ready,
-  expired,
-  error
-}
-
-/// Workspace-local state for one fixed product Worker slot.
+/// Workspace-local state for one configured logical Worker.
 class LocalConfiguredWorker {
   LocalConfiguredWorker({
     required this.id,
     required this.workspaceId,
     required this.workerTypeId,
-    String? name,
-    String? authStrategy,
-    String? credentialRef,
-    String? defaultModel,
-    Map<String, Object?> adapterConfig = const {},
-    List<String> allowedModels = const [],
     required this.localPermissions,
     required this.localConcurrencyLimit,
-    String? adapterVersionPolicy,
     required LocalWorkerStatus status,
     LocalWorkerActivationState? activationState,
     WorkerReadinessState? readinessState,
-    LocalWorkerCredentialStatus credentialStatus =
-        LocalWorkerCredentialStatus.notRequired,
     required this.revision,
     required this.createdAt,
     required this.updatedAt,
@@ -82,9 +64,7 @@ class LocalConfiguredWorker {
                 : LocalWorkerActivationState.enabled),
         readinessState = _independentReadiness(
           readinessState,
-          workerTypeId: workerTypeId,
           status: status,
-          lastLiveTestAt: lastLiveTestAt,
           lastLiveTestPassed: lastLiveTestPassed,
           issueCode: readinessIssueCode ?? lastLiveTestIssueCode,
         );
@@ -94,18 +74,6 @@ class LocalConfiguredWorker {
   final String workerTypeId;
   final List<String> localPermissions;
   final int localConcurrencyLimit;
-
-  // Read-only compatibility projections for remaining migration-era callers.
-  // These values are not held in memory or written to the registry.
-  String get name => FirstPartyWorkerPackage.productNameFor(workerTypeId);
-  String get authStrategy => 'provider_owned';
-  String? get credentialRef => null;
-  String? get defaultModel => null;
-  Map<String, Object?> get adapterConfig => const {};
-  List<String> get allowedModels => const [];
-  String? get adapterVersionPolicy => null;
-  LocalWorkerCredentialStatus get credentialStatus =>
-      LocalWorkerCredentialStatus.notRequired;
 
   /// Local activation is independent from the package-reported health state.
   final LocalWorkerActivationState activationState;
@@ -141,24 +109,14 @@ class LocalConfiguredWorker {
   final String? lastLiveTestDetails;
 
   LocalConfiguredWorker copyWith({
-    String? name,
     String? workerTypeId,
-    String? authStrategy,
-    String? credentialRef,
-    String? defaultModel,
-    Map<String, Object?>? adapterConfig,
-    List<String>? allowedModels,
     List<String>? localPermissions,
     int? localConcurrencyLimit,
-    String? adapterVersionPolicy,
     LocalWorkerStatus? status,
     LocalWorkerActivationState? activationState,
     WorkerReadinessState? readinessState,
-    LocalWorkerCredentialStatus? credentialStatus,
     int? revision,
     String? updatedAt,
-    bool clearCredentialRef = false,
-    bool clearModelConfiguration = false,
     String? lastLiveTestAt,
     bool? lastLiveTestPassed,
     String? lastLiveTestDetails,
@@ -178,21 +136,10 @@ class LocalConfiguredWorker {
       LocalConfiguredWorker(
         id: id,
         workspaceId: workspaceId,
-        name: name ?? this.name,
         workerTypeId: workerTypeId ?? this.workerTypeId,
-        authStrategy: authStrategy ?? this.authStrategy,
-        credentialRef:
-            clearCredentialRef ? null : credentialRef ?? this.credentialRef,
-        defaultModel:
-            clearModelConfiguration ? null : defaultModel ?? this.defaultModel,
-        adapterConfig: adapterConfig ?? this.adapterConfig,
-        allowedModels: clearModelConfiguration
-            ? const []
-            : allowedModels ?? this.allowedModels,
         localPermissions: localPermissions ?? this.localPermissions,
         localConcurrencyLimit:
             localConcurrencyLimit ?? this.localConcurrencyLimit,
-        adapterVersionPolicy: adapterVersionPolicy ?? this.adapterVersionPolicy,
         status: status ?? this.status,
         activationState: activationState ??
             (status == null
@@ -202,7 +149,6 @@ class LocalConfiguredWorker {
                     ? LocalWorkerActivationState.disabled
                     : LocalWorkerActivationState.enabled),
         readinessState: readinessState ?? this.readinessState,
-        credentialStatus: credentialStatus ?? this.credentialStatus,
         revision: revision ?? this.revision,
         createdAt: createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
@@ -360,17 +306,9 @@ class LocalConfiguredWorker {
     return LocalConfiguredWorker(
       id: required('workerId'),
       workspaceId: required('workspaceId'),
-      name: FirstPartyWorkerPackage.productNameFor(
-          required('productWorkerTypeId')),
       workerTypeId: required('productWorkerTypeId'),
-      authStrategy: 'provider_owned',
-      credentialRef: null,
-      defaultModel: null,
-      adapterConfig: const {},
-      allowedModels: const [],
       localPermissions: strings('localPermissions'),
       localConcurrencyLimit: concurrency,
-      adapterVersionPolicy: null,
       status: activationState == LocalWorkerActivationState.disabled
           ? LocalWorkerStatus.disabled
           : readinessState == WorkerReadinessState.ready
@@ -378,7 +316,6 @@ class LocalConfiguredWorker {
               : LocalWorkerStatus.needsAttention,
       activationState: activationState,
       readinessState: readinessState,
-      credentialStatus: LocalWorkerCredentialStatus.notRequired,
       revision: revision,
       createdAt: required('createdAt'),
       updatedAt: required('updatedAt'),
@@ -397,9 +334,7 @@ class LocalConfiguredWorker {
 
 WorkerReadinessState _independentReadiness(
   WorkerReadinessState? persisted, {
-  required String workerTypeId,
   required LocalWorkerStatus status,
-  required String? lastLiveTestAt,
   required bool? lastLiveTestPassed,
   required String? issueCode,
 }) {
@@ -414,13 +349,10 @@ WorkerReadinessState _independentReadiness(
   if (issueCode == 'authentication_required') {
     return WorkerReadinessState.signInRequired;
   }
-  if (workerTypeId == 'gemini' && lastLiveTestAt == null) {
-    return WorkerReadinessState.setupRequired;
-  }
   if (lastLiveTestPassed == false) return WorkerReadinessState.testFailed;
   return status == LocalWorkerStatus.ready
       ? WorkerReadinessState.ready
-      : WorkerReadinessState.testFailed;
+      : WorkerReadinessState.notProbed;
 }
 
 class LocalWorkerRegistryCorrupt implements Exception {
@@ -440,7 +372,6 @@ class LocalConfiguredWorkerRegistry {
     DateTime Function()? clock,
     String Function()? idGenerator,
     this.onWorkerRemoving,
-    this.onLegacyCredentialReference,
     this.onChanged,
   })  : platform = platform ?? currentPlatformRuntime,
         clock = clock ?? DateTime.now,
@@ -457,8 +388,6 @@ class LocalConfiguredWorkerRegistry {
   final DateTime Function() clock;
   final String Function() idGenerator;
   final Future<void> Function(String workerId)? onWorkerRemoving;
-  final Future<void> Function(String credentialReference)?
-      onLegacyCredentialReference;
   final FutureOr<void> Function()? onChanged;
   Future<void> _tail = Future<void>.value();
 
@@ -491,35 +420,18 @@ class LocalConfiguredWorkerRegistry {
       });
 
   Future<LocalConfiguredWorker> create({
-    required String name,
-    required String workerTypeId,
-    required String authStrategy,
-    String? credentialRef,
-    String? defaultModel,
-    Map<String, Object?> adapterConfig = const {},
-    List<String> allowedModels = const [],
+    required LogicalWorkerCatalogEntry catalogEntry,
     List<String> localPermissions = const [],
     int? localConcurrencyLimit,
-    String? adapterVersionPolicy,
     LocalWorkerStatus status = LocalWorkerStatus.needsAttention,
     WorkerReadinessState? readinessState,
-    LocalWorkerCredentialStatus credentialStatus =
-        LocalWorkerCredentialStatus.needsAuthentication,
-    LogicalWorkerCatalogEntry? approvedCatalogEntry,
   }) =>
       _locked(() async {
         final workers = await _read();
-        final normalizedTypeId =
-            FirstPartyWorkerPackage.canonicalProductWorkerTypeId(
-          workerTypeId.trim(),
-        );
-        final descriptor = FirstPartyWorkerPackage.forProductWorkerTypeId(
-          normalizedTypeId,
-        );
-        if (descriptor == null &&
-            (approvedCatalogEntry == null ||
-                approvedCatalogEntry.workerTypeId != normalizedTypeId ||
-                approvedCatalogEntry.engineFamily != 'cli')) {
+        final normalizedTypeId = catalogEntry.workerTypeId;
+        if (catalogEntry.engineFamily != 'cli' ||
+            !RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$')
+                .hasMatch(normalizedTypeId)) {
           throw ArgumentError('Worker slot is not in the approved catalog');
         }
         final existingSlot = workers
@@ -534,26 +446,14 @@ class LocalConfiguredWorkerRegistry {
         final worker = LocalConfiguredWorker(
           id: previous?.id ?? idGenerator(),
           workspaceId: workspaceId,
-          name: descriptor?.productName ?? approvedCatalogEntry!.displayName,
           workerTypeId: normalizedTypeId,
-          authStrategy: authStrategy,
-          credentialRef: credentialRef,
-          defaultModel: defaultModel,
-          adapterConfig: Map.unmodifiable(adapterConfig),
-          allowedModels: List.unmodifiable(allowedModels),
           localPermissions: List.unmodifiable(localPermissions),
           localConcurrencyLimit: localConcurrencyLimit ?? 1,
-          adapterVersionPolicy: adapterVersionPolicy,
           status: status,
           readinessState: readinessState,
-          credentialStatus: credentialStatus,
           revision: (previous?.revision ?? 0) + 1,
           createdAt: previous?.createdAt ?? now,
           updatedAt: now,
-          readinessIssueCode:
-              normalizedTypeId == 'gemini' && readinessState == null
-                  ? 'setup_required'
-                  : null,
         );
         if (previous == null &&
             workers.any((existing) => existing.id == worker.id)) {
@@ -583,11 +483,7 @@ class LocalConfiguredWorkerRegistry {
           throw StateError('Removed Worker records cannot be edited');
         }
         final proposed = change(current);
-        final descriptor = FirstPartyWorkerPackage.forProductWorkerTypeId(
-          current.workerTypeId,
-        );
         final updated = proposed.copyWith(
-          name: descriptor?.productName ?? proposed.name,
           revision: current.revision + 1,
           updatedAt: clock().toUtc().toIso8601String(),
         );
@@ -598,12 +494,6 @@ class LocalConfiguredWorkerRegistry {
               'Worker identity and ownership fields are immutable');
         }
         _validateWorker(updated);
-        if (updated.workerTypeId !=
-            FirstPartyWorkerPackage.canonicalProductWorkerTypeId(
-              updated.workerTypeId,
-            )) {
-          throw ArgumentError('Worker Type ID is not canonical');
-        }
         _validateTypeUnique(workers, updated, excludingId: workerId);
         workers[index] = updated;
         await _write(workers);
@@ -618,19 +508,6 @@ class LocalConfiguredWorkerRegistry {
         activationState: LocalWorkerActivationState.disabled,
       ),
     );
-  }
-
-  Future<void> setCredentialState(
-    String workerId,
-    LocalWorkerCredentialStatus status, {
-    String? credentialRef,
-  }) async {
-    await update(
-        workerId,
-        (current) => current.copyWith(
-              credentialStatus: status,
-              credentialRef: credentialRef,
-            ));
   }
 
   Future<void> remove(String workerId) => _locked(() async {
@@ -677,22 +554,21 @@ class LocalConfiguredWorkerRegistry {
       }
       final schemaVersion = decoded['schemaVersion'] as int;
       final rawWorkers = decoded['workers'] as List;
+      if (schemaVersion < _registrySchemaVersion) {
+        // This development reset intentionally does not migrate old slot
+        // records, package IDs, permissions, or provider configuration.
+        await _write(const []);
+        return <LocalConfiguredWorker>[];
+      }
       final expected = _checksumRaw(schemaVersion, rawWorkers);
       if (decoded['checksum'] != expected) {
         throw const FormatException('checksum mismatch');
       }
-      if (schemaVersion < _registrySchemaVersion) {
-        final migrated = await _migrateLegacyRegistry(rawWorkers);
-        _validateAll(migrated);
-        await _write(migrated);
-        return migrated;
-      }
-      var records = rawWorkers.map((item) {
+      final records = rawWorkers.map((item) {
         if (item is! Map) {
           throw const FormatException('Worker record must be an object');
         }
         final json = Map<String, dynamic>.from(item);
-        if (schemaVersion == 1) json.remove('ownerUserId');
         return LocalConfiguredWorker.fromJson(json);
       }).toList();
       _validateAll(records);
@@ -700,102 +576,6 @@ class LocalConfiguredWorkerRegistry {
     } on Object catch (error) {
       throw LocalWorkerRegistryCorrupt('cannot read ${file.path}: $error');
     }
-  }
-
-  Future<List<LocalConfiguredWorker>> _migrateLegacyRegistry(
-    List rawWorkers,
-  ) async {
-    // Schema 17 deliberately drops adapter-era configuration and readiness
-    // state. Preserve only the fixed product slot identity and safe Workspace
-    // policy; every slot must be passively probed again after the reset.
-    final candidates = <String, List<Map<String, dynamic>>>{};
-    final discardedIds = <String>{};
-    final legacyCredentialReferences = <String>{};
-    for (final raw in rawWorkers) {
-      if (raw is! Map) continue;
-      final record = Map<String, dynamic>.from(raw);
-      final rawId = record['id'] ?? record['workerId'];
-      final rawType = record['workerTypeId'] ?? record['productWorkerTypeId'];
-      final legacyCredential = record['credentialRef'];
-      if (rawId is String && legacyCredential == 'worker-credential/$rawId') {
-        legacyCredentialReferences.add(legacyCredential as String);
-      }
-      if (rawId is! String ||
-          rawId.trim().isEmpty ||
-          rawType is! String ||
-          (record['workspaceId'] is String &&
-              record['workspaceId'] != workspaceId)) {
-        continue;
-      }
-      final type = FirstPartyWorkerPackage.canonicalProductWorkerTypeId(
-        rawType.trim(),
-      );
-      if (!{'chatgpt', 'gemini'}.contains(type)) {
-        discardedIds.add(rawId);
-        continue;
-      }
-      candidates.putIfAbsent(type, () => []).add(record);
-    }
-
-    final migrated = <LocalConfiguredWorker>[];
-    final preservedIds = <String>{};
-    for (final entry in candidates.entries) {
-      // Stable ordering makes duplicate resolution deterministic and keeps the
-      // same slot ID on every machine with the same legacy registry.
-      entry.value.sort((a, b) =>
-          (a['id'] as String? ?? '').compareTo(b['id'] as String? ?? ''));
-      final record = entry.value.first;
-      final id = (record['id'] ?? record['workerId']) as String;
-      preservedIds.add(id);
-      final activation = record['activationState'] == 'disabled' ||
-              record['status'] == 'disabled' ||
-              record['status'] == 'removed'
-          ? LocalWorkerActivationState.disabled
-          : LocalWorkerActivationState.enabled;
-      final permissions = record['localPermissions'];
-      final concurrency = record['localConcurrencyLimit'];
-      final createdAt = record['createdAt'];
-      final revision = record['revision'];
-      final now = clock().toUtc().toIso8601String();
-      migrated.add(LocalConfiguredWorker(
-        id: id,
-        workspaceId: workspaceId,
-        name: FirstPartyWorkerPackage.productNameFor(entry.key),
-        workerTypeId: entry.key,
-        authStrategy: 'provider_owned',
-        credentialRef: null,
-        defaultModel: null,
-        adapterConfig: const {},
-        allowedModels: const [],
-        localPermissions: permissions is List
-            ? permissions.whereType<String>().toList()
-            : const [],
-        localConcurrencyLimit:
-            concurrency is int && concurrency > 0 ? concurrency : 1,
-        adapterVersionPolicy: null,
-        status: LocalWorkerStatus.needsAttention,
-        activationState: activation,
-        readinessState: WorkerReadinessState.testFailed,
-        credentialStatus: LocalWorkerCredentialStatus.notRequired,
-        revision: revision is int && revision > 0 ? revision + 1 : 1,
-        createdAt: createdAt is String ? createdAt : now,
-        updatedAt: now,
-        readinessIssueCode: 'worker_reconfigured',
-      ));
-      for (final duplicate in entry.value.skip(1)) {
-        final duplicateId = duplicate['id'] ?? duplicate['workerId'];
-        if (duplicateId is String) discardedIds.add(duplicateId);
-      }
-    }
-    discardedIds.removeAll(preservedIds);
-    for (final reference in legacyCredentialReferences) {
-      await onLegacyCredentialReference?.call(reference);
-    }
-    for (final oldId in discardedIds) {
-      await onWorkerRemoving?.call(oldId);
-    }
-    migrated.sort((a, b) => a.workerTypeId.compareTo(b.workerTypeId));
-    return migrated;
   }
 
   Future<void> _write(List<LocalConfiguredWorker> workers) async {

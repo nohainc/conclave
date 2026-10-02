@@ -1,26 +1,21 @@
 # Workspace, Engine, and Tool Profile Release Trust
 
-**Current target:** Architecture v8 separates trust for the Workspace
-application, the generic CLI Worker Engine, and immutable Tool Profile
-Releases. Architecture v7 is the historical baseline; Worker Runtime v2 is its
-process-boundary predecessor. Any provider-specific Worker signatures, routes,
-or release records below are migration history only.
+**Status:** Current Architecture v8 release trust contract. Trust is separated
+for the Workspace application and immutable Tool Profile releases; the generic
+CLI Worker Engine ships within a signed Workspace release.
 
 ## Trust model
 
 Conclave Workspace verifies release metadata with Ed25519 public keys. Signing
-seeds remain in GitHub/production release infrastructure and are never shipped
-in Workspace or Worker releases. Release metadata binds the publisher, key ID,
-version, channel, platform/architecture, and archive digest. Worker release
-signatures also bind the canonical manifest (excluding its signature field)
-and the package file-tree digest.
+seeds remain in release infrastructure and are never shipped in Workspace or
+Engine releases. Workspace release metadata binds the publisher, key ID,
+version, channel, platform/architecture, and archive digest. Tool Profile
+signatures bind their canonical behavior payload and release identity.
 
 Workspace application, CLI Worker Engine, and Tool Profile release classes use
 explicit trust separation. Workspace application signing material must never
-be reused for Engine/Profile release signing. Profile signing must not use the
-historical per-Worker signing trust class. They share the public-key trust-root
-configuration format, but a key for one release class must not be reused for
-the other.
+be reused for Engine/Profile release signing. Profiles use the shared
+public-key trust-root format; historical per-Worker signing trust is retired.
 Apple Developer ID signing and notarization verify macOS origin/platform
 requirements; Conclave release metadata verification remains required.
 
@@ -34,7 +29,6 @@ The release workflows use GitHub Environments and repository variables:
 
 | Purpose | Secret | Variable |
 | --- | --- | --- |
-| Native Worker manifest/package signing | `CONCLAVE_WORKER_SIGNING_SEED` | `CONCLAVE_WORKER_SIGNING_KEY_ID` |
 | Workspace app release metadata | `CONCLAVE_WORKSPACE_ED25519_SEED` | `CONCLAVE_WORKSPACE_SIGNING_KEY_ID` |
 | Release publication authorization | `CONCLAVE_RELEASE_PUBLISH_TOKEN` | `CLOUD_API_URL` |
 | macOS Developer ID/notarization | `CONCLAVE_MACOS_CERTIFICATE_P12`, password and Apple credentials | — |
@@ -75,10 +69,10 @@ installed clients until a recovery distribution path is available.
 
 - Revoke a compromised key ID or publisher immediately in Cloud trust state;
   clients refresh revocation state before release checks/admission.
-- Revoke an individual Workspace app release through the host-release revoke
-  endpoint. Profile release, publisher, or signing-key revocations use the
-  shared `/api/release-trust` mechanism and are checked before Profile
-  admission. Historical Worker-release revoke routes are unavailable in v8.
+- Revoke an individual Workspace app release through the workspace-release
+  revoke endpoint. Profile release, publisher, or signing-key revocations use
+  the shared `/api/release-trust` mechanism and are checked before Profile
+  admission.
 - Release revocation prevents future install/update admission. It does not
   terminate an already-running process; follow the incident response plan for
   active work and publish a replacement immutable release when safe.
@@ -91,18 +85,6 @@ The release workflows read published metadata and package bytes back from
 Cloud, compare digests, and verify the signature/admission before reporting
 success. A workflow dispatch is not production evidence until its run succeeds
 against the intended Cloud environment. See [Workspace release operations](../deployment/WORKSPACE_RELEASES.md).
-
-## Historical Worker Runtime v2 trust refinement
-
-The following records the predecessor package model only; it is not the v8
-trust or release contract.
-
-ADR-017 makes first-party Worker artifacts native platform executables. Trust verification therefore binds the Worker Type, Worker version, platform/architecture, protocol range, Worker-state schema compatibility, permissions, executable path, package digest and archive hash in addition to normal publisher/key metadata.
-
-Workspace may keep multiple trusted Worker versions installed for rollback. A previous version is eligible only while both its release and signing key remain trusted and its protocol/state schema remain compatible. Rollback does not bypass revocation.
-
-Native Worker executable code signing on macOS/Windows complements Conclave Ed25519 package trust; it does not replace the Conclave manifest/package verification.
-
 
 ## Architecture v8 Profile trust
 

@@ -19,7 +19,6 @@ void main() {
             id: 'proj-1',
             name: 'Conclave Core',
             branch: 'main',
-            activeGoals: 1,
             lastActivity: 'now',
             workstreams: [
               StudioWorkstream(
@@ -50,14 +49,14 @@ void main() {
             id: 'proj-2',
             name: 'Data Pipeline',
             branch: 'develop',
-            activeGoals: 0,
             lastActivity: 'yesterday',
           ),
         ],
       );
     });
 
-    testWidgets('Search control allows typing and displays clear button when non-empty',
+    testWidgets(
+        'Search control allows typing and displays clear button when non-empty',
         (tester) async {
       final controller = TextEditingController();
       addTearDown(controller.dispose);
@@ -66,7 +65,6 @@ void main() {
         navigation: const StudioNavigation.home(),
         projects: sampleSnapshot.projects,
         workspaces: const [],
-        accounts: const [],
         unreadNotificationCount: 0,
         isDarkTheme: true,
       );
@@ -133,7 +131,6 @@ void main() {
               snapshot: sampleSnapshot,
               onNavigateTo: (nav) => navigatedTarget = nav,
               onSelectProject: (_) {},
-              onSelectChat: (_, __) {},
               onClearSearch: () => searchCleared = true,
             ),
           ),
@@ -158,7 +155,8 @@ void main() {
       );
     });
 
-    testWidgets('SearchPage displays friendly empty state when no results match',
+    testWidgets(
+        'SearchPage displays friendly empty state when no results match',
         (tester) async {
       var searchCleared = false;
 
@@ -170,14 +168,14 @@ void main() {
               snapshot: sampleSnapshot,
               onNavigateTo: (_) {},
               onSelectProject: (_) {},
-              onSelectChat: (_, __) {},
               onClearSearch: () => searchCleared = true,
             ),
           ),
         ),
       );
 
-      expect(find.text('No results found for "nonexistentquery123"'), findsOneWidget);
+      expect(find.text('No results found for "nonexistentquery123"'),
+          findsOneWidget);
       expect(find.byIcon(Icons.search_off_rounded), findsOneWidget);
 
       // Tap back button in empty state

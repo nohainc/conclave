@@ -35,7 +35,6 @@ class StudioShellContext {
     this.selectedWorkstream,
     this.selectedRun,
     this.workspaces = const [],
-    this.accounts = const [],
     this.unreadNotificationCount = 0,
     this.isDarkTheme = true,
     this.themeMode = ThemeMode.system,
@@ -52,7 +51,6 @@ class StudioShellContext {
   final StudioWorkstream? selectedWorkstream;
   final StudioRun? selectedRun;
   final List<StudioWorkspace> workspaces;
-  final List<StudioCredentialProfile> accounts;
   final int unreadNotificationCount;
   final bool isDarkTheme;
   final ThemeMode themeMode;
@@ -171,13 +169,11 @@ class StudioShellContext {
         return navigation.kind == StudioRouteKind.projects ||
             navigation.kind == StudioRouteKind.project ||
             navigation.kind == StudioRouteKind.workstream ||
-            navigation.kind == StudioRouteKind.run ||
-            navigation.kind == StudioRouteKind.chat;
+            navigation.kind == StudioRouteKind.run;
       case StudioRouteKind.project:
         return (navigation.kind == StudioRouteKind.project ||
                 navigation.kind == StudioRouteKind.workstream ||
-                navigation.kind == StudioRouteKind.run ||
-                navigation.kind == StudioRouteKind.chat) &&
+                navigation.kind == StudioRouteKind.run) &&
             target.projectId != null &&
             navigation.projectId == target.projectId;
       case StudioRouteKind.workstream:
@@ -192,10 +188,6 @@ class StudioShellContext {
         return navigation.kind == StudioRouteKind.run &&
             target.runId != null &&
             navigation.runId == target.runId;
-      case StudioRouteKind.chat:
-        return navigation.kind == StudioRouteKind.chat &&
-            target.chatId != null &&
-            navigation.chatId == target.chatId;
       case StudioRouteKind.login:
         return navigation.kind == StudioRouteKind.login;
       case StudioRouteKind.desktopAuthApproval:

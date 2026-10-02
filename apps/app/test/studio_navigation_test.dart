@@ -4,13 +4,6 @@ import 'package:conclave_app/src/navigation/studio_navigation.dart';
 
 void main() {
   test('parses and serializes project, Workstream, and run deep links', () {
-    final chat =
-        StudioNavigation.fromUri(Uri.parse('/projects/project-1/chats/chat-2'));
-    expect(chat.kind, StudioRouteKind.chat);
-    expect(chat.projectId, 'project-1');
-    expect(chat.chatId, 'chat-2');
-    expect(chat.toUri().path, '/projects/project-1/chats/chat-2');
-
     final workstream = StudioNavigation.fromUri(
         Uri.parse('/projects/project-1/workstreams/workstream-2'));
     expect(workstream.kind, StudioRouteKind.workstream);
@@ -48,59 +41,6 @@ void main() {
     for (final route in routes) {
       expect(StudioNavigation.fromUri(route.toUri()), route);
     }
-  });
-
-  test('redirects legacy Worker URLs to the canonical Workspaces route', () {
-    const workspace = StudioNavigation.workspaces();
-    expect(workspace.toUri().path, '/workspaces');
-    expect(StudioNavigation.fromUri(Uri.parse('/execution')), workspace);
-    expect(StudioNavigation.fromUri(Uri.parse('/execution/workspaces')),
-        workspace);
-    expect(StudioNavigation.fromUri(Uri.parse('/workspaces')), workspace);
-    expect(StudioNavigation.fromUri(Uri.parse('/hosts')), workspace);
-
-    expect(workspace.toUri().path, '/workspaces');
-    for (final path in [
-      '/execution/workers',
-      '/workspaces/workers',
-      '/hosts/workers',
-      '/workers',
-    ]) {
-      final redirected = StudioNavigation.fromUri(Uri.parse(path));
-      expect(redirected, workspace, reason: path);
-      expect(redirected.toUri().path, '/workspaces', reason: path);
-    }
-    expect(StudioNavigation.fromUri(Uri.parse('/execution/workspaces/alpha')),
-        const StudioNavigation.workspaces(workspaceId: 'alpha'));
-    expect(StudioNavigation.fromUri(Uri.parse('/hosts/alpha')),
-        const StudioNavigation.workspaces(workspaceId: 'alpha'));
-    expect(
-        StudioNavigation.fromUri(Uri.parse('/workspaces/alpha')).toUri().path,
-        '/workspaces/alpha');
-    expect(StudioNavigation.fromUri(Uri.parse('/workspaces?tab=workers')),
-        workspace);
-    expect(
-        StudioNavigation.fromUri(Uri.parse('/hosts?tab=workers')), workspace);
-  });
-
-  test('each browser tab can own an independent navigation state', () {
-    final firstTab =
-        StudioNavigation.fromUri(Uri.parse('/projects/project-1/chats/chat-a'));
-    final secondTab =
-        StudioNavigation.fromUri(Uri.parse('/projects/project-2/chats/chat-b'));
-
-    expect(firstTab, isNot(secondTab));
-    expect(firstTab.chatId, isNot(secondTab.chatId));
-  });
-
-  test('preserves a deep link through the signed-out route', () {
-    final login = StudioNavigation.fromUri(
-        Uri.parse('/login?returnTo=%2Fprojects%2Fproject-1%2Fchats%2Fchat-2'));
-
-    expect(login.kind, StudioRouteKind.login);
-    expect(login.loginReturnTo, '/projects/project-1/chats/chat-2');
-    expect(login.toUri().queryParameters['returnTo'],
-        '/projects/project-1/chats/chat-2');
   });
 
   test('preserves desktop auth approval through the browser sign-in route', () {

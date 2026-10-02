@@ -13,20 +13,18 @@ class SearchPage extends StatelessWidget {
     required this.snapshot,
     required this.onNavigateTo,
     required this.onSelectProject,
-    required this.onSelectChat,
     required this.onClearSearch,
     this.onToggleTheme,
-    this.onNewGoal,
+    this.onCreateContextualItem,
   });
 
   final String query;
   final StudioSnapshot snapshot;
   final ValueChanged<StudioNavigation> onNavigateTo;
   final ValueChanged<String> onSelectProject;
-  final void Function(String projectId, String chatId) onSelectChat;
   final VoidCallback onClearSearch;
   final VoidCallback? onToggleTheme;
-  final VoidCallback? onNewGoal;
+  final VoidCallback? onCreateContextualItem;
 
   List<CommandPaletteAction> _buildAllActions(BuildContext context) {
     final actions = <CommandPaletteAction>[
@@ -43,7 +41,7 @@ class SearchPage extends StatelessWidget {
       ),
       CommandPaletteAction(
         title: 'Workspaces',
-        subtitle: 'Execution capacity and Workers configured on each Workspace',
+        subtitle: 'Connected computers and assigned Worker profiles',
         icon: Icons.computer_outlined,
         category: 'Navigation',
         onSelect: () {
@@ -53,7 +51,7 @@ class SearchPage extends StatelessWidget {
       ),
       CommandPaletteAction(
         title: 'Profile & Security',
-        subtitle: 'Profile, passkeys, and account settings',
+        subtitle: 'Profile, passkeys, and sign-in settings',
         icon: Icons.person_outline_rounded,
         category: 'Navigation',
         onSelect: () {
@@ -76,20 +74,20 @@ class SearchPage extends StatelessWidget {
       ));
     }
 
-    if (onNewGoal != null) {
+    if (onCreateContextualItem != null) {
       actions.add(CommandPaletteAction(
-        title: 'New Work Request',
-        subtitle: 'Create a new automated work request',
-        icon: Icons.add_task_rounded,
+        title: 'Create Project or Workstream',
+        subtitle: 'Add a focused area for team discussion and Work',
+        icon: Icons.add_rounded,
         category: 'Actions',
         onSelect: () {
           onClearSearch();
-          onNewGoal!();
+          onCreateContextualItem!();
         },
       ));
     }
 
-    // Projects & Workstreams & Chats
+    // Projects and Workstreams
     for (final project in snapshot.projects) {
       actions.add(CommandPaletteAction(
         title: project.name,
@@ -113,19 +111,6 @@ class SearchPage extends StatelessWidget {
             onClearSearch();
             onNavigateTo(
                 StudioNavigation.workstream(project.id, workstream.id));
-          },
-        ));
-      }
-
-      for (final chat in project.chats) {
-        actions.add(CommandPaletteAction(
-          title: chat.title,
-          subtitle: 'in ${project.name}',
-          icon: Icons.chat_bubble_outline_rounded,
-          category: 'Chats',
-          onSelect: () {
-            onClearSearch();
-            onSelectChat(project.id, chat.id);
           },
         ));
       }
@@ -163,8 +148,7 @@ class SearchPage extends StatelessWidget {
         category: 'Workspaces',
         onSelect: () {
           onClearSearch();
-          onNavigateTo(
-              StudioNavigation.workspaces(workspaceId: workspace.id));
+          onNavigateTo(StudioNavigation.workspaces(workspaceId: workspace.id));
         },
       ));
     }

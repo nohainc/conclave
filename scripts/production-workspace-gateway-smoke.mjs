@@ -28,7 +28,7 @@ function executeD1(sql) {
     [
       "d1",
       "execute",
-      "conclave-production",
+      "conclave-v8-production",
       "--remote",
       "--yes",
       "--config",

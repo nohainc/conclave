@@ -27,18 +27,14 @@ class CommandPaletteDialog extends StatefulWidget {
     super.key,
     required this.snapshot,
     required this.onSelectProject,
-    required this.onSelectChat,
     required this.onNavigateTo,
     required this.onToggleTheme,
-    required this.onNewGoal,
   });
 
   final StudioSnapshot snapshot;
   final ValueChanged<String> onSelectProject;
-  final void Function(String projectId, String chatId) onSelectChat;
   final ValueChanged<StudioNavigation> onNavigateTo;
   final VoidCallback onToggleTheme;
-  final VoidCallback onNewGoal;
 
   @override
   State<CommandPaletteDialog> createState() => _CommandPaletteDialogState();
@@ -81,7 +77,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
       ),
       CommandPaletteAction(
         title: 'Workspaces',
-        subtitle: 'Execution capacity and Workers configured on each Workspace',
+        subtitle: 'Connected computers and assigned Worker profiles',
         icon: Icons.computer_outlined,
         category: 'Navigation',
         onSelect: () {
@@ -91,7 +87,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
       ),
       CommandPaletteAction(
         title: 'Profile & Security',
-        subtitle: 'Profile, passkeys, and account settings',
+        subtitle: 'Profile, passkeys, and sign-in settings',
         icon: Icons.person_outline_rounded,
         category: 'Navigation',
         onSelect: () {
@@ -136,20 +132,6 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
             if (Navigator.of(context).canPop()) Navigator.of(context).pop();
             widget.onNavigateTo(
                 StudioNavigation.workstream(project.id, workstream.id));
-          },
-        ));
-      }
-
-      // Add Project Chats (Legacy)
-      for (final chat in project.chats) {
-        actions.add(CommandPaletteAction(
-          title: 'Chat: ${chat.title}',
-          subtitle: 'in ${project.name}',
-          icon: Icons.chat_bubble_outline_rounded,
-          category: 'Chats',
-          onSelect: () {
-            if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-            widget.onSelectChat(project.id, chat.id);
           },
         ));
       }
@@ -256,7 +238,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                         isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
                   ),
                   decoration: InputDecoration(
-                    hintText: 'Type a command, project, or chat...',
+                    hintText: 'Type a command, project, or Workstream...',
                     prefixIcon: const Icon(Icons.search_rounded, size: 20),
                     suffixIcon: Container(
                       padding: const EdgeInsets.symmetric(

@@ -189,12 +189,6 @@ export async function routeWorkerRequest(
     if (request.method === "POST" && url.pathname === "/api/session/logout") {
       return await handlers.handleSessionLogout!(request, env, ctx);
     }
-    if (
-      request.method === "GET" &&
-      url.pathname === "/api/invitations/pending"
-    ) {
-      return await handlers.handleListPendingInvitations!(request, env, ctx);
-    }
     const connectorMatch = url.pathname.match(
       /^\/api\/connector\/(register_session|claim_task|get_task|get_context|get_next_message|submit_candidate|submit_result|submit_finding|report_status|release_task)$/,
     );
@@ -276,38 +270,6 @@ export async function routeWorkerRequest(
     if (request.method === "GET" && url.pathname === "/api/workflows/catalog") {
       return deps.json({ workflows: Object.values(BUILTIN_WORKFLOW_CATALOG) });
     }
-    if (request.method === "GET" && url.pathname === "/api/v7/workers") {
-      return await handlers.handleListWorkspaceWorkerInventory!(
-        request,
-        env,
-        ctx,
-      );
-    }
-    const v7WorkerSchedulingMatch = url.pathname.match(
-      /^\/api\/v7\/workers\/([^/]+)\/scheduling(?:\/(enable|disable|drain))?$/,
-    );
-    if (
-      v7WorkerSchedulingMatch?.[1] &&
-      ((request.method === "GET" && !v7WorkerSchedulingMatch[2]) ||
-        (request.method === "POST" && v7WorkerSchedulingMatch[2]))
-    ) {
-      return await handlers.handleV7WorkerScheduling!(
-        request,
-        env,
-        v7WorkerSchedulingMatch[1],
-        v7WorkerSchedulingMatch[2],
-        ctx,
-      );
-    }
-    if (
-      url.pathname === "/api/worker-releases" ||
-      url.pathname.startsWith("/api/worker-releases/")
-    ) {
-      return Response.json(
-        { code: "native_worker_releases_retired" },
-        { status: 410 },
-      );
-    }
     if (request.method === "GET" && url.pathname === "/api/release-trust") {
       return await handlers.handleGetReleaseTrustState!(request, env, ctx);
     }
@@ -324,6 +286,13 @@ export async function routeWorkerRequest(
     }
     if (request.method === "GET" && url.pathname === "/api/tool-profiles") {
       return await handlers.handleResolveToolProfileChannels!(
+        request,
+        env,
+        ctx,
+      );
+    }
+    if (request.method === "GET" && url.pathname === "/api/workers") {
+      return await handlers.handleListWorkspaceWorkerInventory!(
         request,
         env,
         ctx,
@@ -548,15 +517,8 @@ export async function routeWorkerRequest(
     }
     // Workspace runtime Gateway & Protocol routes
     if (
-      request.method === "POST" &&
-      url.pathname === "/api/internal/agent-assignments/dispatch"
-    ) {
-      return await handlers.handleInternalDispatchTaskAssignment!(request, env);
-    }
-    if (
       request.method === "GET" &&
-      (url.pathname === "/api/workspace-gateway/connect" ||
-        url.pathname === "/api/v2/workspace-gateway/connect")
+      url.pathname === "/api/workspace-gateway/connect"
     ) {
       return await handlers.handleWorkspaceGatewayConnect!(request, env);
     }
@@ -564,10 +526,10 @@ export async function routeWorkerRequest(
     // enrollment is owned by the execution Workspace and has no tenant
     // membership semantics.
     const agentEnrollmentsMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/enrollments$/,
+      /^\/api\/workspaces\/([^/]+)\/enrollments$/,
     );
     if (request.method === "GET" && agentEnrollmentsMatch?.[1]) {
-      return await handlers.handleListHostEnrollments!(
+      return await handlers.handleListWorkspaceEnrollments!(
         request,
         env,
         agentEnrollmentsMatch[1],
@@ -575,7 +537,7 @@ export async function routeWorkerRequest(
       );
     }
     if (request.method === "POST" && agentEnrollmentsMatch?.[1]) {
-      return await handlers.handleCreateHostEnrollment!(
+      return await handlers.handleCreateWorkspaceEnrollment!(
         request,
         env,
         agentEnrollmentsMatch[1],
@@ -583,14 +545,14 @@ export async function routeWorkerRequest(
       );
     }
     const revokeEnrollmentMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/enrollments\/([^/]+)$/,
+      /^\/api\/workspaces\/([^/]+)\/enrollments\/([^/]+)$/,
     );
     if (
       request.method === "DELETE" &&
       revokeEnrollmentMatch?.[1] &&
       revokeEnrollmentMatch?.[2]
     ) {
-      return await handlers.handleRevokeHostEnrollment!(
+      return await handlers.handleRevokeWorkspaceEnrollment!(
         request,
         env,
         revokeEnrollmentMatch[1],
@@ -610,278 +572,48 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
-    const hostsMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts$/,
-    );
-    if (request.method === "GET" && hostsMatch?.[1]) {
-      return await handlers.handleListHosts!(request, env, hostsMatch[1], ctx);
-    }
-    const bindHostMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts\/([^/]+)\/bind$/,
-    );
-    if (request.method === "POST" && bindHostMatch?.[1] && bindHostMatch?.[2]) {
-      return await handlers.handleBindHostWorkspace!(
-        request,
-        env,
-        bindHostMatch[1],
-        bindHostMatch[2],
-        ctx,
-      );
-    }
-    const singleAgentMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts\/([^/]+)$/,
-    );
-    if (
-      request.method === "PATCH" &&
-      singleAgentMatch?.[1] &&
-      singleAgentMatch?.[2]
-    ) {
-      return await handlers.handleUpdateHost!(
-        request,
-        env,
-        singleAgentMatch[1],
-        singleAgentMatch[2],
-        ctx,
-      );
-    }
+    // Workspace application release routes.
     if (
       request.method === "GET" &&
-      singleAgentMatch?.[1] &&
-      singleAgentMatch?.[2]
+      url.pathname === "/api/workspace-releases/latest"
     ) {
-      return await handlers.handleGetHost!(
-        request,
-        env,
-        singleAgentMatch[1],
-        singleAgentMatch[2],
-        ctx,
-      );
-    }
-    if (
-      request.method === "DELETE" &&
-      singleAgentMatch?.[1] &&
-      singleAgentMatch?.[2]
-    ) {
-      return await handlers.handleRevokeHost!(
-        request,
-        env,
-        singleAgentMatch[1],
-        singleAgentMatch[2],
-        ctx,
-      );
-    }
-    const agentUpdateMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts\/([^/]+)\/update$/,
-    );
-    if (
-      request.method === "POST" &&
-      agentUpdateMatch?.[1] &&
-      agentUpdateMatch?.[2]
-    ) {
-      return await handlers.handleAnnounceHostUpdate!(
-        request,
-        env,
-        agentUpdateMatch[1],
-        agentUpdateMatch[2],
-        ctx,
-      );
-    }
-    const desiredStateMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/hosts\/([^/]+)\/desired-state$/,
-    );
-    if (
-      request.method === "PUT" &&
-      desiredStateMatch?.[1] &&
-      desiredStateMatch?.[2]
-    ) {
-      return await handlers.handleSetHostDesiredState!(
-        request,
-        env,
-        desiredStateMatch[1],
-        desiredStateMatch[2],
-        ctx,
-      );
-    }
-
-    // Task Assignment Dispatcher (Architecture v2)
-    const taskEnsembleDispatchMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/tasks\/([^/]+)\/ensemble-dispatch$/,
-    );
-    if (
-      request.method === "POST" &&
-      taskEnsembleDispatchMatch?.[1] &&
-      taskEnsembleDispatchMatch?.[2]
-    ) {
-      return await handlers.handleDispatchEnsembleTaskAssignment!(
-        request,
-        env,
-        taskEnsembleDispatchMatch[1],
-        taskEnsembleDispatchMatch[2],
-        ctx,
-      );
-    }
-
-    const taskDispatchMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/tasks\/([^/]+)\/dispatch$/,
-    );
-    if (
-      request.method === "POST" &&
-      taskDispatchMatch?.[1] &&
-      taskDispatchMatch?.[2]
-    ) {
-      return await handlers.handleDispatchTaskAssignment!(
-        request,
-        env,
-        taskDispatchMatch[1],
-        taskDispatchMatch[2],
-        ctx,
-      );
-    }
-
-    const assignmentCancelMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/workspaces\/([^/]+)\/assignments\/([^/]+)\/cancel$/,
-    );
-    if (
-      request.method === "POST" &&
-      assignmentCancelMatch?.[1] &&
-      assignmentCancelMatch?.[2]
-    ) {
-      return await handlers.handleCancelTaskAssignment!(
-        request,
-        env,
-        assignmentCancelMatch[1],
-        assignmentCancelMatch[2],
-        ctx,
-      );
-    }
-
-    // Plugin Registry routes (Architecture v2)
-    if (
-      request.method === "GET" &&
-      (url.pathname === "/api/plugins" || url.pathname === "/api/v2/plugins")
-    ) {
-      return await handlers.handleListPlugins!(request, env);
+      return await handlers.handleGetLatestWorkspaceRelease!(request, env);
     }
     if (
       request.method === "POST" &&
-      (url.pathname === "/api/plugins/publish" ||
-        url.pathname === "/api/v2/plugins/publish")
+      url.pathname === "/api/workspace-releases/publish"
     ) {
-      return await handlers.handlePublishPlugin!(request, env, ctx);
+      return await handlers.handlePublishWorkspaceRelease!(request, env, ctx);
     }
-
-    const pluginDownloadMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/plugins\/([^/]+)\/versions\/([^/]+)\/download$/,
+    const workspaceReleaseDownloadMatch = url.pathname.match(
+      /^\/api\/workspace-releases\/([^/]+)\/download$/,
     );
-    if (
-      request.method === "GET" &&
-      pluginDownloadMatch?.[1] &&
-      pluginDownloadMatch?.[2]
-    ) {
-      return await handlers.handleDownloadPluginVersion!(
+    if (request.method === "GET" && workspaceReleaseDownloadMatch?.[1]) {
+      return await handlers.handleDownloadWorkspaceRelease!(
         request,
         env,
-        pluginDownloadMatch[1],
-        pluginDownloadMatch[2],
+        workspaceReleaseDownloadMatch[1],
         ctx,
       );
     }
-
-    const pluginRevokeMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/plugins\/([^/]+)\/versions\/([^/]+)\/revoke$/,
+    const workspaceReleaseRevokeMatch = url.pathname.match(
+      /^\/api\/workspace-releases\/([^/]+)\/revoke$/,
     );
-    if (
-      request.method === "POST" &&
-      pluginRevokeMatch?.[1] &&
-      pluginRevokeMatch?.[2]
-    ) {
-      return await handlers.handleRevokePluginVersion!(
+    if (request.method === "POST" && workspaceReleaseRevokeMatch?.[1]) {
+      return await handlers.handleRevokeWorkspaceRelease!(
         request,
         env,
-        pluginRevokeMatch[1],
-        pluginRevokeMatch[2],
+        workspaceReleaseRevokeMatch[1],
         ctx,
       );
     }
-
-    const pluginVersionMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/plugins\/([^/]+)\/versions\/([^/]+)$/,
+    const singleWorkspaceReleaseMatch = url.pathname.match(
+      /^\/api\/workspace-releases\/([^/]+)$/,
     );
-    if (
-      request.method === "GET" &&
-      pluginVersionMatch?.[1] &&
-      pluginVersionMatch?.[2]
-    ) {
-      return await handlers.handleGetPluginVersion!(
+    if (request.method === "GET" && singleWorkspaceReleaseMatch?.[1]) {
+      return await handlers.handleGetWorkspaceRelease!(
         env,
-        pluginVersionMatch[1],
-        pluginVersionMatch[2],
-      );
-    }
-
-    const pluginDeprecateMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/plugins\/([^/]+)\/deprecate$/,
-    );
-    if (request.method === "POST" && pluginDeprecateMatch?.[1]) {
-      return await handlers.handleDeprecatePlugin!(
-        request,
-        env,
-        pluginDeprecateMatch[1],
-        ctx,
-      );
-    }
-
-    const singlePluginMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/plugins\/([^/]+)$/,
-    );
-    if (request.method === "GET" && singlePluginMatch?.[1]) {
-      return await handlers.handleGetPlugin!(env, singlePluginMatch[1]);
-    }
-
-    // Agent Releases routes (Architecture v2 Self-Update)
-    if (
-      request.method === "GET" &&
-      (url.pathname === "/api/host-releases/latest" ||
-        url.pathname === "/api/v2/host-releases/latest")
-    ) {
-      return await handlers.handleGetLatestHostRelease!(request, env);
-    }
-    if (
-      request.method === "POST" &&
-      (url.pathname === "/api/host-releases/publish" ||
-        url.pathname === "/api/v2/host-releases/publish")
-    ) {
-      return await handlers.handlePublishHostRelease!(request, env, ctx);
-    }
-    const agentReleaseDownloadMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/host-releases\/([^/]+)\/download$/,
-    );
-    if (request.method === "GET" && agentReleaseDownloadMatch?.[1]) {
-      return await handlers.handleDownloadHostRelease!(
-        request,
-        env,
-        agentReleaseDownloadMatch[1],
-        ctx,
-      );
-    }
-    const agentReleaseRevokeMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/host-releases\/([^/]+)\/revoke$/,
-    );
-    if (request.method === "POST" && agentReleaseRevokeMatch?.[1]) {
-      return await handlers.handleRevokeHostRelease!(
-        request,
-        env,
-        agentReleaseRevokeMatch[1],
-        ctx,
-      );
-    }
-    const singleHostReleaseMatch = url.pathname.match(
-      /^\/api(?:\/v2)?\/host-releases\/([^/]+)$/,
-    );
-    if (request.method === "GET" && singleHostReleaseMatch?.[1]) {
-      return await handlers.handleGetHostRelease!(
-        env,
-        singleHostReleaseMatch[1],
+        singleWorkspaceReleaseMatch[1],
       );
     }
 
@@ -1017,25 +749,6 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
-    const projectChatsMatch = url.pathname.match(
-      /^\/api\/projects\/([^/]+)\/chats$/,
-    );
-    if (request.method === "GET" && projectChatsMatch?.[1]) {
-      return await handlers.handleListChats!(
-        request,
-        env,
-        projectChatsMatch[1],
-        ctx,
-      );
-    }
-    if (request.method === "POST" && projectChatsMatch?.[1]) {
-      return await handlers.handleCreateChat!(
-        request,
-        env,
-        projectChatsMatch[1],
-        ctx,
-      );
-    }
     const projectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)$/);
     if (request.method === "GET" && projectMatch?.[1]) {
       return await handlers.handleGetProject!(
@@ -1060,42 +773,6 @@ export async function routeWorkerRequest(
         projectMatch[1],
         ctx,
       );
-    }
-
-    const chatGoalsMatch = url.pathname.match(/^\/api\/chats\/([^/]+)\/goals$/);
-    if (request.method === "GET" && chatGoalsMatch?.[1]) {
-      return await handlers.handleListChatGoals!(
-        request,
-        env,
-        chatGoalsMatch[1],
-        ctx,
-      );
-    }
-    const chatMessagesMatch = url.pathname.match(
-      /^\/api\/chats\/([^/]+)\/messages$/,
-    );
-    if (request.method === "GET" && chatMessagesMatch?.[1]) {
-      return await handlers.handleListChatMessages!(
-        request,
-        env,
-        chatMessagesMatch[1],
-        ctx,
-      );
-    }
-    if (request.method === "POST" && chatMessagesMatch?.[1]) {
-      return await handlers.handleCreateChatMessage!(
-        request,
-        env,
-        chatMessagesMatch[1],
-        ctx,
-      );
-    }
-    const chatMatch = url.pathname.match(/^\/api\/chats\/([^/]+)$/);
-    if (request.method === "GET" && chatMatch?.[1]) {
-      return await handlers.handleGetChat!(request, env, chatMatch[1], ctx);
-    }
-    if (request.method === "PATCH" && chatMatch?.[1]) {
-      return await handlers.handleUpdateChat!(request, env, chatMatch[1], ctx);
     }
 
     const projectWorkstreamsMatch = url.pathname.match(
@@ -1249,12 +926,6 @@ export async function routeWorkerRequest(
       );
     }
 
-    if (request.method === "POST" && url.pathname === "/api/runs") {
-      return await handlers.handleRunRequest!(request, env, ctx);
-    }
-    if (request.method === "POST" && url.pathname === "/api/goals") {
-      return await handlers.handleGoalRequest!(request, env, ctx);
-    }
     if (request.method === "GET" && url.pathname === "/api/studio/snapshot") {
       return await handlers.handleStudioSnapshot!(
         env,
@@ -1285,7 +956,7 @@ export async function routeWorkerRequest(
       await deps.authorizeRequest(
         request,
         securityEnv,
-        "project:read",
+        "projects:read",
         projectId,
         ctx,
       );

@@ -2,7 +2,6 @@ enum StudioRouteKind {
   home,
   projects,
   project,
-  chat,
   workstream,
   run,
   workspaces,
@@ -16,7 +15,6 @@ class StudioNavigation {
   const StudioNavigation._({
     required this.kind,
     this.projectId,
-    this.chatId,
     this.workstreamId,
     this.runId,
     this.workspaceId,
@@ -31,10 +29,6 @@ class StudioNavigation {
 
   const StudioNavigation.project(String projectId)
       : this._(kind: StudioRouteKind.project, projectId: projectId);
-
-  const StudioNavigation.chat(String projectId, String chatId)
-      : this._(
-            kind: StudioRouteKind.chat, projectId: projectId, chatId: chatId);
 
   const StudioNavigation.workstream(String projectId, String workstreamId)
       : this._(
@@ -71,13 +65,8 @@ class StudioNavigation {
             kind: StudioRouteKind.desktopAuthApproval,
             desktopAuthIntentId: intentId);
 
-  /// Compatibility parser for old links. New links serialize canonically.
-  const StudioNavigation.account()
-      : this._(kind: StudioRouteKind.profileSecurity);
-
   final StudioRouteKind kind;
   final String? projectId;
-  final String? chatId;
   final String? workstreamId;
   final String? runId;
   final String? workspaceId;
@@ -97,45 +86,19 @@ class StudioNavigation {
         return StudioNavigation.desktopAuthApproval(intentId);
       }
     }
-    if (parts case ['account']) {
-      return const StudioNavigation.profileSecurity();
-    }
     if (parts case ['settings', 'profile']) {
       return const StudioNavigation.profileSecurity();
     }
     if (parts case ['projects']) return const StudioNavigation.projects();
-    if ((parts.length == 1 && parts[0] == 'execution') ||
-        (parts.length == 2 &&
-            parts[0] == 'execution' &&
-            parts[1] == 'workspaces')) {
-      return const StudioNavigation.workspaces();
-    }
-    if (parts.length == 3 &&
-        parts[0] == 'execution' &&
-        parts[1] == 'workspaces') {
-      return StudioNavigation.workspaces(workspaceId: parts[2]);
-    }
-    if (parts case ['execution', 'workers']) {
-      return const StudioNavigation.workspaces();
-    }
-    if (parts.length == 1 &&
-        (parts[0] == 'workspaces' || parts[0] == 'hosts')) {
-      final tab = uri.queryParameters['tab']?.toLowerCase();
-      if (tab == 'workers') return const StudioNavigation.workspaces();
-      if (tab == 'accounts' || tab == 'ai_accounts') {
-        return const StudioNavigation.workspaces();
-      }
+    if (parts.length == 1 && parts[0] == 'workspaces') {
       return const StudioNavigation.workspaces();
     }
     if (parts.length == 2 &&
-        (parts[0] == 'workspaces' || parts[0] == 'hosts')) {
-      if (parts[1] == 'workers') return const StudioNavigation.workspaces();
-      if (parts[1] == 'accounts') return const StudioNavigation.workspaces();
+        parts[0] == 'workspaces' &&
+        parts[1] != 'workers' &&
+        parts[1] != 'accounts') {
       return StudioNavigation.workspaces(workspaceId: parts[1]);
     }
-    // Backward compatibility for standalone /workers and /accounts
-    if (parts case ['workers']) return const StudioNavigation.workspaces();
-    if (parts case ['accounts']) return const StudioNavigation.workspaces();
     if (parts case ['search']) {
       return StudioNavigation.search(uri.queryParameters['q']);
     }
@@ -151,9 +114,6 @@ class StudioNavigation {
       return StudioNavigation.run(pId, rId, workstreamId: wsId);
     }
     if (parts.length >= 4 && parts[0] == 'projects') {
-      if (parts[2] == 'chats') {
-        return StudioNavigation.chat(parts[1], parts[3]);
-      }
       if (parts[2] == 'workstreams') {
         return StudioNavigation.workstream(parts[1], parts[3]);
       }
@@ -172,7 +132,6 @@ class StudioNavigation {
       StudioRouteKind.home => Uri(path: '/'),
       StudioRouteKind.projects => Uri(path: '/projects'),
       StudioRouteKind.project => Uri(path: '/projects/$projectId'),
-      StudioRouteKind.chat => Uri(path: '/projects/$projectId/chats/$chatId'),
       StudioRouteKind.workstream =>
         Uri(path: '/projects/$projectId/workstreams/$workstreamId'),
       StudioRouteKind.run => workstreamId != null
@@ -208,7 +167,6 @@ class StudioNavigation {
       other is StudioNavigation &&
       other.kind == kind &&
       other.projectId == projectId &&
-      other.chatId == chatId &&
       other.workstreamId == workstreamId &&
       other.runId == runId &&
       other.workspaceId == workspaceId &&
@@ -217,6 +175,6 @@ class StudioNavigation {
       other.desktopAuthIntentId == desktopAuthIntentId;
 
   @override
-  int get hashCode => Object.hash(kind, projectId, chatId, workstreamId, runId,
+  int get hashCode => Object.hash(kind, projectId, workstreamId, runId,
       workspaceId, loginReturnTo, searchQuery, desktopAuthIntentId);
 }

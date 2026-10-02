@@ -1,14 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
   ConclaveForgeExecutionService,
-  readExecutionContext,
   workStepSessionKey,
 } from "../src/forge-execution.js";
 
+interface ExecutionRow {
+  readonly id: string;
+  readonly runId: string;
+  readonly executionKind: string;
+  readonly externalId: string;
+  status: string;
+  resultArtifactId?: string;
+  error?: string;
+  updatedAt: string;
+}
+
 class MemoryD1 {
-  readonly records = new Map<string, string>();
-  readonly contextQueries: string[] = [];
-  contextRow: Record<string, unknown> | null = null;
+  readonly executions: ExecutionRow[] = [];
+
+  async batch() {
+    return [];
+  }
 
   prepare(query: string) {
     let values: readonly unknown[] = [];
@@ -18,73 +30,38 @@ class MemoryD1 {
         return statement;
       },
       first: async <T>() => {
-        if (query.includes("FROM projects")) {
-          this.contextQueries.push(query);
-          return this.contextRow as T;
-        }
-        if (
-          query.includes("FROM forge_executions") &&
-          query.includes("WHERE run_id")
-        ) {
-          for (const record of this.records.values()) {
-            const parsed = JSON.parse(record) as {
-              executionId: string;
-              runId: string;
-            };
-            if (parsed.runId === String(values[0])) {
-              return {
-                execution_id: parsed.executionId,
-                run_id: parsed.runId,
-                workspace_id: null,
-                status: "started",
-                result_artifact_id: null,
-                error: null,
-                updated_at: "2026-09-22T00:00:00.000Z",
-              } as T;
-            }
-          }
-          return null;
-        }
-        if (
-          !query.includes("FROM persistence_records") &&
-          !query.includes("FROM forge_executions")
-        )
-          return null;
-        const record = this.records.get(String(values[0]));
-        if (!record) return null;
-        if (query.includes("FROM forge_executions")) {
-          const parsed = JSON.parse(record) as {
-            executionId: string;
-            runId: string;
-            status: string;
-            resultArtifactId?: string;
-            error?: string;
-            updatedAt: string;
-          };
-          return {
-            execution_id: parsed.executionId,
-            run_id: parsed.runId,
-            status: parsed.status,
-            result_artifact_id: parsed.resultArtifactId ?? null,
-            error: parsed.error ?? null,
-            updated_at: parsed.updatedAt,
-          } as T;
-        }
-        return { record_json: record } as T;
+        const row = query.includes("WHERE external_id")
+          ? this.executions.find((item) => item.externalId === values[0])
+          : query.includes("WHERE run_id")
+            ? this.executions.find(
+                (item) =>
+                  item.runId === values[0] && item.executionKind === values[1],
+              )
+            : undefined;
+        return row ? this.toDatabaseRow(row) as T : null;
       },
       all: async <T>() => ({ results: [] as readonly T[] }),
       run: async () => {
-        if (query.includes("INSERT INTO forge_executions")) {
-          this.records.set(
-            String(values[0]),
-            JSON.stringify({
-              executionId: String(values[0]),
-              runId: String(values[1]),
-              workspaceId: values[2] ?? null,
-              status: String(values[3]),
-              updatedAt: String(values[4]),
-            }),
+        if (query.includes("INSERT INTO run_external_executions")) {
+          this.executions.push({
+            id: String(values[0]),
+            runId: String(values[1]),
+            executionKind: String(values[2]),
+            externalId: String(values[3]),
+            status: String(values[4]),
+            updatedAt: String(values[5]),
+          });
+        }
+        if (query.includes("UPDATE run_external_executions")) {
+          const row = this.executions.find(
+            (item) => item.externalId === values[4],
           );
+          if (row) {
+            row.status = String(values[0]);
+            row.resultArtifactId = values[1] ? String(values[1]) : undefined;
+            row.error = values[2] ? String(values[2]) : undefined;
+            row.updatedAt = String(values[3]);
+          }
         }
         return { success: true as const };
       },
@@ -92,19 +69,23 @@ class MemoryD1 {
     return statement;
   }
 
-  async batch() {
-    return [];
+  private toDatabaseRow(row: ExecutionRow): Record<string, unknown> {
+    return {
+      execution_id: row.externalId,
+      run_id: row.runId,
+      status: row.status,
+      result_artifact_id: row.resultArtifactId ?? null,
+      error: row.error ?? null,
+      updated_at: row.updatedAt,
+    };
   }
 }
 
 function service(db: MemoryD1): ConclaveForgeExecutionService {
-  return new ConclaveForgeExecutionService({
-    CONCLAVE_DB: db,
-    CONCLAVE_ARTIFACTS: {} as R2Bucket,
-  });
+  return new ConclaveForgeExecutionService({ CONCLAVE_DB: db });
 }
 
-describe("durable Forge execution service", () => {
+describe("Work assignment execution service", () => {
   it("keeps Verify in a separate provider session from Implement", () => {
     const implement = workStepSessionKey({
       workBindingId: "implement",
@@ -151,69 +132,32 @@ describe("durable Forge execution service", () => {
     ).toBe(`${direct}:retry-fresh-2`);
   });
 
-  it("rejects a domain run that belongs to another Goal", async () => {
-    const db = new MemoryD1();
-    db.contextRow = {
-      project_id: "project-1",
-      repository_id: "repo-1",
-      goal_id: "goal-1",
-      run_goal_id: "goal-other",
-      run_project_id: "project-1",
-    };
-
-    await expect(
-      readExecutionContext(
-        { CONCLAVE_DB: db } as never,
-        {
-          runId: "run-1",
-          goalId: "goal-1",
-          organizationId: "org-1",
-          projectId: "project-1",
-          repositoryId: "repo-1",
-        },
-        "execution-1",
-      ),
-    ).rejects.toThrow("Run does not belong to the requested Goal");
-    expect(db.contextQueries[0]).toContain("p.workspace_id = ?3");
-  });
-
-  it("rejects a repository override that is not the Project repository", async () => {
-    const db = new MemoryD1();
-    db.contextRow = {
-      project_id: "project-1",
-      repository_id: "repo-1",
-      goal_id: "goal-1",
-      run_goal_id: null,
-      run_project_id: null,
-    };
-
-    await expect(
-      readExecutionContext(
-        { CONCLAVE_DB: db } as never,
-        {
-          runId: "run-1",
-          goalId: "goal-1",
-          organizationId: "org-1",
-          projectId: "project-1",
-          repositoryId: "repo-other",
-        },
-        "execution-1",
-      ),
-    ).rejects.toThrow("Forge repository does not match the Project repository");
-  });
-
-  it("recovers a persisted terminal execution by execution ID", async () => {
-    const db = new MemoryD1();
-    db.records.set(
-      "execution-1",
-      JSON.stringify({
-        executionId: "execution-1",
-        runId: "run-1",
-        status: "completed",
-        resultArtifactId: "artifact-1",
-        updatedAt: "2026-09-22T00:00:00.000Z",
+  it("requires a persisted Work Request and binding", async () => {
+    const response = await service(new MemoryD1()).fetch(
+      new Request("https://conclave.internal/execute", {
+        method: "POST",
+        body: JSON.stringify({ runId: "run-1" }),
       }),
+      {} as ExecutionContext,
     );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "work_request_required",
+    });
+  });
+
+  it("recovers a terminal Work execution by its external execution ID", async () => {
+    const db = new MemoryD1();
+    db.executions.push({
+      id: "row-1",
+      runId: "run-1",
+      executionKind: "direct:task-1:1",
+      externalId: "execution-1",
+      status: "completed",
+      resultArtifactId: "artifact-1",
+      updatedAt: "2026-10-02T00:00:00.000Z",
+    });
 
     const response = await service(db).fetch(
       new Request("https://conclave.internal/status/execution-1"),
@@ -229,62 +173,35 @@ describe("durable Forge execution service", () => {
     });
   });
 
-  it("rejects execution intake without a domain run ID", async () => {
-    const response = await service(new MemoryD1()).fetch(
-      new Request("https://conclave.internal/execute", {
-        method: "POST",
-        body: JSON.stringify({}),
-      }),
-      {} as ExecutionContext,
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: "run_id_required",
-    });
-  });
-
-  it("returns the persisted execution for a retried domain run", async () => {
+  it("returns an existing Workflow step execution on replay", async () => {
     const db = new MemoryD1();
-    db.records.set(
-      "execution-1",
-      JSON.stringify({
-        executionId: "execution-1",
-        runId: "run-1",
-        status: "started",
-        updatedAt: "2026-09-22T00:00:00.000Z",
-      }),
-    );
+    db.executions.push({
+      id: "row-1",
+      runId: "run-1",
+      executionKind: "direct:task-1:1",
+      externalId: "execution-1",
+      status: "started",
+      updatedAt: "2026-10-02T00:00:00.000Z",
+    });
+
     const response = await service(db).fetch(
       new Request("https://conclave.internal/execute", {
         method: "POST",
-        body: JSON.stringify({ runId: "run-1" }),
+        body: JSON.stringify({
+          runId: "run-1",
+          taskId: "task-1",
+          workRequestId: "request-1",
+          workBindingId: "direct",
+        }),
       }),
       { waitUntil: () => undefined } as unknown as ExecutionContext,
     );
+
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toMatchObject({
       executionId: "execution-1",
       runId: "run-1",
       status: "started",
     });
-  });
-
-  it("accepts direct Host Gateway execution without an internal HTTP API", async () => {
-    const db = new MemoryD1();
-    const gateway = {} as DurableObjectNamespace;
-    const response = await new ConclaveForgeExecutionService({
-      CONCLAVE_DB: db,
-      CONCLAVE_ARTIFACTS: {} as R2Bucket,
-      CONCLAVE_HOST_GATEWAY: gateway,
-    }).fetch(
-      new Request("https://conclave.internal/execute", {
-        method: "POST",
-        body: JSON.stringify({ runId: "run-1" }),
-      }),
-      { waitUntil: () => undefined } as unknown as ExecutionContext,
-    );
-
-    expect(response.status).toBe(202);
   });
 });

@@ -10,14 +10,14 @@ import {
   type Worker,
   type LegacyWorkerAssignment,
   type WorkerAssignmentResult,
-  type ExecutionHostRelease,
+  type WorkspaceRelease,
   DomainInvariantError,
   validateWorkspace,
   validateProject,
   validateChat,
   validateChatMessage,
   validateExecutionHost,
-  validateExecutionHostRelease,
+  validateWorkspaceRelease,
   validateWorkerCatalog,
   validateWorkerVersion,
   validateWorker,
@@ -458,11 +458,11 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
       ).toThrow(/does not match parent plugin/);
     });
 
-    it("validates valid ExecutionHostRelease and rejects invalid ones", () => {
-      const release: ExecutionHostRelease = {
+    it("validates valid WorkspaceRelease and rejects invalid ones", () => {
+      const release: WorkspaceRelease = {
         version: "1.3.0",
         channel: "stable",
-        minSupportedAgentVersion: "1.0.0",
+        minSupportedWorkspaceVersion: "1.0.0",
         supportedOS: ["macos", "linux"],
         supportedArch: ["arm64", "x64"],
         packageDigest: "sha256:abc12345",
@@ -473,28 +473,28 @@ describe("Architecture v2 Core Domain Entities and Invariants", () => {
         createdAt: "2026-09-21T12:00:00Z",
       };
 
-      expect(() => validateExecutionHostRelease(release)).not.toThrow();
+      expect(() => validateWorkspaceRelease(release)).not.toThrow();
 
       expect(() =>
-        validateExecutionHostRelease({
+        validateWorkspaceRelease({
           ...release,
-          channel: "unknown" as unknown as ExecutionHostRelease["channel"],
+          channel: "unknown" as unknown as WorkspaceRelease["channel"],
         }),
-      ).toThrow(/Invalid ExecutionHostRelease channel/);
+      ).toThrow(/Invalid WorkspaceRelease channel/);
 
       expect(() =>
-        validateExecutionHostRelease({
+        validateWorkspaceRelease({
           ...release,
           supportedOS: [],
         }),
-      ).toThrow(/ExecutionHostRelease must support at least one OS/);
+      ).toThrow(/WorkspaceRelease must support at least one OS/);
 
       expect(() =>
-        validateExecutionHostRelease({
+        validateWorkspaceRelease({
           ...release,
           signature: "",
         }),
-      ).toThrow(/ExecutionHostRelease signature is required/);
+      ).toThrow(/WorkspaceRelease signature is required/);
     });
   });
 });

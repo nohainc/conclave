@@ -5,10 +5,8 @@ import 'package:conclave_host/cli_worker_engine_supervisor.dart';
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/tool_profile_catalog.dart';
 import 'package:conclave_host/tool_profile_release_store.dart';
-import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/worker_diagnostic_store.dart';
 import 'package:conclave_host/worker_readiness.dart';
-import 'package:conclave_host/worker_trust_policy.dart';
 import 'package:test/test.dart';
 
 import 'support/ed25519_release_fixture.dart';
@@ -62,7 +60,7 @@ void main() {
         '${Platform.isWindows ? '.exe' : ''}',
       );
       final providerBuild = await Process.run(
-        Platform.resolvedExecutable,
+        _dartExecutable(),
         [
           'compile',
           'exe',
@@ -108,12 +106,7 @@ void main() {
         workspaceId: 'workspace-third-cli',
         idGenerator: () => 'fixture-worker-local',
       );
-      final worker = await registry.create(
-        name: entry.displayName,
-        workerTypeId: entry.workerTypeId,
-        authStrategy: 'provider_owned',
-        approvedCatalogEntry: entry,
-      );
+      final worker = await registry.create(catalogEntry: entry);
       final bundledEngine = File(
         '$repository/apps/host/assets/engines/'
         'conclave_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
@@ -121,9 +114,8 @@ void main() {
       final dartDirectory = File(Platform.resolvedExecutable).parent.path;
       final inheritedPath = Platform.environment['PATH'] ?? '';
       final engine = CliWorkerEngineSupervisor(
-        engineExecutable: bundledEngine.existsSync()
-            ? bundledEngine.path
-            : Platform.resolvedExecutable,
+        engineExecutable:
+            bundledEngine.existsSync() ? bundledEngine.path : _dartExecutable(),
         engineArgumentsPrefix: bundledEngine.existsSync()
             ? const []
             : ['$repository/engines/cli_worker/bin/conclave_cli_worker.dart'],
@@ -138,11 +130,6 @@ void main() {
       );
       final monitor = WorkerReadinessMonitor(
         registry: registry,
-        adapterStore: V7AdapterPackageStore(
-          root: Directory('${root.path}/Adapters'),
-          trustPolicy: signing.trustPolicy,
-          allowedPermissions: WorkerPermission.values.toSet(),
-        ),
         toolProfileReleaseStore: profileStore,
         toolProfileCatalog: catalog,
         cliWorkerEngineSupervisor: engine,
@@ -182,4 +169,15 @@ void main() {
       catalog.close();
     },
   );
+}
+
+String _dartExecutable() {
+  final resolved = File(Platform.resolvedExecutable);
+  if (!resolved.path.endsWith('flutter_tester')) return resolved.path;
+  final cacheDirectory = resolved.parent.parent.parent.parent;
+  final dart = File('${cacheDirectory.path}/dart-sdk/bin/dart');
+  if (!dart.existsSync()) {
+    throw StateError('Could not locate the Flutter-bundled Dart executable.');
+  }
+  return dart.path;
 }

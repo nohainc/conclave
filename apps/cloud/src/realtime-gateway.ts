@@ -15,12 +15,11 @@ import {
 
 export interface RealtimeScope {
   kind?:
-    "user" | "project" | "workstream" | "chat" | "run" | "execution_workspace";
+    "user" | "project" | "workstream" | "run" | "execution_workspace";
   executionWorkspaceId?: string;
   workspaceId?: string;
   projectId?: string;
   workstreamId?: string;
-  chatId?: string;
   runId?: string;
 }
 
@@ -63,9 +62,9 @@ const MAX_SOCKET_BUFFERED_BYTES = 256 * 1024;
 
 export function scopeKey(scope: RealtimeScope): string {
   if (scope.kind) {
-    return `${scope.kind}=${scope.executionWorkspaceId ?? scope.projectId ?? scope.workstreamId ?? scope.chatId ?? scope.runId ?? ""}`;
+    return `${scope.kind}=${scope.executionWorkspaceId ?? scope.projectId ?? scope.workstreamId ?? scope.runId ?? ""}`;
   }
-  return ["workspaceId", "projectId", "chatId", "runId"]
+  return ["workspaceId", "projectId", "runId"]
     .map((field) => `${field}=${scope[field as keyof RealtimeScope] ?? ""}`)
     .join("&");
 }
@@ -124,7 +123,6 @@ export function parseRealtimeClientMessage(
   if (
     scope.kind === "project" ||
     scope.kind === "workstream" ||
-    scope.kind === "chat" ||
     scope.kind === "run"
   ) {
     const idField = `${scope.kind}Id`;
@@ -154,7 +152,7 @@ export function parseRealtimeClientMessage(
       },
     };
   }
-  const scopeFields = ["workspaceId", "projectId", "chatId", "runId"] as const;
+  const scopeFields = ["workspaceId", "projectId", "runId"] as const;
   if (typeof scope.workspaceId !== "string" || scope.workspaceId.length === 0) {
     throw new Error("Realtime subscription workspaceId is required");
   }
@@ -170,7 +168,6 @@ export function parseRealtimeClientMessage(
       ...(typeof scope.projectId === "string"
         ? { projectId: scope.projectId }
         : {}),
-      ...(typeof scope.chatId === "string" ? { chatId: scope.chatId } : {}),
       ...(typeof scope.runId === "string" ? { runId: scope.runId } : {}),
     },
   };
@@ -202,7 +199,6 @@ export function eventMatchesScope(
   if (scope.kind === "project") return event.projectId === scope.projectId;
   if (scope.kind === "workstream")
     return event.workstreamId === scope.workstreamId;
-  if (scope.kind === "chat") return event.chatId === scope.chatId;
   if (scope.kind === "run") return event.runId === scope.runId;
   if (scope.kind === "execution_workspace") {
     return event.workspaceId === scope.executionWorkspaceId;
@@ -210,7 +206,6 @@ export function eventMatchesScope(
   return (
     event.workspaceId === scope.workspaceId &&
     (!scope.projectId || event.projectId === scope.projectId) &&
-    (!scope.chatId || event.chatId === scope.chatId) &&
     (!scope.runId || event.runId === scope.runId)
   );
 }
@@ -266,56 +261,45 @@ export async function authorizeRealtimeScope(
       ? { allowed: true }
       : { allowed: false, reason: "execution_workspace_access_denied" };
   }
-  if (scope.kind === "chat" || scope.kind === "run") {
+  if (scope.kind === "run") {
     const row = await db
       .prepare(
         `SELECT pm.user_id FROM project_memberships pm
-       JOIN ${scope.kind === "chat" ? "chats" : "runs"} resource ON resource.project_id = pm.project_id
+       JOIN runs resource ON resource.project_id = pm.project_id
        WHERE resource.id = ?1 AND pm.user_id = ?2`,
       )
-      .bind(scope[`${scope.kind}Id` as "chatId" | "runId"], userId)
+      .bind(scope.runId, userId)
       .first<{ user_id: string }>();
     return row
       ? { allowed: true }
       : { allowed: false, reason: `${scope.kind}_access_denied` };
   }
-  const membership = await db
+  const owner = await db
     .prepare(
-      "SELECT 1 AS member FROM workspace_memberships WHERE workspace_id = ?1 AND user_id = ?2 AND status = 'active'",
+      "SELECT 1 AS owner FROM execution_workspaces WHERE id = ?1 AND owner_user_id = ?2 AND status <> 'revoked'",
     )
     .bind(scope.workspaceId, userId)
-    .first<{ member: number }>();
-  if (!membership) return { allowed: false, reason: "workspace_access_denied" };
+    .first<{ owner: number }>();
+  if (!owner) return { allowed: false, reason: "execution_workspace_access_denied" };
 
   if (scope.projectId) {
     const project = await db
-      .prepare("SELECT workspace_id FROM projects WHERE id = ?1")
-      .bind(scope.projectId)
-      .first<{ workspace_id: string }>();
-    if (!project || project.workspace_id !== scope.workspaceId) {
+        .prepare(`SELECT 1 AS granted FROM workspace_project_grants
+                  WHERE project_id = ?1 AND workspace_id = ?2 AND status = 'active'`)
+        .bind(scope.projectId, scope.workspaceId)
+        .first<{ granted: number }>();
+    if (!project) {
       return { allowed: false, reason: "project_access_denied" };
-    }
-  }
-  if (scope.chatId) {
-    const chat = await db
-      .prepare("SELECT project_id FROM chats WHERE id = ?1")
-      .bind(scope.chatId)
-      .first<{ project_id: string }>();
-    if (!chat) return { allowed: false, reason: "chat_access_denied" };
-    const project = await db
-      .prepare("SELECT workspace_id FROM projects WHERE id = ?1")
-      .bind(chat.project_id)
-      .first<{ workspace_id: string }>();
-    if (!project || project.workspace_id !== scope.workspaceId) {
-      return { allowed: false, reason: "chat_access_denied" };
     }
   }
   if (scope.runId) {
     const run = await db
-      .prepare("SELECT workspace_id FROM runs WHERE id = ?1")
-      .bind(scope.runId)
-      .first<{ workspace_id: string }>();
-    if (!run || run.workspace_id !== scope.workspaceId) {
+        .prepare(`SELECT 1 AS granted FROM runs r
+                  JOIN workspace_project_grants g ON g.project_id = r.project_id
+                  WHERE r.id = ?1 AND g.workspace_id = ?2 AND g.status = 'active'`)
+        .bind(scope.runId, scope.workspaceId)
+        .first<{ granted: number }>();
+    if (!run) {
       return { allowed: false, reason: "run_access_denied" };
     }
   }

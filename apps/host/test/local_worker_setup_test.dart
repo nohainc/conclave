@@ -5,10 +5,11 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_host/configured_worker_registry.dart';
-import 'package:conclave_host/first_party_worker_registry.dart';
 import 'package:conclave_host/local_worker_permissions.dart';
 import 'package:conclave_host/local_worker_setup.dart';
 import 'package:conclave_host/platform_runtime.dart';
+
+import 'support/logical_worker_catalog_fixture.dart';
 
 class _TestPlatformRuntime implements PlatformRuntime {
   @override
@@ -58,86 +59,33 @@ void main() {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
-  test('v1 registry contains only the product to package mapping', () {
-    expect(
-      FirstPartyWorkerPackage.all
-          .map((type) => type.productWorkerTypeId)
-          .toList(),
-      ['chatgpt', 'gemini'],
-    );
-    expect(
-      FirstPartyWorkerPackage.all.map((type) => type.productName).toList(),
-      ['ChatGPT', 'Gemini'],
-    );
-    expect(
-      FirstPartyWorkerPackage.all.map((type) => type.packageId).toList(),
-      ['codex', 'antigravity'],
-    );
-    final chatgpt = FirstPartyWorkerPackage.all.first;
-    expect(chatgpt.productWorkerTypeId, 'chatgpt');
-    expect(chatgpt.productName, 'ChatGPT');
-    expect(chatgpt.packageId, 'codex');
-    final gemini = FirstPartyWorkerPackage.all.last;
-    expect(gemini.productWorkerTypeId, 'gemini');
-    expect(gemini.productName, 'Gemini');
-    expect(gemini.packageId, 'antigravity');
-    expect(
-      FirstPartyWorkerPackage.canonicalProductWorkerTypeId('codex'),
-      'chatgpt',
-    );
-    expect(
-      FirstPartyWorkerPackage.canonicalProductWorkerTypeId('antigravity'),
-      'gemini',
-    );
-    expect(
-      FirstPartyWorkerPackage.packageIdFor('chatgpt'),
-      'codex',
-    );
-    expect(
-      FirstPartyWorkerPackage.packageIdFor('gemini'),
-      'antigravity',
-    );
-  });
-
-  test('setup creates a pending package worker without provider metadata',
-      () async {
-    final type = FirstPartyWorkerPackage.all.first;
-    final worker = await LocalWorkerSetupService(registry: registry).create(
-      type: type,
+  test('setup uses a logical Worker supplied by the cached catalog', () async {
+    final worker =
+        await LocalWorkerSetupService(registry: registry).createCatalogWorker(
+      entry: logicalWorkerCatalogFixture('chatgpt'),
       permissions: firstPartyWorkerLocalPermissions,
     );
     expect(worker.workerTypeId, 'chatgpt');
     expect(worker.localConcurrencyLimit, defaultLocalWorkerConcurrency);
     expect(worker.status, LocalWorkerStatus.needsAttention);
-    expect(worker.credentialStatus, LocalWorkerCredentialStatus.notRequired);
-    expect(worker.credentialRef, isNull);
+    expect(worker.localPermissions, firstPartyWorkerLocalPermissions);
     final file = File(
         '${directory.path}${Platform.pathSeparator}configured-workers.json');
     expect(jsonDecode(await file.readAsString())['workers'], hasLength(1));
   });
 
-  test('never-tested Gemini starts in setup-required state', () async {
-    final gemini = FirstPartyWorkerPackage.forProductWorkerTypeId('gemini')!;
-    final worker = await LocalWorkerSetupService(registry: registry).create(
-      type: gemini,
+  test('new catalog Worker starts unprobed until its first readiness check',
+      () async {
+    final worker =
+        await LocalWorkerSetupService(registry: registry).createCatalogWorker(
+      entry: logicalWorkerCatalogFixture('gemini'),
       permissions: firstPartyWorkerLocalPermissions,
     );
 
     expect(worker.status, LocalWorkerStatus.needsAttention);
-    expect(worker.readinessState, WorkerReadinessState.setupRequired);
-    expect(worker.readinessIssueCode, 'setup_required');
+    expect(worker.readinessState, WorkerReadinessState.notProbed);
+    expect(worker.readinessIssueCode, isNull);
     expect(worker.lastPassiveProbeAt, isNull);
     expect(worker.lastLiveTestAt, isNull);
-  });
-
-  test('registry excludes non-v1 product Worker Types', () {
-    expect(
-      FirstPartyWorkerPackage.forProductWorkerTypeId('claude-code'),
-      isNull,
-    );
-    expect(
-      FirstPartyWorkerPackage.forPackageId('claude-code'),
-      isNull,
-    );
   });
 }

@@ -1,452 +1,171 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const schemaPath = "packages/protocol/schema/conclave-message.schema.json";
-const schema = JSON.parse(await readFile(schemaPath, "utf8"));
-const protocolName = schema.properties.protocol.const;
-const protocolVersion = schema["x-protocol-version"];
-const executionErrorCodes = schema["x-execution-error-codes"];
-const executionErrorMessages = schema["x-execution-error-messages"];
+const schema = JSON.parse(
+  await readFile(
+    "packages/protocol/schema/conclave-message.schema.json",
+    "utf8",
+  ),
+);
+const host = schema["x-host-protocol"];
+const realtime = schema["x-realtime-events"];
 const messageTypes = schema["x-message-types"];
-const messagePayloads = schema["x-message-payloads"];
-const requiredFields = schema.required;
-const hostProtocol = schema["x-host-protocol"];
-const workerProtocol = schema["x-worker-protocol"];
-const realtimeEvents = schema["x-realtime-events"];
-const agentProtocol = schema["x-agent-protocol"];
-const localProtocols = schema["x-local-protocols"];
+const payloads = schema["x-message-payloads"];
+const errorCodes = schema["x-execution-error-codes"];
+const errorMessages = schema["x-execution-error-messages"];
 
 if (
-  typeof protocolName !== "string" ||
-  typeof protocolVersion !== "string" ||
-  !Array.isArray(executionErrorCodes) ||
-  executionErrorCodes.length === 0 ||
-  executionErrorCodes.some((code) => typeof code !== "string") ||
-  typeof executionErrorMessages !== "object" ||
-  executionErrorMessages === null ||
-  executionErrorCodes.some(
-    (code) => typeof executionErrorMessages[code] !== "string",
-  ) ||
-  !Array.isArray(requiredFields) ||
-  requiredFields.some((field) => typeof field !== "string") ||
+  !host ||
+  !realtime ||
   !Array.isArray(messageTypes) ||
-  messageTypes.length === 0 ||
-  messageTypes.some((messageType) => typeof messageType !== "string") ||
-  typeof messagePayloads !== "object" ||
-  messagePayloads === null ||
-  messageTypes.some(
-    (messageType) => typeof messagePayloads[messageType] !== "string",
-  ) ||
-  typeof hostProtocol !== "object" ||
-  hostProtocol === null ||
-  typeof hostProtocol.name !== "string" ||
-  typeof hostProtocol.version !== "string" ||
-  typeof hostProtocol.maxMessageSizeBytes !== "number" ||
-  !Array.isArray(hostProtocol.messageTypes) ||
-  !Array.isArray(hostProtocol.baseEnvelopeFields) ||
-  !Array.isArray(hostProtocol.assignmentEnvelopeFields) ||
-  typeof workerProtocol !== "object" ||
-  workerProtocol === null ||
-  typeof workerProtocol.name !== "string" ||
-  typeof workerProtocol.version !== "string" ||
-  typeof workerProtocol.jsonRpcVersion !== "string" ||
-  !Array.isArray(workerProtocol.methods) ||
-  !Array.isArray(workerProtocol.notifications) ||
-  typeof realtimeEvents !== "object" ||
-  realtimeEvents === null ||
-  typeof realtimeEvents.name !== "string" ||
-  typeof realtimeEvents.version !== "string" ||
-  !Array.isArray(realtimeEvents.envelopeFields) ||
-  !Array.isArray(realtimeEvents.optionalEnvelopeFields) ||
-  !Array.isArray(realtimeEvents.durableTypes) ||
-  !Array.isArray(realtimeEvents.ephemeralTypes) ||
-  typeof realtimeEvents.payloadSchema !== "string"
+  !Array.isArray(errorCodes) ||
+  !payloads ||
+  !errorMessages ||
+  Object.hasOwn(schema, "x-agent-protocol") ||
+  Object.hasOwn(schema, "x-local-protocols") ||
+  Object.hasOwn(schema, "x-worker-protocol")
 ) {
-  throw new Error("canonical protocol schema is missing generator metadata");
+  throw new Error(
+    "current protocol schema metadata is incomplete or contains retired protocols",
+  );
 }
 
-const hostMessageTypes = hostProtocol.messageTypes
-  .map((messageType) => `  ${JSON.stringify(messageType)},`)
+const jsonItems = (items) =>
+  items.map((item) => `  ${JSON.stringify(item)},`).join("\n");
+const dartItems = (items) =>
+  items.map((item) => `  '${String(item).replaceAll("'", "\\'")}',`).join("\n");
+const tsMessages = messageTypes
+  .map((type) => `  ${type}: ${JSON.stringify(payloads[type])},`)
   .join("\n");
-const hostBaseFields = hostProtocol.baseEnvelopeFields
-  .map((field) => `  ${JSON.stringify(field)},`)
-  .join("\n");
-const hostAssignmentFields = hostProtocol.assignmentEnvelopeFields
-  .map((field) => `  ${JSON.stringify(field)},`)
-  .join("\n");
-
-const workerMethods = workerProtocol.methods
-  .map((method) => `  ${JSON.stringify(method)},`)
-  .join("\n");
-const workerNotifications = workerProtocol.notifications
-  .map((method) => `  ${JSON.stringify(method)},`)
-  .join("\n");
-const realtimeEnvelopeFields = realtimeEvents.envelopeFields
-  .map((field) => `  ${JSON.stringify(field)},`)
-  .join("\n");
-const realtimeOptionalEnvelopeFields = realtimeEvents.optionalEnvelopeFields
-  .map((field) => `  ${JSON.stringify(field)},`)
-  .join("\n");
-const realtimeDurableTypes = realtimeEvents.durableTypes
-  .map((type) => `  ${JSON.stringify(type)},`)
-  .join("\n");
-const realtimeEphemeralTypes = realtimeEvents.ephemeralTypes
-  .map((type) => `  ${JSON.stringify(type)},`)
-  .join("\n");
-
-const agentMessageTypes = (agentProtocol?.messageTypes ?? [])
-  .map((messageType) => `  ${JSON.stringify(messageType)},`)
-  .join("\n");
-const agentBaseFields = (agentProtocol?.baseEnvelopeFields ?? [])
-  .map((field) => `  ${JSON.stringify(field)},`)
-  .join("\n");
-const agentAssignmentFields = (agentProtocol?.assignmentEnvelopeFields ?? [])
-  .map((field) => `  ${JSON.stringify(field)},`)
-  .join("\n");
-const ipcCommandTypes = (localProtocols?.agentAppIpc?.commandTypes ?? [])
-  .map((type) => `  ${JSON.stringify(type)},`)
-  .join("\n");
-const pluginMethods = (localProtocols?.workerPlugin?.methods ?? [])
-  .map((method) => `  ${JSON.stringify(method)},`)
-  .join("\n");
-const pluginNotifications = (localProtocols?.workerPlugin?.notifications ?? [])
-  .map((method) => `  ${JSON.stringify(method)},`)
-  .join("\n");
-
-const tsFields = requiredFields
-  .map((field) => `  ${JSON.stringify(field)},`)
-  .join("\n");
-const tsMessageTypes = messageTypes
-  .map((messageType) => `  ${JSON.stringify(messageType)},`)
-  .join("\n");
-const tsPayloads = messageTypes
-  .map(
-    (messageType) =>
-      `  ${messageType}: ${JSON.stringify(messagePayloads[messageType])},`,
-  )
-  .join("\n");
-const tsExecutionErrorCodes = executionErrorCodes
-  .map((code) => `  ${JSON.stringify(code)},`)
-  .join("\n");
-const tsExecutionErrorMessages = executionErrorCodes
+const tsErrors = errorCodes
   .map(
     (code) =>
-      `  ${JSON.stringify(code)}: ${JSON.stringify(executionErrorMessages[code])},`,
+      `  ${JSON.stringify(code)}: ${JSON.stringify(errorMessages[code])},`,
   )
   .join("\n");
-const ts = `// GENERATED FILE. Do not edit by hand.
 
-export const PROTOCOL_NAME = ${JSON.stringify(protocolName)} as const;
-export const PROTOCOL_VERSION = ${JSON.stringify(protocolVersion)} as const;
+const protocolTs = `// GENERATED FILE. Do not edit by hand.
+
+export const PROTOCOL_NAME = ${JSON.stringify(schema.properties.protocol.const)} as const;
+export const PROTOCOL_VERSION = ${JSON.stringify(schema["x-protocol-version"])} as const;
 export const EXECUTION_ERROR_CODES = [
-${tsExecutionErrorCodes}
+${jsonItems(errorCodes)}
 ] as const;
 export const EXECUTION_ERROR_MESSAGES = {
-${tsExecutionErrorMessages}
+${tsErrors}
 } as const;
 export const REQUIRED_ENVELOPE_FIELDS = [
-${tsFields}
+${jsonItems(schema.required)}
 ] as const;
 export const PROTOCOL_MESSAGE_TYPES = [
-${tsMessageTypes}
+${jsonItems(messageTypes)}
 ] as const;
 export const PROTOCOL_MESSAGE_PAYLOAD_SCHEMAS = {
-${tsPayloads}
+${tsMessages}
 } as const;
 
-export const HOST_PROTOCOL_NAME = ${JSON.stringify(hostProtocol.name)} as const;
-export const HOST_PROTOCOL_VERSION = ${JSON.stringify(hostProtocol.version)} as const;
-export const HOST_PROTOCOL_MAX_MESSAGE_SIZE_BYTES = ${hostProtocol.maxMessageSizeBytes} as const;
-export const HOST_PROTOCOL_MESSAGE_TYPES = [
-${hostMessageTypes}
-] as const;
-export const HOST_PROTOCOL_BASE_ENVELOPE_FIELDS = [
-${hostBaseFields}
-] as const;
-export const HOST_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS = [
-${hostAssignmentFields}
-] as const;
-
-export const REALTIME_EVENTS_NAME = ${JSON.stringify(realtimeEvents.name)} as const;
-export const REALTIME_EVENTS_VERSION = ${JSON.stringify(realtimeEvents.version)} as const;
-export const REALTIME_EVENT_ENVELOPE_FIELDS = [
-${realtimeEnvelopeFields}
-] as const;
-export const REALTIME_EVENT_OPTIONAL_ENVELOPE_FIELDS = [
-${realtimeOptionalEnvelopeFields}
-] as const;
-export const DURABLE_REALTIME_EVENT_TYPES = [
-${realtimeDurableTypes}
-] as const;
-export const EPHEMERAL_REALTIME_EVENT_TYPES = [
-${realtimeEphemeralTypes}
-] as const;
-export const REALTIME_EVENT_PAYLOAD_SCHEMA =
-  ${JSON.stringify(realtimeEvents.payloadSchema)} as const;
-
-export const AGENT_PROTOCOL_NAME = ${JSON.stringify(agentProtocol?.name ?? "conclave.agent-protocol")} as const;
-export const AGENT_PROTOCOL_VERSION = ${JSON.stringify(agentProtocol?.version ?? "2.0")} as const;
-export const AGENT_PROTOCOL_MAX_MESSAGE_SIZE_BYTES = ${agentProtocol?.maxMessageSizeBytes ?? 4194304} as const;
-export const AGENT_PROTOCOL_MESSAGE_TYPES = [
-${agentMessageTypes}
-] as const;
-export const AGENT_PROTOCOL_BASE_ENVELOPE_FIELDS = [
-${agentBaseFields}
-] as const;
-export const AGENT_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS = [
-${agentAssignmentFields}
-] as const;
+${hostTsConstants(host)}
+${realtimeTsConstants(realtime)}
 `;
+
 const hostTs = `// GENERATED FILE. Do not edit by hand.
 
-export const HOST_PROTOCOL_NAME = ${JSON.stringify(hostProtocol.name)} as const;
-export const HOST_PROTOCOL_VERSION = ${JSON.stringify(hostProtocol.version)} as const;
-export const HOST_PROTOCOL_MAX_MESSAGE_SIZE_BYTES = ${hostProtocol.maxMessageSizeBytes} as const;
-export const HOST_PROTOCOL_MESSAGE_TYPES = [
-${hostMessageTypes}
-] as const;
-export const HOST_PROTOCOL_BASE_ENVELOPE_FIELDS = [
-${hostBaseFields}
-] as const;
-export const HOST_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS = [
-${hostAssignmentFields}
-] as const;
-
-export const WORKER_PROTOCOL_NAME = ${JSON.stringify(workerProtocol.name)} as const;
-export const WORKER_PROTOCOL_VERSION = ${JSON.stringify(workerProtocol.version)} as const;
-export const WORKER_PROTOCOL_JSON_RPC_VERSION = ${JSON.stringify(workerProtocol.jsonRpcVersion)} as const;
-export const WORKER_PROTOCOL_METHODS = [
-${workerMethods}
-] as const;
-export const WORKER_PROTOCOL_NOTIFICATIONS = [
-${workerNotifications}
-] as const;
-
-export const REALTIME_EVENTS_NAME = ${JSON.stringify(realtimeEvents.name)} as const;
-export const REALTIME_EVENTS_VERSION = ${JSON.stringify(realtimeEvents.version)} as const;
-export const REALTIME_EVENT_ENVELOPE_FIELDS = [
-${realtimeEnvelopeFields}
-] as const;
-export const REALTIME_EVENT_OPTIONAL_ENVELOPE_FIELDS = [
-${realtimeOptionalEnvelopeFields}
-] as const;
-export const DURABLE_REALTIME_EVENT_TYPES = [
-${realtimeDurableTypes}
-] as const;
-export const EPHEMERAL_REALTIME_EVENT_TYPES = [
-${realtimeEphemeralTypes}
-] as const;
-export const REALTIME_EVENT_PAYLOAD_SCHEMA =
-  ${JSON.stringify(realtimeEvents.payloadSchema)} as const;
-
-export const AGENT_PROTOCOL_NAME = ${JSON.stringify(agentProtocol?.name ?? "conclave.agent-protocol")} as const;
-export const AGENT_PROTOCOL_VERSION = ${JSON.stringify(agentProtocol?.version ?? "2.0")} as const;
-export const AGENT_PROTOCOL_MAX_MESSAGE_SIZE_BYTES = ${agentProtocol?.maxMessageSizeBytes ?? 4194304} as const;
-export const AGENT_PROTOCOL_MESSAGE_TYPES = [
-${agentMessageTypes}
-] as const;
-export const AGENT_PROTOCOL_BASE_ENVELOPE_FIELDS = [
-${agentBaseFields}
-] as const;
-export const AGENT_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS = [
-${agentAssignmentFields}
-] as const;
+${hostTsConstants(host)}
+${realtimeTsConstants(realtime)}
 `;
-const localTs = `// GENERATED FILE. Do not edit by hand.
 
-export const WORKER_PROTOCOL_NAME = ${JSON.stringify(workerProtocol.name)} as const;
-export const WORKER_PROTOCOL_VERSION = ${JSON.stringify(workerProtocol.version)} as const;
-export const WORKER_PROTOCOL_JSON_RPC_VERSION = ${JSON.stringify(workerProtocol.jsonRpcVersion)} as const;
-export const WORKER_PROTOCOL_METHODS = [
-${workerMethods}
-] as const;
-export const WORKER_PROTOCOL_NOTIFICATIONS = [
-${workerNotifications}
-] as const;
+const dartProtocol = `// GENERATED FILE. Do not edit by hand.
 
-export const AGENT_APP_IPC_PROTOCOL_NAME = ${JSON.stringify(localProtocols?.agentAppIpc?.name ?? "conclave.agent-app-ipc")} as const;
-export const AGENT_APP_IPC_PROTOCOL_VERSION = ${JSON.stringify(localProtocols?.agentAppIpc?.version ?? "1.0")} as const;
-export const AGENT_APP_IPC_MAX_FRAME_BYTES = ${localProtocols?.agentAppIpc?.maxFrameBytes ?? 1048576} as const;
-export const AGENT_APP_IPC_COMMAND_TYPES = [
-${ipcCommandTypes}
-] as const;
-export const WORKER_PLUGIN_PROTOCOL_NAME = ${JSON.stringify(localProtocols?.workerPlugin?.name ?? "conclave.worker-plugin")} as const;
-export const WORKER_PLUGIN_PROTOCOL_VERSION = ${JSON.stringify(localProtocols?.workerPlugin?.version ?? "2.0")} as const;
-export const WORKER_PLUGIN_JSON_RPC_VERSION = ${JSON.stringify(localProtocols?.workerPlugin?.jsonRpcVersion ?? "2.0")} as const;
-export const WORKER_PLUGIN_METHODS = [
-${pluginMethods}
-] as const;
-export const WORKER_PLUGIN_NOTIFICATIONS = [
-${pluginNotifications}
-] as const;
-`;
-const dartFields = requiredFields.map((field) => `  '${field}',`).join("\n");
-const dartMessageTypes = messageTypes
-  .map((messageType) => `  '${messageType}',`)
-  .join("\n");
-const dartPayloads = messageTypes
-  .map(
-    (messageType) =>
-      `  '${messageType}': '${messagePayloads[messageType].replaceAll("$", "\\$")}',`,
-  )
-  .join("\n");
-const dartExecutionErrorCodes = executionErrorCodes
-  .map((code) => `  '${code}',`)
-  .join("\n");
-const dartExecutionErrorMessages = executionErrorCodes
-  .map(
-    (code) =>
-      `  '${code}': '${executionErrorMessages[code].replaceAll("'", "\\'")}',`,
-  )
-  .join("\n");
-
-const dartHostMessageTypes = hostProtocol.messageTypes
-  .map((messageType) => `  '${messageType}',`)
-  .join("\n");
-const dartHostBaseFields = hostProtocol.baseEnvelopeFields
-  .map((field) => `  '${field}',`)
-  .join("\n");
-const dartHostAssignmentFields = hostProtocol.assignmentEnvelopeFields
-  .map((field) => `  '${field}',`)
-  .join("\n");
-
-const dartWorkerMethods = workerProtocol.methods
-  .map((method) => `  '${method}',`)
-  .join("\n");
-const dartWorkerNotifications = workerProtocol.notifications
-  .map((method) => `  '${method}',`)
-  .join("\n");
-const dartRealtimeEnvelopeFields = realtimeEvents.envelopeFields
-  .map((field) => `  '${field}',`)
-  .join("\n");
-const dartRealtimeOptionalEnvelopeFields = realtimeEvents.optionalEnvelopeFields
-  .map((field) => `  '${field}',`)
-  .join("\n");
-const dartRealtimeDurableTypes = realtimeEvents.durableTypes
-  .map((type) => `  '${type}',`)
-  .join("\n");
-const dartRealtimeEphemeralTypes = realtimeEvents.ephemeralTypes
-  .map((type) => `  '${type}',`)
-  .join("\n");
-
-const dartAgentMessageTypes = (agentProtocol?.messageTypes ?? [])
-  .map((messageType) => `  '${messageType}',`)
-  .join("\n");
-const dartAgentBaseFields = (agentProtocol?.baseEnvelopeFields ?? [])
-  .map((field) => `  '${field}',`)
-  .join("\n");
-const dartAgentAssignmentFields = (
-  agentProtocol?.assignmentEnvelopeFields ?? []
-)
-  .map((field) => `  '${field}',`)
-  .join("\n");
-
-const dart = `// GENERATED FILE. Do not edit by hand.
-
-const protocolName = '${protocolName}';
-const protocolVersion = '${protocolVersion}';
+const protocolName = '${schema.properties.protocol.const}';
+const protocolVersion = '${schema["x-protocol-version"]}';
 const executionErrorCodes = <String>{
-${dartExecutionErrorCodes}
+${dartItems(errorCodes)}
 };
 const executionErrorMessages = <String, String>{
-${dartExecutionErrorMessages}
+${errorCodes.map((code) => `  '${code}': '${String(errorMessages[code]).replaceAll("'", "\\'")}',`).join("\n")}
 };
 const requiredEnvelopeFields = <String>[
-${dartFields}
+${dartItems(schema.required)}
 ];
 const protocolMessageTypes = <String>{
-${dartMessageTypes}
+${dartItems(messageTypes)}
 };
 const protocolMessagePayloadSchemas = <String, String>{
-${dartPayloads}
+  ${messageTypes.map((type) => `  '${type}': '${payloads[type].replaceAll("$", "\\$")}',`).join("\n")}
 };
 
-const hostProtocolName = '${hostProtocol.name}';
-const hostProtocolVersion = '${hostProtocol.version}';
-const hostProtocolMaxMessageSizeBytes = ${hostProtocol.maxMessageSizeBytes};
+${hostDartConstants(host)}
+${realtimeDartConstants(realtime)}
+`;
+
+await writeFile("packages/protocol/src/generated.ts", protocolTs);
+await writeFile("packages/host-protocol/src/generated.ts", hostTs);
+await writeFile(
+  "packages/dart/protocol/lib/generated_protocol.dart",
+  dartProtocol,
+);
+
+function hostTsConstants(value) {
+  return `export const HOST_PROTOCOL_NAME = ${JSON.stringify(value.name)} as const;
+export const HOST_PROTOCOL_VERSION = ${JSON.stringify(value.version)} as const;
+export const HOST_PROTOCOL_MAX_MESSAGE_SIZE_BYTES = ${value.maxMessageSizeBytes} as const;
+export const HOST_PROTOCOL_MESSAGE_TYPES = [
+${jsonItems(value.messageTypes)}
+] as const;
+export const HOST_PROTOCOL_BASE_ENVELOPE_FIELDS = [
+${jsonItems(value.baseEnvelopeFields)}
+] as const;
+export const HOST_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS = [
+${jsonItems(value.assignmentEnvelopeFields)}
+] as const;`;
+}
+
+function realtimeTsConstants(value) {
+  return `export const REALTIME_EVENTS_NAME = ${JSON.stringify(value.name)} as const;
+export const REALTIME_EVENTS_VERSION = ${JSON.stringify(value.version)} as const;
+export const REALTIME_EVENT_ENVELOPE_FIELDS = [
+${jsonItems(value.envelopeFields)}
+] as const;
+export const REALTIME_EVENT_OPTIONAL_ENVELOPE_FIELDS = [
+${jsonItems(value.optionalEnvelopeFields)}
+] as const;
+export const DURABLE_REALTIME_EVENT_TYPES = [
+${jsonItems(value.durableTypes)}
+] as const;
+export const EPHEMERAL_REALTIME_EVENT_TYPES = [
+${jsonItems(value.ephemeralTypes)}
+] as const;
+export const REALTIME_EVENT_PAYLOAD_SCHEMA = ${JSON.stringify(value.payloadSchema)} as const;`;
+}
+
+function hostDartConstants(value) {
+  return `const hostProtocolName = '${value.name}';
+const hostProtocolVersion = '${value.version}';
+const hostProtocolMaxMessageSizeBytes = ${value.maxMessageSizeBytes};
 const hostProtocolMessageTypes = <String>{
-${dartHostMessageTypes}
+${dartItems(value.messageTypes)}
 };
 const hostProtocolBaseEnvelopeFields = <String>[
-${dartHostBaseFields}
+${dartItems(value.baseEnvelopeFields)}
 ];
 const hostProtocolAssignmentEnvelopeFields = <String>[
-${dartHostAssignmentFields}
-];
+${dartItems(value.assignmentEnvelopeFields)}
+];`;
+}
 
-const realtimeEventsName = '${realtimeEvents.name}';
-const realtimeEventsVersion = '${realtimeEvents.version}';
+function realtimeDartConstants(value) {
+  return `const realtimeEventsName = '${value.name}';
+const realtimeEventsVersion = '${value.version}';
 const realtimeEventEnvelopeFields = <String>[
-${dartRealtimeEnvelopeFields}
+${dartItems(value.envelopeFields)}
 ];
 const realtimeEventOptionalEnvelopeFields = <String>[
-${dartRealtimeOptionalEnvelopeFields}
+${dartItems(value.optionalEnvelopeFields)}
 ];
 const durableRealtimeEventTypes = <String>{
-${dartRealtimeDurableTypes}
+${dartItems(value.durableTypes)}
 };
 const ephemeralRealtimeEventTypes = <String>{
-${dartRealtimeEphemeralTypes}
+${dartItems(value.ephemeralTypes)}
 };
-const realtimeEventPayloadSchema = '${realtimeEvents.payloadSchema.replaceAll("$", "\\$")}';
-
-const agentProtocolName = '${agentProtocol?.name ?? "conclave.agent-protocol"}';
-const agentProtocolVersion = '${agentProtocol?.version ?? "2.0"}';
-const agentProtocolMaxMessageSizeBytes = ${agentProtocol?.maxMessageSizeBytes ?? 4194304};
-const agentProtocolMessageTypes = <String>{
-${dartAgentMessageTypes}
-};
-const agentProtocolBaseEnvelopeFields = <String>[
-${dartAgentBaseFields}
-];
-const agentProtocolAssignmentEnvelopeFields = <String>[
-${dartAgentAssignmentFields}
-];
-`;
-const dartIpcCommands = (localProtocols?.agentAppIpc?.commandTypes ?? [])
-  .map((type) => `  '${type}',`)
-  .join("\n");
-const dartPluginMethods = (localProtocols?.workerPlugin?.methods ?? [])
-  .map((method) => `  '${method}',`)
-  .join("\n");
-const dartPluginNotifications = (
-  localProtocols?.workerPlugin?.notifications ?? []
-)
-  .map((method) => `  '${method}',`)
-  .join("\n");
-const dartLocal = `// GENERATED FILE. Do not edit by hand.
-
-const workerProtocolName = '${workerProtocol.name}';
-const workerProtocolVersion = '${workerProtocol.version}';
-const workerProtocolJsonRpcVersion = '${workerProtocol.jsonRpcVersion}';
-const workerProtocolMethods = <String>{
-${dartWorkerMethods}
-};
-const workerProtocolNotifications = <String>{
-${dartWorkerNotifications}
-};
-
-const agentAppIpcProtocolName = '${localProtocols?.agentAppIpc?.name ?? "conclave.agent-app-ipc"}';
-const agentAppIpcProtocolVersion = '${localProtocols?.agentAppIpc?.version ?? "1.0"}';
-const agentAppIpcMaxFrameBytes = ${localProtocols?.agentAppIpc?.maxFrameBytes ?? 1048576};
-const agentAppIpcCommandTypes = <String>{
-${dartIpcCommands}
-};
-const workerPluginProtocolName = '${localProtocols?.workerPlugin?.name ?? "conclave.worker-plugin"}';
-const workerPluginProtocolVersion = '${localProtocols?.workerPlugin?.version ?? "2.0"}';
-const workerPluginJsonRpcVersion = '${localProtocols?.workerPlugin?.jsonRpcVersion ?? "2.0"}';
-const workerPluginMethods = <String>{
-${dartPluginMethods}
-};
-const workerPluginNotifications = <String>{
-${dartPluginNotifications}
-};
-`;
-
-await writeFile("packages/protocol/src/generated.ts", ts);
-await writeFile("packages/host-protocol/src/generated.ts", hostTs);
-await writeFile("packages/protocol/src/generated-local-protocols.ts", localTs);
-await writeFile(
-  "packages/dart/protocol/lib/generated_local_protocols.dart",
-  dartLocal,
-);
-await writeFile("packages/dart/protocol/lib/generated_protocol.dart", dart);
+const realtimeEventPayloadSchema = '${value.payloadSchema.replaceAll("$", "\\$")}';`;
+}

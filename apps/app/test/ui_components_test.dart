@@ -133,10 +133,8 @@ void main() {
             body: CommandPaletteDialog(
               snapshot: snapshot,
               onSelectProject: (_) {},
-              onSelectChat: (_, __) {},
               onNavigateTo: (route) => navigatedTo = route,
               onToggleTheme: () {},
-              onNewGoal: () {},
             ),
           ),
         ),
@@ -145,7 +143,6 @@ void main() {
 
       expect(find.text('Workspaces'), findsWidgets);
       expect(find.text('Workers'), findsNothing);
-      expect(find.text('AI Accounts'), findsNothing);
       expect(find.text('Profile & Security'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), 'Workspaces');
@@ -179,10 +176,8 @@ void main() {
             body: CommandPaletteDialog(
               snapshot: studioFixtureSnapshot(),
               onSelectProject: (_) {},
-              onSelectChat: (_, __) {},
               onNavigateTo: (route) => navigatedTo = route,
               onToggleTheme: () {},
-              onNewGoal: () {},
             ),
           ),
         ),

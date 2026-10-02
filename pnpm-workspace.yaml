@@ -5,7 +5,6 @@ packages:
   - packages/core
   - packages/orchestration
   - packages/persistence
-  - packages/worker-manifest
   - packages/tool-profile
   - packages/protocol
   - packages/security

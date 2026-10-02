@@ -44,8 +44,8 @@ Future<Map<String, Object?>> buildHostDiagnostics({
   HostCloudConnection? connection,
   AssignmentJournal? journal,
   LocalConfiguredWorkerRegistry? workerRegistry,
-  WorkerVersionStore? workerVersionStore,
   ToolProfileReleaseStore? toolProfileReleaseStore,
+  ToolProfileCatalogClient? toolProfileCatalog,
   String? lastUpdateCheckStatus,
   DateTime? lastUpdateCheckAt,
   String? updateStatus,
@@ -63,7 +63,13 @@ Future<Map<String, Object?>> buildHostDiagnostics({
   for (final worker
       in await workerRegistry?.list(includeRemoved: true) ?? const []) {
     Map<String, Object?>? toolProfile;
-    final profileDefinitionId = _profileDefinitionId(worker.workerTypeId);
+    final catalog = toolProfileCatalog;
+    final profileDefinitionId = catalog == null
+        ? null
+        : (await catalog.loadCatalog())
+            .where((entry) => entry.workerTypeId == worker.workerTypeId)
+            .firstOrNull
+            ?.profileDefinitionId;
     if (profileDefinitionId != null && toolProfileReleaseStore != null) {
       try {
         final resolver = ToolProfileResolver(toolProfileReleaseStore);
@@ -236,8 +242,8 @@ Future<File> writeHostDiagnostics({
   HostCloudConnection? connection,
   AssignmentJournal? journal,
   LocalConfiguredWorkerRegistry? workerRegistry,
-  WorkerVersionStore? workerVersionStore,
   ToolProfileReleaseStore? toolProfileReleaseStore,
+  ToolProfileCatalogClient? toolProfileCatalog,
   String? lastUpdateCheckStatus,
   DateTime? lastUpdateCheckAt,
   String? updateStatus,
@@ -248,8 +254,8 @@ Future<File> writeHostDiagnostics({
     connection: connection,
     journal: journal,
     workerRegistry: workerRegistry,
-    workerVersionStore: workerVersionStore,
     toolProfileReleaseStore: toolProfileReleaseStore,
+    toolProfileCatalog: toolProfileCatalog,
     lastUpdateCheckStatus: lastUpdateCheckStatus,
     lastUpdateCheckAt: lastUpdateCheckAt,
     updateStatus: updateStatus,
@@ -261,9 +267,3 @@ Future<File> writeHostDiagnostics({
   await currentPlatformRuntime.restrictPermissions(file.path, directory: false);
   return file;
 }
-
-String? _profileDefinitionId(String workerTypeId) => switch (workerTypeId) {
-      'chatgpt' => 'chatgpt-codex',
-      'gemini' => 'gemini-antigravity',
-      _ => null,
-    };

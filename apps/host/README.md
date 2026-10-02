@@ -3,10 +3,10 @@
 Conclave Workspace is the machine-side execution and security runtime.
 
 It maintains the Cloud connection, owns the local Work Root, creates/resolves
-Workstream working directories, manages locally configured Workers and their
-credentials, installs/verifies Worker Type adapter packages, launches adapter
-child processes, enforces local permissions, supervises execution, and reports
-safe readiness/status back to Conclave Cloud.
+Workstream working directories, manages logical Workers and local provider
+credentials, resolves signed Tool Profiles, launches the generic CLI Worker
+Engine, enforces local permissions, supervises execution, and reports safe
+readiness/status back to Conclave Cloud.
 
 Its GUI is intentionally minimal and local-first:
 - account sign-in and explicit Workspace connection/lifecycle;
@@ -21,32 +21,9 @@ Its GUI is intentionally minimal and local-first:
 Projects, Workstreams, Discuss, Work orchestration, Project membership and
 remote scheduling policy belong in Conclave AX.
 
-Users install only Conclave Workspace. Worker adapters are managed internally;
-they are not separately installed desktop applications.
-
-## Packaging a V7 adapter release
-
-Use `.github/workflows/release-v7-adapter.yml` for development, beta, stable,
-and revocation operations. Its Ed25519 private seed is a protected GitHub
-environment secret. The packager computes the file-tree digest and signs the
-canonical manifest and digest. Workspace receives only public trust roots.
-
-```sh
-cd apps/host
-CONCLAVE_RELEASE_SIGNING_SEED="$V7_ADAPTER_ED25519_SEED" \
-CONCLAVE_RELEASE_SIGNING_KEY_ID="adapter-2026-01" \
-  dart run bin/package_v7_adapter.dart \
-  --source ../../packages/worker-manifest/adapters/codex \
-  --output ../../dist/codex-1.0.0.tgz \
-  --channel development
-```
-
-Never copy private seeds to Workspace or desktop builds. Configure the public-
-only `CONCLAVE_RELEASE_TRUST_KEYS_JSON` build define with publisher/key IDs and
-base64 raw Ed25519 public keys. Use distinct adapter and Workspace key IDs and
-rotate them independently; ship overlapping public keys during rotation.
-Workspace refreshes key and release revocations, blocks new assignments for a
-revoked adapter, and lets active work finish before replacing it.
+Users install only Conclave Workspace. Workspace manages the bundled generic
+Engine and signed Tool Profile releases; provider CLI software is installed
+separately by its provider.
 
 Workspace update metadata is signed by an independent Ed25519 application
 release key and binds the archive digest, version, channel, supported platform,
@@ -55,16 +32,9 @@ notarization complement this verification; they do not replace it. Publish
 macOS builds through `.github/workflows/release-workspace-macos.yml`; it checks
 the downloaded release metadata signature and archive digest.
 
-Before enabling either workflow, configure `CONCLAVE_RELEASE_TRUST_KEYS_JSON`
-as a public Cloud Worker variable and as a GitHub environment variable. It must
-contain the same raw public keys embedded into Workspace builds. The release
-environments also require `CLOUD_API_URL`, `CONCLAVE_RELEASE_PUBLISH_TOKEN`,
-`CONCLAVE_ADAPTER_ED25519_SEED`, `CONCLAVE_ADAPTER_SIGNING_KEY_ID`,
-`CONCLAVE_WORKSPACE_ED25519_SEED`, and
-`CONCLAVE_WORKSPACE_SIGNING_KEY_ID`. Keep the two private seeds separate.
-The macOS environment additionally needs the Developer ID certificate and
-Apple notarization credentials used by its workflow. Workflows fail closed
-when required keys or credentials are absent.
+The Workspace release workflow uses the Workspace signing key and public trust
+roots. The generic Engine is bundled with Workspace; provider-specific Worker
+package signing and publishing workflows have been retired.
 
 ## Desktop development and macOS build
 
@@ -80,14 +50,8 @@ Build a local macOS Workspace app from repository root:
 bash scripts/build-workspace-macos.sh
 ~~~
 
-By default, this local build packages unsigned first-party adapters and enables
-their use only as app-bundled development packages. It does not need adapter
-release keys. Cloud-downloaded adapters still require trusted signatures.
-Apple Developer ID signing is separately optional via `--sign`.
-
-For a product release, pass `--sign-adapters` and provide the protected adapter
-signing seed, key ID, and public trust roots. The release workflow does this
-automatically. Never put private signing seeds in the repository.
+The local build bundles the generic CLI Worker Engine. Apple Developer ID
+signing is separately optional via `--sign`.
 
 Optional environment:
 - `CONCLAVE_MACOS_SIGN_IDENTITY` — Developer ID Application identity;
@@ -120,7 +84,7 @@ shown, including transient notifications and Worker setup details. Copying a
 message copies its displayed text; it does not extend the message's existing
 display timeout.
 
-Disconnect preserves installation ownership and local Workers/provider
+Disconnect preserves installation ownership and local Worker/provider
 credentials. Release ownership is a separate advanced action for a disconnected
 Workspace and permits a different account to connect. Reset local Workspace
 has separate published data-removal semantics; see [ADR-014](../../docs/decisions/ADR-014-workspace-desktop-lifecycle.md).
@@ -148,6 +112,8 @@ per slot. The corresponding CLI owns sign-in, credential storage, and billing
 mode; Conclave checks whether the CLI can execute and does not request or store
 provider credentials. See [ADR-015](../../docs/decisions/ADR-015-first-party-worker-v1-contract.md).
 
-Other adapters and their tests remain in the repository during compatibility
-and migration work, but are not offered as first-party v1 Workers. Worker
-readiness remains a local execution fact; Cloud receives only safe inventory.
+The native ChatGPT and Gemini Worker source packages remain pending the real
+Engine/Profile acceptance gate, but their build/install/release tooling is
+retired. Normal Workspace execution uses the generic Engine and signed Tool
+Profiles. Worker readiness remains a local execution fact; Cloud receives only
+safe inventory.

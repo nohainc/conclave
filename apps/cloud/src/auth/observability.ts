@@ -26,7 +26,6 @@ const REASONS = new Set([
   "removed_member",
   "invalid_workspace",
   "invalid_project",
-  "invalid_credential_profile",
   "unknown",
 ]);
 

@@ -2,7 +2,7 @@ import {
   validateBuiltinWorkflowDefinition,
   type BuiltinWorkflowDefinition,
   type BuiltinWorkflowStep,
-} from "./v6-entities.js";
+} from "./workstream.js";
 
 export type WorkflowTaskStatus =
   "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled";

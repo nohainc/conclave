@@ -11,6 +11,8 @@ import 'package:conclave_host/workspace_enrollment.dart';
 import 'package:conclave_host/workspace_runtime.dart';
 import 'package:test/test.dart';
 
+import 'support/logical_worker_catalog_fixture.dart';
+
 class _MemoryCredentialStore implements SecureCredentialStore {
   final Map<String, String> values = {};
 
@@ -67,8 +69,8 @@ void main() {
     late _MemoryCredentialStore credentialStore;
 
     setUp(() async {
-      tempDir = await Directory.systemTemp
-          .createTemp('conclave-desktop-b10-test-');
+      tempDir =
+          await Directory.systemTemp.createTemp('conclave-desktop-b10-test-');
       credentialStore = _MemoryCredentialStore();
     });
 
@@ -99,7 +101,8 @@ void main() {
       expect(await store2.getOrCreate(), equals(id1));
     });
 
-    test('3. computer-name default resolves friendly name with hostname fallback',
+    test(
+        '3. computer-name default resolves friendly name with hostname fallback',
         () async {
       final friendly = resolveFriendlyComputerNameSync(
         localHostname: 'vitalii-macbook-pro.local',
@@ -248,8 +251,10 @@ void main() {
         ),
         throwsA(
           isA<WorkspacePairingException>()
-              .having((e) => e.kind, 'kind', WorkspacePairingErrorKind.invalidCode)
-              .having((e) => e.message, 'message', 'The pairing code is invalid.')
+              .having(
+                  (e) => e.kind, 'kind', WorkspacePairingErrorKind.invalidCode)
+              .having(
+                  (e) => e.message, 'message', 'The pairing code is invalid.')
               .having((e) => e.action, 'action',
                   'Check the code in Conclave AX and try again.'),
         ),
@@ -283,9 +288,10 @@ void main() {
         ),
         throwsA(
           isA<WorkspacePairingException>()
-              .having((e) => e.kind, 'kind', WorkspacePairingErrorKind.expiredCode)
-              .having((e) => e.message, 'message',
-                  'This pairing code has expired.')
+              .having(
+                  (e) => e.kind, 'kind', WorkspacePairingErrorKind.expiredCode)
+              .having(
+                  (e) => e.message, 'message', 'This pairing code has expired.')
               .having((e) => e.action, 'action',
                   'Generate a new code in Conclave AX and try again.'),
         ),
@@ -391,7 +397,8 @@ void main() {
       );
     });
 
-    test('12. reconnect to same Workspace preserves credentials and configuration',
+    test(
+        '12. reconnect to same Workspace preserves credentials and configuration',
         () async {
       final regStore = HostRegistrationStore(tempDir);
       await regStore.write(const HostRegistration(
@@ -402,8 +409,7 @@ void main() {
         hostname: 'studio.local',
         credentialRef: 'workspace-runtime:runtime-recon-1',
       ));
-      await credentialStore.write(
-          'runtime-recon-1', 'tok_reconnect_preserved');
+      await credentialStore.write('runtime-recon-1', 'tok_reconnect_preserved');
 
       final config = HostConfig.fromArgs(
         ['--data-dir', tempDir.path],
@@ -415,7 +421,8 @@ void main() {
       expect(config.authToken, 'tok_reconnect_preserved');
     });
 
-    test('13. disconnect Workspace revokes cloud runtime without deleting local workers',
+    test(
+        '13. disconnect Workspace revokes cloud runtime without deleting local workers',
         () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() => server.close(force: true));
@@ -453,20 +460,11 @@ void main() {
         idGenerator: () => 'worker-local-1',
       );
       await workerRegistry.create(
-        name: 'Claude Local',
-        workerTypeId: 'claude-code',
-        authStrategy: 'api_key',
-        credentialRef: 'worker-credential/worker-local-1',
-        defaultModel: 'claude-3-7-sonnet',
-        allowedModels: const ['claude-3-7-sonnet'],
+        catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
         localPermissions: const ['workstream_filesystem'],
         localConcurrencyLimit: 1,
-        adapterVersionPolicy: 'latest',
         status: LocalWorkerStatus.ready,
-        credentialStatus: LocalWorkerCredentialStatus.ready,
       );
-      await credentialStore.write(
-          'worker-credential/worker-local-1', 'sk-ant-test-key');
 
       // Perform disconnect
       await WorkspacePairingService.unpair(
@@ -480,12 +478,10 @@ void main() {
       expect(regStore.readSync(), isNull);
       expect(credentialStore.readSync('runtime-unpair-1'), isNull);
 
-      // Verify local worker and worker secret remain intact!
+      // Verify local Worker configuration remains intact.
       final workers = await workerRegistry.list();
       expect(workers, hasLength(1));
-      expect(workers.first.name, 'Claude Local');
-      expect(credentialStore.readSync('worker-credential/worker-local-1'),
-          'sk-ant-test-key');
+      expect(workers.first.workerTypeId, 'chatgpt');
     });
 
     test('14. re-pair after legitimate disconnect succeeds with new runtime ID',
@@ -622,17 +618,10 @@ void main() {
       );
 
       await registry.create(
-        name: 'Ollama Qwen',
-        workerTypeId: 'ollama',
-        authStrategy: 'local_endpoint',
-        credentialRef: null,
-        defaultModel: 'qwen2.5-coder:32b',
-        allowedModels: const ['qwen2.5-coder:32b'],
+        catalogEntry: logicalWorkerCatalogFixture('gemini'),
         localPermissions: const ['workstream_filesystem', 'terminal_process'],
         localConcurrencyLimit: 1,
-        adapterVersionPolicy: 'latest',
         status: LocalWorkerStatus.ready,
-        credentialStatus: LocalWorkerCredentialStatus.ready,
       );
 
       // Local workers file is separate from host-config.json
@@ -640,11 +629,12 @@ void main() {
       expect(workerFile.existsSync(), isTrue);
 
       final workers = await registry.list();
-      expect(workers.first.name, 'Ollama Qwen');
+      expect(workers.first.workerTypeId, 'gemini');
       expect(workers.first.workspaceId, localWsId);
     });
 
-    test('18. machine rename does not change Workspace identity or installation ID',
+    test(
+        '18. machine rename does not change Workspace identity or installation ID',
         () async {
       final installStore = InstallationIdentityStore(tempDir);
       final installId = await installStore.getOrCreate();

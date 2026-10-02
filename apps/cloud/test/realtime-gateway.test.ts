@@ -74,11 +74,11 @@ describe("realtime gateway contract", () => {
       ),
     ).toBe(false);
     expect(scopeKey({ workspaceId: "workspace-1" })).toBe(
-      "workspaceId=workspace-1&projectId=&chatId=&runId=",
+      "workspaceId=workspace-1&projectId=&runId=",
     );
   });
 
-  it("parses v5 user, Project, and execution Workspace scopes", () => {
+  it("parses user, Project, and execution Workspace scopes", () => {
     expect(
       parseRealtimeClientMessage({
         type: "subscribe",
@@ -126,7 +126,7 @@ describe("realtime gateway contract", () => {
     });
   });
 
-  it("matches v5 scopes by Project and execution Workspace identity", () => {
+  it("matches scopes by Project and execution Workspace identity", () => {
     const event = {
       eventId: "event-1",
       type: "run.completed",
@@ -212,7 +212,7 @@ describe("realtime gateway contract", () => {
     expect(queue.depth).toBe(1);
   });
 
-  it("requires active Workspace membership and validates nested scopes", async () => {
+  it("requires Workspace ownership and validates active Project grants", async () => {
     const queries: string[] = [];
     const db = {
       prepare(query: string) {
@@ -221,14 +221,12 @@ describe("realtime gateway contract", () => {
           bind(...args: unknown[]) {
             return {
               first: async () => {
-                if (query.includes("workspace_memberships"))
-                  return { member: 1 };
-                if (query.includes("FROM projects")) {
-                  return {
-                    workspace_id:
-                      args[0] === "project-1" ? "workspace-1" : "workspace-2",
-                  };
-                }
+                if (query.includes("execution_workspaces"))
+                  return args[0] === "workspace-1" ? { owner: 1 } : null;
+                if (query.includes("workspace_project_grants"))
+                  return args[0] === "project-1" && args[1] === "workspace-1"
+                    ? { granted: 1 }
+                    : null;
                 return null;
               },
             };
@@ -248,9 +246,8 @@ describe("realtime gateway contract", () => {
         projectId: "project-2",
       }),
     ).resolves.toEqual({ allowed: false, reason: "project_access_denied" });
-    expect(
-      queries.some((query) => query.includes("workspace_memberships")),
-    ).toBe(true);
+    expect(queries.some((query) => query.includes("workspace_project_grants"))).toBe(true);
+    expect(queries.some((query) => query.includes("workspace_memberships"))).toBe(false);
   });
 
   it("revalidates suspended users and removed subscriptions", async () => {
@@ -261,7 +258,7 @@ describe("realtime gateway contract", () => {
             return {
               first: async () => {
                 if (query.includes("FROM users")) return { status: "active" };
-                if (query.includes("workspace_memberships")) return null;
+                if (query.includes("execution_workspaces")) return null;
                 return null;
               },
             };

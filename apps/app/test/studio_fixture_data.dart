@@ -50,7 +50,6 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<void> cancelWorkRequest({required String workRequestId}) async {}
 
   @override
-  @override
   Future<StudioSession> loadSession() async =>
       StudioSession(authenticated: authenticated);
 
@@ -83,13 +82,11 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<StudioProject> createProject(
           {required String name,
           String? description,
-          String? instructions,
-          String? defaultExecutionPolicy}) async =>
+          String? instructions}) async =>
       StudioProject(
         id: 'project-created',
         name: name,
         branch: '',
-        activeGoals: 0,
         lastActivity: 'Just now',
       );
 
@@ -99,7 +96,6 @@ class StudioFixtureDataSource implements StudioDataSource {
     String? name,
     String? description,
     String? instructions,
-    String? defaultExecutionPolicy,
     Map<String, dynamic>? settings,
   }) async {
     final project = studioFixtureSnapshot()
@@ -110,7 +106,6 @@ class StudioFixtureDataSource implements StudioDataSource {
       id: projectId,
       name: name ?? project?.name ?? 'Updated project',
       branch: project?.branch ?? '',
-      activeGoals: project?.activeGoals ?? 0,
       lastActivity: 'Just now',
       description: description ?? project?.description ?? '',
       instructions: instructions ?? project?.instructions ?? '',
@@ -367,15 +362,6 @@ class StudioFixtureDataSource implements StudioDataSource {
       const [];
 
   @override
-  Future<void> setWorkspaceWorkerScheduling(
-      {required String workerId, required String action}) async {}
-
-  @override
-  Future<List<StudioCredentialProfile>> loadCredentialProfiles(
-          {required String workspaceId}) async =>
-      studioFixtureSnapshot().accounts;
-
-  @override
   Future<StudioWorkspace> updateWorkspace({
     required String workspaceId,
     required String name,
@@ -456,83 +442,7 @@ class StudioFixtureDataSource implements StudioDataSource {
   Future<void> respondToRunPrompt(String runId, String response) async {}
 
   @override
-  Future<void> createGoal({
-    required String projectId,
-    required String objective,
-    required String revision,
-  }) async {}
-
-  @override
-  Future<StudioChatMessage> sendChatMessage({
-    required String projectId,
-    required String chatId,
-    required String text,
-  }) async {
-    return StudioChatMessage(
-      id: 'msg-${DateTime.now().millisecondsSinceEpoch}',
-      sender: StudioMessageSender.user,
-      text: text,
-      timestamp: 'Just now',
-    );
-  }
-
-  @override
-  Future<StudioChat> createChat({
-    required String projectId,
-    required String title,
-  }) async {
-    return StudioChat(
-      id: 'chat-${DateTime.now().millisecondsSinceEpoch}',
-      projectId: projectId,
-      title: title,
-      lastActivity: 'Just now',
-      messages: [],
-    );
-  }
-
-  @override
-  Future<StudioCredentialProfile> createCredentialProfile({
-    required String workspaceId,
-    required String displayName,
-    required String workerId,
-    required String authType,
-    required String ownerType,
-    required String sharingPolicy,
-    String? hostId,
-  }) async =>
-      StudioCredentialProfile(
-        id: 'account-created',
-        displayName: displayName,
-        owner: ownerType == 'workspace' ? 'Workspace' : 'You',
-        worker: workerId,
-        host: hostId ?? 'Cloud',
-        sharing: sharingPolicy,
-        status: authType == 'none' ? 'ready' : 'setup_required',
-      );
-
-  @override
-  Future<void> requestCredentialSetup({
-    required String workspaceId,
-    required String profileId,
-    String action = 'reauthenticate',
-  }) async {}
-
-  @override
-  Future<void> revokeCredentialProfile({
-    required String workspaceId,
-    required String profileId,
-  }) async {}
-
-  @override
   Future<void> revokeWorkspace({required String workspaceId}) async {}
-
-  @override
-  Future<void> announceWorkspaceUpdate({
-    required String workspaceId,
-    required String runtimeId,
-    String? channel,
-    String? version,
-  }) async {}
 
   @override
   Future<StudioWorkspaceEnrollment> createWorkspaceEnrollment({
@@ -550,12 +460,11 @@ class StudioFixtureDataSource implements StudioDataSource {
 
 /// Stateful fixture used by the empty-workspace onboarding test. It mirrors
 /// the production API flow closely enough to verify the shell, project
-/// creation, chat creation, and subsequent read-model refresh together.
+/// creation and subsequent read-model refresh together.
 class EmptyWorkspaceFixtureDataSource extends StudioFixtureDataSource {
   EmptyWorkspaceFixtureDataSource() : super();
 
   bool hasProject = false;
-  bool hasChat = false;
 
   @override
   Future<StudioSnapshot> loadReadModels(
@@ -571,27 +480,14 @@ class EmptyWorkspaceFixtureDataSource extends StudioFixtureDataSource {
 
   @override
   Future<StudioProject> createProject(
-      {required String name,
-      String? description,
-      String? instructions,
-      String? defaultExecutionPolicy}) async {
+      {required String name, String? description, String? instructions}) async {
     hasProject = true;
     return StudioProject(
       id: 'project-created',
       name: name,
       branch: '',
-      activeGoals: 0,
       lastActivity: 'Just now',
     );
-  }
-
-  @override
-  Future<StudioChat> createChat({
-    required String projectId,
-    required String title,
-  }) async {
-    hasChat = true;
-    return super.createChat(projectId: projectId, title: title);
   }
 
   StudioSnapshot _snapshot() {
@@ -599,23 +495,10 @@ class EmptyWorkspaceFixtureDataSource extends StudioFixtureDataSource {
       id: 'project-created',
       name: 'My first project',
       branch: '',
-      activeGoals: 0,
       lastActivity: 'Just now',
-      chats: hasChat
-          ? const [
-              StudioChat(
-                id: 'chat-created',
-                projectId: 'project-created',
-                title: 'First chat',
-                lastActivity: 'Just now',
-                messages: [],
-              ),
-            ]
-          : const [],
     );
     return studioFixtureSnapshot().copyWith(
       projects: hasProject ? [project] : const [],
-      activeChatId: hasChat ? 'chat-created' : null,
     );
   }
 }

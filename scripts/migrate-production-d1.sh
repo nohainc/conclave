@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-database_name="${CONCLAVE_PRODUCTION_D1_NAME:-conclave-production}"
+database_name="${CONCLAVE_PRODUCTION_D1_NAME:-conclave-v8-production}"
 wrangler_config="${CONCLAVE_WRANGLER_CONFIG:-${repo_root}/infra/cloudflare/app.wrangler.jsonc}"
 
 if [[ "${CONFIRM_PRODUCTION_MIGRATION:-}" != "YES" ]]; then

@@ -1,14 +1,14 @@
-# Conclave AX Landing-Page Release Gate
+# Conclave AX Public Site Release Gate
 
-The public site becomes the public entry point only when the generated release
-passes the automated gates and a human unfamiliar with Conclave AX passes the
-comprehension review below.
+The public site is ready to serve as the public entry point when automated
+checks pass and a person unfamiliar with Conclave AX can explain the product
+from the page without additional context.
 
-## Automated gate
+## Automated checks
 
-From the repository root:
+From the repository root, run the site checks defined by `package.json`:
 
-```bash
+```sh
 pnpm site:build
 pnpm site:release
 pnpm site:content
@@ -20,35 +20,33 @@ pnpm site:analytics
 pnpm site:test
 ```
 
-The release gate verifies the required routes and assets, homepage sections,
-direct `app.conclaveax.com` CTAs, privacy/terms/security links, no public
-Studio/Plugin/Agent terminology, and the `www` redirect contract. The other
-checks cover SEO metadata, social preview assets, accessibility, responsive
-behavior, performance budgets, security headers, analytics privacy, and route
-tests.
+The checks cover generated routes and assets, metadata, application links,
+accessibility structure, responsive behavior, security headers, analytics
+privacy, and performance budgets. Confirm `www.conclaveax.com` redirects to
+`https://conclaveax.com` and the primary action opens
+`https://app.conclaveax.com`.
 
-## Human comprehension review
+## Human review
 
-Ask someone who has not worked on Conclave AX to open `conclaveax.com` without
-additional explanation. Within 30–60 seconds, they should be able to answer:
+Ask someone who has not worked on Conclave AX to review the site without
+additional explanation. They should be able to answer:
 
-1. What does Conclave AX do?
-2. Why can multiple Workers improve the result?
-3. Why is a Conclave Host needed?
-4. Which action starts the product?
+1. What does Conclave AX help people do?
+2. How do Projects and Workstreams use Conclave Workspace?
+3. Where does provider CLI execution happen?
+4. How do they open the application?
 
-They should identify **Open Conclave AX** without being directed, understand
-that Accounts are external AI identities, and not confuse a Host with an AI
-model or the public site with the authenticated application.
+They should understand that execution runs through a local Workspace and that
+provider credentials stay with provider CLI software on the user's machine.
 
-## Required content checklist
+## Content checklist
 
-- `conclaveax.com` serves the public website.
-- `www.conclaveax.com` redirects to the canonical domain.
-- Homepage CTA opens `app.conclaveax.com`.
-- Hero, product explanation, workflow, Hosts, Workers, Accounts/privacy,
-  quality/verification, security/architecture, and final CTA are present.
-- SEO metadata, social preview, responsive layout, accessibility, performance,
-  security headers, custom 404, privacy, and terms are present.
-- No legacy product terminology, old architecture diagram, or unsupported
-  product promise appears in generated public HTML.
+- The public site and authenticated application have clear, separate roles.
+- Product explanation matches the current Project, Workstream, Workspace,
+  Worker, Engine, and Tool Profile architecture.
+- Security and provider claims are supported by current implementation.
+- Privacy and Terms routes are present and current.
+- No retired product concepts or unsupported capabilities appear in generated
+  public HTML.
+- Keyboard navigation, narrow layouts, zoom, reduced motion, and contrast
+  preferences remain usable.

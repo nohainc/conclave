@@ -8,6 +8,7 @@ import 'package:conclave_host/workstream_directory.dart';
 import 'package:conclave_host/workstream_marker.dart';
 import 'package:conclave_host/workstream_path.dart';
 import 'package:test/test.dart';
+import 'support/assignment_worker_fixture.dart';
 
 void main() {
   late Directory root;
@@ -96,17 +97,13 @@ void main() {
 
   test('rejects an arbitrary Cloud-provided CWD', () async {
     final handler = WorkerAssignmentHandler(
-      executor: WorkerProcessExecutor(),
-      resolve: (_) => const WorkerProcessSpec(
-        workerId: 'worker',
-        executable: 'worker',
-      ),
+      resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
       workstreamDirectoryLifecycle: WorkstreamDirectoryLifecycle(
         pathResolver: WorkstreamPathResolver(root),
       ),
     );
     await expectLater(
-      handler.prepareProcessSpec(const HostAssignmentContext(
+      handler.prepareAssignmentScope(const HostAssignmentContext(
         workspaceId: 'workspace-1',
         hostId: 'runtime-1',
         workerId: 'worker',
@@ -117,6 +114,7 @@ void main() {
         idempotencyKey: 'idem-1',
         payload: {
           'workerId': 'worker',
+          'workerTypeId': 'test-worker',
           'projectId': 'project-1',
           'workstreamId': 'workstream-1',
           'executionClass': 'stateful_workstream',

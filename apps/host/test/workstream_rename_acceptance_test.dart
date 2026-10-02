@@ -7,6 +7,7 @@ import 'package:conclave_host/workstream_directory.dart';
 import 'package:conclave_host/workstream_marker.dart';
 import 'package:conclave_host/workstream_path.dart';
 import 'package:test/test.dart';
+import 'support/assignment_worker_fixture.dart';
 
 void main() {
   test('renames during active work preserve CWD, marker, and files', () async {
@@ -16,11 +17,7 @@ void main() {
       pathResolver: WorkstreamPathResolver(root),
     );
     final handler = WorkerAssignmentHandler(
-      executor: WorkerProcessExecutor(),
-      resolve: (workerId) => WorkerProcessSpec(
-        workerId: workerId,
-        executable: 'dart',
-      ),
+      resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
       workstreamDirectoryLifecycle: lifecycle,
     );
     final context = const HostAssignmentContext(
@@ -34,6 +31,7 @@ void main() {
       idempotencyKey: 'idem-1',
       payload: {
         'workerId': 'worker-one',
+        'workerTypeId': 'test-worker',
         'projectId': 'project-1',
         'workstreamId': 'workstream-1',
         'workRequestId': 'request-1',
@@ -41,8 +39,8 @@ void main() {
       },
     );
 
-    final firstSpec = await handler.prepareProcessSpec(context);
-    final firstDirectory = Directory(firstSpec.workingDirectory!);
+    final firstScope = await handler.prepareAssignmentScope(context);
+    final firstDirectory = firstScope.workingDirectory;
     final markerBefore = await const WorkstreamMarkerStore().reuse(
       workstreamDirectory: firstDirectory,
       projectId: 'project-1',
@@ -62,9 +60,9 @@ Future<void> main() async {
 ''');
 
     final firstProcess = await Process.start(
-      firstSpec.executable,
+      Platform.resolvedExecutable,
       [firstWorkerScript.path],
-      workingDirectory: firstSpec.workingDirectory,
+      workingDirectory: firstDirectory.path,
       runInShell: false,
     );
     unawaited(firstProcess.stdout.drain());
@@ -81,16 +79,17 @@ Future<void> main() async {
     expect(projectName, 'Renamed Project');
     expect(workstreamName, 'Renamed Again');
 
-    final secondSpec = await handler.prepareProcessSpec(
+    final secondScope = await handler.prepareAssignmentScope(
       context.copyWith(
         workerId: 'worker-two',
         payload: {
           ...context.payload,
           'workerId': 'worker-two',
+          'workerTypeId': 'test-worker',
         },
       ),
     );
-    expect(secondSpec.workingDirectory, firstSpec.workingDirectory);
+    expect(secondScope.workingDirectory.path, firstDirectory.path);
     expect(await firstDirectory.exists(), isTrue);
     final markerAfter = await const WorkstreamMarkerStore().reuse(
       workstreamDirectory: firstDirectory,
@@ -110,9 +109,9 @@ Future<void> main() async {
 }
 ''');
     final secondProcess = await Process.start(
-      secondSpec.executable,
+      Platform.resolvedExecutable,
       [secondWorkerScript.path],
-      workingDirectory: secondSpec.workingDirectory,
+      workingDirectory: secondScope.workingDirectory.path,
       runInShell: false,
     );
     unawaited(secondProcess.stdout.drain());

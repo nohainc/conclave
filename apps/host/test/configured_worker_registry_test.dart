@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/tool_profile_catalog.dart';
+
+import 'support/logical_worker_catalog_fixture.dart';
 
 void main() {
   late Directory directory;
@@ -29,12 +30,9 @@ void main() {
     if (await directory.exists()) await directory.delete(recursive: true);
   });
 
-  test('persists fixed product slot identity and local operational state',
-      () async {
+  test('persists only local execution state for a catalog Worker', () async {
     final worker = await registry.create(
-      name: 'Ignored alias',
-      workerTypeId: 'codex',
-      authStrategy: 'browser_auth',
+      catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
       localPermissions: const ['workspace_read'],
       localConcurrencyLimit: 2,
     );
@@ -55,7 +53,7 @@ void main() {
       await File('${directory.path}/configured-workers.json').readAsString(),
     ) as Map<String, dynamic>;
     final record = (document['workers'] as List).single as Map;
-    expect(document['schemaVersion'], 17);
+    expect(document['schemaVersion'], 18);
     expect(record['workerId'], worker.id);
     expect(record['productWorkerTypeId'], 'chatgpt');
     expect(record['activationState'], 'enabled');
@@ -71,8 +69,6 @@ void main() {
       'credentialRef',
       'defaultModel',
       'allowedModels',
-      'adapterConfig',
-      'adapterVersionPolicy',
       'status',
       'credentialStatus',
     ]) {
@@ -84,9 +80,7 @@ void main() {
 
   test('rejects legacy and unknown fields in the current schema', () async {
     final worker = await registry.create(
-      name: 'ChatGPT',
-      workerTypeId: 'chatgpt',
-      authStrategy: 'browser_auth',
+      catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
     );
     expect(
       () => LocalConfiguredWorker.fromJson({
@@ -104,38 +98,21 @@ void main() {
     );
   });
 
-  test('keeps one stable slot per first-party product type', () async {
+  test('keeps one local slot per Worker Type from the catalog', () async {
     final chatgpt = await registry.create(
-      name: 'Custom name',
-      workerTypeId: 'chatgpt',
-      authStrategy: 'browser_auth',
+      catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
     );
-    expect(chatgpt.name, 'ChatGPT');
     expect(chatgpt.workerTypeId, 'chatgpt');
     await registry.create(
-      name: 'Gemini',
-      workerTypeId: 'gemini',
-      authStrategy: 'browser_auth',
+      catalogEntry: logicalWorkerCatalogFixture('gemini'),
     );
     await expectLater(
-      registry.create(
-        name: 'Duplicate',
-        workerTypeId: 'chatgpt',
-        authStrategy: 'browser_auth',
-      ),
-      throwsArgumentError,
-    );
-    await expectLater(
-      registry.create(
-        name: 'Unsupported',
-        workerTypeId: 'claude',
-        authStrategy: 'browser_auth',
-      ),
+      registry.create(catalogEntry: logicalWorkerCatalogFixture('chatgpt')),
       throwsArgumentError,
     );
   });
 
-  test('creates a future logical Worker only from an approved catalog entry',
+  test('creates logical Workers from catalog entries, including future types',
       () async {
     const entry = LogicalWorkerCatalogEntry(
       workerTypeId: 'approved-cli',
@@ -148,80 +125,69 @@ void main() {
       capabilities: ['text'],
       sortOrder: 30,
     );
-    final worker = await registry.create(
-      name: entry.displayName,
-      workerTypeId: entry.workerTypeId,
-      approvedCatalogEntry: entry,
-      authStrategy: 'browser_auth',
-    );
+    final worker = await registry.create(catalogEntry: entry);
     expect(worker.workerTypeId, 'approved-cli');
-
-    await expectLater(
-      registry.create(
-        name: 'Unapproved',
-        workerTypeId: 'unapproved-cli',
-        authStrategy: 'browser_auth',
+    expect(
+      () => registry.create(
+        catalogEntry: const LogicalWorkerCatalogEntry(
+          workerTypeId: 'invalid',
+          displayName: 'Invalid',
+          description: '',
+          profileDefinitionId: 'invalid-profile',
+          providerToolName: 'invalid',
+          engineFamily: 'native',
+          releaseStage: 'testing',
+          capabilities: ['text'],
+          sortOrder: 1,
+        ),
       ),
       throwsArgumentError,
     );
   });
 
-  test('schema 17 resets legacy fields and preserves fixed slot IDs', () async {
-    final oldRecords = [
-      _legacyRecord(id: 'stable-chatgpt', type: 'codex'),
-      _legacyRecord(
-        id: 'duplicate-chatgpt',
-        type: 'chatgpt',
-        model: 'gpt-test',
-      ),
-      _legacyRecord(id: 'stable-gemini', type: 'antigravity'),
-      _legacyRecord(id: 'old-claude', type: 'claude'),
-    ];
+  test(
+      'schema reset clears registry but preserves profiles, state, and Work Root',
+      () async {
+    final oldDocument = jsonEncode({
+      'schemaVersion': 17,
+      'workers': [
+        {
+          'workerId': 'old-chatgpt',
+          'workspaceId': 'workspace-1',
+          'productWorkerTypeId': 'chatgpt',
+          'authStrategy': 'browser_auth',
+          'localPermissions': ['workspace_read'],
+        }
+      ],
+      'checksum': 'legacy-checksum-is-not-interpreted',
+    });
     final file = File('${directory.path}/configured-workers.json');
-    await file.writeAsString(_legacyDocument(16, oldRecords));
-    final cleanedIds = <String>[];
-    final removedCredentialReferences = <String>[];
-    final migratingRegistry = LocalConfiguredWorkerRegistry(
-      dataDirectory: directory,
-      workspaceId: 'workspace-1',
-      clock: () => instant,
-      idGenerator: () => 'unused',
-      onWorkerRemoving: (workerId) async => cleanedIds.add(workerId),
-      onLegacyCredentialReference: (reference) async =>
-          removedCredentialReferences.add(reference),
-    );
-
-    final workers = await migratingRegistry.list();
-    expect(workers.map((worker) => worker.id),
-        ['duplicate-chatgpt', 'stable-gemini']);
-    expect(workers.map((worker) => worker.workerTypeId), ['chatgpt', 'gemini']);
-    expect(workers.first.readinessIssueCode, 'worker_reconfigured');
-    expect(workers.first.readinessState, WorkerReadinessState.testFailed);
-    expect(workers.first.localPermissions, ['workspace_read']);
-    expect(cleanedIds, containsAll(['stable-chatgpt', 'old-claude']));
-    expect(
-      removedCredentialReferences,
-      containsAll([
-        'worker-credential/stable-chatgpt',
-        'worker-credential/duplicate-chatgpt',
-        'worker-credential/stable-gemini',
-        'worker-credential/old-claude',
-      ]),
-    );
-
-    final document = jsonDecode(await file.readAsString()) as Map;
-    expect(document['schemaVersion'], 17);
-    final savedRecords = document['workers'] as List;
-    expect(savedRecords.every((record) => record is Map), isTrue);
-    expect(savedRecords.first, isNot(contains('defaultModel')));
-    expect(savedRecords.first, isNot(contains('adapterConfig')));
+    final preservedFiles = [
+      File('${directory.path}/Profiles/worker-catalog.json'),
+      File('${directory.path}/Engines/cli_worker/engine'),
+      File('${directory.path}/Workers/worker-old/state/session.json'),
+      File('${directory.path}/Workers/worker-old/logs/worker.jsonl'),
+      File('${directory.path}/Work/workstream/notes.txt'),
+    ];
+    for (final preserved in preservedFiles) {
+      await preserved.create(recursive: true);
+      await preserved.writeAsString('preserve');
+    }
+    await file.writeAsString(oldDocument);
+    final workers = await registry.list();
+    expect(workers, isEmpty);
+    final reset = jsonDecode(await file.readAsString()) as Map;
+    expect(reset['schemaVersion'], 18);
+    expect(reset['workers'], isEmpty);
+    for (final preserved in preservedFiles) {
+      expect(await preserved.readAsString(), 'preserve',
+          reason: preserved.path);
+    }
   });
 
-  test('removal disables a slot without creating a legacy tombstone', () async {
+  test('removal disables a slot without creating a tombstone', () async {
     final worker = await registry.create(
-      name: 'Gemini',
-      workerTypeId: 'gemini',
-      authStrategy: 'browser_auth',
+      catalogEntry: logicalWorkerCatalogFixture('gemini'),
     );
     await registry.remove(worker.id);
 
@@ -234,50 +200,21 @@ void main() {
     expect((saved['workers'] as List).single, isNot(contains('status')));
   });
 
-  test('backup uses the clean schema and excludes provider secrets', () async {
+  test('backup uses current schema and excludes provider configuration',
+      () async {
     await registry.create(
-      name: 'ChatGPT',
-      workerTypeId: 'chatgpt',
-      authStrategy: 'browser_auth',
-      credentialRef: 'must-not-persist',
+      catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
     );
     final backup = jsonDecode(await registry.exportBackup()) as Map;
-    expect(backup['schemaVersion'], 17);
-    expect(jsonEncode(backup), isNot(contains('credentialRef')));
-    expect(jsonEncode(backup), isNot(contains('authStrategy')));
-  });
-}
-
-Map<String, Object?> _legacyRecord({
-  required String id,
-  required String type,
-  String? model,
-}) =>
-    {
-      'id': id,
-      'workspaceId': 'workspace-1',
-      'name': 'Legacy $type',
-      'workerTypeId': type,
-      'authStrategy': 'browser_auth',
-      'credentialRef': 'worker-credential/$id',
-      'defaultModel': model,
-      'adapterConfig': <String, Object?>{'legacy': true},
-      'allowedModels': model == null ? <String>[] : <String>[model],
-      'localPermissions': <String>['workspace_read'],
-      'localConcurrencyLimit': 2,
-      'adapterVersionPolicy': 'latest',
-      'status': 'ready',
-      'readinessState': 'ready',
-      'credentialStatus': 'ready',
-      'revision': 4,
-      'createdAt': '2026-09-26T00:00:00.000Z',
-      'updatedAt': '2026-09-27T00:00:00.000Z',
-    };
-
-String _legacyDocument(int schemaVersion, List<Map<String, Object?>> workers) {
-  final body = {'schemaVersion': schemaVersion, 'workers': workers};
-  return jsonEncode({
-    ...body,
-    'checksum': sha256.convert(utf8.encode(jsonEncode(body))).toString(),
+    expect(backup['schemaVersion'], 18);
+    for (final legacy in [
+      'credentialRef',
+      'authStrategy',
+      'defaultModel',
+      'allowedModels',
+      'credentialStatus',
+    ]) {
+      expect(jsonEncode(backup), isNot(contains(legacy)));
+    }
   });
 }

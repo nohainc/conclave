@@ -1,16 +1,14 @@
 # ADR-009: Workstreams and Isolated Execution
 
-**Status:** Accepted; Workstream isolation and Primary Workspace rules remain current under Architecture v7. Any Worker ownership or binding assumptions are superseded by ADR-012.
+**Status:** Accepted; current Workstream isolation and Primary Workspace rules. Worker ownership and execution boundaries follow [ADR-012](ADR-012-workspace-owned-local-workers.md) and [ADR-015](ADR-015-first-party-worker-v1-contract.md).
 **Date:** 2026-09-24  
-**Builds on:** ADR-008 / Architecture v5
+**Builds on:** ADR-008
 
 ## Context
 
-Architecture v5 correctly separates Project collaboration from Workspace execution, but the implemented product still treats Chat as both:
-- human conversation; and
-- a potential execution trigger.
-
-It also needs a stable isolation boundary so parallel Workstreams never mutate the same local working directory.
+Project collaboration and machine execution need a stable isolation boundary so
+parallel Workstreams never mutate the same local working directory. Discuss is
+human collaboration; Work is an explicit execution request.
 
 For a shared Project with several collaborators, this creates two product risks:
 

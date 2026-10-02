@@ -130,7 +130,6 @@ void main() {
       expect(find.text('Workspaces'), findsOneWidget);
       expect(find.byType(TabBar), findsNothing);
       expect(find.text(snapshot.workspaces.first.name), findsOneWidget);
-      expect(find.widgetWithText(Tab, 'AI Accounts'), findsNothing);
 
       expect(find.byTooltip('Connect Workspace'), findsNothing);
       expect(find.text('Rename'), findsNothing);
@@ -319,7 +318,7 @@ void main() {
       expect(targetShape.side.color, isNot(Colors.transparent));
     });
 
-    testWidgets('expanded Workspace lists its V7 Worker projections',
+    testWidgets('expanded Workspace lists its Worker projections',
         (tester) async {
       final snapshot = studioFixtureSnapshot();
       const localWorker = StudioWorker(
@@ -343,7 +342,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('ChatGPT'), findsNWidgets(2));
       expect(find.text('Codex Personal'), findsNothing);
-      expect(find.text('AI Accounts'), findsNothing);
       expect(find.byTooltip('Remove binding'), findsNothing);
     });
 

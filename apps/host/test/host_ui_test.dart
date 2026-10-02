@@ -8,10 +8,15 @@ import 'package:conclave_host/desktop_auth.dart';
 import 'package:conclave_host/main.dart';
 import 'package:conclave_host/platform_runtime.dart';
 import 'package:conclave_host/secure_credentials.dart';
+import 'package:conclave_host/tool_profile_catalog.dart';
+import 'package:conclave_host/tool_profile_release_store.dart';
+import 'package:conclave_host/worker_trust_policy.dart';
 import 'package:conclave_host/worker_readiness.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/logical_worker_catalog_fixture.dart';
 
 class _TestPlatformRuntime implements PlatformRuntime {
   @override
@@ -94,19 +99,11 @@ LocalConfiguredWorker _disabledChatGptWorker({
     LocalConfiguredWorker(
       id: 'w-chatgpt-disabled',
       workspaceId: 'ws-test',
-      name: 'ChatGPT',
       workerTypeId: 'chatgpt',
-      authStrategy: 'browser_auth',
-      credentialRef: null,
-      defaultModel: null,
-      adapterConfig: const {},
-      allowedModels: const [],
       localPermissions: const ['workstream_filesystem', 'shell_execution'],
       localConcurrencyLimit: 1,
-      adapterVersionPolicy: null,
       status: LocalWorkerStatus.disabled,
       readinessState: readinessState,
-      credentialStatus: LocalWorkerCredentialStatus.ready,
       revision: 1,
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-01T00:00:00Z',
@@ -199,8 +196,33 @@ void main() {
     Future<void> Function({LocalWorkerProbeMode mode, String? workerTypeId})?
         onReadinessCheck,
     SecureCredentialStore? credentialStore,
+    ToolProfileCatalogClient? toolProfileCatalog,
     bool signedIn = false,
   }) async {
+    final profileDirectory = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('host-ui-catalog-'),
+    ))!;
+    addTearDown(
+      () => tester.runAsync(() => profileDirectory.delete(recursive: true)),
+    );
+    final trustPolicy = WorkerTrustPolicy();
+    final catalog = toolProfileCatalog ??
+        ToolProfileCatalogClient(
+          cloudUri: Uri.parse('https://catalog.test'),
+          store: ToolProfileReleaseStore(
+            profilesRoot: profileDirectory,
+            trustPolicy: trustPolicy,
+          ),
+          trustPolicy: trustPolicy,
+          workerCatalogLoader: () async => [
+            logicalWorkerCatalogFixture('chatgpt').toJson(),
+            logicalWorkerCatalogFixture('gemini').toJson(),
+          ],
+        );
+    if (toolProfileCatalog == null) {
+      await tester.runAsync(catalog.syncCatalog);
+    }
+    addTearDown(catalog.close);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -221,6 +243,7 @@ void main() {
             onChangeWorkRoot: onChangeWorkRoot,
             onReadinessCheck: onReadinessCheck,
             localWorkerRegistry: localWorkerRegistry,
+            toolProfileCatalog: catalog,
             // Build-time widget tests must never read the developer's actual
             // Keychain. Tests covering Keychain behavior provide a mocked
             // native bridge explicitly.
@@ -468,8 +491,6 @@ void main() {
     expect(find.text('Workers'), findsWidgets);
     await tester.tap(find.text('Workers').first);
     await tester.pumpAndSettle();
-    expect(find.text('ChatGPT'), findsOneWidget);
-    expect(find.text('Gemini'), findsOneWidget);
     await tester.tap(find.text('Workspace').first);
     await tester.pumpAndSettle();
     expect(find.text('Connect'), findsOneWidget);
@@ -1206,7 +1227,6 @@ void main() {
       ),
       localWorkerRegistry: _FakeWorkerRegistry([]),
     );
-
     await tester.tap(find.text('Workers').first);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('worker-catalog-chatgpt')));
@@ -1240,19 +1260,11 @@ void main() {
     final chatGptWorker = LocalConfiguredWorker(
       id: 'w-chatgpt',
       workspaceId: 'ws-test',
-      name: 'ChatGPT local',
       workerTypeId: 'chatgpt',
-      authStrategy: 'browser_auth',
-      credentialRef: null,
-      defaultModel: null,
-      adapterConfig: const {},
-      allowedModels: const [],
       localPermissions: const ['workstream_filesystem', 'shell_execution'],
       localConcurrencyLimit: 1,
-      adapterVersionPolicy: null,
       status: LocalWorkerStatus.disabled,
       readinessState: WorkerReadinessState.runtimeUnavailable,
-      credentialStatus: LocalWorkerCredentialStatus.ready,
       revision: 1,
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-01T00:00:00Z',
@@ -1268,19 +1280,11 @@ void main() {
     final geminiWorker = LocalConfiguredWorker(
       id: 'w-gemini',
       workspaceId: 'ws-test',
-      name: 'Gemini',
       workerTypeId: 'gemini',
-      authStrategy: 'browser_auth',
-      credentialRef: null,
-      defaultModel: null,
-      adapterConfig: const {},
-      allowedModels: const [],
       localPermissions: const ['workstream_filesystem', 'shell_execution'],
       localConcurrencyLimit: 1,
-      adapterVersionPolicy: null,
       status: LocalWorkerStatus.needsAttention,
       readinessState: WorkerReadinessState.setupRequired,
-      credentialStatus: LocalWorkerCredentialStatus.ready,
       revision: 1,
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-01T00:00:00Z',
@@ -1517,19 +1521,11 @@ void main() {
     final worker = LocalConfiguredWorker(
       id: 'w-chatgpt-toggle',
       workspaceId: 'ws-test',
-      name: 'ChatGPT',
       workerTypeId: 'chatgpt',
-      authStrategy: 'browser_auth',
-      credentialRef: null,
-      defaultModel: null,
-      adapterConfig: const {},
-      allowedModels: const [],
       localPermissions: const ['workstream_filesystem', 'shell_execution'],
       localConcurrencyLimit: 1,
-      adapterVersionPolicy: null,
       status: LocalWorkerStatus.ready,
       readinessState: WorkerReadinessState.ready,
-      credentialStatus: LocalWorkerCredentialStatus.ready,
       revision: 1,
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-01T00:00:00Z',
@@ -1573,34 +1569,25 @@ void main() {
     expect(registry.workers.single.lastLiveTestAt, isNull);
   });
 
-  testWidgets(
-      'legacy Worker records stay stored but are absent from v1 catalog',
+  testWidgets('unrecognized Worker types are absent from the catalog',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final legacyWorker = LocalConfiguredWorker(
-      id: 'w-legacy',
+    final unknownWorker = LocalConfiguredWorker(
+      id: 'w-unknown',
       workspaceId: 'ws-test',
-      name: 'Primary Claude Worker',
-      workerTypeId: 'claude-code',
-      authStrategy: 'browser_auth',
-      credentialRef: 'cred-1',
-      defaultModel: 'claude-3-7-sonnet',
-      adapterConfig: const {},
-      allowedModels: const ['claude-3-7-sonnet'],
+      workerTypeId: 'internal-tool',
       localPermissions: const ['workstream_filesystem'],
       localConcurrencyLimit: 1,
-      adapterVersionPolicy: 'latest',
       status: LocalWorkerStatus.ready,
-      credentialStatus: LocalWorkerCredentialStatus.ready,
       revision: 1,
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-01T00:00:00Z',
     );
-    final registry = _FakeWorkerRegistry([legacyWorker]);
+    final registry = _FakeWorkerRegistry([unknownWorker]);
 
     await pumpDashboard(
       tester,
@@ -1620,38 +1607,25 @@ void main() {
 
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
-    expect(find.text('Primary Claude Worker'), findsNothing);
-    expect(find.text('Claude Code'), findsNothing);
-    expect((await registry.list()).single.id, legacyWorker.id);
+    expect(find.text('internal-tool'), findsNothing);
+    expect((await registry.list()).single.id, unknownWorker.id);
   });
 
   group('deriveLocalWorkerHealth', () {
     LocalConfiguredWorker makeWorker({
       LocalWorkerStatus status = LocalWorkerStatus.ready,
       WorkerReadinessState readinessState = WorkerReadinessState.ready,
-      LocalWorkerCredentialStatus credentialStatus =
-          LocalWorkerCredentialStatus.ready,
-      String authStrategy = 'browser_auth',
       List<String> permissions = const ['workstream_filesystem'],
-      Map<String, Object?> adapterConfig = const {},
       String? readinessIssueCode,
     }) {
       return LocalConfiguredWorker(
         id: 'worker-1',
         workspaceId: 'ws-1',
-        name: 'Test Worker',
-        workerTypeId: 'claude-code',
-        authStrategy: authStrategy,
-        credentialRef: 'cred-1',
-        defaultModel: 'claude-3-7-sonnet',
-        adapterConfig: adapterConfig,
-        allowedModels: const ['claude-3-7-sonnet'],
+        workerTypeId: 'chatgpt',
         localPermissions: permissions,
         localConcurrencyLimit: 2,
-        adapterVersionPolicy: 'latest',
         status: status,
         readinessState: readinessState,
-        credentialStatus: credentialStatus,
         readinessIssueCode: readinessIssueCode,
         revision: 42,
         createdAt: '2026-01-01T00:00:00Z',

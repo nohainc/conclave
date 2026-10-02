@@ -9,7 +9,36 @@ permissions:
   contents: read
 
 jobs:
-  v7-runtime-e2e:
+  engine-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: dart pub get
+        working-directory: engines/cli_worker
+      - name: CLI Worker Engine tests
+        run: dart test
+        working-directory: engines/cli_worker
+
+  profile-fixture-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Tool Profile fixture and interpreter tests
+        run: pnpm exec vitest run packages/tool-profile/test/profile-fixture-harness.test.ts packages/tool-profile/test/interpreter.test.ts
+
+  profile-security-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,8 +56,64 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: flutter pub get
         working-directory: apps/host
-      - name: Cloud to Workspace E2E with fixture and fake provider CLIs
-        run: DART_EXECUTABLE="$(command -v dart)" pnpm exec vitest run apps/cloud/test/v7-runtime-e2e.acceptance.test.ts apps/cloud/test/v7-inventory-recovery.acceptance.test.ts
+      - name: Profile schema and release security tests
+        run: pnpm exec vitest run packages/tool-profile/test/profile-schema.test.ts packages/security/test apps/cloud/test/tool-profile-release-domain.test.ts
+      - name: Workspace Profile signature and trust tests
+        run: flutter test test/tool_profile_release_verifier_test.dart test/trust_policy_test.dart
+        working-directory: apps/host
+
+  workspace-runtime-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        working-directory: apps/host
+      - name: Workspace runtime and readiness tests
+        run: DART_EXECUTABLE="$(command -v dart)" flutter test --concurrency=1 test/cli_worker_engine_readiness_test.dart test/cli_worker_engine_supervisor_test.dart test/configured_worker_registry_test.dart test/tool_profile_resolver_test.dart test/worker_readiness_test.dart test/workspace_paths_test.dart
+        working-directory: apps/host
+
+  v8-runtime-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: pnpm install --frozen-lockfile
+      - run: flutter pub get
+        working-directory: apps/host
+      - name: Clean v8 schema acceptance
+        run: pnpm exec vitest run apps/cloud/test/v8-schema-clean-room-acceptance.test.ts
+      - name: Workspace executes a fixture CLI through Engine and Profile
+        run: DART_EXECUTABLE="$(command -v dart)" flutter test --concurrency=1 test/fixture_cli_profile_acceptance_test.dart
+        working-directory: apps/host
+
+  work-v1-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Cloud Work v1 workflows across the v8 Worker boundary
+        run: pnpm exec vitest run apps/cloud/test/work-v1-v8-regression.acceptance.test.ts
 
   typescript:
     runs-on: ubuntu-latest
@@ -50,12 +135,7 @@ jobs:
       - run: pnpm host:architecture-check
       - run: pnpm production:preflight
       - run: pnpm auth:access-guard
-      - run: pnpm v4:architecture-guard
-      - name: Fake CLI adapter and protocol tests
-        run: pnpm worker-adapters:test
       - run: pnpm check
-      - name: Real Cloud/D1 application E2E
-        run: pnpm app:e2e
       - run: ../../node_modules/.bin/wrangler check startup
         working-directory: apps/cloud
       - run: ../../node_modules/.bin/wrangler check startup --config forge-execution.wrangler.jsonc
@@ -145,7 +225,19 @@ jobs:
 
   publish-evidence:
     if: ${{ vars.CONCLAVE_CI_INGEST_URL != '' && vars.CONCLAVE_RUN_ID != '' }}
-    needs: [typescript, app-flutter, site-astro, host-flutter]
+    needs:
+      [
+        typescript,
+        engine-tests,
+        profile-fixture-tests,
+        profile-security-tests,
+        workspace-runtime-tests,
+        v8-runtime-e2e,
+        work-v1-e2e,
+        app-flutter,
+        site-astro,
+        host-flutter,
+      ]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -180,7 +272,7 @@ jobs:
                 {name: "Host Dart", status: "passed", command: "dart analyze && dart test", exitCode: 0, artifactIds: []}
               ],
               smokeTests: ["Cloud startup analysis passed"],
-              healthChecks: ["Architecture v4 CI checks passed"],
+              healthChecks: ["Architecture v8 CI checks passed"],
               observedAt: $observedAt
             }')
           curl --fail-with-body --silent --show-error \

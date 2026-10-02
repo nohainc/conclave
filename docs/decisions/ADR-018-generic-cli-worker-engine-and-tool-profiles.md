@@ -2,12 +2,12 @@
 
 **Status:** Accepted for Architecture v8 implementation  
 **Date:** 2026-10-01  
-**Supersedes/refines:** ADR-017 first-party per-provider executable implementation  
+**Decision:** one generic Engine with signed Tool Profiles for all supported local CLI Workers.
 **Preserves:** ADR-012 Workspace ownership, ADR-015 logical Worker catalog, ADR-016 AX-owned Worker usage
 
 ## Context
 
-Worker Runtime v2 proved the correct process and security boundaries:
+The runtime requires a clear process and security boundary:
 
 ~~~text
 Conclave Workspace
@@ -15,19 +15,8 @@ Conclave Workspace
 -> provider CLI
 ~~~
 
-It also proved that provider-specific code should not live in Workspace.
-
-The first v2 implementation compiled a separate Dart Worker executable for each
-logical provider integration, for example:
-
-~~~text
-ChatGPT Worker -> Codex CLI
-Gemini Worker  -> agy
-~~~
-
-That design works, but it scales poorly when Conclave supports many local CLI
-tools or when provider CLIs change frequently. Most of the implementation is
-already common: process supervision, executable discovery, environment
+Provider-specific behavior should not require a separate Workspace executable.
+Process supervision, executable discovery, environment
 construction, streaming, output limits, deadlines, cancellation, session
 storage, logging, diagnostics, and the Local Worker Protocol. The remaining
 differences are mostly declarative provider/tool behavior:
@@ -44,9 +33,8 @@ differences are mostly declarative provider/tool behavior:
 - stable error mappings;
 - provider environment allowlist.
 
-Rebuilding, signing, and distributing one native Worker binary per provider for
-changes that can be represented safely as data creates unnecessary operational
-cost.
+When behavior can be represented safely as bounded, signed data, a shared
+engine avoids duplicating common runtime code.
 
 ## Decision
 
@@ -543,20 +531,12 @@ MCP Engine         -> future MCP Profiles
 
 Do not force non-CLI integrations into command-line emulation.
 
-## 21. Pre-production migration may be aggressive
+## 21. Scope
 
-Conclave is not yet production-bound by the v7/v2 provider-specific Worker
-release model.
-
-After v8 acceptance:
-- delete provider-specific ChatGPT/Gemini Worker binaries;
-- remove per-provider native Worker release distribution;
-- remove provider-specific Worker source packages replaced by profiles;
-- replace Worker release catalog semantics with engine + profile releases;
-- remove v2 compatibility aliases not needed by supported builds;
-- consolidate development database migrations where safe.
-
-The logical ChatGPT/Gemini Worker IDs and Workstream bindings remain stable.
+Conclave uses one generic CLI Worker Engine and signed Tool Profiles for normal
+CLI execution. Logical ChatGPT/Gemini Worker IDs and Workstream bindings remain
+stable across Engine and Profile releases. Release status and acceptance
+evidence are tracked in the [v8 implementation plan](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
 
 ## Consequences
 

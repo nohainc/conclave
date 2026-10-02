@@ -2,59 +2,12 @@ import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
 
-enum WorkerPermission {
-  readWorkspace,
-  writeWorkspace,
-  shell,
-  network,
-  networkOpenAi,
-  networkGoogle,
-  networkAnthropic,
-  credentials
-}
-
-extension WorkerPermissionWire on WorkerPermission {
-  String get wireName => switch (this) {
-        WorkerPermission.readWorkspace => 'workspace:read',
-        WorkerPermission.writeWorkspace => 'workspace:write',
-        WorkerPermission.shell => 'shell:execute',
-        WorkerPermission.network => 'network:outbound',
-        WorkerPermission.networkOpenAi => 'network:openai',
-        WorkerPermission.networkGoogle => 'network:google',
-        WorkerPermission.networkAnthropic => 'network:anthropic',
-        WorkerPermission.credentials => 'credentials:read',
-      };
-}
-
-WorkerPermission parseWorkerPermission(String value) => switch (value) {
-      'readWorkspace' || 'workspace:read' => WorkerPermission.readWorkspace,
-      'writeWorkspace' || 'workspace:write' => WorkerPermission.writeWorkspace,
-      'shell' || 'shell:execute' => WorkerPermission.shell,
-      'network' || 'network:outbound' => WorkerPermission.network,
-      'network:openai' => WorkerPermission.networkOpenAi,
-      'network:google' => WorkerPermission.networkGoogle,
-      'network:anthropic' => WorkerPermission.networkAnthropic,
-      'credentials' || 'credentials:read' => WorkerPermission.credentials,
-      _ => throw StateError('unknown worker permission: $value'),
-    };
-
-Set<WorkerPermission> parseConfiguredWorkerPermissions(String? configured) {
-  if (configured == null || configured.trim().isEmpty) return {};
-  return configured
-      .split(',')
-      .map((permission) => permission.trim())
-      .where((permission) => permission.isNotEmpty)
-      .map(parseWorkerPermission)
-      .toSet();
-}
-
 /// Public verification roots shipped with Workspace. Values are base64 raw
 /// Ed25519 public keys, keyed by publisher and explicit key ID. This class
 /// never accepts signing secrets.
 class WorkerTrustPolicy {
   WorkerTrustPolicy({
     Map<String, Map<String, String>> trustedPublicKeys = const {},
-    this.allowUnsignedDevelopmentReleases = false,
     Set<String> revokedDigests = const {},
     Set<String> revokedPublishers = const {},
     Set<String> revokedKeyIds = const {},
@@ -70,9 +23,6 @@ class WorkerTrustPolicy {
 
   final Map<String, Map<String, String>> trustedPublicKeys;
 
-  /// Permits only the explicit local-development manifest marker. Workspace
-  /// enables this only in debug builds when its development define is set.
-  final bool allowUnsignedDevelopmentReleases;
   Set<String> _revokedDigests;
   Set<String> _revokedPublishers;
   Set<String> _revokedKeyIds;
@@ -154,79 +104,7 @@ class WorkerTrustPolicy {
     );
   }
 
-  Future<bool> verifyAdapterManifest({
-    required String publisher,
-    required String signingKeyId,
-    required String digest,
-    required String signature,
-    required Map<String, Object?> manifest,
-  }) async {
-    final releaseId =
-        '${manifest['workerTypeId']}@${manifest['adapterVersion']}';
-    if (_revokedDigests.contains(digest) ||
-        _revokedPublishers.contains(publisher) ||
-        _revokedKeyIds.contains(signingKeyId) ||
-        _revokedReleaseIds.contains(releaseId)) {
-      return false;
-    }
-    final unsigned = Map<String, Object?>.from(manifest)..remove('signature');
-    final payload = 'conclave-v7-adapter-release-v1\n$digest\n'
-        '${canonicalJson(unsigned)}';
-    return _verifySignature(
-      publisher: publisher,
-      signingKeyId: signingKeyId,
-      signature: signature,
-      message: utf8.encode(payload),
-    );
-  }
-
-  /// Verifies signed, provider-neutral Worker release manifest v2 metadata.
-  Future<bool> verifyWorkerReleaseManifest(
-    Map<String, Object?> manifest,
-  ) async {
-    final publisher = manifest['publisher'];
-    final signingKeyId = manifest['signingKeyId'];
-    final digest = manifest['packageDigest'];
-    final workerTypeId = manifest['workerTypeId'];
-    final workerVersion = manifest['workerVersion'];
-    final signature = manifest['signature'];
-    if (publisher is! String ||
-        signingKeyId is! String ||
-        digest is! String ||
-        workerTypeId is! String ||
-        workerVersion is! String ||
-        signature is! String) {
-      return false;
-    }
-    if (allowUnsignedDevelopmentReleases &&
-        publisher == 'local-development' &&
-        manifest['releaseChannel'] == 'development' &&
-        signingKeyId == 'unsigned-development' &&
-        signature == 'unsigned-development' &&
-        !_revokedDigests.contains(digest) &&
-        !_revokedPublishers.contains(publisher) &&
-        !_revokedKeyIds.contains(signingKeyId) &&
-        !_revokedReleaseIds.contains('$workerTypeId@$workerVersion')) {
-      return true;
-    }
-    if (_revokedDigests.contains(digest) ||
-        _revokedPublishers.contains(publisher) ||
-        _revokedKeyIds.contains(signingKeyId) ||
-        _revokedReleaseIds.contains('$workerTypeId@$workerVersion')) {
-      return false;
-    }
-    final unsigned = Map<String, Object?>.from(manifest)..remove('signature');
-    return _verifySignature(
-      publisher: publisher,
-      signingKeyId: signingKeyId,
-      signature: signature,
-      message: utf8.encode(
-        'conclave-worker-release-manifest-v2\n${canonicalJson(unsigned)}',
-      ),
-    );
-  }
-
-  Future<bool> verifyHostRelease({
+  Future<bool> verifyWorkspaceRelease({
     required String publisher,
     required String signingKeyId,
     required String digest,
@@ -275,14 +153,6 @@ class WorkerTrustPolicy {
       );
     } on Object {
       return false;
-    }
-  }
-
-  void requirePermissions(
-      Iterable<WorkerPermission> declared, Iterable<WorkerPermission> allowed) {
-    final allow = allowed.toSet();
-    if (!declared.every(allow.contains)) {
-      throw StateError('worker requested a denied permission');
     }
   }
 }

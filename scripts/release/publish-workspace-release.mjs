@@ -33,7 +33,7 @@ const packageDigest = `sha256:${createHash("sha256").update(archive).digest("hex
 const metadata = {
   version,
   channel,
-  minSupportedHostVersion: null,
+  minSupportedWorkspaceVersion: null,
   supportedOS: ["macos"],
   supportedArch: [process.arch === "arm64" ? "arm64" : "x64"],
   releaseNotes: process.env.RELEASE_NOTES || "",
@@ -58,30 +58,33 @@ const signature = sign(null, Buffer.from(payload), privateKey).toString(
 );
 const base = required("CLOUD_API_URL").replace(/\/$/, "");
 const token = required("RELEASE_PUBLISH_TOKEN");
-const publish = await globalThis.fetch(`${base}/api/host-releases/publish`, {
-  method: "POST",
-  headers: {
-    authorization: `Bearer ${token}`,
-    "content-type": "application/json",
+const publish = await globalThis.fetch(
+  `${base}/api/workspace-releases/publish`,
+  {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      version,
+      channel,
+      minSupportedWorkspaceVersion: metadata.minSupportedWorkspaceVersion,
+      supportedOS: metadata.supportedOS,
+      supportedArch: metadata.supportedArch,
+      releaseNotes: metadata.releaseNotes,
+      packageDigest,
+      signingKeyId: keyId,
+      signature,
+      packageBase64: archive.toString("base64"),
+    }),
   },
-  body: JSON.stringify({
-    version,
-    channel,
-    minSupportedAgentVersion: metadata.minSupportedHostVersion,
-    supportedOS: metadata.supportedOS,
-    supportedArch: metadata.supportedArch,
-    releaseNotes: metadata.releaseNotes,
-    packageDigest,
-    signingKeyId: keyId,
-    signature,
-    packageBase64: archive.toString("base64"),
-  }),
-});
+);
 if (!publish.ok)
   throw new Error(`Workspace release publish failed: HTTP ${publish.status}`);
 
 const infoResponse = await globalThis.fetch(
-  `${base}/api/host-releases/${encodeURIComponent(version)}`,
+  `${base}/api/workspace-releases/${encodeURIComponent(version)}`,
 );
 if (!infoResponse.ok)
   throw new Error(
@@ -103,7 +106,7 @@ const publicKey = createPublicKey({
 const readbackMetadata = {
   version: info.version,
   channel: info.channel,
-  minSupportedHostVersion: info.minSupportedAgentVersion,
+  minSupportedWorkspaceVersion: info.minSupportedWorkspaceVersion,
   supportedOS: info.supportedOS,
   supportedArch: info.supportedArch,
   releaseNotes: info.releaseNotes,
@@ -124,7 +127,7 @@ if (
   throw new Error("Workspace release metadata signature readback failed");
 }
 const download = await globalThis.fetch(
-  `${base}/api/host-releases/${encodeURIComponent(version)}/download`,
+  `${base}/api/workspace-releases/${encodeURIComponent(version)}/download`,
   {
     headers: { authorization: `Bearer ${token}` },
   },

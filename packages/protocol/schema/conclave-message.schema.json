@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://conclaveax.com/schemas/conclave-message.schema.json",
   "title": "Conclave canonical message",
-  "description": "Strict cross-language contract shared by Conclave Cloud, App, Host, and Workers.",
+  "description": "Current cross-language product, Workspace message metadata, execution error, and realtime event contracts.",
   "x-protocol-version": "0.1",
   "x-execution-error-codes": [
     "worker_not_ready",
@@ -45,10 +45,6 @@
       "host.sync.result",
       "host.status",
       "host.update",
-      "worker.install",
-      "worker.remove",
-      "worker.status",
-      "credential.status",
       "assignment.start",
       "assignment.ack",
       "assignment.progress",
@@ -85,10 +81,6 @@
       "host.sync.result": "#/$defs/hostSyncResultPayload",
       "host.status": "#/$defs/hostStatusPayload",
       "host.update": "#/$defs/hostUpdatePayload",
-      "worker.install": "#/$defs/workerInstallPayload",
-      "worker.remove": "#/$defs/workerRemovePayload",
-      "worker.status": "#/$defs/workerStatusPayload",
-      "credential.status": "#/$defs/credentialStatusPayload",
       "assignment.start": "#/$defs/assignmentStartPayload",
       "assignment.ack": "#/$defs/assignmentAckPayload",
       "assignment.progress": "#/$defs/assignmentProgressPayload",
@@ -96,49 +88,6 @@
       "assignment.error": "#/$defs/assignmentErrorPayload",
       "assignment.cancel": "#/$defs/assignmentCancelPayload",
       "assignment.cancel.ack": "#/$defs/assignmentCancelAckPayload"
-    }
-  },
-  "x-worker-protocol": {
-    "name": "conclave.worker-protocol",
-    "version": "4.0",
-    "jsonRpcVersion": "2.0",
-    "methods": [
-      "initialize",
-      "health",
-      "describe",
-      "execute",
-      "cancel",
-      "shutdown"
-    ],
-    "notifications": [
-      "progress",
-      "status",
-      "output_delta",
-      "tool.started",
-      "tool.completed",
-      "usage",
-      "artifact",
-      "result",
-      "error",
-      "log"
-    ],
-    "payloadSchemas": {
-      "initialize": "#/$defs/workerInitializeParams",
-      "health": "#/$defs/workerEmptyParams",
-      "describe": "#/$defs/workerEmptyParams",
-      "execute": "#/$defs/workerExecuteParams",
-      "cancel": "#/$defs/workerCancelParams",
-      "shutdown": "#/$defs/workerShutdownParams",
-      "progress": "#/$defs/workerProgressNotification",
-      "status": "#/$defs/workerStatusNotification",
-      "output_delta": "#/$defs/workerOutputDeltaNotification",
-      "tool.started": "#/$defs/workerToolStartedNotification",
-      "tool.completed": "#/$defs/workerToolCompletedNotification",
-      "usage": "#/$defs/workerUsageNotification",
-      "artifact": "#/$defs/workerArtifactNotification",
-      "result": "#/$defs/workerResultNotification",
-      "error": "#/$defs/workerErrorNotification",
-      "log": "#/$defs/workerLogNotification"
     }
   },
   "x-realtime-events": {
@@ -208,96 +157,6 @@
     ],
     "payloadSchema": "#/$defs/realtimeEventPayload"
   },
-  "x-agent-protocol": {
-    "name": "conclave.agent-protocol",
-    "version": "2.0",
-    "maxMessageSizeBytes": 4194304,
-    "messageTypes": [
-      "agent.hello",
-      "agent.hello.ack",
-      "agent.heartbeat",
-      "agent.heartbeat.ack",
-      "agent.sync.request",
-      "agent.sync.response",
-      "agent.capabilities",
-      "agent.update.available",
-      "agent.update.status",
-      "plugin.install",
-      "plugin.update",
-      "plugin.remove",
-      "plugin.status",
-      "worker.configure",
-      "worker.status",
-      "assignment.start",
-      "assignment.ack",
-      "assignment.progress",
-      "assignment.result",
-      "assignment.error",
-      "assignment.cancelled",
-      "assignment.cancel",
-      "assignment.cancel.ack"
-    ],
-    "baseEnvelopeFields": [
-      "protocol",
-      "protocolVersion",
-      "messageId",
-      "correlationId",
-      "timestamp",
-      "type",
-      "payload"
-    ],
-    "assignmentEnvelopeFields": [
-      "workspaceId",
-      "agentId",
-      "workerId",
-      "runId",
-      "taskId",
-      "attemptId",
-      "assignmentId",
-      "idempotencyKey"
-    ]
-  },
-  "x-local-protocols": {
-    "agentAppIpc": {
-      "name": "conclave.agent-app-ipc",
-      "version": "1.0",
-      "maxFrameBytes": 1048576,
-      "commandTypes": [
-        "engine.status",
-        "engine.logs",
-        "engine.restart",
-        "engine.update"
-      ]
-    },
-    "workerPlugin": {
-      "name": "conclave.worker-plugin",
-      "version": "2.0",
-      "jsonRpcVersion": "2.0",
-      "methods": [
-        "initialize",
-        "health",
-        "getCapabilities",
-        "configureWorker",
-        "startAssignment",
-        "cancelAssignment",
-        "shutdown",
-        "get_capabilities",
-        "configure_worker",
-        "start_assignment",
-        "cancel_assignment"
-      ],
-      "notifications": [
-        "progress",
-        "log",
-        "artifact",
-        "usage",
-        "result",
-        "error",
-        "authentication_required",
-        "rate_limited"
-      ]
-    }
-  },
   "x-message-types": [
     "PlanRequest",
     "PlanResult",
@@ -340,16 +199,29 @@
     "payload"
   ],
   "properties": {
-    "protocol": { "const": "conclave.protocol" },
+    "protocol": {
+      "const": "conclave.protocol"
+    },
     "version": {
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$"
     },
-    "messageId": { "$ref": "#/$defs/id" },
-    "goalId": { "$ref": "#/$defs/id" },
-    "runId": { "$ref": "#/$defs/id" },
-    "workerId": { "$ref": "#/$defs/id" },
-    "createdAt": { "type": "string", "format": "date-time" },
+    "messageId": {
+      "$ref": "#/$defs/id"
+    },
+    "goalId": {
+      "$ref": "#/$defs/id"
+    },
+    "runId": {
+      "$ref": "#/$defs/id"
+    },
+    "workerId": {
+      "$ref": "#/$defs/id"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
     "messageType": {
       "type": "string",
       "enum": [
@@ -367,94 +239,200 @@
         "RuntimeOperationRequest"
       ]
     },
-    "payload": { "type": "object" }
+    "payload": {
+      "type": "object"
+    }
   },
   "allOf": [
     {
-      "if": { "properties": { "messageType": { "const": "PlanRequest" } } },
-      "then": {
-        "properties": { "payload": { "$ref": "#/$defs/planRequestPayload" } }
-      }
-    },
-    {
-      "if": { "properties": { "messageType": { "const": "PlanResult" } } },
-      "then": {
-        "properties": { "payload": { "$ref": "#/$defs/planResultPayload" } }
-      }
-    },
-    {
-      "if": { "properties": { "messageType": { "const": "TaskRequest" } } },
-      "then": {
-        "properties": { "payload": { "$ref": "#/$defs/taskRequestPayload" } }
-      }
-    },
-    {
-      "if": { "properties": { "messageType": { "const": "TaskResult" } } },
-      "then": {
-        "properties": { "payload": { "$ref": "#/$defs/taskResultPayload" } }
-      }
-    },
-    {
-      "if": { "properties": { "messageType": { "const": "ResearchResult" } } },
-      "then": {
-        "properties": { "payload": { "$ref": "#/$defs/researchResultPayload" } }
-      }
-    },
-    {
       "if": {
-        "properties": { "messageType": { "const": "ImplementationResult" } }
-      },
-      "then": {
         "properties": {
-          "payload": { "$ref": "#/$defs/implementationResultPayload" }
+          "messageType": {
+            "const": "PlanRequest"
+          }
         }
-      }
-    },
-    {
-      "if": { "properties": { "messageType": { "const": "ReviewResult" } } },
-      "then": {
-        "properties": { "payload": { "$ref": "#/$defs/reviewResultPayload" } }
-      }
-    },
-    {
-      "if": { "properties": { "messageType": { "const": "TestResult" } } },
-      "then": {
-        "properties": { "payload": { "$ref": "#/$defs/testResultPayload" } }
-      }
-    },
-    {
-      "if": {
-        "properties": { "messageType": { "const": "VerificationResult" } }
       },
       "then": {
         "properties": {
-          "payload": { "$ref": "#/$defs/verificationResultPayload" }
-        }
-      }
-    },
-    {
-      "if": { "properties": { "messageType": { "const": "DecisionResult" } } },
-      "then": {
-        "properties": { "payload": { "$ref": "#/$defs/decisionResultPayload" } }
-      }
-    },
-    {
-      "if": {
-        "properties": { "messageType": { "const": "CompletionResult" } }
-      },
-      "then": {
-        "properties": {
-          "payload": { "$ref": "#/$defs/completionResultPayload" }
+          "payload": {
+            "$ref": "#/$defs/planRequestPayload"
+          }
         }
       }
     },
     {
       "if": {
-        "properties": { "messageType": { "const": "RuntimeOperationRequest" } }
+        "properties": {
+          "messageType": {
+            "const": "PlanResult"
+          }
+        }
       },
       "then": {
         "properties": {
-          "payload": { "$ref": "#/$defs/runtimeOperationPayload" }
+          "payload": {
+            "$ref": "#/$defs/planResultPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "messageType": {
+            "const": "TaskRequest"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/taskRequestPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "messageType": {
+            "const": "TaskResult"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/taskResultPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "messageType": {
+            "const": "ResearchResult"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/researchResultPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "messageType": {
+            "const": "ImplementationResult"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/implementationResultPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "messageType": {
+            "const": "ReviewResult"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/reviewResultPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "messageType": {
+            "const": "TestResult"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/testResultPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "messageType": {
+            "const": "VerificationResult"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/verificationResultPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "messageType": {
+            "const": "DecisionResult"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/decisionResultPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "messageType": {
+            "const": "CompletionResult"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/completionResultPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "messageType": {
+            "const": "RuntimeOperationRequest"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/runtimeOperationPayload"
+          }
         }
       }
     }
@@ -482,17 +460,36 @@
       "additionalProperties": false,
       "required": ["code", "message", "retryable"],
       "properties": {
-        "code": { "$ref": "#/$defs/executionErrorCode" },
-        "message": { "type": "string", "minLength": 1, "maxLength": 512 },
-        "retryable": { "type": "boolean" }
+        "code": {
+          "$ref": "#/$defs/executionErrorCode"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "retryable": {
+          "type": "boolean"
+        }
       }
     },
-    "id": { "type": "string", "minLength": 1 },
-    "nonEmpty": { "type": "string", "minLength": 1 },
-    "timestamp": { "type": "string", "format": "date-time" },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nonEmpty": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
     "stringList": {
       "type": "array",
-      "items": { "$ref": "#/$defs/nonEmpty" }
+      "items": {
+        "$ref": "#/$defs/nonEmpty"
+      }
     },
     "objectMap": {
       "type": "object",
@@ -509,12 +506,25 @@
         "maxConcurrentWorkers"
       ],
       "properties": {
-        "os": { "enum": ["macos", "linux", "windows"] },
-        "arch": { "enum": ["arm64", "x64"] },
-        "version": { "$ref": "#/$defs/nonEmpty" },
-        "supportedRuntimes": { "$ref": "#/$defs/stringList" },
-        "maxConcurrentWorkers": { "type": "integer", "minimum": 1 },
-        "customCapabilities": { "$ref": "#/$defs/stringList" }
+        "os": {
+          "enum": ["macos", "linux", "windows"]
+        },
+        "arch": {
+          "enum": ["arm64", "x64"]
+        },
+        "version": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "supportedRuntimes": {
+          "$ref": "#/$defs/stringList"
+        },
+        "maxConcurrentWorkers": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "customCapabilities": {
+          "$ref": "#/$defs/stringList"
+        }
       }
     },
     "assignmentSnapshot": {
@@ -530,7 +540,6 @@
         "requestedByUserId",
         "hostId",
         "workerId",
-        "resolvedWorkerVersion",
         "credentialProfileId",
         "config",
         "sessionPolicy",
@@ -540,19 +549,42 @@
         "idempotencyKey"
       ],
       "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "workspaceId": { "$ref": "#/$defs/nonEmpty" },
-        "projectId": { "$ref": "#/$defs/nonEmpty" },
-        "runId": { "$ref": "#/$defs/nonEmpty" },
-        "taskId": { "$ref": "#/$defs/nonEmpty" },
-        "attemptId": { "$ref": "#/$defs/nonEmpty" },
-        "requestedByUserId": { "$ref": "#/$defs/nonEmpty" },
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "workerId": { "$ref": "#/$defs/nonEmpty" },
-        "resolvedWorkerVersion": { "$ref": "#/$defs/nonEmpty" },
-        "credentialProfileId": { "$ref": "#/$defs/nonEmpty" },
-        "model": { "type": "string" },
-        "config": { "$ref": "#/$defs/objectMap" },
+        "assignmentId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "workspaceId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "projectId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "runId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "taskId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "attemptId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "requestedByUserId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "hostId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "workerId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "credentialProfileId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "model": {
+          "type": "string"
+        },
+        "config": {
+          "$ref": "#/$defs/objectMap"
+        },
         "sessionPolicy": {
           "enum": [
             "stateless",
@@ -562,14 +594,27 @@
             "persistent_context"
           ]
         },
-        "sessionKey": { "type": "string", "minLength": 1, "maxLength": 256 },
-        "permissions": { "$ref": "#/$defs/stringList" },
+        "sessionKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "permissions": {
+          "$ref": "#/$defs/stringList"
+        },
         "contextRefs": {
           "type": "array",
-          "items": { "$ref": "#/$defs/objectMap" }
+          "items": {
+            "$ref": "#/$defs/objectMap"
+          }
         },
-        "timeoutMs": { "type": "integer", "minimum": 1000 },
-        "idempotencyKey": { "$ref": "#/$defs/nonEmpty" }
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1000
+        },
+        "idempotencyKey": {
+          "$ref": "#/$defs/nonEmpty"
+        }
       }
     },
     "hostHelloPayload": {
@@ -577,13 +622,27 @@
       "additionalProperties": false,
       "required": ["hostId", "name", "hostname", "hostVersion", "capabilities"],
       "properties": {
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "name": { "$ref": "#/$defs/nonEmpty" },
-        "hostname": { "$ref": "#/$defs/nonEmpty" },
-        "hostVersion": { "$ref": "#/$defs/nonEmpty" },
-        "capabilities": { "$ref": "#/$defs/hostCapabilities" },
-        "enrolledWorkspaces": { "$ref": "#/$defs/stringList" },
-        "authCredentials": { "$ref": "#/$defs/objectMap" }
+        "hostId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "hostname": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "hostVersion": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/hostCapabilities"
+        },
+        "enrolledWorkspaces": {
+          "$ref": "#/$defs/stringList"
+        },
+        "authCredentials": {
+          "$ref": "#/$defs/objectMap"
+        }
       }
     },
     "hostHelloAckPayload": {
@@ -591,13 +650,27 @@
       "additionalProperties": false,
       "required": ["hostId", "status", "authenticatedAt", "serverVersion"],
       "properties": {
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "status": { "enum": ["authenticated", "rejected"] },
-        "authenticatedAt": { "$ref": "#/$defs/timestamp" },
-        "serverVersion": { "$ref": "#/$defs/nonEmpty" },
-        "sessionToken": { "$ref": "#/$defs/nonEmpty" },
-        "activeWorkspaceBindings": { "$ref": "#/$defs/stringList" },
-        "rejectionReason": { "type": "string" }
+        "hostId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "status": {
+          "enum": ["authenticated", "rejected"]
+        },
+        "authenticatedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "serverVersion": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "sessionToken": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "activeWorkspaceBindings": {
+          "$ref": "#/$defs/stringList"
+        },
+        "rejectionReason": {
+          "type": "string"
+        }
       }
     },
     "hostHeartbeatPayload": {
@@ -605,9 +678,15 @@
       "additionalProperties": false,
       "required": ["hostId", "timestamp"],
       "properties": {
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "timestamp": { "$ref": "#/$defs/timestamp" },
-        "metrics": { "$ref": "#/$defs/objectMap" }
+        "hostId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "timestamp": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "metrics": {
+          "$ref": "#/$defs/objectMap"
+        }
       }
     },
     "hostHeartbeatAckPayload": {
@@ -615,10 +694,19 @@
       "additionalProperties": false,
       "required": ["hostId", "acknowledgedAt", "serverTime"],
       "properties": {
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "acknowledgedAt": { "$ref": "#/$defs/timestamp" },
-        "serverTime": { "$ref": "#/$defs/timestamp" },
-        "nextHeartbeatIntervalMs": { "type": "integer", "minimum": 1000 }
+        "hostId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "acknowledgedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "serverTime": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "nextHeartbeatIntervalMs": {
+          "type": "integer",
+          "minimum": 1000
+        }
       }
     },
     "hostSyncRequestPayload": {
@@ -626,10 +714,18 @@
       "additionalProperties": false,
       "required": ["hostId"],
       "properties": {
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "syncToken": { "type": "string" },
-        "knownAssignmentIds": { "$ref": "#/$defs/stringList" },
-        "knownWorkerIds": { "$ref": "#/$defs/stringList" }
+        "hostId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "syncToken": {
+          "type": "string"
+        },
+        "knownAssignmentIds": {
+          "$ref": "#/$defs/stringList"
+        },
+        "knownWorkerIds": {
+          "$ref": "#/$defs/stringList"
+        }
       }
     },
     "hostSyncResultPayload": {
@@ -637,11 +733,21 @@
       "additionalProperties": false,
       "required": ["hostId", "syncToken"],
       "properties": {
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "syncToken": { "$ref": "#/$defs/nonEmpty" },
-        "pendingAssignments": { "$ref": "#/$defs/stringList" },
-        "installedWorkers": { "$ref": "#/$defs/stringList" },
-        "credentialStatuses": { "$ref": "#/$defs/objectMap" }
+        "hostId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "syncToken": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "pendingAssignments": {
+          "$ref": "#/$defs/stringList"
+        },
+        "installedWorkers": {
+          "$ref": "#/$defs/stringList"
+        },
+        "credentialStatuses": {
+          "$ref": "#/$defs/objectMap"
+        }
       }
     },
     "hostStatusPayload": {
@@ -649,10 +755,19 @@
       "additionalProperties": false,
       "required": ["hostId", "status"],
       "properties": {
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "status": { "enum": ["online", "draining", "offline"] },
-        "activeAssignmentsCount": { "type": "integer", "minimum": 0 },
-        "reason": { "type": "string" }
+        "hostId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "status": {
+          "enum": ["online", "draining", "offline"]
+        },
+        "activeAssignmentsCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string"
+        }
       }
     },
     "hostUpdatePayload": {
@@ -666,127 +781,98 @@
         "signature"
       ],
       "properties": {
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "targetVersion": { "$ref": "#/$defs/nonEmpty" },
-        "packageDigest": { "$ref": "#/$defs/nonEmpty" },
-        "packageR2Key": { "$ref": "#/$defs/nonEmpty" },
-        "signature": { "$ref": "#/$defs/nonEmpty" },
-        "channel": { "enum": ["stable", "beta", "development"] }
-      }
-    },
-    "workerInstallPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "hostId",
-        "workerId",
-        "version",
-        "packageDigest",
-        "packageR2Key",
-        "signature",
-        "entrypoint"
-      ],
-      "properties": {
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "workerId": { "$ref": "#/$defs/nonEmpty" },
-        "version": { "$ref": "#/$defs/nonEmpty" },
-        "packageDigest": { "$ref": "#/$defs/nonEmpty" },
-        "packageR2Key": { "$ref": "#/$defs/nonEmpty" },
-        "signature": { "$ref": "#/$defs/nonEmpty" },
-        "entrypoint": { "$ref": "#/$defs/nonEmpty" },
-        "permissions": { "$ref": "#/$defs/stringList" }
-      }
-    },
-    "workerRemovePayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["hostId", "workerId"],
-      "properties": {
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "workerId": { "$ref": "#/$defs/nonEmpty" },
-        "version": { "$ref": "#/$defs/nonEmpty" },
-        "purgeData": { "type": "boolean" }
-      }
-    },
-    "workerStatusPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["hostId", "workerId", "version", "status"],
-      "properties": {
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "workerId": { "$ref": "#/$defs/nonEmpty" },
-        "version": { "$ref": "#/$defs/nonEmpty" },
-        "status": {
-          "enum": [
-            "absent",
-            "requested",
-            "downloading",
-            "verifying",
-            "installing",
-            "ready",
-            "updating",
-            "degraded",
-            "failed",
-            "removing"
-          ]
+        "hostId": {
+          "$ref": "#/$defs/nonEmpty"
         },
-        "error": { "type": "string" }
-      }
-    },
-    "credentialStatusPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "hostId",
-        "credentialProfileId",
-        "workerId",
-        "status",
-        "authMode",
-        "lastCheckedAt"
-      ],
-      "properties": {
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "credentialProfileId": { "$ref": "#/$defs/nonEmpty" },
-        "workerId": { "$ref": "#/$defs/nonEmpty" },
-        "status": { "enum": ["ready", "needs_auth", "invalid", "expired"] },
-        "authMode": {
-          "enum": [
-            "none",
-            "api_key",
-            "oauth_browser",
-            "local_cli_session",
-            "interactive_custom"
-          ]
+        "targetVersion": {
+          "$ref": "#/$defs/nonEmpty"
         },
-        "visibility": { "enum": ["private", "workspace"] },
-        "lastCheckedAt": { "$ref": "#/$defs/timestamp" },
-        "errorMessage": { "type": "string" }
+        "packageDigest": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "packageR2Key": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "signature": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "channel": {
+          "enum": ["stable", "beta", "development"]
+        }
       }
     },
     "realtimeEventPayload": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "entityId": { "$ref": "#/$defs/nonEmpty" },
-        "status": { "$ref": "#/$defs/nonEmpty" },
-        "message": { "type": "string", "maxLength": 32768 },
-        "summary": { "type": "string", "maxLength": 32768 },
-        "text": { "type": "string", "maxLength": 32768 },
-        "delta": { "type": "string", "maxLength": 8192 },
-        "tool": { "$ref": "#/$defs/nonEmpty" },
-        "artifactId": { "$ref": "#/$defs/nonEmpty" },
-        "findingId": { "$ref": "#/$defs/nonEmpty" },
-        "verificationId": { "$ref": "#/$defs/nonEmpty" },
-        "workRequestId": { "$ref": "#/$defs/nonEmpty" },
-        "workstreamId": { "$ref": "#/$defs/nonEmpty" },
-        "stepKind": { "$ref": "#/$defs/nonEmpty" },
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "workerId": { "$ref": "#/$defs/nonEmpty" },
-        "credentialProfileId": { "$ref": "#/$defs/nonEmpty" },
-        "percentage": { "type": "number", "minimum": 0, "maximum": 100 },
-        "durationMs": { "type": "integer", "minimum": 0 },
-        "tokenCount": { "type": "integer", "minimum": 0 },
-        "coalesced": { "type": "boolean" }
+        "entityId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "status": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 32768
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 32768
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 32768
+        },
+        "delta": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "tool": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "artifactId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "findingId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "verificationId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "workRequestId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "workstreamId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "stepKind": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "hostId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "workerId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "credentialProfileId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokenCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coalesced": {
+          "type": "boolean"
+        }
       }
     },
     "assignmentStartPayload": {
@@ -794,8 +880,12 @@
       "additionalProperties": false,
       "required": ["snapshot", "input"],
       "properties": {
-        "snapshot": { "$ref": "#/$defs/assignmentSnapshot" },
-        "input": { "$ref": "#/$defs/objectMap" }
+        "snapshot": {
+          "$ref": "#/$defs/assignmentSnapshot"
+        },
+        "input": {
+          "$ref": "#/$defs/objectMap"
+        }
       }
     },
     "assignmentAckPayload": {
@@ -809,12 +899,24 @@
         "acknowledgedAt"
       ],
       "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "hostId": { "$ref": "#/$defs/nonEmpty" },
-        "workerId": { "$ref": "#/$defs/nonEmpty" },
-        "status": { "enum": ["accepted", "rejected"] },
-        "acknowledgedAt": { "$ref": "#/$defs/timestamp" },
-        "rejectionReason": { "type": "string" }
+        "assignmentId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "hostId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "workerId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "status": {
+          "enum": ["accepted", "rejected"]
+        },
+        "acknowledgedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "rejectionReason": {
+          "type": "string"
+        }
       }
     },
     "assignmentProgressPayload": {
@@ -822,11 +924,23 @@
       "additionalProperties": false,
       "required": ["assignmentId", "percentage", "observedAt"],
       "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "percentage": { "type": "number", "minimum": 0, "maximum": 100 },
-        "message": { "type": "string" },
-        "observedAt": { "$ref": "#/$defs/timestamp" },
-        "metrics": { "$ref": "#/$defs/objectMap" }
+        "assignmentId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "message": {
+          "type": "string"
+        },
+        "observedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "metrics": {
+          "$ref": "#/$defs/objectMap"
+        }
       }
     },
     "assignmentResultPayload": {
@@ -834,12 +948,24 @@
       "additionalProperties": false,
       "required": ["assignmentId", "status", "output", "completedAt"],
       "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "status": { "enum": ["completed", "failed", "cancelled"] },
-        "output": { "type": ["object", "null"] },
-        "findings": { "type": "array" },
-        "artifactIds": { "$ref": "#/$defs/stringList" },
-        "completedAt": { "$ref": "#/$defs/timestamp" }
+        "assignmentId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "status": {
+          "enum": ["completed", "failed", "cancelled"]
+        },
+        "output": {
+          "type": ["object", "null"]
+        },
+        "findings": {
+          "type": "array"
+        },
+        "artifactIds": {
+          "$ref": "#/$defs/stringList"
+        },
+        "completedAt": {
+          "$ref": "#/$defs/timestamp"
+        }
       }
     },
     "assignmentErrorPayload": {
@@ -847,9 +973,15 @@
       "additionalProperties": false,
       "required": ["assignmentId", "error", "failedAt"],
       "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "error": { "$ref": "#/$defs/executionError" },
-        "failedAt": { "$ref": "#/$defs/timestamp" }
+        "assignmentId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "error": {
+          "$ref": "#/$defs/executionError"
+        },
+        "failedAt": {
+          "$ref": "#/$defs/timestamp"
+        }
       }
     },
     "assignmentCancelPayload": {
@@ -857,9 +989,16 @@
       "additionalProperties": false,
       "required": ["assignmentId"],
       "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "reason": { "type": "string" },
-        "deadlineMs": { "type": "integer", "minimum": 0 }
+        "assignmentId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "deadlineMs": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "assignmentCancelAckPayload": {
@@ -867,181 +1006,34 @@
       "additionalProperties": false,
       "required": ["assignmentId", "cancelled"],
       "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "cancelled": { "type": "boolean" },
-        "reason": { "type": "string" }
+        "assignmentId": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "cancelled": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        }
       }
     },
-    "workerEmptyParams": { "type": "object", "additionalProperties": false },
-    "workerInitializeParams": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["workerId", "version", "hostVersion"],
-      "properties": {
-        "workerId": { "$ref": "#/$defs/nonEmpty" },
-        "version": { "$ref": "#/$defs/nonEmpty" },
-        "protocolVersion": { "$ref": "#/$defs/nonEmpty" },
-        "hostVersion": { "$ref": "#/$defs/nonEmpty" },
-        "config": { "$ref": "#/$defs/objectMap" },
-        "permissions": { "$ref": "#/$defs/stringList" }
+    "artifactIds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/id"
       }
     },
-    "workerExecuteParams": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["assignment", "input"],
-      "properties": {
-        "assignment": { "$ref": "#/$defs/assignmentSnapshot" },
-        "input": { "$ref": "#/$defs/objectMap" }
-      }
-    },
-    "workerCancelParams": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["assignmentId"],
-      "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "reason": { "type": "string" }
-      }
-    },
-    "workerShutdownParams": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": { "gracePeriodMs": { "type": "integer", "minimum": 0 } }
-    },
-    "workerProgressNotification": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["assignmentId", "percentage", "timestamp"],
-      "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "percentage": { "type": "number", "minimum": 0, "maximum": 100 },
-        "message": { "type": "string" },
-        "timestamp": { "$ref": "#/$defs/timestamp" }
-      }
-    },
-    "workerUsageNotification": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["assignmentId", "timestamp"],
-      "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "tokensUsed": { "type": "integer", "minimum": 0 },
-        "estimatedCostMicros": { "type": "integer", "minimum": 0 },
-        "timestamp": { "$ref": "#/$defs/timestamp" }
-      }
-    },
-    "workerStatusNotification": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["assignmentId", "status", "timestamp"],
-      "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "status": { "$ref": "#/$defs/nonEmpty" },
-        "message": { "type": "string", "maxLength": 8192 },
-        "timestamp": { "$ref": "#/$defs/timestamp" }
-      }
-    },
-    "workerOutputDeltaNotification": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["assignmentId", "delta", "timestamp"],
-      "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "delta": { "type": "string", "maxLength": 8192 },
-        "sequence": { "type": "integer", "minimum": 0 },
-        "timestamp": { "$ref": "#/$defs/timestamp" }
-      }
-    },
-    "workerToolStartedNotification": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["assignmentId", "toolCallId", "tool", "timestamp"],
-      "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "toolCallId": { "$ref": "#/$defs/nonEmpty" },
-        "tool": { "$ref": "#/$defs/nonEmpty" },
-        "timestamp": { "$ref": "#/$defs/timestamp" }
-      }
-    },
-    "workerToolCompletedNotification": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "assignmentId",
-        "toolCallId",
-        "tool",
-        "success",
-        "timestamp"
-      ],
-      "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "toolCallId": { "$ref": "#/$defs/nonEmpty" },
-        "tool": { "$ref": "#/$defs/nonEmpty" },
-        "success": { "type": "boolean" },
-        "timestamp": { "$ref": "#/$defs/timestamp" }
-      }
-    },
-    "workerArtifactNotification": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["assignmentId", "artifactId", "name", "type", "digest"],
-      "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "artifactId": { "$ref": "#/$defs/nonEmpty" },
-        "name": { "$ref": "#/$defs/nonEmpty" },
-        "type": { "$ref": "#/$defs/nonEmpty" },
-        "digest": { "$ref": "#/$defs/nonEmpty" },
-        "contentBase64": { "type": "string" },
-        "metadata": { "$ref": "#/$defs/objectMap" }
-      }
-    },
-    "workerResultNotification": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["assignmentId", "status", "output", "completedAt"],
-      "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "status": { "enum": ["completed", "failed", "cancelled"] },
-        "output": { "type": ["object", "null"] },
-        "findings": { "type": "array" },
-        "artifactIds": { "$ref": "#/$defs/stringList" },
-        "completedAt": { "$ref": "#/$defs/timestamp" }
-      }
-    },
-    "workerErrorNotification": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["assignmentId", "code", "message", "timestamp"],
-      "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "code": { "$ref": "#/$defs/nonEmpty" },
-        "message": { "$ref": "#/$defs/nonEmpty" },
-        "retryable": { "type": "boolean" },
-        "details": { "$ref": "#/$defs/objectMap" },
-        "timestamp": { "$ref": "#/$defs/timestamp" }
-      }
-    },
-    "workerLogNotification": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["level", "message", "timestamp"],
-      "properties": {
-        "assignmentId": { "$ref": "#/$defs/nonEmpty" },
-        "level": { "enum": ["debug", "info", "warn", "error"] },
-        "message": { "$ref": "#/$defs/nonEmpty" },
-        "timestamp": { "$ref": "#/$defs/timestamp" },
-        "metadata": { "$ref": "#/$defs/objectMap" }
-      }
-    },
-    "artifactIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
     "repository": {
       "type": "object",
       "additionalProperties": false,
       "required": ["repositoryId", "revision"],
       "properties": {
-        "repositoryId": { "$ref": "#/$defs/id" },
-        "revision": { "$ref": "#/$defs/nonEmpty" }
+        "repositoryId": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/nonEmpty"
+        }
       }
     },
     "taskPlan": {
@@ -1056,19 +1048,31 @@
         "requiresIndependentVerification"
       ],
       "properties": {
-        "taskId": { "$ref": "#/$defs/id" },
-        "objective": { "$ref": "#/$defs/nonEmpty" },
-        "role": { "$ref": "#/$defs/nonEmpty" },
+        "taskId": {
+          "$ref": "#/$defs/id"
+        },
+        "objective": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "role": {
+          "$ref": "#/$defs/nonEmpty"
+        },
         "capabilities": {
           "type": "array",
-          "items": { "$ref": "#/$defs/nonEmpty" },
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          },
           "minItems": 1
         },
         "dependsOnTaskIds": {
           "type": "array",
-          "items": { "$ref": "#/$defs/id" }
+          "items": {
+            "$ref": "#/$defs/id"
+          }
         },
-        "requiresIndependentVerification": { "type": "boolean" }
+        "requiresIndependentVerification": {
+          "type": "boolean"
+        }
       }
     },
     "phasePlan": {
@@ -1076,12 +1080,20 @@
       "additionalProperties": false,
       "required": ["phaseId", "name", "purpose", "tasks"],
       "properties": {
-        "phaseId": { "$ref": "#/$defs/id" },
-        "name": { "$ref": "#/$defs/nonEmpty" },
-        "purpose": { "$ref": "#/$defs/nonEmpty" },
+        "phaseId": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "purpose": {
+          "$ref": "#/$defs/nonEmpty"
+        },
         "tasks": {
           "type": "array",
-          "items": { "$ref": "#/$defs/taskPlan" },
+          "items": {
+            "$ref": "#/$defs/taskPlan"
+          },
           "minItems": 1
         }
       }
@@ -1091,9 +1103,16 @@
       "additionalProperties": false,
       "required": ["oldText", "newText"],
       "properties": {
-        "oldText": { "type": "string" },
-        "newText": { "type": "string" },
-        "maxReplacements": { "type": "integer", "minimum": 1 }
+        "oldText": {
+          "type": "string"
+        },
+        "newText": {
+          "type": "string"
+        },
+        "maxReplacements": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "check": {
@@ -1101,11 +1120,21 @@
       "additionalProperties": false,
       "required": ["name", "status", "artifactIds"],
       "properties": {
-        "name": { "$ref": "#/$defs/nonEmpty" },
-        "status": { "enum": ["passed", "failed", "skipped", "inconclusive"] },
-        "command": { "$ref": "#/$defs/nonEmpty" },
-        "exitCode": { "type": "integer" },
-        "artifactIds": { "$ref": "#/$defs/artifactIds" }
+        "name": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "status": {
+          "enum": ["passed", "failed", "skipped", "inconclusive"]
+        },
+        "command": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "exitCode": {
+          "type": "integer"
+        },
+        "artifactIds": {
+          "$ref": "#/$defs/artifactIds"
+        }
       }
     },
     "finding": {
@@ -1119,11 +1148,21 @@
         "evidenceArtifactIds"
       ],
       "properties": {
-        "findingId": { "$ref": "#/$defs/id" },
-        "severity": { "enum": ["blocker", "major", "minor", "note"] },
-        "scope": { "$ref": "#/$defs/nonEmpty" },
-        "description": { "$ref": "#/$defs/nonEmpty" },
-        "evidenceArtifactIds": { "$ref": "#/$defs/artifactIds" }
+        "findingId": {
+          "$ref": "#/$defs/id"
+        },
+        "severity": {
+          "enum": ["blocker", "major", "minor", "note"]
+        },
+        "scope": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "description": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "evidenceArtifactIds": {
+          "$ref": "#/$defs/artifactIds"
+        }
       }
     },
     "implementationOperation": {
@@ -1133,10 +1172,18 @@
           "additionalProperties": false,
           "required": ["kind", "path", "content"],
           "properties": {
-            "kind": { "const": "write_file" },
-            "path": { "$ref": "#/$defs/nonEmpty" },
-            "content": { "type": "string" },
-            "expectedDigest": { "$ref": "#/$defs/id" }
+            "kind": {
+              "const": "write_file"
+            },
+            "path": {
+              "$ref": "#/$defs/nonEmpty"
+            },
+            "content": {
+              "type": "string"
+            },
+            "expectedDigest": {
+              "$ref": "#/$defs/id"
+            }
           }
         },
         {
@@ -1144,14 +1191,22 @@
           "additionalProperties": false,
           "required": ["kind", "path", "patches"],
           "properties": {
-            "kind": { "const": "patch_file" },
-            "path": { "$ref": "#/$defs/nonEmpty" },
+            "kind": {
+              "const": "patch_file"
+            },
+            "path": {
+              "$ref": "#/$defs/nonEmpty"
+            },
             "patches": {
               "type": "array",
-              "items": { "$ref": "#/$defs/filePatch" },
+              "items": {
+                "$ref": "#/$defs/filePatch"
+              },
               "minItems": 1
             },
-            "expectedDigest": { "$ref": "#/$defs/id" }
+            "expectedDigest": {
+              "$ref": "#/$defs/id"
+            }
           }
         },
         {
@@ -1159,9 +1214,15 @@
           "additionalProperties": false,
           "required": ["kind", "path"],
           "properties": {
-            "kind": { "const": "delete_file" },
-            "path": { "$ref": "#/$defs/nonEmpty" },
-            "expectedDigest": { "$ref": "#/$defs/id" }
+            "kind": {
+              "const": "delete_file"
+            },
+            "path": {
+              "$ref": "#/$defs/nonEmpty"
+            },
+            "expectedDigest": {
+              "$ref": "#/$defs/id"
+            }
           }
         }
       ]
@@ -1177,16 +1238,26 @@
         "completionCriteria"
       ],
       "properties": {
-        "taskId": { "$ref": "#/$defs/id" },
-        "objective": { "$ref": "#/$defs/nonEmpty" },
+        "taskId": {
+          "$ref": "#/$defs/id"
+        },
+        "objective": {
+          "$ref": "#/$defs/nonEmpty"
+        },
         "constraints": {
           "type": "array",
-          "items": { "$ref": "#/$defs/nonEmpty" }
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          }
         },
-        "repository": { "$ref": "#/$defs/repository" },
+        "repository": {
+          "$ref": "#/$defs/repository"
+        },
         "completionCriteria": {
           "type": "array",
-          "items": { "$ref": "#/$defs/nonEmpty" },
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          },
           "minItems": 1
         }
       }
@@ -1196,17 +1267,28 @@
       "additionalProperties": false,
       "required": ["taskId", "phases", "assumptions", "risks"],
       "properties": {
-        "taskId": { "$ref": "#/$defs/id" },
+        "taskId": {
+          "$ref": "#/$defs/id"
+        },
         "phases": {
           "type": "array",
-          "items": { "$ref": "#/$defs/phasePlan" },
+          "items": {
+            "$ref": "#/$defs/phasePlan"
+          },
           "minItems": 1
         },
         "assumptions": {
           "type": "array",
-          "items": { "$ref": "#/$defs/nonEmpty" }
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          }
         },
-        "risks": { "type": "array", "items": { "$ref": "#/$defs/nonEmpty" } }
+        "risks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          }
+        }
       }
     },
     "taskRequestPayload": {
@@ -1221,16 +1303,28 @@
         "inputs"
       ],
       "properties": {
-        "taskId": { "$ref": "#/$defs/id" },
-        "objective": { "$ref": "#/$defs/nonEmpty" },
-        "role": { "$ref": "#/$defs/nonEmpty" },
+        "taskId": {
+          "$ref": "#/$defs/id"
+        },
+        "objective": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "role": {
+          "$ref": "#/$defs/nonEmpty"
+        },
         "requiredCapabilities": {
           "type": "array",
-          "items": { "$ref": "#/$defs/nonEmpty" },
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          },
           "minItems": 1
         },
-        "contextArtifactIds": { "$ref": "#/$defs/artifactIds" },
-        "inputs": { "type": "object" }
+        "contextArtifactIds": {
+          "$ref": "#/$defs/artifactIds"
+        },
+        "inputs": {
+          "type": "object"
+        }
       }
     },
     "taskResultPayload": {
@@ -1238,11 +1332,21 @@
       "additionalProperties": false,
       "required": ["taskId", "status", "summary", "artifactIds", "findingIds"],
       "properties": {
-        "taskId": { "$ref": "#/$defs/id" },
-        "status": { "enum": ["succeeded", "blocked", "failed"] },
-        "summary": { "$ref": "#/$defs/nonEmpty" },
-        "artifactIds": { "$ref": "#/$defs/artifactIds" },
-        "findingIds": { "$ref": "#/$defs/artifactIds" }
+        "taskId": {
+          "$ref": "#/$defs/id"
+        },
+        "status": {
+          "enum": ["succeeded", "blocked", "failed"]
+        },
+        "summary": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "artifactIds": {
+          "$ref": "#/$defs/artifactIds"
+        },
+        "findingIds": {
+          "$ref": "#/$defs/artifactIds"
+        }
       }
     },
     "researchResultPayload": {
@@ -1256,11 +1360,17 @@
         "risks"
       ],
       "properties": {
-        "taskId": { "$ref": "#/$defs/id" },
-        "summary": { "$ref": "#/$defs/nonEmpty" },
+        "taskId": {
+          "$ref": "#/$defs/id"
+        },
+        "summary": {
+          "$ref": "#/$defs/nonEmpty"
+        },
         "relevantPaths": {
           "type": "array",
-          "items": { "$ref": "#/$defs/nonEmpty" }
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          }
         },
         "observations": {
           "type": "array",
@@ -1270,12 +1380,21 @@
             "additionalProperties": false,
             "required": ["statement", "evidenceArtifactIds"],
             "properties": {
-              "statement": { "$ref": "#/$defs/nonEmpty" },
-              "evidenceArtifactIds": { "$ref": "#/$defs/artifactIds" }
+              "statement": {
+                "$ref": "#/$defs/nonEmpty"
+              },
+              "evidenceArtifactIds": {
+                "$ref": "#/$defs/artifactIds"
+              }
             }
           }
         },
-        "risks": { "type": "array", "items": { "$ref": "#/$defs/nonEmpty" } }
+        "risks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          }
+        }
       }
     },
     "implementationResultPayload": {
@@ -1293,24 +1412,45 @@
         "risks"
       ],
       "properties": {
-        "taskId": { "$ref": "#/$defs/id" },
-        "status": { "enum": ["succeeded", "blocked", "failed"] },
-        "revision": { "$ref": "#/$defs/nonEmpty" },
+        "taskId": {
+          "$ref": "#/$defs/id"
+        },
+        "status": {
+          "enum": ["succeeded", "blocked", "failed"]
+        },
+        "revision": {
+          "$ref": "#/$defs/nonEmpty"
+        },
         "changedFiles": {
           "type": "array",
-          "items": { "$ref": "#/$defs/nonEmpty" }
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          }
         },
         "proposedOperations": {
           "type": "array",
-          "items": { "$ref": "#/$defs/implementationOperation" }
+          "items": {
+            "$ref": "#/$defs/implementationOperation"
+          }
         },
-        "artifactIds": { "$ref": "#/$defs/artifactIds" },
+        "artifactIds": {
+          "$ref": "#/$defs/artifactIds"
+        },
         "testsRequested": {
           "type": "array",
-          "items": { "$ref": "#/$defs/nonEmpty" }
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          }
         },
-        "summary": { "$ref": "#/$defs/nonEmpty" },
-        "risks": { "type": "array", "items": { "$ref": "#/$defs/nonEmpty" } }
+        "summary": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "risks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          }
+        }
       }
     },
     "reviewResultPayload": {
@@ -1325,12 +1465,27 @@
         "summary"
       ],
       "properties": {
-        "taskId": { "$ref": "#/$defs/id" },
-        "outcome": { "enum": ["pass", "changes_requested", "blocked"] },
-        "reviewedArtifactIds": { "$ref": "#/$defs/artifactIds" },
-        "resolvedFindingIds": { "$ref": "#/$defs/artifactIds" },
-        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
-        "summary": { "$ref": "#/$defs/nonEmpty" }
+        "taskId": {
+          "$ref": "#/$defs/id"
+        },
+        "outcome": {
+          "enum": ["pass", "changes_requested", "blocked"]
+        },
+        "reviewedArtifactIds": {
+          "$ref": "#/$defs/artifactIds"
+        },
+        "resolvedFindingIds": {
+          "$ref": "#/$defs/artifactIds"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        },
+        "summary": {
+          "$ref": "#/$defs/nonEmpty"
+        }
       }
     },
     "testResultPayload": {
@@ -1338,15 +1493,25 @@
       "additionalProperties": false,
       "required": ["taskId", "revision", "outcome", "checks", "summary"],
       "properties": {
-        "taskId": { "$ref": "#/$defs/id" },
-        "revision": { "$ref": "#/$defs/nonEmpty" },
-        "outcome": { "enum": ["pass", "fail", "inconclusive"] },
+        "taskId": {
+          "$ref": "#/$defs/id"
+        },
+        "revision": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "outcome": {
+          "enum": ["pass", "fail", "inconclusive"]
+        },
         "checks": {
           "type": "array",
-          "items": { "$ref": "#/$defs/check" },
+          "items": {
+            "$ref": "#/$defs/check"
+          },
           "minItems": 1
         },
-        "summary": { "$ref": "#/$defs/nonEmpty" }
+        "summary": {
+          "$ref": "#/$defs/nonEmpty"
+        }
       }
     },
     "verificationResultPayload": {
@@ -1361,8 +1526,12 @@
         "rationale"
       ],
       "properties": {
-        "taskId": { "$ref": "#/$defs/id" },
-        "criterionId": { "$ref": "#/$defs/id" },
+        "taskId": {
+          "$ref": "#/$defs/id"
+        },
+        "criterionId": {
+          "$ref": "#/$defs/id"
+        },
         "method": {
           "enum": [
             "executable_check",
@@ -1371,9 +1540,15 @@
             "human_approval"
           ]
         },
-        "outcome": { "enum": ["passed", "failed", "waived", "inconclusive"] },
-        "evidenceArtifactIds": { "$ref": "#/$defs/artifactIds" },
-        "rationale": { "$ref": "#/$defs/nonEmpty" }
+        "outcome": {
+          "enum": ["passed", "failed", "waived", "inconclusive"]
+        },
+        "evidenceArtifactIds": {
+          "$ref": "#/$defs/artifactIds"
+        },
+        "rationale": {
+          "$ref": "#/$defs/nonEmpty"
+        }
       }
     },
     "decisionResultPayload": {
@@ -1388,7 +1563,9 @@
         "transitions"
       ],
       "properties": {
-        "taskId": { "$ref": "#/$defs/id" },
+        "taskId": {
+          "$ref": "#/$defs/id"
+        },
         "decisionType": {
           "enum": [
             "accept_plan",
@@ -1401,9 +1578,15 @@
             "fail"
           ]
         },
-        "outcome": { "enum": ["accepted", "rejected"] },
-        "rationale": { "$ref": "#/$defs/nonEmpty" },
-        "evidenceArtifactIds": { "$ref": "#/$defs/artifactIds" },
+        "outcome": {
+          "enum": ["accepted", "rejected"]
+        },
+        "rationale": {
+          "$ref": "#/$defs/nonEmpty"
+        },
+        "evidenceArtifactIds": {
+          "$ref": "#/$defs/artifactIds"
+        },
         "transitions": {
           "type": "array",
           "minItems": 1,
@@ -1415,9 +1598,15 @@
               "entityType": {
                 "enum": ["goal", "run", "phase", "task", "finding"]
               },
-              "entityId": { "$ref": "#/$defs/id" },
-              "from": { "$ref": "#/$defs/nonEmpty" },
-              "to": { "$ref": "#/$defs/nonEmpty" }
+              "entityId": {
+                "$ref": "#/$defs/id"
+              },
+              "from": {
+                "$ref": "#/$defs/nonEmpty"
+              },
+              "to": {
+                "$ref": "#/$defs/nonEmpty"
+              }
             }
           }
         }
@@ -1435,8 +1624,12 @@
         "remainingRisks"
       ],
       "properties": {
-        "taskId": { "$ref": "#/$defs/id" },
-        "outcome": { "enum": ["completed", "failed"] },
+        "taskId": {
+          "$ref": "#/$defs/id"
+        },
+        "outcome": {
+          "enum": ["completed", "failed"]
+        },
         "criteria": {
           "type": "array",
           "minItems": 1,
@@ -1445,19 +1638,29 @@
             "additionalProperties": false,
             "required": ["criterionId", "status", "evidenceArtifactIds"],
             "properties": {
-              "criterionId": { "$ref": "#/$defs/id" },
+              "criterionId": {
+                "$ref": "#/$defs/id"
+              },
               "status": {
                 "enum": ["satisfied", "failed", "waived", "inconclusive"]
               },
-              "evidenceArtifactIds": { "$ref": "#/$defs/artifactIds" }
+              "evidenceArtifactIds": {
+                "$ref": "#/$defs/artifactIds"
+              }
             }
           }
         },
-        "finalReportArtifactId": { "$ref": "#/$defs/id" },
-        "unresolvedFindingIds": { "$ref": "#/$defs/artifactIds" },
+        "finalReportArtifactId": {
+          "$ref": "#/$defs/id"
+        },
+        "unresolvedFindingIds": {
+          "$ref": "#/$defs/artifactIds"
+        },
         "remainingRisks": {
           "type": "array",
-          "items": { "$ref": "#/$defs/nonEmpty" }
+          "items": {
+            "$ref": "#/$defs/nonEmpty"
+          }
         }
       }
     },
@@ -1475,12 +1678,24 @@
             "path"
           ],
           "properties": {
-            "operation": { "const": "search" },
-            "taskId": { "$ref": "#/$defs/id" },
-            "repositoryId": { "$ref": "#/$defs/id" },
-            "revision": { "$ref": "#/$defs/nonEmpty" },
-            "query": { "$ref": "#/$defs/nonEmpty" },
-            "path": { "$ref": "#/$defs/nonEmpty" }
+            "operation": {
+              "const": "search"
+            },
+            "taskId": {
+              "$ref": "#/$defs/id"
+            },
+            "repositoryId": {
+              "$ref": "#/$defs/id"
+            },
+            "revision": {
+              "$ref": "#/$defs/nonEmpty"
+            },
+            "query": {
+              "$ref": "#/$defs/nonEmpty"
+            },
+            "path": {
+              "$ref": "#/$defs/nonEmpty"
+            }
           }
         },
         {
@@ -1495,13 +1710,27 @@
             "content"
           ],
           "properties": {
-            "operation": { "const": "write_file" },
-            "taskId": { "$ref": "#/$defs/id" },
-            "repositoryId": { "$ref": "#/$defs/id" },
-            "revision": { "$ref": "#/$defs/nonEmpty" },
-            "path": { "$ref": "#/$defs/nonEmpty" },
-            "content": { "type": "string" },
-            "expectedDigest": { "$ref": "#/$defs/id" }
+            "operation": {
+              "const": "write_file"
+            },
+            "taskId": {
+              "$ref": "#/$defs/id"
+            },
+            "repositoryId": {
+              "$ref": "#/$defs/id"
+            },
+            "revision": {
+              "$ref": "#/$defs/nonEmpty"
+            },
+            "path": {
+              "$ref": "#/$defs/nonEmpty"
+            },
+            "content": {
+              "type": "string"
+            },
+            "expectedDigest": {
+              "$ref": "#/$defs/id"
+            }
           }
         },
         {
@@ -1516,17 +1745,31 @@
             "patches"
           ],
           "properties": {
-            "operation": { "const": "patch_file" },
-            "taskId": { "$ref": "#/$defs/id" },
-            "repositoryId": { "$ref": "#/$defs/id" },
-            "revision": { "$ref": "#/$defs/nonEmpty" },
-            "path": { "$ref": "#/$defs/nonEmpty" },
+            "operation": {
+              "const": "patch_file"
+            },
+            "taskId": {
+              "$ref": "#/$defs/id"
+            },
+            "repositoryId": {
+              "$ref": "#/$defs/id"
+            },
+            "revision": {
+              "$ref": "#/$defs/nonEmpty"
+            },
+            "path": {
+              "$ref": "#/$defs/nonEmpty"
+            },
             "patches": {
               "type": "array",
-              "items": { "$ref": "#/$defs/filePatch" },
+              "items": {
+                "$ref": "#/$defs/filePatch"
+              },
               "minItems": 1
             },
-            "expectedDigest": { "$ref": "#/$defs/id" }
+            "expectedDigest": {
+              "$ref": "#/$defs/id"
+            }
           }
         },
         {
@@ -1540,12 +1783,24 @@
             "path"
           ],
           "properties": {
-            "operation": { "const": "delete_file" },
-            "taskId": { "$ref": "#/$defs/id" },
-            "repositoryId": { "$ref": "#/$defs/id" },
-            "revision": { "$ref": "#/$defs/nonEmpty" },
-            "path": { "$ref": "#/$defs/nonEmpty" },
-            "expectedDigest": { "$ref": "#/$defs/id" }
+            "operation": {
+              "const": "delete_file"
+            },
+            "taskId": {
+              "$ref": "#/$defs/id"
+            },
+            "repositoryId": {
+              "$ref": "#/$defs/id"
+            },
+            "revision": {
+              "$ref": "#/$defs/nonEmpty"
+            },
+            "path": {
+              "$ref": "#/$defs/nonEmpty"
+            },
+            "expectedDigest": {
+              "$ref": "#/$defs/id"
+            }
           }
         },
         {
@@ -1561,19 +1816,33 @@
             "changedFiles"
           ],
           "properties": {
-            "operation": { "const": "test" },
-            "taskId": { "$ref": "#/$defs/id" },
-            "repositoryId": { "$ref": "#/$defs/id" },
-            "revision": { "$ref": "#/$defs/nonEmpty" },
+            "operation": {
+              "const": "test"
+            },
+            "taskId": {
+              "$ref": "#/$defs/id"
+            },
+            "repositoryId": {
+              "$ref": "#/$defs/id"
+            },
+            "revision": {
+              "$ref": "#/$defs/nonEmpty"
+            },
             "command": {
               "type": "array",
-              "items": { "$ref": "#/$defs/nonEmpty" },
+              "items": {
+                "$ref": "#/$defs/nonEmpty"
+              },
               "minItems": 1
             },
-            "cwd": { "$ref": "#/$defs/nonEmpty" },
+            "cwd": {
+              "$ref": "#/$defs/nonEmpty"
+            },
             "changedFiles": {
               "type": "array",
-              "items": { "$ref": "#/$defs/nonEmpty" }
+              "items": {
+                "$ref": "#/$defs/nonEmpty"
+              }
             }
           }
         }

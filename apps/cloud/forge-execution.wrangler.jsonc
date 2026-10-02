@@ -10,9 +10,9 @@
   "d1_databases": [
     {
       "binding": "CONCLAVE_DB",
-      "database_name": "conclave-production",
-      "database_id": "09b20c15-ba5b-413a-85de-17f3480fd1c2",
-      "migrations_dir": "migrations",
+      "database_name": "conclave-v8-production",
+      "database_id": "50a2b0dd-5f3d-4fab-af12-93cd96831701",
+      "migrations_dir": "migrations-v8",
     },
   ],
   "r2_buckets": [

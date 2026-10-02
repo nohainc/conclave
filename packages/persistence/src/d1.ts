@@ -1038,39 +1038,6 @@ export class D1ModelCallRepository {
         call.finishedAt,
       )
       .run();
-    const startedMs = Date.parse(call.startedAt);
-    const finishedMs = call.finishedAt
-      ? Date.parse(call.finishedAt)
-      : startedMs;
-    const durationMs =
-      Number.isFinite(startedMs) && Number.isFinite(finishedMs)
-        ? Math.max(0, finishedMs - startedMs)
-        : 0;
-    await this.db
-      .prepare(
-        `INSERT INTO usage (id, workspace_id, project_id, run_id, worker_id, assignment_id,
-           provider, billing_category, input_tokens, output_tokens, cost_micros, duration_ms, recorded_at)
-         SELECT ?1, r.workspace_id, r.project_id, r.id, ?2, NULL, ?3, 'api', ?4, ?5, NULL, ?6, ?7
-         FROM attempts a
-         JOIN tasks t ON t.id = a.task_id
-         JOIN phases p ON p.id = t.phase_id
-         JOIN runs r ON r.id = p.run_id
-         WHERE a.id = ?7
-         ON CONFLICT(id) DO UPDATE SET input_tokens=excluded.input_tokens,
-           output_tokens=excluded.output_tokens, duration_ms=excluded.duration_ms,
-           recorded_at=excluded.recorded_at`,
-      )
-      .bind(
-        `usage:model-call:${call.id}`,
-        call.workerId,
-        call.provider,
-        call.inputTokens ?? 0,
-        call.outputTokens ?? 0,
-        durationMs,
-        call.finishedAt ?? call.startedAt,
-        call.attemptId,
-      )
-      .run();
   }
 
   async listByAttempt(attemptId: string): Promise<readonly ModelCallRecord[]> {

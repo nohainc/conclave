@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_protocol/conclave_protocol.dart';
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'assignment_journal.dart';
 import 'runtime_capabilities.dart';
-import 'worker_protocol.dart';
 import 'workspace_enrollment.dart';
 import 'workspace_transport.dart';
 
@@ -94,9 +94,9 @@ class HostConnectionPreflightException implements Exception {
   String toString() => message;
 }
 
-/// A normalized local adapter failure safe to report across the runtime link.
-class V7AdapterExecutionFailure implements Exception {
-  const V7AdapterExecutionFailure({
+/// A normalized local assignment failure safe to report across the runtime link.
+class AssignmentExecutionFailure implements Exception {
+  const AssignmentExecutionFailure({
     required this.code,
     required this.message,
     this.retryable = false,
@@ -369,24 +369,17 @@ class HostCloudConnection {
 
   /// Relays validated Worker facts using the trusted Assignment correlation.
   /// Workers never provide Workspace, Host, Run, or Task identity.
-  void reportWorkerNotification(
+  void reportWorkerProgress(
     HostAssignmentContext context,
-    WorkerRpcNotification notification,
+    WorkerProgress progress,
   ) {
-    final assignmentId = notification.params['assignmentId'];
-    if (assignmentId != context.assignmentId) return;
+    if (progress.assignmentId != context.assignmentId) return;
     final socket = _transport;
     if (socket == null || sessionId == null) return;
     final now = DateTime.now().toUtc();
-    final terminal =
-        notification.method == 'result' || notification.method == 'error';
-    if (!terminal) {
-      final last = _lastEphemeralWorkerEvent[context.assignmentId];
-      if (last != null && now.difference(last).inMilliseconds < 100) return;
-      _lastEphemeralWorkerEvent[context.assignmentId] = now;
-    }
-    final params = Map<String, Object?>.from(notification.params)
-      ..remove('assignmentId');
+    final last = _lastEphemeralWorkerEvent[context.assignmentId];
+    if (last != null && now.difference(last).inMilliseconds < 100) return;
+    _lastEphemeralWorkerEvent[context.assignmentId] = now;
     final correlation = {
       'workspaceId': context.workspaceId,
       'hostId': context.hostId,
@@ -397,57 +390,14 @@ class HostCloudConnection {
       'assignmentId': context.assignmentId,
       'idempotencyKey': context.idempotencyKey,
     };
-    if (notification.method == 'result') {
-      socket.send(jsonEncode(_assignmentEnvelope(
-        'assignment.result',
-        correlation,
-        {
-          'assignmentId': context.assignmentId,
-          'status': params['status'] ?? 'completed',
-          'output': params['output'],
-          'artifactIds': params['artifactIds'] ?? const [],
-          'completedAt': params['completedAt'] ?? now.toIso8601String(),
-        },
-      )));
-      return;
-    }
-    if (notification.method == 'error') {
-      socket.send(jsonEncode(_assignmentEnvelope(
-        'assignment.error',
-        correlation,
-        {
-          'assignmentId': context.assignmentId,
-          'error': {
-            'code': params['code'] ?? 'worker_error',
-            'message': params['message'] ?? 'Worker failed',
-            'retryable': params['retryable'] ?? false,
-            if (params['details'] is Map) 'details': params['details'],
-          },
-          'failedAt': params['timestamp'] ?? now.toIso8601String(),
-        },
-      )));
-      return;
-    }
-    final percentage = params['percentage'] is num
-        ? (params['percentage'] as num).toDouble()
-        : 0.0;
-    final message = params['message'] is String
-        ? params['message'] as String
-        : params['delta'] is String
-            ? params['delta'] as String
-            : notification.method;
     socket.send(jsonEncode(_assignmentEnvelope(
       'assignment.progress',
       correlation,
       {
         'assignmentId': context.assignmentId,
-        'percentage': percentage.clamp(0, 100),
-        'message': message,
-        'observedAt': params['timestamp'] ?? now.toIso8601String(),
-        'metrics': {
-          'workerEventType': notification.method,
-          ...params,
-        },
+        'percentage': progress.percentage,
+        'message': progress.message ?? '',
+        'observedAt': now.toIso8601String(),
       },
     )));
   }
@@ -1341,7 +1291,8 @@ class HostCloudConnection {
         result: {'summary': result.summary, 'artifactIds': result.artifactIds},
       );
     } catch (error) {
-      final normalizedError = error is V7AdapterExecutionFailure ? error : null;
+      final normalizedError =
+          error is AssignmentExecutionFailure ? error : null;
       final errorCode = canonicalExecutionErrorCode(normalizedError?.code);
       final errorMessage = executionErrorMessage(errorCode);
       socket.send(jsonEncode(_assignmentEnvelope(

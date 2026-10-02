@@ -523,7 +523,6 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
         name: widget.project.name,
         description: widget.project.description,
         instructions: widget.project.instructions,
-        defaultExecutionPolicy: widget.project.defaultExecutionPolicy,
         settings: {
           ...widget.project.settings,
           'workstreamOrder': orderIds,
@@ -534,15 +533,10 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
         id: updatedProject.id,
         name: updatedProject.name,
         branch: updatedProject.branch,
-        activeGoals: updatedProject.activeGoals,
         lastActivity: updatedProject.lastActivity,
-        chats: updatedProject.chats.isNotEmpty
-            ? updatedProject.chats
-            : widget.project.chats,
         workstreams: updatedList,
         description: updatedProject.description,
         instructions: updatedProject.instructions,
-        defaultExecutionPolicy: updatedProject.defaultExecutionPolicy,
         archived: updatedProject.archived,
         role: updatedProject.role.isNotEmpty
             ? updatedProject.role
@@ -1630,7 +1624,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                 tabs: const [
                   Tab(text: 'Discuss'),
                   Tab(text: 'Work'),
-                  Tab(text: 'Execution'),
+                  Tab(text: 'Work settings'),
                 ],
               ),
             ),
@@ -1749,12 +1743,10 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     final defaultWorkflowId = _workConfig['defaultWorkflowId']?.toString() ??
         _workflowCatalog.firstOrNull?.id ??
         '';
-    final chatgptWorker = _preferredReadyWorker('chatgpt');
-    final geminiWorker = _preferredReadyWorker('gemini');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Execution', style: Theme.of(context).textTheme.titleLarge),
+        Text('Work settings', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 16),
         Text('Default workflow', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 6),
@@ -1792,22 +1784,16 @@ class _WorkstreamPageState extends State<WorkstreamPage>
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
               child: Text(
-                'Grant a Workspace to this Project and install a Worker to configure Steps.',
+                'Connect a Workspace and create a ready logical Worker before assigning Steps.',
               ),
             )
           else if (_eligibleWorkers.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
               child: Text(
-                'No Workers are Ready yet. Check sign-in and enablement in Workspace settings.',
+                'No logical Workers are Ready yet. Check Profile readiness in Workspace.',
               ),
             ),
-          if (bindings.isEmpty && chatgptWorker != null && geminiWorker != null)
-            _recommendedSetupCard(chatgptWorker, geminiWorker),
-          if (bindings.isEmpty && chatgptWorker != null && geminiWorker == null)
-            _singleWorkerSetupCard(chatgptWorker),
-          if (bindings.isEmpty && geminiWorker != null && chatgptWorker == null)
-            _singleWorkerSetupCard(geminiWorker),
           ...const [
             'direct',
             'research',
@@ -2026,124 +2012,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     return details.isEmpty
         ? 'Instructions, model, and fallback'
         : details.join(' · ');
-  }
-
-  StudioWorker? _preferredReadyWorker(String workerTypeId) {
-    final matching = _eligibleWorkers
-        .where((worker) => worker.workerTypeId == workerTypeId)
-        .toList()
-      ..sort((a, b) {
-        final workspaceCompare = (_projectWorkspaceNames[a.workspaceId] ?? '')
-            .compareTo(_projectWorkspaceNames[b.workspaceId] ?? '');
-        if (workspaceCompare != 0) return workspaceCompare;
-        return a.id.compareTo(b.id);
-      });
-    return matching.firstOrNull;
-  }
-
-  Widget _recommendedSetupCard(
-    StudioWorker chatgptWorker,
-    StudioWorker geminiWorker,
-  ) =>
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Set up Work',
-                  style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 4),
-              const Text('Recommended'),
-              const SizedBox(height: 12),
-              ...const [
-                ('Direct', 'chatgpt'),
-                ('Research', 'gemini'),
-                ('Plan', 'gemini'),
-                ('Implement', 'chatgpt'),
-                ('Test', 'chatgpt'),
-                ('Verify', 'gemini'),
-              ].map((step) {
-                final worker =
-                    step.$2 == 'chatgpt' ? chatgptWorker : geminiWorker;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(step.$1)),
-                      Text(_workerDisplayName(worker)),
-                    ],
-                  ),
-                );
-              }),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: !_canConfigureWork || _savingWorkConfig
-                    ? null
-                    : () => _applySuggestedWorkerSetup({
-                          'direct': chatgptWorker,
-                          'research': geminiWorker,
-                          'plan': geminiWorker,
-                          'implement': chatgptWorker,
-                          'test': chatgptWorker,
-                          'verify': geminiWorker,
-                        }),
-                child: _savingWorkConfig
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Use recommended'),
-              ),
-            ],
-          ),
-        ),
-      );
-
-  Widget _singleWorkerSetupCard(StudioWorker worker) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Set up Work with ${_workerDisplayName(worker)} for every Step',
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: !_canConfigureWork || _savingWorkConfig
-                    ? null
-                    : () => _applySuggestedWorkerSetup({
-                          for (final id in const [
-                            'direct',
-                            'research',
-                            'plan',
-                            'implement',
-                            'test',
-                            'verify',
-                          ])
-                            id: worker,
-                        }),
-                child: _savingWorkConfig
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : Text('Use ${_workerDisplayName(worker)} for all'),
-              ),
-            ],
-          ),
-        ),
-      );
-
-  Future<void> _applySuggestedWorkerSetup(
-    Map<String, StudioWorker> assignments,
-  ) async {
-    final bindings = <String, dynamic>{
-      for (final entry in assignments.entries)
-        entry.key: {'workerId': entry.value.id},
-    };
-    await _saveWorkConfig({..._workConfig, 'bindings': bindings});
   }
 
   void _setStepBinding(String bindingId, Map<String, dynamic> binding) {
@@ -2937,7 +2805,9 @@ class _WorkComposer extends StatelessWidget {
             const SizedBox(height: 10),
             const LinearProgressIndicator(),
             const SizedBox(height: 6),
-            const Text('Checking Worker setup and starting Work…'),
+            const Text(
+              'Checking Engine, Profile, and Provider CLI before starting Work…',
+            ),
           ],
           if (submitError != null) ...[
             const SizedBox(height: 10),

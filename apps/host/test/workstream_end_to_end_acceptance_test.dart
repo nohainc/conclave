@@ -6,6 +6,7 @@ import 'package:conclave_host/workstream_directory.dart';
 import 'package:conclave_host/workstream_marker.dart';
 import 'package:conclave_host/workstream_path.dart';
 import 'package:test/test.dart';
+import 'support/assignment_worker_fixture.dart';
 
 void main() {
   test('clean-room Workstream execution survives renames and re-enrollment',
@@ -38,11 +39,7 @@ Future<void> main(List<String> args) async {
       pathResolver: WorkstreamPathResolver(workRoot),
     );
     final handler = WorkerAssignmentHandler(
-      executor: WorkerProcessExecutor(),
-      resolve: (workerId) => WorkerProcessSpec(
-        workerId: workerId,
-        executable: 'dart',
-      ),
+      resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
       workstreamDirectoryLifecycle: lifecycle,
     );
 
@@ -52,8 +49,8 @@ Future<void> main(List<String> args) async {
       projectId: 'project-1',
       workstreamId: 'workstream-1',
     );
-    final firstSpec = await handler.prepareProcessSpec(firstContext);
-    final firstDirectory = Directory(firstSpec.workingDirectory!);
+    final firstScope = await handler.prepareAssignmentScope(firstContext);
+    final firstDirectory = firstScope.workingDirectory;
     expect(firstDirectory.path,
         endsWith('project-1${Platform.pathSeparator}workstream-1'));
     expect(firstDirectory.path, isNot(contains('Original Project')));
@@ -61,9 +58,9 @@ Future<void> main(List<String> args) async {
     expect(firstDirectory.path, isNot(contains(firstWorkspaceId)));
 
     final firstWorker = await Process.run(
-      firstSpec.executable,
+      Platform.resolvedExecutable,
       [workerScript.path, remote.path, 'first-worker'],
-      workingDirectory: firstSpec.workingDirectory,
+      workingDirectory: firstDirectory.path,
     );
     expect(firstWorker.exitCode, 0,
         reason: '${firstWorker.stdout}\n${firstWorker.stderr}');
@@ -82,7 +79,7 @@ Future<void> main(List<String> args) async {
     expect(projectName, 'Renamed Project');
     expect(workstreamName, 'Renamed Again');
 
-    final secondWorkerSpec = await handler.prepareProcessSpec(
+    final secondWorkerScope = await handler.prepareAssignmentScope(
       firstContext.copyWith(
         workerId: 'claude-review',
         payload: {
@@ -91,11 +88,11 @@ Future<void> main(List<String> args) async {
         },
       ),
     );
-    expect(secondWorkerSpec.workingDirectory, firstSpec.workingDirectory);
+    expect(secondWorkerScope.workingDirectory.path, firstDirectory.path);
     final continuation = await Process.run(
-      secondWorkerSpec.executable,
+      Platform.resolvedExecutable,
       [workerScript.path, remote.path, 'second-worker'],
-      workingDirectory: secondWorkerSpec.workingDirectory,
+      workingDirectory: secondWorkerScope.workingDirectory.path,
     );
     expect(continuation.exitCode, 0,
         reason: '${continuation.stdout}\n${continuation.stderr}');
@@ -114,7 +111,7 @@ Future<void> main(List<String> args) async {
 
     // A second Workstream in the same Project gets a distinct directory and
     // can clone/use the same repository in parallel.
-    final secondWorkstreamSpec = await handler.prepareProcessSpec(
+    final secondWorkstreamScope = await handler.prepareAssignmentScope(
       _context(
         workspaceId: firstWorkspaceId,
         workerId: 'codex-company',
@@ -122,18 +119,18 @@ Future<void> main(List<String> args) async {
         workstreamId: 'workstream-2',
       ),
     );
-    expect(secondWorkstreamSpec.workingDirectory,
-        isNot(firstSpec.workingDirectory));
+    expect(secondWorkstreamScope.workingDirectory.path,
+        isNot(firstDirectory.path));
     final parallel = await Process.run(
-      secondWorkstreamSpec.executable,
+      Platform.resolvedExecutable,
       [workerScript.path, remote.path, 'parallel-worker'],
-      workingDirectory: secondWorkstreamSpec.workingDirectory,
+      workingDirectory: secondWorkstreamScope.workingDirectory.path,
     );
     expect(parallel.exitCode, 0,
         reason: '${parallel.stdout}\n${parallel.stderr}');
     expect(
       await File(
-              '${secondWorkstreamSpec.workingDirectory}${Platform.pathSeparator}conclave${Platform.pathSeparator}parallel-worker.txt')
+              '${secondWorkstreamScope.workingDirectory.path}${Platform.pathSeparator}conclave${Platform.pathSeparator}parallel-worker.txt')
           .readAsString(),
       'parallel-worker',
     );
@@ -150,14 +147,10 @@ Future<void> main(List<String> args) async {
       pathResolver: WorkstreamPathResolver(workRoot),
     );
     final reenrolledHandler = WorkerAssignmentHandler(
-      executor: WorkerProcessExecutor(),
-      resolve: (workerId) => WorkerProcessSpec(
-        workerId: workerId,
-        executable: 'dart',
-      ),
+      resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
       workstreamDirectoryLifecycle: lifecycle,
     );
-    final reenrolledSpec = await reenrolledHandler.prepareProcessSpec(
+    final reenrolledScope = await reenrolledHandler.prepareAssignmentScope(
       _context(
         workspaceId: secondWorkspaceId,
         workerId: 'codex-personal',
@@ -165,11 +158,11 @@ Future<void> main(List<String> args) async {
         workstreamId: 'workstream-1',
       ),
     );
-    expect(reenrolledSpec.workingDirectory, firstSpec.workingDirectory);
+    expect(reenrolledScope.workingDirectory.path, firstDirectory.path);
     final reentry = await Process.run(
-      reenrolledSpec.executable,
+      Platform.resolvedExecutable,
       [workerScript.path, remote.path, 'reenrolled-worker'],
-      workingDirectory: reenrolledSpec.workingDirectory,
+      workingDirectory: reenrolledScope.workingDirectory.path,
     );
     expect(reentry.exitCode, 0, reason: '${reentry.stdout}\n${reentry.stderr}');
     expect(
@@ -210,6 +203,7 @@ HostAssignmentContext _context({
       idempotencyKey: 'idempotency-$workstreamId',
       payload: {
         'workerId': workerId,
+        'workerTypeId': 'test-worker',
         'projectId': projectId,
         'workstreamId': workstreamId,
         'workRequestId': 'request-$workstreamId',

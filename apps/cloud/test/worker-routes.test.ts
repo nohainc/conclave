@@ -47,70 +47,69 @@ describe("Worker API routes", () => {
     });
   });
 
-  it("removes Workspace-scoped Architecture v2 Worker endpoints", async () => {
-    const handlers = {} as WorkerRouteHandlers;
-    for (const [path, method] of [
-      ["/api/workspaces/workspace-1/workers", "GET"],
-      ["/api/v2/workspaces/workspace-1/workers", "GET"],
-      ["/api/workspaces/workspace-1/workers/codex", "GET"],
-      ["/api/v2/workspaces/workspace-1/workers/codex", "PUT"],
-    ] as const) {
-      const response = await routeWorkerRequest(
-        request(path, method),
-        {} as Parameters<typeof routeWorkerRequest>[1],
-        undefined,
-        handlers,
-        dependencies,
-      );
-      expect(response.status, `${method} ${path}`).toBe(404);
-    }
+  it("serves the logical Worker inventory at its current product route", async () => {
+    const handler = vi.fn(
+      async () => new Response("inventory", { status: 200 }),
+    );
+    const response = await routeWorkerRequest(
+      request("/api/workers?workspaceId=workspace-1"),
+      {} as Parameters<typeof routeWorkerRequest>[1],
+      undefined,
+      {
+        handleListWorkspaceWorkerInventory: handler,
+      } as unknown as WorkerRouteHandlers,
+      dependencies,
+    );
+    expect(response.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
   });
 
-  it("keeps V7 inventory and scheduling control routes", async () => {
-    const calls: unknown[][] = [];
-    const handlers = {
-      handleListWorkspaceWorkerInventory: vi.fn(async (...args: unknown[]) => {
-        calls.push(args);
-        return new Response("inventory", { status: 200 });
-      }),
-      handleV7WorkerScheduling: vi.fn(async (...args: unknown[]) => {
-        calls.push(args);
-        return new Response("scheduling", { status: 200 });
-      }),
-    } as unknown as WorkerRouteHandlers;
+  it("serves Workspace releases only at the versionless release routes", async () => {
+    const routes = [
+      [
+        "GET",
+        "/api/workspace-releases/latest",
+        "handleGetLatestWorkspaceRelease",
+      ],
+      [
+        "POST",
+        "/api/workspace-releases/publish",
+        "handlePublishWorkspaceRelease",
+      ],
+      ["GET", "/api/workspace-releases/1.2.3", "handleGetWorkspaceRelease"],
+      [
+        "GET",
+        "/api/workspace-releases/1.2.3/download",
+        "handleDownloadWorkspaceRelease",
+      ],
+      [
+        "POST",
+        "/api/workspace-releases/1.2.3/revoke",
+        "handleRevokeWorkspaceRelease",
+      ],
+    ] as const;
 
-    for (const [path, method] of [
-      ["/api/v7/workers", "GET"],
-      ["/api/v7/workers/worker-1/scheduling", "GET"],
-      ["/api/v7/workers/worker-1/scheduling/disable", "POST"],
-    ] as const) {
+    for (const [method, path, handlerName] of routes) {
+      const handler = vi.fn(
+        async () => new Response("release", { status: 200 }),
+      );
       const response = await routeWorkerRequest(
         request(path, method),
         {} as Parameters<typeof routeWorkerRequest>[1],
         undefined,
-        handlers,
+        { [handlerName]: handler } as unknown as WorkerRouteHandlers,
         dependencies,
       );
       expect(response.status, `${method} ${path}`).toBe(200);
+      expect(handler).toHaveBeenCalledOnce();
     }
-
-    expect(handlers.handleListWorkspaceWorkerInventory).toHaveBeenCalledOnce();
-    expect(handlers.handleV7WorkerScheduling).toHaveBeenCalledTimes(2);
-    expect(calls).toHaveLength(3);
   });
 
-  it("retires native Worker package routes and serves shared release trust", async () => {
+  it("serves shared release trust", async () => {
     const handlers = {
       handleGetReleaseTrustState: vi.fn(async () => new Response("trust")),
     } as unknown as WorkerRouteHandlers;
 
-    const catalog = await routeWorkerRequest(
-      request("/api/worker-releases?platform=linux-arm64"),
-      {} as Parameters<typeof routeWorkerRequest>[1],
-      undefined,
-      handlers,
-      dependencies,
-    );
     const trust = await routeWorkerRequest(
       request("/api/release-trust"),
       {} as Parameters<typeof routeWorkerRequest>[1],
@@ -118,33 +117,7 @@ describe("Worker API routes", () => {
       handlers,
       dependencies,
     );
-    const publish = await routeWorkerRequest(
-      request("/api/worker-releases/publish", "POST"),
-      {} as Parameters<typeof routeWorkerRequest>[1],
-      undefined,
-      handlers,
-      dependencies,
-    );
-    const legacyTrust = await routeWorkerRequest(
-      request("/api/worker-releases/trust"),
-      {} as Parameters<typeof routeWorkerRequest>[1],
-      undefined,
-      handlers,
-      dependencies,
-    );
-    const legacy = await routeWorkerRequest(
-      request("/api/v7/adapters"),
-      {} as Parameters<typeof routeWorkerRequest>[1],
-      undefined,
-      {} as WorkerRouteHandlers,
-      dependencies,
-    );
-
-    expect(catalog.status).toBe(410);
-    expect(publish.status).toBe(410);
-    expect(legacyTrust.status).toBe(410);
     expect(trust.status).toBe(200);
-    expect(legacy.status).toBe(404);
     expect(handlers.handleGetReleaseTrustState).toHaveBeenCalledOnce();
   });
 

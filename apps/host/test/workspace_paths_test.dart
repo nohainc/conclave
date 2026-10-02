@@ -41,7 +41,7 @@ class _FakeMacRuntime implements PlatformRuntime {
 }
 
 void main() {
-  test('macOS defaults group Workspace state, work, adapters, updates and logs',
+  test('macOS defaults group Workspace state, work, updates and logs',
       () async {
     final home = await Directory.systemTemp.createTemp('workspace-paths-');
     addTearDown(() => home.delete(recursive: true));
@@ -51,8 +51,6 @@ void main() {
 
     expect(state.path,
         '${home.path}/Library/Application Support/Conclave/Workspace/State');
-    expect(paths.adaptersDirectory.path,
-        '${home.path}/Library/Application Support/Conclave/Workspace/Adapters');
     expect(paths.profilesDirectory.path,
         '${home.path}/Library/Application Support/Conclave/Workspace/Profiles');
     expect(paths.updatesDirectory.path,
@@ -72,10 +70,11 @@ void main() {
     oldConfig.writeAsStringSync('{"workspaceId":"workspace-1"}');
     await File('${oldState.path}/installation-id')
         .writeAsString('install-stable');
-    final adapterManifest =
-        File('${oldState.path}/v7-adapters/pkg/adapter.json');
-    await adapterManifest.create(recursive: true);
-    adapterManifest.writeAsStringSync('{"version":"1.0.0"}');
+    final legacyRegistry = File('${oldState.path}/configured-workers.json');
+    await legacyRegistry.writeAsString('{"schemaVersion":17}');
+    final oldStateWork = File('${oldState.path}/Work/user-data.txt');
+    await oldStateWork.create(recursive: true);
+    oldStateWork.writeAsStringSync('preserve');
     final stagedRelease = File('${oldState.path}/updates/staged/release.zip');
     await stagedRelease.create(recursive: true);
     stagedRelease.writeAsStringSync('release');
@@ -101,10 +100,18 @@ void main() {
     expect(
         File('${paths.stateDirectory.path}/installation-id').readAsStringSync(),
         'install-stable');
+    expect(legacyRegistry.existsSync(), isTrue);
+    expect(oldStateWork.readAsStringSync(), 'preserve');
     expect(
-        File('${paths.adaptersDirectory.path}/pkg/adapter.json')
-            .readAsStringSync(),
-        contains('1.0.0'));
+      Directory('${paths.applicationSupportDirectory.path}/Adapters')
+          .existsSync(),
+      isFalse,
+    );
+    expect(
+      Directory('${paths.applicationSupportDirectory.path}/Workers')
+          .existsSync(),
+      isFalse,
+    );
     expect(
         File('${paths.updatesDirectory.path}/staged/release.zip')
             .readAsStringSync(),
@@ -142,7 +149,6 @@ void main() {
     for (final directory in [
       paths.applicationSupportDirectory,
       paths.stateDirectory,
-      paths.adaptersDirectory,
       paths.profilesDirectory,
       paths.updatesDirectory,
       paths.logsDirectory,

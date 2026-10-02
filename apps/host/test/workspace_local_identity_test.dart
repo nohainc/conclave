@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/host_configuration.dart';
+import 'package:conclave_host/tool_profile_catalog.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -18,10 +19,17 @@ void main() {
       workspaceId: localId,
     );
     final worker = await registry.create(
-      name: 'Personal Codex',
-      workerTypeId: 'codex',
-      authStrategy: 'browser_auth',
-      credentialStatus: LocalWorkerCredentialStatus.notRequired,
+      catalogEntry: LogicalWorkerCatalogEntry(
+        workerTypeId: 'chatgpt',
+        displayName: 'ChatGPT',
+        description: '',
+        profileDefinitionId: 'chatgpt-codex',
+        providerToolName: 'codex',
+        engineFamily: 'cli',
+        releaseStage: 'testing',
+        capabilities: const ['text'],
+        sortOrder: 0,
+      ),
     );
 
     expect(worker.workspaceId, startsWith('local-'));

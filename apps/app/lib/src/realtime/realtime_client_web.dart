@@ -14,7 +14,6 @@ class _BrowserRealtimeClient implements RealtimeClient {
   String? _workspaceId;
   String? _projectId;
   String? _workstreamId;
-  String? _chatId;
   String? _runId;
   String? _executionWorkspaceId;
   Timer? _reconnectTimer;
@@ -44,7 +43,6 @@ class _BrowserRealtimeClient implements RealtimeClient {
   Future<void> setScopes({
     String? projectId,
     String? workstreamId,
-    String? chatId,
     String? runId,
     String? executionWorkspaceId,
   }) async {
@@ -56,7 +54,6 @@ class _BrowserRealtimeClient implements RealtimeClient {
     }
     _projectId = projectId;
     _workstreamId = workstreamId;
-    _chatId = chatId;
     _runId = runId;
     _executionWorkspaceId = executionWorkspaceId;
     if (_socket?.readyState == html.WebSocket.OPEN) {
@@ -100,14 +97,10 @@ class _BrowserRealtimeClient implements RealtimeClient {
             _lastDurableSequence = sequence;
             _lastDurableSequences['user='] = sequence;
             final projectId = eventValue['projectId'];
-            final chatId = eventValue['chatId'];
             final runId = eventValue['runId'];
             final workspaceId = eventValue['workspaceId'];
             if (projectId is String) {
               _lastDurableSequences['project=$projectId'] = sequence;
-            }
-            if (chatId is String) {
-              _lastDurableSequences['chat=$chatId'] = sequence;
             }
             if (runId is String) {
               _lastDurableSequences['run=$runId'] = sequence;
@@ -141,7 +134,6 @@ class _BrowserRealtimeClient implements RealtimeClient {
         if (_projectId != null) {'kind': 'project', 'projectId': _projectId},
         if (_workstreamId != null)
           {'kind': 'workstream', 'workstreamId': _workstreamId},
-        if (_chatId != null) {'kind': 'chat', 'chatId': _chatId},
         if (_runId != null) {'kind': 'run', 'runId': _runId},
         if (_executionWorkspaceId != null)
           {

@@ -4,7 +4,7 @@ import 'platform_runtime.dart';
 
 /// Owns the on-disk layout for the Workspace desktop runtime.
 ///
-/// On macOS, user-managed state, work, adapters, and updates live under the
+/// On macOS, user-managed state, work, and updates live under the
 /// Workspace Application Support directory, while logs use the standard
 /// per-user Logs directory. Explicit --data-dir deployments remain colocated.
 class WorkspacePaths {
@@ -47,11 +47,7 @@ class WorkspacePaths {
   Directory get applicationSupportDirectory =>
       _usesManagedMacLayout ? stateDirectory.parent : stateDirectory;
 
-  Directory get adaptersDirectory => _usesManagedMacLayout
-      ? Directory('${applicationSupportDirectory.path}/Adapters')
-      : Directory('${stateDirectory.path}/v7-adapters');
-
-  /// Private opaque state owned by installed Worker Packages.
+  /// Private state owned by each configured logical Worker.
   Directory get workersDirectory =>
       Directory('${applicationSupportDirectory.path}/Workers');
 
@@ -103,7 +99,6 @@ class WorkspacePaths {
     }
     for (final directory in [
       stateDirectory,
-      adaptersDirectory,
       workersDirectory,
       profilesDirectory,
       enginesDirectory,
@@ -160,15 +155,15 @@ class WorkspacePaths {
         await _mergeMissingFiles(source, target, skip: const {
           'host.lock',
           'logs',
+          'Adapters',
+          'Workers',
+          'Work',
+          'configured-workers.json',
           'v7-adapters',
           'updates',
         });
 
         final paths = WorkspacePaths(target, platform: runtime);
-        await _moveOrMergeDirectory(
-          Directory('${source.path}/v7-adapters'),
-          paths.adaptersDirectory,
-        );
         await _moveOrMergeDirectory(
           Directory('${source.path}/updates'),
           paths.updatesDirectory,

@@ -1,41 +1,26 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:conclave_host/host.dart';
-import 'package:conclave_host/bundled_adapter_asset_loader.dart';
 import 'package:conclave_host/host_configuration.dart';
 import 'package:conclave_host/assignment_journal.dart';
 import 'package:conclave_host/cloud_connection.dart';
-import 'package:conclave_host/first_party_worker_registry.dart';
 import 'package:conclave_host/worker_executor.dart';
 import 'package:conclave_host/workstream_directory.dart';
 import 'package:conclave_host/workstream_path.dart';
 import 'package:conclave_host/repository_registry.dart';
 import 'package:conclave_host/self_update.dart';
 import 'package:conclave_host/secure_credentials.dart';
-import 'package:conclave_host/worker_trust_policy.dart';
-import 'package:conclave_host/v7_adapter_package_store.dart';
-import 'package:conclave_host/v7_adapter_catalog.dart';
 import 'package:conclave_host/workspace_enrollment.dart';
 import 'package:conclave_host/workspace_transport.dart';
 import 'package:conclave_host/worker_readiness.dart';
-import 'package:conclave_host/worker_process_supervisor.dart';
 import 'package:conclave_host/bundled_cli_worker_engine_loader.dart';
 import 'package:conclave_host/cli_worker_engine_supervisor.dart';
 import 'package:conclave_host/worker_diagnostic_store.dart';
-
-Set<WorkerPermission> _configuredPermissions() {
-  final configured = Platform.environment['CONCLAVE_WORKER_PERMISSIONS'];
-  if (configured == null || configured.trim().isEmpty) {
-    // Desktop installs must work without shell-provided environment. This is
-    // the machine-wide adapter admission ceiling only; each configured Worker
-    // still has an explicit local permission set that Cloud cannot broaden.
-    return WorkerPermission.values.toSet();
-  }
-  return parseConfiguredWorkerPermissions(configured);
-}
+import 'package:conclave_host/tool_profile_resolver.dart';
 
 Future<Host> buildWorkspaceRuntime(
   HostConfig config, {
@@ -46,9 +31,8 @@ Future<Host> buildWorkspaceRuntime(
   final workspacePaths = WorkspacePaths(config.dataDirectory);
   final secureCredentialStore =
       credentialStore ?? const PlatformSecureCredentialStore();
-  final workerExecutor = WorkerProcessExecutor();
   final releaseTrustPolicy = workerTrustPolicy;
-  final nativeWorkerSupervisor = WorkerProcessSupervisor();
+  CliWorkerEngineSupervisor? cliWorkerEngineSupervisor;
   final installationId = await InstallationIdentityStore(
     config.dataDirectory,
   ).getOrCreate(initialIdentity: config.installationId);
@@ -75,44 +59,9 @@ Future<Host> buildWorkspaceRuntime(
       await connection?.refreshWorkerInventory();
     },
     onWorkerRemoving: (workerId) async {
-      await workerExecutor.cancelWorker(workerId);
+      await cliWorkerEngineSupervisor?.cancelWorker(workerId);
     },
-    onLegacyCredentialReference: secureCredentialStore.delete,
   );
-  final v7AdapterPackageStore = V7AdapterPackageStore(
-    root: WorkspacePaths(config.dataDirectory).adaptersDirectory,
-    workerStateRoot: WorkspacePaths(config.dataDirectory).workersDirectory,
-    statePlatform: WorkspacePaths(config.dataDirectory).platform,
-    trustPolicy: workerTrustPolicy,
-    allowedPermissions: _configuredPermissions(),
-    loadBundledPackage: loadBundledFirstPartyAdapter,
-  );
-  final adapterCatalog = config.cloudUri == null
-      ? null
-      : V7AdapterCatalogClient(
-          cloudUri: config.cloudUri!,
-          packageStore: v7AdapterPackageStore,
-          authToken: config.authToken,
-        );
-  final workerVersionStore = WorkerVersionStore(
-    workersRoot: WorkspacePaths(config.dataDirectory).workersDirectory,
-    trustPolicy: workerTrustPolicy,
-    allowedPermissions: _configuredPermissions(),
-    workerStateSchemaVersion: 1,
-    hasActiveAssignments: () => (connection?.activeAssignmentCount ?? 0) > 0,
-    candidateHealthCheck: WorkerCandidateValidator(
-      supervisor: nativeWorkerSupervisor,
-    ),
-  );
-  final workerReleaseCatalog = config.cloudUri == null
-      ? null
-      : WorkerReleaseCatalog(
-          cloudUri: config.cloudUri!,
-          store: workerVersionStore,
-          authToken: config.authToken,
-          hasActiveAssignments: () =>
-              (connection?.activeAssignmentCount ?? 0) > 0,
-        );
   final toolProfileReleaseStore = ToolProfileReleaseStore(
     profilesRoot: WorkspacePaths(config.dataDirectory).profilesDirectory,
     trustPolicy: workerTrustPolicy,
@@ -120,7 +69,7 @@ Future<Host> buildWorkspaceRuntime(
   final bundledEngine = await loadBundledCliWorkerEngine(
     enginesDirectory: workspacePaths.enginesDirectory,
   );
-  final cliWorkerEngineSupervisor = bundledEngine == null
+  cliWorkerEngineSupervisor = bundledEngine == null
       ? null
       : CliWorkerEngineSupervisor(engineExecutable: bundledEngine.path);
   late final WorkerReadinessMonitor readinessMonitor;
@@ -171,69 +120,132 @@ Future<Host> buildWorkspaceRuntime(
   ));
   final workRoot = await config.workRootResolver.resolve();
   final workerHandler = WorkerAssignmentHandler(
-    executor: workerExecutor,
-    resolve: (_) async => null,
-    resolveV7Adapter: (workerId, {expectedWorkerTypeId}) async {
+    resolveLogicalWorker: (workerId) async {
       final worker = await localWorkerRegistry.find(workerId);
-      if (worker == null) {
-        throw V7AdapterExecutionFailure(
-          code: 'worker_not_ready',
-          message: executionErrorMessage('worker_not_ready'),
-        );
-      }
-      if (expectedWorkerTypeId != null &&
-          worker.workerTypeId != expectedWorkerTypeId) {
-        throw V7AdapterExecutionFailure(
-          code: 'worker_not_ready',
-          message: executionErrorMessage('worker_not_ready'),
-        );
-      }
-      if (worker.status != LocalWorkerStatus.ready) {
-        throw V7AdapterExecutionFailure(
-          code: 'worker_not_ready',
-          message: executionErrorMessage('worker_not_ready'),
-        );
-      }
-      final descriptor =
-          FirstPartyWorkerPackage.forProductWorkerTypeId(worker.workerTypeId);
-      if (descriptor != null && expectedWorkerTypeId == null) {
-        throw V7AdapterExecutionFailure(
-          code: 'worker_not_ready',
-          message: executionErrorMessage('worker_not_ready'),
-        );
-      }
-      final adapter = await v7AdapterPackageStore.resolve(
-        worker: worker,
-        readCredential: secureCredentialStore.read,
+      if (worker == null) return null;
+      return AssignmentLogicalWorker(
+        id: worker.id,
+        workerTypeId: worker.workerTypeId,
+        enabled: worker.activationState == LocalWorkerActivationState.enabled,
+        ready: worker.status == LocalWorkerStatus.ready,
+        permissions: {
+          for (final permission in worker.localPermissions)
+            ...switch (permission) {
+              'workstream_filesystem' => {'workspace:read', 'workspace:write'},
+              'shell_execution' => {'shell:execute'},
+              'network' => {'network:outbound'},
+              _ => {permission},
+            },
+        },
+        localConcurrencyLimit: worker.localConcurrencyLimit,
+        providerCliVersion: worker.toolVersion,
       );
-      if (adapter == null) {
-        throw V7AdapterExecutionFailure(
-          code: 'internal_adapter_error',
-          message: executionErrorMessage('internal_adapter_error'),
+    },
+    defaultWorkingDirectory: workRoot,
+    cancelToolProfileAssignment: cliWorkerEngineSupervisor?.cancel,
+    executeWithToolProfile: (worker, workingDirectory, context, payload,
+        {onProgress}) async {
+      var profileDefinitionId =
+          toolProfileCatalog?.profileDefinitionForWorker(worker.workerTypeId);
+      if (profileDefinitionId == null && toolProfileCatalog != null) {
+        try {
+          await toolProfileCatalog.syncCatalog();
+        } on Object {
+          // Verified local releases remain usable if Cloud is unavailable.
+        }
+        profileDefinitionId =
+            toolProfileCatalog.profileDefinitionForWorker(worker.workerTypeId);
+      }
+      final supervisor = cliWorkerEngineSupervisor;
+      if (profileDefinitionId == null || supervisor == null) {
+        throw AssignmentExecutionFailure(
+          code: 'worker_not_ready',
+          message: executionErrorMessage('worker_not_ready'),
         );
       }
-      return adapter;
+      final resolver = ToolProfileResolver(toolProfileReleaseStore);
+      final resolution = await resolver.resolveForWorker(
+        logicalWorkerTypeId: worker.workerTypeId,
+        profileDefinitionId: profileDefinitionId,
+        engineVersion: cliWorkerEngineVersion,
+        providerCliVersion: worker.providerCliVersion,
+        ensureAvailable: () async {
+          await toolProfileCatalog?.syncCatalog();
+          await toolProfileCatalog?.syncWorkerProfiles(worker.workerTypeId);
+        },
+      );
+      final release = resolution.release;
+      if (release == null) {
+        throw AssignmentExecutionFailure(
+          code: resolution.reason ==
+                  ToolProfileUnavailableReason.unsupportedProviderVersion
+              ? 'unsupported_provider_tool_version'
+              : 'worker_not_ready',
+          message: executionErrorMessage(
+            resolution.reason ==
+                    ToolProfileUnavailableReason.unsupportedProviderVersion
+                ? 'unsupported_provider_tool_version'
+                : 'worker_not_ready',
+          ),
+        );
+      }
+      final input = payload['input'];
+      final modelValue =
+          payload['model'] ?? (input is Map ? input['model'] : null);
+      final sessionPolicyValue = payload['sessionPolicy'] ??
+          (input is Map ? input['sessionPolicy'] : null) ??
+          'stateless';
+      final sessionKeyValue =
+          payload['sessionKey'] ?? (input is Map ? input['sessionKey'] : null);
+      if (!const {'stateless', 'durable_session'}
+              .contains(sessionPolicyValue) ||
+          (sessionPolicyValue == 'durable_session') !=
+              (sessionKeyValue is String)) {
+        throw AssignmentExecutionFailure(
+          code: 'execution_failed',
+          message: executionErrorMessage('execution_failed'),
+        );
+      }
+      final prompt = input is Map && input['prompt'] is String
+          ? input['prompt'] as String
+          : payload['prompt'] is String
+              ? payload['prompt'] as String
+              : jsonEncode(payload);
+      final timeoutValue = payload['timeoutMs'];
+      if (timeoutValue is! int || timeoutValue < 1) {
+        throw AssignmentExecutionFailure(
+          code: 'execution_failed',
+          message: executionErrorMessage('execution_failed'),
+        );
+      }
+      return supervisor.execute(
+        release,
+        profileFile: toolProfileReleaseStore.profileFile(
+          release.profileDefinitionId,
+          release.releaseVersion,
+        ),
+        stateDirectory: workspacePaths.workerStateDirectory(worker.id),
+        workingDirectory: workingDirectory,
+        workerId: worker.id,
+        maxConcurrentAssignments: worker.localConcurrencyLimit,
+        assignmentId: context.assignmentId,
+        prompt: prompt,
+        timeout: Duration(milliseconds: timeoutValue),
+        sessionPolicy: sessionPolicyValue == 'durable_session'
+            ? WorkerSessionPolicy.durableSession
+            : WorkerSessionPolicy.stateless,
+        sessionKey: sessionKeyValue as String?,
+        model: modelValue is String && modelValue.trim().isNotEmpty
+            ? modelValue.trim()
+            : null,
+        executionPolicy: context.payload['readOnly'] == true ||
+                context.payload['executionClass'] == 'stateless_read'
+            ? WorkerExecutionPolicy.providerDefault
+            : WorkerExecutionPolicy.restricted,
+        onProgress: onProgress,
+      );
     },
     resolveRepositoryPath: repositoryRegistry.resolve,
-    resolvePermissions: (workerId) async {
-      final worker = await localWorkerRegistry.find(workerId);
-      if (worker == null) {
-        throw StateError('Workspace-owned Worker is not present locally');
-      }
-      return {
-        for (final permission in worker.localPermissions)
-          ...switch (permission) {
-            'workstream_filesystem' => {'workspace:read', 'workspace:write'},
-            'shell_execution' => {'shell:execute'},
-            'network' => {'network:outbound'},
-            _ => {permission},
-          },
-      };
-    },
-    resolveConcurrencyLimit: (workerId) async {
-      final worker = await localWorkerRegistry.find(workerId);
-      return worker?.localConcurrencyLimit;
-    },
     workstreamDirectoryLifecycle: WorkstreamDirectoryLifecycle(
       pathResolver: WorkstreamPathResolver(workRoot),
     ),
@@ -245,7 +257,7 @@ Future<Host> buildWorkspaceRuntime(
     updateController = HostUpdateController(
       cloudUri: config.cloudUri!,
       currentVersion: conclaveWorkspaceAppVersion,
-      client: const HostReleaseClient(),
+      client: const WorkspaceReleaseClient(),
       updater: HostUpdater(
         WorkspacePaths(config.dataDirectory).updatesDirectory,
         trustPolicy: releaseTrustPolicy,
@@ -361,75 +373,22 @@ Future<Host> buildWorkspaceRuntime(
           },
         )
       : null;
-  if (adapterCatalog != null) {
-    var reconcilingAdapters = false;
-    Timer.periodic(const Duration(minutes: 10), (_) {
-      unawaited(() async {
-        if (reconcilingAdapters) return;
-        reconcilingAdapters = true;
-        try {
-          final canActivate = (connection?.activeAssignmentCount ?? 0) == 0;
-          final workers = await localWorkerRegistry.list();
-          for (final worker in workers.where((item) =>
-              item.status == LocalWorkerStatus.ready &&
-              item.adapterVersionPolicy != null)) {
-            await adapterCatalog.reconcileWorker(
-              FirstPartyWorkerPackage.packageIdFor(
-                worker.workerTypeId,
-              ),
-              channel:
-                  worker.adapterVersionPolicy == 'beta' ? 'beta' : 'stable',
-              allowActivation: canActivate,
-            );
-          }
-          await connection?.refreshWorkerInventory();
-        } on Object {
-          // Preserve the last usable adapter and retry on the next interval.
-        } finally {
-          reconcilingAdapters = false;
-        }
-      }());
-    });
-  }
-  if (workerReleaseCatalog != null) {
-    var refreshingWorkerReleases = false;
-    Timer.periodic(const Duration(minutes: 10), (_) {
-      unawaited(() async {
-        if (refreshingWorkerReleases ||
-            (connection?.activeAssignmentCount ?? 0) > 0) {
-          return;
-        }
-        refreshingWorkerReleases = true;
-        try {
-          for (final descriptor in FirstPartyWorkerPackage.all) {
-            await workerReleaseCatalog.refreshAutomaticUpdate(
-              descriptor.productWorkerTypeId,
-            );
-          }
-        } on Object {
-          // Keep the installed Worker and retry at the next interval.
-        } finally {
-          refreshingWorkerReleases = false;
-        }
-      }());
-    });
-  }
   readinessMonitor = WorkerReadinessMonitor(
     registry: localWorkerRegistry,
-    adapterStore: v7AdapterPackageStore,
     toolProfileReleaseStore: toolProfileReleaseStore,
     toolProfileCatalog: toolProfileCatalog,
     cliWorkerEngineSupervisor: cliWorkerEngineSupervisor,
     workerStateDirectory: workspacePaths.workerStateDirectory,
     profileDiagnosticStoreForWorker: (workerTypeId) => WorkerDiagnosticStore(
-      directory: workerVersionStore.logsDirectory(workerTypeId),
+      directory: Directory(
+        '${workspacePaths.workerStateDirectory(workerTypeId).parent.path}'
+        '${Platform.pathSeparator}logs',
+      ),
     ),
     ensureToolProfileAvailable: (workerTypeId) async {
       await toolProfileCatalog?.syncCatalog();
       await toolProfileCatalog?.syncWorkerProfiles(workerTypeId);
     },
-    executor: workerExecutor,
-    readCredential: secureCredentialStore.read,
   );
   if (toolProfileCatalog != null) {
     var refreshingToolProfiles = false;
@@ -465,11 +424,10 @@ Future<Host> buildWorkspaceRuntime(
     credentialStore: secureCredentialStore,
     localWorkerRegistry: localWorkerRegistry,
     workerReadinessMonitor: readinessMonitor,
-    workerShutdownHandler: workerExecutor.shutdown,
+    workerShutdownHandler: () async {
+      await cliWorkerEngineSupervisor?.shutdown();
+    },
     cloudConnection: connection,
-    adapterPackageStore: v7AdapterPackageStore,
-    workerVersionStore: workerVersionStore,
-    workerReleaseCatalog: workerReleaseCatalog,
     toolProfileReleaseStore: toolProfileReleaseStore,
     toolProfileCatalog: toolProfileCatalog,
     statusProvider: () async {

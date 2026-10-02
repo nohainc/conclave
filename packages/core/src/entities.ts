@@ -130,12 +130,12 @@ export interface ExecutionHostSession {
   readonly ipAddress?: string;
 }
 
-export type ExecutionHostReleaseChannel = "stable" | "beta" | "development";
+export type WorkspaceReleaseChannel = "stable" | "beta" | "development";
 
-export interface ExecutionHostRelease {
+export interface WorkspaceRelease {
   readonly version: string;
-  readonly channel: ExecutionHostReleaseChannel;
-  readonly minSupportedAgentVersion?: string | null;
+  readonly channel: WorkspaceReleaseChannel;
+  readonly minSupportedWorkspaceVersion?: string | null;
   readonly supportedOS: readonly ExecutionHostPlatform[];
   readonly supportedArch: readonly ExecutionHostArchitecture[];
   readonly packageDigest: string;
@@ -427,42 +427,36 @@ export function validateExecutionHost(agent: ExecutionHost): void {
 }
 
 /**
- * Validates invariants for an ExecutionHostRelease.
+ * Validates invariants for an WorkspaceRelease.
  */
-export function validateExecutionHostRelease(
-  release: ExecutionHostRelease,
-): void {
+export function validateWorkspaceRelease(release: WorkspaceRelease): void {
   if (!release.version || release.version.trim().length === 0) {
-    throw new DomainInvariantError("ExecutionHostRelease version is required");
+    throw new DomainInvariantError("WorkspaceRelease version is required");
   }
   if (!["stable", "beta", "development"].includes(release.channel)) {
     throw new DomainInvariantError(
-      `Invalid ExecutionHostRelease channel '${release.channel}'. Must be stable, beta, or development`,
+      `Invalid WorkspaceRelease channel '${release.channel}'. Must be stable, beta, or development`,
     );
   }
   if (!release.packageDigest || release.packageDigest.trim().length === 0) {
     throw new DomainInvariantError(
-      "ExecutionHostRelease packageDigest is required",
+      "WorkspaceRelease packageDigest is required",
     );
   }
   if (!release.packageR2Key || release.packageR2Key.trim().length === 0) {
-    throw new DomainInvariantError(
-      "ExecutionHostRelease packageR2Key is required",
-    );
+    throw new DomainInvariantError("WorkspaceRelease packageR2Key is required");
   }
   if (!release.signature || release.signature.trim().length === 0) {
-    throw new DomainInvariantError(
-      "ExecutionHostRelease signature is required",
-    );
+    throw new DomainInvariantError("WorkspaceRelease signature is required");
   }
   if (!release.supportedOS || release.supportedOS.length === 0) {
     throw new DomainInvariantError(
-      "ExecutionHostRelease must support at least one OS",
+      "WorkspaceRelease must support at least one OS",
     );
   }
   if (!release.supportedArch || release.supportedArch.length === 0) {
     throw new DomainInvariantError(
-      "ExecutionHostRelease must support at least one architecture",
+      "WorkspaceRelease must support at least one architecture",
     );
   }
 }

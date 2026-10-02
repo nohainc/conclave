@@ -35,7 +35,7 @@ function createHarness(options: { duplicate?: boolean } = {}) {
               return null;
             },
             async all<T>() {
-              if (query.includes("workspace_memberships")) {
+              if (query.includes("execution_workspaces")) {
                 return {
                   results: [{ user_id: "user-1" }, { user_id: "user-2" }],
                 } as T;

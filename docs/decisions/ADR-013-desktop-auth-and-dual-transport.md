@@ -7,7 +7,7 @@
 
 ## Context
 
-Architecture v7 correctly separates two identities:
+The current Workspace lifecycle separates two identities:
 
 - the human User;
 - the Workspace runtime/machine identity.
@@ -276,7 +276,8 @@ Human desktop authentication does not allow provider secrets into Cloud.
 
 Local Worker credentials, provider sessions, API keys, permissions, adapter state, Work Root, and local files remain Workspace-owned.
 
-Cloud receives only safe projections already allowed by v7.
+Cloud receives only the safe projections defined by the current Workspace
+runtime contract.
 
 The desktop human session and runtime credential are distinct secrets and must be redacted independently from logs/diagnostics.
 
@@ -329,7 +330,7 @@ credential or transport separation. In particular:
   to another user.
 
 See [ADR-014](ADR-014-workspace-desktop-lifecycle.md) and the
-[desktop lifecycle implementation plan](../roadmaps/WORKSPACE_DESKTOP_LIFECYCLE_IMPLEMENTATION.md).
+[desktop lifecycle release validation](../operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md).
 
 ## Acceptance
 

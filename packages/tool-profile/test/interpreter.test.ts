@@ -85,6 +85,8 @@ describe("Tool Profile v1 pure interpreter", () => {
       "--output-format",
       "stream-json",
       "--sandbox",
+      "--mode",
+      "accept-edits",
       "--print-timeout",
       "29s",
       "--conversation",
@@ -92,6 +94,28 @@ describe("Tool Profile v1 pure interpreter", () => {
       "--model",
       "gemini-pro",
     ]);
+  });
+
+  it("keeps Gemini read-only assignments in plan mode", () => {
+    const profile = loadProfile("gemini-antigravity.v1");
+    expect(
+      expandExecutionArguments(
+        profile,
+        context({ executionPolicy: "restricted" }),
+      ),
+    ).toEqual(expect.arrayContaining(["--sandbox", "--mode", "accept-edits"]));
+    expect(
+      expandExecutionArguments(
+        profile,
+        context({ executionPolicy: "provider_default" }),
+      ),
+    ).toEqual(expect.arrayContaining(["--sandbox"]));
+    expect(
+      expandExecutionArguments(
+        profile,
+        context({ executionPolicy: "provider_default" }),
+      ),
+    ).not.toContain("--mode");
   });
 
   it("evaluates only the fixed present/absent argument conditions", () => {
@@ -118,6 +142,8 @@ describe("Tool Profile v1 pure interpreter", () => {
       ),
     ).toEqual([
       "--sandbox",
+      "--mode",
+      "accept-edits",
       "--model",
       "gpt-test",
       "--conversation",

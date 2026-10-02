@@ -8,30 +8,17 @@ import 'host_configuration.dart';
 import 'secure_credentials.dart';
 import 'platform_runtime.dart';
 import 'work_root.dart';
-import 'v7_adapter_package_store.dart';
-import 'worker_trust_policy.dart';
-import 'release_trust_roots.dart';
 import 'workspace_paths.dart';
 import 'worker_readiness.dart';
-import 'worker_version_store.dart';
-import 'worker_release_catalog.dart';
 import 'tool_profile_catalog.dart';
 import 'tool_profile_release_store.dart';
 
 export 'configured_worker_registry.dart';
 export 'release_trust_roots.dart';
-export 'worker_release_manifest.dart';
-export 'worker_release_verifier.dart';
 export 'tool_profile_release_verifier.dart';
-export 'worker_version_store.dart';
-export 'worker_release_catalog.dart';
 export 'tool_profile_catalog.dart';
 export 'tool_profile_release_store.dart';
-export 'worker_candidate_validator.dart';
 export 'workspace_paths.dart';
-
-WorkerTrustPolicy _configuredAdapterTrustPolicy() =>
-    workspaceReleaseTrustPolicy();
 
 typedef HostStatusProvider = Future<Map<String, Object?>> Function();
 typedef HostUpdateHandler = Future<Map<String, Object?>> Function(
@@ -248,9 +235,6 @@ class Host {
     this.updateStatusProvider,
     this.updateHandler,
     SecureCredentialStore? credentialStore,
-    V7AdapterPackageStore? adapterPackageStore,
-    this.workerVersionStore,
-    this.workerReleaseCatalog,
     this.toolProfileReleaseStore,
     this.toolProfileCatalog,
     LocalConfiguredWorkerRegistry? localWorkerRegistry,
@@ -261,16 +245,6 @@ class Host {
   })  : _configuredLogOutput = logOutput,
         credentialStore =
             credentialStore ?? const PlatformSecureCredentialStore(),
-        adapterPackageStore = adapterPackageStore ??
-            V7AdapterPackageStore(
-              root: WorkspacePaths(config.dataDirectory).adaptersDirectory,
-              workerStateRoot:
-                  WorkspacePaths(config.dataDirectory).workersDirectory,
-              statePlatform: WorkspacePaths(config.dataDirectory).platform,
-              trustPolicy: _configuredAdapterTrustPolicy(),
-              allowedPermissions: parseConfiguredWorkerPermissions(
-                  Platform.environment['CONCLAVE_WORKER_PERMISSIONS']),
-            ),
         localWorkerRegistry = localWorkerRegistry ??
             (config.workspaceId == null
                 ? null
@@ -288,9 +262,6 @@ class Host {
 
   final HostConfig config;
   final SecureCredentialStore credentialStore;
-  final V7AdapterPackageStore adapterPackageStore;
-  final WorkerVersionStore? workerVersionStore;
-  final WorkerReleaseCatalog? workerReleaseCatalog;
   final ToolProfileReleaseStore? toolProfileReleaseStore;
   final ToolProfileCatalogClient? toolProfileCatalog;
   final LocalConfiguredWorkerRegistry? localWorkerRegistry;
@@ -361,7 +332,6 @@ class Host {
     if (!_running) return;
     _running = false;
     await workerReadinessMonitor?.dispose();
-    workerReleaseCatalog?.close();
     toolProfileCatalog?.close();
     for (final subscription in _signalSubscriptions) {
       await subscription.cancel();

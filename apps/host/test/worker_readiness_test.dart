@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_host/configured_worker_registry.dart';
 import 'package:conclave_host/platform_runtime.dart';
-import 'package:conclave_host/v7_adapter_package_store.dart';
-import 'package:conclave_host/worker_trust_policy.dart';
 import 'package:conclave_host/worker_readiness.dart';
+
+import 'support/logical_worker_catalog_fixture.dart';
 
 class _ReadinessPlatform implements PlatformRuntime {
   @override
@@ -34,71 +34,14 @@ class _ReadinessPlatform implements PlatformRuntime {
       {required bool force}) async {}
 }
 
-class _MissingFirstPartyAdapterStore extends V7AdapterPackageStore {
-  _MissingFirstPartyAdapterStore({
-    required super.root,
-  }) : super(
-          trustPolicy: WorkerTrustPolicy(),
-          allowedPermissions: WorkerPermission.values.toSet(),
-        );
-
-  final ensuredPackageIds = <String>[];
-
-  @override
-  Future<bool> hasVerifiedActivePackage(String workerTypeId,
-          [List<String>? localPermissions]) async =>
-      false;
-
-  @override
-  Future<bool> ensureFirstPartyAdapterAvailable(
-    String workerTypeId,
-  ) async {
-    ensuredPackageIds.add(workerTypeId);
-    return false;
-  }
-}
-
 void main() {
-  test('readiness assessments retain package issue codes directly', () {
+  test('readiness assessments retain issue codes directly', () {
     const assessment = WorkerReadinessAssessment(
       WorkerReadinessState.setupRequired,
       issueCode: 'setup_required',
     );
     expect(assessment.state, WorkerReadinessState.setupRequired);
     expect(assessment.issueCode, 'setup_required');
-  });
-
-  test('readiness ensures the mapped package before probing', () async {
-    final directory = await Directory.systemTemp.createTemp('worker-fallback-');
-    addTearDown(() => directory.delete(recursive: true));
-    final registry = LocalConfiguredWorkerRegistry(
-      dataDirectory: directory,
-      workspaceId: 'workspace-fallback',
-      platform: _ReadinessPlatform(),
-      idGenerator: () => 'worker-chatgpt',
-    );
-    await registry.create(
-      name: 'ChatGPT',
-      workerTypeId: 'chatgpt',
-      authStrategy: 'browser_auth',
-      localPermissions: const ['workstream_filesystem', 'shell_execution'],
-    );
-    final adapterStore = _MissingFirstPartyAdapterStore(
-      root: Directory('${directory.path}/adapters'),
-    );
-    final monitor = WorkerReadinessMonitor(
-      registry: registry,
-      adapterStore: adapterStore,
-    );
-
-    await monitor.checkNow();
-
-    expect(adapterStore.ensuredPackageIds, ['codex']);
-    final worker = (await registry.list()).single;
-    expect(worker.readinessState, WorkerReadinessState.runtimeUnavailable);
-    expect(worker.readinessIssueCode, 'package_unavailable');
-    expect(worker.lastPassiveProbeAt, isNotNull);
-    await monitor.dispose();
   });
 
   test('rechecks configured Workers and syncs changed readiness state',
@@ -114,11 +57,8 @@ void main() {
       onChanged: () async => syncs++,
     );
     final worker = await registry.create(
-      name: 'ChatGPT',
-      workerTypeId: 'chatgpt',
-      authStrategy: 'browser_auth',
+      catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
       localPermissions: const ['workstream_filesystem', 'shell_execution'],
-      credentialStatus: LocalWorkerCredentialStatus.ready,
       status: LocalWorkerStatus.ready,
       readinessState: WorkerReadinessState.ready,
     );
@@ -127,11 +67,6 @@ void main() {
     var checks = 0;
     final monitor = WorkerReadinessMonitor(
       registry: registry,
-      adapterStore: V7AdapterPackageStore(
-        root: Directory('${directory.path}/adapters'),
-        trustPolicy: WorkerTrustPolicy(),
-        allowedPermissions: WorkerPermission.values.toSet(),
-      ),
       interval: const Duration(milliseconds: 10),
       assessWorker: (_) async {
         checks++;
@@ -174,22 +109,14 @@ void main() {
       idGenerator: () => 'worker-gemini',
     );
     final worker = await registry.create(
-      name: 'Gemini',
-      workerTypeId: 'gemini',
-      authStrategy: 'browser_auth',
+      catalogEntry: logicalWorkerCatalogFixture('gemini'),
       localPermissions: const ['workstream_filesystem', 'shell_execution'],
-      credentialStatus: LocalWorkerCredentialStatus.ready,
       status: LocalWorkerStatus.disabled,
       readinessState: WorkerReadinessState.setupRequired,
     );
     var checks = 0;
     final monitor = WorkerReadinessMonitor(
       registry: registry,
-      adapterStore: V7AdapterPackageStore(
-        root: Directory('${directory.path}/adapters'),
-        trustPolicy: WorkerTrustPolicy(),
-        allowedPermissions: WorkerPermission.values.toSet(),
-      ),
       assessWorker: (_) async {
         checks++;
         return const WorkerReadinessAssessment(WorkerReadinessState.ready);
@@ -223,22 +150,14 @@ void main() {
     );
     for (final type in const ['chatgpt', 'gemini']) {
       await registry.create(
-        name: type,
-        workerTypeId: type,
-        authStrategy: 'browser_auth',
+        catalogEntry: logicalWorkerCatalogFixture(type),
         status: LocalWorkerStatus.ready,
         readinessState: WorkerReadinessState.ready,
-        credentialStatus: LocalWorkerCredentialStatus.ready,
       );
     }
     final testedTypes = <String>[];
     final monitor = WorkerReadinessMonitor(
       registry: registry,
-      adapterStore: V7AdapterPackageStore(
-        root: Directory('${directory.path}/adapters'),
-        trustPolicy: WorkerTrustPolicy(),
-        allowedPermissions: WorkerPermission.values.toSet(),
-      ),
       assessWorker: (worker) async {
         testedTypes.add(worker.workerTypeId);
         return const WorkerReadinessAssessment(
@@ -281,19 +200,11 @@ void main() {
       idGenerator: () => 'worker-gemini',
     );
     final worker = await registry.create(
-      name: 'Gemini',
-      workerTypeId: 'gemini',
-      authStrategy: 'browser_auth',
-      credentialStatus: LocalWorkerCredentialStatus.ready,
+      catalogEntry: logicalWorkerCatalogFixture('gemini'),
     );
     var livePasses = false;
     final monitor = WorkerReadinessMonitor(
       registry: registry,
-      adapterStore: V7AdapterPackageStore(
-        root: Directory('${directory.path}/adapters'),
-        trustPolicy: WorkerTrustPolicy(),
-        allowedPermissions: WorkerPermission.values.toSet(),
-      ),
       assessWorker: (current) async =>
           livePasses && current.lastLiveTestAt == null
               ? const WorkerReadinessAssessment(WorkerReadinessState.ready)
@@ -339,21 +250,13 @@ void main() {
       idGenerator: () => 'worker-chatgpt',
     );
     final worker = await registry.create(
-      name: 'ChatGPT',
-      workerTypeId: 'chatgpt',
-      authStrategy: 'browser_auth',
+      catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
       status: LocalWorkerStatus.ready,
       readinessState: WorkerReadinessState.ready,
-      credentialStatus: LocalWorkerCredentialStatus.ready,
     );
     var shouldFail = true;
     final monitor = WorkerReadinessMonitor(
       registry: registry,
-      adapterStore: V7AdapterPackageStore(
-        root: Directory('${directory.path}/adapters'),
-        trustPolicy: WorkerTrustPolicy(),
-        allowedPermissions: WorkerPermission.values.toSet(),
-      ),
       assessWorker: (_) async => shouldFail
           ? const WorkerReadinessAssessment(
               WorkerReadinessState.runtimeUnavailable)
@@ -365,7 +268,7 @@ void main() {
     final failed = (await registry.find(worker.id))!;
     expect(failed.lastLiveTestPassed, isFalse);
     expect(failed.lastLiveTestDetails, contains('execution_test_failed'));
-    expect(failed.lastLiveTestDetails, contains('Worker Package test failed'));
+    expect(failed.lastLiveTestDetails, contains('Tool Profile test failed'));
 
     shouldFail = false;
     await monitor.checkNow(
@@ -386,21 +289,13 @@ void main() {
       idGenerator: () => 'worker-chatgpt',
     );
     final worker = await registry.create(
-      name: 'ChatGPT',
-      workerTypeId: 'chatgpt',
-      authStrategy: 'browser_auth',
+      catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
       localPermissions: const ['workstream_filesystem', 'shell_execution'],
-      credentialStatus: LocalWorkerCredentialStatus.ready,
       status: LocalWorkerStatus.ready,
     );
     final result = Completer<WorkerReadinessAssessment>();
     final monitor = WorkerReadinessMonitor(
       registry: registry,
-      adapterStore: V7AdapterPackageStore(
-        root: Directory('${directory.path}/adapters'),
-        trustPolicy: WorkerTrustPolicy(),
-        allowedPermissions: WorkerPermission.values.toSet(),
-      ),
       interval: const Duration(hours: 1),
       assessWorker: (_) => result.future,
     );

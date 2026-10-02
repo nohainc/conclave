@@ -416,7 +416,7 @@ class ToolProfileCatalogClient {
   }
 
   Future<void> _refreshTrustState() async {
-    await const HostReleaseClient().refreshRevocations(
+    await const WorkspaceReleaseClient().refreshRevocations(
       cloudUri: cloudUri,
       authToken: authToken,
       policy: trustPolicy,

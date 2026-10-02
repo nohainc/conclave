@@ -13,7 +13,7 @@ class ReleasePackage {
       this.signingKeyId,
       this.signature,
       this.minimumProtocolVersion,
-      this.minSupportedHostVersion,
+      this.minSupportedWorkspaceVersion,
       this.operatingSystem,
       this.architecture,
       this.supportedOS = const [],
@@ -28,7 +28,7 @@ class ReleasePackage {
   final String? signingKeyId;
   final String? signature;
   final String? minimumProtocolVersion;
-  final String? minSupportedHostVersion;
+  final String? minSupportedWorkspaceVersion;
   final String? operatingSystem;
   final String? architecture;
   final List<String> supportedOS;
@@ -37,8 +37,8 @@ class ReleasePackage {
   final String? packageUrl;
 }
 
-class HostReleaseDescriptor {
-  const HostReleaseDescriptor({
+class WorkspaceReleaseDescriptor {
+  const WorkspaceReleaseDescriptor({
     required this.version,
     required this.channel,
     required this.packageDigest,
@@ -47,7 +47,7 @@ class HostReleaseDescriptor {
     this.signingKeyId,
     this.signature,
     this.minimumProtocolVersion,
-    this.minSupportedHostVersion,
+    this.minSupportedWorkspaceVersion,
     this.operatingSystem,
     this.architecture,
     this.supportedOS = const [],
@@ -64,7 +64,7 @@ class HostReleaseDescriptor {
   final String? signingKeyId;
   final String? signature;
   final String? minimumProtocolVersion;
-  final String? minSupportedHostVersion;
+  final String? minSupportedWorkspaceVersion;
   final String? operatingSystem;
   final String? architecture;
   final List<String> supportedOS;
@@ -72,7 +72,7 @@ class HostReleaseDescriptor {
   final String? releaseNotes;
   final String? packageUrl;
 
-  factory HostReleaseDescriptor.fromJson(Map<String, dynamic> json) {
+  factory WorkspaceReleaseDescriptor.fromJson(Map<String, dynamic> json) {
     String requiredString(String key) {
       final value = json[key];
       if (value is! String || value.isEmpty) {
@@ -84,7 +84,7 @@ class HostReleaseDescriptor {
     String? optionalString(String key) =>
         json[key] is String ? json[key] as String : null;
 
-    return HostReleaseDescriptor(
+    return WorkspaceReleaseDescriptor(
       version: requiredString('version'),
       channel: requiredString('channel'),
       packageDigest: requiredString('packageDigest'),
@@ -93,8 +93,8 @@ class HostReleaseDescriptor {
       signingKeyId: optionalString('signingKeyId'),
       signature: optionalString('signature'),
       minimumProtocolVersion: optionalString('minimumProtocolVersion'),
-      minSupportedHostVersion: optionalString('minSupportedHostVersion') ??
-          optionalString('minSupportedAgentVersion'),
+      minSupportedWorkspaceVersion:
+          optionalString('minSupportedWorkspaceVersion'),
       operatingSystem: optionalString('operatingSystem'),
       architecture: optionalString('architecture'),
       supportedOS: json['supportedOS'] is List
@@ -109,8 +109,8 @@ class HostReleaseDescriptor {
   }
 }
 
-class HostReleaseClient {
-  const HostReleaseClient({this.timeout = const Duration(seconds: 30)});
+class WorkspaceReleaseClient {
+  const WorkspaceReleaseClient({this.timeout = const Duration(seconds: 30)});
 
   final Duration timeout;
 
@@ -134,7 +134,6 @@ class HostReleaseClient {
       final decoded = jsonDecode(await _readBody(owned, 1024 * 1024));
       if (decoded is! Map ||
           decoded['revokedKeyIds'] is! List ||
-          decoded['revokedWorkers'] is! List ||
           decoded['revokedWorkspaceReleases'] is! List ||
           decoded['revokedToolProfiles'] is! List) {
         throw const FormatException('release trust response is invalid');
@@ -142,7 +141,6 @@ class HostReleaseClient {
       final digests = <String>{};
       final releases = <String>{};
       for (final row in [
-        ...decoded['revokedWorkers'] as List,
         ...decoded['revokedWorkspaceReleases'] as List,
         ...decoded['revokedToolProfiles'] as List,
       ].whereType<Map>()) {
@@ -151,9 +149,7 @@ class HostReleaseClient {
         } else if (row['payloadDigest'] is String) {
           digests.add(row['payloadDigest'] as String);
         }
-        if (row['workerTypeId'] is String && row['version'] is String) {
-          releases.add('${row['workerTypeId']}@${row['version']}');
-        } else if (row['version'] is String) {
+        if (row['version'] is String) {
           releases.add('workspace@${row['version']}');
         } else if (row['profileDefinitionId'] is String &&
             row['releaseVersion'] is int) {
@@ -172,7 +168,7 @@ class HostReleaseClient {
     }
   }
 
-  Future<HostReleaseDescriptor?> latest({
+  Future<WorkspaceReleaseDescriptor?> latest({
     required Uri cloudUri,
     required String channel,
     required String currentVersion,
@@ -183,7 +179,7 @@ class HostReleaseClient {
     final owned = await _request(
       cloudUri.replace(
         scheme: _httpScheme(cloudUri),
-        pathSegments: ['api', 'host-releases', 'latest'],
+        pathSegments: ['api', 'workspace-releases', 'latest'],
         queryParameters: {
           'channel': channel,
           'currentVersion': currentVersion,
@@ -197,7 +193,7 @@ class HostReleaseClient {
       final response = owned.response;
       if (response.statusCode != HttpStatus.ok) {
         throw StateError(
-            'host release lookup failed with HTTP ${response.statusCode}');
+            'Workspace release lookup failed with HTTP ${response.statusCode}');
       }
       final decoded = jsonDecode(await _readBody(owned, 256 * 1024));
       if (decoded is! Map || decoded['updateAvailable'] != true) {
@@ -207,7 +203,8 @@ class HostReleaseClient {
       if (release is! Map) {
         throw const FormatException('release metadata is invalid');
       }
-      return HostReleaseDescriptor.fromJson(Map<String, dynamic>.from(release));
+      return WorkspaceReleaseDescriptor.fromJson(
+          Map<String, dynamic>.from(release));
     } finally {
       owned.close();
     }
@@ -215,7 +212,7 @@ class HostReleaseClient {
 
   Future<ReleasePackage> download({
     required Uri cloudUri,
-    required HostReleaseDescriptor release,
+    required WorkspaceReleaseDescriptor release,
     String? authToken,
     int maxPackageBytes = 512 * 1024 * 1024,
   }) async {
@@ -226,7 +223,12 @@ class HostReleaseClient {
     final owned = await _request(
       cloudUri.replace(
         scheme: _httpScheme(cloudUri),
-        pathSegments: ['api', 'host-releases', release.version, 'download'],
+        pathSegments: [
+          'api',
+          'workspace-releases',
+          release.version,
+          'download'
+        ],
       ),
       authToken: authToken,
     );
@@ -234,7 +236,7 @@ class HostReleaseClient {
       final response = owned.response;
       if (response.statusCode != HttpStatus.ok) {
         throw StateError(
-            'host release download failed with HTTP ${response.statusCode}');
+            'Workspace release download failed with HTTP ${response.statusCode}');
       }
       final bytes = await _readBytes(owned, maxPackageBytes);
       return ReleasePackage(
@@ -246,7 +248,7 @@ class HostReleaseClient {
         signingKeyId: release.signingKeyId,
         signature: release.signature,
         minimumProtocolVersion: release.minimumProtocolVersion,
-        minSupportedHostVersion: release.minSupportedHostVersion,
+        minSupportedWorkspaceVersion: release.minSupportedWorkspaceVersion,
         operatingSystem: release.operatingSystem,
         architecture: release.architecture,
         supportedOS: release.supportedOS,
@@ -286,7 +288,7 @@ class HostReleaseClient {
     final bytes = <int>[];
     await for (final chunk in owned.response.timeout(timeout)) {
       if (bytes.length + chunk.length > maxBytes) {
-        throw StateError('host release response exceeded $maxBytes bytes');
+        throw StateError('Workspace release response exceeded $maxBytes bytes');
       }
       bytes.addAll(chunk);
     }
@@ -348,7 +350,7 @@ class HostUpdateController {
 
   final Uri cloudUri;
   final String currentVersion;
-  final HostReleaseClient client;
+  final WorkspaceReleaseClient client;
   final HostUpdater updater;
   final String channel;
   final String? operatingSystem;
@@ -358,16 +360,16 @@ class HostUpdateController {
   final HostRestartBootstrap? restartBootstrap;
 
   HostUpdateStatus _status = const HostUpdateStatus(phase: 'idle');
-  HostReleaseDescriptor? _available;
+  WorkspaceReleaseDescriptor? _available;
 
   HostUpdateStatus get status => _status;
-  HostReleaseDescriptor? get availableRelease => _available;
+  WorkspaceReleaseDescriptor? get availableRelease => _available;
 
   /// Accepts a release announcement delivered over the authenticated Cloud
   /// connection. The announcement is only made available for an explicit
   /// apply action; receiving it never mutates the running installation.
-  HostReleaseDescriptor acceptAvailable(Map<String, Object?> payload) {
-    final release = HostReleaseDescriptor.fromJson(
+  WorkspaceReleaseDescriptor acceptAvailable(Map<String, Object?> payload) {
+    final release = WorkspaceReleaseDescriptor.fromJson(
       Map<String, dynamic>.from(payload),
     );
     _validateAnnouncementCompatibility(release);
@@ -376,7 +378,7 @@ class HostUpdateController {
     return release;
   }
 
-  Future<HostReleaseDescriptor?> check() async {
+  Future<WorkspaceReleaseDescriptor?> check() async {
     _publish(const HostUpdateStatus(phase: 'checking'));
     try {
       final policy = updater.trustPolicy;
@@ -481,19 +483,20 @@ class HostUpdateController {
     reportStatus?.call(status);
   }
 
-  void _validateAnnouncementCompatibility(HostReleaseDescriptor release) {
+  void _validateAnnouncementCompatibility(WorkspaceReleaseDescriptor release) {
     if (!_isVersion(release.version) || !_isVersion(currentVersion)) {
-      throw StateError('host release version is invalid');
+      throw StateError('Workspace release version is invalid');
     }
     if (_compareVersions(release.version, currentVersion) <= 0) {
       throw StateError(
-          'host release downgrade or duplicate is not permitted: ${release.version} <= $currentVersion');
+          'Workspace release downgrade or duplicate is not permitted: ${release.version} <= $currentVersion');
     }
-    final minimum = release.minSupportedHostVersion;
+    final minimum = release.minSupportedWorkspaceVersion;
     if (minimum != null &&
         (!_isVersion(minimum) ||
             _compareVersions(currentVersion, minimum) < 0)) {
-      throw StateError('host release requires a newer Host: $minimum');
+      throw StateError(
+          'Workspace release requires a newer Workspace: $minimum');
     }
   }
 
@@ -547,16 +550,16 @@ class HostUpdater {
     }
     if (release.bytes.length > maxPackageBytes) {
       throw StateError(
-          'host release exceeds the $maxPackageBytes byte package limit');
+          'Workspace release exceeds the $maxPackageBytes byte package limit');
     }
     if (await hasActiveAssignments?.call() ?? false) {
       throw StateError(
-          'host release update is waiting for active assignments to finish');
+          'Workspace release update is waiting for active assignments to finish');
     }
     final actual = sha256.convert(release.bytes).toString();
     final canonicalDigest = 'sha256:$actual';
     if (release.digest != actual && release.digest != canonicalDigest) {
-      throw StateError('host release digest mismatch');
+      throw StateError('Workspace release digest mismatch');
     }
     final hostOs = Platform.operatingSystem;
     final hostArch =
@@ -565,11 +568,12 @@ class HostUpdater {
             !release.supportedOS.contains(hostOs)) ||
         (release.supportedArch.isNotEmpty &&
             !release.supportedArch.contains(hostArch))) {
-      throw StateError('host release does not support this platform');
+      throw StateError('Workspace release does not support this platform');
     }
     final policy = trustPolicy;
     if (requireSignature && policy == null) {
-      throw StateError('host release signature verification is not configured');
+      throw StateError(
+          'Workspace release signature verification is not configured');
     }
     if (policy != null) {
       final publisher = release.publisher;
@@ -578,7 +582,7 @@ class HostUpdater {
       if (publisher == null ||
           signingKeyId == null ||
           signature == null ||
-          !await policy.verifyHostRelease(
+          !await policy.verifyWorkspaceRelease(
             publisher: publisher,
             signingKeyId: signingKeyId,
             digest: release.digest,
@@ -586,19 +590,20 @@ class HostUpdater {
             metadata: {
               'version': release.version,
               'channel': release.channel,
-              'minSupportedHostVersion': release.minSupportedHostVersion,
+              'minSupportedWorkspaceVersion':
+                  release.minSupportedWorkspaceVersion,
               'supportedOS': release.supportedOS,
               'supportedArch': release.supportedArch,
               'releaseNotes': release.releaseNotes,
             },
           )) {
-        throw StateError('host release signature is not trusted');
+        throw StateError('Workspace release signature is not trusted');
       }
     }
     final minimumProtocol = release.minimumProtocolVersion;
     if (minimumProtocol != null &&
         !_satisfiesMinimumVersion(currentProtocolVersion, minimumProtocol)) {
-      throw StateError('host release requires an incompatible protocol');
+      throw StateError('Workspace release requires an incompatible protocol');
     }
     await root.create(recursive: true);
     final releaseMetadata = File('${root.path}/release.json');
@@ -610,7 +615,7 @@ class HostUpdater {
         if (activeVersion is String &&
             _compareVersions(release.version, activeVersion) < 0) {
           throw StateError(
-              'host release rollback is not permitted: ${release.version} < $activeVersion');
+              'Workspace release rollback is not permitted: ${release.version} < $activeVersion');
         }
         if (activeVersion == release.version &&
             metadata['digest'] == release.digest) {
@@ -618,12 +623,12 @@ class HostUpdater {
         }
         if (activeVersion == release.version &&
             metadata['digest'] != release.digest) {
-          throw StateError('host release version is already installed');
+          throw StateError('Workspace release version is already installed');
         }
       } on StateError {
         rethrow;
       } on Object {
-        throw StateError('active host release metadata is invalid');
+        throw StateError('active Workspace release metadata is invalid');
       }
     }
     _validateVersion(release.version);
@@ -642,12 +647,12 @@ class HostUpdater {
       if (!await healthCheck(active)) {
         if (await active.exists()) await active.delete();
         if (await backup.exists()) await backup.rename(active.path);
-        throw StateError('host release health check failed; rolled back');
+        throw StateError('Workspace release health check failed; rolled back');
       }
       if (onActivated != null && !await onActivated(active)) {
         if (await active.exists()) await active.delete();
         if (await backup.exists()) await backup.rename(active.path);
-        throw StateError('host release restart failed; rolled back');
+        throw StateError('Workspace release restart failed; rolled back');
       }
     } catch (_) {
       if (await staged.exists()) await staged.delete();
@@ -674,8 +679,9 @@ class HostUpdater {
               'architecture': release.architecture,
             'supportedOS': release.supportedOS,
             'supportedArch': release.supportedArch,
-            if (release.minSupportedHostVersion != null)
-              'minSupportedHostVersion': release.minSupportedHostVersion,
+            if (release.minSupportedWorkspaceVersion != null)
+              'minSupportedWorkspaceVersion':
+                  release.minSupportedWorkspaceVersion,
             if (release.releaseNotes != null)
               'releaseNotes': release.releaseNotes,
             if (release.packageUrl != null) 'packageUrl': release.packageUrl,
@@ -694,7 +700,7 @@ class HostUpdater {
 
   void _validateVersion(String version) {
     if (!RegExp(r'^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$').hasMatch(version)) {
-      throw StateError('host release version is invalid');
+      throw StateError('Workspace release version is invalid');
     }
   }
 

@@ -192,7 +192,7 @@ function timeoutValues(
   };
 }
 
-function compareSemver(left: string, right: string): number {
+export function compareSemver(left: string, right: string): number {
   const parse = (value: string) => {
     const match =
       /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(

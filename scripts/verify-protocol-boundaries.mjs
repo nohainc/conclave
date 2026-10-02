@@ -7,11 +7,10 @@ const boundaryDoc = readFileSync(boundaryDocPath, "utf8");
 const requiredContractText = [
   "## 1. AX ↔ Cloud — Human Product Protocol",
   "## 2. Workspace ↔ Cloud — Workspace Runtime Protocol",
-  "## 3. Workspace ↔ Adapter — Local Adapter Protocol",
+  "## 3. Workspace ↔ CLI Worker Engine — Local Worker Protocol 4.0",
   "AX MUST NOT open a Workspace Runtime Protocol connection",
-  "Worker adapters are\nnot runtime clients and MUST NOT connect to Cloud",
-  "adapter child process",
-  "Workspace Runtime Protocol frame",
+  "CLI Worker Engine process",
+  "Local Worker Protocol 4.0: implemented by the Workspace supervisor",
   "## Shared canonical domain vocabulary",
   "`WorkspaceId`",
   "`WorkspaceRuntimeId`",
@@ -50,9 +49,7 @@ const violations = missingContractText.map(
 
 const axRuntimeProtocolPattern =
   /conclave\.workspace-runtime-protocol|workspaceRuntimeProtocol|WorkspaceRuntimeMessage|workspace-runtime\.ts|@conclave\/host-protocol/i;
-const adapterCloudProtocolPattern =
-  /conclave\.workspace-runtime-protocol|workspaceRuntimeProtocol|WorkspaceRuntimeMessage|workspace-runtime\.ts|@conclave\/host-protocol|apps\/cloud\/(?:api|workspace-gateway)|conclaveCloud(?:Url|Origin|BaseUrl)?|cloudGateway|workspaceRuntimeCredential/i;
-const firstPartyAdapterPackagePattern = /\b(?:codex|antigravity)\b/i;
+const firstPartyProviderPackagePattern = /\b(?:codex|antigravity)\b/i;
 
 for (const file of sourceFiles) {
   const contents = readFileSync(file, "utf8");
@@ -68,34 +65,25 @@ for (const file of sourceFiles) {
 
   if (
     file.startsWith("apps/app/lib/") &&
-    firstPartyAdapterPackagePattern.test(contents)
+    firstPartyProviderPackagePattern.test(contents)
   ) {
     violations.push(
-      `${file}: AX source references a first-party adapter package ID`,
+      `${file}: AX source references a first-party provider package ID`,
     );
   }
 
   if (
     [
       "apps/cloud/src/assignment-dispatcher.ts",
-      "apps/cloud/src/v7-scheduler.ts",
+      "apps/cloud/src/scheduler.ts",
     ].includes(file) &&
-    firstPartyAdapterPackagePattern.test(contents)
+    firstPartyProviderPackagePattern.test(contents)
   ) {
     violations.push(
-      `${file}: Cloud assignment selection/dispatch references an adapter package ID`,
+      `${file}: Cloud assignment selection/dispatch references a provider package ID`,
     );
   }
 
-  if (
-    file.startsWith("packages/worker-manifest/adapters/") &&
-    !file.includes("/test/") &&
-    adapterCloudProtocolPattern.test(contents)
-  ) {
-    violations.push(
-      `${file}: adapter source references a Cloud/runtime protocol`,
-    );
-  }
 }
 
 if (violations.length > 0) {
@@ -105,5 +93,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  "Protocol boundary architecture check passed: endpoint ownership is explicit, Cloud assignments and AX use product Worker Types, and adapters do not reference Cloud/runtime protocols.",
+  "Protocol boundary architecture check passed: endpoint ownership is explicit, and Cloud assignments, AX, Workspace, and the CLI Worker Engine use their owned protocol boundaries.",
 );

@@ -190,14 +190,12 @@ abstract interface class StudioDataSource {
     required String name,
     String? description,
     String? instructions,
-    String? defaultExecutionPolicy,
   });
   Future<StudioProject> updateProject({
     required String projectId,
     String? name,
     String? description,
     String? instructions,
-    String? defaultExecutionPolicy,
     Map<String, dynamic>? settings,
   });
   Future<void> archiveProject({required String projectId});
@@ -325,11 +323,6 @@ abstract interface class StudioDataSource {
   Future<List<StudioWorker>> loadWorkspaceWorkerInventory() async => const [];
   Future<List<StudioBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async =>
       const [];
-  Future<void> setWorkspaceWorkerScheduling(
-          {required String workerId, required String action}) async =>
-      throw UnimplementedError('Workspace Worker scheduling is not available');
-  Future<List<StudioCredentialProfile>> loadCredentialProfiles(
-      {required String workspaceId});
   Future<StudioWorkspace> updateWorkspace({
     required String workspaceId,
     required String name,
@@ -367,51 +360,13 @@ abstract interface class StudioDataSource {
   Future<StudioSnapshot> loadSnapshot({String? projectId, String? workspaceId});
   Future<void> controlRun(String runId, String command);
   Future<void> respondToRunPrompt(String runId, String response);
-  Future<void> createGoal({
-    required String projectId,
-    required String objective,
-    required String revision,
-  });
-  Future<StudioChatMessage> sendChatMessage({
-    required String projectId,
-    required String chatId,
-    required String text,
-  });
-  Future<StudioChat> createChat({
-    required String projectId,
-    required String title,
-  });
   Future<void> provisionWorkstreamCheckout({
     required String workstreamId,
     String? workspaceId,
   }) async =>
       throw UnimplementedError(
           'Workstream checkout provisioning is not available');
-  Future<StudioCredentialProfile> createCredentialProfile({
-    required String workspaceId,
-    required String displayName,
-    required String workerId,
-    required String authType,
-    required String ownerType,
-    required String sharingPolicy,
-    String? hostId,
-  });
-  Future<void> requestCredentialSetup({
-    required String workspaceId,
-    required String profileId,
-    String action = 'reauthenticate',
-  });
-  Future<void> revokeCredentialProfile({
-    required String workspaceId,
-    required String profileId,
-  });
   Future<void> revokeWorkspace({required String workspaceId});
-  Future<void> announceWorkspaceUpdate({
-    required String workspaceId,
-    required String runtimeId,
-    String? channel,
-    String? version,
-  });
   Future<StudioWorkspaceEnrollment> createWorkspaceEnrollment({
     required String workspaceId,
     int expiresHours = 24,
@@ -424,35 +379,6 @@ class StudioApiException implements Exception {
   final int? statusCode;
   @override
   String toString() => message;
-}
-
-Map<String, dynamic> _studioChatMessageFromApi(Map<String, dynamic> json) {
-  final senderType = json['senderType'] ?? json['sender'];
-  final sender = switch (senderType) {
-    'user' => 'user',
-    'system' => 'system',
-    _ => 'conclave',
-  };
-  final metadata = json['metadata'];
-  return {
-    'id': json['id'],
-    'sender': sender,
-    'text': json['content'] ?? json['text'] ?? '',
-    'timestamp': json['createdAt'] ?? json['timestamp'] ?? '',
-    if (metadata is Map && metadata['runPreview'] != null)
-      'runPreview': metadata['runPreview'],
-  };
-}
-
-Map<String, dynamic> _studioChatFromApi(Map<String, dynamic> json) {
-  return {
-    ...json,
-    'lastActivity': json['lastActivity'] ?? json['updatedAt'] ?? '',
-    'messages': (json['messages'] as List? ?? const [])
-        .map((message) => _studioChatMessageFromApi(
-            Map<String, dynamic>.from(message as Map)))
-        .toList(),
-  };
 }
 
 class StudioApiClient implements StudioDataSource {
@@ -968,49 +894,10 @@ class StudioApiClient implements StudioDataSource {
 
   @override
   Future<List<StudioWorker>> loadWorkspaceWorkerInventory() async {
-    final body = await _getJson(Uri.parse('$baseUrl/v7/workers'));
+    final body = await _getJson(Uri.parse('$baseUrl/workers'));
     return (body['workers'] as List? ?? const [])
         .whereType<Map>()
         .map((item) => StudioWorker.fromJson(Map<String, dynamic>.from(item)))
-        .toList();
-  }
-
-  @override
-  Future<void> setWorkspaceWorkerScheduling(
-      {required String workerId, required String action}) async {
-    await _workerMutation(
-        'POST',
-        Uri.parse(
-            '$baseUrl/v7/workers/${Uri.encodeComponent(workerId)}/scheduling/${Uri.encodeComponent(action)}'),
-        const {});
-  }
-
-  Future<Map<String, dynamic>> _workerMutation(
-      String method, Uri uri, Map<String, dynamic> payload) async {
-    final request = http.Request(method, uri)
-      ..headers.addAll(_headers(contentType: 'application/json'))
-      ..body = jsonEncode(payload);
-    final streamed = await client.send(request);
-    final response = await http.Response.fromStream(streamed);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException(
-        'Worker action failed (${response.statusCode})',
-        statusCode: response.statusCode,
-      );
-    }
-    final decoded = jsonDecode(response.body);
-    return decoded is Map ? Map<String, dynamic>.from(decoded) : const {};
-  }
-
-  @override
-  Future<List<StudioCredentialProfile>> loadCredentialProfiles(
-      {required String workspaceId}) async {
-    final body =
-        await _getJson(Uri.parse('$baseUrl/workspaces/$workspaceId/accounts'));
-    return (body['accounts'] as List? ?? const [])
-        .whereType<Map>()
-        .map((item) =>
-            StudioCredentialProfile.fromJson(Map<String, dynamic>.from(item)))
         .toList();
   }
 
@@ -1445,11 +1332,11 @@ class StudioApiClient implements StudioDataSource {
       );
 
   @override
-  Future<StudioProject> createProject(
-      {required String name,
-      String? description,
-      String? instructions,
-      String? defaultExecutionPolicy}) async {
+  Future<StudioProject> createProject({
+    required String name,
+    String? description,
+    String? instructions,
+  }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/projects'),
       headers: _headers(contentType: 'application/json'),
@@ -1457,14 +1344,8 @@ class StudioApiClient implements StudioDataSource {
         'name': name,
         if (description != null && description.trim().isNotEmpty)
           'description': description.trim(),
-        if (instructions != null && instructions.trim().isNotEmpty ||
-            defaultExecutionPolicy != null)
-          'settings': {
-            if (instructions != null && instructions.trim().isNotEmpty)
-              'instructions': instructions.trim(),
-            if (defaultExecutionPolicy != null)
-              'defaultExecutionPolicy': defaultExecutionPolicy,
-          },
+        if (instructions != null && instructions.trim().isNotEmpty)
+          'settings': {'instructions': instructions.trim()},
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -1491,9 +1372,7 @@ class StudioApiClient implements StudioDataSource {
     return StudioProject.fromJson({
       ...value,
       'branch': value['branch'] ?? '',
-      'activeGoals': value['activeGoals'] ?? 0,
       'lastActivity': value['lastActivity'] ?? value['updatedAt'] ?? '',
-      'chats': value['chats'] ?? const [],
       'settings': value['settings'] ?? const {},
     });
   }
@@ -1504,7 +1383,6 @@ class StudioApiClient implements StudioDataSource {
     String? name,
     String? description,
     String? instructions,
-    String? defaultExecutionPolicy,
     Map<String, dynamic>? settings,
   }) async {
     final response = await client.patch(
@@ -1514,16 +1392,10 @@ class StudioApiClient implements StudioDataSource {
         if (name != null) 'name': name,
         if (description != null) 'description': description,
         if (instructions != null) 'instructions': instructions,
-        if (defaultExecutionPolicy != null)
-          'defaultExecutionPolicy': defaultExecutionPolicy,
-        if (instructions != null ||
-            defaultExecutionPolicy != null ||
-            settings != null)
+        if (instructions != null || settings != null)
           'settings': {
             if (settings != null) ...settings,
             if (instructions != null) 'instructions': instructions,
-            if (defaultExecutionPolicy != null)
-              'defaultExecutionPolicy': defaultExecutionPolicy,
           },
       }),
     );
@@ -1740,7 +1612,6 @@ class StudioApiClient implements StudioDataSource {
     final responses = await Future.wait([
       getJson(Uri.parse('$baseUrl/projects')),
       getJson(Uri.parse('$baseUrl/workspaces')),
-      getJson(Uri.parse('$baseUrl/workspaces/$selectedWorkspaceId/accounts')),
     ]);
     final projects = (responses[0]['projects'] as List? ?? const [])
         .whereType<Map>()
@@ -1762,7 +1633,6 @@ class StudioApiClient implements StudioDataSource {
       'workspaceId': selectedWorkspaceId,
       'projects': mergedProjects,
       'workspaces': responses[1]['workspaces'] ?? const [],
-      'accounts': responses[2]['accounts'] ?? const [],
       'run': detail['run'],
       'activeRunId': detail['activeRunId'],
       'tasks': detail['tasks'] ?? const [],
@@ -1826,75 +1696,6 @@ class StudioApiClient implements StudioDataSource {
   }
 
   @override
-  Future<void> createGoal({
-    required String projectId,
-    required String objective,
-    required String revision,
-  }) async {
-    final response = await client.post(
-      Uri.parse('$baseUrl/goals'),
-      headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({
-        'projectId': projectId,
-        'objective': objective,
-        'revision': revision,
-        'commitSha': revision,
-      }),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException('Goal creation failed (${response.statusCode})');
-    }
-  }
-
-  @override
-  Future<StudioChatMessage> sendChatMessage({
-    required String projectId,
-    required String chatId,
-    required String text,
-  }) async {
-    final response = await client.post(
-      Uri.parse('$baseUrl/chats/$chatId/messages'),
-      headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({'content': text}),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException('Send message failed (${response.statusCode})');
-    }
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final message = body['message'];
-    if (message is! Map) {
-      throw const StudioApiException('Send message response is malformed');
-    }
-    return StudioChatMessage.fromJson({
-      ..._studioChatMessageFromApi(Map<String, dynamic>.from(message)),
-      'goalId': body['goalId'] ?? message['goalId'],
-      'runId': body['runId'],
-      'intentKind': body['intent'] is Map ? body['intent']['kind'] : null,
-    });
-  }
-
-  @override
-  Future<StudioChat> createChat({
-    required String projectId,
-    required String title,
-  }) async {
-    final response = await client.post(
-      Uri.parse('$baseUrl/projects/$projectId/chats'),
-      headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({'title': title}),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException('Create chat failed (${response.statusCode})');
-    }
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final chat = body['chat'];
-    if (chat is! Map) {
-      throw const StudioApiException('Create chat response is malformed');
-    }
-    return StudioChat.fromJson(
-        _studioChatFromApi(Map<String, dynamic>.from(chat)));
-  }
-
   @override
   Future<void> provisionWorkstreamCheckout({
     required String workstreamId,
@@ -1914,82 +1715,6 @@ class StudioApiClient implements StudioDataSource {
   }
 
   @override
-  Future<StudioCredentialProfile> createCredentialProfile({
-    required String workspaceId,
-    required String displayName,
-    required String workerId,
-    required String authType,
-    required String ownerType,
-    required String sharingPolicy,
-    String? hostId,
-  }) async {
-    final response = await client.post(
-      Uri.parse('$baseUrl/workspaces/$workspaceId/accounts'),
-      headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({
-        'displayName': displayName,
-        'workerId': workerId,
-        'authType': authType,
-        'ownerType': ownerType,
-        'sharingPolicy': sharingPolicy,
-        if (hostId != null) 'hostId': hostId,
-      }),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      var detail = '';
-      try {
-        final body = jsonDecode(response.body);
-        if (body is Map && body['error'] is String) {
-          detail = ': ${body['error']}';
-        }
-      } on Object {
-        // Preserve the HTTP status when the error body is not JSON.
-      }
-      throw StudioApiException(
-          'Account creation failed (${response.statusCode})$detail');
-    }
-    final body = jsonDecode(response.body);
-    final account = body is Map ? body['account'] : null;
-    if (account is! Map) {
-      throw const StudioApiException('Account creation response is malformed');
-    }
-    return StudioCredentialProfile.fromJson(Map<String, dynamic>.from(account));
-  }
-
-  @override
-  Future<void> requestCredentialSetup({
-    required String workspaceId,
-    required String profileId,
-    String action = 'reauthenticate',
-  }) async {
-    final response = await client.post(
-      Uri.parse(
-          '$baseUrl/workspaces/$workspaceId/accounts/$profileId/setup-intent'),
-      headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({'action': action}),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException(
-          'Account setup request failed (${response.statusCode})');
-    }
-  }
-
-  @override
-  Future<void> revokeCredentialProfile({
-    required String workspaceId,
-    required String profileId,
-  }) async {
-    final response = await client.delete(
-      Uri.parse('$baseUrl/workspaces/$workspaceId/accounts/$profileId'),
-      headers: _headers(),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException(
-          'Account revoke failed (${response.statusCode})');
-    }
-  }
-
-  @override
   Future<void> revokeWorkspace({required String workspaceId}) async {
     final response = await client.delete(
       Uri.parse('$baseUrl/workspaces/$workspaceId'),
@@ -2001,27 +1726,6 @@ class StudioApiClient implements StudioDataSource {
         'Workspace revoke failed (${response.statusCode})${detail.isEmpty ? '' : ': $detail'}',
         statusCode: response.statusCode,
       );
-    }
-  }
-
-  @override
-  Future<void> announceWorkspaceUpdate({
-    required String workspaceId,
-    required String runtimeId,
-    String? channel,
-    String? version,
-  }) async {
-    final response = await client.post(
-      Uri.parse('$baseUrl/workspaces/$workspaceId/hosts/$runtimeId/update'),
-      headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({
-        if (channel != null) 'channel': channel,
-        if (version != null) 'version': version,
-      }),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StudioApiException(
-          'Workspace update announcement failed (${response.statusCode})');
     }
   }
 

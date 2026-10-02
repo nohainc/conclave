@@ -1,8 +1,7 @@
 # Conclave AX Cloudflare Deployment
 
-Architecture and Worker ownership are documented in [Architecture v7](../architecture/ARCHITECTURE_V7.md).
-Operational guidance for signed Workspace/Worker releases and public-key
-rotation is in [Workspace release operations](WORKSPACE_RELEASES.md) and
+Current product and runtime boundaries are documented in [Architecture v8](../architecture/ARCHITECTURE_V8.md).
+Operational guidance for signed Workspace and Tool Profile releases is in [Workspace release operations](WORKSPACE_RELEASES.md) and
 [Release Trust and Rotation](../security/RELEASE_TRUST_AND_ROTATION.md).
 
 ## Domain plan
@@ -16,7 +15,7 @@ rotation is in [Workspace release operations](WORKSPACE_RELEASES.md) and
 
 The public site is deployed independently from the authenticated application.
 Its production Worker owns only `conclaveax.com` and `www.conclaveax.com`.
-It does not handle `/api/*`, `app.conclaveax.com`, Host Gateway traffic, or
+It does not handle `/api/*`, `app.conclaveax.com`, Workspace Gateway traffic, or
 Better Auth callbacks. PR previews use a separate temporary Workers name with
 no production custom-domain routes; merging to `main` deploys the production
 site through `.github/workflows/deploy-site-production.yml`.
@@ -109,14 +108,9 @@ Actions -> Deploy Conclave AX App -> Run workflow
 ```
 
 Before applying production D1 migrations or deploying Workers, the workflow
-runs the V7 runtime assignment and inventory recovery end-to-end tests. These
-tests use the same Workspace Gateway URI and protocol preflight as the desktop
-runtime; a failure stops the production deployment. The V7 runtime acceptance
-keeps the real Workspace child execution over WebSocket and adds forced WSS
-failure followed by HTTPS fallback readiness, inventory synchronization,
-scheduler dispatch, assignment execution, and persisted result verification.
-A third run hands over from fallback to WebSocket, completes hello/sync
-reconciliation, and asserts the assignment was delivered exactly once.
+runs the v8 clean-schema and Work v1 regression acceptance tests. CI also runs
+the v8 runtime and Work v1 end-to-end suites. Failures stop the production
+deployment.
 
 After deploying `app.conclaveax.com`, the same workflow runs
 `scripts/production-workspace-gateway-smoke.mjs` as a production acceptance
@@ -141,40 +135,41 @@ The custom-domain route in `infra/cloudflare/app.wrangler.jsonc` targets `app.co
 
 ## Durable Objects & Database Migrations
 
-### Durable Object Migration Tags
-Architecture v5 retains the `HostGateway` and `RealtimeGateway` Durable Object migration history while the runtime surface migrates to Workspace terminology. The migration chain in `infra/cloudflare/app.wrangler.jsonc` includes:
-- `v1-runtime-connection`: Legacy initial deployment tag.
-- `v2-host-and-realtime-gateway`: Removes `RuntimeConnection` and `AgentGateway`, registers `HostGateway` and `RealtimeGateway`.
+### Durable Object migrations
 
-When deploying through Wrangler, migration tags are applied automatically. If re-provisioning or updating Durable Objects, retain all migration tags in sequence so Cloudflare Workers can reconcile schema history.
+Wrangler applies Durable Object migrations in sequence. Preserve every tag in
+`infra/cloudflare/app.wrangler.jsonc` when deploying or re-provisioning; the
+earlier tags are retained only because Cloudflare applies migration history
+cumulatively. The active runtime binding is `WorkspaceGateway`.
 
 ### D1 Database Provisioning
-The production D1 database `conclave-production` uses the forward V6 migration
-chain from `apps/cloud/migrations-v6`. The V4/V5 migration directories are
-historical baselines, not the active production chain:
+New development databases use the clean v8 schema from
+`apps/cloud/migrations-v8`. Apply its single baseline when initializing the
+local database:
 ```bash
-pnpm exec wrangler d1 migrations apply conclave-production --remote --config infra/cloudflare/app.wrangler.jsonc
+pnpm exec wrangler d1 migrations apply conclave-development --local --config apps/cloud/wrangler.jsonc
 ```
 
-The V6 clean baseline intentionally omitted the legacy `host_releases` table.
-Migration `0027_public_key_release_trust.sql` creates the current Workspace
-release table when absent before adding its signing key ID and revocation state.
-If a migration fails, D1 rolls back that migration and leaves the last
-successful migration applied; correct the pending migration and re-run the
-same migration command after review. Do not manually mark a failed migration as
-applied.
+Production now targets the separately provisioned `conclave-v8-production`
+database. It was initialized from the clean v8 baseline, then populated from a
+private export of the existing production database. Aggregate row counts and
+key parent-child relationships were checked after import. The old
+`conclave-production` database remains intact as a rollback copy until the v8
+Worker deployment and production checks pass. The v8 migration is a clean
+baseline, not an in-place upgrade for a database initialized from an earlier
+migration chain. Do not apply it to the old database.
 
 The `workspace-gateway-schema-regression.test.ts` test constructs a clean
-SQLite database from every SQL migration in `apps/cloud/migrations-v6`, checks
-critical runtime tables, and exercises the production Gateway connection,
-heartbeat, and disconnect statements. A clean active migration chain must
+SQLite database from the single SQL migration in `apps/cloud/migrations-v8`,
+checks critical runtime tables, and exercises the production Gateway
+connection, heartbeat, and disconnect statements. The clean schema must
 support every SQL statement used by current Cloud runtime code.
 
 The Workspace Gateway Durable Object is authoritative for live connection
 state. Workspace online/offline fields and session history are persisted
 projections: their writes are queued and logged on failure, but cannot reject
-an authenticated connection or interrupt a heartbeat acknowledgement. V7
-assignment selection checks the owning Gateway's live socket and runtime ID;
+an authenticated connection or interrupt a heartbeat acknowledgement.
+Assignment selection checks the owning Gateway's live socket and runtime ID;
 it does not trust a stale database online flag. The Durable Object restores
 hibernated sockets from its accepted WebSocket attachments before answering
 status or dispatch requests.
@@ -182,25 +177,21 @@ status or dispatch requests.
 
 ## Backend deployment gate
 
-Do not expose the API publicly until the release gates in
-[`V3_IMPLEMENTATION_STATUS.md`](../roadmaps/V3_IMPLEMENTATION_STATUS.md) are
-complete.
+Public production deployment remains gated by the
+[current v8 implementation plan](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
 
 Before production backend deployment:
 
 1. provision production D1/R2 resources; the deployment workflow applies the
-   checked-in D1 migrations to `conclave-production`;
+   checked-in D1 migrations to `conclave-v8-production`;
 2. configure required signing, callback, and other production secrets;
-3. run the deployed Forge recovery drill, including Host restart, Cloud
-   restart, network loss, and reviewer timeout;
+3. run Workspace desktop lifecycle and Cloud runtime release validations;
 4. run the external-user security gate, including tenant isolation and
    backup/restore verification;
 5. enable API/CI ingress only after the release gates pass.
 
-Cloud owns orchestration and persistence. The Conclave Host provides the
-outbound execution channel; Workers perform model, repository, and tool
-operations. The former Local Runtime product concept is not a deployable
-service.
+Cloud owns orchestration and persistence. Conclave Workspace maintains the
+outbound runtime channel; the generic Engine invokes the provider CLI locally.
 
 At that point the preferred topology is either:
 

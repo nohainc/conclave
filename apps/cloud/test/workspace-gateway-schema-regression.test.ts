@@ -61,9 +61,9 @@ describe("Workspace Gateway active-schema regression", () => {
     vi.unstubAllGlobals();
   });
 
-  it("supports Gateway connect, heartbeat, and disconnect on migrations-v6 alone", async () => {
+  it("supports Gateway connect, heartbeat, and disconnect on migrations-v8 alone", async () => {
     const migrationDirectory = fileURLToPath(
-      new URL("../migrations-v6/", import.meta.url),
+      new URL("../migrations-v8/", import.meta.url),
     );
     const database = new DatabaseSync(":memory:");
     database.exec("PRAGMA foreign_keys = ON");
@@ -80,7 +80,9 @@ describe("Workspace Gateway active-schema regression", () => {
       "workspace_sessions",
       "workspace_runtime_facts",
       "workspace_worker_inventory",
-      "v7_worker_scheduling",
+      "worker_scheduling",
+      "worker_scheduling_audit",
+      "workspace_releases",
       "workspace_pairing_intents",
       "workspace_project_grants",
       "workstream_execution_policies",
@@ -97,12 +99,12 @@ describe("Workspace Gateway active-schema regression", () => {
         .all()
         .map((row) => String((row as { name: string }).name)),
     );
-    expect(migrationFiles).toContain("0029_workspace_sessions.sql");
-    expect(migrationFiles).toContain("0036_worker_inventory_v2.sql");
     expect(expectedTables.filter((table) => !actualTables.has(table))).toEqual(
       [],
     );
     expect(actualTables.has("worker_releases")).toBe(false);
+    expect(actualTables.has("host_releases")).toBe(false);
+    expect(actualTables.has("v7_worker_scheduling")).toBe(false);
     expect(actualTables.has("v7_adapter_releases")).toBe(false);
     const inventoryColumns = new Set(
       database

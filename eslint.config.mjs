@@ -42,7 +42,6 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/worker-manifest/adapters/**/*.mjs"],
     languageOptions: {
       globals: {
         AbortController: "readonly",

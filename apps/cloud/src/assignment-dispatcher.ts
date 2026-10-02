@@ -8,9 +8,8 @@ import {
   canonicalExecutionErrorCode,
   executionErrorMessage,
 } from "@conclave/protocol";
-import type { GatewayEnv } from "./host-gateway.js";
-import { selectProjectExecutionTarget } from "./v7-scheduler.js";
-import { recordExecutionWorkspaceAudit } from "./v5-accounting.js";
+import { selectProjectExecutionTarget } from "./scheduler.js";
+import { recordExecutionWorkspaceAudit } from "./workspace-audit.js";
 
 export interface TaskToDispatch {
   readonly id: string;
@@ -66,7 +65,8 @@ export interface DispatchAssignmentResult {
   readonly error?: string;
 }
 
-export interface AssignmentDispatcherEnv extends GatewayEnv {
+export interface AssignmentDispatcherEnv {
+  readonly CONCLAVE_DB: D1Database;
   readonly CONCLAVE_WORKSPACE_GATEWAY?: DurableObjectNamespace;
 }
 
@@ -154,11 +154,11 @@ async function dispatchWorkspaceWorkerAssignment(
        (id, project_id, execution_workspace_id, workspace_project_grant_id,
         run_id, task_id, attempt_id, requested_by_user_id, runtime_identity_id,
         worker_id, workspace_worker_id, engine_version,
-        account_id, model, config_json, effective_permissions_json,
+        model, config_json, effective_permissions_json,
         permission_snapshot_json, timeout_ms, session_policy, idempotency_key, status,
         input_json, created_at, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-             ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, 'created', ?21, ?22, ?22)`,
+             ?13, ?14, ?15, ?16, ?17, ?18, ?19, 'created', ?20, ?21, ?21)`,
   )
     .bind(
       assignmentId,
@@ -173,7 +173,6 @@ async function dispatchWorkspaceWorkerAssignment(
       target.workerTypeId,
       target.workerId,
       target.engineVersion,
-      null,
       target.model,
       JSON.stringify(assignmentInput),
       JSON.stringify(target.effectivePermissions),

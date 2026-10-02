@@ -1,7 +1,7 @@
 # Conclave Protocol Boundaries
 
-**Status:** Current product boundary contract. Local Worker Protocol 4.0 is the Architecture v8 contract; Protocol 3.0/2.x describe predecessor implementations.
-**Applies to:** Conclave AX, Conclave Cloud, Conclave Workspace, and Workers
+**Status:** Current product boundary contract. Local Worker Protocol 4.0 is the Workspace-to-Engine contract.
+**Applies to:** Conclave AX, Conclave Cloud, Conclave Workspace, and the CLI Worker Engine.
 
 Conclave has three protocol boundaries. They share domain vocabulary, but each
 boundary has its own endpoints, authentication, transport, versioning, and wire
@@ -123,9 +123,9 @@ Tool Profiles are not protocol peers. They are signed immutable behavior configu
 
 Provider credentials, provider session IDs, arbitrary Cloud executable paths, shell commands, and raw provider output are not Local Worker Protocol fields.
 
-Local Worker Protocol 3.0 and the older 2.x schemas remain migration/history
-references only. Local Worker Protocol 4.0 is the v8 target. Architecture v8
-implementation must not add provider-specific binary identity to the protocol.
+Local Worker Protocol 4.0 is the sole Workspace-to-Engine protocol contract.
+Provider identity, release state, and executable paths do not cross this
+boundary as caller-controlled values.
 
 ## Shared canonical domain vocabulary
 
@@ -182,7 +182,15 @@ unchanged across a boundary.
   `apps/host/lib/cloud_connection.dart`; schema
   `packages/host-protocol/src/workspace-runtime.ts`; Cloud
   `apps/cloud/src/workspace-gateway.ts`.
-- Local Worker Protocol 2.x/3.0 historical source implementation: Workspace `apps/host/lib/worker_executor.dart` / `apps/host/lib/v7_adapter_protocol.dart` and `packages/worker-manifest/src/adapter-v7.ts`; retained as migration evidence.
-- Local Worker Protocol 4.0 target: Workspace-to-CLI Worker Engine contract; implementation is scheduled in Phase 4 of the [Architecture v8 plan](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
+- Local Worker Protocol 4.0: implemented by the Workspace supervisor
+  `apps/host/lib/cli_worker_engine_supervisor.dart`, assignment handler
+  `apps/host/lib/worker_executor.dart`, generic Engine
+  `engines/cli_worker/lib/src/cli_worker_engine.dart`, and shared schema
+  `packages/conclave_worker_protocol`.
 - Canonical domain model: domain entities in `packages/core/src` and the
   canonical vocabulary in this document; wire validators remain protocol-owned.
+
+Protocol binding generation covers the product envelope, Cloud Workspace
+message metadata, and realtime event metadata. It does not generate Local
+Worker Protocol bindings: `packages/conclave_worker_protocol` is the single
+source for Worker Protocol 4.0 models and validation.

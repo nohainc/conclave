@@ -514,13 +514,10 @@ policy, Cloud authorization, Workspace readiness, local permissions, or
 Workstream execution rules. The Work request text remains user input; Conclave
 system prompts and the meaning of each `StepKind` remain product-owned.
 
-## Migration note
+## Workflow source
 
-The earlier V6 Workflow presets and runner model are historical implementation
-details, not the Work v1 catalog. In particular, old names such as
-`Implementation`, `Review`, and `Implementation + Test + Review` must not be
-added to new Work v1 UI or APIs. AX obtains current definitions from the shared
-built-in catalog and must not maintain a duplicate Workflow list.
+AX obtains current Workflow definitions from the shared built-in catalog and
+must not maintain a duplicate Workflow list.
 
 
 ## Architecture v8 runtime note

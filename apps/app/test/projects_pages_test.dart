@@ -24,7 +24,6 @@ void main() {
               description: 'Shared space for Project One',
               instructions: 'Follow standard engineering practices.',
               branch: 'main',
-              activeGoals: 0,
               lastActivity: 'today',
             ),
             dataSource: const StudioFixtureDataSource(),
@@ -81,7 +80,6 @@ void main() {
       name: 'Project One',
       description: 'First project description',
       branch: '',
-      activeGoals: 0,
       lastActivity: 'today',
     );
     const p2 = StudioProject(
@@ -89,7 +87,6 @@ void main() {
       name: 'Project Two',
       description: 'Second project description',
       branch: '',
-      activeGoals: 0,
       lastActivity: 'today',
     );
 
@@ -141,7 +138,6 @@ void main() {
               id: 'project-1',
               name: 'Project One',
               branch: '',
-              activeGoals: 0,
               lastActivity: 'today',
               role: 'viewer',
             ),
@@ -194,7 +190,6 @@ void main() {
               id: 'project-1',
               name: 'Project One',
               branch: '',
-              activeGoals: 0,
               lastActivity: 'today',
               role: 'collaborator',
             ),
@@ -252,7 +247,6 @@ void main() {
               id: 'project-1',
               name: 'Project One',
               branch: '',
-              activeGoals: 0,
               lastActivity: 'today',
               role: 'collaborator',
             ),
@@ -306,7 +300,6 @@ void main() {
               id: 'project-1',
               name: 'Project One',
               branch: '',
-              activeGoals: 0,
               lastActivity: 'today',
               role: 'collaborator',
             ),
@@ -383,7 +376,6 @@ void main() {
       id: 'project-1',
       name: 'Project One',
       branch: '',
-      activeGoals: 0,
       lastActivity: 'today',
       role: 'collaborator',
     );
@@ -510,7 +502,6 @@ void main() {
       id: 'p-1',
       name: 'Test Project',
       branch: 'main',
-      activeGoals: 0,
       lastActivity: 'today',
       workstreams: [ws1, ws2, ws3],
     );
@@ -579,7 +570,6 @@ void main() {
               id: 'p-1',
               name: 'Test Project',
               branch: 'main',
-              activeGoals: 0,
               lastActivity: 'today',
             ),
             dataSource: customDataSource,
@@ -626,7 +616,6 @@ void main() {
               description: 'Initial description',
               instructions: 'Initial instructions',
               branch: 'main',
-              activeGoals: 0,
               lastActivity: 'today',
             ),
             dataSource: const StudioFixtureDataSource(),
@@ -687,7 +676,6 @@ void main() {
               id: 'p-1',
               name: 'Test Project',
               branch: 'main',
-              activeGoals: 0,
               lastActivity: 'today',
               workstreams: [
                 StudioWorkstream(
@@ -757,7 +745,6 @@ void main() {
               id: 'p-1',
               name: 'Test Project',
               branch: 'main',
-              activeGoals: 0,
               lastActivity: 'today',
             ),
             dataSource: customDataSource,
@@ -815,7 +802,6 @@ void main() {
               id: 'p-1',
               name: 'Test Project',
               branch: 'main',
-              activeGoals: 0,
               lastActivity: 'today',
             ),
             dataSource: customDataSource,

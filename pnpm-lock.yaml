@@ -59,9 +59,6 @@ importers:
       '@conclave/tool-profile':
         specifier: workspace:*
         version: link:../../packages/tool-profile
-      '@conclave/worker-manifest':
-        specifier: workspace:*
-        version: link:../../packages/worker-manifest
       better-auth:
         specifier: ^1.7.5
         version: 1.7.5(vitest@4.1.11(@types/node@24.13.6)(vite@7.3.6(@types/node@24.13.6)(yaml@2.9.1)))
@@ -132,15 +129,6 @@ importers:
       zod:
         specifier: ^4.1.11
         version: 4.6.5
-
-  packages/worker-manifest:
-    dependencies:
-      '@conclave/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      zod:
-        specifier: ^3.24.2
-        version: 3.25.76
 
 packages:
 

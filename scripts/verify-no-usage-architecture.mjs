@@ -5,14 +5,12 @@ const root = process.cwd();
 const roots = [
   "apps/app/lib",
   "apps/cloud/src",
-  "apps/cloud/migrations-v6",
+  "apps/cloud/migrations-v8",
   "apps/host/lib",
   "packages",
 ];
 
 const ignored = new Set([
-  "packages/core/src/v4-entities.ts",
-  "packages/core/src/v4-scheduler.ts",
 ]);
 
 const forbidden = [

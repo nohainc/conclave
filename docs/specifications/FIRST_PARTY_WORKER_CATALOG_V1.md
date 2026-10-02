@@ -5,8 +5,7 @@
 
 **Implementation rule:** a normal local CLI integration is a Logical Worker
 implemented by the generic CLI Worker Engine and an official signed Tool
-Profile Release. Provider-specific native Worker binaries are predecessor
-artifacts and are not an extension point for this catalog.
+Profile Release.
 
 ## Catalog
 
@@ -135,27 +134,6 @@ provider model
 ~~~
 
 Only the first item is the product Worker identity.
-
-## Migration from Worker Runtime v2
-
-Before v8, ChatGPT and Gemini were compiled as separate provider-specific Dart
-Worker executables.
-
-Architecture v8 preserves:
-- logical Worker IDs;
-- local provider authentication;
-- UI rows;
-- Workstream bindings;
-- readiness semantics;
-- process isolation.
-
-It supersedes:
-- separate ChatGPT/Gemini Conclave binaries;
-- per-provider native Worker release selection;
-- provider integration code compiled separately for each logical Worker.
-
-Do not add another first-party provider-specific native Worker executable to
-this v1 catalog during the v8 migration.
 
 ## Future catalog expansion
 

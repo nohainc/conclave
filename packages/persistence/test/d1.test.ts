@@ -41,8 +41,9 @@ class FakeStatement implements D1Statement {
 class FakeDb implements D1DatabaseLike {
   constructor(private readonly responses: readonly unknown[]) {}
   private cursor = 0;
+  readonly queries: string[] = [];
   prepare(query: string): D1Statement {
-    void query;
+    this.queries.push(query);
     return new FakeStatement(this.responses[this.cursor++]);
   }
   async batch(): Promise<readonly { success: boolean }[]> {
@@ -452,13 +453,11 @@ describe("Cloudflare persistence adapters", () => {
   });
 
   it("persists and reconstructs tenant-scoped model calls", async () => {
-    const repository = new D1ModelCallRepository(
-      new FakeDb([
-        { workspace_id: "workspace-1", project_id: "project-1" },
-        [],
-        [],
-      ]),
-    );
+    const db = new FakeDb([
+      { workspace_id: "workspace-1", project_id: "project-1" },
+      [],
+    ]);
+    const repository = new D1ModelCallRepository(db);
     const call = {
       id: "call-1",
       attemptId: "attempt-1",
@@ -475,6 +474,8 @@ describe("Cloudflare persistence adapters", () => {
       finishedAt: "2026-09-22T00:00:01.000Z",
     } as const;
     await expect(repository.save(call)).resolves.toBeUndefined();
+    expect(db.queries).toHaveLength(2);
+    expect(db.queries.join("\n")).not.toMatch(/\busage\b/i);
 
     const listed = await new D1ModelCallRepository(
       new FakeDb([

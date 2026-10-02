@@ -12,7 +12,6 @@ class HomePage extends StatelessWidget {
     required this.openFindingCount,
     required this.onOpenWorkspaces,
     required this.onOpenProject,
-    required this.onOpenChat,
     required this.onOpenRun,
     required this.onCreateProject,
     required this.onOpenArchivedProjects,
@@ -25,7 +24,6 @@ class HomePage extends StatelessWidget {
   final int openFindingCount;
   final VoidCallback onOpenWorkspaces;
   final ValueChanged<String> onOpenProject;
-  final void Function(String projectId, String chatId) onOpenChat;
   final void Function(String projectId, String runId) onOpenRun;
   final VoidCallback onCreateProject;
   final VoidCallback onOpenArchivedProjects;
@@ -46,7 +44,6 @@ class HomePage extends StatelessWidget {
           openFindingCount: openFindingCount,
           onOpenWorkspaces: onOpenWorkspaces,
           onOpenProject: onOpenProject,
-          onOpenChat: onOpenChat,
           onOpenRun: onOpenRun,
           onOpenArchivedProjects: onOpenArchivedProjects,
         );
@@ -83,9 +80,9 @@ class _GettingStarted extends StatelessWidget {
               onPressed: onOpenWorkspaces),
           _SetupStep(
               number: '2',
-              title: 'Configure Workers in Conclave Workspace',
+              title: 'Set up Engine and Profiles in Conclave Workspace',
               detail:
-                  'Configure and authenticate Workers in Conclave Workspace on your computer.',
+                  'Install provider CLIs, configure Profiles, and confirm readiness in Workspace.',
               action: 'Open Workspaces',
               onPressed: onOpenWorkspaces),
           _SetupStep(
@@ -102,7 +99,7 @@ class _GettingStarted extends StatelessWidget {
               title: const Text('First request',
                   style: TextStyle(fontWeight: FontWeight.w700)),
               subtitle: const Text(
-                  'Once your Project is ready, start a Chat and describe what you want to accomplish.'),
+                  'Once your Project is ready, create a Workstream and describe what you want to accomplish.'),
               trailing: const Icon(Icons.arrow_forward_rounded),
             ),
           ),
@@ -153,7 +150,6 @@ class _EstablishedHome extends StatelessWidget {
     required this.openFindingCount,
     required this.onOpenWorkspaces,
     required this.onOpenProject,
-    required this.onOpenChat,
     required this.onOpenRun,
     required this.onOpenArchivedProjects,
   });
@@ -165,16 +161,12 @@ class _EstablishedHome extends StatelessWidget {
   final int openFindingCount;
   final VoidCallback onOpenWorkspaces;
   final ValueChanged<String> onOpenProject;
-  final void Function(String projectId, String chatId) onOpenChat;
   final void Function(String projectId, String runId) onOpenRun;
   final VoidCallback onOpenArchivedProjects;
 
   @override
   Widget build(BuildContext context) {
     final recentProjects = projects.take(3);
-    final recentChats = projects
-        .expand((project) => project.chats.map((chat) => (project, chat)))
-        .take(4);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Text('Home',
           style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
@@ -266,21 +258,6 @@ class _EstablishedHome extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 16),
-      _HomeCard(
-        title: 'Recent Chats',
-        icon: Icons.chat_bubble_outline,
-        child: Column(
-          children: recentChats
-              .map((entry) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(entry.$2.title),
-                    subtitle: Text(entry.$1.name),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => onOpenChat(entry.$1.id, entry.$2.id),
-                  ))
-              .toList(),
-        ),
-      ),
     ]);
   }
 }

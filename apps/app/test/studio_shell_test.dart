@@ -22,7 +22,8 @@ void main() {
       expect(homeContext.isNavActive(const StudioNavigation.home()), isTrue);
       expect(
           homeContext.isNavActive(const StudioNavigation.projects()), isFalse);
-      expect(homeContext.isNavActive(const StudioNavigation.workspaces()), isFalse);
+      expect(homeContext.isNavActive(const StudioNavigation.workspaces()),
+          isFalse);
 
       const projectContext = StudioShellContext(
         navigation: StudioNavigation.project('project-1'),
@@ -58,13 +59,13 @@ void main() {
     });
 
     test('isNavActive covers every route kind accurately', () {
-      // Projects section active for projects, project, workstream, run, chat
+      // Projects section active for projects, project, workstream, and run
       const routesInProjects = [
         StudioNavigation.projects(),
         StudioNavigation.project('p-1'),
         StudioNavigation.workstream('p-1', 'ws-1'),
         StudioNavigation.run('p-1', 'r-1'),
-        StudioNavigation.chat('p-1', 'c-1'),
+        StudioNavigation.workstream('p-1', 'ws-2'),
       ];
 
       for (final nav in routesInProjects) {
@@ -95,14 +96,6 @@ void main() {
       expect(hostsCtx.isNavActive(const StudioNavigation.projects()), isFalse);
       expect(hostsCtx.isNavActive(const StudioNavigation.home()), isFalse);
 
-      // Legacy Worker routes resolve to Workspaces.
-      const legacyWorkersCtx = StudioShellContext(
-        navigation: StudioNavigation.workspaces(),
-        projects: [],
-      );
-      expect(legacyWorkersCtx.isNavActive(const StudioNavigation.workspaces()), isTrue);
-      expect(legacyWorkersCtx.isNavActive(const StudioNavigation.home()), isFalse);
-
       // Profile & Security route
       const profileCtx = StudioShellContext(
         navigation: StudioNavigation.profileSecurity(),
@@ -121,7 +114,6 @@ void main() {
       id: 'project-1',
       name: 'Conclave AX',
       branch: 'main',
-      activeGoals: 0,
       lastActivity: 'today',
       workstreams: [
         StudioWorkstream(
@@ -489,7 +481,6 @@ void main() {
         id: 'project-2',
         name: 'Conclave Core',
         branch: 'main',
-        activeGoals: 0,
         lastActivity: 'today',
         workstreams: [
           StudioWorkstream(
@@ -551,7 +542,6 @@ void main() {
       id: 'project-1',
       name: 'Conclave AX',
       branch: 'main',
-      activeGoals: 0,
       lastActivity: 'today',
       workstreams: [
         StudioWorkstream(
@@ -859,35 +849,6 @@ void main() {
       await tester.tap(find.text('Conclave AX'));
       expect(navigatedTo?.kind, StudioRouteKind.project);
       expect(navigatedTo?.projectId, 'project-1');
-    });
-
-    testWidgets('legacy Worker route resolves to Workspaces breadcrumbs',
-        (tester) async {
-      StudioNavigation? navigatedTo;
-
-      const workersContext = StudioShellContext(
-        navigation: StudioNavigation.workspaces(),
-        projects: [testProject],
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
-          home: Scaffold(
-            body: StudioTopBar(
-              shellContext: workersContext,
-              onNavigateTo: (nav) => navigatedTo = nav,
-              onOpenCommandPalette: () {},
-              onOpenNotifications: () {},
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Workspaces'), findsOneWidget);
-      expect(find.text('Workers'), findsNothing);
-      expect(navigatedTo, isNull);
     });
 
     testWidgets('compact HUD displays full breadcrumb path for run',
@@ -1250,7 +1211,6 @@ void main() {
       id: 'p-1',
       name: 'Conclave Core',
       branch: 'main',
-      activeGoals: 0,
       lastActivity: 'today',
       workstreams: [
         StudioWorkstream(
@@ -1760,7 +1720,6 @@ void main() {
         id: 'p-1',
         name: 'Conclave AX',
         branch: 'main',
-        activeGoals: 5,
         lastActivity: 'today',
         workstreams: [
           StudioWorkstream(
@@ -1824,7 +1783,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Project row: name is displayed without activeGoals count '5'
+      // Project rows display the project name without legacy Goal counts.
       expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand and Project
       expect(find.text('5'), findsNothing);
 
@@ -1858,7 +1817,6 @@ void main() {
         id: 'p-1',
         name: 'Conclave AX',
         branch: 'main',
-        activeGoals: 0,
         lastActivity: 'today',
         workstreams: [ws1],
       );
@@ -1959,7 +1917,6 @@ void main() {
         id: 'p-1',
         name: 'Conclave AX',
         branch: 'main',
-        activeGoals: 0,
         lastActivity: 'today',
         workstreams: [ws],
       );

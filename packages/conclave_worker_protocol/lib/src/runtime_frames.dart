@@ -307,6 +307,7 @@ final class ExecuteRequest extends WorkerFrame {
     required this.prompt,
     required this.timeoutMs,
     required this.sessionPolicy,
+    this.executionPolicy = WorkerExecutionPolicy.restricted,
     this.model,
     this.sessionKey,
     this.protocolVersion = localWorkerProtocolVersion,
@@ -359,6 +360,7 @@ final class ExecuteRequest extends WorkerFrame {
   final String? model;
   final int timeoutMs;
   final WorkerSessionPolicy sessionPolicy;
+  final WorkerExecutionPolicy executionPolicy;
   final String? sessionKey;
 
   @override
@@ -376,6 +378,7 @@ final class ExecuteRequest extends WorkerFrame {
         'sessionPolicy': sessionPolicy == WorkerSessionPolicy.durableSession
             ? 'durable_session'
             : 'stateless',
+        'executionPolicy': executionPolicy.wireValue,
         if (sessionKey != null) 'sessionKey': sessionKey,
       };
 
@@ -389,6 +392,7 @@ final class ExecuteRequest extends WorkerFrame {
       'model',
       'timeoutMs',
       'sessionPolicy',
+      'executionPolicy',
       'sessionKey',
     });
     _expectType(json, 'execute.request');
@@ -404,6 +408,13 @@ final class ExecuteRequest extends WorkerFrame {
       'durable_session' => WorkerSessionPolicy.durableSession,
       _ => throw const FormatException('invalid sessionPolicy'),
     };
+    final rawExecutionPolicy = json['executionPolicy'] ?? 'restricted';
+    if (rawExecutionPolicy is! String) {
+      throw const FormatException('executionPolicy must be a string');
+    }
+    final parsedExecutionPolicy = WorkerExecutionPolicy.fromWireValue(
+      rawExecutionPolicy,
+    );
     return ExecuteRequest(
       protocolVersion: _requiredString(json, 'protocolVersion'),
       requestId: _boundedString(
@@ -420,9 +431,26 @@ final class ExecuteRequest extends WorkerFrame {
       model: model as String?,
       timeoutMs: timeout,
       sessionPolicy: parsedPolicy,
+      executionPolicy: parsedExecutionPolicy,
       sessionKey: _optionalString(json, 'sessionKey'),
     );
   }
+}
+
+/// A bounded Workspace-selected sandbox mode. Full access is intentionally
+/// excluded from the Local Worker Protocol so assignments cannot request it.
+enum WorkerExecutionPolicy {
+  restricted('restricted'),
+  providerDefault('provider_default');
+
+  const WorkerExecutionPolicy(this.wireValue);
+  final String wireValue;
+
+  static WorkerExecutionPolicy fromWireValue(String value) => switch (value) {
+        'restricted' => WorkerExecutionPolicy.restricted,
+        'provider_default' => WorkerExecutionPolicy.providerDefault,
+        _ => throw const FormatException('invalid executionPolicy'),
+      };
 }
 
 final class WorkerProgress extends WorkerFrame {

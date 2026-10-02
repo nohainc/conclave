@@ -82,10 +82,6 @@ export const HOST_PROTOCOL_MESSAGE_TYPES = [
   "host.sync.result",
   "host.status",
   "host.update",
-  "worker.install",
-  "worker.remove",
-  "worker.status",
-  "credential.status",
   "assignment.start",
   "assignment.ack",
   "assignment.progress",
@@ -113,7 +109,6 @@ export const HOST_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS = [
   "assignmentId",
   "idempotencyKey",
 ] as const;
-
 export const REALTIME_EVENTS_NAME = "conclave.realtime-events" as const;
 export const REALTIME_EVENTS_VERSION = "1.0" as const;
 export const REALTIME_EVENT_ENVELOPE_FIELDS = [
@@ -178,53 +173,4 @@ export const EPHEMERAL_REALTIME_EVENT_TYPES = [
   "heartbeat",
   "host.load",
 ] as const;
-export const REALTIME_EVENT_PAYLOAD_SCHEMA =
-  "#/$defs/realtimeEventPayload" as const;
-
-export const AGENT_PROTOCOL_NAME = "conclave.agent-protocol" as const;
-export const AGENT_PROTOCOL_VERSION = "2.0" as const;
-export const AGENT_PROTOCOL_MAX_MESSAGE_SIZE_BYTES = 4194304 as const;
-export const AGENT_PROTOCOL_MESSAGE_TYPES = [
-  "agent.hello",
-  "agent.hello.ack",
-  "agent.heartbeat",
-  "agent.heartbeat.ack",
-  "agent.sync.request",
-  "agent.sync.response",
-  "agent.capabilities",
-  "agent.update.available",
-  "agent.update.status",
-  "plugin.install",
-  "plugin.update",
-  "plugin.remove",
-  "plugin.status",
-  "worker.configure",
-  "worker.status",
-  "assignment.start",
-  "assignment.ack",
-  "assignment.progress",
-  "assignment.result",
-  "assignment.error",
-  "assignment.cancelled",
-  "assignment.cancel",
-  "assignment.cancel.ack",
-] as const;
-export const AGENT_PROTOCOL_BASE_ENVELOPE_FIELDS = [
-  "protocol",
-  "protocolVersion",
-  "messageId",
-  "correlationId",
-  "timestamp",
-  "type",
-  "payload",
-] as const;
-export const AGENT_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS = [
-  "workspaceId",
-  "agentId",
-  "workerId",
-  "runId",
-  "taskId",
-  "attemptId",
-  "assignmentId",
-  "idempotencyKey",
-] as const;
+export const REALTIME_EVENT_PAYLOAD_SCHEMA = "#/$defs/realtimeEventPayload" as const;

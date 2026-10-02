@@ -18,7 +18,6 @@
     "@conclave/protocol": "workspace:*",
     "@conclave/security": "workspace:*",
     "@conclave/tool-profile": "workspace:*",
-    "@conclave/worker-manifest": "workspace:*",
     "better-auth": "^1.7.5"
   }
 }

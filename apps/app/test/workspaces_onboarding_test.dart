@@ -69,8 +69,7 @@ void main() {
     expect(find.text('Pair Workspace'), findsNothing);
   });
 
-  testWidgets('paired offline Workspace does not enter the legacy pairing flow',
-      (tester) async {
+  testWidgets('paired offline Workspace stays read-only', (tester) async {
     const workspace = StudioWorkspace(
       id: 'workspace-offline',
       name: 'Paired Mac',
@@ -97,38 +96,5 @@ void main() {
 
     expect(find.text('Paired Mac'), findsOneWidget);
     expect(find.text('Connect Machine'), findsNothing);
-  });
-
-  testWidgets('legacy unpaired placeholder remains read-only', (tester) async {
-    const workspace = StudioWorkspace(
-      id: 'workspace-placeholder',
-      name: 'Existing Workspace',
-      status: 'not_connected',
-    );
-    var connectCount = 0;
-
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: SingleChildScrollView(
-          child: WorkspacesPage(
-            workspaces: const [workspace],
-            onAdd: () {},
-            onRename: (_) {},
-            onUpdate: (_) {},
-            onRevoke: (_) {},
-            onGrant: (_) {},
-            onConnect: (_) async {
-              connectCount++;
-            },
-          ),
-        ),
-      ),
-    ));
-
-    expect(find.text('Existing Workspace'), findsOneWidget);
-    expect(find.text('Connect Machine'), findsNothing);
-    expect(find.text('Pairing code'), findsNothing);
-    expect(find.text('Create pairing code'), findsNothing);
-    expect(connectCount, 0);
   });
 }

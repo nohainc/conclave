@@ -1,6 +1,9 @@
-# Conclave protocol schemas
+# Conclave protocol schema
 
-This directory is the canonical, language-neutral contract source for messages crossing the Cloud, Agent Engine, and Worker Plugin boundaries.
+This directory contains the canonical, language-neutral JSON Schema for the
+product message envelope, execution error vocabulary, Workspace message
+metadata, and realtime event metadata. It does not define Agent, IPC, Worker
+Plugin, or Local Worker Protocol messages.
 
 Protocol versions use `major.minor.patch`:
 
@@ -8,4 +11,7 @@ Protocol versions use `major.minor.patch`:
 - a higher minor may add optional fields and remains readable by older peers;
 - patch changes do not alter the contract.
 
-The Zod schemas in `src/index.ts` are the TypeScript runtime validators for the domain payloads. Dart bindings in `packages/dart/protocol` validate the same envelope and the shared Task messages at the native boundary.
+TypeScript and Dart bindings are generated from this schema by
+`scripts/generate-protocol-bindings.mjs` and checked by
+`scripts/verify-protocol-bindings.mjs`. Local Worker Protocol 4.0 is defined
+and validated only in `packages/conclave_worker_protocol`.

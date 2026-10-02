@@ -14,13 +14,10 @@ const base = {
 };
 
 describe("Workspace Runtime protocol", () => {
-  it("uses workspace lifecycle message names", () => {
+  it("uses Workspace lifecycle message names", () => {
     expect(
       parseWorkspaceRuntimeMessage({ ...base, type: "workspace.hello" }).type,
     ).toBe("workspace.hello");
-    expect(() =>
-      parseWorkspaceRuntimeMessage({ ...base, type: "host.hello" }),
-    ).toThrow();
   });
 
   it("requires both execution and runtime identity on assignments", () => {
@@ -141,12 +138,7 @@ describe("Workspace Runtime protocol", () => {
         },
       }),
     ).toThrow();
-    for (const obsoleteField of [
-      "authStrategy",
-      "defaultModel",
-      "adapterVersion",
-      "providerToolPath",
-    ]) {
+    for (const obsoleteField of ["providerToolPath"]) {
       expect(() =>
         parseWorkspaceRuntimeMessage({
           ...base,
@@ -158,17 +150,17 @@ describe("Workspace Runtime protocol", () => {
         }),
       ).toThrow();
     }
-    for (const adapterPackageId of ["codex", "antigravity"]) {
+    for (const providerCliName of ["codex", "antigravity"]) {
       expect(() =>
         parseWorkspaceRuntimeMessage({
           ...base,
           type: "worker.inventory",
           payload: {
-            workers: [{ ...worker, workerTypeId: adapterPackageId }],
+            workers: [{ ...worker, workerTypeId: providerCliName }],
             fullSnapshot: true,
           },
         }),
-      ).toThrow(/legacy package IDs/);
+      ).toThrow();
     }
     expect(() =>
       parseWorkspaceRuntimeMessage({
@@ -190,7 +182,7 @@ describe("Workspace Runtime protocol", () => {
     ).toThrow(/requires Workspace protocol 5.1/);
   });
 
-  it("rejects adapter package IDs in Cloud assignment snapshots", () => {
+  it("requires logical Worker types in Cloud assignment snapshots", () => {
     const assignment = {
       ...base,
       type: "assignment.start",
@@ -207,13 +199,13 @@ describe("Workspace Runtime protocol", () => {
     expect(parseWorkspaceRuntimeMessage(assignment).type).toBe(
       "assignment.start",
     );
-    for (const adapterPackageId of ["codex", "antigravity"]) {
+    for (const providerCliName of ["codex", "antigravity"]) {
       expect(() =>
         parseWorkspaceRuntimeMessage({
           ...assignment,
-          payload: { snapshot: { workerTypeId: adapterPackageId }, input: {} },
+          payload: { snapshot: { workerTypeId: providerCliName }, input: {} },
         }),
-      ).toThrow(/legacy package IDs/);
+      ).toThrow();
     }
   });
 

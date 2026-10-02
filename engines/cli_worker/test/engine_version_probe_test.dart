@@ -31,9 +31,17 @@ void main() {
                 ).readAsString(),
               )
               as Map<String, Object?>;
-      (profile['providerTool']!
-          as Map<String, Object?>)['supportedVersions'] = [
+      final provider = profile['providerTool']! as Map<String, Object?>;
+      provider['executableCandidates'] = ['dart'];
+      provider['supportedVersions'] = [
         {'min': '99.0.0', 'maxExclusive': '100.0.0'},
+      ];
+      (provider['discovery']! as Map<String, Object?>)['standardLocations'] =
+          <String>[];
+      (provider['versionProbe']! as Map<String, Object?>)['arguments'] = [
+        'run',
+        'workers/fixture_cli/tool/fixture_provider.dart',
+        '--version',
       ];
       final passive =
           (profile['probe']! as Map<String, Object?>)['passive']!

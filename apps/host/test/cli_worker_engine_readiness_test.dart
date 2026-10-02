@@ -3,14 +3,15 @@ import 'dart:io';
 
 import 'package:conclave_host/cli_worker_engine_supervisor.dart';
 import 'package:conclave_host/configured_worker_registry.dart';
+import 'package:conclave_host/tool_profile_catalog.dart';
 import 'package:conclave_host/tool_profile_release_store.dart';
-import 'package:conclave_host/v7_adapter_package_store.dart';
 import 'package:conclave_host/worker_readiness.dart';
 import 'package:conclave_host/worker_diagnostic_store.dart';
-import 'package:conclave_host/worker_trust_policy.dart';
+
 import 'package:test/test.dart';
 
 import 'support/ed25519_release_fixture.dart';
+import 'support/logical_worker_catalog_fixture.dart';
 
 void main() {
   test(
@@ -98,11 +99,18 @@ void main() {
       idGenerator: () => 'disabled-chatgpt',
     );
     final worker = await registry.create(
-      name: 'ChatGPT',
-      workerTypeId: 'chatgpt',
-      authStrategy: 'provider_owned',
+      catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
       status: LocalWorkerStatus.disabled,
     );
+    final catalog = ToolProfileCatalogClient(
+      cloudUri: Uri.parse('https://catalog.test'),
+      store: profileStore,
+      trustPolicy: signing.trustPolicy,
+      workerCatalogLoader: () async => [
+        logicalWorkerCatalogFixture('chatgpt').toJson(),
+      ],
+    );
+    addTearDown(catalog.close);
     final bundledEngine = File(
       '$repository/apps/host/assets/engines/'
       'conclave_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
@@ -120,12 +128,8 @@ void main() {
     );
     final monitor = WorkerReadinessMonitor(
       registry: registry,
-      adapterStore: V7AdapterPackageStore(
-        root: Directory('${root.path}/Adapters'),
-        trustPolicy: signing.trustPolicy,
-        allowedPermissions: WorkerPermission.values.toSet(),
-      ),
       toolProfileReleaseStore: profileStore,
+      toolProfileCatalog: catalog,
       cliWorkerEngineSupervisor: engine,
       workerStateDirectory: (workerId) =>
           Directory('${root.path}/Workers/$workerId/state'),
@@ -265,11 +269,18 @@ Future<void> main(List<String> arguments) async {
       idGenerator: () => 'disabled-gemini',
     );
     final worker = await registry.create(
-      name: 'Gemini',
-      workerTypeId: 'gemini',
-      authStrategy: 'provider_owned',
+      catalogEntry: logicalWorkerCatalogFixture('gemini'),
       status: LocalWorkerStatus.disabled,
     );
+    final catalog = ToolProfileCatalogClient(
+      cloudUri: Uri.parse('https://catalog.test'),
+      store: profileStore,
+      trustPolicy: signing.trustPolicy,
+      workerCatalogLoader: () async => [
+        logicalWorkerCatalogFixture('gemini').toJson(),
+      ],
+    );
+    addTearDown(catalog.close);
     final bundledEngine = File(
       '$repository/apps/host/assets/engines/'
       'conclave_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
@@ -285,12 +296,8 @@ Future<void> main(List<String> arguments) async {
     );
     final monitor = WorkerReadinessMonitor(
       registry: registry,
-      adapterStore: V7AdapterPackageStore(
-        root: Directory('${root.path}/Adapters'),
-        trustPolicy: signing.trustPolicy,
-        allowedPermissions: WorkerPermission.values.toSet(),
-      ),
       toolProfileReleaseStore: profileStore,
+      toolProfileCatalog: catalog,
       cliWorkerEngineSupervisor: engine,
       workerStateDirectory: (workerId) =>
           Directory('${root.path}/Workers/$workerId/state'),

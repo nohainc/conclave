@@ -42,6 +42,51 @@ class ToolProfileResolver {
 
   final ToolProfileReleaseStore store;
 
+  /// Applies the same channel, provider-version, and bootstrap fallback used
+  /// by Workspace readiness before selecting a Profile for an assignment.
+  Future<ToolProfileResolution> resolveForWorker({
+    required String logicalWorkerTypeId,
+    required String profileDefinitionId,
+    required String engineVersion,
+    String? providerCliVersion,
+    Future<void> Function()? ensureAvailable,
+  }) async {
+    Future<ToolProfileResolution> resolveCurrent() async {
+      final channel =
+          (await store.releaseState(profileDefinitionId)).selectedChannel;
+      var result = providerCliVersion == null
+          ? await resolveBootstrapProfile(
+              logicalWorkerTypeId: logicalWorkerTypeId,
+              profileDefinitionId: profileDefinitionId,
+              engineVersion: engineVersion,
+              channel: channel,
+            )
+          : await resolve(
+              logicalWorkerTypeId: logicalWorkerTypeId,
+              profileDefinitionId: profileDefinitionId,
+              engineVersion: engineVersion,
+              providerCliVersion: providerCliVersion,
+              channel: channel,
+            );
+      if (!result.isAvailable && providerCliVersion != null) {
+        result = await resolveBootstrapProfile(
+          logicalWorkerTypeId: logicalWorkerTypeId,
+          profileDefinitionId: profileDefinitionId,
+          engineVersion: engineVersion,
+          channel: channel,
+        );
+      }
+      return result;
+    }
+
+    var result = await resolveCurrent();
+    if (!result.isAvailable && ensureAvailable != null) {
+      await ensureAvailable();
+      result = await resolveCurrent();
+    }
+    return result;
+  }
+
   /// Selects a verified, Engine-compatible Profile to run only its bounded
   /// version probe. The resulting provider version must be passed to [resolve]
   /// before the Profile is used for normal work.

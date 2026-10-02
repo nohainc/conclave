@@ -44,8 +44,8 @@ describe("IdentityService", () => {
     const request = new Request(
       "https://app.conclave.test/api/auth/sign-in/github",
     );
-    expect(safeAuthReturnTo(request, "/projects/p-1/chats/c-1")).toBe(
-      "/projects/p-1/chats/c-1",
+    expect(safeAuthReturnTo(request, "/projects/p-1/workstreams/ws-1")).toBe(
+      "/projects/p-1/workstreams/ws-1",
     );
     expect(safeAuthReturnTo(request, "https://evil.example/steal")).toBe("/");
     expect(safeAuthReturnTo(request, "/api/auth/sign-out")).toBe("/");

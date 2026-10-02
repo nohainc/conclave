@@ -121,21 +121,11 @@ void main() {
   test('loads and clears the Cloud session boundary', () async {
     final client = _JsonClient({
       'authenticated': true,
-      'workspaceId': 'workspace-1',
-      'workspaceRole': 'member',
       'user': {
         'id': 'user-1',
         'displayName': 'User One',
         'email': 'user@example.test',
       },
-      'pendingInvitations': [
-        {
-          'id': 'inv-1',
-          'workspaceId': 'workspace-team',
-          'role': 'member',
-          'expiresAt': '2099-01-01T00:00:00Z',
-        },
-      ],
     }, statusCode: 200);
     final api = StudioApiClient(
       baseUrl: 'https://conclave.test/api',
@@ -145,7 +135,6 @@ void main() {
     final session = await api.loadSession();
     expect(session.authenticated, isTrue);
     expect(session.viewer?.email, 'user@example.test');
-    expect(session.pendingInvitations.single.id, 'inv-1');
     expect(client.lastRequest?.url.path, '/api/session');
 
     await api.logout();
@@ -159,7 +148,6 @@ void main() {
 
     expect(snapshot.workspaceId, isNull);
     expect(store.projects.items.first.id, 'forge');
-    expect(store.chats.items, hasLength(3));
     expect(store.runs.current?.id, 'run-fixture');
     expect(store.workspaces.items.single.id, 'workspace-macbook');
     expect(store.workspaces.items, hasLength(1));
@@ -177,38 +165,6 @@ void main() {
     store.auth.replace(null);
 
     expect(store.auth.viewer?.id, 'user-1');
-  });
-
-  test('normalizes the Cloud chat message envelope', () async {
-    final requestClient = _JsonClient({
-      'message': {
-        'id': 'message-1',
-        'senderType': 'user',
-        'content': 'Fix the bug',
-        'createdAt': '2026-09-22T00:00:00Z',
-        'metadata': {},
-      },
-      'goalId': 'goal-1',
-      'runId': 'run-1',
-      'intent': {'kind': 'new_goal'},
-    });
-    final client = StudioApiClient(
-      baseUrl: 'https://conclave.test/api',
-      client: requestClient,
-    );
-
-    final message = await client.sendChatMessage(
-      projectId: 'project-1',
-      chatId: 'chat-1',
-      text: 'Fix the bug',
-    );
-
-    expect(message.sender, StudioMessageSender.user);
-    expect(message.text, 'Fix the bug');
-    expect(message.goalId, 'goal-1');
-    expect(message.runId, 'run-1');
-    expect(message.intentKind, 'new_goal');
-    expect(requestClient.lastRequest?.url.path, '/api/chats/chat-1/messages');
   });
 
   test('loads workspaces and scopes Studio snapshots', () async {
@@ -266,19 +222,16 @@ void main() {
           {
             'id': 'project-1',
             'name': 'Project One',
-            'activeGoals': 0,
             'lastActivity': 'today',
           },
         ],
       },
       '/api/workspaces': {'workspaces': []},
-      '/api/workspaces/workspace-1/accounts': {'accounts': []},
       '/api/projects/project-1/read-model': {
         'workspaceId': 'workspace-1',
         'project': {
           'id': 'project-1',
           'name': 'Project One',
-          'activeGoals': 0,
           'lastActivity': 'today',
           'workstreams': [
             {
@@ -312,69 +265,8 @@ void main() {
     expect(client.requests, isNot(contains('/api/studio/snapshot')));
     expect(client.requests, contains('/api/projects/project-1/read-model'));
     expect(client.requests, contains('/api/workspaces'));
-    expect(
-        client.requests, isNot(contains('/api/workspaces/workspace-1/hosts')));
     expect(client.requests,
         isNot(contains('/api/workspaces/workspace-1/workers')));
-  });
-
-  test('keeps the full Workspace list when the legacy snapshot omits it',
-      () async {
-    final client = _ReadModelClient({
-      '/api/studio/snapshot': {
-        'workspaceId': null,
-        'projects': [],
-        'workers': [],
-        'hosts': [],
-        'plugins': [],
-        'tasks': [],
-        'findings': [],
-        'events': [],
-        'artifacts': [],
-      },
-      '/api/workspaces': {
-        'workspaces': [
-          {'id': 'workspace-a', 'name': 'Connected Mac', 'status': 'online'},
-          {'id': 'workspace-b', 'name': 'Build Machine', 'status': 'offline'},
-        ],
-      },
-    });
-    final api = StudioApiClient(
-      baseUrl: 'https://conclave.test/api',
-      client: client,
-    );
-
-    final snapshot = await api.loadReadModels();
-
-    expect(snapshot.workspaces.map((workspace) => workspace.id), [
-      'workspace-a',
-      'workspace-b',
-    ]);
-    expect(client.requests, contains('/api/studio/snapshot'));
-    expect(client.requests, contains('/api/workspaces'));
-  });
-
-  test('normalizes the Cloud chat creation wrapper', () async {
-    final client = StudioApiClient(
-      baseUrl: 'https://conclave.test/api',
-      client: _JsonClient({
-        'chat': {
-          'id': 'chat-1',
-          'projectId': 'project-1',
-          'title': 'Auth',
-          'status': 'active',
-          'updatedAt': '2026-09-22T00:00:00Z',
-        },
-      }),
-    );
-
-    final chat = await client.createChat(
-      projectId: 'project-1',
-      title: 'Auth',
-    );
-
-    expect(chat.id, 'chat-1');
-    expect(chat.lastActivity, '2026-09-22T00:00:00Z');
   });
 
   test('returns the created Project from the Cloud response', () async {
@@ -431,7 +323,7 @@ void main() {
     expect(project.instructions, 'Use the team conventions.');
   });
 
-  test('parses Workspace runtime facts and credential profiles', () {
+  test('parses Workspace runtime facts', () {
     final snapshot = StudioSnapshot.fromJson({
       'workspaceId': 'workspace-1',
       'workspaces': [
@@ -443,17 +335,6 @@ void main() {
           'appVersion': '4.0.0',
           'workerCount': 2,
           'platform': 'macos',
-        },
-      ],
-      'accounts': [
-        {
-          'id': 'profile-1',
-          'displayName': 'Personal Codex',
-          'owner': 'user-1',
-          'worker': 'codex',
-          'host': 'host-1',
-          'sharingPolicy': 'private_only',
-          'status': 'ready',
         },
       ],
       'hosts': [
@@ -468,11 +349,9 @@ void main() {
     expect(snapshot.workspaces.single.name, 'Build Workspace');
     expect(snapshot.workspaces.single.appVersion, '4.0.0');
     expect(snapshot.workspaces.single.platform, 'macos');
-    expect(snapshot.accounts.single.displayName, 'Personal Codex');
-    expect(snapshot.accounts.single.sharing, 'private_only');
   });
 
-  test('parses only the safe V7 Workspace Worker projection', () {
+  test('parses only the safe Workspace Worker projection', () {
     final worker = StudioWorker.fromJson({
       'id': 'worker-codex',
       'workspaceId': 'workspace-1',
@@ -481,10 +360,6 @@ void main() {
       'readinessState': 'ready',
       'localConcurrencyLimit': 2,
       'capabilities': ['code'],
-      'authStrategy': 'must-not-be-retained',
-      'credentialStatus': 'must-not-be-retained',
-      'defaultModel': 'must-not-be-retained',
-      'allowedModels': ['must-not-be-retained'],
       'name': 'must-not-be-retained',
       'apiKey': 'must-not-be-retained',
     });
@@ -493,27 +368,6 @@ void main() {
     expect(worker.workerTypeId, 'chatgpt');
     expect(worker.localConcurrencyLimit, 2);
     expect(worker.attentionReasonCode, isNull);
-  });
-
-  test(
-      'announces a Workspace runtime update through the Cloud management endpoint',
-      () async {
-    final client = _JsonClient({}, statusCode: 200);
-    final api = StudioApiClient(
-      baseUrl: 'https://conclave.test/api',
-      client: client,
-    );
-
-    await api.announceWorkspaceUpdate(
-      workspaceId: 'workspace-1',
-      runtimeId: 'runtime-1',
-      channel: 'stable',
-    );
-
-    expect(client.lastRequest?.method, 'POST');
-    expect(client.lastRequest?.url.path,
-        '/api/workspaces/workspace-1/hosts/runtime-1/update');
-    expect(jsonDecode(client.lastBody!)['channel'], 'stable');
   });
 
   test('uses Workspace runtime enrollment and revocation paths', () async {
@@ -537,41 +391,6 @@ void main() {
     await api.revokeWorkspace(workspaceId: 'workspace-1');
     expect(client.lastRequest?.method, 'DELETE');
     expect(client.lastRequest?.url.path, '/api/workspaces/workspace-1');
-  });
-
-  test('creates an AI Account with Host-local setup metadata', () async {
-    final client = _JsonClient({
-      'account': {
-        'id': 'account-1',
-        'displayName': 'My Codex',
-        'owner': 'User One',
-        'worker': 'Codex',
-        'host': 'host-1',
-        'sharing': 'Private',
-        'status': 'setup_required',
-      },
-    }, statusCode: 201);
-    final api = StudioApiClient(
-      baseUrl: 'https://conclave.test/api',
-      client: client,
-    );
-
-    final account = await api.createCredentialProfile(
-      workspaceId: 'workspace-1',
-      displayName: 'My Codex',
-      workerId: 'worker-codex',
-      authType: 'oauth_browser',
-      ownerType: 'user',
-      sharingPolicy: 'private_only',
-      hostId: 'host-1',
-    );
-
-    expect(account.id, 'account-1');
-    expect(client.lastRequest?.method, 'POST');
-    expect(
-        client.lastRequest?.url.path, '/api/workspaces/workspace-1/accounts');
-    expect(jsonDecode(client.lastBody!)['hostId'], 'host-1');
-    expect(jsonDecode(client.lastBody!)['sharingPolicy'], 'private_only');
   });
 
   test('uses Workspace management routes for rename and invitations', () async {

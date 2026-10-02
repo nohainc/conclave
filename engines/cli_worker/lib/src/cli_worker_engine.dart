@@ -767,7 +767,7 @@ class CliWorkerEngine {
         '${((request.timeoutMs - _int(_profile.timeout['providerReserveMs'])).clamp(1, request.timeoutMs) / 1000).ceil()}',
     if (request.model != null) 'model': request.model!,
     if (sessionId != null) 'sessionId': sessionId,
-    'executionPolicy': 'restricted',
+    'executionPolicy': request.executionPolicy.wireValue,
     'sessionPolicy': request.sessionPolicy == WorkerSessionPolicy.durableSession
         ? 'durable'
         : 'stateless',
@@ -1372,8 +1372,9 @@ class CliWorkerEngine {
           durationMs: timer?.elapsedMilliseconds,
           errorCode: frame.issueCode,
           probeStage: frame.mode.name,
-          failureLayer:
-              frame.issueCode == null ? null : _failureLayer(frame.issueCode!),
+          failureLayer: frame.issueCode == null
+              ? null
+              : _failureLayer(frame.issueCode!),
         ),
       );
     } else if (frame is WorkerResult || frame is WorkerErrorFrame) {
@@ -1385,7 +1386,9 @@ class CliWorkerEngine {
           : error?.assignmentId;
       _logger.log(
         error == null ? 'info' : 'warning',
-        error == null ? 'engine.assignment.completed' : 'engine.assignment.failed',
+        error == null
+            ? 'engine.assignment.completed'
+            : 'engine.assignment.failed',
         context: _diagnosticContext(
           requestId: requestId,
           assignmentId: assignmentId,

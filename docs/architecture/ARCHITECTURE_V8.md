@@ -4,25 +4,13 @@
 **Release declaration:** Withheld; acceptance gates remain open
 
 **Date:** 2026-10-01  
-**Builds on:** Architecture v7, Worker Runtime v2, Work v1  
+**Product contracts:** Work v1, Workspace lifecycle, logical Worker catalog
 **Primary decision:** [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md)
 
 ## 1. Executive decision
 
-Architecture v8 keeps the v7 product model and Work v1 orchestration, but
-simplifies the local AI execution layer.
-
-The historical Worker Runtime v2 implementation used one first-party Worker
-executable per provider:
-
-~~~text
-Workspace
-├── ChatGPT Worker -> Codex CLI
-└── Gemini Worker  -> agy
-~~~
-
-v8 replaces that implementation with one generic isolated CLI Worker Engine and
-signed Cloud-managed Tool Profiles:
+Architecture v8 uses one generic isolated CLI Worker Engine and signed
+Cloud-managed Tool Profiles:
 
 ~~~text
 Conclave AX
@@ -42,7 +30,7 @@ Conclave CLI Worker Engine
 provider CLI
 ~~~
 
-### 1.1 Canonical v8 terminology and migration boundary
+### 1.1 Canonical v8 terminology
 
 Use these terms for v8 architecture, implementation, tests, and operations:
 
@@ -54,13 +42,15 @@ Use these terms for v8 architecture, implementation, tests, and operations:
 - **Provider CLI** — locally installed tool such as `codex` or `agy`;
 - **Local Worker Protocol 4.0** — Workspace-to-Engine contract.
 
+The `@conclave/core` package organizes current domain contracts by concept
+(`project`, `workspace-grants`, `workstream`, `integration`, and
+`observability`). Current source uses domain names rather than architecture
+version labels.
+
 Workspace, Worker, Worker Type, Workstream, Work Request, and Work v1 Workflow
-remain canonical product/domain terms. “ChatGPT Worker executable,” “Gemini
-Worker executable,” “provider-specific Worker release,” and “per-provider
-native Worker package” describe the superseded v2 implementation only. Existing
-v2 provider binaries and their release machinery are migration-only references
-until the v8 acceptance gates pass and Phase 31 removes them. Do not extend that
-runtime for new provider integrations.
+remain canonical product/domain terms. The generic Engine is the sole
+production CLI Worker runtime. Live provider and release acceptance are
+tracked as release gates in the current implementation roadmap.
 
 Examples:
 
@@ -131,6 +121,14 @@ Workspace concurrency limits.
 
 ## 4. Application boundaries
 
+### Cloud API surface
+
+Cloud's HTTP handlers are grouped by current product domain under
+`apps/cloud/src/routes/`: authentication, Projects, Workspaces, Workstreams,
+Work, Tool Profiles, and Workspace/application releases. The Workspace Gateway
+is the authenticated runtime surface. Workstream Discuss provides
+collaboration; Work v1 Work Requests provide execution.
+
 ### 4.1 Conclave AX
 
 AX remains the human web application.
@@ -166,6 +164,25 @@ It owns:
 
 Cloud does not execute provider CLIs.
 
+#### Authorization boundaries
+
+Cloud request identity contains the authenticated human, session, and current
+Project membership roles. Project reads, writes, and Work execution are checked
+against the Project membership on each request. Workspace membership roles and
+organization aliases are not authorization principals.
+
+Execution Workspaces have one owner. Workspace operations recheck that owner
+against the Workspace row. A Project can use an Execution Workspace only
+through an active Project → Workspace Grant; Project membership alone does not
+grant machine access. Workstream access is checked separately by the Workstream
+policy.
+
+Tool Profile administration and release operations use the explicit Cloud
+`CONCLAVE_PROFILE_ADMIN_USER_IDS` allowlist. Workspace ownership and Project
+roles do not grant Profile administration. Sensitive Profile and release
+operations continue to require session-bound step-up authentication where
+specified.
+
 ### 4.3 Conclave Workspace
 
 Workspace remains the persistent machine-side trust and execution supervisor.
@@ -192,6 +209,14 @@ pointers in `release-state.json`. Workspace refreshes Cloud revocations before
 release sync and validates the shared Profile v1 schema and trust envelope
 before writing. Cache updates are independent of Engine and Workspace
 application versions.
+
+Every normal assignment resolves its enabled, ready Logical Worker from local
+Workspace state, selects a signed Tool Profile using the same channel and
+provider-version rules as readiness, and runs it through
+`CliWorkerEngineSupervisor.execute()`. The execute frame carries only the
+bounded Workspace
+execution policies `restricted` and `provider_default`; provider Profile
+arguments map those policies to CLI-specific sandbox flags.
 
 Workspace does **not** know provider-specific commands or event formats.
 
@@ -272,7 +297,8 @@ The boundaries share canonical IDs only. They do not share credentials.
 
 ## 6. Local Worker Protocol 4.0
 
-Protocol 4.0 retains the provider-neutral operations proven by Runtime v2:
+Protocol 4.0 carries the provider-neutral operations required by Workspace and
+the Engine:
 
 ~~~text
 initialize
@@ -827,14 +853,11 @@ Cloud does not receive:
 - local profile files;
 - provider credentials.
 
-The v8 inventory contract replaces the provider-native
-`worker_runtime_version` field with the Engine and Profile evidence above.
-New assignment snapshots and `worker_assignments` rows record Engine/Profile
+Assignment snapshots and `worker_assignments` rows record Engine/Profile
 identity. Each assignment stores that snapshot at dispatch, including the
 provider tool version and explicit model, so later Profile promotions cannot
 rewrite the evidence. Run history reads the stored snapshot instead of current
-inventory. The migration renames the v7 assignment version column; no local
-path or secret is included.
+inventory. No local path or secret is included.
 
 ## 23. Observability
 
@@ -927,39 +950,14 @@ The profile payload itself need not be copied into Cloud assignment data if the
 release is immutable and addressable, but sufficient evidence must remain for
 audit/reproducibility.
 
-## 27. Compatibility with v7/v2
+## 27. Release gates
 
-v8 preserves:
-- Workspace-owned local execution;
-- separate execution process;
-- provider credentials staying local;
-- Local Worker Protocol abstraction;
-- process-tree supervision;
-- local provider session storage;
-- logical ChatGPT/Gemini Worker IDs;
-- Work v1 orchestration.
+The current schema, local Worker registry, assignment executor, and protocol
+use the v8 model. Normal assignments resolve a logical Worker through its
+signed Tool Profile and execute it with the generic Engine. There is no
+parallel provider executable runtime or architecture-version route.
 
-v8 supersedes:
-- one native Worker binary per provider;
-- provider-specific Worker release catalog;
-- Workspace-managed independent ChatGPT/Gemini executable versions;
-- provider integration behavior compiled into separate Worker executables.
-
-Worker Runtime v2 and its provider-specific binaries remain historical
-design/evidence for the process boundary and migration fixtures only. They are
-not the v8 runtime target.
-
-## 28. Migration posture
-
-Conclave is still in development.
-
-Prefer convergence to permanent dual runtime.
-
-Temporary migration may support:
-- existing ChatGPT/Gemini v2 provider binaries as migration-only fallbacks;
-- new generic Engine + profiles.
-
-Release gate:
+The v8 release declaration remains gated on retained evidence for:
 
 ~~~text
 ChatGPT generic Engine/profile real acceptance
@@ -968,14 +966,12 @@ Gemini generic Engine/profile real acceptance
 AND
 profile update/rollback acceptance
 AND
-Cloud -> Workspace -> Engine -> provider acceptance
-THEN
-remove provider-specific Worker binaries
+Work v1 full-path acceptance
+AND
+failure/security acceptance
 ~~~
 
-Do not ship indefinite per-provider-binary and profile-driven modes together.
-
-## 29. Future engine families
+## 28. Future engine families
 
 Architecture v8 deliberately names this component CLI Worker Engine.
 
@@ -992,7 +988,7 @@ Local Model Server Engine
 
 All may still expose the same logical Worker/Work orchestration abstraction.
 
-## 30. Final v8 topology
+## 29. Final v8 topology
 
 ~~~text
                          CONCLAVE AX

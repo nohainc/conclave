@@ -23,7 +23,7 @@ import {
 } from "../src/routes/handlers.js";
 
 const migrationsDirectory = fileURLToPath(
-  new URL("../migrations-v6/", import.meta.url),
+  new URL("../migrations-v8/", import.meta.url),
 );
 
 class Statement {

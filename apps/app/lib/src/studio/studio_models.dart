@@ -46,31 +46,6 @@ extension StudioTaskHelpers on StudioTask {
   String? get assignedWorkerId => worker.isNotEmpty ? worker : null;
 }
 
-extension StudioQualityPresetHelpers on StudioQualityPreset {
-  String get label => switch (this) {
-        StudioQualityPreset.economy => 'Economy',
-        StudioQualityPreset.balanced => 'Balanced',
-        StudioQualityPreset.highAssurance => 'High Assurance',
-        StudioQualityPreset.exploration => 'Exploration',
-        StudioQualityPreset.custom => 'Custom',
-      };
-}
-
-extension StudioChatMessageHelpers on StudioChatMessage {
-  String get content => text;
-  String get sentAt => timestamp;
-  String get senderName => switch (sender) {
-        StudioMessageSender.user => 'You',
-        StudioMessageSender.conclave => 'Conclave AX',
-        StudioMessageSender.system => 'System',
-      };
-  StudioMessageRole get senderRole => sender.role;
-}
-
-extension StudioCredentialProfileHelpers on StudioCredentialProfile {
-  String get name => displayName;
-}
-
 extension StudioProjectHelpers on StudioProject {
   String get title => name;
 }
@@ -78,47 +53,6 @@ extension StudioProjectHelpers on StudioProject {
 enum FindingSeverity { blocker, major, minor, note }
 
 enum FindingStatus { open, fixed, verified }
-
-enum StudioQualityPreset {
-  economy,
-  balanced,
-  highAssurance,
-  exploration,
-  custom
-}
-
-class StudioPolicy {
-  const StudioPolicy({
-    required this.preset,
-    required this.mode,
-    required this.candidateCount,
-    required this.maxParallel,
-    required this.costCeiling,
-    required this.requiresSynthesis,
-  });
-
-  final StudioQualityPreset preset;
-  final String mode;
-  final int candidateCount;
-  final int maxParallel;
-  final String costCeiling;
-  final bool requiresSynthesis;
-
-  factory StudioPolicy.fromJson(Map<String, dynamic> json) => StudioPolicy(
-        preset: switch (_string(json, 'preset')) {
-          'economy' => StudioQualityPreset.economy,
-          'high_assurance' => StudioQualityPreset.highAssurance,
-          'exploration' => StudioQualityPreset.exploration,
-          'custom' => StudioQualityPreset.custom,
-          _ => StudioQualityPreset.balanced,
-        },
-        mode: _string(json, 'mode', 'parallel'),
-        candidateCount: json['candidateCount'] as int? ?? 2,
-        maxParallel: json['maxParallel'] as int? ?? 2,
-        costCeiling: _string(json, 'costCeiling', 'No ceiling'),
-        requiresSynthesis: json['requiresSynthesis'] as bool? ?? false,
-      );
-}
 
 class StudioCandidateOutput {
   const StudioCandidateOutput({
@@ -246,18 +180,6 @@ List<String> _runtimeCapabilityLabels(Map<String, dynamic> json, String key) {
   return labels;
 }
 
-enum StudioMessageSender { user, conclave, system }
-
-enum StudioMessageRole { user, assistant, system }
-
-extension StudioMessageSenderRole on StudioMessageSender {
-  StudioMessageRole get role => switch (this) {
-        StudioMessageSender.user => StudioMessageRole.user,
-        StudioMessageSender.conclave => StudioMessageRole.assistant,
-        StudioMessageSender.system => StudioMessageRole.system,
-      };
-}
-
 enum StudioPhaseStatus { completed, inProgress, pending }
 
 class StudioPhaseItem {
@@ -289,129 +211,6 @@ class StudioPhaseItem {
 }
 
 typedef StudioRunPhase = StudioPhaseItem;
-
-class StudioRunPreview {
-  const StudioRunPreview({
-    required this.runId,
-    required this.statusSummary,
-    required this.phases,
-    required this.workerCount,
-    this.finalAnswer,
-  });
-
-  final String runId;
-  final String statusSummary;
-  final List<StudioPhaseItem> phases;
-  final int workerCount;
-  final String? finalAnswer;
-
-  factory StudioRunPreview.fromJson(Map<String, dynamic> json) =>
-      StudioRunPreview(
-        runId: _string(json, 'runId'),
-        statusSummary: _string(json, 'statusSummary'),
-        phases: (json['phases'] as List? ?? const [])
-            .map((item) => StudioPhaseItem.fromJson(
-                Map<String, dynamic>.from(item as Map)))
-            .toList(),
-        workerCount: json['workerCount'] as int? ?? 1,
-        finalAnswer: json['finalAnswer'] as String?,
-      );
-
-  Map<String, dynamic> toJson() => {
-        'runId': runId,
-        'statusSummary': statusSummary,
-        'phases': phases.map((p) => p.toJson()).toList(),
-        'workerCount': workerCount,
-        'finalAnswer': finalAnswer,
-      };
-}
-
-class StudioChatMessage {
-  const StudioChatMessage({
-    required this.id,
-    required this.sender,
-    required this.text,
-    required this.timestamp,
-    this.runPreview,
-    this.goalId,
-    this.runId,
-    this.intentKind,
-  });
-
-  final String id;
-  final StudioMessageSender sender;
-  final String text;
-  final String timestamp;
-  final StudioRunPreview? runPreview;
-  final String? goalId;
-  final String? runId;
-  final String? intentKind;
-
-  factory StudioChatMessage.fromJson(Map<String, dynamic> json) =>
-      StudioChatMessage(
-        id: _string(json, 'id'),
-        sender: StudioMessageSender.values.firstWhere(
-          (v) => v.name == json['sender'],
-          orElse: () => StudioMessageSender.conclave,
-        ),
-        text: _string(json, 'text'),
-        timestamp: _string(json, 'timestamp'),
-        runPreview: json['runPreview'] == null
-            ? null
-            : StudioRunPreview.fromJson(
-                Map<String, dynamic>.from(json['runPreview'] as Map)),
-        goalId: json['goalId'] as String?,
-        runId: json['runId'] as String?,
-        intentKind: json['intentKind'] as String?,
-      );
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'sender': sender.name,
-        'text': text,
-        'timestamp': timestamp,
-        'runPreview': runPreview?.toJson(),
-      };
-}
-
-class StudioChat {
-  const StudioChat({
-    required this.id,
-    required this.projectId,
-    required this.title,
-    required this.lastActivity,
-    required this.messages,
-    this.activeRunId,
-  });
-
-  final String id;
-  final String projectId;
-  final String title;
-  final String lastActivity;
-  final List<StudioChatMessage> messages;
-  final String? activeRunId;
-
-  factory StudioChat.fromJson(Map<String, dynamic> json) => StudioChat(
-        id: _string(json, 'id'),
-        projectId: _string(json, 'projectId'),
-        title: _string(json, 'title'),
-        lastActivity: _string(json, 'lastActivity'),
-        messages: (json['messages'] as List? ?? const [])
-            .map((item) => StudioChatMessage.fromJson(
-                Map<String, dynamic>.from(item as Map)))
-            .toList(),
-        activeRunId: json['activeRunId'] as String?,
-      );
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'projectId': projectId,
-        'title': title,
-        'lastActivity': lastActivity,
-        'messages': messages.map((m) => m.toJson()).toList(),
-        'activeRunId': activeRunId,
-      };
-}
 
 class StudioWorkstream {
   const StudioWorkstream({
@@ -524,13 +323,10 @@ class StudioProject {
     required this.id,
     required this.name,
     required this.branch,
-    required this.activeGoals,
     required this.lastActivity,
-    this.chats = const [],
     this.workstreams = const [],
     this.description = '',
     this.instructions = '',
-    this.defaultExecutionPolicy = 'balanced',
     this.archived = false,
     this.role = 'owner',
     this.settings = const {},
@@ -539,13 +335,10 @@ class StudioProject {
   final String id;
   final String name;
   final String branch;
-  final int activeGoals;
   final String lastActivity;
-  final List<StudioChat> chats;
   final List<StudioWorkstream> workstreams;
   final String description;
   final String instructions;
-  final String defaultExecutionPolicy;
   final bool archived;
   final String role;
   final Map<String, dynamic> settings;
@@ -554,12 +347,7 @@ class StudioProject {
         id: _string(json, 'id'),
         name: _string(json, 'name'),
         branch: _string(json, 'branch'),
-        activeGoals: json['activeGoals'] as int? ?? 0,
         lastActivity: _string(json, 'lastActivity'),
-        chats: (json['chats'] as List? ?? const [])
-            .map((item) =>
-                StudioChat.fromJson(Map<String, dynamic>.from(item as Map)))
-            .toList(),
         workstreams: (json['workstreams'] as List? ?? const [])
             .map((item) => StudioWorkstream.fromJson(
                 Map<String, dynamic>.from(item as Map)))
@@ -572,13 +360,6 @@ class StudioProject {
                     (json['settings'] as Map)['instructions'] != null)
                 ? (json['settings'] as Map)['instructions'].toString()
                 : ''),
-        defaultExecutionPolicy: _string(
-            json,
-            'defaultExecutionPolicy',
-            (json['settings'] is Map &&
-                    (json['settings'] as Map)['defaultExecutionPolicy'] != null)
-                ? (json['settings'] as Map)['defaultExecutionPolicy'].toString()
-                : 'balanced'),
         archived: json['archived'] == true ||
             (json['settings'] is Map &&
                 (json['settings'] as Map)['archived'] == true),
@@ -592,13 +373,10 @@ class StudioProject {
     String? id,
     String? name,
     String? branch,
-    int? activeGoals,
     String? lastActivity,
-    List<StudioChat>? chats,
     List<StudioWorkstream>? workstreams,
     String? description,
     String? instructions,
-    String? defaultExecutionPolicy,
     bool? archived,
     String? role,
     Map<String, dynamic>? settings,
@@ -607,14 +385,10 @@ class StudioProject {
         id: id ?? this.id,
         name: name ?? this.name,
         branch: branch ?? this.branch,
-        activeGoals: activeGoals ?? this.activeGoals,
         lastActivity: lastActivity ?? this.lastActivity,
-        chats: chats ?? this.chats,
         workstreams: workstreams ?? this.workstreams,
         description: description ?? this.description,
         instructions: instructions ?? this.instructions,
-        defaultExecutionPolicy:
-            defaultExecutionPolicy ?? this.defaultExecutionPolicy,
         archived: archived ?? this.archived,
         role: role ?? this.role,
         settings: settings ?? this.settings,
@@ -697,41 +471,6 @@ class StudioWorkspaceEnrollment {
         token: _string(json, 'token'),
         workspaceId: _string(json, 'workspaceId'),
         expiresAt: _string(json, 'expiresAt'),
-      );
-}
-
-class StudioCredentialProfile {
-  const StudioCredentialProfile({
-    required this.id,
-    required this.displayName,
-    required this.owner,
-    required this.worker,
-    required this.host,
-    required this.sharing,
-    required this.status,
-    this.storageLocation = 'None',
-  });
-
-  final String id;
-  final String displayName;
-  final String owner;
-  final String worker;
-  final String host;
-  final String sharing;
-  final String status;
-  final String storageLocation;
-
-  factory StudioCredentialProfile.fromJson(Map<String, dynamic> json) =>
-      StudioCredentialProfile(
-        id: _string(json, 'id'),
-        displayName: _string(json, 'displayName', _string(json, 'name')),
-        owner: _string(json, 'owner', _string(json, 'ownerId')),
-        worker: _string(json, 'worker', _string(json, 'workerId')),
-        host: _string(json, 'host', _string(json, 'hostId', 'Cloud')),
-        sharing:
-            _string(json, 'sharing', _string(json, 'sharingPolicy', 'Private')),
-        status: _string(json, 'status', 'setup_required'),
-        storageLocation: _string(json, 'storageLocation', 'None'),
       );
 }
 
@@ -914,56 +653,20 @@ class StudioViewer {
       );
 }
 
-class StudioPendingInvitation {
-  const StudioPendingInvitation({
-    required this.id,
-    required this.workspaceId,
-    required this.role,
-    required this.expiresAt,
-  });
-
-  final String id;
-  final String workspaceId;
-  final String role;
-  final String expiresAt;
-
-  factory StudioPendingInvitation.fromJson(Map<String, dynamic> json) =>
-      StudioPendingInvitation(
-        id: _string(json, 'id'),
-        workspaceId: _string(json, 'workspaceId'),
-        role: _string(json, 'role'),
-        expiresAt: _string(json, 'expiresAt'),
-      );
-}
-
 class StudioSession {
   const StudioSession({
     required this.authenticated,
     this.viewer,
-    this.workspaceId,
-    this.workspaceRole,
-    this.pendingInvitations = const [],
   });
 
   final bool authenticated;
   final StudioViewer? viewer;
-  final String? workspaceId;
-  final String? workspaceRole;
-  final List<StudioPendingInvitation> pendingInvitations;
-
   factory StudioSession.fromJson(Map<String, dynamic> json) => StudioSession(
         authenticated: json['authenticated'] == true,
         viewer: json['user'] is Map
             ? StudioViewer.fromJson(
                 Map<String, dynamic>.from(json['user'] as Map))
             : null,
-        workspaceId: json['workspaceId'] as String?,
-        workspaceRole: json['workspaceRole'] as String?,
-        pendingInvitations: (json['pendingInvitations'] as List? ?? const [])
-            .whereType<Map>()
-            .map((invitation) => StudioPendingInvitation.fromJson(
-                Map<String, dynamic>.from(invitation)))
-            .toList(growable: false),
       );
 }
 
@@ -1295,7 +998,6 @@ class StudioSnapshot {
     this.workspaceId,
     this.viewer,
     this.activeRunId,
-    this.activeChatId,
     this.run,
     required this.projects,
     this.workspaces = const [],
@@ -1303,16 +1005,13 @@ class StudioSnapshot {
     required this.findings,
     required this.events,
     required this.artifacts,
-    this.policy,
     this.candidateOutputs = const [],
     this.synthesisDecision,
-    this.accounts = const [],
   });
 
   final String? workspaceId;
   final String? activeRunId;
   final StudioViewer? viewer;
-  final String? activeChatId;
   final StudioRun? run;
   final List<StudioProject> projects;
   final List<StudioWorkspace> workspaces;
@@ -1320,22 +1019,17 @@ class StudioSnapshot {
   final List<StudioFinding> findings;
   final List<StudioEvent> events;
   final List<StudioArtifact> artifacts;
-  final List<StudioCredentialProfile> accounts;
-  final StudioPolicy? policy;
   final List<StudioCandidateOutput> candidateOutputs;
   final StudioSynthesisDecision? synthesisDecision;
 
   StudioSnapshot copyWith({
     List<StudioProject>? projects,
     List<StudioWorkspace>? workspaces,
-    List<StudioCredentialProfile>? accounts,
-    String? activeChatId,
   }) =>
       StudioSnapshot(
         workspaceId: workspaceId,
         viewer: viewer,
         activeRunId: activeRunId,
-        activeChatId: activeChatId ?? this.activeChatId,
         run: run,
         projects: projects ?? this.projects,
         workspaces: workspaces ?? this.workspaces,
@@ -1343,23 +1037,9 @@ class StudioSnapshot {
         findings: findings,
         events: events,
         artifacts: artifacts,
-        policy: policy,
         candidateOutputs: candidateOutputs,
         synthesisDecision: synthesisDecision,
-        accounts: accounts ?? this.accounts,
       );
-
-  List<StudioChat> get allChats =>
-      projects.expand((project) => project.chats).toList();
-
-  StudioChat? get activeChat {
-    final chats = allChats;
-    if (activeChatId != null) {
-      final found = chats.where((c) => c.id == activeChatId).firstOrNull;
-      if (found != null) return found;
-    }
-    return chats.firstOrNull;
-  }
 
   static StudioSnapshot empty() => const StudioSnapshot(
       projects: [],
@@ -1367,8 +1047,7 @@ class StudioSnapshot {
       tasks: [],
       findings: [],
       events: [],
-      artifacts: [],
-      accounts: []);
+      artifacts: []);
 
   factory StudioSnapshot.fromJson(Map<String, dynamic> json) => StudioSnapshot(
         workspaceId: json['workspaceId'] as String?,
@@ -1377,7 +1056,6 @@ class StudioSnapshot {
             : StudioViewer.fromJson(
                 Map<String, dynamic>.from(json['viewer'] as Map)),
         activeRunId: json['activeRunId'] as String?,
-        activeChatId: json['activeChatId'] as String?,
         run: json['run'] == null
             ? null
             : StudioRun.fromJson(Map<String, dynamic>.from(json['run'] as Map)),
@@ -1405,14 +1083,6 @@ class StudioSnapshot {
             .map((item) =>
                 StudioArtifact.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList(),
-        accounts: (json['accounts'] as List? ?? const [])
-            .map((item) => StudioCredentialProfile.fromJson(
-                Map<String, dynamic>.from(item as Map)))
-            .toList(),
-        policy: json['policy'] == null
-            ? null
-            : StudioPolicy.fromJson(
-                Map<String, dynamic>.from(json['policy'] as Map)),
         candidateOutputs: (json['candidateOutputs'] as List? ?? const [])
             .map((item) => StudioCandidateOutput.fromJson(
                 Map<String, dynamic>.from(item as Map)))

@@ -152,7 +152,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
           ProbeRequest(
             requestId: 'accept-live',
             mode: WorkerProbeMode.live,
-            timeoutMs: 60000,
+            timeoutMs: 30000,
           ),
           timeout: const Duration(seconds: 90),
         );
@@ -195,7 +195,13 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
           ),
           timeout: const Duration(minutes: 3),
         );
-        expect(result.terminal, isA<WorkerResult>());
+        expect(
+          result.terminal,
+          isA<WorkerResult>(),
+          reason: result.terminal is WorkerErrorFrame
+              ? jsonEncode((result.terminal as WorkerErrorFrame).toJson())
+              : null,
+        );
         expect(
           (result.terminal as WorkerResult).output,
           contains('WRITE_OK'),
@@ -422,7 +428,7 @@ final class _EngineClient {
     required Directory workstreamDirectory,
   }) async {
     final process = await currentPlatformRuntime.startIsolatedProcess(
-      Platform.resolvedExecutable,
+      Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
       [
         '${repository.path}/engines/cli_worker/bin/conclave_cli_worker.dart',
         '--profile',

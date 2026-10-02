@@ -1,40 +1,5 @@
-import type {
-  ArtifactRecord,
-  GoalRecord,
-  RunRecord,
-} from "@conclave/persistence";
-import {
-  D1PersistenceRepositories,
-  R2ArtifactStore,
-  ThresholdArtifactStore,
-  type D1DatabaseLike,
-} from "@conclave/persistence";
-import type {
-  ExecutionHost,
-  Worker,
-  WorkerAssignmentResult,
-  WorkerAvailability,
-  WorkerCostMetadata,
-  V4ResolvedExecutionTarget,
-  WorkstreamBindingId,
-} from "@conclave/core";
-import {
-  canonicalExecutionErrorCode,
-  executionErrorMessage,
-  type ExecutionErrorCode,
-} from "@conclave/protocol";
-import {
-  executeForgeGoal,
-  type ForgeWorker,
-  type ForgeWorkerRequest,
-  type ForgePersistence,
-  type ForgeRuntimeAdapter,
-  type ForgeRuntimeEvidence,
-} from "@conclave/orchestration";
-import {
-  parseRuntimeOperationRequest,
-  type ImplementationOperation,
-} from "@conclave/protocol";
+import type { WorkstreamBindingId } from "@conclave/core";
+import type { D1DatabaseLike } from "@conclave/persistence";
 import {
   dispatchTaskAssignment,
   type AssignmentDispatcherEnv,
@@ -43,39 +8,16 @@ import {
 
 interface ForgeExecutionEnv {
   readonly CONCLAVE_DB: D1DatabaseLike;
-  readonly CONCLAVE_ARTIFACTS: R2Bucket;
-  readonly CONCLAVE_ARTIFACT_BUCKET_NAME?: string;
   readonly CONCLAVE_API_BASE_URL?: string;
   readonly CONCLAVE_API?: Fetcher;
   readonly CONCLAVE_FORGE_CALLBACK_TOKEN?: string;
-  readonly CONCLAVE_TEST_COMMAND?: string;
-  readonly CONCLAVE_HOST_GATEWAY?: DurableObjectNamespace;
   readonly CONCLAVE_WORKSPACE_GATEWAY?: DurableObjectNamespace;
-}
-
-interface ForgeExecutionContext {
-  readonly executionId: string;
-  readonly runId: string;
-  readonly taskId: string;
-  readonly goalId: string;
-  readonly organizationId: string;
-  readonly requestedByUserId: string;
-  readonly projectId: string;
-  readonly repositoryId: string;
-  readonly revision: string;
-  readonly workstreamId?: string;
-  readonly workRequestId?: string;
-  readonly workBindingId?: WorkstreamBindingId;
-  readonly executionClass?: "stateless_read" | "stateful_workstream";
-  readonly effectiveWorkerPrompt?: string;
-  readonly sessionPolicy?: "stateless";
 }
 
 interface ForgeExecutionRecord {
   readonly executionId: string;
   readonly runId: string;
-  readonly status:
-    "started" | "completed" | "failed" | "cancelled" | "needs_input";
+  readonly status: "started" | "completed" | "failed" | "cancelled" | "needs_input";
   readonly resultArtifactId?: string;
   readonly error?: string;
   readonly updatedAt: string;
@@ -116,140 +58,6 @@ function forgeExecutionRecord(
   };
 }
 
-export function assertSingleHostForgeBindings(
-  bindings: readonly ForgeWorkerBinding[],
-): void {
-  if (bindings.length !== 3) {
-    throw new Error(
-      "Single-worker Forge requires lead, implementation, and review workers",
-    );
-  }
-  const resolvedHostIds = new Set(bindings.map(({ agent }) => agent.id));
-  const uniqueHostCount = [...resolvedHostIds].length;
-  if (uniqueHostCount !== 1) {
-    throw new Error(
-      "Single-worker Forge requires all workers to run on one Host",
-    );
-  }
-}
-
-export function assertMultiWorkerForgeBindings(
-  bindings: readonly ForgeWorkerBinding[],
-): void {
-  if (bindings.length < 3) {
-    throw new Error(
-      "Multi-worker Forge requires lead, implementation, and review workers",
-    );
-  }
-  if (new Set(bindings.map(({ agent }) => agent.id)).size < 2) {
-    throw new Error(
-      "Multi-worker Forge requires workers on at least two Hosts",
-    );
-  }
-}
-
-export function assertV4ForgeBindings(
-  bindings: readonly ForgeWorkerBinding[],
-): void {
-  if (
-    bindings.length < 3 ||
-    bindings.some((binding) => !binding.executionTarget)
-  ) {
-    throw new Error(
-      "Forge requires ExecutionHost + Worker + Credential Profile execution targets",
-    );
-  }
-  const targets = bindings.map((binding) => binding.executionTarget!);
-  if (
-    targets.some(
-      (target) =>
-        !target.hostId || !target.workerId || !target.credentialProfileId,
-    )
-  ) {
-    throw new Error("Forge execution targets must be immutable v4 snapshots");
-  }
-}
-
-function digest(value: string): string {
-  return [...new Uint8Array(new TextEncoder().encode(value))]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function parseJsonArray(value: unknown): readonly string[] {
-  if (typeof value !== "string") return [];
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function cost(value: unknown): WorkerCostMetadata {
-  const record =
-    typeof value === "object" && value !== null
-      ? (value as Record<string, unknown>)
-      : {};
-  const numberOrNull = (item: unknown): number | null =>
-    typeof item === "number" ? item : null;
-  return {
-    currency: typeof record.currency === "string" ? record.currency : "USD",
-    estimatedCostMicrosPerAttempt: numberOrNull(
-      record.estimatedCostMicrosPerAttempt,
-    ),
-    inputMicrosPerMillionTokens: numberOrNull(
-      record.inputMicrosPerMillionTokens,
-    ),
-    outputMicrosPerMillionTokens: numberOrNull(
-      record.outputMicrosPerMillionTokens,
-    ),
-  };
-}
-
-export interface ForgeWorkerBinding {
-  readonly worker: Worker;
-  readonly agent: ExecutionHost;
-  /** v4 immutable target snapshot used by Forge dispatch. */
-  readonly executionTarget?: V4ResolvedExecutionTarget;
-}
-
-function workerEntity(row: Record<string, unknown>): Worker {
-  const workerStatus = String(row.worker_status ?? row.status ?? "offline");
-  const agentStatus =
-    row.revoked_at == null ? String(row.agent_status ?? "offline") : "offline";
-  const enabled = row.enabled === undefined || row.enabled === 1;
-  return {
-    id: String(row.id),
-    name: String(row.name),
-    workspaceId: String(row.workspace_id),
-    agentId: String(row.agent_id),
-    workerCatalogId: String(row.plugin_id),
-    workerVersionPolicy: String(row.plugin_version_policy ?? "latest"),
-    capabilities: parseJsonArray(row.capabilities_json),
-    roles: parseJsonArray(row.roles_json),
-    independenceKey: String(row.independence_key),
-    config: parseJsonRecord(row.config_json),
-    secretRefs: parseJsonArray(row.secret_refs_json),
-    enabled,
-    billingMode: String(row.billing_mode) as Worker["billingMode"],
-    costMetadata: cost(row.cost_metadata_json),
-    concurrencyLimit: Number(row.concurrency_limit ?? 1),
-    sessionPolicy: String(
-      row.session_policy ?? "stateless",
-    ) as Worker["sessionPolicy"],
-    availability:
-      enabled && agentStatus === "online" && workerStatus === "available"
-        ? "available"
-        : (workerStatus as WorkerAvailability),
-    status: workerStatus as Worker["status"],
-    createdAt: String(row.created_at ?? ""),
-    updatedAt: String(row.updated_at ?? ""),
-  };
-}
-
 function parseJsonRecord(value: unknown): Record<string, unknown> {
   if (typeof value !== "string") return {};
   try {
@@ -259,1088 +67,6 @@ function parseJsonRecord(value: unknown): Record<string, unknown> {
       : {};
   } catch {
     return {};
-  }
-}
-
-function hostEntity(row: Record<string, unknown>): ExecutionHost {
-  const capabilities = parseJsonRecord(row.agent_capabilities_json);
-  return {
-    id: String(row.agent_id),
-    workspaceId: String(row.workspace_id),
-    name: String(row.agent_name ?? row.agent_id),
-    hostname: String(row.agent_hostname ?? "unknown"),
-    status: String(row.agent_status ?? "offline") as ExecutionHost["status"],
-    version: String(row.agent_version ?? "unknown"),
-    capabilities: {
-      os: String(
-        capabilities.os ?? "macos",
-      ) as ExecutionHost["capabilities"]["os"],
-      arch: String(
-        capabilities.arch ?? "arm64",
-      ) as ExecutionHost["capabilities"]["arch"],
-      version: String(capabilities.version ?? row.agent_version ?? "unknown"),
-      supportedRuntimes: parseJsonArray(capabilities.supportedRuntimes),
-      maxConcurrentWorkers: Number(capabilities.maxConcurrentWorkers ?? 1),
-      customCapabilities: parseJsonArray(capabilities.customCapabilities),
-    },
-    enrolledAt: String(row.enrolled_at ?? ""),
-    lastHeartbeatAt:
-      row.last_heartbeat_at == null ? null : String(row.last_heartbeat_at),
-    revokedAt: row.revoked_at == null ? null : String(row.revoked_at),
-  };
-}
-
-class D1ForgeWorkerRegistry {
-  constructor(private readonly workers: readonly ForgeWorkerBinding[]) {}
-
-  list(): readonly ForgeWorkerBinding[] {
-    return this.workers;
-  }
-
-  resolve(requirement: {
-    capability: string;
-    role?: string;
-  }): ForgeWorkerBinding | null {
-    return (
-      [...this.workers]
-        .filter(
-          ({ worker, agent }) =>
-            worker.enabled &&
-            worker.availability === "available" &&
-            agent.status === "online",
-        )
-        .filter(({ worker }) =>
-          worker.capabilities.includes(requirement.capability),
-        )
-        .filter(
-          ({ worker }) =>
-            requirement.role === undefined ||
-            worker.roles.includes(requirement.role),
-        )
-        .at(0) ?? null
-    );
-  }
-}
-
-class DurableForgePersistence implements ForgePersistence {
-  private readonly artifacts: ThresholdArtifactStore;
-
-  constructor(
-    private readonly repositories: D1PersistenceRepositories,
-    private readonly r2: R2ArtifactStore,
-  ) {
-    this.artifacts = new ThresholdArtifactStore(64 * 1024, this.r2);
-  }
-
-  saveGoal(goal: GoalRecord): Promise<void> {
-    return this.repositories.goals.save(goal);
-  }
-
-  saveRun(run: RunRecord): Promise<void> {
-    return this.repositories.runs.save(run);
-  }
-
-  savePhase(
-    phase: Parameters<ForgePersistence["savePhase"]>[0],
-  ): Promise<void> {
-    return this.repositories.phases.save(phase);
-  }
-
-  saveTask(task: Parameters<ForgePersistence["saveTask"]>[0]): Promise<void> {
-    return this.repositories.tasks.save(task);
-  }
-
-  saveTaskDependency(
-    dependency: Parameters<ForgePersistence["saveTaskDependency"]>[0],
-  ): Promise<void> {
-    return this.repositories.taskDependencies.save(dependency);
-  }
-
-  saveAttempt(
-    attempt: Parameters<ForgePersistence["saveAttempt"]>[0],
-  ): Promise<void> {
-    return this.repositories.attempts.save(attempt);
-  }
-
-  saveModelCall(
-    call: Parameters<ForgePersistence["saveModelCall"]>[0],
-  ): Promise<void> {
-    return this.repositories.modelCalls.save(call);
-  }
-
-  saveFinding(
-    finding: Parameters<ForgePersistence["saveFinding"]>[0],
-  ): Promise<void> {
-    return this.repositories.findings.save(finding);
-  }
-
-  saveVerification(
-    verification: Parameters<ForgePersistence["saveVerification"]>[0],
-  ): Promise<void> {
-    return this.repositories.verifications.save(verification);
-  }
-
-  async saveArtifact(artifact: ArtifactRecord): Promise<void> {
-    const persisted =
-      artifact.payload.kind === "inline"
-        ? await this.artifacts.persist(
-            {
-              id: artifact.id,
-              runId: artifact.runId,
-              taskId: artifact.taskId,
-              attemptId: artifact.attemptId,
-              mediaType: artifact.mediaType,
-              contentDigest: artifact.contentDigest,
-              provenance: artifact.provenance,
-              createdAt: artifact.createdAt,
-            },
-            artifact.payload.content,
-          )
-        : artifact;
-    await this.repositories.artifacts.save(persisted);
-  }
-
-  appendEvent(
-    event: Parameters<ForgePersistence["appendEvent"]>[0],
-  ): Promise<void> {
-    return this.repositories.events.append(event);
-  }
-
-  async resolve(artifactId: string) {
-    const artifact = await this.repositories.artifacts.get(artifactId);
-    if (!artifact) return null;
-    if (artifact.payload.kind === "inline") {
-      return {
-        artifactId: artifact.id,
-        mediaType: artifact.mediaType,
-        content: artifact.payload.content,
-      };
-    }
-    const bytes = await this.r2.get(artifact.payload);
-    return bytes
-      ? {
-          artifactId: artifact.id,
-          mediaType: artifact.mediaType,
-          content: new TextDecoder().decode(bytes),
-        }
-      : null;
-  }
-}
-
-/**
- * Executes repository operations through an ExecutionHost Worker assignment.
- *
- * Cloud owns orchestration and evidence persistence, while the ExecutionHost/Plugin
- * owns filesystem and process access. Keeping this adapter on the Worker
- * assignment interface keeps Forge independent from plugin/provider details.
- */
-class HostWorkerRuntime implements ForgeRuntimeAdapter {
-  constructor(
-    private readonly env: ForgeExecutionEnv,
-    private readonly context: ForgeExecutionContext,
-    private readonly worker: ForgeWorker,
-  ) {}
-
-  inspect(input: Parameters<ForgeRuntimeAdapter["inspect"]>[0]) {
-    return this.execute(
-      "search",
-      { query: input.objective, path: "." },
-      input.taskId,
-      input.repositoryId,
-      input.revision,
-    );
-  }
-
-  async apply(
-    input: Parameters<ForgeRuntimeAdapter["apply"]>[0],
-  ): Promise<ForgeRuntimeEvidence> {
-    const evidence: ForgeRuntimeEvidence[] = [];
-    for (const operation of input.operations) {
-      const result = await this.executeOperation(
-        operation,
-        input.taskId,
-        input.repositoryId,
-        input.revision,
-      );
-      evidence.push(result);
-      if (result.status !== "succeeded") break;
-    }
-    const failed = evidence.find((item) => item.status !== "succeeded");
-    const applied: ForgeRuntimeEvidence = {
-      operation: "apply",
-      status: failed ? "failed" : "succeeded",
-      summary: failed?.summary ?? "apply completed",
-      content: evidence.map((item) => item.content).join("\n"),
-      contentDigest: digest(
-        evidence.map((item) => item.contentDigest).join(":"),
-      ),
-      ...(failed?.command ? { command: failed.command } : {}),
-      ...(failed ? { exitCode: failed.exitCode } : {}),
-    };
-    return applied;
-  }
-
-  async test(input: Parameters<ForgeRuntimeAdapter["test"]>[0]) {
-    const command = this.command();
-    return this.execute(
-      "test",
-      {
-        command,
-        cwd: ".",
-        changedFiles: input.changedFiles,
-      },
-      input.taskId,
-      input.repositoryId,
-      input.revision,
-    );
-  }
-
-  private async executeOperation(
-    operation: ImplementationOperation,
-    taskId: string,
-    repositoryId: string,
-    revision: string,
-  ): Promise<ForgeRuntimeEvidence> {
-    const { kind, ...details } = operation;
-    return this.execute(kind, details, taskId, repositoryId, revision);
-  }
-
-  private async execute(
-    kind: "search" | "write_file" | "patch_file" | "delete_file" | "test",
-    details: Record<string, unknown>,
-    taskId = this.context.taskId,
-    repositoryId = this.context.repositoryId,
-    revision = this.context.revision,
-  ): Promise<ForgeRuntimeEvidence> {
-    const operationPayload = parseRuntimeOperationRequest({
-      protocol: "conclave.protocol",
-      version: "0.1",
-      messageId: crypto.randomUUID(),
-      goalId: this.context.goalId,
-      runId: this.context.runId,
-      workerId: this.worker.worker.id,
-      createdAt: new Date().toISOString(),
-      messageType: "RuntimeOperationRequest",
-      payload: {
-        operation: kind,
-        taskId,
-        repositoryId,
-        revision,
-        ...details,
-      },
-    }).payload;
-    const result = await this.worker.execute({
-      requestId: crypto.randomUUID(),
-      goalId: this.context.goalId,
-      runId: this.context.runId,
-      taskId,
-      attemptId: `${this.context.executionId}:${taskId}:${kind}`,
-      repositoryId,
-      message: {
-        protocol: "conclave.protocol",
-        version: "0.1",
-        messageType: "RuntimeOperationRequest",
-        payload: operationPayload,
-      },
-      context: [],
-      deadlineAt: new Date(Date.now() + 15 * 60_000).toISOString(),
-    });
-    const output = this.parseOutput(result.output);
-    const content =
-      typeof output.content === "string"
-        ? output.content
-        : (result.error?.message ?? JSON.stringify(output));
-    const checks = this.parseChecks(output.checks) ?? [];
-    return {
-      operation:
-        kind === "test" ? "test" : kind === "search" ? "research" : "apply",
-      status: result.status === "completed" ? "succeeded" : "failed",
-      summary:
-        typeof output.summary === "string"
-          ? output.summary
-          : result.status === "completed"
-            ? `${kind} completed`
-            : (result.error?.message ?? `${kind} failed`),
-      content,
-      contentDigest: digest(content),
-      ...(Array.isArray(output.command)
-        ? {
-            command: output.command.filter(
-              (item): item is string => typeof item === "string",
-            ),
-          }
-        : {}),
-      ...(typeof output.exitCode === "number"
-        ? { exitCode: output.exitCode }
-        : {}),
-      ...(checks.length > 0 ? { checks } : {}),
-    };
-  }
-
-  private parseOutput(
-    value: Record<string, unknown> | null,
-  ): Record<string, unknown> {
-    if (!value) return {};
-    return value;
-  }
-
-  private parseChecks(value: unknown): ForgeRuntimeEvidence["checks"] {
-    if (!Array.isArray(value)) return [];
-    return value.flatMap((item) => {
-      if (typeof item !== "object" || item === null) return [];
-      const check = item as Record<string, unknown>;
-      const name = typeof check.name === "string" ? check.name : null;
-      const status = check.status;
-      if (
-        !name ||
-        (status !== "passed" &&
-          status !== "failed" &&
-          status !== "skipped" &&
-          status !== "inconclusive")
-      ) {
-        return [];
-      }
-      return [
-        {
-          name,
-          status,
-          ...(typeof check.command === "string"
-            ? { command: check.command }
-            : {}),
-          ...(typeof check.exitCode === "number"
-            ? { exitCode: check.exitCode }
-            : {}),
-        },
-      ];
-    });
-  }
-
-  private command(): readonly string[] {
-    if (!this.env.CONCLAVE_TEST_COMMAND) return ["pnpm", "check"];
-    const parsed: unknown = JSON.parse(this.env.CONCLAVE_TEST_COMMAND);
-    if (
-      !Array.isArray(parsed) ||
-      parsed.some((item) => typeof item !== "string")
-    ) {
-      throw new Error("CONCLAVE_TEST_COMMAND must be a JSON string array");
-    }
-    return parsed;
-  }
-}
-
-class HostGatewayForgeWorker implements ForgeWorker {
-  constructor(
-    readonly worker: Worker,
-    readonly agent: ExecutionHost,
-    private readonly env: ForgeExecutionEnv,
-    private readonly context: ForgeExecutionContext,
-    private readonly executionTarget?: V4ResolvedExecutionTarget,
-  ) {}
-
-  async execute(request: ForgeWorkerRequest): Promise<WorkerAssignmentResult> {
-    const message =
-      typeof request.message === "object" && request.message !== null
-        ? (request.message as Record<string, unknown>)
-        : {};
-    const payload =
-      typeof message.payload === "object" && message.payload !== null
-        ? (message.payload as Record<string, unknown>)
-        : {};
-    const objective =
-      typeof payload.objective === "string"
-        ? payload.objective
-        : `Execute ${String(message.messageType ?? "worker task")}`;
-    const role =
-      typeof payload.role === "string"
-        ? payload.role
-        : (this.worker.roles[0] ?? "worker");
-    const capabilities = Array.isArray(payload.requiredCapabilities)
-      ? payload.requiredCapabilities.filter(
-          (value): value is string => typeof value === "string",
-        )
-      : this.worker.capabilities;
-    const task = {
-      id: request.taskId,
-      role,
-      objective: this.context.effectiveWorkerPrompt
-        ? `${this.context.effectiveWorkerPrompt}\n\nCurrent execution detail:\n${objective}`
-        : objective,
-      capabilities,
-      contextArtifactIds: request.context.map((item) => item.artifactId),
-      ...(this.context.workstreamId
-        ? { workstreamId: this.context.workstreamId }
-        : {}),
-      ...(this.context.workRequestId
-        ? { workRequestId: this.context.workRequestId }
-        : {}),
-      ...(this.context.workBindingId
-        ? { workBindingId: this.context.workBindingId }
-        : {}),
-      ...(this.context.executionClass
-        ? { executionClass: this.context.executionClass }
-        : {}),
-      timeoutMs: this.deadline(request),
-      repository: {
-        repositoryId: request.repositoryId,
-        revision: this.revisionFromMessage(message),
-      },
-      input: {
-        request,
-        message: request.message,
-        context: request.context,
-      },
-      ...(this.context.sessionPolicy
-        ? { sessionPolicy: this.context.sessionPolicy }
-        : {}),
-    };
-    const dispatched = await this.dispatch(request, task);
-    if (!dispatched.accepted) {
-      return this.failed(
-        dispatched.error ?? "ExecutionHost assignment was rejected",
-      );
-    }
-
-    const deadline = Date.now() + this.deadline(request);
-    while (Date.now() < deadline) {
-      const row = await this.env.CONCLAVE_DB.prepare(
-        `SELECT status, output_json, error_json
-         FROM worker_assignments WHERE id = ?1`,
-      )
-        .bind(dispatched.assignmentId)
-        .first<{
-          status: string;
-          output_json: string | null;
-          error_json: string | null;
-        }>();
-      if (row?.status === "completed" && row.output_json) {
-        const result = JSON.parse(row.output_json) as {
-          output?: unknown;
-          artifactIds?: unknown;
-          summary?: unknown;
-        };
-        const output =
-          typeof result.output === "string"
-            ? result.output
-            : JSON.stringify(result.output ?? { summary: result.summary });
-        return {
-          assignmentId: dispatched.assignmentId,
-          workspaceId: this.worker.workspaceId,
-          runId: request.runId,
-          taskId: request.taskId,
-          attemptId: dispatched.attemptId,
-          agentId: this.agent.id,
-          workerId: this.worker.id,
-          status: "completed",
-          output: this.outputRecord(output),
-          artifactIds: Array.isArray(result.artifactIds)
-            ? result.artifactIds.filter(
-                (value): value is string => typeof value === "string",
-              )
-            : [],
-          completedAt: new Date().toISOString(),
-        };
-      }
-      if (row?.status === "failed" || row?.status === "cancelled") {
-        const assignmentError = this.assignmentError(row.error_json);
-        const code =
-          row.status === "cancelled"
-            ? "cancelled"
-            : (assignmentError?.code ?? "execution_failed");
-        return this.failed(
-          assignmentError?.message ?? executionErrorMessage(code),
-          false,
-          code,
-        );
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    return this.failed(executionErrorMessage("timeout"), true, "timeout");
-  }
-
-  private async dispatch(
-    request: ForgeWorkerRequest,
-    task: {
-      id: string;
-      role: string;
-      objective: string;
-      capabilities: readonly string[];
-      contextArtifactIds: readonly string[];
-      timeoutMs: number;
-      input: Record<string, unknown>;
-      sessionPolicy?: "stateless";
-    },
-  ): Promise<DispatchAssignmentResult> {
-    if (this.executionTarget) {
-      return this.dispatchV4(request, task);
-    }
-    const dispatcherEnv = this.env as unknown as AssignmentDispatcherEnv;
-    if (this.env.CONCLAVE_HOST_GATEWAY) {
-      return dispatchTaskAssignment(dispatcherEnv, {
-        workspaceId: this.context.workstreamId
-          ? ""
-          : this.context.organizationId,
-        runId: request.runId,
-        taskId: request.taskId,
-        ...(!this.context.workstreamId
-          ? { explicitWorkerId: this.worker.id }
-          : {}),
-        task,
-      });
-    }
-
-    const token = this.env.CONCLAVE_FORGE_CALLBACK_TOKEN;
-    if ((!this.env.CONCLAVE_API && !this.env.CONCLAVE_API_BASE_URL) || !token) {
-      return {
-        assignmentId: "",
-        attemptId: "",
-        workerId: this.worker.id,
-        agentId: "",
-        workerCatalogId: this.worker.workerCatalogId,
-        status: "failed",
-        accepted: false,
-        error:
-          "ExecutionHost Gateway or internal Forge dispatch is not configured",
-      };
-    }
-    const dispatchRequest = new Request(
-      this.env.CONCLAVE_API
-        ? "https://conclave.internal/api/internal/agent-assignments/dispatch"
-        : `${this.env.CONCLAVE_API_BASE_URL!.replace(/\/$/, "")}/api/internal/agent-assignments/dispatch`,
-      {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          workspaceId: this.context.organizationId,
-          runId: request.runId,
-          taskId: request.taskId,
-          ...(!this.context.workstreamId ? { workerId: this.worker.id } : {}),
-          task,
-        }),
-      },
-    );
-    const response = await (this.env.CONCLAVE_API
-      ? this.env.CONCLAVE_API.fetch(dispatchRequest)
-      : fetch(dispatchRequest));
-    const body = (await response.json()) as {
-      assignment?: DispatchAssignmentResult;
-      error?: string;
-    };
-    if (!response.ok || !body.assignment) {
-      return {
-        assignmentId: "",
-        attemptId: "",
-        workerId: this.worker.id,
-        agentId: "",
-        workerCatalogId: this.worker.workerCatalogId,
-        status: "failed",
-        accepted: false,
-        error:
-          body.error ?? `Internal Forge dispatch failed (${response.status})`,
-      };
-    }
-    return body.assignment;
-  }
-
-  private async dispatchV4(
-    request: ForgeWorkerRequest,
-    task: {
-      id: string;
-      role: string;
-      objective: string;
-      capabilities: readonly string[];
-      contextArtifactIds: readonly string[];
-      timeoutMs: number;
-      input: Record<string, unknown>;
-      sessionPolicy?: "stateless";
-    },
-  ): Promise<DispatchAssignmentResult> {
-    const target = this.executionTarget!;
-    const now = new Date().toISOString();
-    const attemptId = `att-${request.taskId}-${crypto.randomUUID().slice(0, 12)}`;
-    const assignmentId = `asg-${request.taskId}-${crypto.randomUUID().slice(0, 12)}`;
-    const idempotencyKey = `idem-${assignmentId}`;
-    await this.env.CONCLAVE_DB.prepare(
-      `INSERT INTO attempts
-       (id, task_id, worker_id, attempt_number, input_snapshot_json, status, started_at)
-       VALUES (?1, ?2, ?3, 1, ?4, 'running', ?5)`,
-    )
-      .bind(
-        attemptId,
-        request.taskId,
-        target.workerId,
-        JSON.stringify(task.input),
-        now,
-      )
-      .run();
-    await this.env.CONCLAVE_DB.prepare(
-      `INSERT INTO worker_assignments
-       (id, workspace_id, project_id, run_id, task_id, attempt_id,
-        requested_by_user_id, host_id, worker_id, resolved_worker_version,
-        credential_profile_id, config_json, session_policy, permissions_json,
-        context_refs_json, timeout_ms, idempotency_key, status, input_json,
-        created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-               'stateless', '[]', ?13, ?14, ?15, 'dispatched', ?16, ?17, ?17)`,
-    )
-      .bind(
-        assignmentId,
-        this.context.organizationId,
-        this.context.projectId,
-        request.runId,
-        request.taskId,
-        attemptId,
-        this.context.requestedByUserId,
-        target.hostId,
-        target.workerId,
-        target.resolvedWorkerVersion,
-        target.credentialProfileId,
-        JSON.stringify(task.input),
-        JSON.stringify(
-          task.contextArtifactIds.map((artifactId) => ({ artifactId })),
-        ),
-        task.timeoutMs,
-        idempotencyKey,
-        JSON.stringify(task.input),
-        now,
-      )
-      .run();
-    const namespace = this.env.CONCLAVE_HOST_GATEWAY;
-    if (!namespace) {
-      return {
-        assignmentId,
-        attemptId,
-        workerId: target.workerId,
-        agentId: target.hostId,
-        workerCatalogId: target.workerId,
-        status: "failed",
-        accepted: false,
-        error: "ExecutionHost Gateway is not configured",
-      };
-    }
-    const stub = namespace.get(namespace.idFromName(target.hostId));
-    const response = await stub.fetch("http://gateway/dispatch-assignment", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        workspaceId: this.context.organizationId,
-        hostId: target.hostId,
-        workerId: target.workerId,
-        runId: request.runId,
-        taskId: request.taskId,
-        attemptId,
-        assignmentId,
-        idempotencyKey,
-        payload: {
-          workerCatalogId: target.workerId,
-          resolvedWorkerVersion: target.resolvedWorkerVersion,
-          role: task.role,
-          objective: task.objective,
-          input: task.input,
-          contextArtifactIds: [...task.contextArtifactIds],
-          timeoutMs: task.timeoutMs,
-          credentialProfileId: target.credentialProfileId,
-        },
-      }),
-    });
-    if (!response.ok) {
-      return {
-        assignmentId,
-        attemptId,
-        workerId: target.workerId,
-        agentId: target.hostId,
-        workerCatalogId: target.workerId,
-        status: "failed",
-        accepted: false,
-        error: await response.text(),
-      };
-    }
-    return {
-      assignmentId,
-      attemptId,
-      workerId: target.workerId,
-      agentId: target.hostId,
-      workerCatalogId: target.workerId,
-      status: "dispatched",
-      accepted: true,
-    };
-  }
-
-  private deadline(request: ForgeWorkerRequest): number {
-    if (!request.deadlineAt) return 15 * 60_000;
-    return Math.max(1000, new Date(request.deadlineAt).getTime() - Date.now());
-  }
-
-  private revisionFromMessage(message: Record<string, unknown>): string {
-    const payload =
-      typeof message.payload === "object" && message.payload !== null
-        ? (message.payload as Record<string, unknown>)
-        : {};
-    return typeof payload.revision === "string" && payload.revision.length > 0
-      ? payload.revision
-      : "HEAD";
-  }
-
-  private failed(
-    message: string,
-    retryable = false,
-    code: ExecutionErrorCode = "execution_failed",
-  ): WorkerAssignmentResult {
-    return {
-      assignmentId: "",
-      workspaceId: this.worker.workspaceId,
-      runId: this.context.runId,
-      taskId: this.context.taskId,
-      attemptId: "",
-      agentId: this.agent.id,
-      workerId: this.worker.id,
-      status: "failed",
-      output: null,
-      artifactIds: [],
-      completedAt: new Date().toISOString(),
-      error: { code, message, retryable },
-    };
-  }
-
-  private outputRecord(output: string): Record<string, unknown> {
-    try {
-      const parsed: unknown = JSON.parse(output);
-      return typeof parsed === "object" && parsed !== null
-        ? (parsed as Record<string, unknown>)
-        : { content: output };
-    } catch {
-      return { content: output };
-    }
-  }
-
-  private assignmentError(
-    value: string | null,
-  ): { code: ExecutionErrorCode; message: string } | null {
-    if (!value) return null;
-    try {
-      const parsed = JSON.parse(value) as {
-        error?: { code?: unknown; message?: unknown };
-      };
-      const code = canonicalExecutionErrorCode(parsed.error?.code);
-      return {
-        code,
-        message: executionErrorMessage(code),
-      };
-    } catch {
-      return null;
-    }
-  }
-}
-
-function modelFor(
-  binding: ForgeWorkerBinding,
-  env: ForgeExecutionEnv,
-  context: ForgeExecutionContext,
-): ForgeWorker {
-  return new HostGatewayForgeWorker(
-    binding.worker,
-    binding.agent,
-    env,
-    context,
-    binding.executionTarget,
-  );
-}
-
-export type ForgeExecutionMode = "single_worker" | "multi_worker";
-
-export function resolveForgeExecutionMode(value: unknown): ForgeExecutionMode {
-  if (value === "cloud_api") {
-    throw new Error(
-      "Forge direct cloud model execution has been retired; use Dart ExecutionHost workers",
-    );
-  }
-  return value === "multi_worker" ? "multi_worker" : "single_worker";
-}
-
-export async function readExecutionContext(
-  env: ForgeExecutionEnv,
-  params: Record<string, unknown>,
-  executionId: string,
-): Promise<ForgeExecutionContext> {
-  const runId = String(params.runId ?? "");
-  const goalId = String(params.goalId ?? "");
-  const organizationId = String(params.organizationId ?? "");
-  const requestedByUserId = String(params.requestedByUserId ?? "");
-  if (!runId || !goalId || !organizationId) {
-    throw new Error(
-      "Forge execution requires runId, goalId, and organizationId",
-    );
-  }
-  const project = await env.CONCLAVE_DB.prepare(
-    `SELECT p.id AS project_id,
-            p.repository_id,
-            g.id AS goal_id, g.created_by_user_id,
-            r.goal_id AS run_goal_id,
-            r.project_id AS run_project_id,
-            r.workstream_id AS run_workstream_id,
-            r.work_request_id AS run_work_request_id
-     FROM projects p
-     JOIN goals g ON g.project_id = p.id
-     LEFT JOIN runs r ON r.id = ?2
-     WHERE g.id = ?1 AND p.workspace_id = ?3`,
-  )
-    .bind(goalId, runId, organizationId)
-    .first<{
-      project_id: string;
-      repository_id: string | null;
-      goal_id: string;
-      run_goal_id: string | null;
-      run_project_id: string | null;
-      run_workstream_id: string | null;
-      run_work_request_id: string | null;
-      created_by_user_id: string | null;
-    }>();
-  if (!project)
-    throw new Error("Goal is not owned by the execution organization");
-  if (project.run_goal_id && project.run_goal_id !== goalId) {
-    throw new Error("Run does not belong to the requested Goal");
-  }
-  if (project.run_project_id && project.run_project_id !== project.project_id) {
-    throw new Error("Run does not belong to the requested Project");
-  }
-  if (
-    typeof params.projectId === "string" &&
-    params.projectId.length > 0 &&
-    params.projectId !== project.project_id
-  ) {
-    throw new Error("Forge project does not match the Goal project");
-  }
-  if (
-    project.repository_id &&
-    typeof params.repositoryId === "string" &&
-    params.repositoryId !== project.repository_id
-  ) {
-    throw new Error("Forge repository does not match the Project repository");
-  }
-  if (
-    typeof params.repositoryId !== "string" ||
-    params.repositoryId.trim().length === 0
-  ) {
-    throw new Error("Forge execution requires a repository mapping");
-  }
-  return {
-    executionId,
-    runId,
-    taskId: String(params.taskId ?? `${runId}:runtime`),
-    goalId,
-    organizationId,
-    requestedByUserId:
-      requestedByUserId || String(project.created_by_user_id ?? ""),
-    projectId: String(params.projectId ?? project.project_id),
-    repositoryId: params.repositoryId.trim(),
-    revision: String(params.revision ?? "HEAD"),
-    ...(typeof project.run_workstream_id === "string"
-      ? { workstreamId: project.run_workstream_id }
-      : {}),
-    ...(typeof params.workRequestId === "string"
-      ? { workRequestId: params.workRequestId }
-      : typeof project.run_work_request_id === "string"
-        ? { workRequestId: project.run_work_request_id }
-        : {}),
-    ...(typeof params.workBindingId === "string" &&
-    ["direct", "research", "plan", "implement", "test", "verify"].includes(
-      params.workBindingId,
-    )
-      ? { workBindingId: params.workBindingId as WorkstreamBindingId }
-      : {}),
-    ...(typeof params.workflowStep === "object" &&
-    params.workflowStep !== null &&
-    (params.workflowStep as Record<string, unknown>).executionMode ===
-      "stateful_workstream"
-      ? { executionClass: "stateful_workstream" as const }
-      : { executionClass: "stateless_read" as const }),
-    ...(typeof params.effectiveWorkerPrompt === "string"
-      ? { effectiveWorkerPrompt: params.effectiveWorkerPrompt.slice(0, 96_000) }
-      : {}),
-    ...(typeof params.workflowStep === "object" &&
-    params.workflowStep !== null &&
-    (params.workflowStep as Record<string, unknown>).kind === "verify"
-      ? { sessionPolicy: "stateless" as const }
-      : {}),
-  };
-}
-
-export async function executeForgeService(
-  env: ForgeExecutionEnv,
-  params: Record<string, unknown>,
-  executionId: string,
-): Promise<string> {
-  const context = await readExecutionContext(env, params, executionId);
-  if (!context.repositoryId)
-    throw new Error("Forge repository is not configured");
-  const repositories = new D1PersistenceRepositories(env.CONCLAVE_DB);
-  const goal = await repositories.goals.get(context.goalId);
-  if (!goal) throw new Error("Goal was not found");
-  const existingRun = await repositories.runs.get(context.runId);
-  const now = new Date().toISOString();
-  const run: RunRecord = existingRun ?? {
-    id: context.runId,
-    goalId: context.goalId,
-    workflowInstanceId: null,
-    parentRunId: null,
-    policySnapshot: {},
-    currentPhaseId: null,
-    status: "running",
-    startedAt: now,
-    finishedAt: null,
-    createdAt: now,
-    updatedAt: now,
-  };
-  const workers = await env.CONCLAVE_DB.prepare(
-    `SELECT
-       w.id, h.id AS agent_id, w.display_name AS name,
-       w.id AS plugin_id, wv.version AS plugin_version_policy,
-       '[]' AS roles_json, wv.capabilities_json, '[]' AS secret_refs_json,
-       w.id AS independence_key, 'local' AS billing_mode, '{}' AS cost_metadata_json,
-       '{}' AS config_json, 1 AS concurrency_limit, 'stateless' AS session_policy,
-       w.created_at, w.updated_at, h.id AS agent_id,
-       h.name AS agent_name, h.hostname AS agent_hostname, h.status AS agent_status,
-       h.version AS agent_version, h.capabilities_json AS agent_capabilities_json,
-       h.enrolled_at, h.last_heartbeat_at, h.revoked_at, w.workspace_id,
-       cp.id AS credential_profile_id
-     FROM host_worker_installations i
-     JOIN hosts h ON h.id = i.host_id AND h.status = 'online' AND h.revoked_at IS NULL
-     JOIN workers w ON w.id = i.worker_id AND w.status = 'active'
-     JOIN worker_versions wv ON wv.id = i.worker_version_id AND wv.is_revoked = 0
-     JOIN credential_profiles cp
-       ON cp.worker_id = w.id AND cp.host_id = h.id AND cp.status = 'ready'
-     WHERE i.status = 'active' AND w.workspace_id = ?1
-       AND cp.id = (
-         SELECT MIN(cp2.id) FROM credential_profiles cp2
-         WHERE cp2.worker_id = w.id AND cp2.host_id = h.id AND cp2.status = 'ready'
-       )
-     ORDER BY w.id, h.id`,
-  )
-    .bind(context.organizationId)
-    .all<Record<string, unknown>>();
-  const registry = new D1ForgeWorkerRegistry(
-    (workers.results ?? []).map((row) => ({
-      worker: workerEntity(row),
-      agent: hostEntity(row),
-      executionTarget: {
-        hostId: String(row.agent_id),
-        workerId: String(row.id),
-        credentialProfileId: String(row.credential_profile_id),
-        resolvedWorkerVersion: String(row.plugin_version_policy),
-        config: {},
-      },
-    })),
-  );
-  const leadResource =
-    registry.resolve({ capability: "planning" }) ??
-    registry.resolve({ capability: "repository_read" });
-  const implementerResource = registry.resolve({
-    capability: "repository_write",
-  });
-  const reviewerResource = registry.resolve({ capability: "code_review" });
-  const runtimeResource = registry.resolve({ capability: "repository_read" });
-  if (
-    !leadResource ||
-    !implementerResource ||
-    !reviewerResource ||
-    !runtimeResource
-  ) {
-    throw new Error(
-      "Forge requires planning, implementation, review, and runtime workers",
-    );
-  }
-  if (reviewerResource.worker.id === implementerResource.worker.id) {
-    throw new Error("Forge requires independent worker resources");
-  }
-  const executionMode = resolveForgeExecutionMode(params.executionMode);
-  const selectedBindings = [
-    leadResource,
-    implementerResource,
-    reviewerResource,
-  ];
-  assertV4ForgeBindings(selectedBindings);
-  if (executionMode === "single_worker") {
-    assertSingleHostForgeBindings(selectedBindings);
-  }
-  if (executionMode === "multi_worker") {
-    assertMultiWorkerForgeBindings(selectedBindings);
-  }
-  const secondaryResearchResource =
-    executionMode === "multi_worker"
-      ? registry
-          .list()
-          .find(
-            ({ worker, agent }) =>
-              worker.capabilities.includes("repository_read") &&
-              agent.id !== leadResource.agent.id,
-          )
-      : undefined;
-  if (executionMode === "multi_worker" && !secondaryResearchResource) {
-    throw new Error(
-      "Multi-worker Forge requires a repository research worker on the second ExecutionHost",
-    );
-  }
-  const persistence = new DurableForgePersistence(
-    repositories,
-    new R2ArtifactStore(
-      env.CONCLAVE_ARTIFACTS,
-      env.CONCLAVE_ARTIFACT_BUCKET_NAME ?? "conclave-artifacts-development",
-    ),
-  );
-  try {
-    const result = await executeForgeGoal({
-      goal,
-      run,
-      repositoryId: context.repositoryId,
-      revision: context.revision,
-      lead: modelFor(leadResource, env, context),
-      implementer: modelFor(implementerResource, env, context),
-      reviewer: modelFor(reviewerResource, env, context),
-      ...(secondaryResearchResource
-        ? {
-            secondaryResearcher: modelFor(
-              secondaryResearchResource,
-              env,
-              context,
-            ),
-          }
-        : {}),
-      requireSecondaryResearch: executionMode === "multi_worker",
-      runtime: new HostWorkerRuntime(
-        env,
-        context,
-        new HostGatewayForgeWorker(
-          runtimeResource.worker,
-          runtimeResource.agent,
-          env,
-          context,
-          runtimeResource.executionTarget,
-        ),
-      ),
-      persistence,
-    });
-    await repositories.runs.save({
-      ...run,
-      status: "completed",
-      finishedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    await repositories.goals.save({
-      ...goal,
-      status: "completed",
-      updatedAt: new Date().toISOString(),
-    });
-    return result.completion.payload.finalReportArtifactId;
-  } catch (error) {
-    await repositories.runs.save({
-      ...run,
-      status: "failed",
-      finishedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    throw error;
   }
 }
 
@@ -1554,7 +280,7 @@ export class ConclaveForgeExecutionService {
     const statusMatch = pathname.match(/^\/status\/([^/]+)$/);
     if (request.method === "GET" && statusMatch?.[1]) {
       const row = await this.env.CONCLAVE_DB.prepare(
-        "SELECT execution_id, run_id, status, result_artifact_id, error, updated_at FROM forge_executions WHERE execution_id = ?1",
+        "SELECT external_id AS execution_id, run_id, status, result_artifact_id, error, updated_at FROM run_external_executions WHERE external_id = ?1",
       )
         .bind(statusMatch[1])
         .first<Record<string, unknown>>();
@@ -1569,19 +295,12 @@ export class ConclaveForgeExecutionService {
     if (typeof params.runId !== "string" || params.runId.length === 0) {
       return Response.json({ error: "run_id_required" }, { status: 400 });
     }
-    const requestedWorkspaceId =
-      typeof params.organizationId === "string" ? params.organizationId : null;
+    const executionKind = [
+      String(params.workBindingId ?? ""),
+      String(params.taskId ?? ""),
+      String(params.retryNumber ?? "1"),
+    ].join(":");
     const responseForExecution = (row: Record<string, unknown>): Response => {
-      if (
-        requestedWorkspaceId &&
-        row.workspace_id &&
-        String(row.workspace_id) !== requestedWorkspaceId
-      ) {
-        return Response.json(
-          { error: "run_workspace_mismatch" },
-          { status: 409 },
-        );
-      }
       const persisted = forgeExecutionRecord(row);
       return Response.json(
         {
@@ -1597,13 +316,16 @@ export class ConclaveForgeExecutionService {
       );
     };
     const existing = await this.env.CONCLAVE_DB.prepare(
-      `SELECT execution_id, run_id, workspace_id, status, result_artifact_id, error, updated_at
-       FROM forge_executions WHERE run_id = ?1`,
+      `SELECT external_id AS execution_id, run_id, status, result_artifact_id, error, updated_at
+       FROM run_external_executions WHERE run_id = ?1 AND execution_kind = ?2`,
     )
-      .bind(params.runId)
+      .bind(params.runId, executionKind)
       .first<Record<string, unknown>>();
     if (existing) {
       return responseForExecution(existing);
+    }
+    if (!params.workRequestId || !params.workBindingId) {
+      return Response.json({ error: "work_request_required" }, { status: 400 });
     }
     const executionId = crypto.randomUUID();
     const runId = params.runId;
@@ -1615,30 +337,29 @@ export class ConclaveForgeExecutionService {
       updatedAt: now,
     };
     await this.env.CONCLAVE_DB.prepare(
-      `INSERT INTO forge_executions
-       (execution_id, run_id, workspace_id, status, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?5)
-       ON CONFLICT(run_id) DO NOTHING`,
+      `INSERT INTO run_external_executions
+       (id, run_id, execution_kind, external_id, status, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+       ON CONFLICT(run_id, execution_kind) DO NOTHING`,
     )
       .bind(
         executionId,
         runId,
-        typeof params.organizationId === "string"
-          ? params.organizationId
-          : null,
+        executionKind,
+        executionId,
         record.status,
         now,
       )
       .run();
     const persisted = await this.env.CONCLAVE_DB.prepare(
-      `SELECT execution_id, run_id, workspace_id, status, result_artifact_id, error, updated_at
-       FROM forge_executions WHERE run_id = ?1`,
+      `SELECT external_id AS execution_id, run_id, status, result_artifact_id, error, updated_at
+       FROM run_external_executions WHERE run_id = ?1 AND execution_kind = ?2`,
     )
-      .bind(runId)
+      .bind(runId, executionKind)
       .first<Record<string, unknown>>();
     if (!persisted) {
       return Response.json(
-        { error: "forge_execution_persistence_failed" },
+        { error: "work_execution_persistence_failed" },
         { status: 500 },
       );
     }
@@ -1654,7 +375,7 @@ export class ConclaveForgeExecutionService {
     patch: Omit<Partial<ForgeExecutionRecord>, "executionId" | "runId">,
   ): Promise<void> {
     const row = await this.env.CONCLAVE_DB.prepare(
-      "SELECT execution_id, run_id, status, result_artifact_id, error, updated_at FROM forge_executions WHERE execution_id = ?1",
+      "SELECT external_id AS execution_id, run_id, status, result_artifact_id, error, updated_at FROM run_external_executions WHERE external_id = ?1",
     )
       .bind(executionId)
       .first<Record<string, unknown>>();
@@ -1667,9 +388,9 @@ export class ConclaveForgeExecutionService {
       updatedAt: new Date().toISOString(),
     };
     await this.env.CONCLAVE_DB.prepare(
-      `UPDATE forge_executions
+      `UPDATE run_external_executions
        SET status = ?1, result_artifact_id = ?2, error = ?3, updated_at = ?4
-       WHERE execution_id = ?5`,
+       WHERE external_id = ?5`,
     )
       .bind(
         updated.status,
@@ -1690,30 +411,18 @@ export class ConclaveForgeExecutionService {
     let workStepResult:
       Awaited<ReturnType<typeof executeBoundWorkStepAssignment>> | undefined;
     try {
-      if (
-        !this.env.CONCLAVE_API &&
-        !this.env.CONCLAVE_API_BASE_URL &&
-        !this.env.CONCLAVE_HOST_GATEWAY &&
-        !this.env.CONCLAVE_WORKSPACE_GATEWAY
-      ) {
-        throw new Error(
-          "Workspace Gateway, Host Gateway, or internal API is not configured",
-        );
+      if (!this.env.CONCLAVE_WORKSPACE_GATEWAY) {
+        throw new Error("Workspace Gateway is not configured");
       }
       if (
-        ["direct", "research", "plan", "implement", "test", "verify"].includes(
+        !["direct", "research", "plan", "implement", "test", "verify"].includes(
           String(params.workBindingId),
-        ) &&
-        typeof params.workRequestId === "string"
+        ) ||
+        typeof params.workRequestId !== "string"
       ) {
-        workStepResult = await executeBoundWorkStepAssignment(this.env, params);
-      } else {
-        resultArtifactId = await executeForgeService(
-          this.env,
-          params,
-          executionId,
-        );
+        throw new Error("Only Work v1 assignment execution is supported");
       }
+      workStepResult = await executeBoundWorkStepAssignment(this.env, params);
     } catch (error) {
       const cancelled = error instanceof WorkAssignmentCancelledError;
       const message = cancelled
@@ -1802,6 +511,7 @@ export class ConclaveForgeExecutionService {
       throw new Error(`Forge callback failed with ${response.status}`);
   }
 }
+
 
 export default {
   fetch(request: Request, env: ForgeExecutionEnv, ctx: ExecutionContext) {

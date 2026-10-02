@@ -2,12 +2,13 @@
 
 **Status:** Accepted
 **Date:** 2026-09-25  
-**Builds on:** ADR-008, ADR-009, ADR-010, Architecture v6  
-**Supersedes:** the Conclave-managed repository checkout/worktree portions of ADR-009 and Architecture v6
+**Builds on:** ADR-008 and ADR-009
+**Supersedes:** Conclave-managed repository checkout/worktree behavior where it conflicts with this decision
 
 ## Context
 
-Architecture v6 originally modeled mutable Workstream state as a Conclave-managed Git checkout/worktree. That design gives strong source provenance, rollback and repository governance, but it also makes Conclave responsible for repository registration, source selection, branch/checkpoint lifecycle and checkout provisioning.
+Conclave does not manage Git checkouts or repository registration. Workers manage
+repositories inside a Workstream's stable local directory.
 
 For the current product stage, that is more infrastructure than Conclave AX needs.
 

@@ -18,7 +18,7 @@ import {
 } from "../src/routes/handlers.js";
 
 const migrationsDirectory = fileURLToPath(
-  new URL("../migrations-v6/", import.meta.url),
+  new URL("../migrations-v8/", import.meta.url),
 );
 
 class LocalD1Statement {
@@ -92,17 +92,9 @@ const ownerContext = (userId: string) => ({
     status: "active" as const,
   },
   workspaceId: "",
-  workspaceRole: "viewer" as const,
-  roles: ["viewer" as const],
-  authorizedProjectIds: [],
   projectRoles: {},
   sessionId: `session-${userId}`,
   clientType: "web" as const,
-  organizationId: "",
-  organizationRoles: ["viewer" as const],
-  authorizationModel: "v5" as const,
-  ownedWorkspaceIds: [],
-  ownedAccountIds: [],
 });
 
 describe("Workspace pairing intents", () => {
@@ -188,7 +180,7 @@ describe("Workspace pairing intents", () => {
     ).toMatchObject({ hostname: "Vitaliis-MacBook-Pro.local" });
   });
 
-  it("requires pairing before creating a V7 execution Workspace", async () => {
+  it("requires pairing before creating an execution Workspace", async () => {
     const { sqlite, env } = setup();
     await expect(
       handleCreateWorkspace(

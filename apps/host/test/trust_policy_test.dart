@@ -39,31 +39,9 @@ void main() {
     );
   });
 
-  test('enforces worker permissions and redacts secrets', () {
-    final policy = WorkerTrustPolicy();
-    expect(
-      () => policy.requirePermissions(
-        [WorkerPermission.shell],
-        [WorkerPermission.readWorkspace],
-      ),
-      throwsStateError,
-    );
+  test('redacts explicitly supplied secrets', () {
     expect(redactSecrets('Authorization: secret', ['secret']),
         'Authorization: [REDACTED]');
-  });
-
-  test('parses canonical and legacy configured permission names', () {
-    expect(
-      parseConfiguredWorkerPermissions('workspace:read,network:outbound'),
-      {WorkerPermission.readWorkspace, WorkerPermission.network},
-    );
-    expect(parseConfiguredWorkerPermissions('readWorkspace'),
-        {WorkerPermission.readWorkspace});
-    expect(() => parseConfiguredWorkerPermissions('unknown'), throwsStateError);
-    expect(
-      parseConfiguredWorkerPermissions('network:openai,network:anthropic'),
-      {WorkerPermission.networkOpenAi, WorkerPermission.networkAnthropic},
-    );
   });
 
   test('supports overlapping key rotation and immediate key revocation',

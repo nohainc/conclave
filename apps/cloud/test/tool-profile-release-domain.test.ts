@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const migrationRoot = fileURLToPath(
-  new URL("../migrations-v6/", import.meta.url),
+  new URL("../migrations-v8/", import.meta.url),
 );
 const migrations = readdirSync(migrationRoot)
   .filter((file) => /^\d+.*\.sql$/.test(file))
@@ -58,21 +58,48 @@ function publishedRelease(version: number): string {
 
 describe("v8 Tool Profile Cloud release domain", () => {
   it("seeds bounded v8 logical Worker metadata and rejects arbitrary enum values", () => {
-    expect(apply(`
+    expect(
+      apply(`
       SELECT worker_type_id, engine_family, visibility_state, release_stage,
              capabilities_json, sort_order FROM worker_catalog ORDER BY sort_order;
-    `)).toEqual([
-      { worker_type_id: "chatgpt", engine_family: "cli", visibility_state: "visible", release_stage: "stable", capabilities_json: '["text","local_file","workstream_read","workstream_write","durable_session"]', sort_order: 10 },
-      { worker_type_id: "gemini", engine_family: "cli", visibility_state: "visible", release_stage: "stable", capabilities_json: '["text","local_file","workstream_read","workstream_write","durable_session"]', sort_order: 20 },
+    `),
+    ).toEqual([
+      {
+        worker_type_id: "chatgpt",
+        engine_family: "cli",
+        visibility_state: "visible",
+        release_stage: "stable",
+        capabilities_json:
+          '["text","local_file","workstream_read","workstream_write","durable_session"]',
+        sort_order: 10,
+      },
+      {
+        worker_type_id: "gemini",
+        engine_family: "cli",
+        visibility_state: "visible",
+        release_stage: "stable",
+        capabilities_json:
+          '["text","local_file","workstream_read","workstream_write","durable_session"]',
+        sort_order: 20,
+      },
     ]);
-    expectSqlFailure(`UPDATE worker_catalog SET release_stage = 'private' WHERE worker_type_id = 'chatgpt';`, "CHECK constraint failed");
-    expectSqlFailure(`UPDATE worker_catalog SET engine_family = 'shell' WHERE worker_type_id = 'chatgpt';`, "CHECK constraint failed");
-    expectSqlFailure(`
+    expectSqlFailure(
+      `UPDATE worker_catalog SET release_stage = 'private' WHERE worker_type_id = 'chatgpt';`,
+      "CHECK constraint failed",
+    );
+    expectSqlFailure(
+      `UPDATE worker_catalog SET engine_family = 'shell' WHERE worker_type_id = 'chatgpt';`,
+      "CHECK constraint failed",
+    );
+    expectSqlFailure(
+      `
       INSERT INTO tool_profile_definitions (
         profile_definition_id, worker_type_id, display_name, provider_tool_name,
         engine_family, schema_version, created_at, updated_at
       ) VALUES ('chatgpt-second', 'chatgpt', 'Second profile', 'other-cli', 'cli', 1, 'now', 'now');
-    `, "UNIQUE constraint failed");
+    `,
+      "UNIQUE constraint failed",
+    );
   });
 
   it("seeds logical Workers and the initial official Profile definitions", () => {

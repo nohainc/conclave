@@ -1384,7 +1384,7 @@ export class WorkspaceGateway implements DurableObject {
         )
         .run();
       await this.env.CONCLAVE_DB.prepare(
-        `INSERT OR IGNORE INTO v7_worker_scheduling (worker_id, state, updated_at)
+        `INSERT OR IGNORE INTO worker_scheduling (worker_id, state, updated_at)
          SELECT worker_id, 'disabled', ?2 FROM workspace_worker_inventory WHERE worker_id = ?1`,
       )
         .bind(workerId, now)

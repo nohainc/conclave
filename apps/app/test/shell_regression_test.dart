@@ -41,7 +41,6 @@ void main() {
     id: 'p-1',
     name: 'Conclave AX',
     branch: 'main',
-    activeGoals: 0,
     lastActivity: 'today',
     workstreams: [wsRunning, wsIdle],
   );
@@ -120,7 +119,6 @@ void main() {
       expect(find.text('PROJECTS'), findsNothing);
       expect(find.text('Workspaces'), findsNothing);
       expect(find.text('Workers'), findsNothing);
-      expect(find.text('AI Accounts'), findsNothing);
       expect(find.text('Usage'), findsNothing);
       expect(find.text('Profile & Security'), findsNothing);
       expect(find.text('Agents'), findsNothing);
@@ -296,37 +294,6 @@ void main() {
       await tester.tap(find.text('System'));
       await tester.pumpAndSettle();
       expect(chosenMode, ThemeMode.system);
-    });
-  });
-
-  group('Phase 13: Legacy URL Redirects & Canonical Routing', () {
-    test('old /workers deep link canonicalizes to /workspaces', () {
-      final parsed = StudioNavigation.fromUri(Uri.parse('/workers'));
-      expect(parsed, const StudioNavigation.workspaces());
-      expect(parsed.toUri().path, '/workspaces');
-    });
-
-    test('old /accounts deep link resolves to the Workspaces surface', () {
-      final parsed = StudioNavigation.fromUri(Uri.parse('/accounts'));
-      expect(parsed, const StudioNavigation.workspaces());
-      expect(parsed.toUri().path, '/workspaces');
-    });
-
-    test('query param tabs canonicalize to nested routes', () {
-      final workersQuery =
-          StudioNavigation.fromUri(Uri.parse('/workspaces?tab=workers'));
-      expect(workersQuery, const StudioNavigation.workspaces());
-      expect(workersQuery.toUri().path, '/workspaces');
-
-      final accountsQuery =
-          StudioNavigation.fromUri(Uri.parse('/workspaces?tab=accounts'));
-      expect(accountsQuery, const StudioNavigation.workspaces());
-      expect(accountsQuery.toUri().path, '/workspaces');
-
-      final legacyHosts =
-          StudioNavigation.fromUri(Uri.parse('/hosts?tab=ai_accounts'));
-      expect(legacyHosts, const StudioNavigation.workspaces());
-      expect(legacyHosts.toUri().path, '/workspaces');
     });
   });
 

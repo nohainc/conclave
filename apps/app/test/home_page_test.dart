@@ -12,7 +12,6 @@ void main() {
     id: 'project-1',
     name: 'Project One',
     branch: 'main',
-    activeGoals: 0,
     lastActivity: 'Today',
   );
 
@@ -26,7 +25,6 @@ void main() {
       openFindingCount: 0,
       onOpenWorkspaces: () {},
       onOpenProject: (_) {},
-      onOpenChat: (_, __) {},
       onOpenRun: (_, __) {},
       onCreateProject: () {},
       onOpenArchivedProjects: () {},
@@ -34,8 +32,8 @@ void main() {
 
     expect(find.text('Getting started'), findsOneWidget);
     expect(find.text('Connect a Workspace'), findsOneWidget);
-    expect(
-        find.text('Configure Workers in Conclave Workspace'), findsOneWidget);
+    expect(find.text('Set up Engine and Profiles in Conclave Workspace'),
+        findsOneWidget);
     expect(find.text('Create Project'), findsOneWidget);
     expect(find.text('Archived Projects'), findsNothing);
     expect(find.text('Execution'), findsNothing);
@@ -64,7 +62,7 @@ void main() {
         StudioWorker(
           id: 'attention-1',
           workspaceId: 'workspace-1',
-          workerTypeId: 'claude-code',
+          workerTypeId: 'gemini',
           status: 'needs_attention',
           readinessState: 'sign_in_required',
           attentionReasonCode: 'sign_in_required',
@@ -76,7 +74,6 @@ void main() {
       openFindingCount: 0,
       onOpenWorkspaces: () => workspaceOpens++,
       onOpenProject: (_) {},
-      onOpenChat: (_, __) {},
       onOpenRun: (_, __) {},
       onCreateProject: () {},
       onOpenArchivedProjects: () {},

@@ -13,10 +13,7 @@ import '../realtime/realtime_client.dart';
 import '../brand.dart';
 import '../features/common/toast_overlay.dart';
 import '../features/common/external_links.dart';
-import '../features/common/code_block_view.dart';
 import '../features/common/diff_viewer.dart';
-import '../features/chat/typing_indicator.dart';
-import '../features/chat/prompt_composer.dart';
 import '../features/execution/task_pipeline_dag.dart';
 import '../features/home/home_page.dart';
 import '../features/navigation/studio_shell_context.dart';
@@ -28,17 +25,6 @@ import '../features/workspace/workspaces_page.dart';
 import 'studio_models.dart';
 import 'studio_data.dart';
 import 'studio_stores.dart';
-
-enum _ChatDeliveryStatus { pending, failed }
-
-class _PendingChatMessage {
-  _PendingChatMessage({required this.id, required this.text});
-
-  final String id;
-  final String text;
-  _ChatDeliveryStatus status = _ChatDeliveryStatus.pending;
-  String? error;
-}
 
 class ConclaveAppShell extends StatefulWidget {
   const ConclaveAppShell(
@@ -66,25 +52,14 @@ class _StudioAppState extends State<ConclaveAppShell> {
   bool isLoading = true;
   String? loadError;
   String? selectedTaskId = 'implement';
-  String? selectedChatId;
   final Set<String> expandedProjectIds = <String>{};
-  bool showNewGoal = false;
   List<StudioWorker> workspaceWorkers = const [];
   bool workspaceWorkerInventoryLoaded = false;
   Map<String, int> workspaceProjectGrantCounts = const {};
-  StudioQualityPreset selectedQuality = StudioQualityPreset.balanced;
-  String selectedExecutionModel = 'Auto';
-  bool showAdvancedExecution = false;
-  bool isSendingChat = false;
-  final objectiveController = TextEditingController();
-  final revisionController = TextEditingController();
-  final chatController = TextEditingController();
   final authNameController = TextEditingController();
   final authEmailController = TextEditingController();
   final authPasswordController = TextEditingController();
   final authConfirmPasswordController = TextEditingController();
-  final List<StudioChatMessage> localChatMessages = [];
-  final List<_PendingChatMessage> pendingChatMessages = [];
   final List<StudioNotification> notifications = [];
   late final StudioStore store;
   final navigatorKey = GlobalKey<NavigatorState>();
@@ -119,14 +94,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
   String _searchQuery = '';
   StudioNavigation? _navigationBeforeSearch;
   DateTime? _lastRealtimeAnnouncement;
-  List<StudioPendingInvitation> pendingInvitations = const [];
   StudioAccountSecurity? accountSecurity;
   bool accountSecurityLoading = false;
   ThemeMode _themeMode = ThemeMode.system;
   bool _desktopSidebarCollapsed = false;
 
   bool get showRunDetails => switch (navigation.kind) {
-        StudioRouteKind.home || StudioRouteKind.chat => false,
+        StudioRouteKind.home => false,
         _ => true,
       };
 
@@ -230,12 +204,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
   StudioTask? get selectedTask =>
       snapshot.tasks.where((task) => task.id == selectedTaskId).firstOrNull;
 
-  StudioChat? get selectedChat =>
-      snapshot.allChats
-          .where((chat) => chat.id == (selectedChatId ?? snapshot.activeChatId))
-          .firstOrNull ??
-      snapshot.activeChat;
-
   StudioWorkstream? get selectedWorkstream {
     final project = selectedProject;
     return project?.workstreams
@@ -313,9 +281,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     _searchQueryController.removeListener(_onSearchQueryChanged);
     _searchQueryController.dispose();
     _searchFocusNode.dispose();
-    objectiveController.dispose();
-    revisionController.dispose();
-    chatController.dispose();
     authNameController.dispose();
     authEmailController.dispose();
     authPasswordController.dispose();
@@ -371,7 +336,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Future<void> _loadSession() async {
     try {
       final session = await store.auth.load();
-      pendingInvitations = session.pendingInvitations;
       if (!session.authenticated) {
         if (!mounted) return;
         setState(() {
@@ -417,7 +381,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         snapshot = StudioSnapshot.empty();
         selectedProjectId = null;
         authRequired = true;
-        pendingInvitations = const [];
       });
       browserNavigation.replaceWithLogin(navigation.toUri());
     } catch (error) {
@@ -695,11 +658,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
         });
         return;
       }
-      if (type.startsWith('project.') || type.startsWith('chat.')) {
+      if (type.startsWith('project.')) {
         final projects = await store.projects.refresh();
         if (!mounted) return;
-        store.chats
-            .replace(projects.expand((project) => project.chats).toList());
         setState(() => snapshot = snapshot.copyWith(projects: projects));
         unawaited(_refreshWorkspaceProjectGrantCounts());
         return;
@@ -912,7 +873,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
     unawaited(realtimeClient.setScopes(
       projectId: selectedProjectId,
-      chatId: selectedChatId,
       runId: navigation.runId,
       executionWorkspaceId: workspaceId,
     ));
@@ -950,7 +910,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Future<void> _linkAccountProvider(String provider) async {
     try {
       final uri = await widget.dataSource
-          .beginAccountLink(provider, Uri(path: '/account'));
+          .beginAccountLink(provider, Uri(path: '/settings/profile'));
       browserNavigation.openExternal(uri);
     } catch (error) {
       if (mounted) _showSnackBar(error.toString());
@@ -1008,14 +968,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
       setState(() {
         snapshot = loaded;
         optimisticRunStatus = null;
-        selectedQuality = loaded.policy?.preset ?? selectedQuality;
         selectedProjectId = loaded.projects.any(
                 (project) => project.id == (projectId ?? selectedProjectId))
             ? (projectId ?? selectedProjectId)
             : loaded.projects.firstOrNull?.id;
-        selectedChatId = navigation.kind == StudioRouteKind.chat
-            ? (loaded.activeChatId ?? loaded.activeChat?.id)
-            : null;
         isLoading = false;
         isReconnecting = false;
         authRequired = false;
@@ -1044,7 +1000,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     try {
       final session = await store.auth.load();
       if (!mounted) return;
-      pendingInvitations = session.pendingInvitations;
       if (!session.authenticated && !authRequired) {
         setState(() => authRequired = true);
         browserNavigation.replaceWithLogin(navigation.toUri());
@@ -1077,16 +1032,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         loaded.projects.any((project) => project.id == routeProject)) {
       selectedProjectId = routeProject;
     }
-    final project = loaded.projects
-        .where((value) => value.id == selectedProjectId)
-        .firstOrNull;
-    if (navigation.kind == StudioRouteKind.chat &&
-        navigation.chatId != null &&
-        project?.chats.any((chat) => chat.id == navigation.chatId) == true) {
-      selectedChatId = navigation.chatId;
-    } else if (navigation.kind != StudioRouteKind.chat) {
-      selectedChatId = null;
-    }
     if (navigation.kind == StudioRouteKind.workstream &&
         navigation.projectId != null) {
       expandedProjectIds.add(navigation.projectId!);
@@ -1105,7 +1050,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     setState(() {
       navigation = next;
       selectedProjectId = next.projectId ?? selectedProjectId;
-      selectedChatId = next.kind == StudioRouteKind.chat ? next.chatId : null;
       if (next.kind == StudioRouteKind.workstream && next.projectId != null) {
         expandedProjectIds.add(next.projectId!);
       }
@@ -1118,7 +1062,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     }
     unawaited(realtimeClient.setScopes(
       projectId: next.projectId ?? selectedProjectId,
-      chatId: next.chatId,
       runId: next.runId,
       executionWorkspaceId: executionWorkspaceId,
     ));
@@ -1140,7 +1083,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     setState(() {
       navigation = next;
       selectedProjectId = next.projectId ?? selectedProjectId;
-      selectedChatId = next.kind == StudioRouteKind.chat ? next.chatId : null;
       if (next.kind == StudioRouteKind.workstream && next.projectId != null) {
         expandedProjectIds.add(next.projectId!);
       }
@@ -1213,31 +1155,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
       if (mounted) _showSnackBar('Workspace access request sent.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
-    }
-  }
-
-  Future<void> _createGoal() async {
-    final projectId = selectedProjectId;
-    final objective = objectiveController.text.trim();
-    final commitSha = revisionController.text.trim();
-    if (projectId == null || objective.isEmpty || commitSha.isEmpty) {
-      if (mounted) {
-        _showSnackBar('Enter an objective and expected commit SHA.');
-      }
-      return;
-    }
-    try {
-      await store.dataSource.createGoal(
-        projectId: projectId,
-        objective: objective,
-        revision: commitSha,
-      );
-      objectiveController.clear();
-      if (!mounted) return;
-      setState(() => showNewGoal = false);
-      await _loadSnapshot(projectId: projectId);
-    } catch (error) {
-      if (mounted) _showSnackBar(error.toString());
     }
   }
 
@@ -1844,11 +1761,10 @@ class _StudioAppState extends State<ConclaveAppShell> {
           projects: [...snapshot.projects, project],
         );
         selectedProjectId = project.id;
-        selectedChatId = null;
         isLoading = false;
       });
       _navigateTo(StudioNavigation.project(project.id), replace: true);
-      _showSnackBar('Project created. Start your first chat.');
+      _showSnackBar('Project created. Create a Workstream to get started.');
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -1921,7 +1837,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
           id: p.id,
           name: p.name,
           branch: p.branch,
-          activeGoals: p.activeGoals,
           lastActivity: 'just now',
           description: p.description,
           instructions: p.instructions,
@@ -2043,7 +1958,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
   Future<void> _deleteProject(String projectId) async {
     final confirmed = await _confirmProjectAction(
       title: 'Delete project?',
-      message: 'This permanently removes the Project and its Chats.',
+      message: 'This permanently removes the Project and its Workstreams.',
       action: 'Delete',
       destructive: true,
     );
@@ -2057,7 +1972,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
               snapshot.projects.where((item) => item.id != projectId).toList(),
         );
         selectedProjectId = null;
-        selectedChatId = null;
       });
       _navigateTo(const StudioNavigation.home(), replace: true);
       _showSnackBar('Project deleted.');
@@ -2095,25 +2009,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     return result == true;
   }
 
-  Widget _pendingInvitationBanner() => Card(
-        color: const Color(0xfff4f1ff),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.mail_outline, color: Color(0xff5143b8)),
-              const SizedBox(width: 10),
-              Flexible(
-                child: Text(
-                  '${pendingInvitations.length} Workspace invitation${pendingInvitations.length == 1 ? '' : 's'} waiting for your review.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
 
   Widget _content({required bool compact, required bool showTopHud}) {
     return Column(children: [
@@ -2139,16 +2034,13 @@ class _StudioAppState extends State<ConclaveAppShell> {
           label: realtimeNotice!,
           child: const SizedBox(width: 1, height: 1),
         ),
-      if (pendingInvitations.isNotEmpty) _pendingInvitationBanner(),
       Expanded(
-          child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                  compact ? 18 : 34, 26, compact ? 18 : 34, 40),
-              child: showRunDetails
-                  ? _runDetailsView(compact)
-                  : navigation.kind == StudioRouteKind.home
-                      ? _homeView()
-                      : _chatView(compact))),
+        child: SingleChildScrollView(
+          padding:
+              EdgeInsets.fromLTRB(compact ? 18 : 34, 26, compact ? 18 : 34, 40),
+          child: showRunDetails ? _runDetailsView(compact) : _homeView(),
+        ),
+      ),
     ]);
   }
 
@@ -2203,8 +2095,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
             _navigateTo(const StudioNavigation.workspaces()),
         onOpenProject: (projectId) =>
             _navigateTo(StudioNavigation.project(projectId)),
-        onOpenChat: (projectId, chatId) =>
-            _navigateTo(StudioNavigation.chat(projectId, chatId)),
         onOpenRun: (projectId, runId) =>
             _navigateTo(StudioNavigation.run(projectId, runId)),
         onCreateProject: _createProject,
@@ -2386,13 +2276,9 @@ class _StudioAppState extends State<ConclaveAppShell> {
         _clearSearch();
         _navigateTo(StudioNavigation.project(projectId));
       },
-      onSelectChat: (projectId, chatId) {
-        _clearSearch();
-        _navigateTo(StudioNavigation.chat(projectId, chatId));
-      },
       onClearSearch: _clearSearch,
       onToggleTheme: _toggleTheme,
-      onNewGoal: () => setState(() => showNewGoal = true),
+      onCreateContextualItem: _handleContextualCreate,
     );
   }
 
@@ -2412,54 +2298,43 @@ class _StudioAppState extends State<ConclaveAppShell> {
         return _searchView();
       case StudioRouteKind.run:
       case StudioRouteKind.home:
-      case StudioRouteKind.chat:
       case StudioRouteKind.login:
       case StudioRouteKind.desktopAuthApproval:
         break;
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(
-          spacing: 16,
-          runSpacing: 10,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(selectedProject?.name ?? 'Project',
-                  style:
-                      const TextStyle(color: Color(0xff777683), fontSize: 12)),
-              const SizedBox(height: 7),
-              const Text('Run details',
-                  style: TextStyle(
-                      fontSize: 25,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xff20202c),
-                      letterSpacing: -.5)),
-              const SizedBox(height: 5),
-              const Text(
-                  'Follow execution, results, verification, and diagnostics.',
-                  style: TextStyle(color: Color(0xff777683), fontSize: 13))
-            ]),
-            FilledButton.icon(
-                key: const Key('new-work-request-button'),
-                onPressed: () => setState(() => showNewGoal = true),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('New work request'),
-                style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xff6254d9),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 13))),
+        spacing: 16,
+        runSpacing: 10,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(selectedProject?.name ?? 'Project',
+                style: const TextStyle(color: Color(0xff777683), fontSize: 12)),
+            const SizedBox(height: 7),
+            const Text('Run details',
+                style: TextStyle(
+                    fontSize: 25,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xff20202c),
+                    letterSpacing: -.5)),
+            const SizedBox(height: 5),
+            const Text(
+                'Follow execution, results, verification, and diagnostics.',
+                style: TextStyle(color: Color(0xff777683), fontSize: 13)),
           ]),
+        ],
+      ),
       const SizedBox(height: 20),
       _runSection(
         title: 'Overview',
-        subtitle: 'Status, elapsed work, Workers, Account, and findings',
+        subtitle: 'Status, elapsed work, Engine, Profile, and findings',
         icon: Icons.dashboard_outlined,
         child: Column(children: [
           _runHeader(compact),
           const SizedBox(height: 16),
           _runContextCard(),
           const SizedBox(height: 16),
-          _policyCard(),
         ]),
       ),
       const SizedBox(height: 16),
@@ -2489,7 +2364,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       const SizedBox(height: 16),
       _runSection(
         title: 'Verification',
-        subtitle: 'Tests, findings, review, and completion criteria',
+        subtitle: 'Tests, findings, and completion criteria',
         icon: Icons.verified_outlined,
         child: _evidenceCard(),
       ),
@@ -2505,7 +2380,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
           _timelineCard(),
         ]),
       ),
-      if (showNewGoal) _newGoalDialog(),
     ]);
   }
 
@@ -2529,369 +2403,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
           children: [child],
         ),
       );
-
-  Future<void> _sendChatMessage([String? submittedText]) async {
-    final chat = selectedChat;
-    final text = (submittedText ?? chatController.text).trim();
-    if (chat == null || text.isEmpty) return;
-    chatController.clear();
-    final pending = _PendingChatMessage(
-      id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
-      text: text,
-    );
-    setState(() {
-      pendingChatMessages.add(pending);
-      isSendingChat = true;
-    });
-    try {
-      final response = await store.chats.send(chat.projectId, chat.id, text);
-      if (!mounted) return;
-      setState(() {
-        pendingChatMessages.removeWhere((item) => item.id == pending.id);
-        isSendingChat = false;
-      });
-      if (response.runId != null && response.runId!.isNotEmpty) {
-        await _loadSnapshot(projectId: chat.projectId, showSpinner: false);
-        if (!mounted) return;
-        _navigateTo(StudioNavigation.run(chat.projectId, response.runId!));
-      } else {
-        await _loadSnapshot(projectId: chat.projectId, showSpinner: false);
-      }
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          pending.status = _ChatDeliveryStatus.failed;
-          pending.error = error.toString();
-          isSendingChat = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _retryPendingChat(_PendingChatMessage pending) async {
-    if (!mounted) return;
-    setState(
-        () => pendingChatMessages.removeWhere((item) => item.id == pending.id));
-    await _sendChatMessage(pending.text);
-  }
-
-  Future<void> _createChat() async {
-    final projectId = selectedProjectId;
-    if (projectId == null) return;
-    var titleValue = '';
-    final title = await showDialog<String>(
-      context: navigatorKey.currentContext ?? context,
-      builder: (context) => AlertDialog(
-        title: const Text('New chat'),
-        content: TextField(
-          autofocus: true,
-          onChanged: (value) => titleValue = value,
-          decoration: const InputDecoration(
-              hintText: 'What would you like to work on?'),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, titleValue.trim()),
-              child: const Text('Create')),
-        ],
-      ),
-    );
-    if (title == null || title.isEmpty) return;
-    try {
-      final chat = await store.chats.create(projectId, title);
-      if (!mounted) return;
-      setState(() {
-        selectedChatId = chat.id;
-      });
-      await _loadSnapshot(projectId: projectId, showSpinner: false);
-    } catch (error) {
-      if (mounted) setState(() => loadError = error.toString());
-    }
-  }
-
-  Widget _chatView(bool compact) {
-    final chat = selectedChat;
-    final messages = [
-      ...?chat?.messages,
-      ...localChatMessages,
-    ];
-    if (chat == null) {
-      return _panel(
-        title: 'Start a conversation',
-        subtitle: selectedProject == null
-            ? 'Create a project to start working with Conclave AX.'
-            : 'Start the first chat for this project.',
-        child: FilledButton.icon(
-          onPressed: selectedProject == null ? _createProject : _createChat,
-          icon: const Icon(Icons.add),
-          label: Text(selectedProject == null ? 'Create project' : 'New chat'),
-        ),
-      );
-    }
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(selectedProject?.name ?? 'Project',
-                style: const TextStyle(color: Color(0xff777683), fontSize: 12)),
-            const SizedBox(height: 6),
-            Text(chat.title,
-                style: const TextStyle(
-                    fontSize: 25,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xff20202c))),
-            const SizedBox(height: 5),
-            const Text(
-                'Historical discussion. Create or open a Workstream for execution.',
-                style: TextStyle(color: Color(0xff777683), fontSize: 13)),
-          ]),
-        ),
-        OutlinedButton.icon(
-          onPressed: _createChat,
-          icon: const Icon(Icons.add, size: 17),
-          label: const Text('New chat'),
-        ),
-      ]),
-      const SizedBox(height: 22),
-      _panel(
-        title: 'Conversation',
-        subtitle: '${messages.length} messages · discussion only',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ...messages.map(_chatMessage),
-            if (snapshot.tasks.any((t) => t.status == TaskStatus.running) ||
-                snapshot.run?.status == RunStatus.running ||
-                snapshot.run?.status == RunStatus.active) ...[
-              StreamingTypingIndicator(
-                workerName: snapshot.tasks
-                    .where((t) => t.status == TaskStatus.running)
-                    .firstOrNull
-                    ?.assignedWorkerId,
-                statusText: 'Executing verification pipeline…',
-              ),
-              const SizedBox(height: 6),
-            ],
-            const SizedBox(height: 10),
-            ...pendingChatMessages.map(_pendingChatMessage),
-            PromptComposer(
-              controller: chatController,
-              onSubmitted: _sendChatMessage,
-              selectedQuality: selectedQuality,
-              onQualityChanged: (value) =>
-                  setState(() => selectedQuality = value),
-              selectedModel: selectedExecutionModel,
-              onModelChanged: (value) =>
-                  setState(() => selectedExecutionModel = value),
-              showAdvanced: showAdvancedExecution,
-              onToggleAdvanced: () => setState(
-                  () => showAdvancedExecution = !showAdvancedExecution),
-              isBusy: isSendingChat,
-              discussionOnly: true,
-            ),
-          ],
-        ),
-      ),
-    ]);
-  }
-
-  Widget _pendingChatMessage(_PendingChatMessage pending) => Align(
-        alignment: Alignment.centerRight,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 760),
-          margin: const EdgeInsets.only(bottom: 14),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: const Color(0xff6254d9).withValues(alpha: .12),
-            borderRadius: BorderRadius.circular(13),
-            border: Border.all(
-              color: pending.status == _ChatDeliveryStatus.failed
-                  ? Colors.redAccent
-                  : const Color(0xffc8c2f3),
-            ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(pending.text, textAlign: TextAlign.right),
-                    const SizedBox(height: 5),
-                    Text(
-                      pending.status == _ChatDeliveryStatus.failed
-                          ? 'Not sent${pending.error == null ? '' : ': ${pending.error}'}'
-                          : 'Sending…',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: pending.status == _ChatDeliveryStatus.failed
-                            ? Colors.redAccent
-                            : const Color(0xff777683),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (pending.status == _ChatDeliveryStatus.failed) ...[
-                const SizedBox(width: 8),
-                TextButton(
-                  onPressed: () => _retryPendingChat(pending),
-                  child: const Text('Retry'),
-                ),
-              ] else ...[
-                const SizedBox(width: 8),
-                const SizedBox(
-                  width: 15,
-                  height: 15,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-
-  Widget _chatMessage(StudioChatMessage message) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isUser = message.sender == StudioMessageSender.user;
-    final surfaceColor = isUser
-        ? ConclaveBrand.accent
-        : (isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface);
-    final borderColor = isUser
-        ? null
-        : (isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine);
-    final inkColor = isUser
-        ? Colors.white
-        : (isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk);
-    final mutedInk = isUser
-        ? Colors.white.withValues(alpha: 0.7)
-        : (isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted);
-
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 760),
-        margin: const EdgeInsets.only(bottom: 14),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: surfaceColor,
-          borderRadius: BorderRadius.circular(13),
-          border: borderColor != null ? Border.all(color: borderColor) : null,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          MarkdownMessageBody(
-            text: message.text,
-            textStyle: TextStyle(
-              color: inkColor,
-              fontSize: 13.5,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(message.timestamp,
-              style: TextStyle(color: mutedInk, fontSize: 10)),
-          if (message.runPreview != null) ...[
-            const SizedBox(height: 14),
-            _runPreviewCard(message.runPreview!),
-          ],
-        ]),
-      ),
-    );
-  }
-
-  Widget _runPreviewCard(StudioRunPreview preview) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(11),
-            border: Border.all(color: const Color(0xffdfdcf7))),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Icon(Icons.hub_rounded, color: Color(0xff6254d9), size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-                child: Text(preview.statusSummary,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 12))),
-            Text('${preview.workerCount} workers',
-                style: const TextStyle(color: Color(0xff888691), fontSize: 10)),
-          ]),
-          const SizedBox(height: 12),
-          ...preview.phases.map((phase) => _phaseIndicator(phase)),
-          if (preview.finalAnswer != null) ...[
-            const Divider(height: 20),
-            const Text('Final synthesized answer',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-            const SizedBox(height: 6),
-            Text(preview.finalAnswer!,
-                maxLines: 8,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    color: Color(0xff575564), fontSize: 12, height: 1.4)),
-          ],
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                final project = selectedProject;
-                final run = snapshot.run;
-                if (project != null && run != null) {
-                  _navigateTo(StudioNavigation.run(project.id, run.id));
-                }
-              },
-              icon: const Icon(Icons.open_in_new, size: 15),
-              label: const Text('Open run details'),
-            ),
-          ),
-        ]),
-      );
-
-  Widget _phaseIndicator(StudioPhaseItem phase) {
-    final (icon, color) = switch (phase.status) {
-      StudioPhaseStatus.completed => (
-          Icons.check_circle_rounded,
-          const Color(0xff43b17f)
-        ),
-      StudioPhaseStatus.inProgress => (
-          Icons.radio_button_checked,
-          const Color(0xff6254d9)
-        ),
-      StudioPhaseStatus.pending => (
-          Icons.radio_button_unchecked,
-          const Color(0xffaaa8b1)
-        ),
-    };
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
-      child: Row(children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 8),
-        Text(phase.name,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-        if (phase.detail != null) ...[
-          const SizedBox(width: 8),
-          Expanded(
-              child: Text(phase.detail!,
-                  overflow: TextOverflow.ellipsis,
-                  style:
-                      const TextStyle(color: Color(0xff96949e), fontSize: 10))),
-        ],
-      ]),
-    );
-  }
 
   Color _runStatusColor(RunStatus status) => switch (status) {
         RunStatus.completed => const Color(0xff43b17f),
@@ -3064,47 +2575,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
         ]),
       );
 
-  String _qualityLabel(StudioQualityPreset preset) => switch (preset) {
-        StudioQualityPreset.highAssurance => 'High Assurance',
-        StudioQualityPreset.exploration => 'Exploration',
-        StudioQualityPreset.custom => 'Custom',
-        StudioQualityPreset.economy => 'Economy',
-        StudioQualityPreset.balanced => 'Balanced',
-      };
-
-  Widget _policyCard() {
-    final policy = snapshot.policy;
-    return _panel(
-      title: 'Execution policy',
-      subtitle: 'Configure worker routing for this run',
-      trailing: _statusChip(
-        policy?.mode ?? 'parallel',
-        const Color(0xff6254d9),
-      ),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          ...StudioQualityPreset.values.map(
-            (preset) => ChoiceChip(
-              label: Text(_qualityLabel(preset)),
-              selected: selectedQuality == preset,
-              onSelected: (_) => setState(() => selectedQuality = preset),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            policy == null
-                ? 'No server policy attached'
-                : '${policy.candidateCount} candidates · ${policy.maxParallel} parallel · ${policy.costCeiling}',
-            style: const TextStyle(color: Color(0xff777683), fontSize: 11),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _resultsDetailsCard() => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -3156,8 +2626,7 @@ class _StudioAppState extends State<ConclaveAppShell> {
       return _panel(
         title: 'Candidate outputs',
         subtitle: 'Read-only multi-worker synthesis',
-        child: const Text(
-            'Candidate outputs will appear when a multi-worker policy runs.'),
+        child: const Text('No candidate outputs are available.'),
       );
     }
     return _panel(
@@ -3758,55 +3227,6 @@ class _StudioAppState extends State<ConclaveAppShell> {
     if (value.isEmpty || value == '—') return 'unknown';
     return value.replaceFirst('T', ' ').replaceFirst('Z', ' UTC');
   }
-
-  Widget _newGoalDialog() => Card(
-        margin: const EdgeInsets.only(top: 16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 510),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Create a Work Request',
-                    style:
-                        TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 6),
-                const Text('Start a new run in the selected project.',
-                    style: TextStyle(color: Color(0xff777683), fontSize: 12)),
-                const SizedBox(height: 18),
-                TextField(
-                    controller: objectiveController,
-                    decoration: const InputDecoration(
-                        labelText: 'What should Conclave accomplish?',
-                        hintText: 'Describe the outcome, not just the task',
-                        border: OutlineInputBorder())),
-                const SizedBox(height: 14),
-                TextField(
-                    controller: revisionController,
-                    decoration: const InputDecoration(
-                        labelText: 'Expected commit SHA',
-                        hintText: 'The commit CI must verify',
-                        border: OutlineInputBorder())),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                        onPressed: () => setState(() => showNewGoal = false),
-                        child: const Text('Cancel')),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                        onPressed: _createGoal,
-                        child: const Text('Create work request')),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
 }
 
 class _RecoveryPanel extends StatelessWidget {

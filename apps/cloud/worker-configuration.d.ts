@@ -6,7 +6,6 @@ interface __BaseEnv_Env {
 	CONCLAVE_DB: D1Database;
 	CONCLAVE_EMAIL: SendEmail;
 	CONCLAVE_ENVIRONMENT: "development";
-	CONCLAVE_HOST_GATEWAY: DurableObjectNamespace<import("./src/index").HostGateway>;
 	CONCLAVE_REALTIME_GATEWAY: DurableObjectNamespace<import("./src/index").RealtimeGateway>;
 	CONCLAVE_FORGE_EXECUTION: Fetcher /* conclave-forge-execution */;
 	CONCLAVE_RUN_WORKFLOW: Workflow<Parameters<import("./src/index").ConclaveRunWorkflow['run']>[0]['payload']>;
@@ -14,7 +13,7 @@ interface __BaseEnv_Env {
 declare namespace Cloudflare {
 	interface GlobalProps {
 		mainModule: typeof import("./src/index");
-		durableNamespaces: "HostGateway" | "RealtimeGateway";
+		durableNamespaces: "RealtimeGateway";
 	}
 	interface Env extends __BaseEnv_Env {}
 }

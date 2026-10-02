@@ -79,8 +79,9 @@ unsupported CLI behavior, the proposal must:
    fixture CLI/Profile where practical;
 3. justify any integration-specific handling and explain why bounded Profile
    data cannot represent it safely;
-4. update the [security threat model](../security/V2-28-threat-model.md) with
-   the new authority, inputs, and resource bounds before implementation;
+4. update the [authorization model](AUTHORIZATION_MODEL.md) and this
+   specification with the new authority, inputs, and resource bounds before
+   implementation;
 5. add schema v2 only when the behavior needs new Profile semantics that cannot
    be expressed by the existing finite v1 primitives.
 
@@ -339,6 +340,11 @@ supported. These markers insert the corresponding section's fixed argument
 vector at that position. The profile's `sandbox.mappings` define finite vectors
 for `restricted`, `provider_default`, and `full_access`.
 
+Workspace Local Worker Protocol 4.0 assignments can select only `restricted`
+or `provider_default`; omitted values default to `restricted`. `full_access`
+remains a schema-level profile mapping for products with a separate explicit
+authorization path and is not representable in normal assignments.
+
 Allowed v1 conditions are limited to:
 - known field present/absent, equals/not-equals, one-of bounded constants, or
   has a JSON value type;
@@ -593,7 +599,8 @@ full_access
 to bounded provider arguments.
 
 `full_access` is usable only when Workspace/product policy explicitly permits
-it. A Profile cannot independently broaden local permissions.
+it. Normal v8 assignment execution does not permit it. A Profile cannot
+independently broaden local permissions.
 
 ## 22. Error mappings
 

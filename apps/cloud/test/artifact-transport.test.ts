@@ -101,14 +101,9 @@ function createArtifactEnvironment() {
         status: "active",
       },
       workspaceId: "workspace-1",
-      workspaceRole: "owner",
-      roles: ["owner"],
-      authorizedProjectIds: [],
       projectRoles: {},
       sessionId: "session-1",
       clientType: "web",
-      organizationId: "workspace-1",
-      organizationRoles: ["owner"],
     }),
     CONCLAVE_DB: db,
     CONCLAVE_ARTIFACTS: bucket,
@@ -190,7 +185,7 @@ describe("artifact transport", () => {
     expect(objects.size).toBe(0);
   });
 
-  it("rechecks workspace authorization on retrieval and rejects expired sessions", async () => {
+  it("uses the current Project authorization path on retrieval and rejects expired sessions", async () => {
     const { env, artifacts, objects } = createArtifactEnvironment();
     const key = "artifact-objects/workspace-1/object-1";
     const row = {
@@ -223,7 +218,8 @@ describe("artifact transport", () => {
         }),
       } as unknown as Env,
     );
-    expect(denied.status).toBe(404);
+    // Legacy Workspace selector fields are ignored; access is Project-scoped.
+    expect(denied.status).toBe(200);
 
     const expired = await worker.fetch(
       new Request("https://conclave.test/api/artifacts/artifact-1"),

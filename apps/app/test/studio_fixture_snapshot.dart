@@ -2,7 +2,6 @@ import 'package:conclave_app/src/studio/studio_models.dart';
 
 StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
       activeRunId: 'run-fixture',
-      activeChatId: 'chat-auth-1',
       run: StudioRun(
         id: 'run-fixture',
         status: RunStatus.running,
@@ -18,7 +17,6 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
           id: 'forge',
           name: 'Forge',
           branch: 'main',
-          activeGoals: 1,
           lastActivity: '2 min ago',
           workstreams: [
             StudioWorkstream(
@@ -34,120 +32,12 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
               queueStatus: 'Idle',
             ),
           ],
-          chats: [
-            StudioChat(
-              id: 'chat-auth-1',
-              projectId: 'forge',
-              title: 'Improve authentication architecture',
-              lastActivity: 'Just now',
-              activeRunId: 'run-fixture',
-              messages: [
-                StudioChatMessage(
-                  id: 'msg-user-1',
-                  sender: StudioMessageSender.user,
-                  text: 'Improve authentication architecture.',
-                  timestamp: '10:14 AM',
-                ),
-                StudioChatMessage(
-                  id: 'msg-conclave-1',
-                  sender: StudioMessageSender.conclave,
-                  text:
-                      'Researching repository boundaries and coordinating candidate workers across GPT-4o and Claude 3.7.',
-                  timestamp: '10:15 AM',
-                  runPreview: StudioRunPreview(
-                    runId: 'run-fixture',
-                    statusSummary: 'Researching with 2 Workers...',
-                    phases: [
-                      StudioPhaseItem(
-                        name: 'Research',
-                        status: StudioPhaseStatus.completed,
-                        detail:
-                            'Repository boundaries and auth endpoints identified',
-                      ),
-                      StudioPhaseItem(
-                        name: 'Synthesis',
-                        status: StudioPhaseStatus.inProgress,
-                        detail:
-                            'Consolidating PKCE token rotation and session limits',
-                      ),
-                      StudioPhaseItem(
-                        name: 'Implementation',
-                        status: StudioPhaseStatus.pending,
-                        detail: 'Worker code patch generation',
-                      ),
-                    ],
-                    workerCount: 2,
-                    finalAnswer:
-                        '### Architecture Recommendation\n\n1. **PKCE Authentication Flow**: Migrate all client sessions to short-lived scoped JWTs with client-bound ephemeral proofs.\n2. **Multi-Agent Consensus Gate**: Require cryptographic signature checks across independent reviewer workers before tenant admin role elevations.\n3. **Distributed Revocation List**: Store blacklisted tokens in edge KV memory with automatic 15-minute TTL expirations.',
-                  ),
-                ),
-              ],
-            ),
-            StudioChat(
-              id: 'chat-stream-2',
-              projectId: 'forge',
-              title: 'Streaming assignment protocol',
-              lastActivity: '1 hour ago',
-              messages: [
-                StudioChatMessage(
-                  id: 'msg-stream-u1',
-                  sender: StudioMessageSender.user,
-                  text:
-                      'How should worker assignment progress chunks stream to Cloud?',
-                  timestamp: '09:00 AM',
-                ),
-                StudioChatMessage(
-                  id: 'msg-stream-c1',
-                  sender: StudioMessageSender.conclave,
-                  text:
-                      'Progress chunks are transmitted over the persistent AgentGateway DO WebSocket connection with incremental percentage and stage logs.',
-                  timestamp: '09:01 AM',
-                ),
-              ],
-            ),
-          ],
         ),
         StudioProject(
           id: 'atlas',
           name: 'Atlas API',
           branch: 'develop',
-          activeGoals: 0,
           lastActivity: 'Yesterday',
-          chats: [
-            StudioChat(
-              id: 'chat-db-1',
-              projectId: 'atlas',
-              title: 'Database migration v2',
-              lastActivity: 'Yesterday',
-              messages: [
-                StudioChatMessage(
-                  id: 'msg-db-u1',
-                  sender: StudioMessageSender.user,
-                  text:
-                      'Plan zero-downtime D1 migration for event sourcing ledger.',
-                  timestamp: 'Yesterday',
-                ),
-                StudioChatMessage(
-                  id: 'msg-db-c1',
-                  sender: StudioMessageSender.conclave,
-                  text:
-                      'Migration plan formulated: step 1 shadow writes, step 2 backfill verification, step 3 read-switchover.',
-                  timestamp: 'Yesterday',
-                ),
-              ],
-            ),
-          ],
-        ),
-      ],
-      accounts: [
-        StudioCredentialProfile(
-          id: 'account-codex',
-          displayName: 'Vitalii Codex',
-          owner: 'Vitalii',
-          worker: 'Codex',
-          host: 'Development Workspace',
-          sharing: 'Private',
-          status: 'ready',
         ),
       ],
       workspaces: [
@@ -267,14 +157,6 @@ StudioSnapshot studioFixtureSnapshot() => const StudioSnapshot(
             size: '4 KB',
             source: 'Lead · Plan'),
       ],
-      policy: StudioPolicy(
-        preset: StudioQualityPreset.balanced,
-        mode: 'parallel',
-        candidateCount: 2,
-        maxParallel: 2,
-        costCeiling: '\$0.04 / attempt',
-        requiresSynthesis: true,
-      ),
       candidateOutputs: [
         StudioCandidateOutput(
           worker: 'Lead',
