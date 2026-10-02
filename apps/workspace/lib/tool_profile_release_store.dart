@@ -402,7 +402,7 @@ class ToolProfileReleaseStore {
   Future<void> restoreRevocations({bool force = false}) async {
     if (_revocationSnapshotRestored && !force) return;
     final file = _trustStateFile();
-    final fileType = await FileSystemEntity.type(file.path, followLinks: false);
+    final fileType = FileSystemEntity.typeSync(file.path, followLinks: false);
     if (fileType == FileSystemEntityType.notFound) {
       _revocationSnapshotRestored = true;
       return;
@@ -410,11 +410,11 @@ class ToolProfileReleaseStore {
     if (fileType != FileSystemEntityType.file) {
       throw const FormatException('Profile trust state path is unsafe');
     }
-    final length = await file.length();
+    final length = file.lengthSync();
     if (length < 1 || length > maxTrustStateBytes) {
       throw const FormatException('Profile trust state is invalid');
     }
-    final decoded = jsonDecode(await file.readAsString());
+    final decoded = jsonDecode(file.readAsStringSync());
     if (decoded is! Map || decoded['schemaVersion'] != 1) {
       throw const FormatException('Profile trust state is invalid');
     }
@@ -530,7 +530,7 @@ class ToolProfileReleaseStore {
     String definitionId,
     int version,
   ) async {
-    if (await FileSystemEntity.type(
+    if (FileSystemEntity.typeSync(
           definitionDirectory(definitionId).path,
           followLinks: false,
         ) !=
@@ -538,23 +538,23 @@ class ToolProfileReleaseStore {
       throw StateError('Tool Profile definition path is unsafe');
     }
     final directory = releaseDirectory(definitionId, version);
-    if (await FileSystemEntity.type(directory.path, followLinks: false) !=
+    if (FileSystemEntity.typeSync(directory.path, followLinks: false) !=
         FileSystemEntityType.directory) {
       throw StateError('Tool Profile release is not installed');
     }
     final metadataFile = _releaseMetadataFile(definitionId, version);
     final profile = profileFile(definitionId, version);
-    if (await FileSystemEntity.type(metadataFile.path, followLinks: false) !=
+    if (FileSystemEntity.typeSync(metadataFile.path, followLinks: false) !=
             FileSystemEntityType.file ||
-        await FileSystemEntity.type(profile.path, followLinks: false) !=
+        FileSystemEntity.typeSync(profile.path, followLinks: false) !=
             FileSystemEntityType.file) {
       throw StateError('Tool Profile release files are missing');
     }
-    if (await metadataFile.length() > maxReleaseMetadataBytes ||
-        await profile.length() > ToolProfileReleaseVerifier.maxPayloadBytes) {
+    if (metadataFile.lengthSync() > maxReleaseMetadataBytes ||
+        profile.lengthSync() > ToolProfileReleaseVerifier.maxPayloadBytes) {
       throw const FormatException('Installed Tool Profile is oversized');
     }
-    final metadata = jsonDecode(await metadataFile.readAsString());
+    final metadata = jsonDecode(metadataFile.readAsStringSync());
     if (metadata is! Map) {
       throw const FormatException('Installed Tool Profile metadata is invalid');
     }
@@ -564,7 +564,7 @@ class ToolProfileReleaseStore {
       throw const FormatException(
           'Installed Tool Profile path identity mismatch');
     }
-    final diskProfile = jsonDecode(await profile.readAsString());
+    final diskProfile = jsonDecode(profile.readAsStringSync());
     if (diskProfile is! Map ||
         canonicalJson(diskProfile) != canonicalJson(release['profile'])) {
       throw StateError('Installed Tool Profile content has changed');
@@ -681,7 +681,7 @@ class ToolProfileReleaseStore {
   }
 
   Future<Map<String, Object?>?> _readState(String definitionId) async {
-    final definitionType = await FileSystemEntity.type(
+    final definitionType = FileSystemEntity.typeSync(
       definitionDirectory(definitionId).path,
       followLinks: false,
     );
@@ -691,15 +691,15 @@ class ToolProfileReleaseStore {
       throw const FormatException('Tool Profile definition path is unsafe');
     }
     final file = _releaseStateFile(definitionId);
-    final fileType = await FileSystemEntity.type(file.path, followLinks: false);
+    final fileType = FileSystemEntity.typeSync(file.path, followLinks: false);
     if (fileType == FileSystemEntityType.notFound) return null;
     if (fileType != FileSystemEntityType.file) {
       throw const FormatException('Tool Profile release state path is unsafe');
     }
-    if (await file.length() > 16 * 1024) {
+    if (file.lengthSync() > 16 * 1024) {
       throw const FormatException('Tool Profile release state is oversized');
     }
-    final value = jsonDecode(await file.readAsString());
+    final value = jsonDecode(file.readAsStringSync());
     if (value is! Map || value['schemaVersion'] != 1) {
       throw const FormatException('Tool Profile release state is invalid');
     }

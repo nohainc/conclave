@@ -304,10 +304,6 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                     snapshot: snapshot,
                     signedIn: effectiveSignedIn,
                     credentialStore: widget.credentialStore,
-                    localWorkerRegistry: widget.localWorkerRegistry,
-                    toolProfileReleaseStore: widget.toolProfileReleaseStore,
-                    toolProfileCatalog: widget.toolProfileCatalog,
-                    onRollbackToolProfile: widget.onRollbackToolProfile,
                     onConnect: widget.onConnect,
                     onRegister: widget.onRegister,
                     onRecoverCredential: widget.onRecoverCredential,
@@ -326,6 +322,8 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                     key: ValueKey(widget.workerRevision),
                     registry: widget.localWorkerRegistry,
                     toolProfileCatalog: widget.toolProfileCatalog,
+                    toolProfileReleaseStore: widget.toolProfileReleaseStore,
+                    onRollbackToolProfile: widget.onRollbackToolProfile,
                     onReadinessCheck: widget.onReadinessCheck,
                   ),
                 ],
@@ -406,10 +404,6 @@ class _WorkspaceTab extends StatefulWidget {
     this.onRecoverCredential,
     this.onChangeWorkspaceName,
     required this.credentialStore,
-    this.localWorkerRegistry,
-    this.toolProfileReleaseStore,
-    this.toolProfileCatalog,
-    this.onRollbackToolProfile,
     this.onRetry,
     this.onExportDiagnostics,
     this.onChangeWorkRoot,
@@ -427,10 +421,6 @@ class _WorkspaceTab extends StatefulWidget {
   final Future<void> Function([String? name])? onRecoverCredential;
   final Future<void> Function(String name)? onChangeWorkspaceName;
   final SecureCredentialStore credentialStore;
-  final LocalWorkerRegistry? localWorkerRegistry;
-  final ToolProfileReleaseStore? toolProfileReleaseStore;
-  final ToolProfileCatalogClient? toolProfileCatalog;
-  final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
   final Future<void> Function(String path)? onChangeWorkRoot;
@@ -673,10 +663,6 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
         _WorkspaceDiagnosticsSection(
           snapshot: widget.snapshot,
           onExportDiagnostics: widget.onExportDiagnostics,
-          workerRegistry: widget.localWorkerRegistry,
-          toolProfileReleaseStore: widget.toolProfileReleaseStore,
-          toolProfileCatalog: widget.toolProfileCatalog,
-          onRollbackToolProfile: widget.onRollbackToolProfile,
         ),
       ],
     );
@@ -687,18 +673,10 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
   const _WorkspaceDiagnosticsSection({
     required this.snapshot,
     this.onExportDiagnostics,
-    this.workerRegistry,
-    this.toolProfileReleaseStore,
-    this.toolProfileCatalog,
-    this.onRollbackToolProfile,
   });
 
   final WorkspaceUiSnapshot snapshot;
   final Future<void> Function()? onExportDiagnostics;
-  final LocalWorkerRegistry? workerRegistry;
-  final ToolProfileReleaseStore? toolProfileReleaseStore;
-  final ToolProfileCatalogClient? toolProfileCatalog;
-  final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -816,14 +794,6 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
                           fontFamily: 'monospace', fontSize: 11)),
                 ),
             ],
-            const SizedBox(height: 12),
-
-            _RuntimeDiagnostics(
-              registry: workerRegistry,
-              toolProfileReleaseStore: toolProfileReleaseStore,
-              toolProfileCatalog: toolProfileCatalog,
-              onRollbackToolProfile: onRollbackToolProfile,
-            ),
             const SizedBox(height: 12),
 
             // Identity
@@ -969,284 +939,3 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
   }
 }
 
-class _RuntimeDiagnostics extends StatefulWidget {
-  const _RuntimeDiagnostics({
-    required this.registry,
-    required this.toolProfileReleaseStore,
-    required this.toolProfileCatalog,
-    required this.onRollbackToolProfile,
-  });
-
-  final LocalWorkerRegistry? registry;
-  final ToolProfileReleaseStore? toolProfileReleaseStore;
-  final ToolProfileCatalogClient? toolProfileCatalog;
-  final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
-
-  @override
-  State<_RuntimeDiagnostics> createState() => _RuntimeDiagnosticsState();
-}
-
-class _RuntimeDiagnosticsState extends State<_RuntimeDiagnostics> {
-  bool _rollingBack = false;
-  Future<List<({LocalWorker worker, Map<String, Object?>? profile})>>? _details;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void didUpdateWidget(covariant _RuntimeDiagnostics oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.registry != widget.registry ||
-        oldWidget.toolProfileReleaseStore != widget.toolProfileReleaseStore ||
-        oldWidget.toolProfileCatalog != widget.toolProfileCatalog) {
-      _load();
-    }
-  }
-
-  void _load() {
-    _details = _readDetails();
-  }
-
-  Future<List<({LocalWorker worker, Map<String, Object?>? profile})>>
-      _readDetails() async {
-    final registry = widget.registry;
-    if (registry == null) return const [];
-    final workers = await registry.list(includeRemoved: true);
-    return Future.wait(workers.map((worker) async {
-      Map<String, Object?>? profile;
-      final catalog = widget.toolProfileCatalog;
-      final catalogEntry = catalog == null
-          ? null
-          : (await catalog.loadCatalog())
-              .where((entry) => entry.workerTypeId == worker.workerTypeId)
-              .firstOrNull;
-      final definitionId = catalogEntry?.profileDefinitionId;
-      if (catalogEntry != null) {
-        profile = {'displayName': catalogEntry.displayName};
-      }
-      final profileStore = widget.toolProfileReleaseStore;
-      if (definitionId != null && profileStore != null) {
-        try {
-          final resolver = ToolProfileResolver(profileStore);
-          final profileState = await profileStore.releaseState(definitionId);
-          var resolution = worker.toolVersion == null
-              ? await resolver.resolveBootstrapProfile(
-                  logicalWorkerTypeId: worker.workerTypeId,
-                  profileDefinitionId: definitionId,
-                  engineVersion: cliWorkerEngineVersion,
-                  channel: profileState.selectedChannel,
-                )
-              : await resolver.resolve(
-                  logicalWorkerTypeId: worker.workerTypeId,
-                  profileDefinitionId: definitionId,
-                  engineVersion: cliWorkerEngineVersion,
-                  providerCliVersion: worker.toolVersion!,
-                  channel: profileState.selectedChannel,
-                );
-          if (!resolution.isAvailable && worker.toolVersion != null) {
-            resolution = await resolver.resolveBootstrapProfile(
-              logicalWorkerTypeId: worker.workerTypeId,
-              profileDefinitionId: definitionId,
-              engineVersion: cliWorkerEngineVersion,
-              channel: profileState.selectedChannel,
-            );
-          }
-          profile = {
-            'displayName': catalogEntry!.displayName,
-            'definitionId': definitionId,
-            'source': resolution.source.name,
-            'activeVersion': profileState.activeVersion,
-            'lastKnownGoodVersion': profileState.lastKnownGoodVersion,
-            'channel': profileState.selectedChannel,
-            if (resolution.release != null)
-              'releaseVersion': resolution.release!.releaseVersion,
-          };
-        } on Object {
-          profile = {
-            'displayName': catalogEntry!.displayName,
-            'definitionId': definitionId,
-            'source': 'unavailable',
-          };
-        }
-      }
-      return (worker: worker, profile: profile);
-    }));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Engine & Tool Profiles',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 6),
-        FutureBuilder<
-            List<
-                ({
-                  LocalWorker worker,
-                  Map<String, Object?>? profile,
-                })>>(
-          future: _details,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: LinearProgressIndicator(),
-              );
-            }
-            final records = snapshot.data ?? const [];
-            if (records.isEmpty) {
-              return Text(
-                widget.registry == null
-                    ? 'Local Worker diagnostics are unavailable.'
-                    : 'No local Workers are configured.',
-                style: theme.textTheme.bodySmall,
-              );
-            }
-            return Column(
-              children: [
-                for (final record in records)
-                  ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    title: Text(
-                      record.profile?['displayName'] as String? ??
-                          record.worker.workerTypeId,
-                    ),
-                    subtitle: Text(
-                      record.worker.workerTypeId,
-                    ),
-                    children: [
-                      _DetailRow(
-                        label: 'Workspace version',
-                        value: conclaveWorkspaceAppVersion,
-                      ),
-                      _DetailRow(
-                        label: 'Engine version',
-                        value: cliWorkerEngineVersion,
-                      ),
-                      if (record.profile != null) ...[
-                        _DetailRow(
-                          label: 'Integration',
-                          value:
-                              '${record.profile!['definitionId']}@${record.profile!['releaseVersion'] ?? 'unavailable'}',
-                        ),
-                        _DetailRow(
-                          label: 'Profile resolution',
-                          value: '${record.profile!['source']}',
-                        ),
-                        _DetailRow(
-                          label: 'Profile channel',
-                          value: '${record.profile!['channel']}',
-                        ),
-                        _DetailRow(
-                          label: 'Active Profile',
-                          value:
-                              '${record.profile!['activeVersion'] ?? 'None'}',
-                        ),
-                        _DetailRow(
-                          label: 'Last-known-good Profile',
-                          value:
-                              '${record.profile!['lastKnownGoodVersion'] ?? 'None'}',
-                        ),
-                        if (record.profile!['lastKnownGoodVersion'] is int)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 138, top: 6),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: OutlinedButton.icon(
-                                onPressed: _rollingBack ||
-                                        widget.onRollbackToolProfile == null
-                                    ? null
-                                    : () => _rollbackToolProfile(
-                                          record.worker.workerTypeId,
-                                        ),
-                                icon: _rollingBack
-                                    ? const SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      )
-                                    : const Icon(Icons.restore, size: 16),
-                                label: Text(
-                                  'Validate and roll back to Profile ${record.profile!['lastKnownGoodVersion']}',
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                      _DetailRow(
-                        label: 'Worker Type ID',
-                        value: record.worker.workerTypeId,
-                      ),
-                      _DetailRow(
-                        label: 'Provider CLI',
-                        value: record.worker.toolName ?? 'Not detected',
-                      ),
-                      _DetailRow(
-                        label: 'Provider CLI version',
-                        value: record.worker.toolVersion ?? 'Not detected',
-                      ),
-                      _DetailRow(
-                        label: 'Provider tool path (local only)',
-                        value: record.worker.toolPath ?? 'Not resolved',
-                      ),
-                      _DetailRow(
-                        label: 'Readiness',
-                        value:
-                            '${record.worker.readinessState.wireValue}${record.worker.readinessIssueCode == null ? '' : ' · ${record.worker.readinessIssueCode}'}',
-                      ),
-                      _DetailRow(
-                        label: 'Last Test',
-                        value: _lastLiveTestLabel(record.worker),
-                      ),
-                      if (record.worker.lastLiveTestDetails != null)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 138, bottom: 8),
-                          child: CopyableMessageText(
-                            record.worker.lastLiveTestDetails!,
-                            style: theme.textTheme.bodySmall,
-                            tooltip: 'Copy Worker diagnostic',
-                          ),
-                        ),
-                    ],
-                  ),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Future<void> _rollbackToolProfile(String workerTypeId) async {
-    if (_rollingBack) return;
-    setState(() => _rollingBack = true);
-    var passed = false;
-    try {
-      passed = await widget.onRollbackToolProfile?.call(workerTypeId) ?? false;
-    } on Object {
-      passed = false;
-    } finally {
-      if (mounted) {
-        setState(() {
-          _rollingBack = false;
-          _load();
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(passed
-                ? 'Profile rollback passed its passive probe.'
-                : 'Rollback validation failed. The current Profile was kept.'),
-          ),
-        );
-      }
-    }
-  }
-}

@@ -10,13 +10,57 @@ import 'package:conclave_workspace/platform_runtime.dart';
 import 'package:conclave_workspace/secure_credentials.dart';
 import 'package:conclave_workspace/tool_profile_catalog.dart';
 import 'package:conclave_workspace/tool_profile_release_store.dart';
-import 'package:conclave_workspace/worker_trust_policy.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/ed25519_release_fixture.dart';
 import 'support/logical_worker_catalog_fixture.dart';
+
+Future<void> _installTestToolProfile({
+  required ToolProfileReleaseStore store,
+  required Ed25519ReleaseFixture signing,
+  required String workerTypeId,
+  required String profileDefinitionId,
+  required String toolName,
+  int version = 1,
+}) async {
+  final baseFile =
+      File('../../packages/tool-profile/test/fixtures/fixture-cli.v1.json');
+  final baseContent = baseFile.existsSync()
+      ? baseFile.readAsStringSync()
+      : File('packages/tool-profile/test/fixtures/fixture-cli.v1.json')
+          .readAsStringSync();
+  final profile = jsonDecode(baseContent) as Map<String, Object?>;
+  profile['profileDefinitionId'] = profileDefinitionId;
+  profile['logicalWorkerTypeId'] = workerTypeId;
+  profile['releaseVersion'] = version;
+  (profile['providerTool']! as Map<String, Object?>)['name'] = toolName;
+  (profile['providerTool']! as Map<String, Object?>)['supportedVersions'] = [
+    {'min': '0.0.0', 'maxExclusive': '99.0.0'},
+  ];
+
+  final release = <String, Object?>{
+    'profileDefinitionId': profileDefinitionId,
+    'workerTypeId': workerTypeId,
+    'displayName': '$workerTypeId Test Profile',
+    'providerToolName': toolName,
+    'channel': 'stable',
+    'releaseVersion': version,
+    'profile': profile,
+    'schemaVersion': profile['schemaVersion'],
+    'engineFamily': profile['engineFamily'],
+    'engineCompatibility': profile['engineCompatibility'],
+  };
+  await signing.signToolProfileRelease(release);
+  await store.installRelease(
+    releaseInput: release,
+    expectedWorkerTypeId: workerTypeId,
+  );
+  await store.activateVersion(profileDefinitionId, version,
+      selectAsStable: true);
+}
 
 class _TestPlatformRuntime implements PlatformRuntime {
   @override
@@ -201,14 +245,16 @@ void main() {
     addTearDown(
       () => tester.runAsync(() => profileDirectory.delete(recursive: true)),
     );
-    final trustPolicy = WorkerTrustPolicy();
+    final signing = await tester.runAsync(Ed25519ReleaseFixture.create);
+    final trustPolicy = signing!.trustPolicy;
+    final store = ToolProfileReleaseStore(
+      profilesRoot: profileDirectory,
+      trustPolicy: trustPolicy,
+    );
     final catalog = toolProfileCatalog ??
         ToolProfileCatalogClient(
           cloudUri: Uri.parse('https://catalog.test'),
-          store: ToolProfileReleaseStore(
-            profilesRoot: profileDirectory,
-            trustPolicy: trustPolicy,
-          ),
+          store: store,
           trustPolicy: trustPolicy,
           workerCatalogLoader: () async => [
             logicalWorkerCatalogFixture('chatgpt').toJson(),
@@ -216,7 +262,23 @@ void main() {
           ],
         );
     if (toolProfileCatalog == null) {
-      await tester.runAsync(catalog.syncCatalog);
+      await tester.runAsync(() async {
+        await _installTestToolProfile(
+          store: store,
+          signing: signing,
+          workerTypeId: 'chatgpt',
+          profileDefinitionId: 'chatgpt-codex',
+          toolName: 'codex',
+        );
+        await _installTestToolProfile(
+          store: store,
+          signing: signing,
+          workerTypeId: 'gemini',
+          profileDefinitionId: 'gemini-antigravity',
+          toolName: 'agy',
+        );
+        await catalog.syncCatalog();
+      });
     }
     addTearDown(catalog.close);
     await tester.pumpWidget(
@@ -240,6 +302,7 @@ void main() {
             onReadinessCheck: onReadinessCheck,
             localWorkerRegistry: localWorkerRegistry,
             toolProfileCatalog: catalog,
+            toolProfileReleaseStore: store,
             // Build-time widget tests must never read the developer's actual
             // Keychain. Tests covering Keychain behavior provide a mocked
             // native bridge explicitly.
@@ -1231,7 +1294,7 @@ void main() {
     expect(find.text('Codex CLI version not detected'), findsOneWidget);
     expect(find.text('agy version not detected'), findsOneWidget);
     expect(find.textContaining('Capabilities:'), findsNothing);
-    expect(find.byType(ExpansionTile), findsNothing);
+    expect(find.text('Diagnostics'), findsNWidgets(2));
     expect(find.text('Set up ChatGPT'), findsNothing);
     expect(find.text('Set up Gemini'), findsNothing);
     expect(find.text('Save Worker'), findsNothing);
@@ -1241,6 +1304,80 @@ void main() {
     expect(find.text('No local Workers configured'), findsNothing);
     expect(find.byKey(const Key('worker-type-selector')), findsNothing);
     expect(find.text('Configure'), findsNWidgets(2));
+  });
+
+  testWidgets(
+      'Workers page only displays available workers according to active profiles',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final profileDirectory = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('workspace-ui-dynamic-workers-'),
+    ))!;
+    addTearDown(
+      () => tester.runAsync(() => profileDirectory.delete(recursive: true)),
+    );
+    final signing = await tester.runAsync(Ed25519ReleaseFixture.create);
+    final trustPolicy = signing!.trustPolicy;
+    final store = ToolProfileReleaseStore(
+      profilesRoot: profileDirectory,
+      trustPolicy: trustPolicy,
+    );
+    final catalog = ToolProfileCatalogClient(
+      cloudUri: Uri.parse('https://catalog.test'),
+      store: store,
+      trustPolicy: trustPolicy,
+      workerCatalogLoader: () async => [
+        logicalWorkerCatalogFixture('chatgpt').toJson(),
+        logicalWorkerCatalogFixture('gemini').toJson(),
+      ],
+    );
+    // Install profile only for Gemini; ChatGPT profile is unavailable
+    await tester.runAsync(() async {
+      await _installTestToolProfile(
+        store: store,
+        signing: signing,
+        workerTypeId: 'gemini',
+        profileDefinitionId: 'gemini-antigravity',
+        toolName: 'agy',
+      );
+      await catalog.syncCatalog();
+    });
+    addTearDown(catalog.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WorkspaceDashboard(
+            snapshot: const WorkspaceUiSnapshot(
+              mode: WorkspaceUiMode.ready,
+              title: 'Workspace is ready',
+              detail: 'Ready',
+              registered: true,
+              workspaceReady: true,
+              cloudConnected: true,
+              workspaceName: 'Office Mac',
+            ),
+            localWorkerRegistry: _FakeWorkerRegistry([]),
+            toolProfileCatalog: catalog,
+            toolProfileReleaseStore: store,
+            credentialStore: _MemoryCredentialStore(),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Workers').first);
+    await tester.pumpAndSettle();
+
+    // ChatGPT is not shown because its profile is unavailable
+    expect(find.text('ChatGPT'), findsNothing);
+    // Gemini is shown because its profile is active and available
+    expect(find.text('Gemini'), findsOneWidget);
+    // Diagnostics are available on the active Gemini worker
+    expect(find.text('Diagnostics'), findsOneWidget);
   });
 
   testWidgets('fixed catalog rows merge local Worker status by type',
@@ -1332,7 +1469,7 @@ void main() {
     expect(find.textContaining('Adapter version'), findsNothing);
     expect(find.textContaining('Signature'), findsNothing);
     expect(find.textContaining('Release channel'), findsNothing);
-    expect(find.byType(ExpansionTile), findsNothing);
+    expect(find.text('Diagnostics'), findsNWidgets(2));
     expect(find.text('Save readiness'), findsNothing);
     expect(find.text('Authentication'), findsNothing);
     expect(
@@ -1350,8 +1487,12 @@ void main() {
     await tester.ensureVisible(find.text('Advanced Diagnostics'));
     await tester.tap(find.text('Advanced Diagnostics'));
     await tester.pumpAndSettle();
-    expect(find.text('Engine & Tool Profiles'), findsOneWidget);
-    await tester.tap(find.text('ChatGPT').last);
+    expect(find.text('Engine & Tool Profiles'), findsNothing);
+
+    await tester.tap(find.text('Workers').first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Diagnostics').first);
+    await tester.tap(find.text('Diagnostics').first);
     await tester.pumpAndSettle();
     expect(find.text('Engine version'), findsOneWidget);
     expect(find.text('1.0.0'), findsWidgets);

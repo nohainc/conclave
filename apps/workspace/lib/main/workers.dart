@@ -4,12 +4,16 @@ class _WorkersTab extends StatefulWidget {
   const _WorkersTab({
     required this.registry,
     this.toolProfileCatalog,
+    this.toolProfileReleaseStore,
+    this.onRollbackToolProfile,
     this.onReadinessCheck,
     super.key,
   });
 
   final LocalWorkerRegistry? registry;
   final ToolProfileCatalogClient? toolProfileCatalog;
+  final ToolProfileReleaseStore? toolProfileReleaseStore;
+  final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
   final Future<void> Function(
       {LocalWorkerProbeMode mode, String? workerTypeId})? onReadinessCheck;
 
@@ -21,6 +25,8 @@ class _WorkersTabState extends State<_WorkersTab> {
   Future<List<LocalWorker>>? _workers;
   final Set<String> _updatingWorkerTypes = {};
   List<LogicalWorkerCatalogEntry> _catalogEntries = const [];
+  Map<String, Map<String, Object?>> _availableProfiles = {};
+  bool _rollingBack = false;
 
   @override
   void initState() {
@@ -32,24 +38,117 @@ class _WorkersTabState extends State<_WorkersTab> {
   Future<void> _loadLogicalWorkerCatalog() async {
     final catalog = widget.toolProfileCatalog;
     if (catalog == null) {
-      if (mounted) setState(() => _catalogEntries = const []);
+      if (mounted) {
+        setState(() {
+          _catalogEntries = const [];
+          _availableProfiles = const {};
+        });
+      }
       return;
     }
     try {
       final cached = await catalog.loadCatalog();
-      if (mounted && cached.isNotEmpty) {
-        setState(() => _catalogEntries = cached);
+      if (cached.isNotEmpty) {
+        await _filterAvailableWorkers(cached);
       }
     } on Object {
       /* A malformed cache is ignored; the signed Cloud response is authoritative. */
     }
     try {
       final current = await catalog.syncCatalog();
-      if (mounted) setState(() => _catalogEntries = current);
-    } on Object {
-      if (mounted && _catalogEntries.isEmpty) {
-        setState(() => _catalogEntries = const []);
+      if (current.isNotEmpty) {
+        await _filterAvailableWorkers(current);
       }
+    } on Object {
+      if (_catalogEntries.isEmpty) {
+        await _filterAvailableWorkers(const []);
+      }
+    }
+  }
+
+  Future<void> _filterAvailableWorkers(
+      List<LogicalWorkerCatalogEntry> entries) async {
+    final store =
+        widget.toolProfileReleaseStore ?? widget.toolProfileCatalog?.store;
+    if (store == null) {
+      if (mounted) {
+        setState(() {
+          _catalogEntries = const [];
+          _availableProfiles = const {};
+        });
+      }
+      return;
+    }
+
+    final workers = await widget.registry?.list() ?? const <LocalWorker>[];
+    final availableEntries = <LogicalWorkerCatalogEntry>[];
+    final availableProfiles = <String, Map<String, Object?>>{};
+
+    for (final entry in entries) {
+      final worker = workers
+          .where((w) => w.workerTypeId == entry.workerTypeId)
+          .firstOrNull;
+      final profile = await _resolveWorkerProfile(entry, worker, store);
+      if (profile != null) {
+        availableEntries.add(entry);
+        availableProfiles[entry.workerTypeId] = profile;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _catalogEntries = availableEntries;
+        _availableProfiles = availableProfiles;
+      });
+    }
+  }
+
+  Future<Map<String, Object?>?> _resolveWorkerProfile(
+    LogicalWorkerCatalogEntry entry,
+    LocalWorker? worker,
+    ToolProfileReleaseStore store,
+  ) async {
+    final definitionId = entry.profileDefinitionId;
+    try {
+      final resolver = ToolProfileResolver(store);
+      final profileState = await store.releaseState(definitionId);
+      var resolution = worker?.toolVersion == null
+          ? await resolver.resolveBootstrapProfile(
+              logicalWorkerTypeId: entry.workerTypeId,
+              profileDefinitionId: definitionId,
+              engineVersion: cliWorkerEngineVersion,
+              channel: profileState.selectedChannel,
+            )
+          : await resolver.resolve(
+              logicalWorkerTypeId: entry.workerTypeId,
+              profileDefinitionId: definitionId,
+              engineVersion: cliWorkerEngineVersion,
+              providerCliVersion: worker!.toolVersion!,
+              channel: profileState.selectedChannel,
+            );
+      if (!resolution.isAvailable && worker?.toolVersion != null) {
+        resolution = await resolver.resolveBootstrapProfile(
+          logicalWorkerTypeId: entry.workerTypeId,
+          profileDefinitionId: definitionId,
+          engineVersion: cliWorkerEngineVersion,
+          channel: profileState.selectedChannel,
+        );
+      }
+      if (!resolution.isAvailable) {
+        return null;
+      }
+      return {
+        'displayName': entry.displayName,
+        'definitionId': definitionId,
+        'source': resolution.source.name,
+        'activeVersion': profileState.activeVersion,
+        'lastKnownGoodVersion': profileState.lastKnownGoodVersion,
+        'channel': profileState.selectedChannel,
+        if (resolution.release != null)
+          'releaseVersion': resolution.release!.releaseVersion,
+      };
+    } on Object {
+      return null;
     }
   }
 
@@ -57,13 +156,42 @@ class _WorkersTabState extends State<_WorkersTab> {
   void didUpdateWidget(covariant _WorkersTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.registry != widget.registry) _loadWorkers();
-    if (oldWidget.toolProfileCatalog != widget.toolProfileCatalog) {
+    if (oldWidget.toolProfileCatalog != widget.toolProfileCatalog ||
+        oldWidget.toolProfileReleaseStore != widget.toolProfileReleaseStore) {
       unawaited(_loadLogicalWorkerCatalog());
     }
   }
 
   void _loadWorkers() {
     _workers = widget.registry?.list();
+    if (widget.toolProfileCatalog != null) {
+      unawaited(_loadLogicalWorkerCatalog());
+    }
+  }
+
+  Future<void> _rollbackToolProfile(String workerTypeId) async {
+    if (_rollingBack) return;
+    setState(() => _rollingBack = true);
+    var passed = false;
+    try {
+      passed = await widget.onRollbackToolProfile?.call(workerTypeId) ?? false;
+    } on Object {
+      passed = false;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _rollingBack = false;
+        });
+        unawaited(_loadLogicalWorkerCatalog());
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(passed
+                ? 'Profile rollback passed its passive probe.'
+                : 'Rollback validation failed. The current Profile was kept.'),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _setActivationState(
@@ -113,7 +241,23 @@ class _WorkersTabState extends State<_WorkersTab> {
             return Column(
               children: [
                 for (final entry in _catalogEntries)
-                  _buildLogicalWorkerCard(entry, records, canConfigure, theme),
+                  _buildLogicalWorkerCard(
+                    entry,
+                    records,
+                    canConfigure,
+                    theme,
+                    _availableProfiles[entry.workerTypeId],
+                  ),
+                if (_catalogEntries.isEmpty && snapshot.hasData)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'No available Workers with active profiles found.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
                 if (snapshot.hasError)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
@@ -127,7 +271,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                   const Padding(
                     padding: EdgeInsets.only(top: 4),
                     child: CopyableMessageText(
-                      'Local Worker setup is unavailable. Restart Workspace and check Advanced Diagnostics.',
+                      'Local Worker setup is unavailable. Restart Workspace and check Diagnostics.',
                     ),
                   ),
               ],
@@ -143,6 +287,7 @@ class _WorkersTabState extends State<_WorkersTab> {
     List<LocalWorker> records,
     bool canConfigure,
     ThemeData theme,
+    Map<String, Object?>? profile,
   ) {
     final worker = records
         .where((record) => record.workerTypeId == entry.workerTypeId)
@@ -164,59 +309,170 @@ class _WorkersTabState extends State<_WorkersTab> {
       key: Key('worker-catalog-${entry.workerTypeId}'),
       margin: const EdgeInsets.only(bottom: 12),
       color: theme.colorScheme.surfaceContainerLow,
-      child: ListTile(
-        leading: Icon(_workerTypeIcon(entry.workerTypeId),
-            color: theme.colorScheme.primary),
-        title: Text(entry.displayName,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Wrap(spacing: 6, runSpacing: 4, children: [
-                for (final badge in badges) _CatalogStatusBadge(label: badge)
-              ]),
-              Padding(
-                  padding: const EdgeInsets.only(top: 3),
-                  child: Text(
-                    '$providerToolLabel ${worker?.toolVersion ?? 'version not detected'}',
-                    style: theme.textTheme.bodySmall,
-                  )),
-            ]),
-        trailing: pending
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2))
-            : worker == null
-                ? TextButton(
-                    onPressed: canConfigure
-                        ? () => _configureCatalogWorker(entry)
-                        : null,
-                    child: const Text('Configure'))
-                : Wrap(
-                    spacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                        TextButton(
-                            onPressed: canConfigure
-                                ? () => _testCatalogWorker(entry, worker)
-                                : null,
-                            child: const Text('Test')),
-                        Tooltip(
-                            message: worker.activationState ==
-                                    LocalWorkerActivationState.enabled
-                                ? 'Disable'
-                                : 'Enable',
-                            child: Switch(
-                              value: worker.activationState ==
-                                  LocalWorkerActivationState.enabled,
-                              onChanged: canConfigure
-                                  ? (enabled) =>
-                                      _setActivationState(worker, enabled)
-                                  : null,
-                            )),
-                      ]),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: Icon(_workerTypeIcon(entry.workerTypeId),
+                color: theme.colorScheme.primary),
+            title: Text(entry.displayName,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Wrap(spacing: 6, runSpacing: 4, children: [
+                    for (final badge in badges) _CatalogStatusBadge(label: badge)
+                  ]),
+                  Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        '$providerToolLabel ${worker?.toolVersion ?? 'version not detected'}',
+                        style: theme.textTheme.bodySmall,
+                      )),
+                ]),
+            trailing: pending
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : worker == null
+                    ? TextButton(
+                        onPressed: canConfigure
+                            ? () => _configureCatalogWorker(entry)
+                            : null,
+                        child: const Text('Configure'))
+                    : Wrap(
+                        spacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                            TextButton(
+                                onPressed: canConfigure
+                                    ? () => _testCatalogWorker(entry, worker)
+                                    : null,
+                                child: const Text('Test')),
+                            Tooltip(
+                                message: worker.activationState ==
+                                        LocalWorkerActivationState.enabled
+                                    ? 'Disable'
+                                    : 'Enable',
+                                child: Switch(
+                                  value: worker.activationState ==
+                                      LocalWorkerActivationState.enabled,
+                                  onChanged: canConfigure
+                                      ? (enabled) =>
+                                          _setActivationState(worker, enabled)
+                                      : null,
+                                )),
+                          ]),
+          ),
+          Theme(
+            data: theme.copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              leading: const Icon(Icons.analytics_outlined, size: 18),
+              title: Text(
+                'Diagnostics',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              children: [
+                _DetailRow(
+                  label: 'Workspace version',
+                  value: conclaveWorkspaceAppVersion,
+                ),
+                _DetailRow(
+                  label: 'Engine version',
+                  value: cliWorkerEngineVersion,
+                ),
+                if (profile != null) ...[
+                  _DetailRow(
+                    label: 'Integration',
+                    value:
+                        '${profile['definitionId']}@${profile['releaseVersion'] ?? 'unavailable'}',
+                  ),
+                  _DetailRow(
+                    label: 'Profile resolution',
+                    value: '${profile['source']}',
+                  ),
+                  _DetailRow(
+                    label: 'Profile channel',
+                    value: '${profile['channel']}',
+                  ),
+                  _DetailRow(
+                    label: 'Active Profile',
+                    value: '${profile['activeVersion'] ?? 'None'}',
+                  ),
+                  _DetailRow(
+                    label: 'Last-known-good Profile',
+                    value: '${profile['lastKnownGoodVersion'] ?? 'None'}',
+                  ),
+                  if (profile['lastKnownGoodVersion'] is int)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 138, top: 6),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: _rollingBack ||
+                                  widget.onRollbackToolProfile == null
+                              ? null
+                              : () => _rollbackToolProfile(entry.workerTypeId),
+                          icon: _rollingBack
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                )
+                              : const Icon(Icons.restore, size: 16),
+                          label: Text(
+                            'Validate and roll back to Profile ${profile['lastKnownGoodVersion']}',
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+                _DetailRow(
+                  label: 'Worker Type ID',
+                  value: entry.workerTypeId,
+                ),
+                _DetailRow(
+                  label: 'Provider CLI',
+                  value: worker?.toolName ?? entry.providerToolName,
+                ),
+                _DetailRow(
+                  label: 'Provider CLI version',
+                  value: worker?.toolVersion ?? 'Not detected',
+                ),
+                _DetailRow(
+                  label: 'Provider tool path (local only)',
+                  value: worker?.toolPath ?? 'Not resolved',
+                ),
+                _DetailRow(
+                  label: 'Readiness',
+                  value: worker == null
+                      ? 'setup_required'
+                      : '${worker.readinessState.wireValue}${worker.readinessIssueCode == null ? '' : ' · ${worker.readinessIssueCode}'}',
+                ),
+                _DetailRow(
+                  label: 'Last Test',
+                  value: _lastLiveTestLabel(worker),
+                ),
+                if (worker?.lastLiveTestDetails != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 138, bottom: 8),
+                    child: CopyableMessageText(
+                      worker!.lastLiveTestDetails!,
+                      style: theme.textTheme.bodySmall,
+                      tooltip: 'Copy Worker diagnostic',
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -256,7 +512,7 @@ class _WorkersTabState extends State<_WorkersTab> {
     } on Object {
       if (mounted) {
         showCopyableErrorSnackBar(context,
-            'Could not complete setup for ${entry.displayName}. Check Advanced Diagnostics.');
+            'Could not complete setup for ${entry.displayName}. Check Diagnostics.');
       }
     } finally {
       _updatingWorkerTypes.remove(entry.workerTypeId);
