@@ -4,11 +4,7 @@ import {
   provisionConclaveUser,
   recordAuthAuditEvent,
 } from "../auth/index.js";
-import {
-  extractBearerToken,
-  hashToken,
-  timingSafeEqual,
-} from "@conclave/security";
+import { extractBearerToken, hashToken } from "@conclave/security";
 import { HttpError, json, recordAudit, securityContext } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
 
@@ -113,11 +109,6 @@ export function randomSecret(prefix: string): string {
   return `${prefix}${btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "")}`;
 }
 
-export function randomUserCode(): string {
-  const bytes = crypto.getRandomValues(new Uint32Array(1));
-  return String((bytes[0] ?? 0) % 100_000_000).padStart(8, "0");
-}
-
 export async function handleCreateDesktopAuthIntent(
   request: Request,
   env: SecurityEnv,
@@ -127,7 +118,13 @@ export async function handleCreateDesktopAuthIntent(
     contractVersion?: unknown;
   };
   if (
-    (body.contractVersion !== "1.0" && body.contractVersion !== "1.1") ||
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.keys(body).some(
+      (key) => !["clientName", "contractVersion"].includes(key),
+    ) ||
+    body.contractVersion !== "1.1" ||
     typeof body.clientName !== "string" ||
     !body.clientName.trim()
   ) {
@@ -137,21 +134,16 @@ export async function handleCreateDesktopAuthIntent(
     );
   }
   const intentId = crypto.randomUUID();
-  const legacyCodeFlow = body.contractVersion === "1.0";
-  const userCode = legacyCodeFlow
-    ? randomUserCode()
-    : randomSecret("conclave_dai_");
   const pollToken = randomSecret("conclave_dap_");
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + 10 * 60_000);
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO desktop_auth_intents
-       (id, user_code_hash, poll_token_hash, client_name, created_at, expires_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+       (id, poll_token_hash, client_name, created_at, expires_at)
+     VALUES (?1, ?2, ?3, ?4, ?5)`,
   )
     .bind(
       intentId,
-      await hashToken(userCode),
       await hashToken(pollToken),
       body.clientName.trim().slice(0, 128),
       createdAt.toISOString(),
@@ -164,7 +156,6 @@ export async function handleCreateDesktopAuthIntent(
   return json(
     {
       intentId,
-      ...(legacyCodeFlow ? { userCode } : {}),
       pollToken,
       verificationUrl: verificationUrl.toString(),
       expiresAt: expiresAt.toISOString(),
@@ -295,48 +286,16 @@ export async function handleApproveDesktopAuthIntent(
       "Sign in to Conclave AX before approving Workspace sign-in",
     );
   await provisionConclaveUser(env.CONCLAVE_DB, identity);
-  const body = (await request.json().catch(() => ({}))) as {
-    userCode?: unknown;
-  };
-  const now = new Date().toISOString();
-  // Older desktop releases still submit their displayed code. New approvals
-  // omit it: the authenticated browser session plus the unguessable intent URL
-  // and explicit approval action bind the request to the signed-in account.
-  if (body.userCode !== undefined) {
-    if (typeof body.userCode !== "string" || !/^\d{8}$/.test(body.userCode)) {
-      throw new HttpError(400, "The legacy desktop sign-in code is invalid");
-    }
-    const attempt = await env.CONCLAVE_DB.prepare(
-      `UPDATE desktop_auth_intents SET approval_attempts = approval_attempts + 1
-        WHERE id = ?1 AND approved_at IS NULL AND claimed_at IS NULL
-          AND denied_at IS NULL AND expires_at > ?2 AND approval_attempts < 5`,
-    )
-      .bind(intentId, now)
-      .run();
-    if ((attempt.meta?.changes ?? 0) !== 1) {
-      throw new HttpError(
-        409,
-        "This sign-in request is invalid, expired, or unavailable",
-      );
-    }
-    const intent = await env.CONCLAVE_DB.prepare(
-      "SELECT user_code_hash AS userCodeHash FROM desktop_auth_intents WHERE id = ?1",
-    )
-      .bind(intentId)
-      .first<{ userCodeHash: string }>();
-    if (
-      !intent ||
-      !timingSafeEqual(intent.userCodeHash, await hashToken(body.userCode))
-    ) {
-      await env.CONCLAVE_DB.prepare(
-        `UPDATE desktop_auth_intents SET denied_at = ?1
-          WHERE id = ?2 AND approval_attempts >= 5 AND approved_at IS NULL`,
-      )
-        .bind(now, intentId)
-        .run();
-      throw new HttpError(409, "The code does not match this sign-in request");
-    }
+  const body: unknown = await request.json().catch(() => ({}));
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.keys(body).length !== 0
+  ) {
+    throw new HttpError(400, "Desktop approval does not accept request fields");
   }
+  const now = new Date().toISOString();
   const result = await env.CONCLAVE_DB.prepare(
     `UPDATE desktop_auth_intents
         SET approved_at = ?1, approved_user_id = ?2

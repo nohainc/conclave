@@ -254,7 +254,6 @@ void main() {
             'status': 'active',
             'brief': 'Improve authentication.',
             'primaryWorkspace': 'Workspace One',
-            'currentCheckpoint': 'Not started',
             'queueStatus': 'Idle',
           },
         ],

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-HOST_DIR="$ROOT/apps/host"
+WORKSPACE_DIR="$ROOT/apps/workspace"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "Conclave Workspace macOS tests must run on macOS." >&2
@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Running Conclave Workspace macOS analysis and tests"
-cd "$HOST_DIR"
+cd "$WORKSPACE_DIR"
 flutter pub get
 echo "Running static analysis..."
 flutter analyze

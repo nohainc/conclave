@@ -333,21 +333,11 @@ export async function handleDeleteProject(
           OR depends_on_task_id IN (${workflowTaskFilter})`,
       `DELETE FROM workflow_tasks
        WHERE work_request_id IN (${workRequestFilter})`,
-      `DELETE FROM workstream_current_checkpoints
-       WHERE workstream_id IN (${workstreamFilter})`,
-      `DELETE FROM workstream_diff_artifacts
-       WHERE workstream_id IN (${workstreamFilter})`,
-      `DELETE FROM workstream_checkpoints
-       WHERE workstream_id IN (${workstreamFilter})`,
       "DELETE FROM worker_assignments WHERE project_id = ?1",
       "DELETE FROM runs WHERE project_id = ?1",
       `DELETE FROM work_requests
        WHERE workstream_id IN (${workstreamFilter})`,
-      `DELETE FROM workstream_checkouts
-       WHERE workstream_id IN (${workstreamFilter})`,
       `DELETE FROM workstream_execution_policies
-       WHERE workstream_id IN (${workstreamFilter})`,
-      `DELETE FROM workstream_memberships
        WHERE workstream_id IN (${workstreamFilter})`,
       `DELETE FROM discussion_messages
        WHERE workstream_id IN (${workstreamFilter})`,

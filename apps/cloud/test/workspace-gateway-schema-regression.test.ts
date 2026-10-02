@@ -163,8 +163,8 @@ describe("Workspace Gateway active-schema regression", () => {
     database
       .prepare(
         `INSERT INTO workspace_runtime_identities
-         (id, workspace_id, credential_key_ref, credential_token_hash, created_at)
-         VALUES (?, ?, 'test-key-ref', ?, '2026-01-01')`,
+         (id, workspace_id, credential_token_hash, installation_id, created_at)
+         VALUES (?, ?, ?, 'install_22222222-2222-4222-8222-222222222222', '2026-01-01')`,
       )
       .run(runtimeId, workspaceId, await hashToken(runtimeToken));
 
@@ -324,8 +324,8 @@ describe("Workspace Gateway active-schema regression", () => {
     database
       .prepare(
         `INSERT INTO workspace_runtime_identities
-         (id, workspace_id, credential_key_ref, credential_token_hash, created_at)
-         VALUES (?, ?, 'test-key-ref', ?, '2026-01-01')`,
+         (id, workspace_id, credential_token_hash, installation_id, created_at)
+         VALUES (?, ?, ?, 'install_11111111-1111-4111-8111-111111111111', '2026-01-01')`,
       )
       .run(
         failedRuntimeId,

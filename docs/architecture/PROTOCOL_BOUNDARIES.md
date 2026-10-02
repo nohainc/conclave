@@ -86,7 +86,7 @@ frames.
 
 The current implementation is named
 `conclave.workspace-runtime-protocol` and is defined in
-`packages/host-protocol/src/workspace-runtime.ts`. Keep its runtime identity,
+`packages/workspace-runtime-protocol/src/workspace-runtime.ts`. Keep its runtime identity,
 authentication, transport negotiation, and assignment envelopes inside this
 boundary.
 
@@ -180,12 +180,12 @@ unchanged across a boundary.
   `apps/app/lib/src/realtime/realtime_client.dart`; Cloud
   `apps/cloud/src/routes/handlers.ts` and `apps/cloud/src/realtime-gateway.ts`.
 - Workspace Runtime Protocol: Workspace
-  `apps/host/lib/cloud_connection.dart`; schema
-  `packages/host-protocol/src/workspace-runtime.ts`; Cloud
+  `apps/workspace/lib/cloud_connection.dart`; schema
+  `packages/workspace-runtime-protocol/src/workspace-runtime.ts`; Cloud
   `apps/cloud/src/workspace-gateway.ts`.
 - Local Worker Protocol 4.0: implemented by the Workspace supervisor
-  `apps/host/lib/cli_worker_engine_supervisor.dart`, assignment handler
-  `apps/host/lib/worker_executor.dart`, generic Engine
+  `apps/workspace/lib/cli_worker_engine_supervisor.dart`, assignment handler
+  `apps/workspace/lib/worker_executor.dart`, generic Engine
   `engines/cli_worker/lib/src/cli_worker_engine.dart`, and shared schema
   `packages/conclave_worker_protocol`.
 - Canonical domain model: domain entities in `packages/core/src` and the

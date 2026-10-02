@@ -21,7 +21,6 @@ void main() {
     status: 'active',
     brief: 'Make login reliable.',
     primaryWorkspace: 'Mac Workspace',
-    currentCheckpoint: 'Not started',
     queueStatus: 'Idle',
   );
 
@@ -67,7 +66,6 @@ void main() {
             workstream: workstream,
             onBackToProject: () {},
             onArchive: () {},
-            onProvisionCheckout: () {},
           ),
         ),
       ),

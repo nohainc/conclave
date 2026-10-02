@@ -13,7 +13,7 @@ enum AxNotificationPriority { high, normal, low }
 enum AxNotificationTarget { run, workspaces, workspace }
 
 /// Filters realtime noise from actionable team notifications. Progress,
-/// discussion, queue, checkout, and lease updates update read models but do
+/// discussion, queue, and lease updates update read models but do
 /// not interrupt the user.
 bool isMeaningfulRealtimeNotification(String type) => {
       'run.input_required',

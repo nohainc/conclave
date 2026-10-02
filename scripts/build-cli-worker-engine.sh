@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENGINE_DIR="$ROOT/engines/cli_worker"
-OUTPUT_DIR="$ROOT/apps/host/assets/engines"
+OUTPUT_DIR="$ROOT/apps/workspace/assets/engines"
 DART_BIN="${CONCLAVE_DART_EXECUTABLE:-$(command -v dart || true)}"
 
 if [[ -z "$DART_BIN" ]]; then

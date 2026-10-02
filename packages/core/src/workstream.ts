@@ -75,11 +75,6 @@ export interface WorkRequest {
   readonly snapshot?: WorkRequestSnapshot;
   readonly status: WorkRequestStatus;
   readonly primaryWorkspaceId: string | null;
-  /**
-   * Historical compatibility field. New Work Requests resolve their local
-   * directory from Project ID + Workstream ID and must leave this null.
-   */
-  readonly checkoutId?: string | null;
   readonly input: Readonly<Record<string, unknown>>;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -334,36 +329,7 @@ export function builtinWorkflowReference(
 export interface WorkstreamExecutionPolicy {
   readonly mode: WorkRequestMode;
   readonly primaryWorkspaceId: string | null;
-  /** Retained for persisted policy compatibility; new policies set false. */
-  readonly requireCheckout: boolean;
   readonly maxConcurrentWorkRequests: number;
-}
-
-export type WorkstreamCheckoutStatus =
-  "provisioning" | "ready" | "stale" | "deleted";
-
-export interface WorkstreamCheckout {
-  /** Stable identity for a Workspace checkout. */
-  readonly id: string;
-  readonly workstreamId: string;
-  readonly workspaceId: string;
-  readonly repositoryId: string;
-  readonly revision: string;
-  readonly relativePath: string;
-  readonly status: WorkstreamCheckoutStatus;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
-
-export interface WorkstreamCheckpoint {
-  readonly id: string;
-  readonly workstreamId: string;
-  readonly checkoutId: string;
-  readonly sequence: number;
-  readonly revision: string;
-  readonly summary: string;
-  readonly createdByWorkRequestId: string;
-  readonly createdAt: string;
 }
 
 export type WorkstreamExecutionLeaseStatus = "active" | "released" | "expired";
@@ -371,7 +337,6 @@ export type WorkstreamExecutionLeaseStatus = "active" | "released" | "expired";
 export interface WorkstreamExecutionLease {
   readonly id: string;
   readonly workstreamId: string;
-  readonly checkoutId: string;
   readonly workRequestId: string;
   readonly workspaceId: string;
   readonly fencingToken: number;
@@ -592,11 +557,6 @@ export function validateWorkRequest(
       );
     }
   }
-  if (request.checkoutId) {
-    throw new DomainInvariantError(
-      "WorkRequest cannot use the historical Checkout control plane",
-    );
-  }
 }
 
 export function validateBuiltinWorkflowDefinition(
@@ -721,55 +681,22 @@ export function validateWorkstreamExecutionPolicy(
   positive(policy.maxConcurrentWorkRequests, "maxConcurrentWorkRequests");
 }
 
-export function validateWorkstreamCheckout(checkout: WorkstreamCheckout): void {
-  required(checkout.id, "WorkstreamCheckout id");
-  required(checkout.workstreamId, "WorkstreamCheckout workstreamId");
-  required(checkout.workspaceId, "WorkstreamCheckout workspaceId");
-  required(checkout.repositoryId, "WorkstreamCheckout repositoryId");
-  required(checkout.revision, "WorkstreamCheckout revision");
-  if (
-    checkout.relativePath.startsWith("/") ||
-    checkout.relativePath.includes("..")
-  ) {
-    throw new DomainInvariantError(
-      "WorkstreamCheckout path must be relative and contained",
-    );
-  }
-}
-
-export function validateWorkstreamCheckpoints(
-  checkout: WorkstreamCheckout,
-  checkpoints: readonly WorkstreamCheckpoint[],
-): void {
-  const relevant = checkpoints
-    .filter((checkpoint) => checkpoint.checkoutId === checkout.id)
-    .sort((left, right) => left.sequence - right.sequence);
-  relevant.forEach((checkpoint, index) => {
-    if (
-      checkpoint.workstreamId !== checkout.workstreamId ||
-      checkpoint.sequence !== index + 1
-    ) {
-      throw new DomainInvariantError(
-        "Workstream checkpoint sequence must be linear per Checkout",
-      );
-    }
-  });
-}
-
 export function validateWorkstreamLeases(
-  checkout: WorkstreamCheckout,
+  workstream: Pick<Workstream, "id">,
   leases: readonly WorkstreamExecutionLease[],
 ): void {
   const active = leases.filter(
-    (lease) => lease.checkoutId === checkout.id && lease.status === "active",
+    (lease) =>
+      lease.workstreamId === workstream.id && lease.status === "active",
   );
   if (active.length > 1) {
     throw new DomainInvariantError(
-      "A Workstream Checkout can have only one active execution lease",
+      "A Workstream can have only one active execution lease",
     );
   }
   for (const lease of leases) {
     required(lease.id, "WorkstreamExecutionLease id");
+    required(lease.workstreamId, "WorkstreamExecutionLease workstreamId");
     positive(lease.fencingToken, "WorkstreamExecutionLease fencingToken");
   }
 }

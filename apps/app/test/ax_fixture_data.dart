@@ -120,11 +120,6 @@ class AxFixtureDataSource implements AxDataSource {
   Future<void> deleteProject({required String projectId}) async {}
 
   @override
-  Future<void> provisionWorkstreamCheckout({
-    required String workstreamId,
-    String? workspaceId,
-  }) async {}
-
   @override
   Future<List<AxDiscussionMessage>> loadDiscussionMessages({
     required String workstreamId,
@@ -296,7 +291,6 @@ class AxFixtureDataSource implements AxDataSource {
   Future<void> requestProjectWorkspace({
     required String projectId,
     required String workspaceId,
-    List<String> repositoryMappings = const [],
   }) async {}
 
   @override
@@ -322,7 +316,6 @@ class AxFixtureDataSource implements AxDataSource {
         status: 'active',
         brief: '',
         primaryWorkspace: 'Not selected',
-        currentCheckpoint: 'Not started',
         queueStatus: 'Idle',
       );
 
@@ -341,7 +334,6 @@ class AxFixtureDataSource implements AxDataSource {
         status: status ?? 'active',
         brief: '',
         primaryWorkspace: 'Not selected',
-        currentCheckpoint: 'Not started',
         queueStatus: 'Idle',
         workConfig: workConfig ??
             const {
@@ -479,7 +471,7 @@ class EmptyWorkspaceFixtureDataSource extends AxFixtureDataSource {
   }
 
   AxSnapshot _snapshot() {
-    final project = AxProject(
+    const project = AxProject(
       id: 'project-created',
       name: 'My first project',
       branch: '',

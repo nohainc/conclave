@@ -86,7 +86,7 @@ latter speaks only the Workspace Runtime Protocol with Conclave Workspace.
 
 ## 3. Conclave Workspace
 
-**Path:** `apps/host`  
+**Path:** `apps/workspace`
 **User-facing product name:** Conclave Workspace
 
 **Technology**

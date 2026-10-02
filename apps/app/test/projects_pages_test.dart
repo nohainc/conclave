@@ -149,12 +149,10 @@ void main() {
               status: 'active',
               brief: 'Understand the problem.',
               primaryWorkspace: 'Not selected',
-              currentCheckpoint: 'Not started',
               queueStatus: 'Idle',
             ),
             onBackToProject: _noop,
             onArchive: _noop,
-            onProvisionCheckout: _noop,
             initialTab: 1,
           ),
         ),
@@ -201,14 +199,12 @@ void main() {
               status: 'active',
               brief: 'Implement the requested change.',
               primaryWorkspace: 'Workspace One',
-              currentCheckpoint: 'main',
               queueStatus: 'Idle',
               canExecuteWork: true,
             ),
             dataSource: _WorkFormDataSource(),
             onBackToProject: _noop,
             onArchive: _noop,
-            onProvisionCheckout: _noop,
             onRunWork: (work, workflowId, attachments) async {
               submittedWork = work;
               return 'request-1';
@@ -258,14 +254,12 @@ void main() {
               status: 'active',
               brief: 'Implement the requested change.',
               primaryWorkspace: 'Workspace One',
-              currentCheckpoint: 'main',
               queueStatus: 'Idle',
             ),
             dataSource: dataSource,
             realtimeEvents: events.stream,
             onBackToProject: _noop,
             onArchive: _noop,
-            onProvisionCheckout: _noop,
             initialTab: 1,
           ),
         ),
@@ -311,12 +305,10 @@ void main() {
               status: 'active',
               brief: 'Understand the problem.',
               primaryWorkspace: 'Workspace One',
-              currentCheckpoint: 'main',
               queueStatus: 'Idle',
             ),
             onBackToProject: _noop,
             onArchive: _noop,
-            onProvisionCheckout: _noop,
           ),
         ),
       ),
@@ -387,7 +379,6 @@ void main() {
       status: 'active',
       brief: '',
       primaryWorkspace: 'Workspace One',
-      currentCheckpoint: 'main',
       queueStatus: 'Idle',
     );
     const ws2 = AxWorkstream(
@@ -398,7 +389,6 @@ void main() {
       status: 'active',
       brief: '',
       primaryWorkspace: 'Workspace One',
-      currentCheckpoint: 'main',
       queueStatus: 'Idle',
     );
 
@@ -415,7 +405,6 @@ void main() {
             currentUserId: 'user-owner',
             onBackToProject: _noop,
             onArchive: _noop,
-            onProvisionCheckout: _noop,
           ),
         ),
       ),
@@ -445,7 +434,6 @@ void main() {
               currentUserId: 'user-owner',
               onBackToProject: _noop,
               onArchive: _noop,
-              onProvisionCheckout: _noop,
             );
           },
         ),
@@ -472,7 +460,6 @@ void main() {
       status: 'active',
       brief: '',
       primaryWorkspace: 'MacBook',
-      currentCheckpoint: 'main',
       queueStatus: 'Idle',
     );
     const ws2 = AxWorkstream(
@@ -483,7 +470,6 @@ void main() {
       status: 'active',
       brief: '',
       primaryWorkspace: 'MacBook',
-      currentCheckpoint: 'main',
       queueStatus: 'Idle',
     );
     const ws3 = AxWorkstream(
@@ -494,7 +480,6 @@ void main() {
       status: 'active',
       brief: '',
       primaryWorkspace: 'MacBook',
-      currentCheckpoint: 'main',
       queueStatus: 'Idle',
     );
 
@@ -686,7 +671,6 @@ void main() {
                   status: 'active',
                   brief: '',
                   primaryWorkspace: '',
-                  currentCheckpoint: '',
                   queueStatus: 'idle',
                 ),
               ],
@@ -923,7 +907,6 @@ class _DuplicateTestDataSource extends AxFixtureDataSource {
       status: 'active',
       brief: brief ?? '',
       primaryWorkspace: primaryWorkspace ?? '',
-      currentCheckpoint: '',
       queueStatus: 'idle',
     );
   }
@@ -932,7 +915,6 @@ class _DuplicateTestDataSource extends AxFixtureDataSource {
   Future<void> requestProjectWorkspace({
     required String projectId,
     required String workspaceId,
-    List<String> repositoryMappings = const [],
   }) async {
     onRequestWorkspace?.call();
   }

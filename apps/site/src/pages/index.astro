@@ -5,8 +5,8 @@ import AccountPrivacyDiagram from "../components/AccountPrivacyDiagram.astro";
 import Container from "../components/Container.astro";
 import FeatureCard from "../components/FeatureCard.astro";
 import HeroArchitecture from "../components/HeroArchitecture.astro";
-import HostTopology from "../components/HostTopology.astro";
-import HostQuickstart from "../components/HostQuickstart.astro";
+import WorkspaceTopology from "../components/WorkspaceTopology.astro";
+import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
 import InteractiveWorkflow from "../components/InteractiveWorkflow.astro";
 import IsolationModel from "../components/IsolationModel.astro";
 import QualityFlow from "../components/QualityFlow.astro";
@@ -64,7 +64,7 @@ import WorkstreamModel from "../components/WorkstreamModel.astro";
             description="A Project brings people together. Workstreams keep each feature, investigation, or delivery thread focused, with human discussion and AI execution connected but deliberately separate."
           />
           <div class="quality-points">
-            <span>Shared context</span><span>Discuss</span><span>Work Requests</span><span>Checkpoints</span><span>Clear ownership</span>
+            <span>Shared context</span><span>Discuss</span><span>Work Requests</span><span>Execution history</span><span>Clear ownership</span>
           </div>
         </div>
         <WorkstreamModel />
@@ -111,7 +111,7 @@ import WorkstreamModel from "../components/WorkstreamModel.astro";
           <SectionHeader
             eyebrow="Safe parallel work"
             title="Run multiple Workstreams without sharing one mutable folder."
-            description="Each stateful Workstream uses its own managed checkout on a Primary Workspace. Different Workstreams can run in parallel, while mutating work inside one Workstream is serialized to keep the environment deterministic."
+            description="Each stateful Workstream uses its own ID-derived directory on a Primary Workspace. Different Workstreams can run in parallel, while a runtime lease serializes mutations within one Workstream."
           />
           <p class="section-intro">The result is practical team concurrency without turning your development machine into a distributed merge problem.</p>
         </div>
@@ -136,21 +136,21 @@ import WorkstreamModel from "../components/WorkstreamModel.astro";
 
   <Section>
     <Container>
-      <div class="host-section" data-site-event="section.workspace_reached">
+      <div class="workspace-section" data-site-event="section.workspace_reached">
         <div>
           <SectionHeader
             eyebrow="Workspaces"
             title="Bring execution to the machines you control."
             description="A Workspace represents one execution environment. It owns local Worker installations, repository access, runtime capacity, and local credential material."
           />
-          <p class="host-section__copy">Projects do not inherit access to a machine. A Workspace is usable only through an explicit Project grant with bounded permissions.</p>
-          <div class="host-platforms"><span>macOS</span><span>Windows</span><span>Linux</span></div>
+          <p class="workspace-section__copy">Projects do not inherit access to a machine. A Workspace is usable only through an explicit Project grant with bounded permissions.</p>
+          <div class="workspace-platforms"><span>macOS</span><span>Windows</span><span>Linux</span></div>
           <div class="actions"><Button href="https://app.conclaveax.com" label="Open Conclave AX →" /></div>
         </div>
-        <HostTopology />
+        <WorkspaceTopology />
       </div>
       <div style="margin-top: var(--space-8);">
-        <HostQuickstart />
+        <WorkspaceQuickstart />
       </div>
     </Container>
   </Section>

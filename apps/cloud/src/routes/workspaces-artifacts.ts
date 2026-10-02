@@ -1,34 +1,15 @@
-import { logStructured, requestIdFor } from "../observability.js";
 import { MAX_ARTIFACT_UPLOAD_BYTES } from "./handlers.js";
-import { SENSITIVE_OPERATIONS } from "../auth/index.js";
-import {
-  extractBearerToken,
-  hashToken,
-  computePackageDigest,
-  authorizeProjectMembership,
-  authorizeWorkspaceOwner,
-} from "@conclave/security";
+
+import { computePackageDigest } from "@conclave/security";
 import { createEventPublisher } from "../event-publisher.js";
 import {
   HttpError,
   artifactMetadata,
   artifactName,
   authorizeRequest,
-  createWorkspaceProjectGrant,
-  disconnectWorkspaceRuntime,
-  findDesktopHumanSession,
-  getWorkspaceGatewayStatus,
-  grantStepUpIfRequired,
   json,
-  loadWorkspaceProjectGrant,
   parseJson,
   recordAudit,
-  recordPairingAuditEvent,
-  requireRecentStepUp,
-  requireWorkspaceContext,
-  requiredString,
-  securityContext,
-  workspaceProjectGrantMetadata,
   workspaceOwnerContext,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";

@@ -22,7 +22,7 @@ The default layout is:
     Work/        Workstream working directories (Work Root)
     Updates/     staged Workspace updates
 ~/Library/Logs/Conclave Workspace/
-    host.log
+    workspace.log
 ```
 
 The local Worker registry contains Worker IDs, catalog type IDs, activation,
@@ -34,8 +34,9 @@ local Worker registry; setup recreates slots from the catalog.
 Runtime credentials remain in macOS Keychain. Provider sign-in remains owned by
 the installed provider CLI and is not copied into Workspace state. Credentials
 are not stored in this directory, copied into connection URL parameters, or
-included in diagnostics. Runtime authentication is sent in the WebSocket
-authorization header. `--data-dir` and `CONCLAVE_HOST_DATA_DIR` remain
+included in diagnostics. Runtime authentication uses the authorization header
+for WebSocket and the bearer authorization header for HTTPS fallback.
+`--data-dir` and `CONCLAVE_WORKSPACE_DATA_DIR` remain
 supported and keep state, updates, and logs colocated with the explicit
 override.
 
@@ -44,15 +45,11 @@ runtime credential. Versioned lifecycle preferences store only desired runtime s
 login-item and lock settings, and non-authoritative owner display metadata;
 they never contain bearer credentials.
 
-At first launch after the macOS layout change, Workspace copies missing
-registration and runtime state from `~/.conclave-host`, excluding the local
-Worker registry, old Worker packages, adapter packages, and work directories.
-It moves update and log directories when the new destination is empty, and
-moves the former default Work Root only when the new location is absent.
-Workspace never deletes Work Root. A
-migration marker makes subsequent launches idempotent. If an older Workspace
-process still holds the legacy runtime lock, close it and reopen the updated
-app to retry migration.
+Workspace initializes fresh local runtime state under the Workspace-owned state
+directory. It does not import pre-Workspace registration, Worker registry, or
+update files. The former default Work Root is moved to the Workspace location
+only when that destination is absent; if both locations exist, both remain
+untouched. Workspace never deletes Work Root.
 
 ## Connection stages
 
@@ -91,7 +88,7 @@ current Workspace owner; do not reset or replace local identity. Disconnect
 preserves owner binding, while Release is the explicit ownership transition.
 See the [lifecycle troubleshooting and production validation runbook](WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md).
 
-## Cloud Gateway checkpoints
+## Cloud Gateway diagnostic stages
 
 The Cloud Worker and `WorkspaceGateway` emit structured `GW-01` through
 `GW-12` records for upgrade receipt, runtime authentication, forwarding,

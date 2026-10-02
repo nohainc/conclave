@@ -28,8 +28,8 @@ import SiteLayout from "../layouts/SiteLayout.astro";
       </div>
 
       <div class="cards security-detail-cards">
-        <FeatureCard title="Scoped execution"><p>Repository and path mappings define where a Project may work. Full-machine access is not the normal execution path.</p></FeatureCard>
-        <FeatureCard title="Isolated Workstreams"><p>Stateful Workstreams use managed checkouts and controlled concurrency so parallel project work does not share one mutable tree.</p></FeatureCard>
+        <FeatureCard title="Workspace grants"><p>A Project can use a Workspace only after its owner grants access. Work runs in an isolated Workstream directory under Workspace runtime controls.</p></FeatureCard>
+        <FeatureCard title="Isolated Workstreams"><p>Stateful Workstreams use ID-derived directories and runtime leases to serialize mutations while allowing separate Workstreams to run in parallel.</p></FeatureCard>
         <FeatureCard title="Credential isolation"><p>Secrets stay behind the Workspace boundary and are not exposed merely because another person can execute authorized Project work.</p></FeatureCard>
       </div>
     </Container>

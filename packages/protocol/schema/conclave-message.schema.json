@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://conclaveax.com/schemas/conclave-message.schema.json",
   "title": "Conclave current shared runtime contracts",
-  "description": "Execution error taxonomy, Host Protocol metadata, and realtime event metadata.",
+  "description": "Execution error taxonomy, Workspace Runtime Protocol metadata, and realtime event metadata.",
   "x-execution-error-codes": [
     "worker_not_ready",
     "cli_not_found",
@@ -29,26 +29,29 @@
     "cancelled": "The assignment was cancelled.",
     "execution_failed": "The assignment could not be completed."
   },
-  "x-host-protocol": {
-    "name": "conclave.host-protocol",
-    "version": "4.0",
+  "x-workspace-runtime-protocol": {
+    "name": "conclave.workspace-runtime-protocol",
+    "version": "5.1",
     "maxMessageSizeBytes": 4194304,
     "messageTypes": [
-      "host.hello",
-      "host.hello.ack",
-      "host.heartbeat",
-      "host.heartbeat.ack",
-      "host.sync.request",
-      "host.sync.result",
-      "host.status",
-      "host.update",
+      "workspace.hello",
+      "workspace.hello.ack",
+      "workspace.heartbeat",
+      "workspace.heartbeat.ack",
+      "workspace.sync.request",
+      "workspace.sync.result",
+      "workspace.status",
+      "workspace.update",
+      "worker.inventory",
+      "workstream.status",
       "assignment.start",
       "assignment.ack",
       "assignment.progress",
       "assignment.result",
       "assignment.error",
       "assignment.cancel",
-      "assignment.cancel.ack"
+      "assignment.cancel.ack",
+      "assignment.cancelled"
     ],
     "baseEnvelopeFields": [
       "protocol",
@@ -60,8 +63,8 @@
       "payload"
     ],
     "assignmentEnvelopeFields": [
-      "workspaceId",
-      "hostId",
+      "executionWorkspaceId",
+      "workspaceRuntimeId",
       "workerId",
       "runId",
       "taskId",
@@ -89,7 +92,7 @@
       "assignmentId",
       "workstreamId",
       "attemptId",
-      "hostId"
+      "workspaceRuntimeId"
     ],
     "durableTypes": [
       "work_request.created",

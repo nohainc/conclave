@@ -2,7 +2,6 @@ export const SENSITIVE_OPERATIONS = {
   workspaceOwnershipTransfer: "workspace.ownership.transfer",
   workspaceEnrollmentRevoke: "workspace.enrollment.revoke",
   billingSecurityChange: "billing.security.change",
-  fullWorkspaceGrant: "workspace.project_grant.full_workspace",
 } as const;
 
 export type SensitiveOperation =
@@ -37,10 +36,6 @@ export const STEP_UP_REQUIREMENTS: Record<
   },
   [SENSITIVE_OPERATIONS.billingSecurityChange]: {
     maxAgeMs: 5 * 60 * 1000,
-    methods: ["passkey", "totp"],
-  },
-  [SENSITIVE_OPERATIONS.fullWorkspaceGrant]: {
-    maxAgeMs: 10 * 60 * 1000,
     methods: ["passkey", "totp"],
   },
 };

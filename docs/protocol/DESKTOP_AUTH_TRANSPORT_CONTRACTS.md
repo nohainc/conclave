@@ -1,7 +1,7 @@
 # Desktop Authentication and Runtime Transport Contracts
 
 **Contract:** `conclave.desktop-auth-transport` **1.0**
-**Canonical validators/types:** `packages/host-protocol/src/desktop-auth-transport.ts`
+**Canonical validators/types:** `packages/workspace-runtime-protocol/src/desktop-auth-transport.ts`
 
 This contract freezes the shared Cloud/desktop shapes for ADR-013 Phase 0.
 It defines payloads and state projection only; it does not implement endpoints,
@@ -16,10 +16,11 @@ validation. Runtime messages inside transport envelopes remain the existing
 | --- | --- | --- | --- |
 | `DesktopHumanSessionCredential` | Human account and Workspace management | Desktop-authenticated management APIs | OS secure storage |
 | `WorkspaceRuntimeCredential` | Enrolled machine execution and runtime transport | Workspace runtime APIs and Gateway | OS secure storage |
-| `LocalWorkerProviderCredential` | Local Worker/provider authentication | The owning local Worker/adapter only | Workspace local secret store |
+| Provider CLI authentication state | Authenticate the locally installed provider CLI | That provider CLI only | The provider CLI's own local configuration or OS credential store |
 
-The first two are separate branded types and schemas. The third is a local-only
-type and intentionally has no shared wire schema. It must never appear in a
+The human and runtime credentials are separate branded types and schemas. A
+provider CLI's authentication state is outside Conclave's credential model: it
+has no Cloud or Workspace Runtime Protocol schema and must never appear in a
 Cloud request, inventory projection, desktop human-auth response, or runtime
 event. No credential is a substitute for another.
 
@@ -27,9 +28,9 @@ event. No credential is a substitute for another.
 
 1. `POST /api/desktop-auth/intents` accepts `DesktopAuthIntentCreateRequest`
    and returns `DesktopAuthIntentCreateResponse`, including a separate
-   short-lived poll token. Intent contract `1.1` does not return a comparison
-   code; legacy intent contract `1.0` retains it during the compatibility
-   window.
+   short-lived poll token. The current intent contract is `1.1` and does not
+   use a comparison code. This intent version is distinct from the shared
+   transport contract version `1.0`.
 2. The desktop opens `verificationUrl` in the system browser. The existing
    AX Better Auth login handles email/password, configured social providers,
    and passkeys where supported. After sign-in, the user explicitly approves
@@ -44,11 +45,10 @@ event. No credential is a substitute for another.
    rotation and revocation use the desktop session bearer and session ID.
 
 The Cloud intent expires after ten minutes and permits a single successful
-claim. Legacy `1.0` intents allow up to five code attempts; poll-token and
-comparison-code values are stored only as hashes. New `1.1` intents bind
-approval to the authenticated browser session, explicit user approval, and the
-unguessable intent URL. Intent expiry, approval and one-time claim enforcement
-are Cloud behavior.
+claim. Poll tokens are stored only as hashes. Current intents bind approval to
+the authenticated browser session, explicit user approval, and the unguessable
+intent URL. Intent expiry, approval and one-time claim enforcement are Cloud
+behavior.
 This exchange never exposes the browser's HttpOnly cookie to the desktop.
 
 At startup, the desktop asynchronously validates the stored human session after
@@ -78,21 +78,18 @@ returns `409 installation_already_owned`; changing the account requires the
 existing explicit disconnect/release workflow. Hostname and display-name changes
 never transfer ownership. Runtime credentials remain separate from the human
 credential and are stored by desktop in the OS secure credential store.
-Registration responses include the authenticated `ownerUserId`; desktop checks
-it against the signed-in session before storing the returned runtime credential.
-This response addition is backward-compatible for older clients that ignore
-unknown fields; new desktop clients fail closed if a Cloud deployment omits the
-owner field.
+Registration responses include the authenticated `ownerUserId`; the current
+desktop checks it against the signed-in session before storing the returned
+runtime credential and fails closed if Cloud omits it.
 
 Before replacing a desktop human session for an already registered local
 Workspace, the desktop calls `POST /api/workspace-runtime/ownership` with that
 session, the persistent installation ID, and any locally known Workspace and
 runtime IDs. Cloud compares the authenticated user with the authoritative
 Workspace owner and returns `409 installation_already_owned` on mismatch. It
-does not issue or rotate a runtime credential. For first-ADR-013 registrations
-whose runtime row has no installation ID, the exact locally stored
-Workspace/runtime ID pair can be owner-verified; only a successful same-owner
-check backfills the installation ID. A failed check does not alter Cloud
+does not issue or rotate a runtime credential. Ownership checks require the
+current installation binding; a Workspace/runtime ID pair alone cannot adopt
+an identity without that binding. A failed check does not alter Cloud
 ownership or the desktop's stored human session. The local owner cache is
 refreshed from this Cloud response and remains non-authoritative. Cloud rejects
 local IDs bound to a different installation or to multiple Workspace records,
@@ -124,9 +121,9 @@ explicit launch-at-login option on macOS 13 and later; it uses the native
 
 Both `websocket` and `http_long_poll` carry the existing logical
 `WorkspaceRuntimeMessage`. The `WorkspaceTransport` interface provides an async
-message stream, `send`, and `close`. `HostCloudConnection` owns protocol
+message stream, `send`, and `close`. `WorkspaceCloudConnection` owns protocol
 handshake, synchronization, inventory, heartbeat, assignment, cancellation,
-progress, and result handling above the selected adapter. It also reports the
+progress, and result handling above the selected transport. It also reports the
 active mode. WebSocket is the preferred mode. One transport is authoritative
 for inbound assignment delivery at a time; transport changes do not change the
 Workspace or runtime identity.
@@ -167,13 +164,12 @@ display-ready `connectionMode` (`Connected · WebSocket` or
 failure independently from HTTPS fallback health so recovery does not erase
 the reason WebSocket became unavailable.
 
-## Compatibility
+## Contract versioning
 
-The shared runtime/registration contract remains version `1.0`. Desktop auth
-intent creation has its own minor version: `1.1` selects browser approval
-without a comparison code; Cloud continues to serve the old `1.0` intent shape
-for already released desktop clients. Changes to other frozen `1.0` shapes
-require a separately versioned contract.
+Desktop auth intents use version `1.1`; runtime registration, transport
+requests, and event envelopes use the independently versioned
+`conclave.desktop-auth-transport` contract `1.0`. Changes to the frozen
+transport shapes require a separately versioned contract.
 
 ## Desktop lifecycle semantics
 

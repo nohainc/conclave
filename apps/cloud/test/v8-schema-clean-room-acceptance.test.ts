@@ -57,6 +57,7 @@ describe("v8 clean D1 schema acceptance", () => {
     expect(tableNames).not.toContain("project_account_grants");
     expect(tableNames).not.toContain("chat_workstream_migrations");
     expect(tableNames).not.toContain("workspace_worker_installations");
+    expect(tableNames).not.toContain("workstream_memberships");
     expect(tableNames).not.toContain("worker_attribution_audit_archive");
     expect(tableNames).not.toContain("run_external_executions");
     expect(tableNames).not.toContain("workstream_execution_leases");
@@ -69,6 +70,25 @@ describe("v8 clean D1 schema acceptance", () => {
       name: string;
     }[];
     expect(grantColumns.map(({ name }) => name)).toContain("budget_json");
+    expect(grantColumns.map(({ name }) => name)).not.toEqual(
+      expect.arrayContaining([
+        "scope",
+        "repository_mappings_json",
+        "path_mappings_json",
+        "requires_step_up",
+      ]),
+    );
+    const runtimeIdentityColumns = apply(
+      "PRAGMA table_info(workspace_runtime_identities);",
+    ) as { name: string; notnull: number }[];
+    expect(runtimeIdentityColumns.map(({ name }) => name)).not.toContain(
+      "credential_key_ref",
+    );
+    expect(
+      runtimeIdentityColumns.find(
+        ({ name }) => name === "credential_token_hash",
+      )?.notnull,
+    ).toBe(1);
     const policyColumns = apply(
       "PRAGMA table_info(workstream_execution_policies);",
     ) as {

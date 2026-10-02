@@ -11,7 +11,11 @@ const workstreams = readFileSync(
   "utf8",
 );
 const work = readFileSync(
-  fileURLToPath(new URL("../src/routes/work.ts", import.meta.url)),
+  fileURLToPath(new URL("../src/routes/work-creation.ts", import.meta.url)),
+  "utf8",
+);
+const workstreamPolicy = readFileSync(
+  fileURLToPath(new URL("../src/routes/workstream-policy.ts", import.meta.url)),
   "utf8",
 );
 const router = readFileSync(
@@ -20,10 +24,6 @@ const router = readFileSync(
 );
 const gateway = readFileSync(
   fileURLToPath(new URL("../src/workspace-gateway.ts", import.meta.url)),
-  "utf8",
-);
-const handlers = readFileSync(
-  fileURLToPath(new URL("../src/routes/handlers.ts", import.meta.url)),
   "utf8",
 );
 
@@ -36,20 +36,14 @@ describe("Workstream Discuss / Work boundary", () => {
   it("exposes separate discussion and explicit Work Request routes", () => {
     expect(router).toMatch(/workstreams.*discussion-messages/);
     expect(router).toMatch(/workstreams.*work-requests/);
-    expect(`${work}\n${handlers}`).toContain('"run.start"');
+    expect(`${work}\n${workstreamPolicy}`).toContain('"run.start"');
     expect(work).toContain("validateWorkRequest(workRequest, policy)");
     expect(work).toContain("workstream.work_requested");
   });
 
-  it("exposes the checkout provisioning control plane", () => {
-    expect(router).toMatch(/workstreams.*checkouts/);
-    expect(workstreams).toContain("handleProvisionWorkstreamCheckout");
-    expect(workstreams).toContain("Workspace Project Grant is not active");
-    expect(workstreams).toContain(
-      "Add at least one repository mapping to the Workspace Project Grant before provisioning a checkout",
-    );
-    expect(gateway).toContain("Workspace is offline");
-    expect(workstreams).toContain("provision-checkout");
-    expect(gateway).toContain("workstream.checkout.status");
+  it("does not expose the removed Checkout control plane", () => {
+    expect(router).not.toMatch(/workstreams.*checkouts/);
+    expect(workstreams).not.toMatch(/WorkstreamCheckout|checkout/);
+    expect(gateway).not.toMatch(/checkout|checkpoint|rollback/i);
   });
 });

@@ -1,35 +1,17 @@
 import { logStructured, requestIdFor } from "../observability.js";
-import { MAX_ARTIFACT_UPLOAD_BYTES } from "./handlers.js";
+
 import { SENSITIVE_OPERATIONS } from "../auth/index.js";
+import { extractBearerToken, hashToken } from "@conclave/security";
+
 import {
-  extractBearerToken,
-  hashToken,
-  computePackageDigest,
-  authorizeProjectMembership,
-  authorizeWorkspaceOwner,
-} from "@conclave/security";
-import { createEventPublisher } from "../event-publisher.js";
-import {
-  HttpError,
-  artifactMetadata,
-  artifactName,
-  authorizeRequest,
-  createWorkspaceProjectGrant,
   disconnectWorkspaceRuntime,
-  findDesktopHumanSession,
-  getWorkspaceGatewayStatus,
-  grantStepUpIfRequired,
   json,
-  loadWorkspaceProjectGrant,
   parseJson,
   recordAudit,
   recordPairingAuditEvent,
   requireRecentStepUp,
   requireWorkspaceContext,
-  requiredString,
   securityContext,
-  workspaceProjectGrantMetadata,
-  workspaceOwnerContext,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
 import { hasControlCharacters } from "./workspaces-shared.js";
@@ -744,17 +726,10 @@ export async function handleRedeemWorkspaceEnrollment(
       ),
       env.CONCLAVE_DB.prepare(
         `INSERT INTO workspace_runtime_identities
-           (id, workspace_id, credential_key_ref, credential_token_hash,
+           (id, workspace_id, credential_token_hash,
             installation_id, created_at, revoked_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)`,
-      ).bind(
-        runtimeId,
-        workspaceId,
-        `workspace-runtime:${runtimeId}`,
-        authTokenHash,
-        installationId,
-        now,
-      ),
+         VALUES (?1, ?2, ?3, ?4, ?5, NULL)`,
+      ).bind(runtimeId, workspaceId, authTokenHash, installationId, now),
       env.CONCLAVE_DB.prepare(
         `INSERT INTO workspace_runtime_facts
            (workspace_id, platform, architecture, hostname, app_version,
@@ -990,15 +965,14 @@ export async function handleRedeemWorkspaceEnrollment(
     ).bind(now, enrollment.workspaceId),
     env.CONCLAVE_DB.prepare(
       `INSERT INTO workspace_runtime_identities
-        (id, workspace_id, credential_key_ref, credential_token_hash,
+        (id, workspace_id, credential_token_hash,
          installation_id, created_at, revoked_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)`,
+       VALUES (?1, ?2, ?3, ?4, ?5, NULL)`,
     ).bind(
       runtimeId,
       enrollment.workspaceId,
-      `workspace-runtime:${runtimeId}`,
       authTokenHash,
-      body.installationId?.trim() || null,
+      legacyInstallationId,
       now,
     ),
     env.CONCLAVE_DB.prepare(

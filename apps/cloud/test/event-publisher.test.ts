@@ -54,7 +54,7 @@ function createHarness(options: { duplicate?: boolean } = {}) {
                   task_id: args[5],
                   attempt_id: args[6],
                   assignment_id: args[7],
-                  host_id: args[8],
+                  workspace_runtime_id: args[8],
                   sequence: args[9],
                   event_type: args[10],
                   payload_json: args[11],

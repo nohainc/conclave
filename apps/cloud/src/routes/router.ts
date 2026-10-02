@@ -768,25 +768,6 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
-    const workstreamCheckoutsMatch = url.pathname.match(
-      /^\/api\/workstreams\/([^/]+)\/checkouts$/,
-    );
-    if (request.method === "GET" && workstreamCheckoutsMatch?.[1]) {
-      return await handlers.handleListWorkstreamCheckouts!(
-        request,
-        env,
-        workstreamCheckoutsMatch[1],
-        ctx,
-      );
-    }
-    if (request.method === "POST" && workstreamCheckoutsMatch?.[1]) {
-      return await handlers.handleProvisionWorkstreamCheckout!(
-        request,
-        env,
-        workstreamCheckoutsMatch[1],
-        ctx,
-      );
-    }
     const discussionMessageMatch = url.pathname.match(
       /^\/api\/discussion-messages\/([^/]+)$/,
     );

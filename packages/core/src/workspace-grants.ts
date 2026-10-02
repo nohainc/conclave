@@ -2,18 +2,6 @@
 
 export type WorkspaceProjectGrantStatus =
   "active" | "suspended" | "revoked" | "expired";
-export type WorkspaceProjectGrantScope =
-  "project_repository" | "selected_paths" | "full_workspace";
-
-export interface WorkspaceRepositoryMapping {
-  readonly repositoryId: string;
-  readonly workspacePath: string;
-}
-
-export interface WorkspacePathMapping {
-  readonly projectPath: string;
-  readonly workspacePath: string;
-}
 
 export interface WorkspaceNetworkPolicy {
   readonly mode: "deny_all" | "allowlist";
@@ -30,15 +18,11 @@ export interface WorkspaceProjectGrant {
   readonly workspaceId: string;
   readonly grantedByUserId: string;
   readonly status: WorkspaceProjectGrantStatus;
-  readonly scope: WorkspaceProjectGrantScope;
-  readonly repositoryMappings: readonly WorkspaceRepositoryMapping[];
-  readonly pathMappings: readonly WorkspacePathMapping[];
   readonly allowedWorkerIds: readonly string[];
   readonly allowedWorkerCapabilities: readonly string[];
   readonly allowedPermissions: readonly string[];
   readonly networkPolicy: WorkspaceNetworkPolicy;
   readonly concurrency: WorkspaceConcurrencyPolicy;
-  readonly requiresStepUp: boolean;
   readonly expiresAt: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -49,10 +33,7 @@ export interface EffectiveWorkspacePermission {
   readonly workspaceId: string;
   readonly grantId: string;
   readonly requesterUserId: string;
-  readonly scope: WorkspaceProjectGrantScope;
   readonly permissions: readonly string[];
-  readonly repositoryMappings: readonly WorkspaceRepositoryMapping[];
-  readonly pathMappings: readonly WorkspacePathMapping[];
   readonly networkPolicy: WorkspaceNetworkPolicy;
   readonly concurrency: WorkspaceConcurrencyPolicy;
   readonly snapshotAt: string;

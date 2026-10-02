@@ -20,7 +20,7 @@ EOF
   exit 64
 fi
 
-cd "$ROOT/apps/host"
+cd "$ROOT/apps/workspace"
 dart run bin/workspace_cloud_smoke.dart \
   --cloud-url "$CLOUD_URL" \
   --enrollment-token "$TOKEN"

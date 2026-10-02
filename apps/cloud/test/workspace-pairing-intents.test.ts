@@ -138,8 +138,8 @@ describe("Workspace pairing intents", () => {
         (id, owner_user_id, name, status, created_at, updated_at)
         VALUES ('ws-rename', 'owner', 'Development MacBook', 'offline', 'now', 'now');
       INSERT INTO workspace_runtime_identities
-        (id, workspace_id, credential_key_ref, credential_token_hash, created_at, revoked_at)
-        VALUES ('runtime-rename', 'ws-rename', 'runtime-key', 'sha256:saved-token', 'now', NULL);
+        (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at)
+        VALUES ('runtime-rename', 'ws-rename', 'sha256:saved-token', 'install_11111111-1111-4111-8111-111111111111', 'now', NULL);
       INSERT INTO workspace_runtime_facts
         (workspace_id, platform, architecture, hostname, app_version, runtime_capabilities_json, updated_at)
         VALUES ('ws-rename', 'macos', 'arm64', 'Vitaliis-MacBook-Pro.local', '1.4.2', '{}', 'now');

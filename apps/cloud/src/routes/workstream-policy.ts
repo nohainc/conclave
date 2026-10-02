@@ -1,22 +1,4 @@
-import { isTrustedOrigin } from "../observability.js";
-import {
-  identityService,
-  provisionConclaveUser,
-  hasRecentStepUp,
-  SENSITIVE_OPERATIONS,
-  recordAuthAuditEvent,
-  type SensitiveOperation,
-} from "../auth/index.js";
-import {
-  authorize,
-  resolveProjectSecurityContextFromIdentity,
-  authorizeProjectMembership,
-  authorizeWorkspaceOwner,
-  authorizeProjectOwner,
-  authorizeProfileAdmin as authorizeSecurityProfileAdmin,
-  type Permission,
-  type SecurityContext,
-} from "@conclave/security";
+import { type Permission, type SecurityContext } from "@conclave/security";
 import {
   canDiscussWorkstream,
   canExecuteWorkstream,
@@ -35,13 +17,7 @@ import {
 import type { SecurityEnv } from "./http-security.js";
 import { authorizeRequest } from "./http-security.js";
 
-import {
-  HttpError,
-  parseJson,
-  requiredString,
-  workspaceOwnerContext,
-  authorizeProjectOwnerOrThrow,
-} from "./http-security.js";
+import { HttpError, parseJson } from "./http-security.js";
 
 export function normalizeWorkstreamWorkConfig(value: unknown): {
   config: Record<string, unknown>;
@@ -191,7 +167,6 @@ export function workstreamMetadata(
       accessPolicy.primaryWorkspaceId ??
       accessPolicy.primary_workspace_id ??
       null,
-    currentCheckpoint: null,
     queueStatus: "Idle",
     createdAt: String(row.createdAt ?? row.created_at),
     updatedAt: String(row.updatedAt ?? row.updated_at),

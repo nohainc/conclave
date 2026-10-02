@@ -25,7 +25,7 @@ const requiredContractText = [
   "These are canonical domain concepts, not a shared message envelope.",
   "apps/app/lib/src/ax/ax_data.dart",
   "apps/cloud/src/workspace-gateway.ts",
-  "apps/host/lib/worker_executor.dart",
+  "apps/workspace/lib/worker_executor.dart",
 ];
 
 const missingContractText = requiredContractText.filter(
@@ -48,7 +48,7 @@ const violations = missingContractText.map(
 );
 
 const axRuntimeProtocolPattern =
-  /conclave\.workspace-runtime-protocol|workspaceRuntimeProtocol|WorkspaceRuntimeMessage|workspace-runtime\.ts|@conclave\/host-protocol/i;
+  /conclave\.workspace-runtime-protocol|workspaceRuntimeProtocol|WorkspaceRuntimeMessage|workspace-runtime\.ts|@conclave\/workspace-runtime-protocol/i;
 const firstPartyProviderPackagePattern = /\b(?:codex|antigravity)\b/i;
 
 for (const file of sourceFiles) {

@@ -149,8 +149,6 @@ export const routeHandlers = {
   handleListDiscussionMessages: handlers.handleListDiscussionMessages,
   handleCreateDiscussionMessage: handlers.handleCreateDiscussionMessage,
   handleEditDiscussionMessage: handlers.handleEditDiscussionMessage,
-  handleListWorkstreamCheckouts: handlers.handleListWorkstreamCheckouts,
-  handleProvisionWorkstreamCheckout: handlers.handleProvisionWorkstreamCheckout,
   handleCreateWorkRequest: handlers.handleCreateWorkRequest,
   handleRetryWorkRequest: handlers.handleRetryWorkRequest,
   handleValidateWorkRequest: handlers.handleValidateWorkRequest,

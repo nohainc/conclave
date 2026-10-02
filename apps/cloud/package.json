@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.5",
-    "@conclave/host-protocol": "workspace:*",
+    "@conclave/workspace-runtime-protocol": "workspace:*",
     "@conclave/core": "workspace:*",
     "@conclave/protocol": "workspace:*",
     "@conclave/security": "workspace:*",

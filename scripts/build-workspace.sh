@@ -10,7 +10,7 @@ while [[ $# -gt 0 ]]; do
     --version|-v) VERSION="$2"; shift 2 ;;
     --help|-h)
       echo "Usage: $(basename "$0") [--debug|--release] [--version X.Y.Z]"
-      echo "Builds the Workspace desktop app and bundled CLI Worker Engine for the current host OS."
+      echo "Builds the Workspace desktop app and bundled CLI Worker Engine for the current machine OS."
       exit 0
       ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
@@ -30,12 +30,12 @@ case "$OS" in
   MINGW*|MSYS*|CYGWIN*)
     target=windows
     ;;
-  *) echo "Unsupported desktop build host: $OS" >&2; exit 1 ;;
+  *) echo "Unsupported desktop build machine: $OS" >&2; exit 1 ;;
 esac
 
-HOST="$ROOT/apps/host"
+WORKSPACE_DIR="$ROOT/apps/workspace"
 command -v flutter >/dev/null 2>&1 || { echo "Flutter is required." >&2; exit 1; }
-cd "$HOST"
+cd "$WORKSPACE_DIR"
 flutter pub get
 bash "$ROOT/scripts/build-cli-worker-engine.sh"
 if [[ "$MODE" == debug ]]; then

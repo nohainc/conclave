@@ -20,7 +20,7 @@ create immutable Profile release
 
 The signature binds the canonical Profile payload and release identity. Workspace verifies the digest, identity, trust roots, and refreshed revocation state before caching a release. Promotion changes lifecycle metadata; it does not alter signed payload bytes. Rollback selects a prior trusted and compatible release.
 
-Real acceptance evidence is produced by [the Profile acceptance suite](../../apps/host/test/tool_profile_real_acceptance_test.dart). It covers passive/live probes, a Workstream write, durable session start/resume, timeout, and process-tree cancellation. Stable promotion requires evidence for the immutable release digest. The current release gates are listed in the [v8 implementation roadmap](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md#release-gates).
+Real acceptance evidence is produced by [the Profile acceptance suite](../../apps/workspace/test/tool_profile_real_acceptance_test.dart). It covers passive/live probes, a Workstream write, durable session start/resume, timeout, and process-tree cancellation. Stable promotion requires evidence for the immutable release digest. The current release gates are listed in the [v8 implementation roadmap](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md#release-gates).
 
 ## Workspace and Engine releases
 

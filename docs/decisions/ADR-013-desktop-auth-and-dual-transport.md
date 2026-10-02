@@ -61,8 +61,8 @@ desktop creates desktop-auth intent
 Browser approval uses the authenticated Better Auth session and an explicit
 approval action for the pending desktop intent; the user does not transcribe a
 comparison code. The desktop keeps its waiting dialog open while the system
-browser is used. Cloud temporarily accepts the former code-based request shape
-for older desktop releases during the compatibility window.
+browser is used. The current desktop auth-intent contract is 1.1. This is
+independent of the versioned desktop/runtime transport contract.
 
 Each opened verification tab observes the intent's non-secret terminal status.
 Canceling in Workspace cancels the intent with its poll credential; choosing
@@ -85,7 +85,7 @@ The human desktop credential is:
 - scoped to human/account-management APIs;
 - revocable independently;
 - stored only in OS secure storage;
-- not sent to Worker adapters;
+- never sent to the CLI Worker Engine or provider CLI;
 - not used as the Workspace execution credential.
 
 ### 2. Runtime identity remains separate
@@ -166,7 +166,10 @@ Normal AX Workspace UI does not:
 - change local Worker permissions;
 - repair local credentials.
 
-Remote operational controls such as Worker scheduling enable/disable/drain are removed from normal Workspace UI for this phase. Backend control APIs may remain temporarily for compatibility/internal operation until separately audited.
+Remote operational controls such as Worker scheduling enable/disable/drain are
+not part of the normal Workspace UI. Any administrative Cloud operation has
+its own current authorization contract and does not expose local Worker
+configuration.
 
 Project membership, Project Workspace Grants, and Workstream policy remain Cloud/AX concerns because they authorize collaborative use; they are not local machine configuration.
 
@@ -183,7 +186,7 @@ Canonical logical messages remain concepts such as:
 - assignment dispatch;
 - assignment progress/result;
 - assignment cancel;
-- checkout commands.
+- Workspace lifecycle and synchronization messages.
 
 The preferred transport is WebSocket/WSS.
 
@@ -274,7 +277,8 @@ If Cloud reports that the installation belongs to another user, the desktop pres
 
 Human desktop authentication does not allow provider secrets into Cloud.
 
-Local Worker credentials, provider sessions, API keys, permissions, adapter state, Work Root, and local files remain Workspace-owned.
+Provider CLI sign-in, local Worker permissions and state, Work Root, and local
+files remain on Workspace or in the provider CLI's own local configuration.
 
 Cloud receives only the safe projections defined by the current Workspace
 runtime contract.
@@ -299,7 +303,8 @@ The desktop human session and runtime credential are distinct secrets and must b
 - Cloud needs a desktop human-session credential lifecycle;
 - long-poll requires delivery cursor/idempotency semantics;
 - scheduler liveness must understand both transports;
-- migration must preserve already-paired Workspaces and runtime credentials;
+- release upgrade must preserve the local Work Root and stable installation
+  identity according to the Workspace lifecycle contract;
 - AX remote control behavior must be deliberately reduced rather than accidentally duplicated.
 
 ## Non-goals
@@ -351,7 +356,7 @@ The architecture is accepted when tests prove:
 
 Phase 0 freezes the Cloud/desktop payloads and validators in
 [`conclave.desktop-auth-transport` 1.0](../protocol/DESKTOP_AUTH_TRANSPORT_CONTRACTS.md),
-exported by `@conclave/host-protocol`. Desktop human sessions,
-Workspace runtime credentials, and local Worker/provider credentials are
-separate types and security boundaries. Cloud and desktop implementation
+exported by `@conclave/workspace-runtime-protocol`. Desktop human sessions and
+Workspace runtime credentials are separate types and security boundaries;
+provider CLI sign-in is outside the shared protocol. Cloud and desktop implementation
 phases must consume these contracts rather than defining parallel shapes.

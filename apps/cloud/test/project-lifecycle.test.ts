@@ -2,12 +2,14 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const handlers = readFileSync(
-  fileURLToPath(new URL("../src/routes/handlers.ts", import.meta.url)),
+const workspaces = readFileSync(
+  fileURLToPath(
+    new URL("../src/routes/workspaces-management.ts", import.meta.url),
+  ),
   "utf8",
 );
-const workspaces = readFileSync(
-  fileURLToPath(new URL("../src/routes/workspaces.ts", import.meta.url)),
+const httpSecurity = readFileSync(
+  fileURLToPath(new URL("../src/routes/http-security.ts", import.meta.url)),
   "utf8",
 );
 const projects = readFileSync(
@@ -57,12 +59,8 @@ describe("Project lifecycle integrity", () => {
   });
 
   it("records Project-scoped audits without requiring a Workspace", () => {
-    const start = handlers.indexOf("async function recordAudit");
-    const end = handlers.indexOf("function errorMessage", start);
-    const body = handlers.slice(start, end);
-
-    expect(body).toContain("project_audit_log");
-    expect(body).toContain("if (!auditWorkspaceId)");
+    expect(httpSecurity).toContain("project_audit_log");
+    expect(httpSecurity).toContain("if (!auditWorkspaceId)");
   });
 
   it("guards duplicate names, grants, and invitations across lifecycle changes", () => {
@@ -85,11 +83,8 @@ describe("Project lifecycle integrity", () => {
     );
     const body = projects.slice(start, end);
 
-    expect(body).toContain("DELETE FROM workstream_current_checkpoints");
-    expect(body).toContain("DELETE FROM workstream_diff_artifacts");
     expect(body).toContain("DELETE FROM runs WHERE project_id = ?1");
     expect(body).toContain("DELETE FROM work_requests");
-    expect(body).toContain("DELETE FROM workstream_checkouts");
     expect(body).toContain("DELETE FROM workstreams");
     expect(body).toContain(
       "DELETE FROM workspace_project_grants WHERE project_id = ?1",

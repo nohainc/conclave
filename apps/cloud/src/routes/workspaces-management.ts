@@ -1,34 +1,15 @@
-import { logStructured, requestIdFor } from "../observability.js";
-import { MAX_ARTIFACT_UPLOAD_BYTES } from "./handlers.js";
-import { SENSITIVE_OPERATIONS } from "../auth/index.js";
-import {
-  extractBearerToken,
-  hashToken,
-  computePackageDigest,
-  authorizeProjectMembership,
-  authorizeWorkspaceOwner,
-} from "@conclave/security";
-import { createEventPublisher } from "../event-publisher.js";
+import { hashToken } from "@conclave/security";
+
 import {
   HttpError,
-  artifactMetadata,
-  artifactName,
-  authorizeRequest,
-  createWorkspaceProjectGrant,
   disconnectWorkspaceRuntime,
   findDesktopHumanSession,
   getWorkspaceGatewayStatus,
-  grantStepUpIfRequired,
   json,
-  loadWorkspaceProjectGrant,
   parseJson,
   recordAudit,
-  recordPairingAuditEvent,
-  requireRecentStepUp,
   requireWorkspaceContext,
-  requiredString,
   securityContext,
-  workspaceProjectGrantMetadata,
   workspaceOwnerContext,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
@@ -218,7 +199,7 @@ export async function handleCreateWorkspacePairingIntent(
   );
 }
 
-/** Verifies and migrates a desktop's existing binding without rotating runtime credentials. */
+/** Verifies that a desktop installation is already bound to its Workspace. */
 export async function handleCheckWorkspaceOwnership(
   request: Request,
   env: SecurityEnv,
@@ -257,11 +238,10 @@ export async function handleCheckWorkspaceOwnership(
     .all<{
       runtimeId: string;
       workspaceId: string;
-      installationId: string | null;
+      installationId: string;
       ownerUserId: string;
     }>();
   const matches = byInstallation.results ?? [];
-  let legacyBinding = false;
   if (workspaceId || runtimeId) {
     if (!workspaceId || !runtimeId) {
       return json(
@@ -273,22 +253,21 @@ export async function handleCheckWorkspaceOwnership(
         { status: 409 },
       );
     }
-    const legacy = await env.CONCLAVE_DB.prepare(
+    const local = await env.CONCLAVE_DB.prepare(
       `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
               i.installation_id AS installationId, w.owner_user_id AS ownerUserId
          FROM workspace_runtime_identities i
          JOIN execution_workspaces w ON w.id = i.workspace_id
-        WHERE i.id = ?1 AND i.workspace_id = ?2`,
+        WHERE i.id = ?1 AND i.workspace_id = ?2 AND i.installation_id = ?3`,
     )
-      .bind(runtimeId, workspaceId)
-      .all<{
+      .bind(runtimeId, workspaceId, installationId)
+      .first<{
         runtimeId: string;
         workspaceId: string;
-        installationId: string | null;
+        installationId: string;
         ownerUserId: string;
       }>();
-    const localBinding = legacy.results ?? [];
-    if (localBinding.length === 0) {
+    if (!local) {
       return json(
         {
           error:
@@ -298,12 +277,9 @@ export async function handleCheckWorkspaceOwnership(
         { status: 409 },
       );
     }
-    for (const binding of localBinding) {
-      if (!matches.some((item) => item.runtimeId === binding.runtimeId)) {
-        matches.push(binding);
-      }
+    if (!matches.some((item) => item.runtimeId === local.runtimeId)) {
+      matches.push(local);
     }
-    legacyBinding = localBinding.some((item) => item.installationId === null);
   }
   if (matches.some((item) => item.ownerUserId !== session.userId)) {
     return json(
@@ -325,12 +301,7 @@ export async function handleCheckWorkspaceOwnership(
       { status: 409 },
     );
   }
-  if (
-    matches.some(
-      (item) =>
-        item.installationId !== null && item.installationId !== installationId,
-    )
-  ) {
+  if (matches.some((item) => item.installationId !== installationId)) {
     return json(
       {
         error:
@@ -339,52 +310,6 @@ export async function handleCheckWorkspaceOwnership(
       },
       { status: 409 },
     );
-  }
-  if (legacyBinding) {
-    const legacy = matches.find((item) => item.runtimeId === runtimeId)!;
-    if (
-      legacy.installationId !== null &&
-      legacy.installationId !== installationId
-    ) {
-      return json(
-        {
-          error:
-            "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
-          code: "installation_already_owned",
-        },
-        { status: 409 },
-      );
-    }
-    const conflict = await env.CONCLAVE_DB.prepare(
-      `SELECT 1 AS found FROM workspace_runtime_identities
-        WHERE installation_id = ?1 AND id <> ?2 LIMIT 1`,
-    )
-      .bind(installationId, runtimeId)
-      .first<{ found: number }>();
-    if (conflict) {
-      return json(
-        {
-          error: "Workspace installation ownership changed concurrently",
-          code: "installation_already_owned",
-        },
-        { status: 409 },
-      );
-    }
-    const linked = await env.CONCLAVE_DB.prepare(
-      `UPDATE workspace_runtime_identities SET installation_id = ?1
-        WHERE id = ?2 AND workspace_id = ?3 AND installation_id IS NULL`,
-    )
-      .bind(installationId, runtimeId, workspaceId)
-      .run();
-    if ((linked.meta?.changes ?? 0) !== 1) {
-      return json(
-        {
-          error: "Workspace installation ownership changed concurrently",
-          code: "installation_already_owned",
-        },
-        { status: 409 },
-      );
-    }
   }
   return json({ registered: matches.length > 0, ownerUserId: session.userId });
 }
@@ -643,16 +568,14 @@ export async function handleRegisterWorkspaceFromDesktop(
 ): Promise<Response> {
   const { session, now } = await findDesktopHumanSession(request, env);
   const body = parseJson<Record<string, unknown>>(await request.text(), {});
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return json(
+      { error: "Workspace registration details are invalid" },
+      { status: 400 },
+    );
+  }
   const installationId =
     typeof body.installationId === "string" ? body.installationId.trim() : "";
-  const existingWorkspaceId =
-    typeof body.existingWorkspaceId === "string"
-      ? body.existingWorkspaceId.trim()
-      : "";
-  const existingRuntimeId =
-    typeof body.existingRuntimeId === "string"
-      ? body.existingRuntimeId.trim()
-      : "";
   const name =
     typeof body.proposedWorkspaceName === "string"
       ? body.proposedWorkspaceName.trim()
@@ -665,6 +588,19 @@ export async function handleRegisterWorkspaceFromDesktop(
     typeof body.appVersion === "string" ? body.appVersion.trim() : "";
   const capabilities = body.runtimeCapabilities;
   if (
+    Object.keys(body).some(
+      (key) =>
+        ![
+          "contractVersion",
+          "installationId",
+          "proposedWorkspaceName",
+          "hostname",
+          "platform",
+          "architecture",
+          "appVersion",
+          "runtimeCapabilities",
+        ].includes(key),
+    ) ||
     body.contractVersion !== "1.0" ||
     !/^install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
       installationId,
@@ -722,14 +658,9 @@ export async function handleRegisterWorkspaceFromDesktop(
             w.owner_user_id AS ownerUserId, w.name AS workspaceName, w.status AS workspaceStatus
        FROM workspace_runtime_identities i JOIN execution_workspaces w ON w.id = i.workspace_id
       WHERE i.installation_id = ?1
-         OR (i.id = ?2 AND i.workspace_id = ?3)
       ORDER BY i.created_at DESC`,
   )
-    .bind(
-      installationId,
-      existingRuntimeId || null,
-      existingWorkspaceId || null,
-    )
+    .bind(installationId)
     .all<{
       runtimeId: string;
       workspaceId: string;
@@ -737,38 +668,13 @@ export async function handleRegisterWorkspaceFromDesktop(
       ownerUserId: string;
       workspaceName: string;
       workspaceStatus: string;
-      installationId: string | null;
+      installationId: string;
     }>();
   const history = bindings.results ?? [];
-  if ((existingWorkspaceId || existingRuntimeId) && history.length === 0) {
-    return json(
-      {
-        error:
-          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
-        code: "installation_already_owned",
-      },
-      { status: 409 },
-    );
-  }
   const active = history.find(
     (item) => item.revokedAt === null && item.workspaceStatus !== "revoked",
   );
   if (history.some((item) => item.ownerUserId !== session.userId)) {
-    return json(
-      {
-        error:
-          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
-        code: "installation_already_owned",
-      },
-      { status: 409 },
-    );
-  }
-  if (
-    history.some(
-      (item) =>
-        item.installationId !== null && item.installationId !== installationId,
-    )
-  ) {
     return json(
       {
         error:
@@ -790,13 +696,6 @@ export async function handleRegisterWorkspaceFromDesktop(
   const credentialHash = await hashToken(credential);
   const auditId = `audit-${crypto.randomUUID()}`;
   const statements = [];
-  if (existing && existing.installationId === null)
-    statements.push(
-      env.CONCLAVE_DB.prepare(
-        `UPDATE workspace_runtime_identities SET installation_id = ?1
-      WHERE id = ?2 AND workspace_id = ?3 AND installation_id IS NULL`,
-      ).bind(installationId, existing.runtimeId, existing.workspaceId),
-    );
   if (
     existing &&
     name &&
@@ -823,15 +722,8 @@ export async function handleRegisterWorkspaceFromDesktop(
     );
   statements.push(
     env.CONCLAVE_DB.prepare(
-      `INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)`,
-    ).bind(
-      runtimeId,
-      workspaceId,
-      `workspace-runtime:${runtimeId}`,
-      credentialHash,
-      installationId,
-      now,
-    ),
+      `INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?1, ?2, ?3, ?4, ?5, NULL)`,
+    ).bind(runtimeId, workspaceId, credentialHash, installationId, now),
   );
   statements.push(
     env.CONCLAVE_DB.prepare(

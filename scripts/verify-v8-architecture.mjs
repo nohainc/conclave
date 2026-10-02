@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { forbiddenArchitecture } from "./v8-architecture-rules.mjs";
 
 const failures = [];
 
@@ -14,8 +15,12 @@ function readRequired(file) {
   return readFileSync(file, "utf8");
 }
 
-const assignment = readRequired("apps/host/lib/worker_executor.dart");
-const runtime = readRequired("apps/host/lib/workspace_runtime.dart");
+const assignment = readRequired("apps/workspace/lib/worker_executor.dart");
+const runtime = readRequired("apps/workspace/lib/workspace_runtime.dart");
+const workspaceConfig = readRequired("apps/workspace/lib/workspace.dart");
+const workspaceRegistration = readRequired(
+  "apps/workspace/lib/workspace_configuration.dart",
+);
 const architecture = readRequired("ARCHITECTURE.md");
 const architectureV8 = readRequired("docs/architecture/ARCHITECTURE_V8.md");
 const schema = readRequired("apps/cloud/migrations-v8/0001_conclave_v8.sql");
@@ -32,6 +37,10 @@ const cloudPackage = JSON.parse(
 const workspacePackages = readRequired("pnpm-workspace.yaml");
 const lockfile = readRequired("pnpm-lock.yaml");
 const wranglerTypes = readRequired("apps/cloud/worker-configuration.d.ts");
+const workspacePubspec = readRequired("apps/workspace/pubspec.yaml");
+const workspaceRuntimePackage = JSON.parse(
+  readRequired("packages/workspace-runtime-protocol/package.json") || "{}",
+);
 
 const canonicalExecutionPath =
   "AX → Cloud → Workspace → CLI Worker Engine → signed Tool Profile → provider CLI";
@@ -46,7 +55,7 @@ const architectureProhibitions = [
     "Conclave-managed provider credentials",
     "conclave_managed_provider_credentials: true",
   ],
-  ["Agent/Host runtime", "agent_or_host_runtime: true"],
+  ["agent-managed runtime", "agent_runtime: true"],
   ["ConfiguredWorker product entity", "configured_worker_product_entity: true"],
   [
     "pre-v8 Goal/Phase/Task orchestration",
@@ -82,12 +91,12 @@ for (const [label, declaration] of architectureProhibitions) {
 const sourceRoots = [
   "apps/cloud/src",
   "apps/cloud/migrations-v8",
-  "apps/host/lib",
+  "apps/workspace/lib",
   "apps/app/lib",
   "engines/cli_worker/lib",
   "packages/core/src",
   "packages/protocol/src",
-  "packages/host-protocol/src",
+  "packages/workspace-runtime-protocol/src",
   "packages/dart/protocol/lib",
   "packages/security/src",
   "packages/tool-profile/src",
@@ -102,34 +111,27 @@ const sourceExtensions = new Set([
   ".yaml",
   ".yml",
 ]);
-const forbiddenArchitecture = [
-  ["Studio AX naming", /\bStudio\w*\b|\/studio\//i],
-  ["Studio snapshot API", /\/api\/studio\/snapshot/i],
-  ["compatibility Project read model", /\/read-model\b/i],
-  ["legacy snapshot API client", /\bloadSnapshot\s*\(/],
-  ["V7Adapter", /V7Adapter/],
-  ["FirstPartyWorkerPackage", /FirstPartyWorkerPackage/],
-  ["ConfiguredWorker identifier", /\bConfiguredWorker\b|\bconfiguredWorker\w*/],
-  ["worker_releases", /worker_releases/i],
-  ["worker_versions", /worker_versions/i],
-  ["credential_profiles", /credential_profiles/i],
-  ["ai_accounts", /ai_accounts/i],
-  ["host_workspace_bindings", /host_workspace_bindings/i],
-  ["AgentEngine", /AgentEngine/],
-  ["workerPlugin", /workerPlugin/i],
-  ["Web AI Worker", /\bWebAiWorker\b|web_ai_worker/i],
-  ["Interactive Connector", /\bInteractiveConnector\b|interactive-connector/i],
-  [
-    "Forge orchestration",
-    /\bForge(?:Execution|Pipeline)\b|forge-execution|forge-terminal|forge-events/i,
-  ],
-  ["connector API route", /\/api\/connector\//i],
-  ["managed provider credential identity", /\bcredentialProfileId\b/],
-  [
-    "provider-specific Worker executable",
-    /provider-specific\s+Worker\s+executable/i,
-  ],
-];
+if (existsSync("apps/host") || existsSync("packages/host-protocol")) {
+  failures.push(
+    "Host-named application or protocol package directories remain.",
+  );
+}
+if (
+  !workspacePubspec.includes("name: conclave_workspace") ||
+  workspaceRuntimePackage.name !== "@conclave/workspace-runtime-protocol"
+) {
+  failures.push(
+    "Workspace application and runtime protocol packages must use Workspace names.",
+  );
+}
+if (
+  !workspaceConfig.includes("CONCLAVE_WORKSPACE_RUNTIME_ID") ||
+  !workspaceRegistration.includes("workspace-registration.json")
+) {
+  failures.push(
+    "Workspace environment and persisted registration names must be canonical.",
+  );
+}
 
 if (existsSync("apps/app/lib/src/studio")) {
   failures.push("The AX source tree must use current AX naming, not studio/.");
@@ -228,6 +230,12 @@ for (const retiredName of [
   "credential_profiles",
   "ai_accounts",
   "host_workspace_bindings",
+  "workstream_checkouts",
+  "workstream_checkpoints",
+  "workstream_current_checkpoints",
+  "workstream_diff_artifacts",
+  "checkout_id",
+  "require_checkout",
 ]) {
   if (schema.includes(retiredName)) {
     failures.push(`The v8 schema retains historical name ${retiredName}.`);
@@ -273,14 +281,10 @@ for (const check of [
   "pnpm protocol:check",
   "pnpm --dir apps/cloud types:check",
   "pnpm format:check",
-  "pnpm format:dart:check",
   "pnpm lint",
   "pnpm build",
   "pnpm test",
-  "pnpm check:dart-protocol",
-  "pnpm check:engine",
-  "pnpm check:workspace",
-  "pnpm check:ax",
+  "pnpm check:dart",
   "pnpm check:fixture-e2e",
 ]) {
   if (!scripts.check?.includes(check)) {

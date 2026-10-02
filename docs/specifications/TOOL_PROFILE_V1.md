@@ -757,7 +757,7 @@ promotion API requires this artifact and retains it as immutable release
 evidence. Normal CI must not enable real acceptance or consume provider
 allowance.
 
-Run one controlled profile from `apps/host` with:
+Run one controlled profile from `apps/workspace` with:
 
 ~~~sh
 CONCLAVE_TEST_REAL_PROFILE_CHATGPT=1 \

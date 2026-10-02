@@ -9,7 +9,6 @@ class WorkstreamPage extends StatefulWidget {
     this.currentUserId,
     required this.onBackToProject,
     required this.onArchive,
-    required this.onProvisionCheckout,
     this.onRename,
     this.onRunWork,
     this.realtimeEvents,
@@ -22,7 +21,6 @@ class WorkstreamPage extends StatefulWidget {
   final String? currentUserId;
   final VoidCallback onBackToProject;
   final VoidCallback onArchive;
-  final VoidCallback onProvisionCheckout;
   final Future<void> Function(String name)? onRename;
   final Future<String> Function(String prompt, String workflowId,
       List<Map<String, dynamic>> attachments)? onRunWork;

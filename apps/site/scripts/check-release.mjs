@@ -10,6 +10,7 @@ const requiredFiles = [
   "security/index.html",
   "privacy/index.html",
   "terms/index.html",
+  "downloads/index.html",
   "favicon.svg",
   "social-preview.svg",
   "social-preview.png",
@@ -44,7 +45,7 @@ async function htmlFiles(directory) {
 
 for (const file of await htmlFiles(dist)) {
   const source = await readFile(file, "utf8");
-  const relative = file.replace(`${dist}/`, "");
+  const relative = file.replace(dist, "");
 
   if (forbiddenLegacy.test(source)) {
     errors.push(`${relative}: legacy product terminology found`);
@@ -52,7 +53,16 @@ for (const file of await htmlFiles(dist)) {
   if (forbiddenPublicArchitectureVersion.test(source)) {
     errors.push(`${relative}: public architecture-version terminology found`);
   }
-  if (/github\.com\/nohainc\/conclave/i.test(source)) {
+  const githubLinks = [
+    ...source.matchAll(/https:\/\/github\.com\/nohainc\/conclave[^"'\s]*/gi),
+  ].map(([link]) => link);
+  const approvedDownloads =
+    relative === "downloads/index.html" &&
+    githubLinks.length > 0 &&
+    githubLinks.every(
+      (link) => link === "https://github.com/nohainc/conclave/releases/latest",
+    );
+  if (githubLinks.length > 0 && !approvedDownloads) {
     errors.push(`${relative}: public GitHub repository link found`);
   }
   if (/shared workspace/i.test(source)) {

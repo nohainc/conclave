@@ -135,25 +135,20 @@ export async function handleCreateWorkstream(
     typeof body.accessPolicy === "object" && body.accessPolicy !== null
       ? body.accessPolicy
       : DEFAULT_WORKSTREAM_ACCESS_POLICY;
-  await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
-      `INSERT INTO workstreams
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO workstreams
        (id, project_id, name, status, access_policy_json, lead_user_id, created_at, updated_at)
        VALUES (?1, ?2, ?3, 'active', ?4, ?5, ?6, ?6)`,
-    ).bind(
+  )
+    .bind(
       id,
       projectId,
       name,
       JSON.stringify(accessPolicy),
       context.userId,
       now,
-    ),
-    env.CONCLAVE_DB.prepare(
-      `INSERT INTO workstream_memberships
-       (workstream_id, user_id, role, created_at)
-       VALUES (?1, ?2, 'lead', ?3)`,
-    ).bind(id, context.userId, now),
-  ]);
+    )
+    .run();
   return json(
     {
       workstream: {
@@ -367,198 +362,6 @@ export async function handleDeleteWorkstream(
     throw new HttpError(404, "Workstream not found");
   }
   return json({ ok: true, workstreamId });
-}
-
-export async function handleListWorkstreamCheckouts(
-  request: Request,
-  env: SecurityEnv,
-  workstreamId: string,
-  accessContext?: ExecutionContext,
-): Promise<Response> {
-  await authorizeWorkstreamAccess(
-    request,
-    env,
-    workstreamId,
-    "view",
-    accessContext,
-  );
-  const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workstream_id AS workstreamId, workspace_id AS workspaceId,
-            repository_id AS repositoryId, revision,
-            status, created_at AS createdAt, updated_at AS updatedAt
-     FROM workstream_checkouts WHERE workstream_id = ?1 ORDER BY created_at DESC`,
-  )
-    .bind(workstreamId)
-    .all();
-  return json({ checkouts: rows.results ?? [] });
-}
-
-/** @deprecated Historical compatibility endpoint. WD-17 execution resolves
- * the local Workstream directory from immutable Project/Workstream IDs. */
-export async function handleProvisionWorkstreamCheckout(
-  request: Request,
-  env: SecurityEnv,
-  workstreamId: string,
-  accessContext?: ExecutionContext,
-): Promise<Response> {
-  const projectId = await workstreamProjectId(env, workstreamId);
-  const context = await authorizeRequest(
-    request,
-    env,
-    "run.start",
-    projectId,
-    accessContext,
-  );
-  const membership = await env.CONCLAVE_DB.prepare(
-    "SELECT role FROM project_memberships WHERE project_id = ?1 AND user_id = ?2",
-  )
-    .bind(projectId, context.userId)
-    .first<{ role: string }>();
-  if (!membership || membership.role === "viewer") {
-    throw new HttpError(
-      403,
-      "Project membership with execute access is required",
-    );
-  }
-  const body = (await request.json().catch(() => ({}))) as Record<
-    string,
-    unknown
-  >;
-  const requestedWorkspaceId =
-    typeof body.workspaceId === "string" ? body.workspaceId : null;
-  const workstream = await env.CONCLAVE_DB.prepare(
-    `SELECT ws.project_id AS projectId,
-            ep.primary_workspace_id AS primaryWorkspaceId
-     FROM workstreams ws
-     LEFT JOIN workstream_execution_policies ep ON ep.workstream_id = ws.id
-     WHERE ws.id = ?1`,
-  )
-    .bind(workstreamId)
-    .first<{
-      projectId: string;
-      primaryWorkspaceId: string | null;
-    }>();
-  if (!workstream) throw new HttpError(404, "Workstream not found");
-  if (!workstream.primaryWorkspaceId && !requestedWorkspaceId) {
-    throw new HttpError(422, "A Primary Workspace must be selected first");
-  }
-  const workspaceId = requestedWorkspaceId ?? workstream.primaryWorkspaceId;
-  if (!workspaceId) throw new HttpError(422, "A Primary Workspace is required");
-  const now = new Date().toISOString();
-  const grant = await env.CONCLAVE_DB.prepare(
-    `SELECT id, repository_mappings_json AS repositoryMappingsJson
-     FROM workspace_project_grants
-     WHERE project_id = ?1 AND workspace_id = ?2 AND status = 'active'
-       AND (expires_at IS NULL OR expires_at > ?3)`,
-  )
-    .bind(workstream.projectId, workspaceId, now)
-    .first<{ id: string; repositoryMappingsJson: string }>();
-  if (!grant) throw new HttpError(409, "Workspace Project Grant is not active");
-  const repositoryMappings = parseJson<unknown[]>(
-    grant.repositoryMappingsJson,
-    [],
-  );
-  const repositoryId = repositoryMappings.reduce<string | null>(
-    (resolved, mapping) => {
-      if (resolved) return resolved;
-      if (typeof mapping === "string" && mapping.trim()) return mapping.trim();
-      if (typeof mapping === "object" && mapping !== null) {
-        const candidate = (mapping as Record<string, unknown>).repositoryId;
-        if (typeof candidate === "string" && candidate.trim()) {
-          return candidate.trim();
-        }
-      }
-      return null;
-    },
-    null,
-  );
-  if (!repositoryId) {
-    throw new HttpError(
-      422,
-      "Add at least one repository mapping to the Workspace Project Grant before provisioning a checkout",
-    );
-  }
-  const existing = await env.CONCLAVE_DB.prepare(
-    `SELECT id, workstream_id AS workstreamId, workspace_id AS workspaceId,
-            repository_id AS repositoryId, revision,
-            status, created_at AS createdAt, updated_at AS updatedAt
-     FROM workstream_checkouts
-     WHERE workstream_id = ?1 AND status IN ('provisioning', 'ready', 'stale')
-     ORDER BY created_at DESC LIMIT 1`,
-  )
-    .bind(workstreamId)
-    .first<Record<string, unknown>>();
-  if (existing && existing.workspaceId !== workspaceId) {
-    throw new HttpError(
-      409,
-      "Workstream already has a checkout on another Workspace",
-    );
-  }
-  const checkoutId = existing
-    ? String(existing.id)
-    : `checkout-${crypto.randomUUID()}`;
-  if (!existing) {
-    await env.CONCLAVE_DB.prepare(
-      `INSERT INTO workstream_checkouts
-       (id, workstream_id, workspace_id, repository_id, revision, relative_path, status, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'provisioning', ?7, ?7)`,
-    )
-      .bind(
-        checkoutId,
-        workstreamId,
-        workspaceId,
-        repositoryId,
-        typeof body.revision === "string" ? body.revision : "HEAD",
-        `runtime_pending:${checkoutId}`,
-        now,
-      )
-      .run();
-  }
-  if (!env.CONCLAVE_WORKSPACE_GATEWAY) {
-    await env.CONCLAVE_DB.prepare(
-      "UPDATE workstream_checkouts SET status = 'stale', updated_at = ?1 WHERE id = ?2",
-    )
-      .bind(now, checkoutId)
-      .run();
-    throw new HttpError(503, "Workspace Gateway is not configured");
-  }
-  {
-    const stub = env.CONCLAVE_WORKSPACE_GATEWAY.getByName(workspaceId);
-    const command = await stub.fetch(
-      "https://workspace-gateway/provision-checkout",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          checkoutId,
-          workstreamId,
-          repositoryId,
-        }),
-      },
-    );
-    if (!command.ok) {
-      await env.CONCLAVE_DB.prepare(
-        "UPDATE workstream_checkouts SET status = 'stale', updated_at = ?1 WHERE id = ?2",
-      )
-        .bind(now, checkoutId)
-        .run();
-      throw new HttpError(
-        command.status === 503 ? 503 : 409,
-        "Workspace could not provision the checkout",
-      );
-    }
-  }
-  return json(
-    {
-      checkout: existing ?? {
-        id: checkoutId,
-        workstreamId,
-        workspaceId,
-        status: "provisioning",
-      },
-    },
-    { status: existing ? 200 : 202 },
-  );
 }
 
 export async function handleListDiscussionMessages(

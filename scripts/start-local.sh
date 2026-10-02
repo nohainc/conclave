@@ -39,7 +39,7 @@ while [[ $# -gt 0 ]]; do
     --api-host) API_HOST="$2"; shift 2 ;;
     --web-port) WEB_PORT="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: ./start-local.sh [-p port] [-d device] [--web-port port] [--api-host host]"
+      echo "Usage: pnpm start:local [-p port] [-d device] [--web-port port] [--api-host host]"
       exit 0
       ;;
     *) shift ;;

@@ -1,0 +1,164 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:conclave_workspace/desktop_auth.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test('cancels an intent with its poll credential', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final received = Completer<void>();
+    server.listen((request) async {
+      expect(request.method, 'POST');
+      expect(request.uri.path, '/api/desktop-auth/intents/intent-a/cancel');
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer poll-secret');
+      request.response.headers.contentType = ContentType.json;
+      request.response.write('{"cancelled":true}');
+      await request.response.close();
+      received.complete();
+    });
+    final client = DesktopAuthClient(
+      cloudUrl: 'http://127.0.0.1:${server.port}',
+    );
+    addTearDown(client.close);
+
+    await client.cancelIntent(DesktopAuthIntent(
+      intentId: 'intent-a',
+      pollToken: 'poll-secret',
+      verificationUrl: Uri.parse('http://127.0.0.1/verify'),
+      expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+      pollIntervalMs: 2000,
+    ));
+    await received.future;
+  });
+
+  test('accepts browser approval intents without exposing a comparison code',
+      () {
+    final intent = DesktopAuthIntent.fromJson({
+      'intentId': 'intent-a',
+      'pollToken': 'poll-token-with-sufficient-length-123456',
+      'verificationUrl': 'https://app.conclave.test/desktop-auth/approve',
+      'expiresAt': DateTime.now()
+          .toUtc()
+          .add(const Duration(minutes: 5))
+          .toIso8601String(),
+      'pollIntervalMs': 2000,
+    });
+
+    expect(intent.intentId, 'intent-a');
+    expect(intent.verificationUrl.path, '/desktop-auth/approve');
+  });
+
+  test('restores the persisted desktop session shape without a wire audience',
+      () {
+    final issuedAt = DateTime.now().toUtc();
+    final session = DesktopHumanSession.fromSecureJson({
+      'credential': 'desktop-session-secret',
+      'sessionId': 'session-a',
+      'userId': 'user-a',
+      'displayName': 'User A',
+      'email': 'a@example.com',
+      'expiresAt': DateTime.now()
+          .toUtc()
+          .add(const Duration(days: 10))
+          .toIso8601String(),
+      'issuedAt': issuedAt.toIso8601String(),
+    });
+
+    expect(session.userId, 'user-a');
+    expect(session.issuedAt, issuedAt);
+    expect(session.toSecureJson()['issuedAt'], issuedAt.toIso8601String());
+    expect(session.toSecureJson(), isNot(contains('audience')));
+  });
+
+  test('rotates the same desktop session using its current bearer credential',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final requestReceived = Completer<void>();
+    server.listen((request) async {
+      expect(request.method, 'POST');
+      expect(request.uri.path, '/api/desktop-auth/sessions/session-a/rotate');
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer current-session-secret');
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'credential': 'rotated-session-secret',
+        'sessionId': 'session-a',
+        'audience': 'conclave.desktop.management',
+        'user': {
+          'userId': 'user-a',
+          'displayName': 'User A',
+          'email': 'a@example.com',
+        },
+        'expiresAt': DateTime.now()
+            .toUtc()
+            .add(const Duration(days: 30))
+            .toIso8601String(),
+      }));
+      await request.response.close();
+      requestReceived.complete();
+    });
+
+    final client = DesktopAuthClient(
+      cloudUrl: 'http://127.0.0.1:${server.port}',
+    );
+    addTearDown(client.close);
+    final rotated = await client.rotateSession(DesktopHumanSession(
+      credential: 'current-session-secret',
+      sessionId: 'session-a',
+      userId: 'user-a',
+      displayName: 'User A',
+      email: 'a@example.com',
+      expiresAt: DateTime.now().toUtc().add(const Duration(days: 2)),
+    ));
+    await requestReceived.future;
+
+    expect(rotated.credential, 'rotated-session-secret');
+    expect(rotated.sessionId, 'session-a');
+    expect(rotated.userId, 'user-a');
+  });
+
+  test('rejects a rotated session that changes user or session identity',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'credential': 'rotated-session-secret',
+        'sessionId': 'another-session',
+        'audience': 'conclave.desktop.management',
+        'user': {
+          'userId': 'user-b',
+          'displayName': 'User B',
+          'email': 'b@example.com',
+        },
+        'expiresAt': DateTime.now()
+            .toUtc()
+            .add(const Duration(days: 30))
+            .toIso8601String(),
+      }));
+      await request.response.close();
+    });
+
+    final client = DesktopAuthClient(
+      cloudUrl: 'http://127.0.0.1:${server.port}',
+    );
+    addTearDown(client.close);
+    await expectLater(
+      client.rotateSession(DesktopHumanSession(
+        credential: 'current-session-secret',
+        sessionId: 'session-a',
+        userId: 'user-a',
+        displayName: 'User A',
+        email: 'a@example.com',
+        expiresAt: DateTime.now().toUtc().add(const Duration(days: 2)),
+      )),
+      throwsA(isA<FormatException>()),
+    );
+  });
+}

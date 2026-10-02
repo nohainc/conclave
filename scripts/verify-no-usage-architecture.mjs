@@ -6,7 +6,7 @@ const roots = [
   "apps/app/lib",
   "apps/cloud/src",
   "apps/cloud/migrations-v8",
-  "apps/host/lib",
+  "apps/workspace/lib",
   "packages",
 ];
 

@@ -1,41 +1,12 @@
-import { isTrustedOrigin } from "../observability.js";
 import {
-  identityService,
-  provisionConclaveUser,
-  hasRecentStepUp,
-  SENSITIVE_OPERATIONS,
-  recordAuthAuditEvent,
-  type SensitiveOperation,
-} from "../auth/index.js";
-import {
-  authorize,
-  resolveProjectSecurityContextFromIdentity,
-  authorizeProjectMembership,
-  authorizeWorkspaceOwner,
-  authorizeProjectOwner,
   authorizeProfileAdmin as authorizeSecurityProfileAdmin,
-  type Permission,
   type SecurityContext,
 } from "@conclave/security";
-import {
-  canDiscussWorkstream,
-  canExecuteWorkstream,
-  canManageWorkstream,
-  canViewWorkstream,
-  DEFAULT_WORKSTREAM_ACCESS_POLICY,
-  type ProjectMembership,
-  type Workstream,
-  type BuiltinWorkflowDefinition,
-  type WorkflowId,
-  WORKFLOW_IDS,
-  WORKSTREAM_BINDING_IDS,
-  WORKER_INPUT_CAPABILITIES,
-} from "@conclave/core";
 
 import type { SecurityEnv } from "./http-security.js";
 import { securityContext } from "./http-security.js";
 
-import { HttpError, requiredString } from "./http-security.js";
+import { HttpError } from "./http-security.js";
 
 export function assertSafeProviderMetadata(
   value: unknown,

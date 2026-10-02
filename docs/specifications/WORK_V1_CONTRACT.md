@@ -5,9 +5,16 @@
 **Scope:** Work composer and built-in Workflow semantics in Conclave AX
 
 This is the single authoritative catalog and semantic definition for Work v1.
-Architecture v8 preserves Workspace ownership, Workstream isolation, Cloud/Workspace transport, AX-owned Worker usage policy, and the Workspace desktop lifecycle. Work v1 binds logical Workers and is intentionally independent from the underlying Engine/Profile implementation. A Work v1 Workflow describes the user-visible shape of a
-Work Request; it does not select a Worker, provider, model, Workspace, or
-execution permission.
+Architecture v8 preserves Workspace ownership, Workstream isolation,
+Cloud/Workspace transport, AX-owned Worker usage policy, and the Workspace
+desktop lifecycle. Work v1 binds logical Workers and is intentionally
+independent from the underlying Engine/Profile implementation. See
+[Persistence Contracts](PERSISTENCE.md),
+[Architecture v8](../architecture/ARCHITECTURE_V8.md), and
+[ADR-011](../decisions/ADR-011-workstream-working-directories.md) for the
+matching runtime lease and local directory rules. A Work v1 Workflow describes
+the user-visible shape of a Work Request; it does not select a Worker, provider,
+model, Workspace, or execution permission.
 
 The product flow is:
 
@@ -238,7 +245,7 @@ surfaces those counts separately as a short Test summary.
 The Work timeline stays concise and links to a separately loaded Run details
 view. Details use the immutable Work Request and Step records and show the
 Workflow ID/version, original request, and each Step's status, assigned Worker,
-Worker Runtime version, provider tool version when known, start/end/duration,
+Workspace and Engine versions, provider tool version when known, start/end/duration,
 and bounded final result text. A queued Step may have no start time; a running
 Step has elapsed time through the time details are loaded and no end time.
 
@@ -295,12 +302,20 @@ free-form `role`. A step's `executionMode`, read/write policy, timeout, prompt
 profile, order, and dependencies are product-owned values. The current fixed
 execution modes are `stateless_read` for `research` and `plan`, and
 `stateful_workstream` for `implement`, `test`, and `verify`. A stateful
-read-only step keeps the active Workstream lease to inspect the exact current
-filesystem, while its effective permissions exclude repository write. Shell
+Work Request is one whose selected Workflow contains a `stateful_workstream`
+Step. Cloud acquires one Workstream runtime lease before that request starts and
+holds it through a terminal state; a stateless-only Work Request has no lease.
+The request-level lease prevents another stateful Work Request from
+interleaving between Steps and keeps all stateful Steps on the Primary
+Workspace. Research and Plan remain stateless and read-only, and may run on
+another eligible granted Workspace even while their Work Request holds a lease
+for later stateful Steps. A stateful read-only Step keeps that lease to inspect
+the exact current filesystem, while its effective permissions exclude
+repository write. Shell
 execution is withheld except for Test, which needs it for validation commands;
-Test's provider still runs in its read-only sandbox. Workspace passes the
-explicit read-only constraint to its provider integration; the
-provider-specific Worker maps that constraint to its CLI's read-only mode.
+Test still has read-only effective filesystem permissions. Workspace passes
+the explicit policy through the generic CLI Worker Engine, which applies the
+signed Tool Profile's bounded provider CLI arguments and sandbox settings.
 Verify always uses its own Work Request-scoped provider session, including when
 the same Worker performed Implement.
 
@@ -433,11 +448,12 @@ rebootstrapped rather than upgraded through a compatibility layer.
 
 ### Direct execution path
 
-Direct Work Requests use the configured `direct` Worker binding and are
-serialized by a Workstream runtime lease. Cloud dispatches the assignment to
+Direct Work Requests use the configured `direct` Worker binding and hold a
+Workstream runtime lease for the request because Direct contains the stateful
+`implement` Step. Cloud dispatches the assignment to
 the selected Worker's Workspace; the Workspace starts the generic CLI Worker
 Engine, which resolves the signed Tool Profile and starts the provider CLI.
-Work Requests, step progress, Worker/provider version attribution,
+Work Requests, step progress, logical Worker and Engine/Profile/provider CLI attribution,
 timing, and final results are available to AX through the Workstream history
 API. The timeline reconstructs from Cloud after page reload or browser restart,
 and each Run retains its original request text. Direct requests use the same

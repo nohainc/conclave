@@ -75,6 +75,7 @@ jobs:
           test -f dist/how-it-works/index.html
           test -f dist/workers/index.html
           test -f dist/security/index.html
+          test -f dist/downloads/index.html
 
   workspace-flutter:
     strategy:
@@ -84,7 +85,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     defaults:
       run:
-        working-directory: apps/host
+        working-directory: apps/workspace
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2

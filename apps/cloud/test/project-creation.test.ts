@@ -20,6 +20,9 @@ describe("Project creation", () => {
           async first() {
             return null;
           },
+          async run() {
+            return { success: true };
+          },
         };
       },
       async batch(statements: readonly unknown[]) {
@@ -66,9 +69,8 @@ describe("Project creation", () => {
     expect(batchSize).toBe(2);
   });
 
-  it("creates a persisted Workstream with a lead membership", async () => {
+  it("creates a persisted Workstream with its Project lead", async () => {
     const prepared: string[] = [];
-    let batchSize = 0;
     const db = {
       prepare(query: string) {
         prepared.push(query);
@@ -79,11 +81,10 @@ describe("Project creation", () => {
           async first() {
             return null;
           },
+          async run() {
+            return { success: true };
+          },
         };
-      },
-      async batch(statements: readonly unknown[]) {
-        batchSize = statements.length;
-        return [];
       },
     };
     const response = await handleCreateWorkstream(
@@ -124,10 +125,6 @@ describe("Project creation", () => {
     expect(prepared).toContainEqual(
       expect.stringContaining("INSERT INTO workstreams"),
     );
-    expect(prepared).toContainEqual(
-      expect.stringContaining("INSERT INTO workstream_memberships"),
-    );
-    expect(batchSize).toBe(2);
   });
 
   it("gets and updates a Project with custom settings", async () => {
@@ -158,7 +155,6 @@ describe("Project creation", () => {
                 id: "project-1",
                 name: "Original Name",
                 description: "Original Desc",
-                repositoryId: null,
                 settingsJson: JSON.stringify({
                   workstreamOrder: ["ws-1", "ws-2"],
                 }),

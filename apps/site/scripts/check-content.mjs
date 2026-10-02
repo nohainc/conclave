@@ -8,6 +8,7 @@ const routes = new Map([
   ["/security/", "security/index.html"],
   ["/privacy/", "privacy/index.html"],
   ["/terms/", "terms/index.html"],
+  ["/downloads/", "downloads/index.html"],
 ]);
 
 /** @type {Record<string, {title: string, heading: string, content: string[]}>} */
@@ -54,6 +55,11 @@ const expected = {
       "Workspaces and local execution",
       "AI Accounts",
     ],
+  },
+  "/downloads/": {
+    title: "Downloads — Conclave AX",
+    heading: "Run Conclave Workers on your computer.",
+    content: ["Conclave Workspace", "Download", "macOS", "Windows", "Linux"],
   },
   "/terms/": {
     title: "Terms — Conclave AX",
@@ -119,7 +125,16 @@ if (!home.includes('href="/#workstreams"'))
   errors.push("homepage: Workstreams navigation anchor is missing");
 
 for (const [route, source] of sources) {
-  if (/github\.com\/nohainc\/conclave/i.test(source))
+  const githubLinks = [
+    ...source.matchAll(/https:\/\/github\.com\/nohainc\/conclave[^"'\s]*/gi),
+  ].map(([link]) => link);
+  const approvedDownloads =
+    route === "/downloads/" &&
+    githubLinks.length > 0 &&
+    githubLinks.every(
+      (link) => link === "https://github.com/nohainc/conclave/releases/latest",
+    );
+  if (githubLinks.length > 0 && !approvedDownloads)
     errors.push(`${route}: public GitHub repository link must not be present`);
   if (/\b(?:architecture\s+)?v\d+\b/i.test(source))
     errors.push(

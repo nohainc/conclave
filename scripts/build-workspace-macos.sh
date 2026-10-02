@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-HOST_DIR="$ROOT/apps/host"
+WORKSPACE_DIR="$ROOT/apps/workspace"
 DIST_DIR="$ROOT/dist/conclave-workspace/macos"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -71,14 +71,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-VERSION="${CONCLAVE_WORKSPACE_VERSION:-$(awk '/^version:/ {print $2; exit}' "$HOST_DIR/pubspec.yaml")}"
+VERSION="${CONCLAVE_WORKSPACE_VERSION:-$(awk '/^version:/ {print $2; exit}' "$WORKSPACE_DIR/pubspec.yaml")}"
 if [[ -z "$VERSION" ]]; then
   echo "Could not determine Conclave Workspace version." >&2
   exit 1
 fi
 
 echo "Building Conclave Workspace $VERSION for macOS (mode: $MODE)"
-cd "$HOST_DIR"
+cd "$WORKSPACE_DIR"
 flutter clean
 flutter pub get
 bash "$ROOT/scripts/build-cli-worker-engine.sh"
@@ -87,12 +87,12 @@ if [[ "$MODE" == "debug" ]]; then
   flutter build macos --debug \
     --dart-define=CONCLAVE_WORKSPACE_VERSION="$VERSION" \
     --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}"
-  APP="$HOST_DIR/build/macos/Build/Products/Debug/Conclave Workspace.app"
+  APP="$WORKSPACE_DIR/build/macos/Build/Products/Debug/Conclave Workspace.app"
 else
   flutter build macos --release \
     --dart-define=CONCLAVE_WORKSPACE_VERSION="$VERSION" \
     --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}"
-  APP="$HOST_DIR/build/macos/Build/Products/Release/Conclave Workspace.app"
+  APP="$WORKSPACE_DIR/build/macos/Build/Products/Release/Conclave Workspace.app"
 fi
 
 if [[ ! -d "$APP" ]]; then

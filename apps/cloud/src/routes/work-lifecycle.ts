@@ -2,36 +2,22 @@ import {
   cancelTaskAssignment,
   type AssignmentDispatcherEnv,
 } from "../assignment-dispatcher.js";
-import {
-  validateWorkRequest,
-  validateBuiltinWorkflowDefinition,
-  BUILTIN_WORKFLOWS,
-  type WorkRequest,
-  type WorkRequestSnapshot,
-  type WorkstreamExecutionPolicy,
-  type BuiltinWorkflowDefinition,
-  type WorkflowId,
-  type StepKind,
-} from "@conclave/core";
+import { type BuiltinWorkflowDefinition, type StepKind } from "@conclave/core";
 import {
   canonicalExecutionErrorCode,
   executionErrorMessage,
 } from "@conclave/protocol";
-import { createEventPublisher } from "../event-publisher.js";
+
 import {
   HttpError,
   authorizeWorkstreamAccess,
-  eligibilityMessage,
-  errorMessage,
   json,
   parseJson,
-  requiredString,
   resolveWorkflowInstanceId,
   summarizeTestCounts,
   validateWorkflowWorkerEligibility,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
-import type { ConclaveWorkflowParams } from "../workflow.js";
 
 import { createOrGetRun } from "./work-creation.js";
 
@@ -201,9 +187,9 @@ export async function handleRetryWorkRequest(
       ).bind(now, workRequestId, stepKind),
       env.CONCLAVE_DB.prepare(
         `INSERT INTO runs
-       (id, project_id, workstream_id, work_request_id, checkout_id,
+       (id, project_id, workstream_id, work_request_id,
         policy_snapshot_json, status, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, NULL, ?5, 'created', ?6, ?6)`,
+       VALUES (?1, ?2, ?3, ?4, ?5, 'created', ?6, ?6)`,
       ).bind(
         runId,
         projectId,

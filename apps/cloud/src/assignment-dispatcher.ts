@@ -2,7 +2,7 @@ import {
   type AssignmentResultPayload,
   type AssignmentFailurePayload,
   type AssignmentCancelPayload,
-} from "@conclave/host-protocol";
+} from "@conclave/workspace-runtime-protocol";
 import type { WorkstreamBindingId } from "@conclave/core";
 import {
   canonicalExecutionErrorCode,
@@ -30,18 +30,11 @@ export interface TaskToDispatch {
   readonly workstreamId?: string;
   readonly workRequestId?: string;
   readonly workBindingId?: WorkstreamBindingId;
-  readonly checkoutId?: string;
   readonly leaseId?: string;
   readonly fencingToken?: number;
-  readonly expectedRevision?: string;
   readonly executionClass?: "stateless_read" | "stateful_workstream";
   /** Restricts Worker/provider access while retaining a Workstream lease. */
   readonly readOnly?: boolean;
-  readonly repository?: {
-    readonly repositoryId: string;
-    readonly revision: string;
-    readonly workspaceSubpath?: string;
-  };
 }
 
 export interface DispatchAssignmentParams {
@@ -94,7 +87,6 @@ async function dispatchWorkspaceWorkerAssignment(
       workstreamId: task.workstreamId,
       workRequestId: task.workRequestId,
       workBindingId: task.workBindingId,
-      expectedRevision: task.expectedRevision,
     },
     new Date(),
     async (workspaceId, runtimeIdentityId) => {
@@ -242,10 +234,8 @@ async function dispatchWorkspaceWorkerAssignment(
       contextArtifactIds: task.contextArtifactIds ?? [],
       workstreamId: target.workstreamId ?? task.workstreamId,
       workRequestId: target.workRequestId ?? task.workRequestId,
-      checkoutId: target.checkoutId ?? task.checkoutId,
       leaseId: target.leaseId ?? task.leaseId,
       fencingToken: target.fencingToken ?? task.fencingToken,
-      expectedRevision: target.expectedRevision ?? task.expectedRevision,
       executionClass: target.executionClass,
       readOnly: target.readOnly,
       executionWorkspaceId: target.workspaceId,

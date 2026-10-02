@@ -3,8 +3,7 @@
  *
  * D1 is the source of truth. The object only serializes mutations, fences
  * workers, and schedules reconciliation after a restart or lease timeout.
- * Checkout columns in the current D1 compatibility schema are historical;
- * active filesystem identity is the Workstream directory.
+ * Active filesystem identity is the ID-derived Workstream directory.
  */
 
 export interface WorkstreamCoordinatorEnv {
@@ -18,7 +17,6 @@ export type CoordinatorRequestRow = {
   mode: "stateless" | "stateful";
   status: string;
   primaryWorkspaceId: string;
-  checkoutId: string | null;
   createdAt: string;
 };
 
@@ -26,12 +24,10 @@ export type CoordinatorLeaseRow = {
   id: string;
   workstreamId: string;
   workRequestId: string;
-  checkoutId?: string;
   workspaceId: string;
   fencingToken: number;
   status: "active" | "released" | "expired";
   expiresAt: string;
-  baseRevision?: string;
 };
 
 export const WORKSTREAM_LEASE_MS = 20 * 60_000;
@@ -285,7 +281,7 @@ export class WorkstreamExecutionCoordinator implements DurableObject {
   private async startNext(workstreamId: string): Promise<void> {
     const rows = await this.env.CONCLAVE_DB.prepare(
       `SELECT id, workstream_id AS workstreamId, mode, status,
-              primary_workspace_id AS primaryWorkspaceId, checkout_id AS checkoutId,
+              primary_workspace_id AS primaryWorkspaceId,
               created_at AS createdAt
        FROM work_requests WHERE workstream_id = ?1 AND mode = 'stateful' AND status = 'queued'
        ORDER BY created_at, id LIMIT 1`,
@@ -330,7 +326,7 @@ export class WorkstreamExecutionCoordinator implements DurableObject {
   private async requestRow(id: string): Promise<CoordinatorRequestRow | null> {
     return this.env.CONCLAVE_DB.prepare(
       `SELECT id, workstream_id AS workstreamId, mode, status,
-              primary_workspace_id AS primaryWorkspaceId, checkout_id AS checkoutId,
+              primary_workspace_id AS primaryWorkspaceId,
               created_at AS createdAt FROM work_requests WHERE id = ?1`,
     )
       .bind(id)
@@ -345,8 +341,7 @@ export class WorkstreamExecutionCoordinator implements DurableObject {
     return this.env.CONCLAVE_DB.prepare(
       `SELECT l.id, l.workstream_id AS workstreamId, l.work_request_id AS workRequestId,
               workspace_id AS workspaceId,
-              fencing_token AS fencingToken, l.status, l.expires_at AS expiresAt,
-              NULL AS baseRevision
+              fencing_token AS fencingToken, l.status, l.expires_at AS expiresAt
        FROM workstream_runtime_leases l
        WHERE l.id = ?1 AND l.work_request_id = ?2 AND l.fencing_token = ?3`,
     )

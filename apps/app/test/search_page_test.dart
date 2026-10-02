@@ -29,7 +29,6 @@ void main() {
                 status: 'active',
                 brief: 'Auth overhaul',
                 primaryWorkspace: 'local',
-                currentCheckpoint: 'checkpoint-1',
                 queueStatus: 'idle',
               ),
               AxWorkstream(
@@ -40,7 +39,6 @@ void main() {
                 status: 'planning',
                 brief: 'Search page UX',
                 primaryWorkspace: 'local',
-                currentCheckpoint: 'checkpoint-2',
                 queueStatus: 'idle',
               ),
             ],

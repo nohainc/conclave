@@ -1,35 +1,17 @@
-import { logStructured, requestIdFor } from "../observability.js";
-import { MAX_ARTIFACT_UPLOAD_BYTES } from "./handlers.js";
-import { SENSITIVE_OPERATIONS } from "../auth/index.js";
 import {
-  extractBearerToken,
-  hashToken,
-  computePackageDigest,
   authorizeProjectMembership,
   authorizeWorkspaceOwner,
 } from "@conclave/security";
-import { createEventPublisher } from "../event-publisher.js";
+
 import {
   HttpError,
-  artifactMetadata,
-  artifactName,
-  authorizeRequest,
   createWorkspaceProjectGrant,
-  disconnectWorkspaceRuntime,
-  findDesktopHumanSession,
-  getWorkspaceGatewayStatus,
-  grantStepUpIfRequired,
   json,
   loadWorkspaceProjectGrant,
-  parseJson,
   recordAudit,
-  recordPairingAuditEvent,
-  requireRecentStepUp,
-  requireWorkspaceContext,
   requiredString,
   securityContext,
   workspaceProjectGrantMetadata,
-  workspaceOwnerContext,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
 
@@ -151,22 +133,13 @@ export async function handleUpdateWorkspaceProjectGrant(
     string,
     unknown
   >;
-  const scope =
-    body.scope === undefined ? String(existing.scope) : String(body.scope);
-  if (
-    !["project_repository", "selected_paths", "full_workspace"].includes(scope)
-  )
-    throw new HttpError(400, "Unsupported Workspace Project Grant scope");
-  const requiresStepUp = await grantStepUpIfRequired(env, context, scope, body);
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.prepare(
-    `UPDATE workspace_project_grants SET scope = ?1, requires_step_up = ?2,
-       status = COALESCE(?3, status), expires_at = COALESCE(?4, expires_at), updated_at = ?5
-     WHERE id = ?6`,
+    `UPDATE workspace_project_grants SET
+       status = COALESCE(?1, status), expires_at = COALESCE(?2, expires_at), updated_at = ?3
+     WHERE id = ?4`,
   )
     .bind(
-      scope,
-      requiresStepUp,
       body.status === undefined ? null : String(body.status),
       typeof body.expiresAt === "string" ? body.expiresAt : null,
       now,
@@ -179,7 +152,7 @@ export async function handleUpdateWorkspaceProjectGrant(
     "workspace.project_grant.updated",
     "workspace_project_grant",
     grantId,
-    { scope, status: body.status ?? existing.status },
+    { status: body.status ?? existing.status },
   );
   const updated = await loadWorkspaceProjectGrant(env, grantId);
   return json({

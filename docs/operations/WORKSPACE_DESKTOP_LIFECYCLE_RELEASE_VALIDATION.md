@@ -27,7 +27,7 @@ outside the release team.
   HTTPS-fallback CI gates are green.
 - Install the candidate macOS package with its production signing and update
   metadata. Keep the same stable installation ID and local data directory
-  throughout the connected-migration and ownership scenarios.
+  throughout the release-upgrade and ownership scenarios.
 - Prepare a harmless test assignment with a deterministic result. Confirm no
   unrelated production assignment will be affected by Disconnect or Release.
 - For each scenario record pass/fail, timestamps, app/Cloud versions, relevant
@@ -70,7 +70,9 @@ of, the production-device evidence.
   or cursor into a ticket.
 - **User B receives ownership conflict:** this is expected while User A's
   binding remains. Verify the owner using the authenticated ownership check;
-  disconnect alone does not release ownership.
+  disconnect alone does not release ownership. The installation ID must match
+  the current runtime binding; local Workspace/runtime IDs do not restore a
+  missing Cloud binding.
 - **Duplicate or missing assignment during handover:** stop further acceptance
   runs, preserve event IDs and Cloud correlations, and verify the Gateway
   logical outbound queue and hello/sync/inventory reconciliation before retry.

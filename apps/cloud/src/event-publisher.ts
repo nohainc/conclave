@@ -20,7 +20,7 @@ export interface DomainEventInput {
   readonly taskId?: string;
   readonly attemptId?: string;
   readonly assignmentId?: string;
-  readonly hostId?: string;
+  readonly workspaceRuntimeId?: string;
   readonly payload: RealtimeEventPayload;
   readonly durable?: boolean;
   readonly occurredAt?: string;
@@ -52,7 +52,7 @@ function eventFromRow(row: Record<string, unknown>): RealtimeEventEnvelope {
     ...(row.task_id ? { taskId: String(row.task_id) } : {}),
     ...(row.attempt_id ? { attemptId: String(row.attempt_id) } : {}),
     ...(row.assignment_id ? { assignmentId: String(row.assignment_id) } : {}),
-    ...(row.host_id ? { hostId: String(row.host_id) } : {}),
+    ...(row.workspace_runtime_id ? { workspaceRuntimeId: String(row.workspace_runtime_id) } : {}),
     sequence: Number(row.sequence),
     payload: JSON.parse(String(row.payload_json)) as RealtimeEventPayload,
   });
@@ -100,7 +100,7 @@ export class CloudEventPublisher implements EventPublisher {
         ...(input.taskId ? { taskId: input.taskId } : {}),
         ...(input.attemptId ? { attemptId: input.attemptId } : {}),
         ...(input.assignmentId ? { assignmentId: input.assignmentId } : {}),
-        ...(input.hostId ? { hostId: input.hostId } : {}),
+        ...(input.workspaceRuntimeId ? { workspaceRuntimeId: input.workspaceRuntimeId } : {}),
         sequence: 0,
         payload: input.payload,
       });
@@ -138,7 +138,7 @@ export class CloudEventPublisher implements EventPublisher {
       ...(input.taskId ? { taskId: input.taskId } : {}),
       ...(input.attemptId ? { attemptId: input.attemptId } : {}),
       ...(input.assignmentId ? { assignmentId: input.assignmentId } : {}),
-      ...(input.hostId ? { hostId: input.hostId } : {}),
+      ...(input.workspaceRuntimeId ? { workspaceRuntimeId: input.workspaceRuntimeId } : {}),
       sequence: cursor.sequence,
       payload: input.payload,
     });
@@ -147,7 +147,7 @@ export class CloudEventPublisher implements EventPublisher {
       await this.env.CONCLAVE_DB.prepare(
         `INSERT INTO realtime_events
          (event_id, workspace_id, project_id, run_id, task_id,
-          attempt_id, assignment_id, host_id, sequence, event_type,
+          attempt_id, assignment_id, workspace_runtime_id, sequence, event_type,
           payload_json, idempotency_key, occurred_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
       )
@@ -159,7 +159,7 @@ export class CloudEventPublisher implements EventPublisher {
           event.taskId ?? null,
           event.attemptId ?? null,
           event.assignmentId ?? null,
-          event.hostId ?? null,
+          event.workspaceRuntimeId ?? null,
           event.sequence,
           event.type,
           json(event.payload),

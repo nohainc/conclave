@@ -40,7 +40,7 @@ jobs:
         run: pnpm check
       - name: Install Workspace Flutter dependencies
         run: flutter pub get
-        working-directory: apps/host
+        working-directory: apps/workspace
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test

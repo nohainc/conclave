@@ -40,10 +40,12 @@ CREATE INDEX idx_workspaces_owner ON execution_workspaces(owner_user_id);
 CREATE TABLE workspace_runtime_identities (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES execution_workspaces(id) ON DELETE CASCADE,
-  credential_key_ref TEXT NOT NULL,
+  credential_token_hash TEXT NOT NULL,
+  installation_id TEXT,
   created_at TEXT NOT NULL,
-  revoked_at TEXT
-, credential_token_hash TEXT, installation_id TEXT);
+  revoked_at TEXT,
+  CHECK (installation_id IS NOT NULL OR revoked_at IS NOT NULL)
+);
 CREATE TABLE workstreams (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -55,13 +57,6 @@ CREATE TABLE workstreams (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX idx_workstreams_project ON workstreams(project_id, status);
-CREATE TABLE workstream_memberships (
-  workstream_id TEXT NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL CHECK (role IN ('lead', 'contributor', 'viewer')),
-  created_at TEXT NOT NULL,
-  PRIMARY KEY (workstream_id, user_id)
-);
 CREATE TABLE discussion_messages (
   id TEXT PRIMARY KEY,
   workstream_id TEXT NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
@@ -76,61 +71,16 @@ CREATE TABLE workstream_execution_policies (
   workstream_id TEXT PRIMARY KEY REFERENCES workstreams(id) ON DELETE CASCADE,
   mode TEXT NOT NULL CHECK (mode IN ('stateless', 'stateful')),
   primary_workspace_id TEXT REFERENCES execution_workspaces(id) ON DELETE RESTRICT,
-  require_checkout INTEGER NOT NULL DEFAULT 0 CHECK (require_checkout IN (0, 1)),
   max_concurrent_work_requests INTEGER NOT NULL CHECK (max_concurrent_work_requests > 0),
   allowed_worker_type_ids_json TEXT NOT NULL DEFAULT '[]',
   allowed_models_json TEXT NOT NULL DEFAULT '[]',
   budget_json TEXT
-);
-CREATE TABLE workstream_checkouts (
-  id TEXT PRIMARY KEY,
-  workstream_id TEXT NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
-  workspace_id TEXT NOT NULL REFERENCES execution_workspaces(id) ON DELETE RESTRICT,
-  repository_id TEXT NOT NULL,
-  revision TEXT NOT NULL,
-  relative_path TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('provisioning', 'ready', 'stale', 'deleted')),
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  UNIQUE (workstream_id, id)
-);
-CREATE UNIQUE INDEX idx_one_active_checkout
-  ON workstream_checkouts(workstream_id)
-  WHERE status IN ('provisioning', 'ready', 'stale');
-CREATE TABLE workstream_checkpoints (
-  id TEXT PRIMARY KEY,
-  workstream_id TEXT NOT NULL,
-  checkout_id TEXT NOT NULL,
-  sequence INTEGER NOT NULL CHECK (sequence > 0),
-  revision TEXT NOT NULL,
-  summary TEXT NOT NULL,
-  created_by_work_request_id TEXT NOT NULL REFERENCES work_requests(id) ON DELETE RESTRICT,
-  created_at TEXT NOT NULL,
-  UNIQUE (checkout_id, sequence),
-  FOREIGN KEY (workstream_id, checkout_id)
-    REFERENCES workstream_checkouts(workstream_id, id) ON DELETE CASCADE
-);
-CREATE TABLE workstream_current_checkpoints (
-  workstream_id TEXT PRIMARY KEY REFERENCES workstreams(id) ON DELETE CASCADE,
-  checkpoint_id TEXT NOT NULL REFERENCES workstream_checkpoints(id) ON DELETE RESTRICT,
-  updated_at TEXT NOT NULL
-);
-CREATE TABLE workstream_diff_artifacts (
-  id TEXT PRIMARY KEY,
-  workstream_id TEXT NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
-  checkout_id TEXT NOT NULL REFERENCES workstream_checkouts(id) ON DELETE RESTRICT,
-  work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
-  revision TEXT NOT NULL,
-  outcome TEXT NOT NULL CHECK (outcome IN ('success', 'failure', 'cancelled')),
-  diff_text TEXT NOT NULL,
-  created_at TEXT NOT NULL
 );
 CREATE TABLE runs (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   workstream_id TEXT REFERENCES workstreams(id) ON DELETE SET NULL,
   work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
-  checkout_id TEXT REFERENCES workstream_checkouts(id) ON DELETE SET NULL,
   status TEXT NOT NULL CHECK (status IN ('created', 'running', 'paused', 'completed', 'failed', 'cancelled')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -141,7 +91,6 @@ CREATE TABLE worker_assignments (
   run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
   workstream_id TEXT REFERENCES workstreams(id) ON DELETE SET NULL,
   work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
-  checkout_id TEXT REFERENCES workstream_checkouts(id) ON DELETE SET NULL,
   execution_workspace_id TEXT NOT NULL REFERENCES execution_workspaces(id) ON DELETE RESTRICT,
   runtime_identity_id TEXT NOT NULL REFERENCES workspace_runtime_identities(id) ON DELETE RESTRICT,
   worker_type_id TEXT NOT NULL REFERENCES worker_catalog(worker_type_id) ON DELETE RESTRICT,
@@ -158,7 +107,6 @@ CREATE TABLE artifacts (
   run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
   workstream_id TEXT REFERENCES workstreams(id) ON DELETE SET NULL,
   work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
-  checkout_id TEXT REFERENCES workstream_checkouts(id) ON DELETE SET NULL,
   assignment_id TEXT REFERENCES worker_assignments(id) ON DELETE SET NULL,
   content_digest TEXT NOT NULL,
   storage_key TEXT NOT NULL,
@@ -173,9 +121,6 @@ CREATE TABLE workspace_project_grants (
   workspace_id TEXT NOT NULL,
   granted_by_user_id TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'revoked', 'expired')),
-  scope TEXT NOT NULL CHECK (scope IN ('project_repository', 'selected_paths', 'full_workspace')),
-  repository_mappings_json TEXT NOT NULL DEFAULT '[]',
-  path_mappings_json TEXT NOT NULL DEFAULT '[]',
   allowed_worker_ids_json TEXT NOT NULL DEFAULT '[]',
   allowed_permissions_json TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL,
@@ -185,7 +130,6 @@ CREATE TABLE workspace_project_grants (
   network_policy_json TEXT NOT NULL DEFAULT '{"mode":"deny_all","allowedHosts":[]}',
   concurrency_json TEXT NOT NULL DEFAULT '{"maxConcurrentAssignments":1}',
   budget_json TEXT,
-  requires_step_up INTEGER NOT NULL DEFAULT 0 CHECK (requires_step_up IN (0, 1)),
   UNIQUE (id, project_id, workspace_id),
   FOREIGN KEY (workspace_id, granted_by_user_id)
     REFERENCES execution_workspaces(id, owner_user_id)
@@ -331,8 +275,7 @@ CREATE TABLE workspace_runtime_facts (
   updated_at TEXT NOT NULL
 );
 CREATE UNIQUE INDEX idx_workspace_runtime_token_hash
-  ON workspace_runtime_identities(credential_token_hash)
-  WHERE credential_token_hash IS NOT NULL;
+  ON workspace_runtime_identities(credential_token_hash);
 CREATE INDEX idx_workspace_runtime_active
   ON workspace_runtime_identities(workspace_id, revoked_at);
 CREATE INDEX idx_assignments_workspace_worker
@@ -376,7 +319,7 @@ CREATE INDEX idx_workspace_pairing_intents_expiry
   WHERE used_at IS NULL AND cancelled_at IS NULL;
 CREATE UNIQUE INDEX idx_runtime_installation_active
   ON workspace_runtime_identities(installation_id)
-  WHERE installation_id IS NOT NULL AND revoked_at IS NULL;
+  WHERE revoked_at IS NULL;
 CREATE TABLE workspace_sessions (
   id TEXT PRIMARY KEY,
 
@@ -401,10 +344,8 @@ CREATE INDEX idx_workspace_sessions_workspace
   ON workspace_sessions(workspace_id);
 CREATE TABLE desktop_auth_intents (
   id TEXT PRIMARY KEY,
-  user_code_hash TEXT NOT NULL,
   poll_token_hash TEXT NOT NULL,
   client_name TEXT NOT NULL,
-  approval_attempts INTEGER NOT NULL DEFAULT 0 CHECK (approval_attempts >= 0),
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
   approved_at TEXT,
@@ -510,7 +451,7 @@ CREATE TABLE realtime_events (
   task_id TEXT,
   attempt_id TEXT,
   assignment_id TEXT,
-  host_id TEXT,
+  workspace_runtime_id TEXT,
   sequence INTEGER NOT NULL,
   event_type TEXT NOT NULL,
   payload_json TEXT NOT NULL,
@@ -822,7 +763,6 @@ CREATE TABLE work_requests (
     status IN ('queued', 'running', 'waiting', 'completed', 'failed', 'cancelled')
   ),
   primary_workspace_id TEXT REFERENCES execution_workspaces(id) ON DELETE RESTRICT,
-  checkout_id TEXT REFERENCES workstream_checkouts(id) ON DELETE RESTRICT,
   input_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -865,7 +805,7 @@ CREATE INDEX idx_workflow_tasks_request
 CREATE TRIGGER trg_work_requests_snapshot_immutable
 BEFORE UPDATE OF workstream_id, requested_by_user_id, mode, workflow_id,
   workflow_version, workflow_snapshot_json, snapshot_json,
-  primary_workspace_id, checkout_id, input_json
+  primary_workspace_id, input_json
 ON work_requests
 WHEN OLD.workstream_id IS NOT NEW.workstream_id
   OR OLD.requested_by_user_id IS NOT NEW.requested_by_user_id
@@ -875,7 +815,6 @@ WHEN OLD.workstream_id IS NOT NEW.workstream_id
   OR OLD.workflow_snapshot_json IS NOT NEW.workflow_snapshot_json
   OR OLD.snapshot_json IS NOT NEW.snapshot_json
   OR OLD.primary_workspace_id IS NOT NEW.primary_workspace_id
-  OR OLD.checkout_id IS NOT NEW.checkout_id
   OR OLD.input_json IS NOT NEW.input_json
 BEGIN
   SELECT RAISE(ABORT, 'Work Request snapshots are immutable');

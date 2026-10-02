@@ -19,14 +19,14 @@ import WorkstreamModel from "../components/WorkstreamModel.astro";
           <WorkflowStep number="03" title="Discuss"><p>People explore the problem and agree on the next step. Discussion never starts AI execution on its own.</p></WorkflowStep>
           <WorkflowStep number="04" title="Run a Work Request"><p>Choose a workflow and explicitly start AI work. The requester, policy, execution environment, and authorized Accounts are known before execution.</p></WorkflowStep>
           <WorkflowStep number="05" title="Coordinate"><p>Research, implementation, testing, and review can be assigned to different Workers based on capability and policy.</p></WorkflowStep>
-          <WorkflowStep number="06" title="Verify and continue"><p>Inspect changes, evidence, tests, findings, and checkpoints. Discuss the result, then create the next Work Request when needed.</p></WorkflowStep>
+          <WorkflowStep number="06" title="Verify and continue"><p>Inspect changes, evidence, tests, and findings. Discuss the result, then create the next Work Request when needed.</p></WorkflowStep>
         </ol>
         <WorkstreamModel />
       </div>
 
       <div class="how-it-works-principles">
         <div><strong>Human discussion is side-effect free.</strong><span>No hidden execution trigger behind normal team conversation.</span></div>
-        <div><strong>Stateful work is isolated.</strong><span>Each Workstream gets a managed checkout on its Primary Workspace.</span></div>
+        <div><strong>Stateful work is isolated.</strong><span>Each Workstream gets an ID-derived directory on its Primary Workspace.</span></div>
         <div><strong>Credentials stay separate.</strong><span>Workspace access never automatically grants use of an AI Account.</span></div>
       </div>
 

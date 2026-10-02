@@ -79,8 +79,6 @@ export {
   handleCreateWorkstream,
   handleUpdateWorkstream,
   handleDeleteWorkstream,
-  handleListWorkstreamCheckouts,
-  handleProvisionWorkstreamCheckout,
   handleListDiscussionMessages,
   handleCreateDiscussionMessage,
   handleEditDiscussionMessage,

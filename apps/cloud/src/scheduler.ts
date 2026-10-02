@@ -18,7 +18,6 @@ export interface ProjectExecutionSelectionRequest {
   readonly workstreamId?: string;
   readonly workRequestId?: string;
   readonly workBindingId?: WorkstreamBindingId;
-  readonly expectedRevision?: string;
 }
 
 export interface ExecutionTarget {
@@ -43,10 +42,8 @@ export interface ExecutionTarget {
   readonly readOnly: boolean;
   readonly workstreamId?: string;
   readonly workRequestId?: string;
-  readonly checkoutId?: string;
   readonly leaseId?: string;
   readonly fencingToken?: number;
-  readonly expectedRevision?: string;
 }
 
 export type WorkspaceLiveCheck = (
@@ -207,10 +204,9 @@ export async function selectProjectExecutionTarget(
   const candidateRows = await db
     .prepare(
       `SELECT g.id AS grant_id, g.project_id, g.workspace_id, g.status AS grant_status,
-            g.scope, g.repository_mappings_json, g.path_mappings_json,
             g.allowed_worker_ids_json, g.allowed_worker_capabilities_json,
             g.allowed_permissions_json, g.network_policy_json,
-            g.concurrency_json, g.requires_step_up, g.expires_at,
+            g.concurrency_json, g.expires_at,
             ep.allowed_worker_type_ids_json,
             ep.allowed_models_json,
             usage.config_json AS workstream_work_config_json,
@@ -511,19 +507,13 @@ export async function selectProjectExecutionTarget(
           ? row.provider_tool_version
           : null,
       requesterUserId: request.requesterUserId,
-      scope: String(row.scope),
       permissions,
-      repositoryMappings: parseJsonValue(row.repository_mappings_json),
-      pathMappings: parseJsonValue(row.path_mappings_json),
       networkPolicy: object(row.network_policy_json),
       concurrency,
       workstreamPolicy: {
         allowedWorkerTypeIds: strings(row.allowed_worker_type_ids_json),
         allowedModels,
       },
-      ...(request.expectedRevision
-        ? { checkpointRevision: request.expectedRevision }
-        : {}),
       snapshotAt,
     };
     return {
@@ -599,9 +589,7 @@ export async function selectProjectExecutionTarget(
             leaseId: statefulLease.leaseId,
             fencingToken: statefulLease.fencingToken,
           }
-        : request.expectedRevision
-          ? { expectedRevision: request.expectedRevision }
-          : {}),
+        : {}),
     };
   }
   return null;

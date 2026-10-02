@@ -23,7 +23,6 @@ export const RealtimeEventPayloadSchema = z
     workRequestId: id.optional(),
     workstreamId: id.optional(),
     stepKind: id.optional(),
-    checkoutId: id.optional(),
     leaseId: id.optional(),
     workerId: id.optional(),
     percentage: z.number().min(0).max(100).optional(),
@@ -47,7 +46,7 @@ export const RealtimeEventEnvelopeSchema = z
     taskId: id.optional(),
     attemptId: id.optional(),
     assignmentId: id.optional(),
-    hostId: id.optional(),
+    workspaceRuntimeId: id.optional(),
     sequence: z.number().int().min(0),
     payload: RealtimeEventPayloadSchema,
   })

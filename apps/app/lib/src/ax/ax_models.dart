@@ -220,7 +220,6 @@ class AxWorkstream {
     required this.status,
     required this.brief,
     required this.primaryWorkspace,
-    required this.currentCheckpoint,
     required this.queueStatus,
     this.workConfig = const {},
     this.canConfigureWork = false,
@@ -235,7 +234,6 @@ class AxWorkstream {
   final String status;
   final String brief;
   final String primaryWorkspace;
-  final String currentCheckpoint;
   final String queueStatus;
   final Map<String, dynamic> workConfig;
   final bool canConfigureWork;
@@ -250,7 +248,6 @@ class AxWorkstream {
         status: _string(json, 'status', 'active'),
         brief: _string(json, 'brief', ''),
         primaryWorkspace: _string(json, 'primaryWorkspace', 'Not selected'),
-        currentCheckpoint: _string(json, 'currentCheckpoint', 'Not started'),
         queueStatus: _string(json, 'queueStatus', 'Idle'),
         workConfig: json['workConfig'] is Map
             ? Map<String, dynamic>.from(json['workConfig'] as Map)

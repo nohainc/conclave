@@ -125,15 +125,12 @@ describe("desktop human authentication", () => {
     expect(create.status).toBe(201);
     const intent = (await create.json()) as {
       intentId: string;
-      userCode?: string;
       pollToken: string;
       verificationUrl: string;
     };
     expect(new URL(intent.verificationUrl).pathname).toBe(
       "/desktop-auth/approve",
     );
-    expect(intent.userCode).toBeUndefined();
-
     const pending = await handleDesktopAuthIntentStatus(
       new Request(
         `https://app.conclave.test/api/desktop-auth/intents/${intent.intentId}`,
@@ -330,12 +327,11 @@ describe("desktop human authentication", () => {
       .run("workspace-a", "human-a", "A's Workspace", now, now);
     sqlite
       .prepare(
-        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, 'install_11111111-1111-4111-8111-111111111111', ?)",
       )
       .run(
         "runtime-a",
         "workspace-a",
-        "runtime-key",
         await hashToken("runtime-only-secret"),
         now,
       );
@@ -417,12 +413,8 @@ describe("desktop human authentication", () => {
     expect(connected.status).toBe(201);
     const firstRuntime = (await connected.json()) as {
       workspaceId: string;
-      workspaceRuntimeId: string;
     };
-    const recovered = await register("human-a", {
-      existingWorkspaceId: firstRuntime.workspaceId,
-      existingRuntimeId: firstRuntime.workspaceRuntimeId,
-    });
+    const recovered = await register("human-a");
     expect(recovered.status).toBe(201);
     const recoveredRuntime = (await recovered.json()) as {
       outcome: string;
@@ -464,41 +456,7 @@ describe("desktop human authentication", () => {
     });
   });
 
-  it("rejects an incorrect comparison code and cannot approve the intent", async () => {
-    const { env } = await setup();
-    const create = await handleCreateDesktopAuthIntent(
-      new Request("https://app.conclave.test/api/desktop-auth/intents", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          clientName: "Conclave Workspace",
-          contractVersion: "1.0",
-        }),
-      }),
-      env,
-    );
-    const intent = (await create.json()) as {
-      intentId: string;
-      userCode: string;
-    };
-    const wrongCode = intent.userCode === "00000000" ? "00000001" : "00000000";
-    await expect(
-      handleApproveDesktopAuthIntent(
-        new Request("https://app.conclave.test/api/desktop-auth/approve", {
-          method: "POST",
-          headers: {
-            cookie: "better-auth-session=opaque",
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ userCode: wrongCode }),
-        }),
-        env,
-        intent.intentId,
-      ),
-    ).rejects.toThrow(/code does not match/);
-  });
-
-  it("hashes the short-lived poll token and comparison code at rest", async () => {
+  it("hashes the short-lived poll token at rest", async () => {
     const { env, sqlite } = await setup();
     const response = await handleCreateDesktopAuthIntent(
       new Request("https://app.conclave.test/api/desktop-auth/intents", {
@@ -506,25 +464,20 @@ describe("desktop human authentication", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           clientName: "Conclave Workspace",
-          contractVersion: "1.0",
+          contractVersion: "1.1",
         }),
       }),
       env,
     );
     const intent = (await response.json()) as {
       intentId: string;
-      userCode: string;
       pollToken: string;
     };
     const stored = sqlite
-      .prepare(
-        "SELECT user_code_hash, poll_token_hash FROM desktop_auth_intents WHERE id = ?",
-      )
+      .prepare("SELECT poll_token_hash FROM desktop_auth_intents WHERE id = ?")
       .get(intent.intentId) as {
-      user_code_hash: string;
       poll_token_hash: string;
     };
-    expect(stored.user_code_hash).toBe(await hashToken(intent.userCode));
     expect(stored.poll_token_hash).toBe(await hashToken(intent.pollToken));
     expect(stored.poll_token_hash).not.toBe(intent.pollToken);
   });
@@ -552,12 +505,11 @@ describe("desktop human authentication", () => {
       .run("workspace-a", "human-a", "A's Workspace", now, now);
     sqlite
       .prepare(
-        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?)",
       )
       .run(
         "runtime-a",
         "workspace-a",
-        "runtime-a-key",
         await hashToken(runtimeCredential),
         installationId,
         now,
@@ -615,7 +567,7 @@ describe("desktop human authentication", () => {
     ).toMatchObject({ count: 1 });
   });
 
-  it("blocks a different owner and safely migrates a legacy unbound runtime", async () => {
+  it("blocks a different owner and preserves an existing runtime installation binding", async () => {
     const { env, sqlite } = await setup();
     const now = new Date().toISOString();
     const installationId = "install_12345678-1234-4234-8234-123456789abc";
@@ -634,16 +586,16 @@ describe("desktop human authentication", () => {
       .prepare(
         "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'offline', ?, ?)",
       )
-      .run("legacy-workspace", "human-a", "Legacy Workspace", now, now);
+      .run("workspace-a", "human-a", "A's Workspace", now, now);
     sqlite
       .prepare(
-        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, NULL, ?)",
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?)",
       )
       .run(
-        "legacy-runtime",
-        "legacy-workspace",
-        "legacy-key",
+        "runtime-a",
+        "workspace-a",
         await hashToken("runtime-secret"),
+        installationId,
         now,
       );
     const addSession = async (
@@ -677,8 +629,8 @@ describe("desktop human authentication", () => {
         body: JSON.stringify({
           contractVersion: "1.0",
           installationId,
-          workspaceId: "legacy-workspace",
-          runtimeId: "legacy-runtime",
+          workspaceId: "workspace-a",
+          runtimeId: "runtime-a",
         }),
       });
 
@@ -695,8 +647,8 @@ describe("desktop human authentication", () => {
         .prepare(
           "SELECT installation_id FROM workspace_runtime_identities WHERE id = ?",
         )
-        .get("legacy-runtime"),
-    ).toMatchObject({ installation_id: null });
+        .get("runtime-a"),
+    ).toMatchObject({ installation_id: installationId });
 
     const connectDenied = await handleRegisterWorkspaceFromDesktop(
       new Request("https://app.conclave.test/api/workspace-runtime/register", {
@@ -708,8 +660,6 @@ describe("desktop human authentication", () => {
         body: JSON.stringify({
           contractVersion: "1.0",
           installationId,
-          existingWorkspaceId: "legacy-workspace",
-          existingRuntimeId: "legacy-runtime",
           proposedWorkspaceName: "B's computer",
           hostname: "b-computer",
           platform: "linux",
@@ -740,7 +690,7 @@ describe("desktop human authentication", () => {
         .prepare(
           "SELECT credential_token_hash AS tokenHash FROM workspace_runtime_identities WHERE id = ?",
         )
-        .get("legacy-runtime"),
+        .get("runtime-a"),
     ).toMatchObject({ tokenHash: await hashToken("runtime-secret") });
 
     const verified = await handleCheckWorkspaceOwnership(
@@ -757,7 +707,7 @@ describe("desktop human authentication", () => {
         .prepare(
           "SELECT installation_id FROM workspace_runtime_identities WHERE id = ?",
         )
-        .get("legacy-runtime"),
+        .get("runtime-a"),
     ).toMatchObject({ installation_id: installationId });
 
     const mismatchedInstallation = await handleCheckWorkspaceOwnership(
@@ -770,8 +720,8 @@ describe("desktop human authentication", () => {
         body: JSON.stringify({
           contractVersion: "1.0",
           installationId: "install_abcdefab-cdef-4abc-8def-abcdefabcdef",
-          workspaceId: "legacy-workspace",
-          runtimeId: "legacy-runtime",
+          workspaceId: "workspace-a",
+          runtimeId: "runtime-a",
         }),
       }),
       env,
@@ -785,7 +735,7 @@ describe("desktop human authentication", () => {
         .prepare(
           "SELECT installation_id FROM workspace_runtime_identities WHERE id = ?",
         )
-        .get("legacy-runtime"),
+        .get("runtime-a"),
     ).toMatchObject({ installation_id: installationId });
 
     sqlite
@@ -795,13 +745,13 @@ describe("desktop human authentication", () => {
       .run("workspace-other", "human-a", "Other Workspace", now, now);
     sqlite
       .prepare(
-        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, NULL, ?)",
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?)",
       )
       .run(
         "runtime-other",
         "workspace-other",
-        "other-key",
         await hashToken("other-runtime-secret"),
+        "install_abcdefab-cdef-4abc-8def-abcdefabcdef",
         now,
       );
     const mismatchedWorkspace = await handleCheckWorkspaceOwnership(
@@ -830,7 +780,9 @@ describe("desktop human authentication", () => {
           "SELECT installation_id FROM workspace_runtime_identities WHERE id = ?",
         )
         .get("runtime-other"),
-    ).toMatchObject({ installation_id: null });
+    ).toMatchObject({
+      installation_id: "install_abcdefab-cdef-4abc-8def-abcdefabcdef",
+    });
   });
 
   it("allows only a fresh Workspace owner session to release the installation binding", async () => {
@@ -854,12 +806,11 @@ describe("desktop human authentication", () => {
       .run("workspace-a", "human-a", "A's Workspace", now, now);
     sqlite
       .prepare(
-        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?)",
       )
       .run(
         "runtime-a",
         "workspace-a",
-        "runtime-key",
         await hashToken("runtime-secret"),
         installationId,
         now,
@@ -1016,12 +967,11 @@ describe("desktop human authentication", () => {
       .run("workspace-a", "human-a", "A's Workspace", now, now);
     sqlite
       .prepare(
-        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?)",
       )
       .run(
         "runtime-a",
         "workspace-a",
-        "runtime-key",
         await hashToken("runtime-secret"),
         installationId,
         now,

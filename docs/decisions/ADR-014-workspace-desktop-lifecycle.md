@@ -133,7 +133,7 @@ It does not expose:
 - Work Root mutation;
 - disconnect/reset;
 - runtime credential recovery;
-- adapter management;
+- Worker, Engine, and Profile runtime diagnostics;
 - local permission management.
 
 The implementation should use a dedicated signed-out shell rather than rendering
@@ -200,7 +200,8 @@ There is no silent account switch.
 - mark runtime participation disconnected;
 - preserve installation identity;
 - preserve owner binding;
-- preserve local Workers, provider credentials, adapters, and Work Root;
+- preserve local Worker slots, provider CLI sign-in state, Profile cache, and
+  Work Root;
 - keep the human management session signed in.
 
 The same owner can later press **Connect Workspace** and recover a fresh runtime
@@ -387,8 +388,8 @@ required.
 
 ### 16. Authentication flow remains browser-assisted
 
-The current browser + one-time comparison code flow is acceptable and remains
-the baseline.
+The browser-assisted, explicit approval flow remains the baseline. The desktop
+does not display or ask the user to enter a comparison code.
 
 It has desirable properties:
 
@@ -398,7 +399,7 @@ It has desirable properties:
 - the user explicitly approves the desktop session.
 
 A future native-app OAuth/OIDC flow using external browser redirect + PKCE may
-replace the code-entry UX, but that is not required for this lifecycle change.
+replace this flow, but that is not required for this lifecycle change.
 
 ### 17. Connection-mode UI remains explicit
 
@@ -506,8 +507,8 @@ CONNECTED / UNLOCKED
 - native local-auth integration is platform-specific;
 - Cloud needs explicit disconnect/release semantics;
 - account/session and runtime/session recovery must be tested independently;
-- migration from the first ADR-013 implementation must avoid disconnecting
-  already-working runtimes.
+- release upgrades preserve the Work Root and stable installation identity as
+  specified by the Workspace lifecycle contract.
 
 ## Non-goals
 
@@ -540,4 +541,5 @@ The lifecycle is complete when:
 12. launch-at-login can be enabled/disabled and uses supported native APIs;
 13. WebSocket/HTTPS fallback status remains independently visible;
 14. explicit Release ownership is required before account transfer;
-15. migration preserves existing connected Workspace installations.
+15. release upgrade preserves local Work Root data and stable installation
+    identity without relying on a Cloud schema compatibility migration.

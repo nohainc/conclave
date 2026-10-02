@@ -28,7 +28,6 @@ AxSnapshot axFixtureSnapshot() => const AxSnapshot(
               brief:
                   'Harden the authentication boundaries before the next release.',
               primaryWorkspace: 'MacBook Pro',
-              currentCheckpoint: 'Repository review',
               queueStatus: 'Idle',
             ),
           ],

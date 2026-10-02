@@ -4,10 +4,8 @@ import {
   type ProjectMembership,
   type WorkRequest,
   type Workstream,
-  type WorkstreamCheckout,
   type WorkstreamExecutionLease,
   type WorkstreamExecutionPolicy,
-  type WorkstreamCheckpoint,
   type BuiltinWorkflowDefinition,
   BUILTIN_WORKFLOWS,
   BUILTIN_WORKFLOW_CATALOG,
@@ -16,7 +14,6 @@ import {
   validateBuiltinWorkflowDefinition,
   validateWorkRequest,
   validateWorkstream,
-  validateWorkstreamCheckpoints,
   validateWorkstreamLeases,
   canDiscussWorkstream,
   canExecuteWorkstream,
@@ -70,22 +67,9 @@ const workstream: Workstream = {
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
 
-const checkout: WorkstreamCheckout = {
-  id: "checkout-1",
-  workstreamId: "workstream-1",
-  workspaceId: "workspace-1",
-  repositoryId: "repo-1",
-  revision: "abc123",
-  relativePath: "workstreams/auth",
-  status: "ready",
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-01T00:00:00.000Z",
-};
-
 const statefulPolicy: WorkstreamExecutionPolicy = {
   mode: "stateful",
   primaryWorkspaceId: "workspace-1",
-  requireCheckout: true,
   maxConcurrentWorkRequests: 1,
 };
 
@@ -115,7 +99,7 @@ describe("Workstream domain", () => {
     ).toThrow(/cannot expand Project membership/);
   });
 
-  it("intersects Project roles with selected Workstream members and permissions", () => {
+  it("intersects Project roles with selected Project members and permissions", () => {
     const restricted = {
       ...workstream,
       accessPolicy: {
@@ -159,7 +143,7 @@ describe("Workstream domain", () => {
     );
   });
 
-  it("requires Primary Workspace and Checkout for stateful Work Requests", () => {
+  it("requires a Primary Workspace for stateful Work Requests", () => {
     const request: WorkRequest = {
       id: "request-1",
       workstreamId: "workstream-1",
@@ -170,25 +154,24 @@ describe("Workstream domain", () => {
       workflowSnapshot: BUILTIN_WORKFLOWS.direct,
       status: "queued",
       primaryWorkspaceId: "workspace-1",
-      checkoutId: "checkout-1",
       input: {},
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
-    expect(() => validateWorkRequest(request, statefulPolicy)).toThrow(
-      /historical Checkout control plane/,
-    );
+    expect(() => validateWorkRequest(request, statefulPolicy)).not.toThrow();
     expect(() =>
-      validateWorkRequest({ ...request, checkoutId: null }, statefulPolicy),
-    ).not.toThrow();
+      validateWorkRequest(
+        { ...request, primaryWorkspaceId: null },
+        statefulPolicy,
+      ),
+    ).toThrow(/requires a Primary Workspace/);
   });
 
-  it("enforces one active lease and linear checkpoints per Checkout", () => {
+  it("enforces one active runtime lease per Workstream", () => {
     const leases: WorkstreamExecutionLease[] = [
       {
         id: "lease-1",
         workstreamId: "workstream-1",
-        checkoutId: "checkout-1",
         workRequestId: "request-1",
         workspaceId: "workspace-1",
         fencingToken: 1,
@@ -199,30 +182,13 @@ describe("Workstream domain", () => {
       },
     ];
     const lease = leases[0]!;
-    expect(() => validateWorkstreamLeases(checkout, leases)).not.toThrow();
+    expect(() => validateWorkstreamLeases(workstream, leases)).not.toThrow();
     expect(() =>
-      validateWorkstreamLeases(checkout, [
+      validateWorkstreamLeases(workstream, [
         ...leases,
         { ...lease, id: "lease-2", fencingToken: 2 },
       ]),
     ).toThrow(/only one active execution lease/);
-
-    const checkpoint = (sequence: number): WorkstreamCheckpoint => ({
-      id: `checkpoint-${sequence}`,
-      workstreamId: "workstream-1",
-      checkoutId: "checkout-1",
-      sequence,
-      revision: `rev-${sequence}`,
-      summary: `checkpoint ${sequence}`,
-      createdByWorkRequestId: "request-1",
-      createdAt: "2026-01-01T00:00:00.000Z",
-    });
-    expect(() =>
-      validateWorkstreamCheckpoints(checkout, [checkpoint(1), checkpoint(2)]),
-    ).not.toThrow();
-    expect(() =>
-      validateWorkstreamCheckpoints(checkout, [checkpoint(1), checkpoint(3)]),
-    ).toThrow(/checkpoint sequence must be linear/);
   });
 
   it("serializes and restores domain entities without persistence types", () => {
@@ -309,7 +275,6 @@ describe("Workstream domain", () => {
       workflowSnapshot: BUILTIN_WORKFLOWS.direct,
       status: "queued",
       primaryWorkspaceId: "workspace-1",
-      checkoutId: null,
       input: {},
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",

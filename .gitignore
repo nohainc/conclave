@@ -13,4 +13,4 @@ coverage/
 **/build/
 apps/site/.astro/
 apps/site/dist/
-apps/host/assets/engines/conclave_cli_worker_engine*
+apps/workspace/assets/engines/conclave_cli_worker_engine*

@@ -41,9 +41,9 @@ importers:
       '@conclave/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@conclave/host-protocol':
+      '@conclave/workspace-runtime-protocol':
         specifier: workspace:*
-        version: link:../../packages/host-protocol
+        version: link:../../packages/workspace-runtime-protocol
       '@conclave/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -82,7 +82,7 @@ importers:
         version: 4.1.11(@types/node@24.13.6)(vite@7.3.6(@types/node@24.13.6)(yaml@2.9.1))
 
   packages/core: {}
-  packages/host-protocol:
+  packages/workspace-runtime-protocol:
     dependencies:
       '@conclave/protocol':
         specifier: workspace:*

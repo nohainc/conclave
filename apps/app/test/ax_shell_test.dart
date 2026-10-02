@@ -116,7 +116,6 @@ void main() {
           status: 'running',
           brief: 'Redesign login flow',
           primaryWorkspace: 'MacBook Pro',
-          currentCheckpoint: 'main',
           queueStatus: 'Running',
         ),
       ],
@@ -483,7 +482,6 @@ void main() {
             status: 'active',
             brief: 'Active task',
             primaryWorkspace: 'MacBook Pro',
-            currentCheckpoint: 'main',
             queueStatus: 'Idle',
           ),
           AxWorkstream(
@@ -494,7 +492,6 @@ void main() {
             status: 'archived',
             brief: 'Archived task',
             primaryWorkspace: 'MacBook Pro',
-            currentCheckpoint: 'main',
             queueStatus: 'Done',
           ),
         ],
@@ -544,7 +541,6 @@ void main() {
           status: 'running',
           brief: 'Redesign login flow',
           primaryWorkspace: 'MacBook Pro',
-          currentCheckpoint: 'main',
           queueStatus: 'Running',
         ),
       ],
@@ -1150,7 +1146,6 @@ void main() {
           status: 'running',
           brief: 'Redesign login flow',
           primaryWorkspace: 'MacBook Pro',
-          currentCheckpoint: 'main',
           queueStatus: 'Running',
         ),
         workspaces: [macBook, officeMacOffline],
@@ -1170,7 +1165,6 @@ void main() {
           status: 'running',
           brief: 'Refactoring core',
           primaryWorkspace: 'Office Mac',
-          currentCheckpoint: 'main',
           queueStatus: 'Running',
         ),
         workspaces: [macBook, officeMacOffline],
@@ -1213,7 +1207,6 @@ void main() {
           status: 'running',
           brief: 'Optimizing worker loop',
           primaryWorkspace: 'MacBook Pro',
-          currentCheckpoint: 'main',
           queueStatus: 'Running',
         ),
         AxWorkstream(
@@ -1224,7 +1217,6 @@ void main() {
           status: 'queued',
           brief: 'Queue worker tasks',
           primaryWorkspace: 'MacBook Pro',
-          currentCheckpoint: 'main',
           queueStatus: 'Queued',
         ),
         AxWorkstream(
@@ -1235,7 +1227,6 @@ void main() {
           status: 'failed',
           brief: 'Failed run',
           primaryWorkspace: 'MacBook Pro',
-          currentCheckpoint: 'main',
           queueStatus: 'Failed',
         ),
       ],
@@ -1722,7 +1713,6 @@ void main() {
             status: 'running',
             brief: 'Redesign login flow',
             primaryWorkspace: 'MacBook Pro',
-            currentCheckpoint: 'main',
             queueStatus: 'Running',
           ),
           AxWorkstream(
@@ -1733,7 +1723,6 @@ void main() {
             status: 'idle',
             brief: 'Landing page work',
             primaryWorkspace: 'MacBook Pro',
-            currentCheckpoint: 'main',
             queueStatus: 'Idle',
           ),
           AxWorkstream(
@@ -1744,7 +1733,6 @@ void main() {
             status: 'queued',
             brief: 'Scheduler updates',
             primaryWorkspace: 'MacBook Pro',
-            currentCheckpoint: 'main',
             queueStatus: 'Queued',
           ),
         ],
@@ -1801,7 +1789,6 @@ void main() {
         status: 'running',
         brief: 'Redesign login flow',
         primaryWorkspace: 'MacBook Pro',
-        currentCheckpoint: 'main',
         queueStatus: 'Running',
       );
 
@@ -1898,7 +1885,6 @@ void main() {
         status: 'running',
         brief: 'Redesign login flow',
         primaryWorkspace: 'MacBook Pro',
-        currentCheckpoint: 'main',
         queueStatus: 'Running',
       );
 

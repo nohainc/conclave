@@ -6,19 +6,19 @@ const schema = JSON.parse(
 );
 const [
   protocolTs,
-  hostTs,
+  workspaceRuntimeTs,
   dart,
   protocolIndex,
-  hostIndex,
+  workspaceRuntimeIndex,
   dartIndex,
   workerPackage,
   workspaceDart,
 ] = await Promise.all([
   read("packages/protocol/src/generated.ts"),
-  read("packages/host-protocol/src/generated.ts"),
+  read("packages/workspace-runtime-protocol/src/generated.ts"),
   read("packages/dart/protocol/lib/generated_protocol.dart"),
   read("packages/protocol/src/index.ts"),
-  read("packages/host-protocol/src/index.ts"),
+  read("packages/workspace-runtime-protocol/src/index.ts"),
   read("packages/dart/protocol/lib/conclave_protocol.dart"),
   read("packages/conclave_worker_protocol/lib/src/protocol_version.dart"),
   read("packages/dart/protocol/lib/workspace_runtime_protocol.dart"),
@@ -42,13 +42,13 @@ for (const message of [
   "worker.status",
   "credential.status",
 ]) {
-  if (schema["x-host-protocol"].messageTypes.includes(message)) {
+  if (schema["x-workspace-runtime-protocol"].messageTypes.includes(message)) {
     throw new Error(
       `canonical schema still defines retired message ${message}`,
     );
   }
 }
-const generatedFiles = [protocolTs, hostTs, dart];
+const generatedFiles = [protocolTs, workspaceRuntimeTs, dart];
 const forbiddenGeneratedTokens = [
   "AGENT_PROTOCOL_",
   "agentProtocolName",
@@ -76,8 +76,8 @@ for (const code of schema["x-execution-error-codes"]) {
     throw new Error(`generated execution error bindings are missing ${code}`);
   }
 }
-for (const type of schema["x-host-protocol"].messageTypes) {
-  if (!hostTs.includes(JSON.stringify(type))) {
+for (const type of schema["x-workspace-runtime-protocol"].messageTypes) {
+  if (!workspaceRuntimeTs.includes(JSON.stringify(type))) {
     throw new Error(
       `generated Workspace protocol bindings are missing ${type}`,
     );
@@ -93,7 +93,7 @@ for (const type of schema["x-realtime-events"].durableTypes.concat(
 if (
   protocolIndex.includes("generated-local-protocols") ||
   protocolIndex.includes("AGENT_PROTOCOL_") ||
-  hostIndex.includes("AGENT_PROTOCOL_") ||
+  workspaceRuntimeIndex.includes("AGENT_PROTOCOL_") ||
   dartIndex.includes("generated_local_protocols") ||
   [
     "worker.install",

@@ -16,13 +16,10 @@ const executionErrorCodes = <String>{
 const executionErrorMessages = <String, String>{
   'worker_not_ready': 'The selected Worker is not ready on its Workspace.',
   'cli_not_found': 'The required local CLI could not be found.',
-  'authentication_required':
-      'Sign in to the configured provider on this computer.',
-  'unsupported_cli_version':
-      'The installed local CLI version is not supported.',
+  'authentication_required': 'Sign in to the configured provider on this computer.',
+  'unsupported_cli_version': 'The installed local CLI version is not supported.',
   'model_not_supported': 'The selected model is not supported by this Worker.',
-  'permission_denied':
-      'A local permission required for this assignment was denied.',
+  'permission_denied': 'A local permission required for this assignment was denied.',
   'quota_exhausted': 'The provider\'s usage limit has been reached.',
   'provider_unavailable': 'The provider is temporarily unavailable.',
   'timeout': 'The assignment exceeded its time limit.',
@@ -30,18 +27,20 @@ const executionErrorMessages = <String, String>{
   'execution_failed': 'The assignment could not be completed.',
 };
 
-const hostProtocolName = 'conclave.host-protocol';
-const hostProtocolVersion = '4.0';
-const hostProtocolMaxMessageSizeBytes = 4194304;
-const hostProtocolMessageTypes = <String>{
-  'host.hello',
-  'host.hello.ack',
-  'host.heartbeat',
-  'host.heartbeat.ack',
-  'host.sync.request',
-  'host.sync.result',
-  'host.status',
-  'host.update',
+const workspaceRuntimeProtocolSchemaName = 'conclave.workspace-runtime-protocol';
+const workspaceRuntimeProtocolSchemaVersion = '5.1';
+const workspaceRuntimeProtocolSchemaMaxMessageSizeBytes = 4194304;
+const workspaceRuntimeProtocolSchemaMessageTypes = <String>{
+  'workspace.hello',
+  'workspace.hello.ack',
+  'workspace.heartbeat',
+  'workspace.heartbeat.ack',
+  'workspace.sync.request',
+  'workspace.sync.result',
+  'workspace.status',
+  'workspace.update',
+  'worker.inventory',
+  'workstream.status',
   'assignment.start',
   'assignment.ack',
   'assignment.progress',
@@ -49,8 +48,9 @@ const hostProtocolMessageTypes = <String>{
   'assignment.error',
   'assignment.cancel',
   'assignment.cancel.ack',
+  'assignment.cancelled',
 };
-const hostProtocolBaseEnvelopeFields = <String>[
+const workspaceRuntimeProtocolSchemaBaseEnvelopeFields = <String>[
   'protocol',
   'protocolVersion',
   'messageId',
@@ -59,9 +59,9 @@ const hostProtocolBaseEnvelopeFields = <String>[
   'type',
   'payload',
 ];
-const hostProtocolAssignmentEnvelopeFields = <String>[
-  'workspaceId',
-  'hostId',
+const workspaceRuntimeProtocolSchemaAssignmentEnvelopeFields = <String>[
+  'executionWorkspaceId',
+  'workspaceRuntimeId',
   'workerId',
   'runId',
   'taskId',
@@ -87,7 +87,7 @@ const realtimeEventOptionalEnvelopeFields = <String>[
   'assignmentId',
   'workstreamId',
   'attemptId',
-  'hostId',
+  'workspaceRuntimeId',
 ];
 const durableRealtimeEventTypes = <String>{
   'work_request.created',

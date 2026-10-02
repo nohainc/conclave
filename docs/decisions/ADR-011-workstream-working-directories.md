@@ -3,16 +3,22 @@
 **Status:** Accepted
 **Date:** 2026-09-25  
 **Builds on:** ADR-008 and ADR-009
-**Supersedes:** Conclave-managed repository checkout/worktree behavior where it conflicts with this decision
+
+Work v1 and persistence details are defined by the
+[Work v1 Contract](../specifications/WORK_V1_CONTRACT.md),
+[Persistence Contracts](../specifications/PERSISTENCE.md), and
+[Architecture v8](../architecture/ARCHITECTURE_V8.md). This ADR defines the
+local directory and filesystem fencing rules those contracts use.
 
 ## Context
 
-Conclave does not manage Git checkouts or repository registration. Workers manage
-repositories inside a Workstream's stable local directory.
+Conclave does not manage Git repositories or repository registration. Provider
+CLIs, launched through the generic Engine, manage repositories inside a
+Workstream's stable local directory.
 
 For the current product stage, that is more infrastructure than Conclave AX needs.
 
-AI Workers such as Codex and Claude Code already understand how to:
+Provider CLIs can:
 - clone public and private repositories;
 - inspect local files;
 - create branches;
@@ -24,7 +30,7 @@ AI Workers such as Codex and Claude Code already understand how to:
 
 Conclave's essential filesystem responsibility is therefore smaller:
 
-> give every Workstream a stable, isolated local directory and always execute Workstream Workers inside it.
+> give every Workstream a stable, isolated local directory and execute its assignments through the generic Engine inside that directory.
 
 The directory identity must survive:
 - Project renames;
@@ -134,7 +140,8 @@ receive Assignment
 -> resolve Work Root
 -> resolve <project-id>/<workstream-id>
 -> validate or create marker
--> launch Worker with that directory as CWD
+-> launch generic CLI Worker Engine with that directory as its Workstream root
+-> Engine resolves the signed Tool Profile and launches the provider CLI
 ~~~
 
 The directory then persists across Work Requests.
@@ -159,7 +166,7 @@ Before reusing an existing directory, the runtime validates that the marker matc
 
 If the path exists with a conflicting or missing identity marker in a situation where safe adoption cannot be proven, execution fails closed rather than overwriting unknown data.
 
-### 8. Worker CWD is always runtime-resolved
+### 8. Provider CLI working directory is runtime-resolved
 
 Cloud sends logical execution identity:
 - Project ID;
@@ -168,17 +175,21 @@ Cloud sends logical execution identity:
 
 Cloud does not send an arbitrary absolute working path.
 
-A Worker cannot select a CWD outside the runtime policy.
+A provider CLI process cannot select a working directory outside the runtime
+policy.
 
-The Workspace runtime resolves the local Workstream directory and launches the Worker with that path as the process working directory.
+Workspace resolves the local Workstream directory and passes it to the generic
+CLI Worker Engine. The Engine launches the provider CLI with that directory as
+its working directory under the signed Tool Profile's execution policy.
 
-All configured Workers participating in the same Workstream on the same Workspace use the same Workstream directory.
+All logical Workers participating in the same Workstream on the same
+Workspace use the same Workstream directory.
 
-### 9. Repositories are Worker-managed, not Conclave-managed
+### 9. Provider CLI-managed repositories
 
 Conclave does not require a Project Source registry for the initial model.
 
-Inside a Workstream directory, a Worker may:
+Inside a Workstream directory, a provider CLI may:
 - clone zero, one or many repositories;
 - create files;
 - generate build outputs;
@@ -233,30 +244,42 @@ If a Workstream changes Primary Workspace:
 - the destination Workspace resolves the same relative ID path;
 - if absent, it creates a new empty Workstream directory;
 - Conclave does not copy local files automatically;
-- the Worker/user reconstructs required state through Git, downloads or explicit instructions.
+- the provider CLI/user reconstructs required state through Git, downloads or
+  explicit instructions.
 
 The UI should warn that changing Workspace does not migrate uncommitted local state.
 
-### 12. Workstream mutation remains serialized
+### 12. Workstream execution uses a request-scoped lease
 
-Removing Conclave-managed Git checkouts does not remove the concurrency invariant.
+Removing managed checkouts does not remove the concurrency invariant. Each
+Work Request containing a stateful Step acquires one runtime lease for its
+Workstream. The lease reserves the Primary Workspace and remains active until
+that Work Request completes, fails, or is cancelled. Its fencing token is
+checked before stateful execution mutates the Workstream directory.
 
-At most one stateful/mutating Work Request may actively mutate a Workstream directory at a time.
+At most one stateful Work Request may run for a Workstream at a time. This
+request-level lock prevents another stateful request from interleaving between
+Steps. Implement may write the directory. Test and Verify are stateful so they
+run against the same Primary Workspace and filesystem state, but their
+effective permissions are read-only.
 
-Different Workstreams may run concurrently because their directories are distinct.
+Research and Plan are stateless read-only Steps. They may run concurrently on
+other eligible granted Workspaces and do not mutate the Workstream directory.
+A multi-Step Work Request that contains any stateful Step retains its lease
+throughout the request, including while its Research or Plan Step runs.
+Different Workstreams may execute concurrently because their directories and
+leases are distinct.
 
-The execution coordinator/lease remains useful as a Workstream-level mutation lock; it no longer represents exclusive ownership of a Conclave-managed Git checkout.
+The request-scoped runtime lease orders stateful Work Requests and fences
+filesystem mutations. It is independent of Git repository ownership.
 
-### 13. Conclave does not guarantee Git rollback/checkpoints initially
+### 13. Git recovery remains local
 
-Because repository contents are Worker-managed, Conclave does not initially promise:
-- automatic checkpoint commits;
-- automatic rollback of failed Work;
-- automatic branch creation;
-- automatic repository cleanliness;
-- repository-specific recovery.
+Because repository contents are provider CLI-managed, Conclave does not create
+commits or restore Git state after failed Work. Git recovery remains with the
+user and provider CLI.
 
-Workers and users may use Git for those operations.
+Provider CLIs and users may use Git for those operations.
 
 Conclave may later observe Git repositories and report branch/HEAD/dirty metadata without turning repositories into user-managed Source objects.
 
@@ -280,7 +303,7 @@ This avoids destroying unpushed or otherwise valuable local work.
 5. IDs are validated as safe single path components before path construction.
 6. The resolved Workstream directory must remain beneath Work Root.
 7. Cloud cannot supply an arbitrary local absolute path.
-8. Workers cannot escape CWD policy merely by changing Project/Workstream display names.
+8. Provider CLI processes cannot escape the working-directory policy by changing Project/Workstream display names.
 9. Existing directories are reused only after marker validation.
 10. Re-enrollment must not silently adopt a directory belonging to different Project/Workstream IDs.
 
@@ -300,12 +323,12 @@ This avoids destroying unpushed or otherwise valuable local work.
 ### Tradeoffs
 
 - Conclave does not initially know authoritative repository provenance;
-- automatic rollback/checkpoint guarantees are reduced;
-- Workers/users are responsible for Git synchronization;
+- automatic Git-state recovery is not provided;
+- provider CLIs/users are responsible for Git synchronization;
 - multiple Workstreams may duplicate repository clones;
 - changing physical machine requires reconstructing local state;
 - enterprise source governance can be added later if proven necessary.
 
 ## Core invariant
 
-> **Local work belongs to Project + Workstream identity, not to names, Workspace enrollment identity, or repositories. The Workspace supplies the machine; the Workstream ID path supplies stable isolation; Workers manage what lives inside it.**
+> **Local work belongs to Project + Workstream identity, not to names, Workspace enrollment identity, or repositories. Workspace resolves the ID-derived path; a request-scoped lease fences stateful execution; the generic Engine and signed Tool Profile run the provider CLI inside that boundary.**

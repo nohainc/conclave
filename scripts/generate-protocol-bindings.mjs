@@ -6,13 +6,13 @@ const schema = JSON.parse(
     "utf8",
   ),
 );
-const host = schema["x-host-protocol"];
+const workspaceRuntime = schema["x-workspace-runtime-protocol"];
 const realtime = schema["x-realtime-events"];
 const errorCodes = schema["x-execution-error-codes"];
 const errorMessages = schema["x-execution-error-messages"];
 
 if (
-  !host ||
+  !workspaceRuntime ||
   !realtime ||
   !Array.isArray(errorCodes) ||
   !errorMessages ||
@@ -44,9 +44,9 @@ ${tsErrors}
 ${realtimeTsConstants(realtime)}
 `;
 
-const hostTs = `// GENERATED FILE. Do not edit by hand.
+const workspaceRuntimeTs = `// GENERATED FILE. Do not edit by hand.
 
-${hostTsConstants(host)}
+${workspaceRuntimeTsConstants(workspaceRuntime)}
 `;
 
 const dartProtocol = `// GENERATED FILE. Do not edit by hand.
@@ -58,7 +58,7 @@ const executionErrorMessages = <String, String>{
 ${errorCodes.map((code) => `  '${code}': '${String(errorMessages[code]).replaceAll("'", "\\'")}',`).join("\n")}
 };
 
-${hostDartConstants(host)}
+${workspaceRuntimeDartConstants(workspaceRuntime)}
 ${realtimeDartConstants(realtime)}
 `;
 
@@ -67,25 +67,25 @@ await writeFile(
   `${protocolTs.trimEnd()}\n`,
 );
 await writeFile(
-  "packages/host-protocol/src/generated.ts",
-  `${hostTs.trimEnd()}\n`,
+  "packages/workspace-runtime-protocol/src/generated.ts",
+  `${workspaceRuntimeTs.trimEnd()}\n`,
 );
 await writeFile(
   "packages/dart/protocol/lib/generated_protocol.dart",
   `${dartProtocol.trimEnd()}\n`,
 );
 
-function hostTsConstants(value) {
-  return `export const HOST_PROTOCOL_NAME = ${JSON.stringify(value.name)} as const;
-export const HOST_PROTOCOL_VERSION = ${JSON.stringify(value.version)} as const;
-export const HOST_PROTOCOL_MAX_MESSAGE_SIZE_BYTES = ${value.maxMessageSizeBytes} as const;
-export const HOST_PROTOCOL_MESSAGE_TYPES = [
+function workspaceRuntimeTsConstants(value) {
+  return `export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_NAME = ${JSON.stringify(value.name)} as const;
+export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_VERSION = ${JSON.stringify(value.version)} as const;
+export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_MAX_MESSAGE_SIZE_BYTES = ${value.maxMessageSizeBytes} as const;
+export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_MESSAGE_TYPES = [
 ${jsonItems(value.messageTypes)}
 ] as const;
-export const HOST_PROTOCOL_BASE_ENVELOPE_FIELDS = [
+export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_BASE_ENVELOPE_FIELDS = [
 ${jsonItems(value.baseEnvelopeFields)}
 ] as const;
-export const HOST_PROTOCOL_ASSIGNMENT_ENVELOPE_FIELDS = [
+export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_ASSIGNMENT_ENVELOPE_FIELDS = [
 ${jsonItems(value.assignmentEnvelopeFields)}
 ] as const;`;
 }
@@ -108,17 +108,17 @@ ${jsonItems(value.ephemeralTypes)}
 `;
 }
 
-function hostDartConstants(value) {
-  return `const hostProtocolName = '${value.name}';
-const hostProtocolVersion = '${value.version}';
-const hostProtocolMaxMessageSizeBytes = ${value.maxMessageSizeBytes};
-const hostProtocolMessageTypes = <String>{
+function workspaceRuntimeDartConstants(value) {
+  return `const workspaceRuntimeProtocolSchemaName = '${value.name}';
+const workspaceRuntimeProtocolSchemaVersion = '${value.version}';
+const workspaceRuntimeProtocolSchemaMaxMessageSizeBytes = ${value.maxMessageSizeBytes};
+const workspaceRuntimeProtocolSchemaMessageTypes = <String>{
 ${dartItems(value.messageTypes)}
 };
-const hostProtocolBaseEnvelopeFields = <String>[
+const workspaceRuntimeProtocolSchemaBaseEnvelopeFields = <String>[
 ${dartItems(value.baseEnvelopeFields)}
 ];
-const hostProtocolAssignmentEnvelopeFields = <String>[
+const workspaceRuntimeProtocolSchemaAssignmentEnvelopeFields = <String>[
 ${dartItems(value.assignmentEnvelopeFields)}
 ];`;
 }

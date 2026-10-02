@@ -1,47 +1,13 @@
-import { isTrustedOrigin } from "../observability.js";
 import {
-  identityService,
-  provisionConclaveUser,
-  hasRecentStepUp,
-  SENSITIVE_OPERATIONS,
-  recordAuthAuditEvent,
-  type SensitiveOperation,
-} from "../auth/index.js";
-import {
-  authorize,
-  resolveProjectSecurityContextFromIdentity,
   authorizeProjectMembership,
   authorizeWorkspaceOwner,
-  authorizeProjectOwner,
-  authorizeProfileAdmin as authorizeSecurityProfileAdmin,
-  type Permission,
   type SecurityContext,
 } from "@conclave/security";
-import {
-  canDiscussWorkstream,
-  canExecuteWorkstream,
-  canManageWorkstream,
-  canViewWorkstream,
-  DEFAULT_WORKSTREAM_ACCESS_POLICY,
-  type ProjectMembership,
-  type Workstream,
-  type BuiltinWorkflowDefinition,
-  type WorkflowId,
-  WORKFLOW_IDS,
-  WORKSTREAM_BINDING_IDS,
-  WORKER_INPUT_CAPABILITIES,
-} from "@conclave/core";
 
 import type { SecurityEnv } from "./http-security.js";
 import { parseJson, recordAudit } from "./http-security.js";
 
-import {
-  HttpError,
-  json,
-  requiredString,
-  workspaceOwnerContext,
-  authorizeProjectOwnerOrThrow,
-} from "./http-security.js";
+import { HttpError, json } from "./http-security.js";
 
 export async function disconnectWorkspaceRuntime(
   env: SecurityEnv,
@@ -97,9 +63,6 @@ export function workspaceProjectGrantMetadata(
       row.owner_user_id == null ? null : String(row.owner_user_id),
     grantedByUserId: String(row.granted_by_user_id),
     status: String(row.status),
-    scope: String(row.scope),
-    repositoryMappings: parseJson(row.repository_mappings_json, []),
-    pathMappings: parseJson(row.path_mappings_json, []),
     allowedWorkerIds: parseJson(row.allowed_worker_ids_json, []),
     allowedWorkerCapabilities: parseJson(
       row.allowed_worker_capabilities_json,
@@ -109,7 +72,6 @@ export function workspaceProjectGrantMetadata(
     networkPolicy: parseJson(row.network_policy_json, {}),
     concurrency: parseJson(row.concurrency_json, {}),
     budget: parseJson(row.budget_json, null),
-    requiresStepUp: Boolean(row.requires_step_up),
     expiresAt: row.expires_at ?? null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
@@ -130,47 +92,12 @@ export async function loadWorkspaceProjectGrant(
     .first<Record<string, unknown>>();
 }
 
-export function grantJsonArray(value: unknown, field: string): string {
-  if (value === undefined) return "[]";
-  if (
-    !Array.isArray(value) ||
-    value.some((item) => typeof item !== "object" || item === null)
-  ) {
-    throw new HttpError(400, `${field} must be an array of objects`);
-  }
-  return JSON.stringify(value);
-}
-
 export function grantStringArray(value: unknown, field: string): string {
   if (value === undefined) return "[]";
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
     throw new HttpError(400, `${field} must be an array of strings`);
   }
   return JSON.stringify(value);
-}
-
-export async function grantStepUpIfRequired(
-  env: SecurityEnv,
-  context: SecurityContext,
-  scope: string,
-  body: Record<string, unknown>,
-): Promise<number> {
-  if (scope !== "full_workspace") return 0;
-  if (body.confirmFullWorkspace !== true) {
-    throw new HttpError(
-      400,
-      "Full Workspace access requires explicit confirmation",
-    );
-  }
-  const verified = await hasRecentStepUp(
-    env.CONCLAVE_DB,
-    context.userId,
-    context.sessionId,
-    SENSITIVE_OPERATIONS.fullWorkspaceGrant,
-  );
-  if (!verified)
-    throw new HttpError(428, "Recent step-up authentication is required");
-  return 1;
 }
 
 export async function createWorkspaceProjectGrant(
@@ -184,12 +111,6 @@ export async function createWorkspaceProjectGrant(
     string,
     unknown
   >;
-  const scope = String(body.scope ?? "project_repository");
-  if (
-    !["project_repository", "selected_paths", "full_workspace"].includes(scope)
-  ) {
-    throw new HttpError(400, "Unsupported Workspace Project Grant scope");
-  }
   const project = await env.CONCLAVE_DB.prepare(
     "SELECT id FROM projects WHERE id = ?1",
   )
@@ -252,12 +173,6 @@ export async function createWorkspaceProjectGrant(
       "Collaborators must explicitly confirm Workspace contribution",
     );
   }
-  const requiresStepUp = await grantStepUpIfRequired(env, context, scope, body);
-  const repositoryMappings = grantJsonArray(
-    body.repositoryMappings,
-    "repositoryMappings",
-  );
-  const pathMappings = grantJsonArray(body.pathMappings, "pathMappings");
   const allowedWorkerIds = grantStringArray(
     body.allowedWorkerIds,
     "allowedWorkerIds",
@@ -284,12 +199,12 @@ export async function createWorkspaceProjectGrant(
   const id = `workspace-project-grant-${crypto.randomUUID().slice(0, 16)}`;
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO workspace_project_grants
-       (id, project_id, workspace_id, granted_by_user_id, status, scope,
-        repository_mappings_json, path_mappings_json, allowed_worker_ids_json,
+       (id, project_id, workspace_id, granted_by_user_id, status,
+        allowed_worker_ids_json,
         allowed_worker_capabilities_json, allowed_permissions_json,
-        network_policy_json, concurrency_json, budget_json, requires_step_up,
+        network_policy_json, concurrency_json, budget_json,
         expires_at, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?16)
+     VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12)
      ON CONFLICT(id, project_id, workspace_id) DO NOTHING`,
   )
     .bind(
@@ -297,16 +212,12 @@ export async function createWorkspaceProjectGrant(
       projectId,
       workspaceId,
       context.userId,
-      scope,
-      repositoryMappings,
-      pathMappings,
       allowedWorkerIds,
       allowedWorkerCapabilities,
       allowedPermissions,
       networkPolicy,
       concurrency,
       budget,
-      requiresStepUp,
       expiresAt,
       now,
     )
@@ -320,8 +231,6 @@ export async function createWorkspaceProjectGrant(
     {
       projectId,
       workspaceId,
-      scope,
-      requiresStepUp: Boolean(requiresStepUp),
     },
   );
   const grant = await loadWorkspaceProjectGrant(env, id);
@@ -329,7 +238,7 @@ export async function createWorkspaceProjectGrant(
     {
       grant: grant
         ? workspaceProjectGrantMetadata(grant)
-        : { id, projectId, workspaceId, scope },
+        : { id, projectId, workspaceId },
     },
     { status: 201 },
   );

@@ -47,7 +47,7 @@ prohibitions:
   browser_or_web_ai_worker: true
   interactive_connector: true
   conclave_managed_provider_credentials: true
-  agent_or_host_runtime: true
+  agent_runtime: true
   configured_worker_product_entity: true
   pre_v8_goal_phase_task_orchestration: true
   compatibility_api_for_unreleased_architecture: true
@@ -55,8 +55,8 @@ prohibitions:
 
 In v8, a provider CLI is invoked only by the generic CLI Worker Engine under a
 signed Tool Profile. Provider authentication remains in the provider CLI's
-local installation. Workspace is the machine-side runtime; Agent and Host are
-not runtime entities. Work v1 owns its bounded Workflow and Step orchestration.
+local installation. Workspace is the machine-side runtime; there is no separate agent-managed
+runtime product. Work v1 owns its bounded Workflow and Step orchestration.
 Unreleased architecture versions receive no API aliases or compatibility
 surface.
 
@@ -744,7 +744,9 @@ Separate sessions remain mandatory for independent verification steps.
 
 ## 20. Work v1
 
-Architecture v8 keeps Work v1 unchanged above Worker resolution.
+Architecture v8 uses the [Work v1 Contract](../specifications/WORK_V1_CONTRACT.md)
+for Workflow and Step semantics. Work v1 binds logical Workers and remains
+independent of Engine versions, Profile releases, and provider CLI formats.
 
 Canonical Steps:
 
@@ -778,6 +780,16 @@ Verify    -> Gemini
 
 When Cloud schedules ChatGPT, Workspace resolves ChatGPT to Engine + official
 compatible profile locally.
+
+Research and Plan are stateless read-only Steps and may execute on any eligible
+Workspace covered by the Project grant. A Work Request containing any stateful
+Step acquires one Workstream runtime lease and holds it until the request is
+terminal. The lease serializes stateful Work Requests for that Workstream,
+selects the Primary Workspace, and carries a fencing token that Workspace
+checks before filesystem mutation. Implement may write the ID-derived
+Workstream directory; Test and Verify run against that same filesystem with
+read-only effective permissions. The request-scoped lease remains held while
+stateless Research or Plan Steps in that same request run.
 
 ## 21. Database target
 

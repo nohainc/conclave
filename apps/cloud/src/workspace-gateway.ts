@@ -4,7 +4,7 @@ import {
   WORKSPACE_RUNTIME_PROTOCOL_NAME,
   WORKSPACE_RUNTIME_PROTOCOL_VERSION,
   type WorkspaceRuntimeMessage,
-} from "@conclave/host-protocol";
+} from "@conclave/workspace-runtime-protocol";
 import { createEventPublisher } from "./event-publisher.js";
 import {
   recordAssignmentCancelled,
@@ -20,8 +20,6 @@ import { logStructured, requestIdFor } from "./observability.js";
 import {
   findWorkspaceRuntimeIdentity,
   isCurrentWorkspaceSocket,
-  isWorkspaceRuntimeAuthorized,
-  normalizeWorkspaceWorkerInstallationStatus,
   runtimeFacts,
   workspaceAssignmentContextMatches,
   workspaceAssignmentIsActive,
@@ -102,18 +100,6 @@ export class WorkspaceGateway implements DurableObject {
     }
     if (request.method === "POST" && url.pathname.startsWith("/runtime/")) {
       return this.handleHttpRuntimeRequest(request, url.pathname);
-    }
-    if (request.method === "POST" && url.pathname === "/provision-checkout") {
-      return this.provisionCheckout(request);
-    }
-    if (request.method === "POST" && url.pathname === "/recover-checkout") {
-      return this.sendCheckoutCommand(request, "checkout.recover");
-    }
-    if (request.method === "POST" && url.pathname === "/archive-checkout") {
-      return this.sendCheckoutCommand(request, "checkout.archive");
-    }
-    if (request.method === "POST" && url.pathname === "/finalize-checkout") {
-      return this.sendCheckoutCommand(request, "checkout.finalize");
     }
     return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -945,7 +931,7 @@ export class WorkspaceGateway implements DurableObject {
           type: "assignment.progress",
           durable: false,
           workspaceId,
-          hostId: this.workspaceRuntimeId ?? message.workspaceRuntimeId,
+          workspaceRuntimeId: this.workspaceRuntimeId ?? message.workspaceRuntimeId,
           runId: message.runId,
           taskId: message.taskId,
           attemptId: message.attemptId,
@@ -968,10 +954,7 @@ export class WorkspaceGateway implements DurableObject {
       }
       case "workstream.status":
         // Runtime readiness is logical-only. Never persist or relay a local
-        // absolute path, repository clone path, or checkout path.
-        return;
-      case "checkout.status":
-        await this.recordCheckoutStatus(message.payload);
+        // absolute path or repository clone path.
         return;
       case "assignment.result":
         await recordAssignmentResult(
@@ -1237,216 +1220,6 @@ export class WorkspaceGateway implements DurableObject {
           .run();
       }
     }
-  }
-
-  private async provisionCheckout(request: Request): Promise<Response> {
-    if (!(await this.isRuntimeLive())) {
-      return Response.json({ error: "Workspace is offline" }, { status: 503 });
-    }
-    const body = (await request.json()) as Record<string, unknown>;
-    const checkoutId =
-      typeof body.checkoutId === "string" ? body.checkoutId : null;
-    const workstreamId =
-      typeof body.workstreamId === "string" ? body.workstreamId : null;
-    if (!checkoutId || !workstreamId) {
-      return Response.json(
-        { error: "checkoutId and workstreamId are required" },
-        { status: 400 },
-      );
-    }
-    const row = await this.env.CONCLAVE_DB.prepare(
-      `SELECT c.id, c.status, c.workstream_id AS workstreamId,
-              c.workspace_id AS workspaceId, c.repository_id AS repositoryId,
-              c.revision, ws.project_id AS projectId,
-              g.id AS grantId
-       FROM workstream_checkouts c
-       JOIN workstreams ws ON ws.id = c.workstream_id
-       JOIN execution_workspaces ew ON ew.id = c.workspace_id
-       LEFT JOIN workspace_project_grants g
-         ON g.project_id = ws.project_id AND g.workspace_id = c.workspace_id
-        AND g.status = 'active'
-        AND (g.expires_at IS NULL OR g.expires_at > ?2)
-       WHERE c.id = ?1 AND c.workstream_id = ?3 AND c.workspace_id = ?4`,
-    )
-      .bind(
-        checkoutId,
-        new Date().toISOString(),
-        workstreamId,
-        this.executionWorkspaceId,
-      )
-      .first<Record<string, unknown>>();
-    if (!row)
-      return Response.json({ error: "Checkout not found" }, { status: 404 });
-    if (!row.grantId) {
-      await this.env.CONCLAVE_DB.prepare(
-        "UPDATE workstream_checkouts SET status = 'stale', updated_at = ?1 WHERE id = ?2",
-      )
-        .bind(new Date().toISOString(), checkoutId)
-        .run();
-      return Response.json(
-        { error: "Workspace Project Grant is not active" },
-        { status: 409 },
-      );
-    }
-    this.send({
-      protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
-      protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
-      messageId: `message-${crypto.randomUUID()}`,
-      correlationId: checkoutId,
-      timestamp: new Date().toISOString(),
-      type: "checkout.provision",
-      executionWorkspaceId: this.executionWorkspaceId ?? undefined,
-      workspaceRuntimeId: this.workspaceRuntimeId ?? undefined,
-      payload: {
-        checkoutId,
-        workstreamId,
-        repositoryId: String(row.repositoryId),
-        revision: String(row.revision),
-      },
-    });
-    return Response.json({ accepted: true, checkoutId, status: row.status });
-  }
-
-  private async sendCheckoutCommand(
-    request: Request,
-    type: "checkout.recover" | "checkout.archive" | "checkout.finalize",
-  ): Promise<Response> {
-    if (!(await this.isRuntimeLive()))
-      return Response.json({ error: "Workspace is offline" }, { status: 503 });
-    const body = (await request.json()) as Record<string, unknown>;
-    if (
-      typeof body.checkoutId !== "string" ||
-      body.checkoutId.trim().length === 0
-    ) {
-      return Response.json(
-        { error: "checkoutId is required" },
-        { status: 400 },
-      );
-    }
-    this.send({
-      protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
-      protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
-      messageId: `message-${crypto.randomUUID()}`,
-      correlationId: body.checkoutId,
-      timestamp: new Date().toISOString(),
-      type,
-      executionWorkspaceId: this.executionWorkspaceId ?? undefined,
-      workspaceRuntimeId: this.workspaceRuntimeId ?? undefined,
-      payload: body,
-    });
-    return Response.json({ accepted: true, checkoutId: body.checkoutId });
-  }
-
-  private async recordCheckoutStatus(payload: unknown): Promise<void> {
-    if (!payload || typeof payload !== "object" || !this.executionWorkspaceId)
-      return;
-    const value = payload as Record<string, unknown>;
-    const checkoutId =
-      typeof value.checkoutId === "string" ? value.checkoutId : null;
-    const status = typeof value.status === "string" ? value.status : null;
-    if (!checkoutId || !status) return;
-    const dbStatus = ["checkpointed", "rolled_back"].includes(status)
-      ? "ready"
-      : status === "recovery_required"
-        ? "stale"
-        : status;
-    if (!["provisioning", "ready", "stale", "deleted"].includes(dbStatus))
-      return;
-    const checkout = await this.env.CONCLAVE_DB.prepare(
-      `SELECT c.id, c.workstream_id AS workstreamId, ws.project_id AS projectId
-       FROM workstream_checkouts c JOIN workstreams ws ON ws.id = c.workstream_id
-       WHERE c.id = ?1 AND c.workspace_id = ?2`,
-    )
-      .bind(checkoutId, this.executionWorkspaceId)
-      .first<Record<string, unknown>>();
-    if (!checkout) return;
-    const now = new Date().toISOString();
-    await this.env.CONCLAVE_DB.prepare(
-      `UPDATE workstream_checkouts
-       SET status = ?1, revision = COALESCE(?2, revision), updated_at = ?3
-       WHERE id = ?4 AND workspace_id = ?5`,
-    )
-      .bind(
-        dbStatus,
-        typeof value.headRevision === "string" ? value.headRevision : null,
-        now,
-        checkoutId,
-        this.executionWorkspaceId,
-      )
-      .run();
-    const changed = value.changed === true;
-    const revision =
-      typeof value.headRevision === "string" ? value.headRevision : null;
-    const workRequestId =
-      typeof value.workRequestId === "string" ? value.workRequestId : null;
-    if (status === "checkpointed" && changed && revision && workRequestId) {
-      const sequence = await this.env.CONCLAVE_DB.prepare(
-        "SELECT COALESCE(MAX(sequence), 0) + 1 AS nextSequence FROM workstream_checkpoints WHERE checkout_id = ?1",
-      )
-        .bind(checkoutId)
-        .first<{ nextSequence: number }>();
-      const checkpointId = `checkpoint-${crypto.randomUUID()}`;
-      await this.env.CONCLAVE_DB.prepare(
-        `INSERT INTO workstream_checkpoints
-         (id, workstream_id, checkout_id, sequence, revision, summary, created_by_work_request_id, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
-      )
-        .bind(
-          checkpointId,
-          String(checkout.workstreamId),
-          checkoutId,
-          sequence?.nextSequence ?? 1,
-          revision,
-          changed
-            ? "Managed Workstream checkpoint"
-            : "No-change Workstream result",
-          workRequestId,
-          now,
-        )
-        .run();
-      await this.env.CONCLAVE_DB.prepare(
-        `INSERT INTO workstream_current_checkpoints (workstream_id, checkpoint_id, updated_at)
-         VALUES (?1, ?2, ?3)
-         ON CONFLICT(workstream_id) DO UPDATE SET checkpoint_id = excluded.checkpoint_id, updated_at = excluded.updated_at`,
-      )
-        .bind(String(checkout.workstreamId), checkpointId, now)
-        .run();
-    }
-    if (revision && typeof value.diff === "string" && value.diff.length > 0) {
-      await this.env.CONCLAVE_DB.prepare(
-        `INSERT INTO workstream_diff_artifacts
-         (id, workstream_id, checkout_id, work_request_id, revision, outcome, diff_text, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
-      )
-        .bind(
-          `diff-${crypto.randomUUID()}`,
-          String(checkout.workstreamId),
-          checkoutId,
-          workRequestId,
-          revision,
-          status === "checkpointed"
-            ? "success"
-            : status === "rolled_back"
-              ? "cancelled"
-              : "failure",
-          String(value.diff).slice(0, 64 * 1024),
-          now,
-        )
-        .run();
-    }
-    await createEventPublisher(this.env).publish({
-      type: "workstream.checkout.status",
-      workspaceId: this.executionWorkspaceId,
-      projectId: String(checkout.projectId),
-      payload: {
-        entityId: checkoutId,
-        status: dbStatus,
-        summary:
-          typeof value.error === "string" ? value.error : `Checkout ${status}`,
-      },
-      durable: true,
-      idempotencyKey: `checkout-status:${checkoutId}:${now}`,
-    });
   }
 
   private async dispatchAssignment(request: Request): Promise<Response> {

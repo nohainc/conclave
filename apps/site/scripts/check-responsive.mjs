@@ -20,8 +20,10 @@ if (
   !css.includes(".hero-architecture__hosts {\n    grid-template-columns: 1fr;")
 )
   errors.push("hero architecture does not collapse vertically");
-if (!css.includes(".host-topology__hosts {\n    grid-template-columns: 1fr;"))
-  errors.push("Host topology does not collapse vertically");
+if (
+  !css.includes(".workspace-topology__hosts {\n    grid-template-columns: 1fr;")
+)
+  errors.push("Workspace topology does not collapse vertically");
 if (!css.includes(".worker-catalog {\n    grid-template-columns: 1fr;"))
   errors.push("Worker catalog does not collapse to one column");
 if (!css.includes(".cards {\n    grid-template-columns: 1fr;"))

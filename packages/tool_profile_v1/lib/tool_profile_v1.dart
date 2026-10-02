@@ -475,7 +475,7 @@ void _validateEnvironmentNames(Map<String, Object?> environment) {
 }
 
 /// Provider credentials (for example OPENAI_API_KEY) may be passed through
-/// when an official Profile explicitly declares them. Host and Conclave
+/// when an official Profile explicitly declares them. Machine and Conclave
 /// credentials are never available to provider processes.
 bool isReservedEnvironmentName(String name) => RegExp(
       r'^(?:CONCLAVE_|CLOUD_|WORKER_|WORKSPACE_|SECRET_STORE_)|^(?:CONCLAVE_API_KEY|CONCLAVE_CLOUD_TOKEN|CLOUD_API_KEY|CLOUD_TOKEN|WORKER_TOKEN|WORKSPACE_TOKEN)$',

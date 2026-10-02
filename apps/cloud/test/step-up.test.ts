@@ -25,7 +25,6 @@ describe("sensitive operation step-up policy", () => {
       SENSITIVE_OPERATIONS.workspaceOwnershipTransfer,
       SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke,
       SENSITIVE_OPERATIONS.billingSecurityChange,
-      SENSITIVE_OPERATIONS.fullWorkspaceGrant,
     ]);
     expect(
       STEP_UP_REQUIREMENTS[SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke]

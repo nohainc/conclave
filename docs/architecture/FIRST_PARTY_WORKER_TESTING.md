@@ -11,7 +11,7 @@ relevant suites with:
 ~~~sh
 cd engines/cli_worker && dart test
 cd packages/tool-profile && pnpm test
-cd apps/host && flutter test
+cd apps/workspace && flutter test
 ~~~
 
 These tests do not require provider accounts or use provider allowance.
@@ -34,7 +34,7 @@ CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/path/to/evidence \
   flutter test test/tool_profile_real_acceptance_test.dart
 ~~~
 
-From `apps/host`, the live assignment suite covers Direct, Plan & Implement,
+From `apps/workspace`, the live assignment suite covers Direct, Plan & Implement,
 Implement & Verify, and Full Cycle for both logical Workers. It uses provider
 allowance and does not replace the evidence-producing release acceptance
 suite.

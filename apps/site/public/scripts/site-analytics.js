@@ -3,7 +3,7 @@ const allowedEvents = new Set([
   "landing.page_view",
   "cta.open_app",
   "navigation.how_it_works",
-  "section.host_reached",
+  "section.workspace_reached",
   "section.workers_reached",
 ]);
 

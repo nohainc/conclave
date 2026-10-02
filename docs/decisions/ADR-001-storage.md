@@ -1,7 +1,15 @@
 # ADR-001: D1 + R2 as initial Conclave storage
 
-**Status:** Accepted  
+**Status:** Superseded
 **Date:** 2026-09-20
+
+**Superseded by:** [Architecture v8](../architecture/ARCHITECTURE_V8.md) and
+[Persistence Contracts](../specifications/PERSISTENCE.md).
+
+This ADR is retained as decision history. Its initial entity inventory,
+repository-interface examples, and proposed prompt/log storage are not the
+current persistence contract. The fresh v8 D1 baseline and local Workspace
+ownership rules are defined by the linked documents.
 
 ## Decision
 Use Cloudflare D1 as the initial relational system of record and Cloudflare R2 for large/unstructured artifacts.

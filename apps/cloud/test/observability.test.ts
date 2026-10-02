@@ -50,7 +50,7 @@ describe("observability", () => {
       taskId: "task-1",
       attemptId: "attempt-1",
       assignmentId: "assignment-1",
-      hostId: "host-1",
+      workspaceRuntimeId: "host-1",
       workerId: "worker-1",
     });
 

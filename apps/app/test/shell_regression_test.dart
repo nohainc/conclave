@@ -21,7 +21,6 @@ void main() {
     status: 'running',
     brief: 'Redesign login and session flow',
     primaryWorkspace: 'MacBook Pro',
-    currentCheckpoint: 'main',
     queueStatus: 'Running',
   );
 
@@ -33,7 +32,6 @@ void main() {
     status: 'idle',
     brief: 'Background task scheduling',
     primaryWorkspace: 'MacBook Pro',
-    currentCheckpoint: 'main',
     queueStatus: 'Idle',
   );
 

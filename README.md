@@ -43,10 +43,10 @@ are implementation details shown only in Advanced Diagnostics.
 ## Repository checks
 
 Run `pnpm check` from the repository root to verify architecture and schema
-consistency, generated protocol and Wrangler bindings, TypeScript and Dart formatting, lint,
-TypeScript builds, Cloud tests, Dart protocol and Engine tests, Workspace and AX
-Flutter tests, and fixture acceptance flows. The command requires Node.js,
-pnpm, Dart, and Flutter.
+consistency, generated protocol and Wrangler bindings, TypeScript formatting,
+lint and builds, Cloud tests, Dart formatting and analysis across all Dart
+packages, Workspace and AX Flutter tests, and fixture acceptance flows. The
+command requires Node.js, pnpm, Dart, and Flutter.
 
 `pnpm start:local` starts Wrangler with the local v8 D1 database and the AX web
 app. Production D1 migrations and deployments remain explicit workflow actions.

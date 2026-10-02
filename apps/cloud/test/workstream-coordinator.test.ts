@@ -16,7 +16,6 @@ describe("Workstream execution coordinator", () => {
           mode: "stateful",
           status: "queued",
           primaryWorkspaceId: "workspace-1",
-          checkoutId: "checkout-1",
           createdAt: "2026-09-24T00:00:02.000Z",
         },
         {
@@ -25,7 +24,6 @@ describe("Workstream execution coordinator", () => {
           mode: "stateless",
           status: "queued",
           primaryWorkspaceId: "",
-          checkoutId: "",
           createdAt: "2026-09-24T00:00:00.000Z",
         },
         {
@@ -34,7 +32,6 @@ describe("Workstream execution coordinator", () => {
           mode: "stateful",
           status: "queued",
           primaryWorkspaceId: "workspace-1",
-          checkoutId: "checkout-1",
           createdAt: "2026-09-24T00:00:01.000Z",
         },
       ]),
@@ -55,7 +52,6 @@ describe("Workstream execution coordinator", () => {
           mode: "stateful",
           status: "running",
           primaryWorkspaceId: "workspace-1",
-          checkoutId: "checkout-1",
           createdAt: "2026-09-24T00:00:00.000Z",
         },
       ]),

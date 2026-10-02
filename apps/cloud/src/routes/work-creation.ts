@@ -1,8 +1,4 @@
 import {
-  cancelTaskAssignment,
-  type AssignmentDispatcherEnv,
-} from "../assignment-dispatcher.js";
-import {
   validateWorkRequest,
   validateBuiltinWorkflowDefinition,
   BUILTIN_WORKFLOWS,
@@ -11,12 +7,8 @@ import {
   type WorkstreamExecutionPolicy,
   type BuiltinWorkflowDefinition,
   type WorkflowId,
-  type StepKind,
 } from "@conclave/core";
-import {
-  canonicalExecutionErrorCode,
-  executionErrorMessage,
-} from "@conclave/protocol";
+
 import { createEventPublisher } from "../event-publisher.js";
 import {
   HttpError,
@@ -27,7 +19,6 @@ import {
   parseJson,
   requiredString,
   resolveWorkflowInstanceId,
-  summarizeTestCounts,
   validateWorkflowWorkerEligibility,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
@@ -469,7 +460,7 @@ export async function handleCreateWorkRequest(
     promptProfileVersions,
   };
   const policyRow = await env.CONCLAVE_DB.prepare(
-    "SELECT mode, primary_workspace_id AS primaryWorkspaceId, require_checkout AS requireCheckout, max_concurrent_work_requests AS maxConcurrentWorkRequests FROM workstream_execution_policies WHERE workstream_id = ?1",
+    "SELECT mode, primary_workspace_id AS primaryWorkspaceId, max_concurrent_work_requests AS maxConcurrentWorkRequests FROM workstream_execution_policies WHERE workstream_id = ?1",
   )
     .bind(workstreamId)
     .first<WorkstreamExecutionPolicy>();
@@ -481,7 +472,6 @@ export async function handleCreateWorkRequest(
             typeof body.primaryWorkspaceId === "string"
               ? body.primaryWorkspaceId
               : null,
-          requireCheckout: false,
           maxConcurrentWorkRequests: 1,
         }
       : (policyRow ?? {
@@ -490,9 +480,6 @@ export async function handleCreateWorkRequest(
             typeof body.primaryWorkspaceId === "string"
               ? body.primaryWorkspaceId
               : null,
-          // WD-17: stateful Work resolves the local ID-derived Workstream directory;
-          // legacy checkout provisioning is not part of the active request path.
-          requireCheckout: false,
           maxConcurrentWorkRequests: 1,
         });
   const now = new Date().toISOString();
@@ -510,9 +497,6 @@ export async function handleCreateWorkRequest(
       typeof body.primaryWorkspaceId === "string"
         ? body.primaryWorkspaceId
         : null,
-    // Ignore the historical client field. Runtime CWD is derived from the
-    // immutable Project/Workstream IDs on the Workspace.
-    checkoutId: null,
     input: requestInput,
     createdAt: now,
     updatedAt: now,
@@ -529,8 +513,8 @@ export async function handleCreateWorkRequest(
   await env.CONCLAVE_DB.batch([
     env.CONCLAVE_DB.prepare(
       `INSERT INTO work_requests
-       (id, workstream_id, requested_by_user_id, mode, workflow_id, workflow_version, workflow_snapshot_json, snapshot_json, status, primary_workspace_id, checkout_id, input_json, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'queued', ?9, ?10, ?11, ?12, ?12)`,
+       (id, workstream_id, requested_by_user_id, mode, workflow_id, workflow_version, workflow_snapshot_json, snapshot_json, status, primary_workspace_id, input_json, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'queued', ?9, ?10, ?11, ?11)`,
     ).bind(
       workRequest.id,
       workstreamId,
@@ -541,22 +525,14 @@ export async function handleCreateWorkRequest(
       JSON.stringify(workflowSnapshot),
       JSON.stringify(snapshot),
       workRequest.primaryWorkspaceId,
-      workRequest.checkoutId,
       JSON.stringify(workRequest.input),
       now,
     ),
     env.CONCLAVE_DB.prepare(
       `INSERT INTO runs
-       (id, project_id, workstream_id, work_request_id, checkout_id, status, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, 'created', ?6, ?6)`,
-    ).bind(
-      runId,
-      projectId,
-      workstreamId,
-      workRequest.id,
-      workRequest.checkoutId,
-      now,
-    ),
+       (id, project_id, workstream_id, work_request_id, status, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, 'created', ?5, ?5)`,
+    ).bind(runId, projectId, workstreamId, workRequest.id, now),
     env.CONCLAVE_DB.prepare(
       `INSERT INTO project_audit_log
        (id, project_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)

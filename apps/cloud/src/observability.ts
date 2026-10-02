@@ -7,7 +7,7 @@ export interface CorrelationContext {
   attemptId?: string;
   assignmentId?: string;
   runtimeId?: string;
-  hostId?: string;
+  workspaceRuntimeId?: string;
   workerId?: string;
 }
 
