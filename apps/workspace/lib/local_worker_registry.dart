@@ -8,7 +8,7 @@ import 'package:crypto/crypto.dart';
 import 'tool_profile_catalog.dart';
 import 'platform_runtime.dart';
 
-const _registrySchemaVersion = 18;
+const _registrySchemaVersion = 19;
 
 enum LocalWorkerStatus { needsAttention, ready, disabled, removed }
 

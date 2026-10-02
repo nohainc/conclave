@@ -34,6 +34,9 @@ const deploy = readRequired(".github/workflows/deploy-app.yml");
 const siteProductionDeploy = readRequired(
   ".github/workflows/deploy-site-production.yml",
 );
+const workspaceRelease = readRequired(
+  ".github/workflows/release-workspace-macos.yml",
+);
 const cloudPackage = JSON.parse(
   readRequired("apps/cloud/package.json") || "{}",
 );
@@ -278,6 +281,19 @@ if (!ci.includes("run: pnpm check")) {
 }
 if (!deploy.includes("run: pnpm check")) {
   failures.push("The production deployment workflow must pass pnpm check.");
+}
+if (
+  !workspaceRelease.includes("needs: ci-gate") ||
+  !workspaceRelease.includes(
+    "Require successful repository CI for this main revision",
+  ) ||
+  !workspaceRelease.includes("run.event === 'push'") ||
+  !workspaceRelease.includes("run.conclusion === 'success'") ||
+  !workspaceRelease.includes("run.head_sha === process.env.GITHUB_SHA")
+) {
+  failures.push(
+    "Workspace releases must require successful main-branch CI for the exact release revision.",
+  );
 }
 if (
   !siteProductionDeploy.includes('workflows: ["CI"]') ||

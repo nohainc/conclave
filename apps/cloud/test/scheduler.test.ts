@@ -1,5 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { selectProjectExecutionTarget } from "../src/scheduler.js";
+
+const permissionAssignment = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../../packages/workspace-runtime-protocol/test/fixtures/execution-permission-assignment.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+) as {
+  permissions: string[];
+  permissionSnapshot: { permissions: string[] };
+};
 
 function candidate(overrides: Record<string, unknown> = {}) {
   return {
@@ -8,7 +22,7 @@ function candidate(overrides: Record<string, unknown> = {}) {
     workspace_id: "workspace-a",
     grant_status: "active",
     allowed_worker_ids_json: "[]",
-    allowed_worker_capabilities_json: JSON.stringify(["repository"]),
+    allowed_worker_capabilities_json: "[]",
     allowed_permissions_json: JSON.stringify([
       "repository:read",
       "repository:write",
@@ -47,6 +61,11 @@ function db(
   rows: Record<string, unknown>[],
   role = "collaborator",
   lease: Record<string, unknown> | null = null,
+  workstream: Record<string, unknown> | null = {
+    project_id: "project-a",
+    lead_user_id: "user-a",
+    access_policy_json: JSON.stringify({ allowedPermissions: ["execute"] }),
+  },
 ) {
   return {
     prepare(query: string) {
@@ -56,6 +75,7 @@ function db(
         },
         async first<T>() {
           if (query.includes("workstream_runtime_leases")) return lease as T;
+          if (query.includes("FROM workstreams ws")) return workstream as T;
           return query.includes("project_memberships") ? ({ role } as T) : null;
         },
         async all<T>() {
@@ -67,6 +87,60 @@ function db(
 }
 
 describe("Project execution scheduler", () => {
+  it("emits the canonical permissions consumed by Workspace assignment execution", async () => {
+    const target = await selectProjectExecutionTarget(db([candidate()]), {
+      projectId: "project-a",
+      requesterUserId: "user-a",
+      role: "collaborator",
+      capabilities: ["repository"],
+    });
+
+    expect(target?.effectivePermissions).toEqual(
+      permissionAssignment.permissions,
+    );
+    expect(target?.permissionSnapshot.permissions).toEqual(
+      permissionAssignment.permissionSnapshot.permissions,
+    );
+  });
+
+  it("fails closed when a stored Grant contains a noncanonical permission", async () => {
+    await expect(
+      selectProjectExecutionTarget(
+        db([
+          candidate({
+            allowed_permissions_json: '["workspace:read"]',
+          }),
+        ]),
+        {
+          projectId: "project-a",
+          requesterUserId: "user-a",
+          role: "collaborator",
+          capabilities: ["repository"],
+        },
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it.each([
+    ["Worker IDs", { allowed_worker_ids_json: '["../foreign"]' }],
+    ["capabilities", { allowed_worker_capabilities_json: '["run_shell"]' }],
+    ["network policy", { network_policy_json: '{"mode":"allow_all"}' }],
+    ["concurrency", { concurrency_json: '{"maxConcurrentAssignments":0}' }],
+    ["status", { grant_status: "revoked" }],
+  ])(
+    "fails closed when stored Grant %s are invalid",
+    async (_name, override) => {
+      await expect(
+        selectProjectExecutionTarget(db([candidate(override)]), {
+          projectId: "project-a",
+          requesterUserId: "user-a",
+          role: "collaborator",
+          capabilities: ["repository"],
+        }),
+      ).resolves.toBeNull();
+    },
+  );
+
   it("uses the AX Step binding for Worker and model", async () => {
     const configured = candidate({
       workstream_work_config_json: JSON.stringify({
@@ -143,6 +217,20 @@ describe("Project execution scheduler", () => {
     expect(result).toBeNull();
   });
 
+  it("fails closed when a Workstream row is missing", async () => {
+    const result = await selectProjectExecutionTarget(
+      db([candidate()], "collaborator", null, null),
+      {
+        projectId: "project-a",
+        requesterUserId: "user-a",
+        role: "collaborator",
+        capabilities: ["repository"],
+        workstreamId: "workstream-missing",
+      },
+    );
+    expect(result).toBeNull();
+  });
+
   it("treats Workstream Worker Type policy as product IDs", async () => {
     const configured = {
       ...candidate(),
@@ -179,7 +267,7 @@ describe("Project execution scheduler", () => {
       workspace_id: "workspace-current",
       grant_status: "active",
       allowed_worker_ids_json: "[]",
-      allowed_worker_capabilities_json: JSON.stringify(["code", "shell"]),
+      allowed_worker_capabilities_json: "[]",
       allowed_permissions_json: JSON.stringify([
         "repository:read",
         "repository:write",
@@ -238,12 +326,15 @@ describe("Project execution scheduler", () => {
       workspace_id: "workspace-current",
       grant_status: "active",
       allowed_worker_ids_json: "[]",
-      allowed_worker_capabilities_json: JSON.stringify(["code"]),
+      allowed_worker_capabilities_json: "[]",
       allowed_permissions_json: JSON.stringify([
         "repository:read",
         "repository:write",
       ]),
-      network_policy_json: JSON.stringify({ mode: "deny_all" }),
+      network_policy_json: JSON.stringify({
+        mode: "deny_all",
+        allowedHosts: [],
+      }),
       concurrency_json: JSON.stringify({ maxConcurrentAssignments: 2 }),
       expires_at: null,
       workspace_name: "MacBook Pro",
@@ -337,22 +428,25 @@ describe("Project execution scheduler", () => {
     });
   });
 
-  it("keeps Workspace local permission details outside Cloud scheduling", async () => {
+  it("uses only the Project role and Workspace Grant at the Cloud boundary", async () => {
     const currentWorker = {
       grant_id: "grant-current",
       project_id: "project-current",
       workspace_id: "workspace-current",
       grant_status: "active",
       allowed_worker_ids_json: "[]",
-      allowed_worker_capabilities_json: JSON.stringify(["code"]),
-      // Cloud grant allows shell:execute and network:use
+      allowed_worker_capabilities_json: "[]",
+      // Cloud grant permits all four canonical assignment permissions.
       allowed_permissions_json: JSON.stringify([
         "repository:read",
         "repository:write",
         "shell:execute",
         "network:use",
       ]),
-      network_policy_json: JSON.stringify({ mode: "allow_all" }),
+      network_policy_json: JSON.stringify({
+        mode: "allowlist",
+        allowedHosts: ["api.example.com"],
+      }),
       concurrency_json: JSON.stringify({ maxConcurrentAssignments: 2 }),
       expires_at: null,
       workspace_name: "MacBook Pro",
@@ -365,7 +459,8 @@ describe("Project execution scheduler", () => {
       profile_definition_id: "chatgpt-codex",
       profile_release_version: 3,
       capabilities_json: JSON.stringify(["code"]),
-      // Local Worker permissions ONLY permit repository:read
+      // Deliberately conflicting data proves Cloud does not simulate local
+      // Workspace permissions in its authorization intersection.
       local_permissions_json: JSON.stringify(["repository:read"]),
       local_worker_activation_state: "enabled",
       local_worker_readiness_state: "ready",
@@ -375,7 +470,6 @@ describe("Project execution scheduler", () => {
       active_assignments: 0,
     };
 
-    // Local permissions are checked by the Workspace and are not part of Cloud inventory.
     const target = await selectProjectExecutionTarget(
       db([currentWorker], "owner"),
       {

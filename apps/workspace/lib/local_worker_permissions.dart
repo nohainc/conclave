@@ -1,19 +1,16 @@
-/// Local permissions granted to newly registered logical Workers by default.
+/// Canonical permissions supported by Workspace assignments.
+const executionPermissionIds = <String>{
+  'repository:read',
+  'repository:write',
+  'shell:execute',
+  'network:use',
+};
+
+/// Local permission ceiling for a newly registered CLI Worker.
 const defaultLocalWorkerPermissions = <String>[
-  'workstream_filesystem',
-  'shell_execution',
+  'repository:read',
+  'repository:write',
+  'shell:execute',
 ];
 
 const defaultLocalWorkerConcurrency = 1;
-
-/// Maps catalog capabilities to Workspace-enforced access. Provider process
-/// launch stays an Engine responsibility and does not grant a general shell.
-List<String> permissionsForLogicalWorker(Iterable<String> capabilities) {
-  final values = capabilities.toSet();
-  if (values.contains('local_file') ||
-      values.contains('workstream_read') ||
-      values.contains('workstream_write')) {
-    return const ['workstream_filesystem'];
-  }
-  return const [];
-}

@@ -20,6 +20,39 @@ A Workspace has one Cloud owner. The owner manages the Workspace runtime. Projec
 
 Cloud authorizes each Workstream operation and assignment using Project membership, Workspace ownership/grants, Workstream state, logical Worker readiness, and scheduling policy. Workspace independently enforces local permissions, readiness, concurrency, deadlines, cancellation, and process cleanup.
 
+Assignment execution uses one canonical permission vocabulary across Cloud,
+Workspace Runtime Protocol, Workspace, and Engine admission:
+
+- `repository:read`
+- `repository:write`
+- `shell:execute`
+- `network:use`
+
+Cloud intersects only the permissions allowed by the requester's Project role
+with `workspace_project_grants.allowed_permissions_json`, then applies the
+request's read-only Step policy. Cloud does not pretend to know the local
+Worker permission set. Workspace compares the exact permission IDs in the
+assignment snapshot against the installed Worker's local permission ceiling;
+unknown names are rejected. Project access policy values such as `view`,
+`discuss`, and `execute` are a separate vocabulary and are not assignment
+execution permissions.
+
+Workspace Grant writes validate permission IDs against that four-value set and
+reject duplicates. Worker capability values must be current Work v1 or Worker
+input capabilities. Explicit Worker IDs must be bounded IDs of Workers already
+inventoried on the granted Workspace; an empty list leaves all its Workers
+eligible (with at most 64 explicit IDs). An empty capability list leaves capability filtering to the
+Workflow/Worker compatibility check. Network policy accepts only
+`deny_all` with no hosts or `allowlist` with unique, lowercase exact DNS
+hostnames (no scheme, port, path, wildcard, or IP literal). Concurrency must be
+an integer from 1 through 1024 and is intersected with the Worker and Cloud
+limits. The default is one concurrent assignment.
+
+Grant status transitions are `active` ↔ `suspended`; either state may become
+`revoked` or `expired`. Revoked and expired Grants are terminal. The owner API
+can activate, suspend, or use the dedicated revoke operation; expiration is
+driven by `expiresAt` and is not a client-settable status.
+
 ## Tool Profile administration
 
 Profile administration and release management use the dedicated `profiles:admin` and `profiles:release:manage` permissions. Cloud resolves authorized administrators from its configured operator identity set. Profile payloads remain signed, immutable, schema-validated releases; authorization does not replace signature verification.

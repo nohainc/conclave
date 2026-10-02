@@ -484,7 +484,7 @@ class _WorkersTabState extends State<_WorkersTab> {
       if (registry == null) return;
       await LocalWorkerSetupService(registry: registry).createCatalogWorker(
         entry: entry,
-        permissions: permissionsForLogicalWorker(entry.capabilities),
+        permissions: defaultLocalWorkerPermissions,
       );
       await widget.toolProfileCatalog?.syncWorkerProfiles(entry.workerTypeId);
       await widget.onReadinessCheck?.call(

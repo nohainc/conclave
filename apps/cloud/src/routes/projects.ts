@@ -570,7 +570,8 @@ export async function handleRemoveProjectMember(
   await env.CONCLAVE_DB.prepare(
     `UPDATE workspace_project_grants
         SET status = 'revoked', updated_at = ?1
-      WHERE project_id = ?2 AND granted_by_user_id = ?3 AND status = 'active'`,
+      WHERE project_id = ?2 AND granted_by_user_id = ?3
+        AND status IN ('active', 'suspended')`,
   )
     .bind(new Date().toISOString(), projectId, userId)
     .run();

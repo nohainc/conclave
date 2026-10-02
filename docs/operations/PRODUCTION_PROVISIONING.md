@@ -27,6 +27,27 @@ rows was imported and checked against the source counts. The previous
 `conclave-production` database remains available as a rollback copy; do not
 delete it until the v8 app has been deployed and its production checks pass.
 
+### Before v8 schema freeze
+
+The v8 release is still withheld, so `0001_conclave_v8.sql` remains the
+pre-freeze baseline. Whenever it changes, do not deploy the edit through the
+normal migration step: Wrangler records applied migrations by filename and
+will not notice changed SQL under the existing `0001` name. Re-bootstrap
+production on a newly created D1 database instead:
+
+1. Take and protect a fresh export of production data outside the repository.
+2. Create a new D1 database and apply the revised `0001` to that empty database.
+3. Import/carry forward production data with any required reviewed mapping.
+4. Verify aggregate row counts, important parent-child relationships, the
+   production binding, and the production acceptance smoke.
+5. Cut production over to the new database and retain the prior database until
+   the deployment and acceptance checks pass.
+
+Do not edit `0001` in place and continue with the normal deployment workflow;
+that workflow cannot re-bootstrap it. Follow the permanent forward-only policy
+in [Persistence Contracts](../specifications/PERSISTENCE.md#d1-schema-lifecycle)
+once the v8 release record declares schema freeze.
+
 ## Required deployment order
 
 1. Confirm the production app Worker preflight passes:

@@ -38,10 +38,7 @@ export async function handleWorkspaceGatewayConnect(
     return json({ error: "Expected WebSocket upgrade" }, { status: 426 });
   }
 
-  const authToken =
-    extractBearerToken(request.headers) ??
-    url.searchParams.get("token") ??
-    url.searchParams.get("authToken");
+  const authToken = extractBearerToken(request.headers);
 
   if (!workspaceRuntimeId || !authToken) {
     logStructured(
@@ -54,7 +51,10 @@ export async function handleWorkspaceGatewayConnect(
       },
     );
     return json(
-      { error: "workspaceRuntimeId and authToken are required" },
+      {
+        error:
+          "workspaceRuntimeId and an Authorization bearer credential are required",
+      },
       { status: 401 },
     );
   }

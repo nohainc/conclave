@@ -29,8 +29,10 @@ Workspace update metadata is signed by an independent Ed25519 application
 release key and binds the archive digest, version, channel, supported platform,
 minimum supported version, and release notes. macOS Developer ID signing and
 notarization complement this verification; they do not replace it. Publish
-macOS builds through `.github/workflows/release-workspace-macos.yml`; it checks
-the downloaded release metadata signature and archive digest.
+macOS builds through `.github/workflows/release-workspace-macos.yml`. The
+workflow requires a successful repository CI run for the selected `main`
+revision before it builds or publishes, then checks the downloaded release
+metadata signature and archive digest.
 
 The Workspace release workflow uses the Workspace signing key and public trust
 roots. The generic Engine is bundled with Workspace; provider-specific Worker

@@ -6,6 +6,30 @@ modules. The v8 schema in
 the clean development baseline. Workspace owns its local registry, Profiles,
 Engines, session state, logs, and Work Root in the local data directory.
 
+## D1 schema lifecycle
+
+The v8 schema is not frozen while the v8 release declaration is withheld. Until
+the freeze is recorded in the release record, `0001_conclave_v8.sql` is the
+mutable canonical baseline. Every change to that file requires production to
+be re-bootstrapped from a newly created D1 database: create the database, apply
+the revised `0001`, carry forward production rows through a reviewed export and
+import, verify row counts and relationships, point the production binding at
+the new database, and complete production smoke checks before retiring the old
+database. Keep the old database available for rollback until acceptance passes.
+
+Do not use `wrangler d1 migrations apply` to deploy an edit to an already
+applied `0001`. Wrangler tracks migration filenames; changing the contents of
+that applied file does not make it run again. The production deployment's
+migration step applies only pending migration entries and is not a baseline
+rebootstrap mechanism.
+
+Once schema freeze is recorded with the v8 release, it is permanent:
+`0001_conclave_v8.sql` and every later migration are immutable. All subsequent
+schema changes must be new, ordered forward migrations (for example,
+`0002_<purpose>.sql`) applied through the normal production migration flow.
+Never rewrite, remove, or reorder an applied migration, and never re-bootstrap
+production to deliver a post-freeze schema change.
+
 Project-scoped records derive authorization from Project membership. Execution
 Workspaces are user-owned and connect to Projects only through explicit
 Workspace Project Grants. Human and runtime bearer credentials are held in OS
@@ -31,7 +55,7 @@ granted Workspace; they do not mutate that directory. D1 persists Work and
 lease metadata, not the local Workstream directory or its Git state. Persisted
 v8 records are authoritative current state; durable realtime events notify AX
 of changes and let it refresh that state. The schema does not include the
-retired Goal/Phase/Attempt/ModelCall/Finding/Verification aggregate.
+retired pre-v8 Goal/Phase/Attempt/ModelCall/Finding/Verification aggregate.
 
 Workspace Project Grants authorize a Project to use an owner-controlled
 Workspace. A grant does not register repositories or map Project
@@ -56,6 +80,22 @@ v8 baseline stores the Cloud Workflow instance ID on
 Worker type IDs. It has no external-execution side table or provider allowlist.
 Apply this baseline only to a fresh development database; it is not an upgrade
 migration for an existing database.
+
+## Durable realtime event retention
+
+Durable realtime events are change notifications, not the authoritative
+business record. Cloud retains event rows and their idempotency keys for 90
+days. The browser must refresh current Project, Workstream, and Work state from
+the authenticated read APIs after a reconnect or sequence gap; the realtime
+transport does not promise historical event replay. Ephemeral events are never
+persisted.
+
+Cloud runs retention cleanup hourly and deletes up to 10,000 expired rows per
+run, oldest first. Cleanup can take multiple runs to catch up after an outage
+or a large backlog. Per-Workspace sequence cursors are retained indefinitely
+and are never reset when old events are deleted, so sequence numbers remain
+monotonic. Idempotency is guaranteed for the 90-day event retention window; a
+retry after expiration may create a new event.
 
 Human Product, Workspace Runtime, and Local Worker Protocol contracts have separate owners, endpoints, authentication, versions, and wire schemas. Keep one canonical schema source per boundary and generate language bindings from it. Shared domain IDs do not justify sharing transport envelopes.
 

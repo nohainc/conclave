@@ -8,6 +8,7 @@ export {
   EXECUTION_ERROR_MESSAGES,
 } from "./generated.js";
 export * from "./realtime-events.js";
+export * from "./execution-permissions.js";
 
 export type ExecutionErrorCode = (typeof EXECUTION_ERROR_CODES)[number];
 

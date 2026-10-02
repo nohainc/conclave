@@ -193,16 +193,11 @@ export async function handleRevokeWorkspace(
     .bind(now, workspaceId)
     .run();
 
-  // These tables were introduced by unreleased compatibility migrations. A
-  // partially migrated development/preview database must still be able to
-  // revoke the canonical Workspace and its Project grants.
-  for (const statement of [
-    env.CONCLAVE_DB.prepare(
-      "UPDATE workspace_runtime_identities SET revoked_at = ?1 WHERE workspace_id = ?2 AND revoked_at IS NULL",
-    ).bind(now, workspaceId),
-  ]) {
-    await statement.run().catch(() => undefined);
-  }
+  await env.CONCLAVE_DB.prepare(
+    "UPDATE workspace_runtime_identities SET revoked_at = ?1 WHERE workspace_id = ?2 AND revoked_at IS NULL",
+  )
+    .bind(now, workspaceId)
+    .run();
 
   if (!alreadyRevoked) {
     await recordAudit(

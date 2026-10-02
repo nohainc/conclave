@@ -41,6 +41,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.1"
+  conclave_protocol:
+    dependency: "direct main"
+    description:
+      path: "../../packages/dart/protocol"
+      relative: true
+    source: path
+    version: "0.1.0"
   fake_async:
     dependency: transitive
     description:

@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
+import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:conclave_workspace/local_worker_registry.dart';
+import 'package:conclave_workspace/worker_executor.dart';
 import 'package:conclave_workspace/tool_profile_catalog.dart';
 import 'package:conclave_workspace/tool_profile_release_store.dart';
 import 'package:conclave_workspace/worker_diagnostic_store.dart';
@@ -13,7 +15,7 @@ import 'support/ed25519_release_fixture.dart';
 
 void main() {
   test(
-    'testing catalog entry executes its signed fixture Profile through the generic Engine',
+    'Cloud permission contract passes Workspace validation and executes through the generic Engine',
     () async {
       final repository = Directory.current.parent.parent.path;
       final root = await Directory.systemTemp.createTemp('third-cli-profile-');
@@ -48,11 +50,11 @@ void main() {
       expect(
           catalog.profileDefinitionForWorker('fixture-worker'), 'fixture-cli');
 
-      final profile = jsonDecode(
-        await File(
-          '$repository/packages/tool-profile/test/fixtures/fixture-cli.v1.json',
-        ).readAsString(),
-      ) as Map<String, Object?>;
+      final profileFile = File(
+        '$repository/packages/tool-profile/test/fixtures/fixture-cli.v1.json',
+      );
+      final profile =
+          jsonDecode(await profileFile.readAsString()) as Map<String, Object?>;
       final providerDirectory = Directory('${root.path}/provider-bin')
         ..createSync();
       final providerExecutable = File(
@@ -146,6 +148,58 @@ void main() {
         reason: '${probed.readinessIssueCode}: ${probed.lastLiveTestDetails}',
       );
       expect(probed.toolVersion, '0.3.0');
+
+      final permissionAssignment = Map<String, Object?>.from(
+        jsonDecode(
+          await File(
+            '$repository/packages/workspace-runtime-protocol/test/fixtures/execution-permission-assignment.json',
+          ).readAsString(),
+        ) as Map,
+      );
+      final admission = await profileStore.activeRelease('fixture-cli');
+      expect(admission, isNotNull);
+      final assignmentHandler = WorkerAssignmentHandler(
+        resolveLogicalWorker: (workerId) => AssignmentLogicalWorker(
+          id: workerId,
+          workerTypeId: 'fixture-worker',
+          enabled: true,
+          ready: true,
+          permissions: const {'repository:read'},
+          localConcurrencyLimit: 1,
+        ),
+        defaultWorkingDirectory: Directory('${root.path}/permission-work'),
+        executeWithToolProfile:
+            (logicalWorker, workingDirectory, context, payload,
+                {onProgress}) async {
+          final input = Map<String, Object?>.from(payload['input'] as Map);
+          return engine.execute(
+            admission!,
+            profileFile: profileStore.profileFile('fixture-cli', 1),
+            stateDirectory: Directory('${root.path}/permission-state'),
+            workingDirectory: workingDirectory,
+            workerId: logicalWorker.id,
+            maxConcurrentAssignments: 1,
+            assignmentId: context.assignmentId,
+            prompt: input['prompt'] as String,
+            timeout: const Duration(seconds: 30),
+          );
+        },
+      );
+      final cloudPayload = permissionAssignment;
+      final assigned = await assignmentHandler.call(
+        WorkspaceAssignmentContext(
+          workspaceId: cloudPayload['executionWorkspaceId'] as String,
+          workspaceRuntimeId: cloudPayload['workspaceRuntimeId'] as String,
+          workerId: cloudPayload['workerId'] as String,
+          runId: cloudPayload['runId'] as String,
+          taskId: cloudPayload['taskId'] as String,
+          attemptId: cloudPayload['attemptId'] as String,
+          assignmentId: cloudPayload['assignmentId'] as String,
+          idempotencyKey: cloudPayload['idempotencyKey'] as String,
+          payload: cloudPayload,
+        ),
+      );
+      expect(assigned.summary, 'OK');
 
       await monitor.checkNow(
         mode: LocalWorkerProbeMode.live,

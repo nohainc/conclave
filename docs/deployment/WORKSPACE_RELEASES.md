@@ -28,6 +28,11 @@ Each Workspace release contains one platform-specific CLI Worker Engine build. W
 
 Use the manually dispatched [Workspace macOS release workflow](../../.github/workflows/release-workspace-macos.yml) to build, sign, notarize, publish, download, and verify a macOS release. The workflow uses Workspace signing credentials and public trust roots.
 
+Dispatch it from `main`. Before accessing release credentials or building, the
+workflow requires a successful push-triggered repository CI run for the exact
+selected commit. A passing run for another revision or a pull request does not
+authorize the release.
+
 The Workspace app does not yet perform a complete automatic update transaction with active-work drain, staging, restart, health check, and rollback. Until that passes end-to-end acceptance, install a downloaded and verified notarized archive manually while Workspace is stopped.
 
 ## Trust and incident operations

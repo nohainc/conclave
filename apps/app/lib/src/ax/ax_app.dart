@@ -43,9 +43,6 @@ class ConclaveAppShell extends StatefulWidget {
   State<ConclaveAppShell> createState() => _AxAppState();
 }
 
-/// Compatibility alias while downstream integrations migrate to the app-shell name.
-typedef AxApp = ConclaveAppShell;
-
 class _RecoveryPanel extends StatelessWidget {
   const _RecoveryPanel({
     required this.icon,

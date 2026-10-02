@@ -8,6 +8,7 @@ import {
 } from "../auth/index.js";
 import {
   authorize,
+  AuthorizationError,
   resolveProjectSecurityContextFromIdentity,
   authorizeProjectMembership,
   authorizeWorkspaceOwner,
@@ -280,7 +281,8 @@ export async function authorizeRequest(
         projectId,
         permission,
       );
-    } catch {
+    } catch (error) {
+      if (!(error instanceof AuthorizationError)) throw error;
       throw new HttpError(404, "Resource not found");
     }
   }
@@ -302,7 +304,7 @@ export async function authorizeRequest(
       workspaceId: null,
       reason: "not_authorized",
       operation: permission,
-    }).catch(() => undefined);
+    });
     throw new HttpError(
       403,
       error instanceof Error ? error.message : "Forbidden",

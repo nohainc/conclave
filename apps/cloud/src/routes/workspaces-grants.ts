@@ -1,4 +1,9 @@
 import {
+  canTransitionWorkspaceProjectGrantStatus,
+  isWorkspaceProjectGrantStatus,
+} from "@conclave/core";
+
+import {
   authorizeProjectMembership,
   authorizeWorkspaceOwner,
 } from "@conclave/security";
@@ -6,6 +11,7 @@ import {
 import {
   HttpError,
   createWorkspaceProjectGrant,
+  grantExpiry,
   json,
   loadWorkspaceProjectGrant,
   recordAudit,
@@ -129,30 +135,56 @@ export async function handleUpdateWorkspaceProjectGrant(
     String(existing.workspace_id),
     "workspace:manage",
   );
-  const body = (await request.json().catch(() => ({}))) as Record<
-    string,
-    unknown
-  >;
+  const rawBody = await request.json().catch(() => null);
+  if (!rawBody || typeof rawBody !== "object" || Array.isArray(rawBody)) {
+    throw new HttpError(400, "Request body must be an object");
+  }
+  const body = rawBody as Record<string, unknown>;
+  if (
+    Object.keys(body).length === 0 ||
+    Object.keys(body).some((key) => key !== "status" && key !== "expiresAt")
+  ) {
+    throw new HttpError(400, "Workspace Grant update fields are invalid");
+  }
+  const existingStatus = existing.status;
+  if (!isWorkspaceProjectGrantStatus(existingStatus)) {
+    throw new HttpError(409, "Workspace Grant has an invalid stored status");
+  }
+  let status = existingStatus;
+  if (body.status !== undefined) {
+    if (body.status !== "active" && body.status !== "suspended") {
+      throw new HttpError(400, "status must be active or suspended");
+    }
+    status = body.status;
+    if (!canTransitionWorkspaceProjectGrantStatus(existingStatus, status)) {
+      throw new HttpError(409, "Workspace Grant status transition is invalid");
+    }
+  }
   const now = new Date().toISOString();
-  await env.CONCLAVE_DB.prepare(
+  const expiresAt = grantExpiry(
+    body.expiresAt === undefined ? existing.expires_at : body.expiresAt,
+    new Date(now),
+  );
+  if (existingStatus !== "active" && existingStatus !== "suspended") {
+    throw new HttpError(409, "Terminal Workspace Grants cannot be updated");
+  }
+  const updatedRow = await env.CONCLAVE_DB.prepare(
     `UPDATE workspace_project_grants SET
-       status = COALESCE(?1, status), expires_at = COALESCE(?2, expires_at), updated_at = ?3
-     WHERE id = ?4`,
+       status = ?1, expires_at = ?2, updated_at = ?3
+     WHERE id = ?4 AND status = ?5`,
   )
-    .bind(
-      body.status === undefined ? null : String(body.status),
-      typeof body.expiresAt === "string" ? body.expiresAt : null,
-      now,
-      grantId,
-    )
+    .bind(status, expiresAt, now, grantId, existingStatus)
     .run();
+  if (updatedRow.meta?.changes === 0) {
+    throw new HttpError(409, "Workspace Grant changed concurrently");
+  }
   await recordAudit(
     env,
     context,
     "workspace.project_grant.updated",
     "workspace_project_grant",
     grantId,
-    { status: body.status ?? existing.status },
+    { status },
   );
   const updated = await loadWorkspaceProjectGrant(env, grantId);
   return json({
@@ -175,11 +207,20 @@ export async function handleRevokeWorkspaceProjectGrant(
     String(existing.workspace_id),
     "workspace:manage",
   );
+  if (!isWorkspaceProjectGrantStatus(existing.status)) {
+    throw new HttpError(409, "Workspace Grant has an invalid stored status");
+  }
+  if (existing.status === "revoked") {
+    return json({ ok: true, revokedAt: existing.updated_at });
+  }
+  if (!canTransitionWorkspaceProjectGrantStatus(existing.status, "revoked")) {
+    throw new HttpError(409, "Terminal Workspace Grants cannot be revoked");
+  }
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.batch([
     env.CONCLAVE_DB.prepare(
-      "UPDATE workspace_project_grants SET status = 'revoked', updated_at = ?1 WHERE id = ?2",
-    ).bind(now, grantId),
+      "UPDATE workspace_project_grants SET status = 'revoked', updated_at = ?1 WHERE id = ?2 AND status = ?3",
+    ).bind(now, grantId, existing.status),
     env.CONCLAVE_DB.prepare(
       "UPDATE worker_assignments SET status = 'cancelled', error_json = ?1, updated_at = ?2 WHERE workspace_project_grant_id = ?3 AND status IN ('created', 'dispatched')",
     ).bind(

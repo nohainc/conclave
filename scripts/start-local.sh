@@ -30,19 +30,56 @@ WEB_PORT="${WEB_PORT:-3000}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+usage() {
+  echo "Usage: pnpm start:local [-p port] [-d device] [-i ip] [--web-port port] [--api-host host]"
+}
+
+option_value() {
+  local option="$1"
+  if [[ $# -lt 2 || -z "$2" || "$2" == -* ]]; then
+    echo "Error: ${option} requires a value." >&2
+    usage >&2
+    exit 2
+  fi
+}
+
 # Parse optional arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -d|--device) DEVICE="$2"; shift 2 ;;
-    -p|--port) PORT="$2"; shift 2 ;;
-    -i|--ip) IP="$2"; shift 2 ;;
-    --api-host) API_HOST="$2"; shift 2 ;;
-    --web-port) WEB_PORT="$2"; shift 2 ;;
+    -d|--device)
+      option_value "$@"
+      DEVICE="$2"
+      shift 2
+      ;;
+    -p|--port)
+      option_value "$@"
+      PORT="$2"
+      shift 2
+      ;;
+    -i|--ip)
+      option_value "$@"
+      IP="$2"
+      shift 2
+      ;;
+    --api-host)
+      option_value "$@"
+      API_HOST="$2"
+      shift 2
+      ;;
+    --web-port)
+      option_value "$@"
+      WEB_PORT="$2"
+      shift 2
+      ;;
     -h|--help)
-      echo "Usage: pnpm start:local [-p port] [-d device] [--web-port port] [--api-host host]"
+      usage
       exit 0
       ;;
-    *) shift ;;
+    *)
+      echo "Error: unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
   esac
 done
 

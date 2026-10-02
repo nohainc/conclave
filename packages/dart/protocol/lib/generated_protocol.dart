@@ -16,13 +16,10 @@ const executionErrorCodes = <String>{
 const executionErrorMessages = <String, String>{
   'worker_not_ready': 'The selected Worker is not ready on its Workspace.',
   'cli_not_found': 'The required local CLI could not be found.',
-  'authentication_required':
-      'Sign in to the configured provider on this computer.',
-  'unsupported_cli_version':
-      'The installed local CLI version is not supported.',
+  'authentication_required': 'Sign in to the configured provider on this computer.',
+  'unsupported_cli_version': 'The installed local CLI version is not supported.',
   'model_not_supported': 'The selected model is not supported by this Worker.',
-  'permission_denied':
-      'A local permission required for this assignment was denied.',
+  'permission_denied': 'A local permission required for this assignment was denied.',
   'quota_exhausted': 'The provider\'s usage limit has been reached.',
   'provider_unavailable': 'The provider is temporarily unavailable.',
   'timeout': 'The assignment exceeded its time limit.',
@@ -30,8 +27,7 @@ const executionErrorMessages = <String, String>{
   'execution_failed': 'The assignment could not be completed.',
 };
 
-const workspaceRuntimeProtocolSchemaName =
-    'conclave.workspace-runtime-protocol';
+const workspaceRuntimeProtocolSchemaName = 'conclave.workspace-runtime-protocol';
 const workspaceRuntimeProtocolSchemaVersion = '5.1';
 const workspaceRuntimeProtocolSchemaMaxMessageSizeBytes = 4194304;
 const workspaceRuntimeProtocolSchemaMessageTypes = <String>{

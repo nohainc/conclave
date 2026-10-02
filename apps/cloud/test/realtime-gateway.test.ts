@@ -43,6 +43,24 @@ describe("realtime gateway contract", () => {
     expect(() => parseRealtimeClientMessage({ type: "unknown" })).toThrow();
   });
 
+  it("validates durable cursors by execution Workspace ID", () => {
+    expect(
+      parseRealtimeClientMessage({
+        type: "realtime.hello",
+        lastDurableSequences: { "workspace-1": 8, "workspace-2": 3 },
+      }),
+    ).toEqual({
+      type: "realtime.hello",
+      lastDurableSequences: { "workspace-1": 8, "workspace-2": 3 },
+    });
+    expect(() =>
+      parseRealtimeClientMessage({
+        type: "realtime.hello",
+        lastDurableSequences: { "workspace-1": -1 },
+      }),
+    ).toThrow("Workspace IDs to non-negative integers");
+  });
+
   it("matches events only within the requested scope", () => {
     expect(
       eventMatchesScope(

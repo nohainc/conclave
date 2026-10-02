@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:math' as math;
 
+import 'package:conclave_protocol/conclave_protocol.dart';
+
 import 'realtime_client_stub.dart';
 
 class _BrowserRealtimeClient implements RealtimeClient {
@@ -18,7 +20,6 @@ class _BrowserRealtimeClient implements RealtimeClient {
   String? _executionWorkspaceId;
   Timer? _reconnectTimer;
   int _attempt = 0;
-  int? _lastDurableSequence;
   final _lastDurableSequences = <String, int>{};
   bool _closed = false;
 
@@ -72,8 +73,6 @@ class _BrowserRealtimeClient implements RealtimeClient {
       _events.add({'type': 'realtime.connection', 'status': 'connected'});
       _send({
         'type': 'realtime.hello',
-        if (_lastDurableSequence != null)
-          'lastDurableSequence': _lastDurableSequence,
         if (_lastDurableSequences.isNotEmpty)
           'lastDurableSequences': _lastDurableSequences,
       });
@@ -93,25 +92,21 @@ class _BrowserRealtimeClient implements RealtimeClient {
         if (message['type'] == 'event' && message['event'] is Map) {
           final eventValue = Map<String, dynamic>.from(message['event'] as Map);
           final sequence = eventValue['sequence'];
-          if (sequence is int) {
-            _lastDurableSequence = sequence;
-            _lastDurableSequences['user='] = sequence;
-            final projectId = eventValue['projectId'];
-            final runId = eventValue['runId'];
-            final workspaceId = eventValue['workspaceId'];
-            if (projectId is String) {
-              _lastDurableSequences['project=$projectId'] = sequence;
-            }
-            if (runId is String) {
-              _lastDurableSequences['run=$runId'] = sequence;
-            }
-            if (workspaceId is String) {
-              _lastDurableSequences['execution_workspace=$workspaceId'] =
-                  sequence;
-            }
+          final type = eventValue['type'];
+          final workspaceId = eventValue['workspaceId'];
+          if (sequence is int &&
+              type is String &&
+              durableRealtimeEventTypes.contains(type) &&
+              workspaceId is String) {
+            _lastDurableSequences[workspaceId] = sequence;
           }
           _events.add(eventValue);
         } else if (message['type'] == 'reconnect.required') {
+          final workspaceId = message['workspaceId'];
+          final nextSequence = message['nextSequence'];
+          if (workspaceId is String && nextSequence is int) {
+            _lastDurableSequences[workspaceId] = nextSequence;
+          }
           // The App performs an authenticated HTTP snapshot resync before
           // continuing to render after a durable event gap.
           _events.add(message);

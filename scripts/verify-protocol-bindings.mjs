@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 
 const read = (path) => readFile(path, "utf8");
 const schema = JSON.parse(
@@ -107,5 +108,13 @@ if (
     "protocol exports do not use the current schema and Worker Protocol package",
   );
 }
+
+execFileSync(
+  process.execPath,
+  ["scripts/generate-protocol-bindings.mjs", "--check"],
+  {
+    stdio: "inherit",
+  },
+);
 
 console.log("Current protocol schema and generated bindings are aligned.");

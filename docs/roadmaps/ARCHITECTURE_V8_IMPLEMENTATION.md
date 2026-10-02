@@ -31,6 +31,10 @@ The current source tree has converged on the v8 architecture:
 - Current Cloud routes, authorization, protocol schemas, and persistence use
   the current Project, Workspace, Workstream, Work, Worker, and Profile model.
 - The clean v8 schema is in `apps/cloud/migrations-v8/0001_conclave_v8.sql`.
+- Until the v8 release declaration, any change to that baseline requires a
+  fresh production D1 bootstrap and verified data carry-forward. Schema freeze
+  is recorded with the release; after freeze, migrations are immutable and
+  schema changes use new forward migration files only.
 - Current protocol definitions are generated from the canonical protocol
   packages.
 - Superseded Worker binaries, releases, compatibility paths, schema snapshots,

@@ -37,7 +37,7 @@ A Workstream contains:
 
 Discuss is human collaboration only.
 
-No Discuss message may create/resume a Goal or Run as a side effect.
+No Discuss message may create/resume a Work Request or Run as a side effect.
 
 ### Work
 

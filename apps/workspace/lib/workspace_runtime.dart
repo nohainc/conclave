@@ -123,15 +123,7 @@ Future<Workspace> buildWorkspaceRuntime(
         workerTypeId: worker.workerTypeId,
         enabled: worker.activationState == LocalWorkerActivationState.enabled,
         ready: worker.status == LocalWorkerStatus.ready,
-        permissions: {
-          for (final permission in worker.localPermissions)
-            ...switch (permission) {
-              'workstream_filesystem' => {'workspace:read', 'workspace:write'},
-              'shell_execution' => {'shell:execute'},
-              'network' => {'network:outbound'},
-              _ => {permission},
-            },
-        },
+        permissions: worker.localPermissions.toSet(),
         localConcurrencyLimit: worker.localConcurrencyLimit,
         providerCliVersion: worker.toolVersion,
       );

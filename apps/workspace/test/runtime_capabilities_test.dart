@@ -25,7 +25,7 @@ void main() {
     expect(
       () => validateAssignmentScope(
         assignmentPayload(input: {'workingDirectory': '/etc'}),
-        localWorkerPermissions: {'workspace:read'},
+        localWorkerPermissions: {'repository:read'},
       ),
       throwsA(isA<RuntimeViolation>()),
     );
@@ -38,14 +38,14 @@ void main() {
           permissions: const ['network:use'],
           networkPolicy: {'mode': 'deny_all'},
         ),
-        localWorkerPermissions: {'network:outbound'},
+        localWorkerPermissions: {'network:use'},
       ),
       throwsA(isA<RuntimeViolation>()),
     );
     expect(
       () => validateAssignmentScope(
         assignmentPayload(input: {'apiKey': 'should-never-cross-runtime'}),
-        localWorkerPermissions: {'workspace:read'},
+        localWorkerPermissions: {'repository:read'},
       ),
       throwsA(isA<RuntimeViolation>()),
     );
@@ -57,7 +57,7 @@ void main() {
         assignmentPayload(
           permissions: const ['repository:read', 'shell:execute'],
         ),
-        localWorkerPermissions: {'workspace:read', 'shell'},
+        localWorkerPermissions: {'repository:read', 'shell:execute'},
       ),
       returnsNormally,
     );
@@ -68,6 +68,25 @@ void main() {
       () => validateAssignmentScope(
         assignmentPayload(permissions: const ['system:admin']),
         localWorkerPermissions: const {'system:admin'},
+      ),
+      throwsA(isA<RuntimeViolation>()),
+    );
+  });
+
+  test('rejects old aliases and mismatched permission copies', () {
+    expect(
+      () => validateAssignmentScope(
+        assignmentPayload(permissions: const ['workspace:read']),
+        localWorkerPermissions: {'workspace:read'},
+      ),
+      throwsA(isA<RuntimeViolation>()),
+    );
+    final mismatched = assignmentPayload();
+    mismatched['permissions'] = ['repository:write'];
+    expect(
+      () => validateAssignmentScope(
+        mismatched,
+        localWorkerPermissions: {'repository:read', 'repository:write'},
       ),
       throwsA(isA<RuntimeViolation>()),
     );

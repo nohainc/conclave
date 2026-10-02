@@ -4,6 +4,9 @@
   "main": "../../apps/cloud/src/index.ts",
   "compatibility_date": "2026-09-21",
   "compatibility_flags": ["nodejs_compat"],
+  "triggers": {
+    "crons": ["17 * * * *"],
+  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,

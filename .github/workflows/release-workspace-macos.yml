@@ -20,13 +20,47 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  ci-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require successful repository CI for this main revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Workspace releases must be dispatched from main."
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&per_page=100" > "$RUNNER_TEMP/ci-runs.json"
+          node --input-type=module - "$RUNNER_TEMP/ci-runs.json" <<'NODE'
+          import { readFileSync } from 'node:fs';
+
+          const { workflow_runs: runs = [] } = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          const passed = runs.some((run) =>
+            run.event === 'push' &&
+            run.head_branch === 'main' &&
+            run.head_sha === process.env.GITHUB_SHA &&
+            run.status === 'completed' &&
+            run.conclusion === 'success'
+          );
+          if (!passed) {
+            console.error(`No successful repository CI run exists for ${process.env.GITHUB_SHA} on main.`);
+            process.exit(1);
+          }
+          console.log(`Repository CI passed for ${process.env.GITHUB_SHA}.`);
+          NODE
+
   release:
+    needs: ci-gate
     runs-on: macos-15
     environment: workspace-release
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
       - uses: subosito/flutter-action@v2
         with:
           channel: stable

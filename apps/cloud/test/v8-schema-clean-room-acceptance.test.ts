@@ -120,6 +120,33 @@ describe("v8 clean D1 schema acceptance", () => {
     ).toEqual([{ worker_type_id: "chatgpt" }, { worker_type_id: "gemini" }]);
   });
 
+  it("enforces Workspace Grant status transitions in the database", () => {
+    const activeToSuspended = apply(`
+      INSERT INTO workspace_project_grants
+        (id, project_id, workspace_id, granted_by_user_id, created_at, updated_at)
+      VALUES ('grant-transition', 'project', 'workspace', 'owner', 'now', 'now');
+      UPDATE workspace_project_grants SET status = 'suspended'
+        WHERE id = 'grant-transition';
+      UPDATE workspace_project_grants SET status = 'active'
+        WHERE id = 'grant-transition';
+      UPDATE workspace_project_grants SET status = 'revoked'
+        WHERE id = 'grant-transition';
+      SELECT status FROM workspace_project_grants WHERE id = 'grant-transition';
+    `) as { status: string }[];
+    expect(activeToSuspended).toEqual([{ status: "revoked" }]);
+    expect(() =>
+      apply(`
+        INSERT INTO workspace_project_grants
+          (id, project_id, workspace_id, granted_by_user_id, created_at, updated_at)
+        VALUES ('grant-terminal', 'project', 'workspace', 'owner', 'now', 'now');
+        UPDATE workspace_project_grants SET status = 'revoked'
+          WHERE id = 'grant-terminal';
+        UPDATE workspace_project_grants SET status = 'active'
+          WHERE id = 'grant-terminal';
+      `),
+    ).toThrow();
+  });
+
   it("keeps the regular development seed to official logical identities", () => {
     const seed = readFileSync(
       fileURLToPath(new URL("../seed/development.sql", import.meta.url)),

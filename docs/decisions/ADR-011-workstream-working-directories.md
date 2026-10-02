@@ -112,7 +112,7 @@ It is appropriate for:
 
 It is **not** part of Workstream directory identity.
 
-If a Workspace is revoked/deleted and the same local installation is later paired as a new Workspace with a different Workspace ID, it resolves the same Project/Workstream path and may safely reuse existing local work after validation.
+If a Workspace is revoked/deleted and the same local installation is later registered as a new Workspace with a different Workspace ID, it resolves the same Project/Workstream path and may safely reuse existing local work after validation.
 
 ### 5. Do not fingerprint physical hardware
 

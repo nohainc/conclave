@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  EXECUTION_PERMISSIONS,
   EXECUTION_ERROR_CODES,
   EXECUTION_ERROR_MESSAGES,
 } from "@conclave/protocol";
@@ -39,6 +40,10 @@ export type WorkspaceRuntimeMessageType =
 const nonEmptyString = z.string().trim().min(1);
 const timestamp = z.string().datetime();
 const executionErrorCode = z.enum(EXECUTION_ERROR_CODES);
+
+/** Canonical execution permissions carried from Cloud to Workspace. */
+export const EXECUTION_PERMISSION_IDS = EXECUTION_PERMISSIONS;
+const executionPermission = z.enum(EXECUTION_PERMISSIONS);
 
 /** Product-facing Worker Type IDs; legacy provider package IDs are not valid. */
 export const WorkspaceProductWorkerTypeIdSchema = nonEmptyString
@@ -152,6 +157,13 @@ export const workspaceRuntimeEnvelopeSchema = z
           snapshot: z
             .object({
               workerTypeId: WorkspaceProductWorkerTypeIdSchema,
+              permissions: z.array(executionPermission).optional(),
+              permissionSnapshot: z
+                .object({
+                  permissions: z.array(executionPermission),
+                })
+                .passthrough()
+                .optional(),
               readOnly: z.boolean().optional(),
               sessionPolicy: z
                 .enum(["stateless", "durable_session"])
@@ -173,7 +185,22 @@ export const workspaceRuntimeEnvelopeSchema = z
                 });
               }
             })
+            .superRefine((snapshot, ctx) => {
+              if (
+                snapshot.permissions &&
+                snapshot.permissionSnapshot &&
+                JSON.stringify(snapshot.permissions) !==
+                  JSON.stringify(snapshot.permissionSnapshot.permissions)
+              ) {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  path: ["permissionSnapshot", "permissions"],
+                  message: "assignment permission fields must match",
+                });
+              }
+            })
             .passthrough(),
+          permissions: z.array(executionPermission).optional(),
           input: z.record(z.string(), z.unknown()).optional(),
         })
         .passthrough()

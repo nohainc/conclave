@@ -6,7 +6,7 @@ import 'package:conclave_app/src/features/navigation/ax_sidebar.dart';
 import 'package:conclave_app/src/features/navigation/ax_top_bar.dart';
 import 'package:conclave_app/src/navigation/ax_navigation.dart';
 import 'package:conclave_app/src/platform/platform_services.dart';
-import 'package:conclave_app/src/ax/ax_app.dart';
+import 'package:conclave_app/src/app_shell.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 
 import 'ax_fixture_data.dart';
@@ -2031,7 +2031,7 @@ void main() {
         MaterialApp(
           theme: ConclaveBrand.darkTheme(),
           home: const Scaffold(
-            body: AxApp(
+            body: ConclaveAppShell(
               services: DefaultPlatformServices(),
               dataSource: AxFixtureDataSource(),
             ),

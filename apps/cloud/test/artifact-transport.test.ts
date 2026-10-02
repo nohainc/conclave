@@ -6,6 +6,8 @@ type ArtifactRow = Record<string, unknown>;
 function createArtifactEnvironment() {
   const artifacts = new Map<string, ArtifactRow>();
   const objects = new Map<string, Uint8Array>();
+  const events = new Map<string, ArtifactRow>();
+  let nextSequence = 0;
   const db = {
     prepare(query: string) {
       let values: readonly unknown[] = [];
@@ -67,10 +69,46 @@ function createArtifactEnvironment() {
               created_at: createdAt,
             });
           }
+          if (query.includes("INSERT INTO realtime_events")) {
+            const [
+              eventId,
+              workspaceId,
+              projectId,
+              runId,
+              taskId,
+              attemptId,
+              assignmentId,
+              workspaceRuntimeId,
+              eventType,
+              payloadJson,
+              idempotencyKey,
+              occurredAt,
+            ] = values;
+            const row = {
+              event_id: eventId,
+              workspace_id: workspaceId,
+              project_id: projectId,
+              run_id: runId,
+              task_id: taskId,
+              attempt_id: attemptId,
+              assignment_id: assignmentId,
+              workspace_runtime_id: workspaceRuntimeId,
+              sequence: ++nextSequence,
+              event_type: eventType,
+              payload_json: payloadJson,
+              idempotency_key: idempotencyKey,
+              occurred_at: occurredAt,
+            };
+            events.set(String(eventId), row);
+            return { success: true, results: [row] };
+          }
           return { success: true };
         },
       };
       return statement;
+    },
+    async batch(statements: Array<{ run(): Promise<unknown> }>) {
+      return Promise.all(statements.map((statement) => statement.run()));
     },
   };
   const bucket = {

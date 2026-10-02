@@ -12,6 +12,9 @@ import {
   WORKFLOW_IDS,
   WORKSTREAM_BINDING_IDS,
   WORKER_INPUT_CAPABILITIES,
+  validateWorkspaceGrantCapabilities,
+  validateWorkspaceGrantPermissions,
+  validateWorkspaceGrantWorkerIds,
 } from "@conclave/core";
 
 import type { SecurityEnv } from "./http-security.js";
@@ -474,10 +477,18 @@ export async function validateWorkflowWorkerEligibility(
       )
     )
       push("capability_missing");
-    const grantCapabilities = parseJson<unknown[]>(
+    const rawGrantCapabilities = parseJson<unknown>(
       row.grantCapabilitiesJson,
-      [],
-    ).filter((value): value is string => typeof value === "string");
+      null,
+    );
+    if (!validateWorkspaceGrantCapabilities(rawGrantCapabilities)) {
+      push("workspace_grant_policy_invalid");
+    }
+    const grantCapabilities = validateWorkspaceGrantCapabilities(
+      rawGrantCapabilities,
+    )
+      ? rawGrantCapabilities
+      : [];
     if (
       grantCapabilities.length > 0 &&
       !requiredCapabilities.every((capability) =>
@@ -522,25 +533,42 @@ export async function validateWorkflowWorkerEligibility(
         });
       }
     }
-    const grantPermissions = parseJson<unknown[]>(
+    const rawGrantPermissions = parseJson<unknown>(
       row.grantPermissionsJson,
-      [],
-    ).filter((value): value is string => typeof value === "string");
+      null,
+    );
+    if (!validateWorkspaceGrantPermissions(rawGrantPermissions)) {
+      push("workspace_grant_policy_invalid");
+    }
+    const grantPermissions = validateWorkspaceGrantPermissions(
+      rawGrantPermissions,
+    )
+      ? rawGrantPermissions
+      : [];
     const requiredPermissions = new Set<string>(["repository:read"]);
     if (step.requiredCapabilities.includes("workstream_write"))
       requiredPermissions.add("repository:write");
     if (step.requiredCapabilities.includes("test_execution"))
       requiredPermissions.add("shell:execute");
+    const grantPermissionSet = new Set<string>(grantPermissions);
     if (
       ![...requiredPermissions].every((permission) =>
-        grantPermissions.includes(permission),
+        grantPermissionSet.has(permission),
       )
     )
       push("permission_not_granted");
-    const allowedWorkerIds = parseJson<unknown[]>(
+    const rawAllowedWorkerIds = parseJson<unknown>(
       row.allowedWorkerIdsJson,
-      [],
-    ).filter((value): value is string => typeof value === "string");
+      null,
+    );
+    if (!validateWorkspaceGrantWorkerIds(rawAllowedWorkerIds)) {
+      push("workspace_grant_policy_invalid");
+    }
+    const allowedWorkerIds = validateWorkspaceGrantWorkerIds(
+      rawAllowedWorkerIds,
+    )
+      ? rawAllowedWorkerIds
+      : [];
     if (
       allowedWorkerIds.length > 0 &&
       !allowedWorkerIds.includes(binding.workerId)

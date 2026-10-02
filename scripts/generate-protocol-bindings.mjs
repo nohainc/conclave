@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { format } from "prettier";
 
 const schema = JSON.parse(
   await readFile(
@@ -62,18 +63,49 @@ ${workspaceRuntimeDartConstants(workspaceRuntime)}
 ${realtimeDartConstants(realtime)}
 `;
 
-await writeFile(
-  "packages/protocol/src/generated.ts",
-  `${protocolTs.trimEnd()}\n`,
-);
-await writeFile(
-  "packages/workspace-runtime-protocol/src/generated.ts",
-  `${workspaceRuntimeTs.trimEnd()}\n`,
-);
-await writeFile(
-  "packages/dart/protocol/lib/generated_protocol.dart",
-  `${dartProtocol.trimEnd()}\n`,
-);
+const generatedFiles = new Map([
+  ["packages/protocol/src/generated.ts", `${protocolTs.trimEnd()}\n`],
+  [
+    "packages/workspace-runtime-protocol/src/generated.ts",
+    `${workspaceRuntimeTs.trimEnd()}\n`,
+  ],
+  [
+    "packages/dart/protocol/lib/generated_protocol.dart",
+    `${dartProtocol.trimEnd()}\n`,
+  ],
+]);
+
+for (const [path, contents] of generatedFiles) {
+  if (path.endsWith(".ts")) {
+    generatedFiles.set(path, await format(contents, { filepath: path }));
+  }
+}
+
+if (process.argv.includes("--check")) {
+  const staleFiles = [];
+  for (const [path, expected] of generatedFiles) {
+    let actual;
+    try {
+      actual = await readFile(path, "utf8");
+    } catch {
+      staleFiles.push(`${path} (missing)`);
+      continue;
+    }
+    if (actual !== expected) staleFiles.push(path);
+  }
+  if (staleFiles.length > 0) {
+    throw new Error(
+      `Generated protocol bindings are stale or differ from the schema:\n${staleFiles.map((path) => `  ${path}`).join("\n")}\nRun pnpm protocol:generate and review the changes.`,
+    );
+  }
+  console.log(
+    "Generated protocol bindings exactly match the canonical schema.",
+  );
+} else {
+  for (const [path, contents] of generatedFiles) {
+    await writeFile(path, contents);
+  }
+}
 
 function workspaceRuntimeTsConstants(value) {
   return `export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_NAME = ${JSON.stringify(value.name)} as const;

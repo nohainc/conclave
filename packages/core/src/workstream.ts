@@ -160,11 +160,13 @@ export const DEFAULT_WORKSTREAM_WORK_CONFIG: WorkstreamWorkConfig = {
 
 export type WorkflowExecutionMode = "stateless_read" | "stateful_workstream";
 export type WorkflowExecutionClass = "analysis" | "workspace_action";
-export type WorkflowCapability =
-  | "authorized_context_read"
-  | "workstream_write"
-  | "test_execution"
-  | "independent_verification";
+export const WORKFLOW_CAPABILITIES = [
+  "authorized_context_read",
+  "workstream_write",
+  "test_execution",
+  "independent_verification",
+] as const;
+export type WorkflowCapability = (typeof WORKFLOW_CAPABILITIES)[number];
 export type WorkflowReadWritePolicy = "read_only" | "write_workstream";
 export type WorkflowResultSemantics =
   | "evidence_summary"

@@ -72,24 +72,14 @@ export class CloudEventPublisher implements EventPublisher {
     let event: RealtimeEventEnvelope;
     let persisted = false;
     if (durable) {
-      const existing = await this.env.CONCLAVE_DB.prepare(
-        `SELECT * FROM realtime_events
-         WHERE event_id = ?1 OR (workspace_id = ?2 AND idempotency_key = ?3)
-         LIMIT 1`,
-      )
-        .bind(eventId, input.workspaceId, idempotencyKey)
-        .first<Record<string, unknown>>();
-      if (existing) {
-        event = eventFromRow(existing);
-      } else {
-        event = await this.persistDurableEvent({
-          ...input,
-          eventId,
-          idempotencyKey,
-          occurredAt,
-        });
-        persisted = true;
-      }
+      const result = await this.persistDurableEvent({
+        ...input,
+        eventId,
+        idempotencyKey,
+        occurredAt,
+      });
+      event = result.event;
+      persisted = result.persisted;
     } else {
       event = parseRealtimeEvent({
         eventId,
@@ -120,18 +110,8 @@ export class CloudEventPublisher implements EventPublisher {
       idempotencyKey: string;
       occurredAt: string;
     },
-  ): Promise<RealtimeEventEnvelope> {
-    const cursor = await this.env.CONCLAVE_DB.prepare(
-      `INSERT INTO realtime_event_cursors (workspace_id, next_sequence)
-       VALUES (?1, 1)
-       ON CONFLICT(workspace_id) DO UPDATE SET next_sequence = next_sequence + 1
-       RETURNING next_sequence - 1 AS sequence`,
-    )
-      .bind(input.workspaceId)
-      .first<{ sequence: number }>();
-    if (!cursor) throw new Error("Could not allocate realtime event sequence");
-
-    const event = parseRealtimeEvent({
+  ): Promise<{ event: RealtimeEventEnvelope; persisted: boolean }> {
+    const eventBase = {
       eventId: input.eventId,
       type: input.type,
       version: "1.0",
@@ -145,46 +125,88 @@ export class CloudEventPublisher implements EventPublisher {
       ...(input.workspaceRuntimeId
         ? { workspaceRuntimeId: input.workspaceRuntimeId }
         : {}),
-      sequence: cursor.sequence,
       payload: input.payload,
-    });
+    };
+    // Validate the complete contract before a sequence can be consumed.
+    parseRealtimeEvent({ ...eventBase, sequence: 0 });
 
-    try {
-      await this.env.CONCLAVE_DB.prepare(
-        `INSERT INTO realtime_events
-         (event_id, workspace_id, project_id, run_id, task_id,
-          attempt_id, assignment_id, workspace_runtime_id, sequence, event_type,
-          payload_json, idempotency_key, occurred_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
-      )
-        .bind(
-          event.eventId,
-          event.workspaceId,
-          event.projectId ?? null,
-          event.runId ?? null,
-          event.taskId ?? null,
-          event.attemptId ?? null,
-          event.assignmentId ?? null,
-          event.workspaceRuntimeId ?? null,
-          event.sequence,
-          event.type,
-          json(event.payload),
-          input.idempotencyKey,
-          event.timestamp,
+    const db = this.env.CONCLAVE_DB;
+    const results = await db.batch([
+      db
+        .prepare(
+          `INSERT INTO realtime_event_cursors (workspace_id, next_sequence)
+           VALUES (
+             ?1,
+             COALESCE(
+               (SELECT MAX(sequence) + 1 FROM realtime_events WHERE workspace_id = ?1),
+               1
+             )
+           )
+           ON CONFLICT(workspace_id) DO NOTHING`,
         )
-        .run();
-    } catch (error) {
-      const duplicate = await this.env.CONCLAVE_DB.prepare(
+        .bind(input.workspaceId),
+      db
+        .prepare(
+          `UPDATE realtime_event_cursors
+           SET next_sequence = next_sequence + 1
+           WHERE workspace_id = ?1
+             AND NOT EXISTS (
+               SELECT 1 FROM realtime_events
+               WHERE workspace_id = ?1
+                 AND (event_id = ?2 OR idempotency_key = ?3)
+             )
+           RETURNING next_sequence - 1 AS sequence`,
+        )
+        .bind(input.workspaceId, input.eventId, input.idempotencyKey),
+      db
+        .prepare(
+          `INSERT INTO realtime_events
+           (event_id, workspace_id, project_id, run_id, task_id,
+            attempt_id, assignment_id, workspace_runtime_id, sequence,
+            event_type, payload_json, idempotency_key, occurred_at)
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, cursor.next_sequence - 1,
+                  ?9, ?10, ?11, ?12
+           FROM realtime_event_cursors AS cursor
+           WHERE cursor.workspace_id = ?2
+             AND NOT EXISTS (
+               SELECT 1 FROM realtime_events
+               WHERE workspace_id = ?2
+                 AND (event_id = ?1 OR idempotency_key = ?11)
+             )
+           RETURNING *`,
+        )
+        .bind(
+          input.eventId,
+          input.workspaceId,
+          input.projectId ?? null,
+          input.runId ?? null,
+          input.taskId ?? null,
+          input.attemptId ?? null,
+          input.assignmentId ?? null,
+          input.workspaceRuntimeId ?? null,
+          input.type,
+          json(input.payload),
+          input.idempotencyKey,
+          input.occurredAt,
+        ),
+    ]);
+
+    const inserted = results[2]?.results?.[0] as
+      Record<string, unknown> | undefined;
+    if (inserted) {
+      return { event: eventFromRow(inserted), persisted: true };
+    }
+
+    const duplicate = await db
+      .prepare(
         `SELECT * FROM realtime_events
-         WHERE event_id = ?1 OR (workspace_id = ?2 AND idempotency_key = ?3)
+         WHERE workspace_id = ?1 AND (event_id = ?2 OR idempotency_key = ?3)
          LIMIT 1`,
       )
-        .bind(input.eventId, input.workspaceId, input.idempotencyKey)
-        .first<Record<string, unknown>>();
-      if (duplicate) return eventFromRow(duplicate);
-      throw error;
-    }
-    return event;
+      .bind(input.workspaceId, input.eventId, input.idempotencyKey)
+      .first<Record<string, unknown>>();
+    if (duplicate) return { event: eventFromRow(duplicate), persisted: false };
+    throw new Error("Could not persist durable realtime event");
   }
 
   private async fanout(event: RealtimeEventEnvelope): Promise<number> {

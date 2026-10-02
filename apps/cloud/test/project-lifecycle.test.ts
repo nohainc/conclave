@@ -53,6 +53,13 @@ describe("Project lifecycle integrity", () => {
       "UPDATE workspace_project_grants SET status = 'revoked'",
     );
     expect(workspaces).toContain(
+      "UPDATE workspace_runtime_identities SET revoked_at = ?1",
+    );
+    expect(workspaces).not.toContain("catch(() => undefined)");
+    expect(workspaces).not.toContain(
+      "partially migrated development/preview database",
+    );
+    expect(workspaces).toContain(
       'const alreadyRevoked = workspace.status === "revoked"',
     );
     expect(workspaces).toContain("status <> 'revoked'");
@@ -61,6 +68,7 @@ describe("Project lifecycle integrity", () => {
   it("records Project-scoped audits without requiring a Workspace", () => {
     expect(httpSecurity).toContain("project_audit_log");
     expect(httpSecurity).toContain("if (!auditWorkspaceId)");
+    expect(httpSecurity).not.toContain(".catch(() => undefined)");
   });
 
   it("guards duplicate names, grants, and invitations across lifecycle changes", () => {

@@ -88,4 +88,16 @@ void main() {
     expect(worker.lastPassiveProbeAt, isNull);
     expect(worker.lastLiveTestAt, isNull);
   });
+
+  test('default local permission list uses canonical permission IDs', () {
+    expect(defaultLocalWorkerPermissions, [
+      'repository:read',
+      'repository:write',
+      'shell:execute',
+    ]);
+    expect(
+      defaultLocalWorkerPermissions.every(executionPermissionIds.contains),
+      isTrue,
+    );
+  });
 }

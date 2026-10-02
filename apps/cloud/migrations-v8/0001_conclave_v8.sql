@@ -181,6 +181,16 @@ CREATE TABLE workspace_project_grants (
 CREATE INDEX idx_workspace_project_grants_project
   ON workspace_project_grants(project_id, status);
 
+CREATE TRIGGER workspace_project_grant_status_transition_valid
+BEFORE UPDATE OF status ON workspace_project_grants
+WHEN OLD.status IS NOT NEW.status AND NOT (
+  (OLD.status = 'active' AND NEW.status IN ('suspended', 'revoked', 'expired')) OR
+  (OLD.status = 'suspended' AND NEW.status IN ('active', 'revoked', 'expired'))
+)
+BEGIN
+  SELECT RAISE(ABORT, 'invalid Workspace Project Grant status transition');
+END;
+
 CREATE TABLE auth_accounts (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -524,6 +534,9 @@ CREATE TABLE realtime_events (
 
 CREATE INDEX idx_realtime_events_workspace_sequence
   ON realtime_events(workspace_id, sequence);
+
+CREATE INDEX idx_realtime_events_occurred_at
+  ON realtime_events(occurred_at, event_id);
 
 CREATE UNIQUE INDEX idx_runs_workflow_instance
   ON runs(workflow_instance_id)

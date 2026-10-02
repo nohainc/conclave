@@ -57,7 +57,7 @@ void main() {
     );
     final worker = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
-      localPermissions: const ['workstream_filesystem', 'shell_execution'],
+      localPermissions: const ['repository:read', 'shell:execute'],
       status: LocalWorkerStatus.ready,
       readinessState: WorkerReadinessState.ready,
     );
@@ -109,7 +109,7 @@ void main() {
     );
     final worker = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('gemini'),
-      localPermissions: const ['workstream_filesystem', 'shell_execution'],
+      localPermissions: const ['repository:read', 'shell:execute'],
       status: LocalWorkerStatus.disabled,
       readinessState: WorkerReadinessState.setupRequired,
     );
@@ -289,7 +289,7 @@ void main() {
     );
     final worker = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
-      localPermissions: const ['workstream_filesystem', 'shell_execution'],
+      localPermissions: const ['repository:read', 'shell:execute'],
       status: LocalWorkerStatus.ready,
     );
     final result = Completer<WorkerReadinessAssessment>();

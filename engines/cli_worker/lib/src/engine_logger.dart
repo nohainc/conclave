@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_cli_worker_runtime/src/worker_diagnostics.dart';
-
 class EngineLogger {
-  const EngineLogger();
+  const EngineLogger({this.writeLine});
+
+  final void Function(String line)? writeLine;
 
   void log(
     String level,
@@ -31,20 +31,38 @@ class EngineLogger {
     }) {
       final value = context[key];
       if (value is String || value is num || value is bool) {
-        safe[key] = value is String
-            ? WorkerDiagnosticCollector(maxCharacters: 128).capture(value)
-            : value;
+        safe[key] = value is String ? _captureDiagnostic(value) : value;
       }
     }
-    stderr.writeln(
-      jsonEncode({
-        'timestamp': DateTime.now().toUtc().toIso8601String(),
-        'level': const {'debug', 'info', 'warning', 'error'}.contains(level)
-            ? level
-            : 'info',
-        'event': event,
-        'context': safe,
-      }),
-    );
+    final line = jsonEncode({
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'level': const {'debug', 'info', 'warning', 'error'}.contains(level)
+          ? level
+          : 'info',
+      'event': event,
+      'context': safe,
+    });
+    final writer = writeLine;
+    if (writer == null) {
+      stderr.writeln(line);
+    } else {
+      writer(line);
+    }
   }
+}
+
+String _captureDiagnostic(String value) {
+  final safe = value
+      .replaceAll(
+        RegExp(r'(bearer\s+)[a-z0-9._~+/-]+=*', caseSensitive: false),
+        r'$1[REDACTED]',
+      )
+      .replaceAll(
+        RegExp(
+          r'''(["']?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|cookie|authorization|secret)["']?\s*[:=]\s*["'])([^"']*)(["'])|(["']?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|cookie|authorization|secret)["']?\s*[:=]\s*)([^\s,}&]+)''',
+          caseSensitive: false,
+        ),
+        r'$1[REDACTED]$3$4[REDACTED]',
+      );
+  return safe.length <= 128 ? safe : safe.substring(0, 128);
 }

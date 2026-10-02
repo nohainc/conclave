@@ -1,3 +1,5 @@
+import 'local_worker_permissions.dart';
+
 class RuntimeViolation implements Exception {
   const RuntimeViolation(this.message);
   final String message;
@@ -36,7 +38,16 @@ void validateAssignmentScope(
     throw const RuntimeViolation(
         'assignment effective permissions are invalid');
   }
+  final requestedPermissions = payload['permissions'];
+  if (requestedPermissions != null &&
+      (requestedPermissions is! List ||
+          !_sameStrings(requestedPermissions, permissions))) {
+    throw const RuntimeViolation('assignment permission fields do not match');
+  }
   for (final permission in permissions.cast<String>()) {
+    if (!executionPermissionIds.contains(permission)) {
+      throw RuntimeViolation('assignment permission is unknown: $permission');
+    }
     if (_isSystemAdministration(permission)) {
       throw RuntimeViolation(
           'system administration is never available to Project assignments: $permission');
@@ -55,6 +66,16 @@ void validateAssignmentScope(
   _rejectCredentialMaterial(payload);
 }
 
+bool _sameStrings(Object? left, Object? right) {
+  if (left is! List || right is! List || left.length != right.length) {
+    return false;
+  }
+  for (var index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
+}
+
 bool _isSystemAdministration(String permission) => const {
       'system:admin',
       'system:administration',
@@ -64,17 +85,8 @@ bool _isSystemAdministration(String permission) => const {
 
 bool runtimePermissionAllowed(
     String permission, Set<String> localWorkerPermissions) {
-  final aliases = <String>{permission};
-  if (permission == 'repository:read') {
-    aliases.addAll({'workspace:read', 'fs:read'});
-  } else if (permission == 'repository:write') {
-    aliases.addAll({'workspace:write', 'fs:write'});
-  } else if (permission == 'network:use') {
-    aliases.addAll({'network:outbound', 'network', 'net:http'});
-  } else if (permission == 'shell:execute') {
-    aliases.addAll({'shell', 'process:spawn'});
-  }
-  return aliases.any(localWorkerPermissions.contains);
+  return executionPermissionIds.contains(permission) &&
+      localWorkerPermissions.contains(permission);
 }
 
 String _networkMode(Object? value) {

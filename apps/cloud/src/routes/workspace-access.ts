@@ -1,8 +1,18 @@
 import {
+  AuthorizationError,
   authorizeProjectMembership,
   authorizeWorkspaceOwner,
   type SecurityContext,
 } from "@conclave/security";
+import {
+  canTransitionWorkspaceProjectGrantStatus,
+  isWorkspaceProjectGrantStatus,
+  validateWorkspaceConcurrencyPolicy,
+  validateWorkspaceGrantCapabilities,
+  validateWorkspaceGrantPermissions,
+  validateWorkspaceGrantWorkerIds,
+  validateWorkspaceNetworkPolicy,
+} from "@conclave/core";
 
 import type { SecurityEnv } from "./http-security.js";
 import { parseJson, recordAudit } from "./http-security.js";
@@ -93,10 +103,62 @@ export async function loadWorkspaceProjectGrant(
 
 export function grantStringArray(value: unknown, field: string): string {
   if (value === undefined) return "[]";
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    throw new HttpError(400, `${field} must be an array of strings`);
+  const valid =
+    field === "allowedWorkerIds"
+      ? validateWorkspaceGrantWorkerIds(value)
+      : validateWorkspaceGrantCapabilities(value);
+  if (!valid) {
+    throw new HttpError(400, `${field} contains invalid or duplicate values`);
   }
   return JSON.stringify(value);
+}
+
+export function grantExecutionPermissions(value: unknown): string {
+  if (value === undefined) return "[]";
+  if (!validateWorkspaceGrantPermissions(value)) {
+    throw new HttpError(
+      400,
+      "allowedPermissions contains invalid or duplicate permissions",
+    );
+  }
+  return JSON.stringify(value);
+}
+
+function recordBody(
+  value: unknown,
+  allowedKeys: readonly string[],
+): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpError(400, "Request body must be an object");
+  }
+  const body = value as Record<string, unknown>;
+  if (Object.keys(body).some((key) => !allowedKeys.includes(key))) {
+    throw new HttpError(400, "Request body contains unsupported fields");
+  }
+  return body;
+}
+
+export function grantExpiry(value: unknown, now: Date): string | null {
+  if (value === undefined || value === null) return null;
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(
+      value,
+    )
+  ) {
+    throw new HttpError(400, "expiresAt must be a valid timestamp or null");
+  }
+  const timestamp = Date.parse(value);
+  if (
+    !Number.isFinite(timestamp) ||
+    new Date(`${value.slice(0, 10)}T00:00:00.000Z`)
+      .toISOString()
+      .slice(0, 10) !== value.slice(0, 10) ||
+    timestamp <= now.getTime()
+  ) {
+    throw new HttpError(400, "expiresAt must be in the future");
+  }
+  return new Date(timestamp).toISOString();
 }
 
 export async function createWorkspaceProjectGrant(
@@ -106,10 +168,25 @@ export async function createWorkspaceProjectGrant(
   projectId: string,
   workspaceId: string,
 ): Promise<Response> {
-  const body = (await request.json().catch(() => ({}))) as Record<
-    string,
-    unknown
-  >;
+  const body = recordBody(await request.json().catch(() => null), [
+    "allowedWorkerIds",
+    "allowedWorkerCapabilities",
+    "allowedPermissions",
+    "networkPolicy",
+    "concurrency",
+    "expiresAt",
+    "confirmContribution",
+    "workspaceId",
+  ]);
+  if (
+    body.confirmContribution !== undefined &&
+    typeof body.confirmContribution !== "boolean"
+  ) {
+    throw new HttpError(400, "confirmContribution must be a boolean");
+  }
+  if (body.workspaceId !== undefined && body.workspaceId !== workspaceId) {
+    throw new HttpError(400, "workspaceId does not match the grant target");
+  }
   const project = await env.CONCLAVE_DB.prepare(
     "SELECT id FROM projects WHERE id = ?1",
   )
@@ -139,7 +216,8 @@ export async function createWorkspaceProjectGrant(
       projectId,
       "projects:write",
     );
-  } catch {
+  } catch (error) {
+    if (!(error instanceof AuthorizationError)) throw error;
     // A Workspace owner may grant their own Workspace to a Project without
     // becoming a Project collaborator; the Project still controls use.
   }
@@ -172,28 +250,54 @@ export async function createWorkspaceProjectGrant(
       "Collaborators must explicitly confirm Workspace contribution",
     );
   }
-  const allowedWorkerIds = grantStringArray(
-    body.allowedWorkerIds,
-    "allowedWorkerIds",
-  );
+  const workerIdsValue =
+    body.allowedWorkerIds === undefined ? [] : body.allowedWorkerIds;
+  if (!validateWorkspaceGrantWorkerIds(workerIdsValue)) {
+    throw new HttpError(
+      400,
+      "allowedWorkerIds contains invalid or duplicate Worker IDs",
+    );
+  }
+  const allowedWorkerIds = JSON.stringify(workerIdsValue);
+  if (workerIdsValue.length > 0) {
+    const placeholders = workerIdsValue.map((_, index) => `?${index + 2}`);
+    const rows = await env.CONCLAVE_DB.prepare(
+      `SELECT worker_id FROM workspace_worker_inventory
+       WHERE workspace_id = ?1 AND worker_id IN (${placeholders.join(", ")})`,
+    )
+      .bind(workspaceId, ...workerIdsValue)
+      .all<{ worker_id: string }>();
+    const found = new Set((rows.results ?? []).map((row) => row.worker_id));
+    if (workerIdsValue.some((workerId) => !found.has(workerId))) {
+      throw new HttpError(
+        400,
+        "allowedWorkerIds must identify Workers on this Workspace",
+      );
+    }
+  }
   const allowedWorkerCapabilities = grantStringArray(
     body.allowedWorkerCapabilities,
     "allowedWorkerCapabilities",
   );
-  const allowedPermissions = grantStringArray(
-    body.allowedPermissions,
-    "allowedPermissions",
-  );
-  const networkPolicy =
-    body.networkPolicy === undefined
-      ? '{"mode":"deny_all","allowedHosts":[]}'
-      : JSON.stringify(body.networkPolicy);
-  const concurrency =
-    body.concurrency === undefined
-      ? '{"maxConcurrentAssignments":1}'
-      : JSON.stringify(body.concurrency);
-  const expiresAt = typeof body.expiresAt === "string" ? body.expiresAt : null;
   const now = new Date().toISOString();
+  const allowedPermissions = grantExecutionPermissions(body.allowedPermissions);
+  const networkPolicyValue =
+    body.networkPolicy === undefined
+      ? { mode: "deny_all", allowedHosts: [] }
+      : body.networkPolicy;
+  if (!validateWorkspaceNetworkPolicy(networkPolicyValue)) {
+    throw new HttpError(400, "networkPolicy is invalid");
+  }
+  const networkPolicy = JSON.stringify(networkPolicyValue);
+  const concurrencyValue =
+    body.concurrency === undefined
+      ? { maxConcurrentAssignments: 1 }
+      : body.concurrency;
+  if (!validateWorkspaceConcurrencyPolicy(concurrencyValue)) {
+    throw new HttpError(400, "concurrency is invalid");
+  }
+  const concurrency = JSON.stringify(concurrencyValue);
+  const expiresAt = grantExpiry(body.expiresAt, new Date(now));
   const id = `workspace-project-grant-${crypto.randomUUID().slice(0, 16)}`;
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO workspace_project_grants

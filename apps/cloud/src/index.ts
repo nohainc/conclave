@@ -39,6 +39,7 @@ import {
   requestIdFor,
   withRequestId,
 } from "./observability.js";
+import { pruneExpiredRealtimeEvents } from "./realtime-retention.js";
 
 function applyCorsHeaders(
   response: Response,
@@ -151,6 +152,15 @@ const routeDependencies = {
 } as unknown as WorkerRouteDependencies;
 
 export default {
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    const deleted = await pruneExpiredRealtimeEvents(env.CONCLAVE_DB);
+    console.log(
+      JSON.stringify({
+        event: "realtime_event_retention_complete",
+        deleted,
+      }),
+    );
+  },
   async fetch(
     request: Request,
     env: Env,

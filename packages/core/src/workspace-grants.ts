@@ -1,7 +1,96 @@
+import {
+  isExecutionPermission,
+  type ExecutionPermission,
+} from "./execution-permissions.js";
+import { WORKER_INPUT_CAPABILITIES } from "./worker-inventory.js";
+import { WORKFLOW_CAPABILITIES } from "./workstream.js";
+
 /** Project authorization to execute work through a Workspace. */
 
 export type WorkspaceProjectGrantStatus =
   "active" | "suspended" | "revoked" | "expired";
+
+export const WORKSPACE_PROJECT_GRANT_STATUSES = [
+  "active",
+  "suspended",
+  "revoked",
+  "expired",
+] as const satisfies readonly WorkspaceProjectGrantStatus[];
+
+export const WORKSPACE_GRANT_CAPABILITIES = [
+  ...WORKFLOW_CAPABILITIES,
+  ...WORKER_INPUT_CAPABILITIES,
+  "workstream_read",
+  "durable_session",
+] as const;
+
+export function isWorkspaceProjectGrantStatus(
+  value: unknown,
+): value is WorkspaceProjectGrantStatus {
+  return (
+    typeof value === "string" &&
+    (WORKSPACE_PROJECT_GRANT_STATUSES as readonly string[]).includes(value)
+  );
+}
+
+export function canTransitionWorkspaceProjectGrantStatus(
+  from: WorkspaceProjectGrantStatus,
+  to: WorkspaceProjectGrantStatus,
+): boolean {
+  if (from === to) return true;
+  if (from === "active")
+    return to === "suspended" || to === "revoked" || to === "expired";
+  if (from === "suspended")
+    return to === "active" || to === "revoked" || to === "expired";
+  return false;
+}
+
+export function isWorkspaceGrantCapability(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    (WORKSPACE_GRANT_CAPABILITIES as readonly string[]).includes(value)
+  );
+}
+
+export function isWorkspaceWorkerId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value)
+  );
+}
+
+export function validateWorkspaceGrantPermissions(
+  value: unknown,
+): value is readonly ExecutionPermission[] {
+  return (
+    Array.isArray(value) &&
+    value.length <= 4 &&
+    value.every(isExecutionPermission) &&
+    new Set(value).size === value.length
+  );
+}
+
+export function validateWorkspaceGrantCapabilities(
+  value: unknown,
+): value is readonly string[] {
+  return (
+    Array.isArray(value) &&
+    value.length <= WORKSPACE_GRANT_CAPABILITIES.length &&
+    value.every(isWorkspaceGrantCapability) &&
+    new Set(value).size === value.length
+  );
+}
+
+export function validateWorkspaceGrantWorkerIds(
+  value: unknown,
+): value is readonly string[] {
+  return (
+    Array.isArray(value) &&
+    value.length <= 64 &&
+    value.every(isWorkspaceWorkerId) &&
+    new Set(value).size === value.length
+  );
+}
 
 export interface WorkspaceNetworkPolicy {
   readonly mode: "deny_all" | "allowlist";
@@ -12,6 +101,59 @@ export interface WorkspaceConcurrencyPolicy {
   readonly maxConcurrentAssignments: number;
 }
 
+export function validateWorkspaceConcurrencyPolicy(
+  value: unknown,
+): value is WorkspaceConcurrencyPolicy {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const policy = value as Record<string, unknown>;
+  return (
+    Object.keys(policy).length === 1 &&
+    Object.hasOwn(policy, "maxConcurrentAssignments") &&
+    Number.isSafeInteger(policy.maxConcurrentAssignments) &&
+    Number(policy.maxConcurrentAssignments) >= 1 &&
+    Number(policy.maxConcurrentAssignments) <= 1024
+  );
+}
+
+function isWorkspaceNetworkHost(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 253 || value !== value.trim())
+    return false;
+  const labels = value.split(".");
+  if (labels.length < 2 || value !== value.toLowerCase()) return false;
+  if (
+    labels.some(
+      (label) =>
+        label.length < 1 ||
+        label.length > 63 ||
+        !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
+    )
+  ) {
+    return false;
+  }
+  const topLevelDomain = labels.at(-1)!;
+  return /^[a-z](?:[a-z-]*[a-z])?$/.test(topLevelDomain);
+}
+
+export function validateWorkspaceNetworkPolicy(
+  value: unknown,
+): value is WorkspaceNetworkPolicy {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const policy = value as Record<string, unknown>;
+  if (
+    Object.keys(policy).length !== 2 ||
+    !Object.hasOwn(policy, "mode") ||
+    !Object.hasOwn(policy, "allowedHosts") ||
+    !Array.isArray(policy.allowedHosts) ||
+    policy.allowedHosts.length > 256 ||
+    !policy.allowedHosts.every(isWorkspaceNetworkHost) ||
+    new Set(policy.allowedHosts).size !== policy.allowedHosts.length
+  ) {
+    return false;
+  }
+  if (policy.mode === "deny_all") return policy.allowedHosts.length === 0;
+  return policy.mode === "allowlist" && policy.allowedHosts.length > 0;
+}
+
 export interface WorkspaceProjectGrant {
   readonly id: string;
   readonly projectId: string;
@@ -20,7 +162,7 @@ export interface WorkspaceProjectGrant {
   readonly status: WorkspaceProjectGrantStatus;
   readonly allowedWorkerIds: readonly string[];
   readonly allowedWorkerCapabilities: readonly string[];
-  readonly allowedPermissions: readonly string[];
+  readonly allowedPermissions: readonly ExecutionPermission[];
   readonly networkPolicy: WorkspaceNetworkPolicy;
   readonly concurrency: WorkspaceConcurrencyPolicy;
   readonly expiresAt: string | null;
@@ -33,36 +175,8 @@ export interface EffectiveWorkspacePermission {
   readonly workspaceId: string;
   readonly grantId: string;
   readonly requesterUserId: string;
-  readonly permissions: readonly string[];
+  readonly permissions: readonly ExecutionPermission[];
   readonly networkPolicy: WorkspaceNetworkPolicy;
   readonly concurrency: WorkspaceConcurrencyPolicy;
   readonly snapshotAt: string;
-}
-
-/** Effective permissions are the set intersection of every active boundary. */
-export function intersectPermissions(
-  ...permissionSets: readonly (readonly string[])[]
-): readonly string[] {
-  if (permissionSets.length === 0) return [];
-  const [first, ...rest] = permissionSets;
-  const otherSets = rest.map((permissions) => new Set(permissions));
-  return [...new Set(first)].filter((permission) =>
-    otherSets.every((set) => set.has(permission)),
-  );
-}
-
-export function resolveEffectivePermissions(input: {
-  readonly projectMemberPermissions: readonly string[];
-  readonly workspaceGrantPermissions: readonly string[];
-  readonly workerPermissions: readonly string[];
-  readonly workspaceLocalPermissions: readonly string[];
-  readonly projectPolicyPermissions: readonly string[];
-}): readonly string[] {
-  return intersectPermissions(
-    input.projectMemberPermissions,
-    input.workspaceGrantPermissions,
-    input.workerPermissions,
-    input.workspaceLocalPermissions,
-    input.projectPolicyPermissions,
-  );
 }

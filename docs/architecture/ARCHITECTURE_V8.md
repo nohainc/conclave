@@ -825,6 +825,12 @@ Profile cannot grant itself filesystem or general shell access. A new catalog
 entry can use the existing Workspace UI and generic Engine once its approved
 Profile release is available.
 
+Assignment permission IDs are canonical across Cloud and Workspace:
+`repository:read`, `repository:write`, `shell:execute`, and `network:use`.
+Cloud intersects Project-role permissions with the Workspace Project Grant.
+Workspace separately checks the received IDs against the local Worker ceiling
+before Engine execution; Cloud does not duplicate or simulate that local check.
+
 ### 21.2 Tool Profile definitions
 
 ~~~text

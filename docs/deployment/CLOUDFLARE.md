@@ -73,9 +73,11 @@ Set these values in the Worker environment:
 The production Worker also uses Cloudflare Email Service for email verification
 and password reset. The current configured sender is
 `auth@auth.earthuc.com`, under the enabled `auth.earthuc.com` sending domain.
-If Conclave later enables Email Sending directly for `conclaveax.com`, update
-`CONCLAVE_EMAIL_FROM` in the production Wrangler configuration. Local
-development logs the generated link instead of sending mail.
+The planned sender-domain migration is to `conclaveax.com`: first enable and
+verify that domain for Cloudflare Email Sending, then change
+`CONCLAVE_EMAIL_FROM` in the production Wrangler configuration. Until then,
+keep the verified current sender. Local development logs the generated link
+instead of sending mail.
 
 Store `CONCLAVE_AUTH_GITHUB_CLIENT_SECRET`,
 `CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET`, and
@@ -159,6 +161,22 @@ Worker deployment and production checks pass. The v8 migration is a clean
 baseline, not an in-place upgrade for a database initialized from an earlier
 migration chain. Do not apply it to the old database.
 
+The v8 release is not declared, so the production schema is still in its
+pre-freeze period. If `0001_conclave_v8.sql` changes, re-bootstrap production
+on a newly created D1 database from the revised baseline and carry forward
+production rows using a reviewed, private export/import. Verify row counts,
+relationships, bindings, and production smoke checks before retiring the old
+database. The production deployment workflow's `wrangler d1 migrations apply`
+step only applies migration filenames Wrangler has not recorded; it will not
+reapply an edited `0001` and must not be treated as this re-bootstrap.
+
+Record schema freeze in the v8 release record. From that point onward, freeze
+is permanent: preserve `0001` and every applied migration byte-for-byte and
+add each schema change as a new ordered forward migration. Use the production
+workflow to apply those pending migrations; do not re-bootstrap production
+for post-freeze schema changes. The complete lifecycle policy is in
+[Persistence Contracts](../specifications/PERSISTENCE.md#d1-schema-lifecycle).
+
 The `workspace-gateway-schema-regression.test.ts` test constructs a clean
 SQLite database from the single SQL migration in `apps/cloud/migrations-v8`,
 checks critical runtime tables, and exercises the production Gateway
@@ -174,6 +192,13 @@ it does not trust a stale database online flag. The Durable Object restores
 hibernated sockets from its accepted WebSocket attachments before answering
 status or dispatch requests.
 
+The app Worker runs durable realtime event cleanup hourly. Event records and
+their idempotency keys are retained for 90 days, with up to 10,000 expired
+records deleted per run; per-Workspace sequence cursors are retained
+indefinitely. Durable events are notifications, so clients refresh current
+state from Cloud read APIs after reconnect or a sequence gap. See the
+[Persistence Contracts](../specifications/PERSISTENCE.md#durable-realtime-event-retention)
+for the retention policy.
 
 ## Backend deployment gate
 

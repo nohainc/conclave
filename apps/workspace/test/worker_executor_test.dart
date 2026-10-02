@@ -190,7 +190,7 @@ void main() {
     final handler = WorkerAssignmentHandler(
       resolveLogicalWorker: (workerId) => assignmentWorker(
         workerId,
-        permissions: {'workspace:read'},
+        permissions: {'repository:read'},
       ),
     );
     await expectLater(

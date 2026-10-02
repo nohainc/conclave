@@ -57,7 +57,8 @@ required for machine participation.
 
 **Endpoints:** the Conclave Workspace runtime and Cloud's Workspace Gateway.  
 **Authentication:** a machine runtime credential bound to one Workspace
-runtime.  
+runtime, sent as a Bearer credential in the `Authorization` header. Runtime
+credentials MUST NOT be accepted from WebSocket URL query parameters.
 **Transport:** WSS is primary; HTTPS long-poll is the functional fallback.  
 **Contract ownership:** the versioned Workspace Runtime Protocol schema and
 Cloud Gateway implementation.
@@ -117,6 +118,12 @@ and requires exact final text `OK`; Profiles can define only provider transport
 and output parsing.
 
 Workspace owns Engine/Profile admission, process lifetime, local permissions, CWD, cancellation and safe Cloud synchronization. Workspace does not discover or invoke provider CLIs directly.
+
+Cloud-to-Workspace assignments carry only the canonical execution permission
+IDs `repository:read`, `repository:write`, `shell:execute`, and `network:use`.
+Cloud derives its assignment set from Project role and Workspace Grant policy;
+Workspace independently enforces that set against local Worker permissions.
+Local permission identifiers are not aliases or Cloud-side boundaries.
 
 The Engine owns provider execution through one Workspace-admitted signed Tool Profile. It may launch only the resolved provider CLI using structured arguments with shell execution disabled. It never receives Workspace runtime credentials and never connects directly to Cloud.
 

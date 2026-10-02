@@ -33,7 +33,7 @@ void main() {
   test('persists only local execution state for a catalog Worker', () async {
     final worker = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
-      localPermissions: const ['workspace_read'],
+      localPermissions: const ['repository:read'],
       localConcurrencyLimit: 2,
     );
     await registry.update(
@@ -53,12 +53,12 @@ void main() {
       await File('${directory.path}/configured-workers.json').readAsString(),
     ) as Map<String, dynamic>;
     final record = (document['workers'] as List).single as Map;
-    expect(document['schemaVersion'], 18);
+    expect(document['schemaVersion'], 19);
     expect(record['workerId'], worker.id);
     expect(record['productWorkerTypeId'], 'chatgpt');
     expect(record['activationState'], 'enabled');
     expect(record['localConcurrencyLimit'], 2);
-    expect(record['localPermissions'], ['workspace_read']);
+    expect(record['localPermissions'], ['repository:read']);
     expect(record['readinessState'], 'ready');
     expect(record['providerToolName'], 'Codex CLI');
     expect(record['providerToolVersion'], '1.2.3');
@@ -156,7 +156,7 @@ void main() {
           'workspaceId': 'workspace-1',
           'productWorkerTypeId': 'chatgpt',
           'authStrategy': 'browser_auth',
-          'localPermissions': ['workspace_read'],
+          'localPermissions': ['repository:read'],
         }
       ],
       'checksum': 'legacy-checksum-is-not-interpreted',
@@ -177,7 +177,7 @@ void main() {
     final workers = await registry.list();
     expect(workers, isEmpty);
     final reset = jsonDecode(await file.readAsString()) as Map;
-    expect(reset['schemaVersion'], 18);
+    expect(reset['schemaVersion'], 19);
     expect(reset['workers'], isEmpty);
     for (final preserved in preservedFiles) {
       expect(await preserved.readAsString(), 'preserve',
@@ -206,7 +206,7 @@ void main() {
       catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
     );
     final backup = jsonDecode(await registry.exportBackup()) as Map;
-    expect(backup['schemaVersion'], 18);
+    expect(backup['schemaVersion'], 19);
     for (final legacy in [
       'credentialRef',
       'authStrategy',

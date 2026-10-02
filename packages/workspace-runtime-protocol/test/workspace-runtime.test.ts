@@ -41,6 +41,60 @@ describe("Workspace Runtime protocol", () => {
     ).toBe("assignment.start");
   });
 
+  it("accepts only canonical execution permissions in assignment snapshots", () => {
+    const assignment = {
+      ...base,
+      type: "assignment.start",
+      executionWorkspaceId: "workspace-a",
+      workspaceRuntimeId: "runtime-a",
+      workerId: "worker-a",
+      runId: "run-a",
+      taskId: "task-a",
+      attemptId: "attempt-a",
+      assignmentId: "assignment-a",
+      idempotencyKey: "idem-a",
+      payload: {
+        snapshot: {
+          workerTypeId: "chatgpt",
+          permissions: ["repository:read", "repository:write"],
+          permissionSnapshot: {
+            permissions: ["repository:read", "repository:write"],
+          },
+        },
+        input: {},
+      },
+    };
+    expect(parseWorkspaceRuntimeMessage(assignment).type).toBe(
+      "assignment.start",
+    );
+    expect(() =>
+      parseWorkspaceRuntimeMessage({
+        ...assignment,
+        payload: {
+          snapshot: {
+            workerTypeId: "chatgpt",
+            permissions: ["workspace:read"],
+            permissionSnapshot: { permissions: ["workspace:read"] },
+          },
+          input: {},
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseWorkspaceRuntimeMessage({
+        ...assignment,
+        payload: {
+          snapshot: {
+            workerTypeId: "chatgpt",
+            permissions: ["repository:read"],
+            permissionSnapshot: { permissions: ["repository:write"] },
+          },
+          input: {},
+        },
+      }),
+    ).toThrow(/permission fields must match/);
+  });
+
   it("rejects removed Checkout control-plane messages", () => {
     for (const type of [
       "checkout.provision",

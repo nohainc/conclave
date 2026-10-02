@@ -25,7 +25,6 @@ export interface RealtimeScope {
 export type RealtimeClientMessage =
   | {
       type: "realtime.hello";
-      lastDurableSequence?: number;
       lastDurableSequences?: Record<string, number>;
     }
   | { type: "subscribe"; scope: RealtimeScope }
@@ -40,7 +39,7 @@ interface ConnectedClient {
   readonly socket: WebSocket;
   readonly identity: AuthenticatedIdentity;
   readonly subscriptions: Map<string, RealtimeScope>;
-  lastDurableSequence: number | null;
+  /** Durable cursors are per execution Workspace, not per subscription scope. */
   readonly lastDurableSequences: Map<string, number>;
   readonly queue: BoundedRealtimeQueue;
   flushScheduled: boolean;
@@ -80,28 +79,35 @@ export function parseRealtimeClientMessage(
   }
   if (value.type === "realtime.hello" || value.type === "ping") {
     if (value.type === "ping") return { type: "ping" };
-    const sequence = value.lastDurableSequence;
+    const rawSequences = value.lastDurableSequences;
     if (
-      sequence !== undefined &&
-      (typeof sequence !== "number" ||
-        !Number.isInteger(sequence) ||
-        sequence < 0)
+      rawSequences !== undefined &&
+      (rawSequences === null ||
+        typeof rawSequences !== "object" ||
+        Array.isArray(rawSequences))
     ) {
-      throw new Error("lastDurableSequence must be a non-negative integer");
+      throw new Error("lastDurableSequences must be an object");
+    }
+    const sequences: Record<string, number> = {};
+    for (const [workspaceId, sequence] of Object.entries(
+      (rawSequences ?? {}) as Record<string, unknown>,
+    )) {
+      if (
+        workspaceId.length === 0 ||
+        typeof sequence !== "number" ||
+        !Number.isInteger(sequence) ||
+        sequence < 0
+      ) {
+        throw new Error(
+          "lastDurableSequences must map Workspace IDs to non-negative integers",
+        );
+      }
+      sequences[workspaceId] = sequence;
     }
     return {
       type: "realtime.hello",
-      ...(sequence === undefined || typeof sequence !== "number"
-        ? {}
-        : { lastDurableSequence: sequence }),
-      ...(value.lastDurableSequences &&
-      typeof value.lastDurableSequences === "object"
-        ? {
-            lastDurableSequences: value.lastDurableSequences as Record<
-              string,
-              number
-            >,
-          }
+      ...(Object.keys(sequences).length > 0
+        ? { lastDurableSequences: sequences }
         : {}),
     };
   }
@@ -394,7 +400,6 @@ export class RealtimeGateway implements DurableObject {
       socket: server,
       identity,
       subscriptions: new Map(),
-      lastDurableSequence: null,
       lastDurableSequences: new Map(),
       queue: new BoundedRealtimeQueue(),
       flushScheduled: false,
@@ -449,20 +454,16 @@ export class RealtimeGateway implements DurableObject {
         return;
       }
       if (message.type === "realtime.hello") {
-        connected.lastDurableSequence = message.lastDurableSequence ?? null;
+        connected.lastDurableSequences.clear();
         for (const [key, value] of Object.entries(
           message.lastDurableSequences ?? {},
         )) {
-          if (Number.isInteger(value) && value >= 0)
-            connected.lastDurableSequences.set(key, value);
+          connected.lastDurableSequences.set(key, value);
         }
         this.sendRaw(connected.socket, {
           type: "realtime.ready",
           connectionId,
           eventVersion: "1.0",
-          ...(connected.lastDurableSequence === null
-            ? {}
-            : { lastDurableSequence: connected.lastDurableSequence }),
         });
         return;
       }
@@ -532,21 +533,23 @@ export class RealtimeGateway implements DurableObject {
         const gapScope = isDurableRealtimeEventType(event.type)
           ? matchingScopes.find((scope) =>
               requiresRealtimeReconnect(
-                connected.lastDurableSequences.get(scopeKey(scope)) ??
-                  (scope.kind ? null : connected.lastDurableSequence),
+                connected.lastDurableSequences.get(event.workspaceId) ?? null,
                 event.sequence,
               ),
             )
           : undefined;
         if (gapScope) {
           this.metrics.reconnects += 1;
+          const lastSequence = connected.lastDurableSequences.get(
+            event.workspaceId,
+          );
+          connected.lastDurableSequences.set(event.workspaceId, event.sequence);
           this.sendRaw(connected.socket, {
             type: "reconnect.required",
             reason: "durable_event_gap",
             scope: gapScope,
-            lastDurableSequence:
-              connected.lastDurableSequences.get(scopeKey(gapScope)) ??
-              connected.lastDurableSequence,
+            workspaceId: event.workspaceId,
+            lastDurableSequence: lastSequence,
             nextSequence: event.sequence,
           });
           continue;
@@ -554,10 +557,7 @@ export class RealtimeGateway implements DurableObject {
         const result = this.enqueueEvent(connected, event);
         this.recordQueueResult(result);
         if (isDurableRealtimeEventType(event.type)) {
-          for (const scope of matchingScopes) {
-            connected.lastDurableSequences.set(scopeKey(scope), event.sequence);
-          }
-          connected.lastDurableSequence = event.sequence;
+          connected.lastDurableSequences.set(event.workspaceId, event.sequence);
         }
       }
       return Response.json({ delivered: true });
@@ -605,6 +605,7 @@ export class RealtimeGateway implements DurableObject {
       this.sendRaw(connected.socket, {
         type: "reconnect.required",
         reason: "connection_queue_limit",
+        workspaceId: event.workspaceId,
         nextSequence: event.sequence,
       });
       return result;

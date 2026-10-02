@@ -1,5 +1,13 @@
 import {
-  resolveEffectivePermissions,
+  EXECUTION_PERMISSIONS,
+  isWorkspaceProjectGrantStatus,
+  resolveExecutionPermissions,
+  validateWorkspaceConcurrencyPolicy,
+  validateWorkspaceGrantCapabilities,
+  validateWorkspaceGrantPermissions,
+  validateWorkspaceGrantWorkerIds,
+  validateWorkspaceNetworkPolicy,
+  type ExecutionPermission,
   type WorkstreamBindingId,
 } from "@conclave/core";
 
@@ -82,16 +90,23 @@ function number(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function projectPermissions(role: string): string[] {
-  if (role === "owner")
-    return [
-      "repository:read",
-      "repository:write",
-      "shell:execute",
-      "network:use",
-    ];
+function projectPermissions(role: string): ExecutionPermission[] {
+  if (role === "owner") return [...EXECUTION_PERMISSIONS];
   if (role === "collaborator") return ["repository:read", "repository:write"];
   return ["repository:read"];
+}
+
+function parsedGrantJson<T>(
+  value: unknown,
+  validate: (parsed: unknown) => parsed is T,
+): T | null {
+  if (typeof value !== "string") return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return validate(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function allowedByJson(row: Row, key: string, value: string): boolean {
@@ -126,36 +141,37 @@ export async function selectProjectExecutionTarget(
       )
       .bind(request.workstreamId)
       .first<Record<string, unknown>>();
-    // Older test doubles and compatibility callers may not expose the
-    // Workstream read model yet; production rows always include project_id.
-    if (typeof workstream?.project_id === "string") {
-      if (workstream.project_id !== request.projectId) return null;
-      if (membership.role !== "owner") {
-        const policy = object(workstream.access_policy_json);
-        const allowedUsers = Array.isArray(policy.allowedUserIds)
-          ? policy.allowedUserIds.filter(
-              (value): value is string => typeof value === "string",
-            )
-          : [];
-        const allowedRoles = Array.isArray(policy.allowedProjectRoles)
-          ? policy.allowedProjectRoles.filter(
-              (value): value is string => typeof value === "string",
-            )
-          : [];
-        const allowedPermissions = Array.isArray(policy.allowedPermissions)
-          ? policy.allowedPermissions.filter(
-              (value): value is string => typeof value === "string",
-            )
-          : [];
-        if (
-          (allowedUsers.length > 0 &&
-            !allowedUsers.includes(request.requesterUserId)) ||
-          (allowedRoles.length > 0 &&
-            !allowedRoles.includes(membership.role)) ||
-          !allowedPermissions.includes("execute")
-        ) {
-          return null;
-        }
+    if (
+      !workstream ||
+      typeof workstream.project_id !== "string" ||
+      workstream.project_id !== request.projectId
+    ) {
+      return null;
+    }
+    if (membership.role !== "owner") {
+      const policy = object(workstream.access_policy_json);
+      const allowedUsers = Array.isArray(policy.allowedUserIds)
+        ? policy.allowedUserIds.filter(
+            (value): value is string => typeof value === "string",
+          )
+        : [];
+      const allowedRoles = Array.isArray(policy.allowedProjectRoles)
+        ? policy.allowedProjectRoles.filter(
+            (value): value is string => typeof value === "string",
+          )
+        : [];
+      const allowedPermissions = Array.isArray(policy.allowedPermissions)
+        ? policy.allowedPermissions.filter(
+            (value): value is string => typeof value === "string",
+          )
+        : [];
+      if (
+        (allowedUsers.length > 0 &&
+          !allowedUsers.includes(request.requesterUserId)) ||
+        (allowedRoles.length > 0 && !allowedRoles.includes(membership.role)) ||
+        !allowedPermissions.includes("execute")
+      ) {
+        return null;
       }
     }
   }
@@ -314,8 +330,9 @@ export async function selectProjectExecutionTarget(
     const requiredCapabilities = request.capabilities.map((value) =>
       value.toLowerCase(),
     );
-    const grantCapabilities = strings(row.allowed_worker_capabilities_json).map(
-      (value) => value.toLowerCase(),
+    const grantCapabilities = parsedGrantJson(
+      row.allowed_worker_capabilities_json,
+      validateWorkspaceGrantCapabilities,
     );
     const selectedModel =
       request.workstreamId &&
@@ -325,17 +342,46 @@ export async function selectProjectExecutionTarget(
         : (request.model ??
           (typeof binding.model === "string" ? binding.model : undefined));
     const independenceKey = workerTypeId;
-    const concurrency = object(row.concurrency_json);
-    const maxConcurrent = Math.min(
-      number(row.local_concurrency_limit, 1024),
-      row.cloud_concurrency_limit == null
-        ? 1024
-        : number(row.cloud_concurrency_limit, 1024),
-      number(concurrency.maxConcurrentAssignments, 1024),
+    const grantWorkerIds = parsedGrantJson(
+      row.allowed_worker_ids_json,
+      validateWorkspaceGrantWorkerIds,
     );
+    const grantPermissions = parsedGrantJson(
+      row.allowed_permissions_json,
+      validateWorkspaceGrantPermissions,
+    );
+    const networkPolicy = parsedGrantJson(
+      row.network_policy_json,
+      validateWorkspaceNetworkPolicy,
+    );
+    const concurrency = parsedGrantJson(
+      row.concurrency_json,
+      validateWorkspaceConcurrencyPolicy,
+    );
+    const grantPolicyValid =
+      isWorkspaceProjectGrantStatus(row.grant_status) &&
+      row.grant_status === "active" &&
+      grantWorkerIds !== null &&
+      grantCapabilities !== null &&
+      grantPermissions !== null &&
+      networkPolicy !== null &&
+      concurrency !== null;
+    const maxConcurrent = grantPolicyValid
+      ? Math.min(
+          number(row.local_concurrency_limit, 0),
+          row.cloud_concurrency_limit == null
+            ? 1024
+            : number(row.cloud_concurrency_limit, 0),
+          concurrency.maxConcurrentAssignments,
+        )
+      : 0;
 
     const reject = (reason: string) =>
       rejected.push({ workspaceId, workerId, reason });
+    if (!grantPolicyValid) {
+      reject("workspace_grant_policy_invalid");
+      continue;
+    }
     if (statefulLease && workspaceId !== statefulLease.workspaceId) {
       reject("stateful_primary_workspace_required");
       continue;
@@ -416,7 +462,7 @@ export async function selectProjectExecutionTarget(
       reject("capability_not_allowed_by_grant");
       continue;
     }
-    if (!allowedByJson(row, "allowed_worker_ids_json", workerId)) {
+    if (grantWorkerIds.length > 0 && !grantWorkerIds.includes(workerId)) {
       reject("worker_not_allowed_by_grant");
       continue;
     }
@@ -441,18 +487,10 @@ export async function selectProjectExecutionTarget(
       continue;
     }
 
-    const grantPermissions = strings(row.allowed_permissions_json);
-    // Local execution permissions stay on the Workspace. Cloud intersects
-    // project membership and grant policy; the Worker enforces its own local
-    // permission boundary when accepting/executing the assignment.
-    const workerPermissions = grantPermissions;
-    const resolvedPermissions = resolveEffectivePermissions({
-      projectMemberPermissions: projectPermissions(membership.role),
-      workspaceGrantPermissions: grantPermissions,
-      workerPermissions,
-      workspaceLocalPermissions: workerPermissions,
-      projectPolicyPermissions: projectPermissions(membership.role),
-    });
+    const resolvedPermissions = resolveExecutionPermissions(
+      projectPermissions(membership.role),
+      grantPermissions,
+    );
     // Read-only steps may keep the active Workstream lease so they inspect its
     // current filesystem, while dropping repository writes. Test alone retains
     // shell execution so it can run validation commands inside the read-only
@@ -508,7 +546,7 @@ export async function selectProjectExecutionTarget(
           : null,
       requesterUserId: request.requesterUserId,
       permissions,
-      networkPolicy: object(row.network_policy_json),
+      networkPolicy,
       concurrency,
       workstreamPolicy: {
         allowedWorkerTypeIds: strings(row.allowed_worker_type_ids_json),
