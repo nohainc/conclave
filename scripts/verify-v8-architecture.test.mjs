@@ -55,10 +55,7 @@ describe("v8 architecture guard rejects retired source patterns", () => {
       "null installation ID recovery from registration",
       "registration.installationId ?? identityStore.getOrCreate()",
     ],
-    [
-      "optional installation ID in pairing method",
-      "String? installationId,",
-    ],
+    ["optional installation ID in pairing method", "String? installationId,"],
     [
       "legacy registration identity creation branch",
       "existingRegistration == null ? null : await identityStore.getOrCreate()",
@@ -74,4 +71,36 @@ describe("v8 architecture guard rejects retired source patterns", () => {
       violationsFor('DESKTOP_AUTH_TRANSPORT_VERSION = "1.0"'),
     ).not.toContain("retired desktop auth compatibility");
   });
+
+  it.each([
+    ["pairing-intent table", "workspace_pairing_intents"],
+    ["pairing-intent API", "/api/workspace-pairing-intents"],
+    ["pairing-intent handler", "handleCreateWorkspacePairingIntent"],
+    ["pairing token prefix", "conclave_pair_"],
+    ["Workspace pairing service", "WorkspacePairingService"],
+  ])("rejects retired Workspace pairing flow: %s", (_description, source) => {
+    expect(violationsFor(source)).toContain(
+      "retired Workspace token pairing flow",
+    );
+  });
+
+  it.each([
+    ["retired pairing-intent table", "workspace_pairing_intents"],
+    ["enrollment table", "workspace_enrollments"],
+    ["retired runtime enrollment route", "workspace-runtime/enroll"],
+    ["retired pairing-intent route", "workspace-pairing-intents"],
+    ["enrollment route", "/api/workspaces/id/enrollments"],
+    ["enrollment handler", "handleCreateWorkspaceEnrollment"],
+    ["Workspace enrollment factory", "createWorkspaceEnrollment"],
+    ["enrollment token prefix", "conclave_enroll_"],
+    ["legacy smoke environment variable", "CONCLAVE_ENROLLMENT_TOKEN"],
+    ["AX enrollment model", "AxWorkspaceEnrollment"],
+  ])(
+    "rejects retired Workspace token enrollment: %s",
+    (_description, source) => {
+      expect(violationsFor(source)).toContain(
+        "retired Workspace token pairing flow",
+      );
+    },
+  );
 });

@@ -106,7 +106,7 @@ LocalWorker _disabledChatGptWorker({
     );
 
 void main() {
-  testWidgets('pairing error notification has a working copy action',
+  testWidgets('Workspace error notification has a working copy action',
       (tester) async {
     tester.view.physicalSize = const Size(1000, 900);
     tester.view.devicePixelRatio = 1;
@@ -125,7 +125,7 @@ void main() {
     addTearDown(() => tester.binding.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, null));
 
-    const error = 'Could not prepare pairing recovery: MissingPluginException';
+    const error = 'Could not register Workspace: Cloud unavailable';
     await tester.pumpWidget(MaterialApp(
       home: Builder(
         builder: (context) => Scaffold(
@@ -251,7 +251,7 @@ void main() {
     );
   }
 
-  testWidgets('first launch uses authenticated registration instead of pairing',
+  testWidgets('first launch uses authenticated desktop registration',
       (tester) async {
     var signInStarted = false;
     final credentials = _MemoryCredentialStore();
@@ -278,7 +278,6 @@ void main() {
 
     expect(find.text('Sign in'), findsOneWidget);
     expect(find.text('Connect Workspace'), findsNothing);
-    expect(find.text('Pairing code'), findsNothing);
     expect(find.text('Connect'), findsNothing);
 
     await tester.tap(find.text('Sign in'));
@@ -349,7 +348,7 @@ void main() {
           mode: WorkspaceUiMode.active,
           title: 'Workspace connected',
           detail: 'Ready',
-          paired: true,
+          registered: true,
           workspaceReady: true,
           cloudConnected: true,
           ownerUserId: 'user-1',
@@ -444,7 +443,7 @@ void main() {
           mode: WorkspaceUiMode.firstLaunch,
           title: 'Workspace disconnected',
           detail: 'This installation remains owned.',
-          paired: true,
+          registered: true,
           workspaceReady: false,
           cloudConnected: false,
           ownerUserId: 'user-1',
@@ -465,7 +464,7 @@ void main() {
               mode: WorkspaceUiMode.firstLaunch,
               title: 'Workspace disconnected',
               detail: 'This installation remains owned.',
-              paired: true,
+              registered: true,
               workspaceReady: false,
               cloudConnected: false,
               ownerUserId: 'user-1',
@@ -519,7 +518,7 @@ void main() {
       mode: WorkspaceUiMode.ready,
       title: 'Workspace ready',
       detail: 'Ready',
-      paired: true,
+      registered: true,
       workspaceReady: true,
       cloudConnected: true,
       desiredRuntimeConnected: true,
@@ -572,7 +571,7 @@ void main() {
           mode: WorkspaceUiMode.ready,
           title: 'Workspace ready',
           detail: 'Ready',
-          paired: true,
+          registered: true,
           workspaceReady: true,
           cloudConnected: true,
           ownerUserId: 'user-a',
@@ -619,7 +618,7 @@ void main() {
           mode: WorkspaceUiMode.firstLaunch,
           title: 'Workspace disconnected',
           detail: 'Sign-in expired.',
-          paired: true,
+          registered: true,
           ownerUserId: 'user-a',
           cloudConnected: false,
           desiredRuntimeConnected: false,
@@ -665,7 +664,7 @@ void main() {
           mode: WorkspaceUiMode.ready,
           title: 'Workspace ready',
           detail: 'Runtime is connected.',
-          paired: true,
+          registered: true,
           workspaceReady: true,
           ownerUserId: 'user-a',
           cloudConnected: true,
@@ -712,7 +711,7 @@ void main() {
           mode: WorkspaceUiMode.ready,
           title: 'Workspace ready',
           detail: 'Runtime is connected.',
-          paired: true,
+          registered: true,
           workspaceReady: true,
           ownerUserId: 'user-a',
           cloudConnected: true,
@@ -773,7 +772,7 @@ void main() {
         title: 'Workspace is offline',
         detail: 'The Workspace could not connect.',
         issue: 'Network unavailable',
-        paired: true,
+        registered: true,
         workspaceId: 'workspace-1',
         workspaceRuntimeId: 'runtime-1',
         workspaceName: 'Development Mac',
@@ -796,7 +795,6 @@ void main() {
 
     expect(find.text('Network unavailable'), findsOneWidget);
     expect(find.text('Offline'), findsWidgets);
-    expect(find.text('Pairing code'), findsNothing);
     expect(find.text('Retry connection'), findsOneWidget);
     expect(find.text('Connect'), findsOneWidget);
     expect(find.byTooltip('Copy error message'), findsOneWidget);
@@ -813,7 +811,7 @@ void main() {
   });
 
   testWidgets(
-      'paired Workspace defaults to Workspace tab with two-surface tabs and zero duplicate cards',
+      'registered Workspace defaults to Workspace tab with two-surface tabs and zero duplicate cards',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -826,7 +824,7 @@ void main() {
         mode: WorkspaceUiMode.ready,
         title: 'Workspace is ready',
         detail: 'This computer is registered and ready to run assigned work.',
-        paired: true,
+        registered: true,
         workspaceReady: true,
         cloudConnected: true,
         activeTransportMode: 'websocket',
@@ -864,9 +862,8 @@ void main() {
     expect(find.text('Application'), findsNothing);
     expect(find.text('Advanced Diagnostics'), findsOneWidget);
 
-    // No pairing form is shown when paired
+    // The registered Workspace has no enrollment form.
     expect(find.text('Connect this Workspace'), findsNothing);
-    expect(find.text('Pairing code'), findsNothing);
     expect(find.text('Connect'), findsNothing);
 
     // Removed sections are not on the Workspace tab
@@ -885,7 +882,7 @@ void main() {
         mode: WorkspaceUiMode.ready,
         title: 'Workspace is ready',
         detail: 'Ready',
-        paired: true,
+        registered: true,
         workspaceReady: true,
         cloudConnected: true,
         statusLabel: 'Connected',
@@ -980,7 +977,7 @@ void main() {
         mode: WorkspaceUiMode.ready,
         title: 'Workspace is ready',
         detail: 'Ready',
-        paired: true,
+        registered: true,
         workspaceReady: true,
         cloudConnected: true,
         workspaceId: 'ws-test-123',
@@ -1093,7 +1090,7 @@ void main() {
         mode: WorkspaceUiMode.ready,
         title: 'Workspace is ready',
         detail: 'Ready',
-        paired: true,
+        registered: true,
         workspaceReady: true,
         cloudConnected: true,
         activeTransportMode: 'websocket',
@@ -1154,7 +1151,7 @@ void main() {
         mode: WorkspaceUiMode.ready,
         title: 'Workspace is ready',
         detail: 'Ready',
-        paired: true,
+        registered: true,
         workspaceReady: true,
         cloudConnected: true,
         workspaceName: 'Office Mac',
@@ -1191,7 +1188,7 @@ void main() {
         mode: WorkspaceUiMode.ready,
         title: 'Connect this Workspace',
         detail: 'Sign in to register this computer.',
-        paired: false,
+        registered: false,
         hostname: 'test-mac',
       ),
       localWorkerRegistry: _FakeWorkerRegistry([]),
@@ -1216,7 +1213,7 @@ void main() {
         mode: WorkspaceUiMode.ready,
         title: 'Workspace is ready',
         detail: 'Ready',
-        paired: true,
+        registered: true,
         workspaceReady: true,
         cloudConnected: true,
         workspaceName: 'Office Mac',
@@ -1293,7 +1290,7 @@ void main() {
         mode: WorkspaceUiMode.ready,
         title: 'Workspace is ready',
         detail: 'Ready',
-        paired: true,
+        registered: true,
         workspaceReady: true,
         cloudConnected: true,
         workspaceName: 'Office Mac',
@@ -1385,7 +1382,7 @@ void main() {
         mode: WorkspaceUiMode.ready,
         title: 'Workspace is ready',
         detail: 'Ready',
-        paired: true,
+        registered: true,
         workspaceReady: true,
         cloudConnected: true,
         workspaceName: 'Office Mac',
@@ -1457,7 +1454,7 @@ void main() {
         mode: WorkspaceUiMode.ready,
         title: 'Workspace is ready',
         detail: 'Ready',
-        paired: true,
+        registered: true,
         workspaceReady: true,
         cloudConnected: true,
         workspaceName: 'Office Mac',
@@ -1535,7 +1532,7 @@ void main() {
         mode: WorkspaceUiMode.ready,
         title: 'Workspace is ready',
         detail: 'Ready',
-        paired: true,
+        registered: true,
         workspaceReady: true,
         cloudConnected: true,
         workspaceName: 'Office Mac',
@@ -1591,7 +1588,7 @@ void main() {
         mode: WorkspaceUiMode.ready,
         title: 'Workspace is ready',
         detail: 'Ready',
-        paired: true,
+        registered: true,
         workspaceReady: true,
         cloudConnected: true,
         workspaceName: 'Office Mac',
@@ -1763,7 +1760,7 @@ void main() {
         title: 'Connect this Workspace',
         detail: 'Sign in to register this computer.',
         hostname: 'test-mac',
-        paired: false,
+        registered: false,
         workspaceReady: false,
       ),
       credentialStore: credentials,
@@ -1807,7 +1804,7 @@ void main() {
         mode: WorkspaceUiMode.ready,
         title: 'Workspace is ready',
         detail: 'Ready',
-        paired: true,
+        registered: true,
         workspaceId: 'ws-123',
         workspaceReady: true,
         cloudConnected: true,

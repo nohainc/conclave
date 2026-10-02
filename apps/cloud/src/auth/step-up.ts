@@ -1,6 +1,5 @@
 export const SENSITIVE_OPERATIONS = {
   workspaceOwnershipTransfer: "workspace.ownership.transfer",
-  workspaceEnrollmentRevoke: "workspace.enrollment.revoke",
   billingSecurityChange: "billing.security.change",
 } as const;
 
@@ -27,10 +26,6 @@ export const STEP_UP_REQUIREMENTS: Record<
   StepUpRequirement
 > = {
   [SENSITIVE_OPERATIONS.workspaceOwnershipTransfer]: {
-    maxAgeMs: 10 * 60 * 1000,
-    methods: ["passkey", "totp"],
-  },
-  [SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke]: {
     maxAgeMs: 10 * 60 * 1000,
     methods: ["passkey", "totp"],
   },

@@ -429,19 +429,6 @@ class AxFixtureDataSource implements AxDataSource {
 
   @override
   Future<void> revokeWorkspace({required String workspaceId}) async {}
-
-  @override
-  Future<AxWorkspaceEnrollment> createWorkspaceEnrollment({
-    required String workspaceId,
-    int expiresHours = 24,
-  }) async {
-    return AxWorkspaceEnrollment(
-      id: 'enrollment-fixture',
-      token: 'conclave_enroll_fixture',
-      workspaceId: workspaceId,
-      expiresAt: 'Tomorrow',
-    );
-  }
 }
 
 /// Stateful fixture used by the empty-workspace onboarding test. It mirrors

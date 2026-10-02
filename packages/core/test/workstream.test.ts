@@ -70,7 +70,6 @@ const workstream: Workstream = {
 const statefulPolicy: WorkstreamExecutionPolicy = {
   mode: "stateful",
   primaryWorkspaceId: "workspace-1",
-  maxConcurrentWorkRequests: 1,
 };
 
 describe("Workstream domain", () => {

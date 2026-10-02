@@ -1,15 +1,10 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 
 import 'package:conclave_app/src/features/navigation/app_menu.dart';
 import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
 import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
 import 'package:conclave_app/src/navigation/ax_navigation.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 
 void main() {
@@ -23,7 +18,8 @@ void main() {
     id: 'workspace-1',
     name: 'MacBook Pro',
     hostname: '—',
-    status: 'not_connected',
+    status: 'offline',
+    hasRuntimeIdentity: false,
     appVersion: '—',
     workerCount: 0,
     activeTaskCount: 0,
@@ -31,34 +27,7 @@ void main() {
     architecture: '—',
   );
 
-  group('Phase 10: Workspace Enrollment Acceptance', () {
-    test('Enrollment code is created only on explicit Connect machine action',
-        () async {
-      final paths = <String>[];
-      final api = AxApiClient(
-        baseUrl: 'https://cloud.test/api',
-        client: MockClient((request) async {
-          paths.add(request.url.path);
-          return http.Response(
-            jsonEncode({
-              'id': 'enrollment-1',
-              'token': 'XK82-PQ71',
-              'workspaceId': 'workspace-1',
-              'expiresAt': '2026-09-27T12:00:00Z',
-            }),
-            201,
-          );
-        }),
-      );
-
-      final enrollment = await api.createWorkspaceEnrollment(
-        workspaceId: initialWorkspace.id,
-      );
-
-      expect(enrollment.token, 'XK82-PQ71');
-      expect(paths, ['/api/workspaces/workspace-1/enrollments']);
-    });
-
+  group('Workspace connection status', () {
     testWidgets(
         'Workspace operational status progresses from not connected to online',
         (tester) async {
@@ -77,34 +46,8 @@ void main() {
       expect(find.text('Not connected'), findsNWidgets(2));
       expect(find.text('Machine'), findsOneWidget);
       expect(find.text('Connect Machine'), findsNothing);
-      expect(find.text('Pairing code'), findsNothing);
 
-      // 2. Transition State: Pairing
-      const pairingWorkspace = AxWorkspace(
-        id: 'workspace-1',
-        name: 'MacBook Pro',
-        hostname: '—',
-        status: 'pairing',
-        appVersion: '—',
-        workerCount: 0,
-        activeTaskCount: 0,
-        platform: '—',
-        architecture: '—',
-      );
-
-      await tester.pumpWidget(scaffold(WorkspacesPage(
-        workspaces: const [pairingWorkspace],
-        onAdd: () {},
-        onRename: (_) {},
-        onUpdate: (_) {},
-        onRevoke: (_) {},
-        onGrant: (_) {},
-      )));
-      await tester.pumpAndSettle();
-      expect(find.text('Pairing'), findsNWidgets(2));
-      expect(find.text('Machine'), findsOneWidget);
-
-      // 3. Runtime Connected: Online with automatically populated platform facts
+      // Runtime Connected: Online with automatically populated platform facts
       const onlineWorkspace = AxWorkspace(
         id: 'workspace-1',
         name: 'MacBook Pro',
@@ -227,47 +170,6 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text(expectedLabel), findsWidgets);
       }
-    });
-
-    test(
-        'Re-enrollment refreshes machine facts while preserving logical entity',
-        () {
-      final initial = AxWorkspace.fromJson({
-        'id': 'workspace-1',
-        'name': 'Development Rig',
-        'slug': 'development-rig',
-        'status': 'offline',
-        'role': 'owner',
-        'platform': 'linux',
-        'architecture': 'x64',
-        'hostname': 'rig-old',
-        'appVersion': '1.0.1',
-      });
-
-      // Runtime is revoked and paired with updated hardware/software
-      final reenrolled = AxWorkspace.fromJson({
-        'id': 'workspace-1',
-        'name': 'Development Rig',
-        'slug': 'development-rig',
-        'status': 'online',
-        'role': 'owner',
-        'platform': 'macos',
-        'architecture': 'arm64',
-        'hostname': 'rig-apple-silicon',
-        'appVersion': '1.0.3',
-      });
-
-      // Logical ID and identity remain identical
-      expect(reenrolled.id, initial.id);
-      expect(reenrolled.name, initial.name);
-      expect(reenrolled.slug, initial.slug);
-
-      // Runtime facts refresh
-      expect(reenrolled.status, 'online');
-      expect(reenrolled.platform, 'macos');
-      expect(reenrolled.architecture, 'arm64');
-      expect(reenrolled.hostname, 'rig-apple-silicon');
-      expect(reenrolled.appVersion, '1.0.3');
     });
   });
 }

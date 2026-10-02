@@ -46,8 +46,8 @@ separate Workstream membership table.
 
 Every Workspace runtime identity has a credential hash. Its stable installation
 ID remains bound while the identity is active. Explicit release revokes the
-identity and clears that binding so the installation can be enrolled again;
-this released state is not an installation-recovery path.
+identity and clears that binding so the installation can be registered again;
+release itself is not an installation-recovery path.
 
 `worker_assignments.worker_type_id` identifies the logical Worker type;
 `workspace_worker_id` identifies the Workspace's local Worker slot. The clean

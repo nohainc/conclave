@@ -1,4 +1,3 @@
-import type { ToolProfileV1 } from "@conclave/tool-profile";
 import { verifyEd25519ReleaseSignature } from "./release-trust.js";
 import {
   ToolProfileRegistryError,
@@ -6,11 +5,9 @@ import {
   parseProfile,
   profileDigest,
   productCapabilities,
-  rejectPlaintextCredentialMaterial,
   toolProfileReleaseSigningMessage,
   validateId,
   validateToolProfileAcceptanceEvidence,
-  validateToolProfileReleasePayload,
   validateVersion,
 } from "./tool-profile-validation.js";
 import type {

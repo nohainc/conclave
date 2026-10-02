@@ -28,7 +28,7 @@ export interface PendingInvitation {
 
 /**
  * Initialize Conclave application state after Better Auth has authenticated
- * the human. Workspace enrollment is not created as a side effect of
+ * the human. Workspace registration is not created as a side effect of
  * sign-in; Workspace creation is an explicit user action.
  */
 export async function provisionConclaveUser(

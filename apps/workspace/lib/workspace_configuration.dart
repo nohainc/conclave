@@ -13,7 +13,6 @@ class WorkspaceRegistration {
     required this.hostname,
     required this.installationId,
     this.ownerUserId,
-    this.pairedAt,
   });
 
   final String workspaceRuntimeId;
@@ -23,7 +22,6 @@ class WorkspaceRegistration {
   final String hostname;
   final String? ownerUserId;
   final String installationId;
-  final String? pairedAt;
 
   factory WorkspaceRegistration.fromJson(Map<String, dynamic> json) {
     String required(String key) {
@@ -45,9 +43,6 @@ class WorkspaceRegistration {
       ownerUserId: json['ownerUserId'] is String
           ? (json['ownerUserId'] as String).trim()
           : null,
-      pairedAt: json['pairedAt'] is String
-          ? (json['pairedAt'] as String).trim()
-          : null,
     );
   }
 
@@ -59,7 +54,6 @@ class WorkspaceRegistration {
         'hostname': hostname,
         'installationId': installationId,
         if (ownerUserId != null) 'ownerUserId': ownerUserId,
-        if (pairedAt != null) 'pairedAt': pairedAt,
       };
 }
 
@@ -107,8 +101,6 @@ class InstallationIdentityStore {
 
   File get file =>
       File('${dataDirectory.path}${Platform.pathSeparator}installation-id');
-  File get recoveryAuthorizationFile => File(
-      '${dataDirectory.path}${Platform.pathSeparator}installation-recovery-authorized');
 
   String? readSync() {
     if (!file.existsSync()) return null;
@@ -139,28 +131,6 @@ class InstallationIdentityStore {
     if (await file.exists()) await file.delete();
   }
 
-  bool recoveryAuthorizedSync() {
-    try {
-      return recoveryAuthorizationFile.existsSync() &&
-          recoveryAuthorizationFile.readAsStringSync().trim() == 'authorized';
-    } on Object {
-      return false;
-    }
-  }
-
-  Future<void> authorizeRecovery() async {
-    await dataDirectory.create(recursive: true);
-    await recoveryAuthorizationFile.writeAsString('authorized', flush: true);
-    await (platform ?? currentPlatformRuntime)
-        .restrictPermissions(recoveryAuthorizationFile.path, directory: false);
-  }
-
-  Future<void> clearRecoveryAuthorization() async {
-    if (await recoveryAuthorizationFile.exists()) {
-      await recoveryAuthorizationFile.delete();
-    }
-  }
-
   static String generateInstallationId() {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));
@@ -173,8 +143,8 @@ class InstallationIdentityStore {
   }
 }
 
-/// Stable local identity for Worker ownership. It exists before Cloud pairing
-/// and survives re-pairing this machine to another Cloud Workspace.
+/// Stable local identity for Worker ownership. It exists before Cloud
+/// registration and survives disconnecting this machine from a Workspace.
 class LocalWorkspaceIdentityStore {
   const LocalWorkspaceIdentityStore(this.dataDirectory, {this.platform});
 

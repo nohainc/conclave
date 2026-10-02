@@ -71,7 +71,6 @@ export function workspaceProjectGrantMetadata(
     allowedPermissions: parseJson(row.allowed_permissions_json, []),
     networkPolicy: parseJson(row.network_policy_json, {}),
     concurrency: parseJson(row.concurrency_json, {}),
-    budget: parseJson(row.budget_json, null),
     expiresAt: row.expires_at ?? null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
@@ -193,7 +192,6 @@ export async function createWorkspaceProjectGrant(
     body.concurrency === undefined
       ? '{"maxConcurrentAssignments":1}'
       : JSON.stringify(body.concurrency);
-  const budget = body.budget === undefined ? null : JSON.stringify(body.budget);
   const expiresAt = typeof body.expiresAt === "string" ? body.expiresAt : null;
   const now = new Date().toISOString();
   const id = `workspace-project-grant-${crypto.randomUUID().slice(0, 16)}`;
@@ -202,9 +200,9 @@ export async function createWorkspaceProjectGrant(
        (id, project_id, workspace_id, granted_by_user_id, status,
         allowed_worker_ids_json,
         allowed_worker_capabilities_json, allowed_permissions_json,
-        network_policy_json, concurrency_json, budget_json,
+        network_policy_json, concurrency_json,
         expires_at, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12)
+     VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11)
      ON CONFLICT(id, project_id, workspace_id) DO NOTHING`,
   )
     .bind(
@@ -217,7 +215,6 @@ export async function createWorkspaceProjectGrant(
       allowedPermissions,
       networkPolicy,
       concurrency,
-      budget,
       expiresAt,
       now,
     )

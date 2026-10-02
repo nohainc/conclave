@@ -11,12 +11,26 @@ const config = join(repositoryRoot, "infra/cloudflare/app.wrangler.jsonc");
 const hostname = "app.conclaveax.com";
 const runId = process.env.GITHUB_RUN_ID
   ? `${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}`
-  : randomUUID();
+  : (process.env.CONCLAVE_SMOKE_RUN_ID ?? randomUUID());
 const ownerId = `gateway-smoke-user-${runId}`;
-const workspaceId = `gateway-smoke-workspace-${runId}`;
-const runtimeId = `runtime-gateway-smoke-${runId}`;
-const runtimeToken = randomBytes(32).toString("base64url");
-const tokenHash = createHash("sha256").update(runtimeToken).digest("hex");
+const humanSessionId = `gateway-smoke-session-${runId}`;
+const humanCredential = randomBytes(32).toString("base64url");
+const humanTokenHash = createHash("sha256")
+  .update(humanCredential)
+  .digest("hex");
+const installationUuid = createHash("sha256")
+  .update(`conclave-production-workspace-smoke:${runId}`)
+  .digest("hex")
+  .slice(0, 32)
+  .split("");
+installationUuid[12] = "4";
+installationUuid[16] = "8";
+const installationId = `install_${installationUuid
+  .join("")
+  .replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5")}`;
+let workspaceId;
+let runtimeId;
+let runtimeToken;
 
 function sqlString(value) {
   return `'${String(value).replaceAll("'", "''")}'`;
@@ -233,7 +247,8 @@ async function connectAndHello() {
     );
     if (
       acknowledgement.executionWorkspaceId !== workspaceId ||
-      acknowledgement.workspaceRuntimeId !== runtimeId
+      acknowledgement.workspaceRuntimeId !== runtimeId ||
+      acknowledgement.correlationId !== hello.messageId
     ) {
       throw new Error(
         "Production Gateway hello acknowledgement identity mismatch",
@@ -286,25 +301,81 @@ async function waitForSessionRecord() {
   );
 }
 
-function createDisposableRuntime() {
+async function createDisposableHumanSession() {
   const now = new Date().toISOString();
   const email = `gateway-smoke-${runId}@example.invalid`;
   executeD1(
-    `INSERT INTO users (id, email, display_name, status, created_at, updated_at) VALUES (${sqlString(ownerId)}, ${sqlString(email)}, 'Production Gateway Smoke', 'active', ${sqlString(now)}, ${sqlString(now)});
-     INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (${sqlString(workspaceId)}, ${sqlString(ownerId)}, 'Production Gateway Smoke', 'enrolled', ${sqlString(now)}, ${sqlString(now)});
-     INSERT INTO workspace_runtime_identities (id, workspace_id, credential_key_ref, credential_token_hash, created_at) VALUES (${sqlString(runtimeId)}, ${sqlString(workspaceId)}, 'deployment-smoke', ${sqlString(tokenHash)}, ${sqlString(now)});`,
+    `INSERT INTO users (id, email, display_name, status, created_at, updated_at) VALUES (${sqlString(ownerId)}, ${sqlString(email)}, 'Production Workspace Registration Smoke', 'active', ${sqlString(now)}, ${sqlString(now)});
+     INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (${sqlString(humanSessionId)}, ${sqlString(ownerId)}, ${sqlString(humanTokenHash)}, 'conclave.desktop.management', ${sqlString(now)}, ${sqlString(now)}, '9999-12-31T23:59:59.999Z');`,
   );
 }
 
 function removeDisposableRuntime() {
   executeD1(
-    `DELETE FROM execution_workspaces WHERE id = ${sqlString(workspaceId)};
+    `DELETE FROM execution_workspaces
+      WHERE owner_user_id = ${sqlString(ownerId)}
+        AND id IN (
+          SELECT workspace_id FROM workspace_runtime_identities
+          WHERE installation_id = ${sqlString(installationId)}
+        );
+     DELETE FROM desktop_human_sessions WHERE id = ${sqlString(humanSessionId)};
      DELETE FROM users WHERE id = ${sqlString(ownerId)};`,
   );
 }
 
+async function registerDisposableWorkspace() {
+  const appVersion = "0.0.0-smoke";
+  const response = await fetch(
+    `https://${hostname}/api/workspace-runtime/register`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${humanCredential}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contractVersion: "1.0",
+        installationId,
+        proposedWorkspaceName: "Production Workspace Registration Smoke",
+        hostname: "github-actions-production-smoke",
+        platform: "linux",
+        architecture: "x64",
+        appVersion,
+        runtimeCapabilities: {
+          os: "linux",
+          arch: "x64",
+          appVersion,
+          supportedRuntimes: ["gateway-smoke"],
+          maxConcurrentWorkers: 1,
+        },
+      }),
+    },
+  );
+  const result = await response.json().catch(() => null);
+  if (
+    response.status !== 201 ||
+    !result ||
+    typeof result.workspaceId !== "string" ||
+    typeof result.workspaceRuntimeId !== "string" ||
+    typeof result.runtimeCredential !== "string" ||
+    result.ownerUserId !== ownerId
+  ) {
+    throw new Error(
+      `Production Workspace registration failed with HTTP ${response.status}`,
+    );
+  }
+  workspaceId = result.workspaceId;
+  runtimeId = result.workspaceRuntimeId;
+  runtimeToken = result.runtimeCredential;
+}
+
 async function main() {
   if (process.argv.includes("--cleanup-only")) {
+    if (!process.env.GITHUB_RUN_ID && !process.env.CONCLAVE_SMOKE_RUN_ID) {
+      throw new Error(
+        "Set CONCLAVE_SMOKE_RUN_ID to the original smoke run ID for cleanup-only mode",
+      );
+    }
     removeDisposableRuntime();
     return;
   }
@@ -312,11 +383,12 @@ async function main() {
   const requiredTables = new Set(
     rowsFromD1(
       executeD1(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('workspace_sessions', 'workspace_runtime_facts', 'workspace_runtime_identities')",
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('desktop_human_sessions', 'workspace_sessions', 'workspace_runtime_facts', 'workspace_runtime_identities')",
       ),
     ).map((row) => row.name),
   );
   for (const table of [
+    "desktop_human_sessions",
     "workspace_sessions",
     "workspace_runtime_facts",
     "workspace_runtime_identities",
@@ -331,12 +403,14 @@ async function main() {
   let socket;
   let setupAttempted = false;
   try {
+    removeDisposableRuntime();
     setupAttempted = true;
-    createDisposableRuntime();
+    await createDisposableHumanSession();
+    await registerDisposableWorkspace();
     socket = await connectAndHello();
     await waitForSessionRecord();
     console.log(
-      "PASS production Gateway smoke: HTTP 101, hello.ack, sync result, session persisted",
+      "PASS production Workspace smoke: authenticated /register, HTTP 101, hello.ack, sync result, session persisted",
     );
   } finally {
     socket?.end(maskedFrame(Buffer.from([0x03, 0xe8]), 0x8));

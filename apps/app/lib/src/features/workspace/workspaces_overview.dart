@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
 
-/// Overview tab displaying the list of enrolled Workspaces.
+/// Overview tab displaying the registered Workspaces.
 class WorkspacesOverview extends StatelessWidget {
   const WorkspacesOverview({
     super.key,
@@ -183,9 +183,7 @@ class WorkspacesOverview extends StatelessWidget {
                                 const SizedBox(width: 5),
                                 Flexible(
                                   child: Text(
-                                    online
-                                        ? 'Online'
-                                        : _statusLabel(workspace.status),
+                                    online ? 'Online' : _statusLabel(workspace),
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                       fontSize: 12,
@@ -212,14 +210,16 @@ class WorkspacesOverview extends StatelessWidget {
     );
   }
 
-  String _statusLabel(String status) => switch (status.toLowerCase()) {
-        'enrolled' || 'not_connected' => 'Not connected',
-        'pairing' => 'Pairing',
-        'online' => 'Online',
-        'offline' => 'Offline',
-        'busy' => 'Busy',
-        'draining' => 'Draining',
-        'revoked' => 'Revoked',
-        _ => status,
-      };
+  String _statusLabel(AxWorkspace workspace) =>
+      workspace.status.toLowerCase() == 'offline' &&
+              !workspace.hasRuntimeIdentity
+          ? 'Not connected'
+          : switch (workspace.status.toLowerCase()) {
+              'online' => 'Online',
+              'offline' => 'Offline',
+              'busy' => 'Busy',
+              'draining' => 'Draining',
+              'revoked' => 'Revoked',
+              _ => workspace.status,
+            };
 }

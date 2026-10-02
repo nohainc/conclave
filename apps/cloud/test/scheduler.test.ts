@@ -365,7 +365,7 @@ describe("Project execution scheduler", () => {
       profile_definition_id: "chatgpt-codex",
       profile_release_version: 3,
       capabilities_json: JSON.stringify(["code"]),
-      // Local worker manifest / local permissions ONLY permit repository:read
+      // Local Worker permissions ONLY permit repository:read
       local_permissions_json: JSON.stringify(["repository:read"]),
       local_worker_activation_state: "enabled",
       local_worker_readiness_state: "ready",

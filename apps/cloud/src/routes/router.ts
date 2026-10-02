@@ -19,9 +19,6 @@ export async function routeWorkerRequest(
 ): Promise<Response> {
   const url = new URL(request.url);
   try {
-    const workspaceEnrollmentRedeem =
-      request.method === "POST" &&
-      url.pathname === "/api/workspace-runtime/enroll";
     const desktopWorkspaceRegistration =
       request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/register";
@@ -34,9 +31,6 @@ export async function routeWorkerRequest(
     const desktopWorkspaceDisconnect =
       request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/disconnect";
-    const workspaceRuntimeUnpair =
-      request.method === "POST" &&
-      url.pathname === "/api/workspace-runtime/unpair";
     const workspaceRuntimeTransport =
       request.method === "POST" &&
       (url.pathname === "/api/workspace-runtime/sessions" ||
@@ -50,12 +44,10 @@ export async function routeWorkerRequest(
       desktopAuthPath &&
       (url.pathname.endsWith("/approve") || url.pathname.endsWith("/deny"));
     if (
-      !workspaceEnrollmentRedeem &&
       !desktopWorkspaceRegistration &&
       !desktopWorkspaceOwnershipCheck &&
       !desktopWorkspaceRelease &&
       !desktopWorkspaceDisconnect &&
-      !workspaceRuntimeUnpair &&
       !workspaceRuntimeTransport &&
       (!desktopAuthPath || desktopAuthRequiresSameOrigin) &&
       (request.method === "POST" ||
@@ -64,9 +56,6 @@ export async function routeWorkerRequest(
         request.method === "DELETE")
     ) {
       deps.requireSameOriginForCookieMutation(request);
-    }
-    if (workspaceEnrollmentRedeem) {
-      return await handlers.handleRedeemWorkspaceEnrollment!(request, env, ctx);
     }
     if (desktopWorkspaceRegistration) {
       return await handlers.handleRegisterWorkspaceFromDesktop!(
@@ -83,9 +72,6 @@ export async function routeWorkerRequest(
     }
     if (desktopWorkspaceDisconnect) {
       return await handlers.handleDisconnectDesktopWorkspace!(request, env);
-    }
-    if (workspaceRuntimeUnpair) {
-      return await handlers.handleUnpairWorkspaceRuntime!(request, env);
     }
     if (workspaceRuntimeTransport) {
       return await handlers.handleWorkspaceRuntimeTransport!(request, env);
@@ -181,51 +167,6 @@ export async function routeWorkerRequest(
     }
     if (request.method === "GET" && url.pathname === "/api/workspaces") {
       return await handlers.handleListWorkspaces!(request, env, ctx);
-    }
-    if (
-      request.method === "POST" &&
-      url.pathname === "/api/workspace-pairing-intents"
-    ) {
-      return await handlers.handleCreateWorkspacePairingIntent!(
-        request,
-        env,
-        ctx,
-      );
-    }
-    const pairingIntentMatch = url.pathname.match(
-      /^\/api\/workspace-pairing-intents\/([^/]+)(?:\/(regenerate|cancel))?$/,
-    );
-    if (pairingIntentMatch?.[1]) {
-      if (request.method === "GET" && !pairingIntentMatch[2]) {
-        return await handlers.handleGetWorkspacePairingIntent!(
-          request,
-          env,
-          pairingIntentMatch[1],
-          ctx,
-        );
-      }
-      if (request.method === "POST" && pairingIntentMatch[2] === "regenerate") {
-        return await handlers.handleRegenerateWorkspacePairingIntent!(
-          request,
-          env,
-          pairingIntentMatch[1],
-          ctx,
-        );
-      }
-      if (
-        (request.method === "POST" || request.method === "DELETE") &&
-        pairingIntentMatch[2] === "cancel"
-      ) {
-        return await handlers.handleCancelWorkspacePairingIntent!(
-          request,
-          env,
-          pairingIntentMatch[1],
-          ctx,
-        );
-      }
-    }
-    if (request.method === "POST" && url.pathname === "/api/workspaces") {
-      return await handlers.handleCreateWorkspace!(request, env, ctx);
     }
     if (request.method === "GET" && url.pathname === "/api/workflows/catalog") {
       return deps.json({ workflows: Object.values(BUILTIN_WORKFLOW_CATALOG) });
@@ -459,42 +400,6 @@ export async function routeWorkerRequest(
       url.pathname === "/api/workspace-gateway/connect"
     ) {
       return await handlers.handleWorkspaceGatewayConnect!(request, env);
-    }
-    // Enrollment belongs to the Workspace and has no Project membership semantics.
-    const workspaceEnrollmentsMatch = url.pathname.match(
-      /^\/api\/workspaces\/([^/]+)\/enrollments$/,
-    );
-    if (request.method === "GET" && workspaceEnrollmentsMatch?.[1]) {
-      return await handlers.handleListWorkspaceEnrollments!(
-        request,
-        env,
-        workspaceEnrollmentsMatch[1],
-        ctx,
-      );
-    }
-    if (request.method === "POST" && workspaceEnrollmentsMatch?.[1]) {
-      return await handlers.handleCreateWorkspaceEnrollment!(
-        request,
-        env,
-        workspaceEnrollmentsMatch[1],
-        ctx,
-      );
-    }
-    const revokeEnrollmentMatch = url.pathname.match(
-      /^\/api\/workspaces\/([^/]+)\/enrollments\/([^/]+)$/,
-    );
-    if (
-      request.method === "DELETE" &&
-      revokeEnrollmentMatch?.[1] &&
-      revokeEnrollmentMatch?.[2]
-    ) {
-      return await handlers.handleRevokeWorkspaceEnrollment!(
-        request,
-        env,
-        revokeEnrollmentMatch[1],
-        revokeEnrollmentMatch[2],
-        ctx,
-      );
     }
     // Workspace Tool Profile administration
     const toolProfileChannelMatch = url.pathname.match(

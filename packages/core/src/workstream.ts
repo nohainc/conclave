@@ -329,7 +329,6 @@ export function builtinWorkflowReference(
 export interface WorkstreamExecutionPolicy {
   readonly mode: WorkRequestMode;
   readonly primaryWorkspaceId: string | null;
-  readonly maxConcurrentWorkRequests: number;
 }
 
 export type WorkstreamExecutionLeaseStatus = "active" | "released" | "expired";
@@ -678,7 +677,6 @@ export function validateWorkstreamExecutionPolicy(
       "Stateless Workstream execution cannot define a Primary Workspace",
     );
   }
-  positive(policy.maxConcurrentWorkRequests, "maxConcurrentWorkRequests");
 }
 
 export function validateWorkstreamLeases(

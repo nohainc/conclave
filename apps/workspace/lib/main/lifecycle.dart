@@ -339,7 +339,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         hostname: hostname,
         cloudUrl: cloudUrl,
         workRootPath: workRootPath,
-        paired: workspaceRuntimeId != null && workspaceId != null,
+        registered: workspaceRuntimeId != null && workspaceId != null,
         ownerUserId: ownerUserId,
         workspaceReady:
             connection?.connectionStage == WorkspaceConnectionStage.ready,
@@ -366,24 +366,26 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       );
     }
     if (workspace.config.workspaceRuntimeId == null) {
-      final isPaired = registration != null;
+      final isRegistered = registration != null;
       return WorkspaceUiSnapshot(
-        mode: isPaired ? WorkspaceUiMode.offline : WorkspaceUiMode.firstLaunch,
+        mode: isRegistered
+            ? WorkspaceUiMode.offline
+            : WorkspaceUiMode.firstLaunch,
         desiredRuntimeConnected: desiredRuntimeConnected,
-        title: isPaired ? 'Workspace is offline' : 'Connect this Workspace',
-        detail: isPaired
+        title: isRegistered ? 'Workspace is offline' : 'Connect this Workspace',
+        detail: isRegistered
             ? 'The Workspace is registered and ready to connect.'
             : 'Sign in to register this computer with Conclave.',
         workspaceName: workspaceName,
         workspaceId: workspaceId,
         workspaceRuntimeId: workspaceRuntimeId,
-        paired: isPaired,
+        registered: isRegistered,
         ownerUserId: ownerUserId,
         installationId: installationId,
         hostname: hostname,
         cloudUrl: cloudUrl,
         workRootPath: workRootPath,
-        statusLabel: isPaired ? 'Offline' : 'Not paired',
+        statusLabel: isRegistered ? 'Offline' : 'Not registered',
         connectionStage: connection?.connectionStage,
         runtimeCredentialAvailable:
             workspace.config.authToken?.isNotEmpty == true,
@@ -489,7 +491,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       hostname: hostname,
       cloudUrl: cloudUrl,
       workRootPath: workRootPath,
-      paired: true,
+      registered: true,
       ownerUserId: ownerUserId,
       workspaceReady:
           connection?.connectionStage == WorkspaceConnectionStage.ready,
@@ -618,7 +620,7 @@ class WorkspaceUiSnapshot {
     this.cloudUrl,
     this.workRootPath,
     this.statusLabel = 'Offline',
-    this.paired = false,
+    this.registered = false,
     this.ownerUserId,
     this.desiredRuntimeConnected = false,
     this.workspaceReady = false,
@@ -660,7 +662,7 @@ class WorkspaceUiSnapshot {
   final String? cloudUrl;
   final String? workRootPath;
   final String statusLabel;
-  final bool paired;
+  final bool registered;
   final String? ownerUserId;
   final bool desiredRuntimeConnected;
   final bool workspaceReady;

@@ -69,7 +69,7 @@ void main() {
     expect(find.text('Pair Workspace'), findsNothing);
   });
 
-  testWidgets('paired offline Workspace stays read-only', (tester) async {
+  testWidgets('registered offline Workspace stays read-only', (tester) async {
     const workspace = AxWorkspace(
       id: 'workspace-offline',
       name: 'Paired Mac',

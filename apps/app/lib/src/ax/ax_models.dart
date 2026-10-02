@@ -447,28 +447,6 @@ class AxWorker {
       );
 }
 
-class AxWorkspaceEnrollment {
-  const AxWorkspaceEnrollment({
-    required this.id,
-    required this.token,
-    required this.workspaceId,
-    required this.expiresAt,
-  });
-
-  final String id;
-  final String token;
-  final String workspaceId;
-  final String expiresAt;
-
-  factory AxWorkspaceEnrollment.fromJson(Map<String, dynamic> json) =>
-      AxWorkspaceEnrollment(
-        id: _string(json, 'id'),
-        token: _string(json, 'token'),
-        workspaceId: _string(json, 'workspaceId'),
-        expiresAt: _string(json, 'expiresAt'),
-      );
-}
-
 class AxTask {
   const AxTask({
     required this.id,
@@ -755,7 +733,7 @@ class AxWorkspace {
     required this.id,
     required this.name,
     this.slug = '',
-    this.status = 'active',
+    this.status = 'offline',
     this.role = 'owner',
     this.hasRuntimeIdentity = false,
     this.platform = '—',
@@ -797,8 +775,7 @@ class AxWorkspace {
         id: _string(json, 'id'),
         name: _string(json, 'name'),
         slug: _string(json, 'slug'),
-        status:
-            _string(json, 'lifecycleStatus', _string(json, 'status', 'active')),
+        status: _string(json, 'status', 'offline'),
         role: _string(json, 'role', 'viewer'),
         hasRuntimeIdentity: json['hasRuntimeIdentity'] == true ||
             json['hasRuntimeIdentity'] == 1,

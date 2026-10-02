@@ -54,14 +54,14 @@ export function intersectPermissions(
 export function resolveEffectivePermissions(input: {
   readonly projectMemberPermissions: readonly string[];
   readonly workspaceGrantPermissions: readonly string[];
-  readonly workerManifestPermissions: readonly string[];
+  readonly workerPermissions: readonly string[];
   readonly workspaceLocalPermissions: readonly string[];
   readonly projectPolicyPermissions: readonly string[];
 }): readonly string[] {
   return intersectPermissions(
     input.projectMemberPermissions,
     input.workspaceGrantPermissions,
-    input.workerManifestPermissions,
+    input.workerPermissions,
     input.workspaceLocalPermissions,
     input.projectPolicyPermissions,
   );

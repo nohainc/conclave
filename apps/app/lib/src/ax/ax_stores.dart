@@ -53,9 +53,6 @@ class WorkspaceStore {
     return value;
   }
 
-  Future<AxWorkspaceEnrollment> createEnrollment(String workspaceId) =>
-      source.createWorkspaceEnrollment(workspaceId: workspaceId);
-
   Future<void> revoke(String workspaceId) =>
       source.revokeWorkspace(workspaceId: workspaceId);
 

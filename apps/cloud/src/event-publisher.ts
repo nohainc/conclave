@@ -52,7 +52,9 @@ function eventFromRow(row: Record<string, unknown>): RealtimeEventEnvelope {
     ...(row.task_id ? { taskId: String(row.task_id) } : {}),
     ...(row.attempt_id ? { attemptId: String(row.attempt_id) } : {}),
     ...(row.assignment_id ? { assignmentId: String(row.assignment_id) } : {}),
-    ...(row.workspace_runtime_id ? { workspaceRuntimeId: String(row.workspace_runtime_id) } : {}),
+    ...(row.workspace_runtime_id
+      ? { workspaceRuntimeId: String(row.workspace_runtime_id) }
+      : {}),
     sequence: Number(row.sequence),
     payload: JSON.parse(String(row.payload_json)) as RealtimeEventPayload,
   });
@@ -100,7 +102,9 @@ export class CloudEventPublisher implements EventPublisher {
         ...(input.taskId ? { taskId: input.taskId } : {}),
         ...(input.attemptId ? { attemptId: input.attemptId } : {}),
         ...(input.assignmentId ? { assignmentId: input.assignmentId } : {}),
-        ...(input.workspaceRuntimeId ? { workspaceRuntimeId: input.workspaceRuntimeId } : {}),
+        ...(input.workspaceRuntimeId
+          ? { workspaceRuntimeId: input.workspaceRuntimeId }
+          : {}),
         sequence: 0,
         payload: input.payload,
       });
@@ -138,7 +142,9 @@ export class CloudEventPublisher implements EventPublisher {
       ...(input.taskId ? { taskId: input.taskId } : {}),
       ...(input.attemptId ? { attemptId: input.attemptId } : {}),
       ...(input.assignmentId ? { assignmentId: input.assignmentId } : {}),
-      ...(input.workspaceRuntimeId ? { workspaceRuntimeId: input.workspaceRuntimeId } : {}),
+      ...(input.workspaceRuntimeId
+        ? { workspaceRuntimeId: input.workspaceRuntimeId }
+        : {}),
       sequence: cursor.sequence,
       payload: input.payload,
     });

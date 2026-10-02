@@ -319,29 +319,6 @@ void main() {
     expect(worker.attentionReasonCode, isNull);
   });
 
-  test('uses Workspace runtime enrollment and revocation paths', () async {
-    final client = _JsonClient({
-      'enrollment': {
-        'id': 'enrollment-1',
-        'token': 'token-1',
-        'workspaceId': 'workspace-1',
-        'expiresAt': '2099-01-01T00:00:00Z',
-      },
-    }, statusCode: 200);
-    final api = AxApiClient(
-      baseUrl: 'https://conclave.test/api',
-      client: client,
-    );
-
-    await api.createWorkspaceEnrollment(workspaceId: 'workspace-1');
-    expect(client.lastRequest?.url.path,
-        '/api/workspaces/workspace-1/enrollments');
-
-    await api.revokeWorkspace(workspaceId: 'workspace-1');
-    expect(client.lastRequest?.method, 'DELETE');
-    expect(client.lastRequest?.url.path, '/api/workspaces/workspace-1');
-  });
-
   test('uses Workspace management routes for rename and invitations', () async {
     final client = _JsonClient({
       'workspace': {

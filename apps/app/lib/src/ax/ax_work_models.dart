@@ -348,8 +348,4 @@ abstract interface class AxDataSource {
   Future<void> controlRun(String runId, String command);
   Future<void> respondToRunPrompt(String runId, String response);
   Future<void> revokeWorkspace({required String workspaceId});
-  Future<AxWorkspaceEnrollment> createWorkspaceEnrollment({
-    required String workspaceId,
-    int expiresHours = 24,
-  });
 }

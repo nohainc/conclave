@@ -501,7 +501,7 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
     final theme = Theme.of(context);
     final effectiveSignedIn = widget.signedIn ||
         _hasValidCachedDesktopSession(widget.credentialStore);
-    final isRegistered = widget.snapshot.paired ||
+    final isRegistered = widget.snapshot.registered ||
         (widget.snapshot.workspaceId != null &&
             widget.snapshot.workspaceId!.isNotEmpty);
     final stage = widget.snapshot.connectionStage;
@@ -843,7 +843,7 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
               label: 'Workspace ID',
               value: snapshot.workspaceId ??
                   snapshot.workspaceRuntimeId ??
-                  'Not paired',
+                  'Not registered',
             ),
             _CopyableDetailRow(
               label: 'Runtime ID',

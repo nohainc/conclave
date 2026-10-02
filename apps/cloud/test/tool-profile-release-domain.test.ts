@@ -149,7 +149,7 @@ describe("v8 Tool Profile Cloud release domain", () => {
         INSERT INTO users (id, email, display_name, status, created_at, updated_at)
         VALUES ('u-channel', 'channel@example.test', 'Channel Admin', 'active', '2026-10-01', '2026-10-01');
         INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at)
-        VALUES ('workspace-channel', 'u-channel', 'Internal Test', 'enrolled', '2026-10-01', '2026-10-01');
+        VALUES ('workspace-channel', 'u-channel', 'Internal Test', 'offline', '2026-10-01', '2026-10-01');
         SELECT ew.id, COALESCE(channel.channel, 'stable') AS selected
           FROM execution_workspaces ew
           LEFT JOIN workspace_tool_profile_channels channel ON channel.workspace_id = ew.id
@@ -163,7 +163,7 @@ describe("v8 Tool Profile Cloud release domain", () => {
         INSERT INTO users (id, email, display_name, status, created_at, updated_at)
         VALUES ('u-channel', 'channel@example.test', 'Channel Admin', 'active', '2026-10-01', '2026-10-01');
         INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at)
-        VALUES ('workspace-channel', 'u-channel', 'Internal Test', 'enrolled', '2026-10-01', '2026-10-01');
+        VALUES ('workspace-channel', 'u-channel', 'Internal Test', 'offline', '2026-10-01', '2026-10-01');
         INSERT INTO workspace_tool_profile_channels
           (workspace_id, channel, updated_by_user_id, updated_at)
         VALUES ('workspace-channel', 'testing', 'u-channel', '2026-10-02');
@@ -182,7 +182,7 @@ describe("v8 Tool Profile Cloud release domain", () => {
         INSERT INTO users (id, email, display_name, status, created_at, updated_at)
         VALUES ('u-channel', 'channel@example.test', 'Channel Admin', 'active', '2026-10-01', '2026-10-01');
         INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at)
-        VALUES ('workspace-channel', 'u-channel', 'Internal Test', 'enrolled', '2026-10-01', '2026-10-01');
+        VALUES ('workspace-channel', 'u-channel', 'Internal Test', 'offline', '2026-10-01', '2026-10-01');
         INSERT INTO workspace_tool_profile_channels
           (workspace_id, channel, updated_by_user_id, updated_at)
         VALUES ('workspace-channel', 'development', 'u-channel', '2026-10-02');

@@ -13,7 +13,7 @@ import 'package:conclave_workspace/workstream_directory.dart';
 import 'package:conclave_workspace/workstream_path.dart';
 import 'package:conclave_workspace/self_update.dart';
 import 'package:conclave_workspace/secure_credentials.dart';
-import 'package:conclave_workspace/workspace_enrollment.dart';
+import 'package:conclave_workspace/workspace_registration.dart';
 import 'package:conclave_workspace/workspace_transport.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
 import 'package:conclave_workspace/bundled_cli_worker_engine_loader.dart';

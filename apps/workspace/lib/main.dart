@@ -15,7 +15,7 @@ import 'local_worker_setup.dart';
 import 'local_worker_permissions.dart';
 import 'secure_credentials.dart';
 import 'secure_credentials_flutter.dart';
-import 'workspace_enrollment.dart';
+import 'workspace_registration.dart';
 import 'workspace_runtime.dart';
 import 'workspace_lifecycle_store.dart';
 import 'workspace_lifecycle.dart';

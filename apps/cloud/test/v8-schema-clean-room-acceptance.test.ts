@@ -35,7 +35,6 @@ describe("v8 clean D1 schema acceptance", () => {
         "workspace_releases",
         "worker_scheduling",
         "worker_scheduling_audit",
-        "workspace_pairing_intents",
         "workstreams",
         "work_requests",
         "worker_assignments",
@@ -69,7 +68,7 @@ describe("v8 clean D1 schema acceptance", () => {
     ) as {
       name: string;
     }[];
-    expect(grantColumns.map(({ name }) => name)).toContain("budget_json");
+    expect(grantColumns.map(({ name }) => name)).not.toContain("budget_json");
     expect(grantColumns.map(({ name }) => name)).not.toEqual(
       expect.arrayContaining([
         "scope",
@@ -94,7 +93,10 @@ describe("v8 clean D1 schema acceptance", () => {
     ) as {
       name: string;
     }[];
-    expect(policyColumns.map(({ name }) => name)).toContain("budget_json");
+    expect(policyColumns.map(({ name }) => name)).not.toContain("budget_json");
+    expect(policyColumns.map(({ name }) => name)).not.toContain(
+      "max_concurrent_work_requests",
+    );
     expect(policyColumns.map(({ name }) => name)).not.toContain(
       "allowed_providers_json",
     );
@@ -161,18 +163,16 @@ describe("v8 clean D1 schema acceptance", () => {
     expect(migration).not.toContain("fixture-worker");
   });
 
-  it("stores pairing intent before creating a permanent execution Workspace", () => {
-    expect(
-      apply(`
-        INSERT INTO users (id, email, display_name, status, created_at, updated_at)
-          VALUES ('u1', 'owner@example.test', 'Owner', 'active', '2026-01-01', '2026-01-01');
-        INSERT INTO workspace_pairing_intents
-          (pairing_id, owner_user_id, token_hash, created_at, expires_at)
-          VALUES ('pair-1', 'u1', 'sha256:token-hash', '2026-01-01', '2026-01-01T00:15:00Z');
-        SELECT (SELECT COUNT(*) FROM workspace_pairing_intents) AS intent_count,
-               (SELECT COUNT(*) FROM execution_workspaces) AS workspace_count;
-      `),
-    ).toEqual([{ intent_count: 1, workspace_count: 0 }]);
+  it("does not include retired Workspace token pairing tables", () => {
+    const tables = apply(
+      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;",
+    ) as { name: string }[];
+    expect(tables.map(({ name }) => name)).not.toContain(
+      "workspace_pairing_intents",
+    );
+    expect(tables.map(({ name }) => name)).not.toContain(
+      "workspace_enrollments",
+    );
   });
 
   it("preserves the synchronized v8 Engine and Profile evidence columns", () => {

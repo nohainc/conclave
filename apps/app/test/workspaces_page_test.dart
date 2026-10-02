@@ -28,7 +28,7 @@ void main() {
         'name': 'MacBook Pro',
         'slug': 'macbook-pro',
         'status': 'online',
-        'lifecycleStatus': 'pairing',
+        'hasRuntimeIdentity': false,
         'role': 'owner',
         'platform': 'macos',
         'architecture': 'arm64',
@@ -40,7 +40,7 @@ void main() {
       });
 
       expect(workspace.platform, 'macos');
-      expect(workspace.status, 'pairing');
+      expect(workspace.status, 'online');
       expect(workspace.architecture, 'arm64');
       expect(workspace.hostname, 'Vitalii-MacBook-Pro');
       expect(workspace.appVersion, '1.0.3');
@@ -49,7 +49,7 @@ void main() {
       expect(workspace.runtimeCapabilities, ['dart', 'shell']);
     });
 
-    testWidgets('shows the paired machine facts and live Workspace summary',
+    testWidgets('shows registered machine facts and live Workspace summary',
         (tester) async {
       final workspace = AxWorkspace.fromJson({
         'id': 'workspace-paired',
@@ -556,7 +556,7 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Offline'), findsNWidgets(2));
+      expect(find.text('Not connected'), findsNWidgets(2));
       expect(find.text('Connect Machine'), findsNothing);
       expect(connectedWorkspace, isNull);
     });

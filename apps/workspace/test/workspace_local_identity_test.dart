@@ -6,7 +6,7 @@ import 'package:conclave_workspace/tool_profile_catalog.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('local Worker setup has a stable identity before Cloud pairing',
+  test('local Worker setup has a stable identity before Cloud registration',
       () async {
     final dataDirectory =
         await Directory.systemTemp.createTemp('workspace-local-identity-');

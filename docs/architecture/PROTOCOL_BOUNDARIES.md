@@ -136,7 +136,7 @@ These names describe Conclave domain values used across boundaries:
 | --- | --- |
 | `ProjectId` | Stable identity of a collaboration Project |
 | `WorkstreamId` | Stable identity of a persistent unit of work |
-| `WorkspaceId` | Cloud identity of an enrolled machine Workspace |
+| `WorkspaceId` | Cloud identity of a registered machine Workspace |
 | `WorkspaceRuntimeId` | Identity of the connected machine runtime |
 | `WorkerId` | Identity of one Workspace-owned local Worker slot/configuration |
 | `WorkerTypeId` | Stable product integration type, such as `chatgpt` or `gemini` |

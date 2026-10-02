@@ -449,7 +449,7 @@ export async function selectProjectExecutionTarget(
     const resolvedPermissions = resolveEffectivePermissions({
       projectMemberPermissions: projectPermissions(membership.role),
       workspaceGrantPermissions: grantPermissions,
-      workerManifestPermissions: workerPermissions,
+      workerPermissions,
       workspaceLocalPermissions: workerPermissions,
       projectPolicyPermissions: projectPermissions(membership.role),
     });
@@ -593,13 +593,4 @@ export async function selectProjectExecutionTarget(
     };
   }
   return null;
-}
-
-function parseJsonValue(value: unknown): unknown {
-  if (typeof value !== "string") return value ?? null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
 }

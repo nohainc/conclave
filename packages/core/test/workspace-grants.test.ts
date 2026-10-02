@@ -7,7 +7,7 @@ describe("Workspace grant permission intersection", () => {
       resolveEffectivePermissions({
         projectMemberPermissions: ["repository:read", "repository:write"],
         workspaceGrantPermissions: ["repository:read", "repository:write"],
-        workerManifestPermissions: ["repository:read"],
+        workerPermissions: ["repository:read"],
         workspaceLocalPermissions: ["repository:read", "shell:execute"],
         projectPolicyPermissions: ["repository:read", "repository:write"],
       }),

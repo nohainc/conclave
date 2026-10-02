@@ -63,12 +63,12 @@ void main() {
     final worker =
         await LocalWorkerSetupService(registry: registry).createCatalogWorker(
       entry: logicalWorkerCatalogFixture('chatgpt'),
-      permissions: firstPartyWorkerLocalPermissions,
+      permissions: defaultLocalWorkerPermissions,
     );
     expect(worker.workerTypeId, 'chatgpt');
     expect(worker.localConcurrencyLimit, defaultLocalWorkerConcurrency);
     expect(worker.status, LocalWorkerStatus.needsAttention);
-    expect(worker.localPermissions, firstPartyWorkerLocalPermissions);
+    expect(worker.localPermissions, defaultLocalWorkerPermissions);
     final file = File(
         '${directory.path}${Platform.pathSeparator}configured-workers.json');
     expect(jsonDecode(await file.readAsString())['workers'], hasLength(1));
@@ -79,7 +79,7 @@ void main() {
     final worker =
         await LocalWorkerSetupService(registry: registry).createCatalogWorker(
       entry: logicalWorkerCatalogFixture('gemini'),
-      permissions: firstPartyWorkerLocalPermissions,
+      permissions: defaultLocalWorkerPermissions,
     );
 
     expect(worker.status, LocalWorkerStatus.needsAttention);

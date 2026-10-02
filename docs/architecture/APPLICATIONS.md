@@ -42,8 +42,8 @@ Authentication and local readiness problems direct users back to that desktop
 runtime.
 
 Workspace-owned Worker inventory remains visible in AX as operational
-readiness. Pairing, recovery, local Worker lifecycle, credentials, permissions,
-and runtime connection management belong to Conclave Workspace. AX owns actual
+readiness. Workspace registration and recovery, local Worker lifecycle,
+credentials, permissions, and runtime connection management belong to Conclave Workspace. AX owns actual
 Project/Workstream Worker use: task role, Workspace/Worker selection, model,
 fallback policy, Cloud scheduling state, and Cloud concurrency ceilings. These
 choices live with Project and Workstream policy, not local Worker setup. See
@@ -186,7 +186,7 @@ Provider credentials remain local to provider CLI software and are not Cloud
 product resources. Readiness may report safe credential state without exposing
 credential material.
 
-## Build and pairing references
+## Build and connection validation
 
 macOS package:
 
@@ -194,11 +194,11 @@ macOS package:
 bash scripts/build-workspace-macos.sh
 ~~~
 
-Real desktop-to-Cloud smoke:
-
-~~~text
-CONCLAVE_ENROLLMENT_TOKEN=... bash scripts/test-workspace-cloud-connection.sh
-~~~
+Workspace connects to Cloud after browser-assisted desktop authentication.
+Registration and recovery use the authenticated
+`POST /api/workspace-runtime/register` contract.
+The production Workspace Gateway smoke exercises this same registration and
+runtime-connection path.
 
 Current ownership and runtime decisions are defined by
 [Architecture v8](ARCHITECTURE_V8.md),

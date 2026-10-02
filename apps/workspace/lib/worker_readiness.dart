@@ -10,7 +10,7 @@ import 'tool_profile_release_verifier.dart';
 import 'tool_profile_resolver.dart';
 import 'tool_profile_catalog.dart';
 import 'worker_diagnostic_store.dart';
-import 'workspace_enrollment.dart';
+import 'workspace_registration.dart';
 
 enum LocalWorkerProbeMode { passive, live }
 

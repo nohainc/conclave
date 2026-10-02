@@ -472,7 +472,6 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
             hostname: existingRegistration.hostname,
             ownerUserId: cloudOwnerUserId,
             installationId: installationId,
-            pairedAt: existingRegistration.pairedAt,
           ));
         }
       }

@@ -1,9 +1,10 @@
 name: Deploy Conclave AX Public Site
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
-  workflow_dispatch:
 
 concurrency:
   group: conclave-ax-public-site-production
@@ -14,12 +15,15 @@ permissions:
 
 jobs:
   deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/site
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: 11.19.0

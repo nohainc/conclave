@@ -199,5 +199,5 @@ export async function handleGetArtifact(
 }
 
 // =========================================================================
-// Workspace Enrollment & Worker Inventory Handlers
+// Workspace Artifacts & Worker Inventory Handlers
 // =========================================================================

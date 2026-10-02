@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { routeHandlers } from "../src/index.js";
 import {
   routeWorkerRequest,
   type WorkerRouteDependencies,
@@ -16,56 +15,43 @@ function dependencies(
   } as unknown as WorkerRouteDependencies;
 }
 
-describe("Workspace desktop enrollment route", () => {
-  it("registers the production claim and unpair handlers", () => {
-    expect(typeof routeHandlers.handleRedeemWorkspaceEnrollment).toBe(
-      "function",
+describe("Workspace runtime lifecycle routes", () => {
+  it.each([
+    ["token redemption", "POST", "/api/workspace-runtime/enroll"],
+    ["token listing", "GET", "/api/workspaces/workspace-1/enrollments"],
+    ["token creation", "POST", "/api/workspaces/workspace-1/enrollments"],
+  ])("does not expose %s", async (_label, method, path) => {
+    const response = await routeWorkerRequest(
+      new Request(`https://app.conclaveax.com${path}`, { method }),
+      {} as Env,
+      undefined,
+      {},
+      dependencies(vi.fn()),
     );
-    expect(typeof routeHandlers.handleUnpairWorkspaceRuntime).toBe("function");
+    expect(response.status).toBe(404);
   });
 
-  it("redeems a one-time Workspace code without cookie same-origin auth", async () => {
+  it("routes authenticated desktop registration without cookie CSRF", async () => {
     const sameOrigin = vi.fn();
-    const redeem = vi.fn(async () =>
+    const register = vi.fn(async () =>
       Response.json({ workspaceRuntimeId: "runtime-1" }, { status: 201 }),
     );
-
     const response = await routeWorkerRequest(
-      new Request("https://app.conclaveax.com/api/workspace-runtime/enroll", {
+      new Request("https://app.conclaveax.com/api/workspace-runtime/register", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token: "one-time-code" }),
+        headers: {
+          authorization: "Bearer desktop-human-token",
+          "content-type": "application/json",
+        },
+        body: "{}",
       }),
       {} as Env,
       undefined,
-      { handleRedeemWorkspaceEnrollment: redeem },
+      { handleRegisterWorkspaceFromDesktop: register },
       dependencies(sameOrigin),
     );
-
     expect(response.status).toBe(201);
-    expect(redeem).toHaveBeenCalledOnce();
-    expect(sameOrigin).not.toHaveBeenCalled();
-  });
-
-  it("revokes a paired runtime using bearer auth without cookie CSRF", async () => {
-    const sameOrigin = vi.fn();
-    const unpair = vi.fn(async () =>
-      Response.json({ unpaired: true }, { status: 200 }),
-    );
-
-    const response = await routeWorkerRequest(
-      new Request("https://app.conclaveax.com/api/workspace-runtime/unpair", {
-        method: "POST",
-        headers: { authorization: "Bearer runtime-token" },
-      }),
-      {} as Env,
-      undefined,
-      { handleUnpairWorkspaceRuntime: unpair },
-      dependencies(sameOrigin),
-    );
-
-    expect(response.status).toBe(200);
-    expect(unpair).toHaveBeenCalledOnce();
+    expect(register).toHaveBeenCalledOnce();
     expect(sameOrigin).not.toHaveBeenCalled();
   });
 
@@ -137,29 +123,6 @@ describe("Workspace desktop enrollment route", () => {
     expect(response.status).toBe(200);
     expect(disconnect).toHaveBeenCalledOnce();
     expect(sameOrigin).not.toHaveBeenCalled();
-  });
-
-  it("keeps same-origin enforcement for normal mutation routes", async () => {
-    const sameOrigin = vi.fn();
-    const createWorkspace = vi.fn(async () =>
-      Response.json({ id: "workspace-1" }, { status: 201 }),
-    );
-
-    const response = await routeWorkerRequest(
-      new Request("https://app.conclaveax.com/api/workspaces", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      }),
-      {} as Env,
-      undefined,
-      { handleCreateWorkspace: createWorkspace },
-      dependencies(sameOrigin),
-    );
-
-    expect(response.status).toBe(201);
-    expect(createWorkspace).toHaveBeenCalledOnce();
-    expect(sameOrigin).toHaveBeenCalledOnce();
   });
 
   it("requires same-origin protection for browser-cookie desktop approval", async () => {

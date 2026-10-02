@@ -23,11 +23,10 @@ describe("sensitive operation step-up policy", () => {
   it("declares a short fresh-auth window for every sensitive operation", () => {
     expect(Object.keys(STEP_UP_REQUIREMENTS)).toEqual([
       SENSITIVE_OPERATIONS.workspaceOwnershipTransfer,
-      SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke,
       SENSITIVE_OPERATIONS.billingSecurityChange,
     ]);
     expect(
-      STEP_UP_REQUIREMENTS[SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke]
+      STEP_UP_REQUIREMENTS[SENSITIVE_OPERATIONS.workspaceOwnershipTransfer]
         .maxAgeMs,
     ).toBe(10 * 60 * 1000);
   });
@@ -36,7 +35,7 @@ describe("sensitive operation step-up policy", () => {
     expect(
       isStepUpSatisfied(
         record(),
-        SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke,
+        SENSITIVE_OPERATIONS.workspaceOwnershipTransfer,
         now,
       ),
     ).toBe(true);
@@ -46,28 +45,28 @@ describe("sensitive operation step-up policy", () => {
     expect(
       isStepUpSatisfied(
         null,
-        SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke,
+        SENSITIVE_OPERATIONS.workspaceOwnershipTransfer,
         now,
       ),
     ).toBe(false);
     expect(
       isStepUpSatisfied(
         record({ expires_at: "2026-09-23T11:59:59.000Z" }),
-        SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke,
+        SENSITIVE_OPERATIONS.workspaceOwnershipTransfer,
         now,
       ),
     ).toBe(false);
     expect(
       isStepUpSatisfied(
         record({ authenticated_at: "2026-09-23T11:49:59.000Z" }),
-        SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke,
+        SENSITIVE_OPERATIONS.workspaceOwnershipTransfer,
         now,
       ),
     ).toBe(false);
     expect(
       isStepUpSatisfied(
         record({ method: "totp" }),
-        SENSITIVE_OPERATIONS.workspaceEnrollmentRevoke,
+        SENSITIVE_OPERATIONS.workspaceOwnershipTransfer,
         now,
       ),
     ).toBe(true);

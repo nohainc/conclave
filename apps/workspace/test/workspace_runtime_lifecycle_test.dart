@@ -84,14 +84,14 @@ void main() {
     );
     final snapshot = WorkspaceLifecycleController(workspace).uiSnapshot;
 
-    expect(snapshot.paired, isTrue);
+    expect(snapshot.registered, isTrue);
     expect(snapshot.ownerUserId, 'user-owner');
     expect(snapshot.desiredRuntimeConnected, isFalse);
     expect(snapshot.workspaceReady, isFalse);
     expect(snapshot.cloudConnected, isFalse);
   });
 
-  test('connection failure keeps saved Workspace registration paired',
+  test('connection failure keeps saved Workspace registration registered',
       () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-workspace-');
@@ -104,6 +104,7 @@ void main() {
       cloudUrl: 'https://cloud.example.test',
       name: 'Development Mac',
       hostname: 'development-mac.local',
+      installationId: 'install_12345678-1234-4234-8234-123456789abc',
     ));
     final connection = WorkspaceCloudConnection(
       uri: Uri.parse(
@@ -131,13 +132,13 @@ void main() {
 
     await expectLater(lifecycle.launch(), throwsA(isA<WebSocketException>()));
     expect(lifecycle.uiSnapshot.mode, WorkspaceUiMode.offline);
-    expect(lifecycle.uiSnapshot.paired, isTrue);
+    expect(lifecycle.uiSnapshot.registered, isTrue);
     expect(lifecycle.uiSnapshot.workspaceName, 'Development Mac');
 
     await lifecycle.quit();
   });
 
-  test('paired runtime without an authenticated session is shown offline',
+  test('registered runtime without an authenticated session is shown offline',
       () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-workspace-');
@@ -150,6 +151,7 @@ void main() {
       cloudUrl: 'https://cloud.example.test',
       name: 'Offline Mac',
       hostname: 'offline-mac.local',
+      installationId: 'install_12345678-1234-4234-8234-123456789def',
     ));
     final connection = WorkspaceCloudConnection(
       uri: Uri.parse(

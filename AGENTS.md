@@ -22,8 +22,14 @@ Every implementation task must report:
 
 ## Quality
 - Add or update tests for behavior changes.
-- Keep schemas/contracts versioned.
-- Keep persistence behind interfaces so D1 can be replaced later.
+- Keep schemas/contracts versioned. The v8 D1 schema is a fresh-start baseline,
+  not a compatibility migration chain.
+- Cloud route/service modules own D1 access. Keep Conclave Core independent of
+  D1 bindings and raw SQL; add persistence interfaces only for a concrete
+  boundary or testing need, not for a hypothetical database replacement.
+- Workspace owns local registry, Profile/Engine state, sessions, logs, and Work
+  Root data. Do not treat Cloud persistence as the source of local runtime
+  state.
 - Avoid premature infrastructure: add Durable Objects, Queues, vector databases, or extra providers only when a concrete requirement exists.
 - Update documentation whenever architecture, data model, protocol, workflow behavior, security, or public API changes.
 

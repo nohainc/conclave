@@ -15,7 +15,47 @@ class FakeSocket implements WorkspaceTransport {
   final sent = <Object>[];
 
   @override
-  Stream<Object?> get messages => controller.stream;
+  Stream<Object?> get messages => controller.stream.map((raw) {
+        if (raw is! String) return raw;
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map<String, dynamic>) return raw;
+        final type = decoded['type'];
+        if (type == 'assignment.start') {
+          decoded['executionWorkspaceId'] ??= decoded.remove('workspaceId');
+          final payload = decoded['payload'];
+          if (payload is Map<String, dynamic> && payload['snapshot'] == null) {
+            final snapshot = Map<String, dynamic>.from(payload)
+              ..remove('input');
+            final workerId = snapshot['workerId'];
+            snapshot['workerTypeId'] ??=
+                workerId == 'gemini' ? 'gemini' : 'chatgpt';
+            decoded['payload'] = {
+              'snapshot': snapshot,
+              if (payload['input'] is Map) 'input': payload['input'],
+            };
+          }
+          return jsonEncode(decoded);
+        }
+        if (type == 'workspace.hello.ack' || type == 'workspace.sync.result') {
+          final requestType = type == 'workspace.hello.ack'
+              ? 'workspace.hello'
+              : 'workspace.sync.request';
+          final requests = sent
+              .whereType<String>()
+              .map((message) => jsonDecode(message) as Map<String, dynamic>)
+              .where((message) => message['type'] == requestType)
+              .toList();
+          final request = requests.isEmpty ? null : requests.last;
+          final payload = request?['payload'];
+          if (request != null && payload is Map<String, dynamic>) {
+            decoded['correlationId'] = request['messageId'];
+            decoded['workspaceRuntimeId'] ??= payload['workspaceRuntimeId'];
+            decoded['executionWorkspaceId'] ??= payload['executionWorkspaceId'];
+            return jsonEncode(decoded);
+          }
+        }
+        return raw;
+      });
 
   @override
   void send(Object message) => sent.add(message);
@@ -51,7 +91,7 @@ Future<void> completeHandshake(
   final protocol = legacy
       ? 'conclave.workspace-runtime-protocol'
       : 'conclave.workspace-runtime-protocol';
-  final version = legacy ? '4.1' : workspaceRuntimeProtocolVersion;
+  final version = workspaceRuntimeProtocolVersion;
   final helloType = legacy ? 'workspace.hello' : 'workspace.hello';
   await waitFor(() => socket.sent.any((message) =>
       (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
@@ -64,14 +104,12 @@ Future<void> completeHandshake(
     if (!legacy) 'correlationId': hello['messageId'],
     'timestamp': DateTime.now().toUtc().toIso8601String(),
     'type': legacy ? 'workspace.hello.ack' : 'workspace.hello.ack',
-    if (legacy) 'workspaceRuntimeId': connection.workspaceRuntimeId,
-    if (legacy) 'workspaceId': connection.workspaceId,
-    if (!legacy) 'workspaceRuntimeId': connection.workspaceRuntimeId,
-    if (!legacy) 'executionWorkspaceId': connection.workspaceId,
+    'workspaceRuntimeId': connection.workspaceRuntimeId,
+    'executionWorkspaceId': connection.workspaceId,
     'payload': {'sessionId': sessionId},
   }));
 
-  final syncType = legacy ? 'workspace.sync.request' : 'workspace.sync.request';
+  const syncType = 'workspace.sync.request';
   await waitFor(() => socket.sent.any((message) =>
       (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
       syncType));
@@ -83,10 +121,8 @@ Future<void> completeHandshake(
     if (!legacy) 'correlationId': sync['messageId'],
     'timestamp': DateTime.now().toUtc().toIso8601String(),
     'type': legacy ? 'workspace.sync.response' : 'workspace.sync.result',
-    if (legacy) 'workspaceRuntimeId': connection.workspaceRuntimeId,
-    if (legacy) 'workspaceId': connection.workspaceId,
-    if (!legacy) 'workspaceRuntimeId': connection.workspaceRuntimeId,
-    if (!legacy) 'executionWorkspaceId': connection.workspaceId,
+    'workspaceRuntimeId': connection.workspaceRuntimeId,
+    'executionWorkspaceId': connection.workspaceId,
     'payload': {'assignmentStates': []},
   }));
   await waitFor(
@@ -97,7 +133,8 @@ void main() {
   test('connects outbound and sends hello', () async {
     final socket = FakeSocket();
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -108,11 +145,11 @@ void main() {
     final hello =
         jsonDecode(socket.sent.single as String) as Map<String, dynamic>;
     expect(hello['protocol'], 'conclave.workspace-runtime-protocol');
-    expect(hello['protocolVersion'], '4.0');
+    expect(hello['protocolVersion'], workspaceRuntimeProtocolVersion);
     expect(hello['type'], 'workspace.hello');
     final payload = hello['payload'] as Map<String, dynamic>;
     expect(payload['workspaceRuntimeId'], 'workspace-1');
-    expect(payload['workspaceId'], 'workspace-1');
+    expect(payload['executionWorkspaceId'], 'workspace-1');
     expect(payload['capabilities'], isA<Map<String, dynamic>>());
     await connection.close();
   });
@@ -417,7 +454,8 @@ void main() {
   test('uses the Gateway session for protocol heartbeats', () async {
     final socket = FakeSocket();
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -427,7 +465,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-1',
       'correlationId': 'client-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -437,7 +475,6 @@ void main() {
         'heartbeatIntervalMs': 1000,
         'serverTime': DateTime.now().toUtc().toIso8601String(),
         'serverVersion': '2.0.0',
-        'activeWorkspaceBindings': ['workspace-1', 'workspace-2'],
       },
     }));
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -452,7 +489,7 @@ void main() {
       (heartbeats.first['payload'] as Map<String, dynamic>)['sessionId'],
       'session-1',
     );
-    expect(connection.authorizedWorkspaceIds, contains('workspace-2'));
+    expect(connection.authorizedWorkspaceIds, contains('workspace-1'));
     final sync = socket.sent
         .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
         .firstWhere((message) => message['type'] == 'workspace.sync.request');
@@ -466,7 +503,8 @@ void main() {
   test('accepts a compatible newer minor protocol version', () async {
     final socket = FakeSocket();
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -476,7 +514,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'workspace.hello.ack',
@@ -493,7 +531,8 @@ void main() {
     final socket = FakeSocket();
     Map<String, Object?>? received;
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -506,7 +545,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-update-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'workspace.update',
@@ -531,7 +570,8 @@ void main() {
   test('ignores an incompatible protocol major version', () async {
     final socket = FakeSocket();
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -563,7 +603,8 @@ void main() {
       () async {
     final socket = FakeSocket();
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -572,7 +613,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'workspace.hello.ack',
@@ -618,7 +659,8 @@ void main() {
       () async {
     final socket = FakeSocket();
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -627,7 +669,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'workspace.hello.ack',
@@ -680,7 +722,8 @@ void main() {
     var socketCount = 0;
     final sockets = <FakeSocket>[];
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async {
@@ -697,7 +740,7 @@ void main() {
     await connection.connect();
     sockets.first.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-ack',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'workspace.hello.ack',
@@ -726,7 +769,8 @@ void main() {
       updatedAt: DateTime.now().toUtc(),
     ));
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -737,7 +781,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'workspace.hello.ack',
@@ -763,7 +807,8 @@ void main() {
     final journal =
         AssignmentJournal(File('${directory.path}/assignments.jsonl'));
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -780,7 +825,7 @@ void main() {
 
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-assignment-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -830,7 +875,8 @@ void main() {
       () async {
     final socket = FakeSocket();
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -845,7 +891,7 @@ void main() {
     await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-normalized-engine-error',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -942,7 +988,8 @@ void main() {
     final socket = FakeSocket();
     var executed = false;
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -958,7 +1005,7 @@ void main() {
 
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-empty-work-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -1015,7 +1062,8 @@ void main() {
       result: {'summary': 'recovered', 'artifactIds': <String>[]},
     ));
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -1025,7 +1073,7 @@ void main() {
     await connection.connect();
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'workspace.hello.ack',
@@ -1034,7 +1082,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-sync-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'workspace.sync.result',
@@ -1068,7 +1116,8 @@ void main() {
   test('rejects assignments addressed to another workspace', () async {
     final socket = FakeSocket();
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -1077,7 +1126,7 @@ void main() {
     await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-assignment-2',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -1104,7 +1153,8 @@ void main() {
       () async {
     final socket = FakeSocket();
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -1116,7 +1166,7 @@ void main() {
     await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-assignment-3',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -1148,7 +1198,8 @@ void main() {
         AssignmentJournal(File('${directory.path}/assignments.jsonl'));
     var executions = 0;
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -1163,7 +1214,7 @@ void main() {
 
     Map<String, Object?> assignment() => {
           'protocol': 'conclave.workspace-runtime-protocol',
-          'protocolVersion': '4.1',
+          'protocolVersion': workspaceRuntimeProtocolVersion,
           'messageId': 'server-replay-${executions + 1}',
           'timestamp': DateTime.now().toUtc().toIso8601String(),
           'type': 'assignment.start',
@@ -1223,7 +1274,8 @@ void main() {
     final release = Completer<void>();
     var executions = 0;
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => socket,
@@ -1239,7 +1291,7 @@ void main() {
 
     final assignment = <String, Object?>{
       'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': '4.1',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-running-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       'type': 'assignment.start',
@@ -1342,7 +1394,8 @@ void main() {
     final sockets = <FakeSocket>[FakeSocket(), FakeSocket()];
     final first = sockets.first;
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async => sockets.removeAt(0),
@@ -1360,7 +1413,8 @@ void main() {
     final recovered = FakeSocket();
     var factoryCalls = 0;
     final connection = WorkspaceCloudConnection(
-      uri: Uri.parse('wss://cloud.test/workspace'),
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
       workspaceRuntimeId: 'workspace-1',
       workspaceId: 'workspace-1',
       factory: (_) async {

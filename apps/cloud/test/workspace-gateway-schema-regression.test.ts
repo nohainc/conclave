@@ -83,7 +83,6 @@ describe("Workspace Gateway active-schema regression", () => {
       "worker_scheduling",
       "worker_scheduling_audit",
       "workspace_releases",
-      "workspace_pairing_intents",
       "workspace_project_grants",
       "workstream_execution_policies",
       "worker_assignments",
@@ -102,6 +101,8 @@ describe("Workspace Gateway active-schema regression", () => {
     expect(expectedTables.filter((table) => !actualTables.has(table))).toEqual(
       [],
     );
+    expect(actualTables.has("workspace_pairing_intents")).toBe(false);
+    expect(actualTables.has("workspace_enrollments")).toBe(false);
     expect(actualTables.has("worker_releases")).toBe(false);
     expect(actualTables.has("host_releases")).toBe(false);
     expect(actualTables.has("v7_worker_scheduling")).toBe(false);
@@ -383,7 +384,7 @@ describe("Workspace Gateway active-schema regression", () => {
           .prepare("SELECT status FROM execution_workspaces WHERE id = ?")
           .get(failedWorkspaceId) as { status: string }
       ).status,
-    ).toBe("enrolled");
+    ).toBe("offline");
     const rehydratedGateway = new WorkspaceGateway(failureState as never, {
       CONCLAVE_DB: new LocalD1(database) as never,
     });

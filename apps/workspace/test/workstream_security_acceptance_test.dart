@@ -145,17 +145,17 @@ void main() {
       projectId: 'project-1',
       workstreamId: 'workstream-1',
     );
-    final rePaired = await WorkstreamPathResolver(root).resolve(
+    final reRegistered = await WorkstreamPathResolver(root).resolve(
       projectId: 'project-1',
       workstreamId: 'workstream-1',
     );
     final markerAfter = await const WorkstreamMarkerStore().reuse(
-      workstreamDirectory: rePaired,
+      workstreamDirectory: reRegistered,
       projectId: 'project-1',
       workstreamId: 'workstream-1',
     );
     expect(renamed.path, before.path);
-    expect(rePaired.path, before.path);
+    expect(reRegistered.path, before.path);
     expect(markerAfter.toJson(), markerBefore.toJson());
   });
 

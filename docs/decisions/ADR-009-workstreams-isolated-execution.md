@@ -86,7 +86,7 @@ copy the directory; local data remains on its original Workspace.
 - one machine can execute multiple isolated Workstreams;
 - every AI iteration has explicit requester, Workflow, and logical Worker attribution;
 - Workstream renames and Project renames never affect local execution paths;
-- Workspace re-enrollment can reuse local Workstream data;
+- Workspace re-registration can reuse local Workstream data;
 - audit remains attributable to Project/Workstream/Worker identity.
 
 ### Tradeoffs
@@ -115,7 +115,7 @@ Rejected because users may rename Projects or Workstreams at any time, including
 
 ### Use Workspace ID in local paths
 
-Rejected because Workspace enrollment identity is replaceable. Re-enrolling the same local installation must not orphan existing Workstream data.
+Rejected because Workspace registration identity is replaceable. Registering the same local installation again must not orphan existing Workstream data.
 
 ### Allow simultaneous stateful Work Requests for one Workstream
 
@@ -124,4 +124,4 @@ concurrently would create nondeterministic filesystem behavior.
 
 ## Core invariant
 
-> **Local work belongs to Project + Workstream identity, not to names, Workspace enrollment identity, or repositories. Workspace resolves the ID-derived path; a request-scoped lease fences stateful execution; the generic Engine and signed Tool Profile run the provider CLI inside that boundary.**
+> **Local work belongs to Project + Workstream identity, not to names, Workspace registration identity, or repositories. Workspace resolves the ID-derived path; a request-scoped lease fences stateful execution; the generic Engine and signed Tool Profile run the provider CLI inside that boundary.**

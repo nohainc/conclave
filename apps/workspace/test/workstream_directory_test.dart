@@ -96,10 +96,10 @@ void main() {
 
     // Workspace A is revoked. Workspace B receives a different runtime ID,
     // but that identity is intentionally not an input to local resolution.
-    final rePairedRuntime = WorkstreamDirectoryLifecycle(
+    final reRegisteredRuntime = WorkstreamDirectoryLifecycle(
       pathResolver: WorkstreamPathResolver(root),
     );
-    final second = await rePairedRuntime.ensureForExecution(
+    final second = await reRegisteredRuntime.ensureForExecution(
       projectId: 'project-1',
       workstreamId: 'workstream-1',
     );

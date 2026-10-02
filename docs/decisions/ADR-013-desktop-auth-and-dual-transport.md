@@ -12,7 +12,9 @@ The current Workspace lifecycle separates two identities:
 - the human User;
 - the Workspace runtime/machine identity.
 
-The current desktop product, however, relies on a pairing/re-pairing flow initiated from Conclave AX. When the runtime credential is revoked or the Workspace is unpaired in AX, Conclave Workspace can restart in a state where its WebSocket cannot authenticate, yet the desktop has no independent authenticated human API channel with which to inspect or repair its Cloud state.
+The desktop needs an authenticated human API channel to inspect or repair its
+registration after a runtime credential is revoked. The current registration
+flow uses the desktop human session directly.
 
 That produces poor recovery UX:
 
@@ -20,8 +22,8 @@ That produces poor recovery UX:
 Workspace runtime credential invalid/revoked
 -> WebSocket cannot connect
 -> desktop only knows transport failed
--> user must switch to AX
--> user repairs pairing from a different application
+-> desktop signs in through browser-assisted auth
+-> desktop verifies ownership and registers or recovers through Cloud HTTPS APIs
 ~~~
 
 The product also currently treats WebSocket as the only runtime transport. A WebSocket is the preferred transport for assignments, cancellation, progress, inventory, and realtime state, but it should not be the only way a legitimate Workspace can communicate with Cloud.
@@ -36,7 +38,7 @@ Conclave Workspace
   HTTPS long-poll -> fallback runtime transport
 ~~~
 
-The desktop application becomes the primary management surface for one user's local Workspace and Workers. Conclave AX shows Workspace/Worker state and Project-facing execution availability, but does not own pairing/re-pairing or local runtime recovery.
+The desktop application becomes the primary management surface for one user's local Workspace and Workers. Conclave AX shows Workspace/Worker state and Project-facing execution availability, but does not own Workspace registration or local runtime recovery.
 
 ## Decision
 
@@ -111,7 +113,7 @@ Human desktop session
   -> "who is managing this Workspace?"
 
 Workspace runtime credential
-  -> "which enrolled machine is executing?"
+  -> "which registered Workspace installation is executing?"
 ~~~
 
 Human session expiry must not automatically terminate already-authorized work. Explicit user sign-out/disconnect may revoke or stop the runtime according to product policy.
@@ -133,7 +135,9 @@ Conclave Workspace
 -> desktop starts runtime transport
 ~~~
 
-Normal users no longer create a Workspace placeholder or pairing code in AX.
+Normal users register or recover a Workspace from Conclave Workspace through
+the authenticated `POST /api/workspace-runtime/register` route. AX does not
+create Workspace placeholders or manage local machine registration.
 
 Cloud must enforce:
 
@@ -158,9 +162,7 @@ The Conclave AX Workspaces page remains useful for:
 
 Normal AX Workspace UI does not:
 
-- create pairing codes;
-- re-pair;
-- unpair;
+- register or disconnect a local machine Workspace;
 - rename the local machine Workspace;
 - add/remove/authenticate Workers;
 - change local Worker permissions;
@@ -256,9 +258,7 @@ HTTPS fallback
 
 but does not control it.
 
-### 8. Recovery no longer depends on "Repair pairing"
-
-Remove the normal **Repair pairing** product concept.
+### 8. Recovery uses the desktop human session
 
 Recovery becomes:
 
@@ -342,13 +342,13 @@ See [ADR-014](ADR-014-workspace-desktop-lifecycle.md) and the
 The architecture is accepted when tests prove:
 
 1. desktop user can authenticate using the same Conclave account identity;
-2. fresh installation can create/register its Workspace without AX pairing;
+2. a fresh installation can register its Workspace directly from Conclave Workspace;
 3. same user can recover an existing installation/runtime;
 4. another user cannot claim an installation already owned by someone else;
 5. WebSocket remains the preferred transport;
 6. HTTP fallback can complete hello/sync/inventory and receive/complete an assignment;
 7. switching transports preserves one Workspace/runtime identity;
-8. AX displays Workspace and Worker state without pairing/recovery controls;
+8. AX displays Workspace and Worker state without local recovery controls;
 9. provider secrets remain local;
 10. a broken WebSocket never prevents the signed-in desktop from querying its Cloud Workspace state.
 

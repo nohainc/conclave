@@ -25,6 +25,7 @@ import 'ax_data.dart';
 import 'ax_stores.dart';
 
 part 'ax_app_state.dart';
+part 'ax_app_shell_views.dart';
 part 'ax_app_views.dart';
 part 'ax_app_run_details.dart';
 part 'ax_app_controller.dart';

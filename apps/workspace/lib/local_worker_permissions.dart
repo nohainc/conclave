@@ -1,6 +1,5 @@
-/// Local permissions granted to the first-party Worker Packages by default.
-/// This is Workspace policy, not provider or package identity metadata.
-const firstPartyWorkerLocalPermissions = <String>[
+/// Local permissions granted to newly registered logical Workers by default.
+const defaultLocalWorkerPermissions = <String>[
   'workstream_filesystem',
   'shell_execution',
 ];

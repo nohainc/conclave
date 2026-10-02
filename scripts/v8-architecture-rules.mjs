@@ -34,6 +34,10 @@ export const forbiddenArchitecture = [
     /LocalRepositoryRegistry|repositoriesFile|CONCLAVE_WORKSPACE_REPOSITORIES|--repositories|repository_mappings_json|path_mappings_json|repositoryMappings|pathMappings|project_repository|selected_paths|full_workspace/i,
   ],
   ["write-only Workstream memberships", /workstream_memberships/i],
+  [
+    "retired Workspace token pairing flow",
+    /workspace_pairing_intents|workspace-pairing-intents|workspace_enrollments|workspace-runtime\/enroll|\/enrollments|CONCLAVE_ENROLLMENT_TOKEN|WorkspacePairingIntent|handle\w*WorkspacePairingIntent|handle\w*WorkspaceEnrollment|conclave_pair_|conclave_enroll_|WorkspacePairing(?:Service|ErrorKind|Exception)|AxWorkspaceEnrollment|createWorkspaceEnrollment/i,
+  ],
   ["legacy runtime credential key reference", /credential_key_ref/i],
   ["retired checkout policy field", /require_checkout/i],
   [

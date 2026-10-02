@@ -1,8 +1,10 @@
 // GENERATED FILE. Do not edit by hand.
 
-export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_NAME = "conclave.workspace-runtime-protocol" as const;
+export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_NAME =
+  "conclave.workspace-runtime-protocol" as const;
 export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_VERSION = "5.1" as const;
-export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_MAX_MESSAGE_SIZE_BYTES = 4194304 as const;
+export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_MAX_MESSAGE_SIZE_BYTES =
+  4194304 as const;
 export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_MESSAGE_TYPES = [
   "workspace.hello",
   "workspace.hello.ack",

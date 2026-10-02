@@ -8,12 +8,12 @@
 
 The top-level execution-capacity page is **Workspaces**. Each Workspace card groups its machine status, locally owned Workers, Project grants, and recent execution activity. AX reads safe Cloud projections; it does not manage local Worker setup or machine process state.
 
-- Workspace represents one enrolled machine runtime and has one Cloud owner.
+- Workspace represents one registered machine runtime and has one Cloud owner.
 - Each logical Worker belongs to exactly one Workspace.
 - Worker inventory and readiness are reported by Workspace. AX does not probe provider CLIs or start assignments directly.
 - Project owners grant Workspaces access to Projects. Workstreams bind logical Worker IDs under Cloud authorization.
 - Stateful Workstreams use their configured Workspace. Stateless execution may use another authorized Workspace when the Work policy permits it.
-- Workspace enrollment and local repair are managed by the Conclave Workspace desktop application.
+- Workspace registration and local recovery are managed by the Conclave Workspace desktop application.
 
 ## Workspace overview model
 
@@ -47,7 +47,7 @@ The Cloud Worker API is versionless. `GET /api/workers` returns safe inventory; 
 - Workers appear only within their owning Workspace card.
 - The page may show connection state, safe machine facts, Worker readiness, Project access, and activity counts.
 - Empty state directs the user to install and sign in to Conclave Workspace, which registers the machine.
-- An offline enrolled Workspace remains visible as offline. Reconnection and ownership recovery are handled by the desktop app.
+- An offline registered Workspace remains visible as offline. Reconnection and ownership recovery are handled by the desktop app.
 - AX does not expose local Worker setup, credentials, process controls, local paths, or machine repair actions.
 
 ## Workstream execution configuration

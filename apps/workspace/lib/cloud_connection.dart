@@ -6,7 +6,7 @@ import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'assignment_journal.dart';
-import 'workspace_enrollment.dart';
+import 'workspace_registration.dart';
 import 'workspace_transport.dart';
 
 part 'cloud_connection/assignment_handlers.dart';

@@ -139,8 +139,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w700)),
                               ),
-                              _StatusPill(
-                                  status: _statusLabel(workspace.status)),
+                              _StatusPill(status: _statusLabel(workspace)),
                               Icon(expanded
                                   ? Icons.expand_less
                                   : Icons.expand_more),
@@ -227,9 +226,7 @@ class _WorkspaceCardBody extends StatelessWidget {
           spacing: 24,
           runSpacing: 14,
           children: [
-            _Fact(
-                label: 'Connection status',
-                value: _statusLabel(workspace.status)),
+            _Fact(label: 'Connection status', value: _statusLabel(workspace)),
             _Fact(
                 label: 'Connection mode',
                 value: _display(workspace.connectionMode ?? '—')),
@@ -512,15 +509,16 @@ String _machine(AxWorkspace workspace) {
 
 String _display(String value) => value.isEmpty ? '—' : value;
 
-String _statusLabel(String status) => switch (status.toLowerCase()) {
-      'enrolled' || 'not_connected' => 'Not connected',
-      'online' => 'Online',
-      'pairing' => 'Pairing',
-      'offline' => 'Offline',
-      'busy' => 'Busy',
-      'draining' => 'Draining',
-      'revoked' => 'Revoked',
-      _ => status,
-    };
+String _statusLabel(AxWorkspace workspace) =>
+    workspace.status.toLowerCase() == 'offline' && !workspace.hasRuntimeIdentity
+        ? 'Not connected'
+        : switch (workspace.status.toLowerCase()) {
+            'online' => 'Online',
+            'offline' => 'Offline',
+            'busy' => 'Busy',
+            'draining' => 'Draining',
+            'revoked' => 'Revoked',
+            _ => workspace.status,
+          };
 
 int _grantCount(AxWorkspace workspace) => workspace.projectGrantCount;

@@ -16,7 +16,6 @@ import {
   requiredString,
   sortWorkstreams,
   workstreamMetadata,
-  workstreamProjectId,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
 

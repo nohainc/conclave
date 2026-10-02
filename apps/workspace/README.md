@@ -89,19 +89,13 @@ credentials. Release ownership is a separate advanced action for a disconnected
 Workspace and permits a different account to connect. Reset local Workspace
 has separate published data-removal semantics; see [ADR-014](../../docs/decisions/ADR-014-workspace-desktop-lifecycle.md).
 
-## Legacy pairing compatibility
+## Cloud connection
 
-Pairing remains available only for the documented compatibility window; it is
-not the normal desktop onboarding path. AX does not create pairing intents in
-its normal Workspaces UI. Do not remove compatibility endpoints/tables until
-the supported-release window and caller audit are complete.
-
-To verify a real Cloud connection with a disposable Workspace:
-
-~~~text
-CONCLAVE_ENROLLMENT_TOKEN='conclave_enroll_...' \
-  bash scripts/test-workspace-cloud-connection.sh
-~~~
+Sign in to Conclave Workspace with browser-assisted desktop authentication.
+Workspace verifies installation ownership, registers or recovers through
+`POST /api/workspace-runtime/register`, and then connects to the Workspace
+Gateway using its runtime credential. Disconnect and ownership release use the
+desktop human session.
 
 ## First-party Worker v1 contract
 

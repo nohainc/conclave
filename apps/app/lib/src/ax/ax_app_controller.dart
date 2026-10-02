@@ -260,7 +260,7 @@ extension _AxAppController on _AxAppStateMixin {
           });
         }
       } catch (_) {
-        // Workspace inventory remains independently optional during enrollment.
+        // Workspace inventory remains independently optional during registration.
       }
       _startRealtime();
     } catch (_) {

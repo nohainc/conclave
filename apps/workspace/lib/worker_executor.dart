@@ -216,7 +216,7 @@ class WorkerAssignmentHandler {
     if (context.payload['permissionSnapshot'] != null) {
       validateAssignmentScope(
         context.payload,
-        manifestPermissions: allowed,
+        localWorkerPermissions: allowed,
       );
     }
     final requestedPermissions = context.payload['permissions'];

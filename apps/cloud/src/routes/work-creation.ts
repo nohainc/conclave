@@ -460,7 +460,7 @@ export async function handleCreateWorkRequest(
     promptProfileVersions,
   };
   const policyRow = await env.CONCLAVE_DB.prepare(
-    "SELECT mode, primary_workspace_id AS primaryWorkspaceId, max_concurrent_work_requests AS maxConcurrentWorkRequests FROM workstream_execution_policies WHERE workstream_id = ?1",
+    "SELECT mode, primary_workspace_id AS primaryWorkspaceId FROM workstream_execution_policies WHERE workstream_id = ?1",
   )
     .bind(workstreamId)
     .first<WorkstreamExecutionPolicy>();
@@ -472,7 +472,6 @@ export async function handleCreateWorkRequest(
             typeof body.primaryWorkspaceId === "string"
               ? body.primaryWorkspaceId
               : null,
-          maxConcurrentWorkRequests: 1,
         }
       : (policyRow ?? {
           mode,
@@ -480,7 +479,6 @@ export async function handleCreateWorkRequest(
             typeof body.primaryWorkspaceId === "string"
               ? body.primaryWorkspaceId
               : null,
-          maxConcurrentWorkRequests: 1,
         });
   const now = new Date().toISOString();
   const workRequest: WorkRequest = {

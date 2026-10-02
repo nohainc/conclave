@@ -97,7 +97,7 @@ The public site does not:
 
 - implement login, discussion, Work, execution, or orchestration;
 - show private Project, Workspace, or Worker data;
-- install or enroll a Workspace;
+- install or register a Workspace;
 - collect provider credentials or machine credentials;
 - expose authenticated Cloud APIs as public website functionality.
 

@@ -36,10 +36,10 @@ The directory identity must survive:
 - Project renames;
 - Workstream renames;
 - repeated renames while work is active;
-- Workspace revoke/delete/re-enrollment on the same machine;
+- Workspace revoke/delete/re-registration on the same machine;
 - Workspace application reinstall when the local Work Root is preserved.
 
-Names and Workspace enrollment identity are therefore unsuitable path keys.
+Names and Workspace registration identity are therefore unsuitable path keys.
 
 ## Decision
 
@@ -99,7 +99,7 @@ The immutable Project ID and Workstream ID remain authoritative.
 
 ### 4. Workspace ID is not local work identity
 
-Workspace ID represents the current enrolled runtime identity.
+Workspace ID represents the current registered runtime identity.
 
 It is appropriate for:
 - Cloud connection;
@@ -305,7 +305,7 @@ This avoids destroying unpushed or otherwise valuable local work.
 7. Cloud cannot supply an arbitrary local absolute path.
 8. Provider CLI processes cannot escape the working-directory policy by changing Project/Workstream display names.
 9. Existing directories are reused only after marker validation.
-10. Re-enrollment must not silently adopt a directory belonging to different Project/Workstream IDs.
+10. Re-registration must not silently adopt a directory belonging to different Project/Workstream IDs.
 
 ## Consequences
 
@@ -314,7 +314,7 @@ This avoids destroying unpushed or otherwise valuable local work.
 - simpler Conclave product and runtime;
 - no Source/repository-management UI required;
 - rename-safe by construction;
-- Workspace re-enrollment does not orphan local work;
+- Workspace re-registration does not orphan local work;
 - multi-repository work requires no special product feature;
 - parallel work on the same Git repository is naturally isolated by Workstream;
 - private repository credentials stay local;
@@ -331,4 +331,4 @@ This avoids destroying unpushed or otherwise valuable local work.
 
 ## Core invariant
 
-> **Local work belongs to Project + Workstream identity, not to names, Workspace enrollment identity, or repositories. Workspace resolves the ID-derived path; a request-scoped lease fences stateful execution; the generic Engine and signed Tool Profile run the provider CLI inside that boundary.**
+> **Local work belongs to Project + Workstream identity, not to names, Workspace registration identity, or repositories. Workspace resolves the ID-derived path; a request-scoped lease fences stateful execution; the generic Engine and signed Tool Profile run the provider CLI inside that boundary.**

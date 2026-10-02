@@ -31,6 +31,9 @@ const infraWrangler = readRequired("infra/cloudflare/app.wrangler.jsonc");
 const packageJson = JSON.parse(readRequired("package.json") || "{}");
 const ci = readRequired(".github/workflows/ci.yml");
 const deploy = readRequired(".github/workflows/deploy-app.yml");
+const siteProductionDeploy = readRequired(
+  ".github/workflows/deploy-site-production.yml",
+);
 const cloudPackage = JSON.parse(
   readRequired("apps/cloud/package.json") || "{}",
 );
@@ -234,6 +237,8 @@ for (const retiredName of [
   "workstream_checkpoints",
   "workstream_current_checkpoints",
   "workstream_diff_artifacts",
+  "workspace_pairing_intents",
+  "workspace_enrollments",
   "checkout_id",
   "require_checkout",
 ]) {
@@ -273,6 +278,20 @@ if (!ci.includes("run: pnpm check")) {
 }
 if (!deploy.includes("run: pnpm check")) {
   failures.push("The production deployment workflow must pass pnpm check.");
+}
+if (
+  !siteProductionDeploy.includes('workflows: ["CI"]') ||
+  !siteProductionDeploy.includes("types: [completed]") ||
+  !siteProductionDeploy.includes(
+    "github.event.workflow_run.conclusion == 'success'",
+  ) ||
+  !siteProductionDeploy.includes(
+    "ref: ${{ github.event.workflow_run.head_sha }}",
+  )
+) {
+  failures.push(
+    "Public-site production deployment must use the successful main-branch CI revision.",
+  );
 }
 
 for (const check of [

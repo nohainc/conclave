@@ -1,8 +1,5 @@
 import { parseToolProfileV1, type ToolProfileV1 } from "@conclave/tool-profile";
-import {
-  canonicalReleaseJson,
-  verifyEd25519ReleaseSignature,
-} from "./release-trust.js";
+import { canonicalReleaseJson } from "./release-trust.js";
 
 export type ToolProfileChannel = "testing" | "beta" | "stable";
 export type ToolProfileLifecycle =

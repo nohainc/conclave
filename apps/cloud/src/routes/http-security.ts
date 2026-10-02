@@ -91,29 +91,6 @@ export async function recordAudit(
     .run();
 }
 
-export async function recordPairingAuditEvent(
-  env: SecurityEnv,
-  userId: string | null,
-  action: "pairing.created" | "pairing.rejected",
-  outcome: "success" | "failure" | "denied",
-  details: Record<string, unknown>,
-): Promise<void> {
-  await env.CONCLAVE_DB.prepare(
-    `INSERT INTO auth_audit_events
-       (id, user_id, session_id, action, outcome, details_json, created_at)
-     VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6)`,
-  )
-    .bind(
-      `audit-${crypto.randomUUID()}`,
-      userId,
-      action,
-      outcome,
-      JSON.stringify(details),
-      new Date().toISOString(),
-    )
-    .run();
-}
-
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Workflow operation failed";
 }

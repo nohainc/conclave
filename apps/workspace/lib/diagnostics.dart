@@ -5,7 +5,7 @@ import 'assignment_journal.dart';
 import 'cloud_connection.dart';
 import 'workspace.dart';
 import 'platform_runtime.dart';
-import 'workspace_enrollment.dart';
+import 'workspace_registration.dart';
 import 'cli_worker_engine_supervisor.dart';
 import 'tool_profile_resolver.dart';
 

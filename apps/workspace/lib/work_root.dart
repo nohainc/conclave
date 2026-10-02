@@ -3,7 +3,7 @@ import 'dart:io';
 import 'platform_runtime.dart';
 
 /// Resolves and prepares the stable local Work Root for one Workspace
-/// runtime. The root is deliberately independent of Workspace enrollment IDs.
+/// runtime. The root is deliberately independent of Workspace registration IDs.
 class WorkRootResolver {
   WorkRootResolver({
     PlatformRuntime? platform,

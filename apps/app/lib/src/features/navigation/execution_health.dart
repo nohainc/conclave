@@ -191,7 +191,7 @@ class ExecutionStatusPopover extends StatelessWidget {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'No execution workspaces enrolled.',
+                                'No execution Workspaces connected.',
                                 style: TextStyle(fontSize: 13, color: mutedInk),
                               ),
                             ],

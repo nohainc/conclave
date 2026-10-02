@@ -98,7 +98,7 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
     final stored = await widget.credentialStore.read(desktopHumanCredentialKey);
     if (stored == null || stored.isEmpty) {
       return _ShellAccess(
-        widget.snapshot.paired && runtimeIntendedConnected
+        widget.snapshot.registered && runtimeIntendedConnected
             ? HumanAuthState.reauthRequired
             : HumanAuthState.signedOut,
       );
@@ -136,7 +136,7 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
         return invalidSession(session);
       }
       final ownerUserId = widget.snapshot.ownerUserId;
-      if (widget.snapshot.paired &&
+      if (widget.snapshot.registered &&
           (ownerUserId == null || ownerUserId != session.userId)) {
         return _ShellAccess(
           HumanAuthState.reauthRequired,

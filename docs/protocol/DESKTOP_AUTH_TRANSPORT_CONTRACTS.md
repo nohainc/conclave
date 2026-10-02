@@ -15,7 +15,7 @@ validation. Runtime messages inside transport envelopes remain the existing
 | Type | Purpose | Accepted by | Storage |
 | --- | --- | --- | --- |
 | `DesktopHumanSessionCredential` | Human account and Workspace management | Desktop-authenticated management APIs | OS secure storage |
-| `WorkspaceRuntimeCredential` | Enrolled machine execution and runtime transport | Workspace runtime APIs and Gateway | OS secure storage |
+| `WorkspaceRuntimeCredential` | Registered machine execution and runtime transport | Workspace runtime APIs and Gateway | OS secure storage |
 | Provider CLI authentication state | Authenticate the locally installed provider CLI | That provider CLI only | The provider CLI's own local configuration or OS credential store |
 
 The human and runtime credentials are separate branded types and schemas. A

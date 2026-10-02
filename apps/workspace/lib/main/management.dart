@@ -46,7 +46,7 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
           installationId: installationId,
           name: workspaceName,
           hostname: Platform.localHostname);
-      await WorkspacePairingService(
+      await WorkspaceRegistrationService(
               dataDirectory: dataDirectory,
               credentialStore: lifecycle.workspace.credentialStore)
           .registerWithDesktopSession(
@@ -445,8 +445,6 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
         workspaceId: registration.workspaceId,
         runtimeId: registration.workspaceRuntimeId,
       );
-      await InstallationIdentityStore(lifecycle.workspace.config.dataDirectory)
-          .authorizeRecovery();
       await lifecycle.workspace.credentialStore
           .delete(registration.workspaceRuntimeId);
       final preferenceStore = WorkspaceLifecyclePreferencesStore(
