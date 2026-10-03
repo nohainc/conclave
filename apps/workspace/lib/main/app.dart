@@ -452,7 +452,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
         );
         if (cloudOwnerUserId != session.userId) {
           throw StateError(
-            'This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.',
+            'This Workspace installation is owned by another Conclave account. Sign in as its current owner, disconnect the Workspace if it is connected, and release ownership before switching accounts.',
           );
         }
         if (previousSession != null &&

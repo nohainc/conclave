@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'controllers/profile_lab_controller.dart';
 import 'theme/profile_lab_theme.dart';
 import 'views/audit_view.dart';
@@ -271,26 +272,14 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ),
-                  if (c.authError != null && c.currentSession == null) ...[
-                    const SizedBox(width: 6),
-                    Tooltip(
-                      message: 'Profile Lab sign-in failed: ${c.authError}',
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.error_outline,
-                              size: 16, color: Colors.redAccent),
-                          SizedBox(width: 4),
-                          Text('Sign-in failed',
-                              style: TextStyle(
-                                  fontSize: 10, color: Colors.redAccent)),
-                        ],
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
+
+            if (c.authError != null && c.currentSession == null)
+              _ProfileLabSignInError(
+                message: 'Profile Lab sign-in failed: ${c.authError}',
+              ),
 
             // Tab view content
             Expanded(
@@ -343,6 +332,44 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
       ),
     );
   }
+}
+
+class _ProfileLabSignInError extends StatelessWidget {
+  const _ProfileLabSignInError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+        color: const Color(0xFF4A1F27),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, size: 18, color: Color(0xFFFF8A80)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: SelectableText(
+                message,
+                style: const TextStyle(color: Color(0xFFFFCDD2), fontSize: 12),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Copy error message',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.copy, size: 18),
+              color: const Color(0xFFFFCDD2),
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: message));
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Error message copied')),
+                );
+              },
+            ),
+          ],
+        ),
+      );
 }
 
 class _NavTabButton extends StatelessWidget {
