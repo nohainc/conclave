@@ -45,6 +45,20 @@ void main() {
     },
   );
 
+  test('accepts a successful CLI that exits before consuming stdin', () async {
+    final result = await runner.run(
+      Platform.resolvedExecutable,
+      [fixture, 'echo', 'completed from arguments'],
+      environment: const {},
+      workingDirectory: repository.path,
+      stdinText: 'unused stdin' * (1024 * 1024),
+      timeout: const Duration(seconds: 10),
+      onStdoutLine: (_) {},
+    );
+
+    expect(result.exitCode, 0);
+  });
+
   test('outer deadline terminates a hanging provider process', () async {
     final watch = Stopwatch()..start();
     await expectLater(

@@ -92,11 +92,23 @@ class CliStreamingRunner {
     }();
     try {
       await onStarted?.call();
-      process.stdin.write(stdinText);
-      await process.stdin.close();
+      Object? stdinError;
+      final stdinTask = () async {
+        try {
+          process.stdin.write(stdinText);
+          await process.stdin.close();
+        } on Object catch (error) {
+          stdinError = error;
+        }
+      }();
       final code = await process.exitCode.timeout(timeout);
+      await stdinTask;
       await Future.wait([stdoutTask, stderrTask]);
       if (streamError != null) throw streamError!;
+      // Some CLIs ignore stdin and exit as soon as their argument-based
+      // request finishes. A closed stdin pipe must not override a successful
+      // process result in that case.
+      if (stdinError != null && code != 0) throw stdinError!;
       return CliStreamResult(exitCode: code, stderr: stderr.toString());
     } on TimeoutException {
       await cleanup.terminate(process);
