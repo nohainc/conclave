@@ -590,11 +590,14 @@ export async function handleRegisterWorkspaceFromDesktop(
   );
   try {
     await env.CONCLAVE_DB.batch(statements);
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Workspace registration batch failed:", message);
     return json(
       {
-        error: "Workspace registration changed concurrently; retry the request",
+        error: `Workspace registration changed concurrently; retry the request (${message})`,
         code: "registration_conflict",
+        details: message,
       },
       { status: 409 },
     );

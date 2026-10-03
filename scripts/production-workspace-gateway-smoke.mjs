@@ -339,49 +339,60 @@ function removeDisposableRuntime() {
 
 async function registerDisposableWorkspace() {
   const appVersion = "0.0.0-smoke";
-  const response = await fetch(
-    `https://${hostname}/api/workspace-runtime/register`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${humanCredential}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contractVersion: "1.0",
-        installationId,
-        proposedWorkspaceName: "Production Workspace Registration Smoke",
-        hostname: "github-actions-production-smoke",
-        platform: "linux",
-        architecture: "x64",
-        appVersion,
-        runtimeCapabilities: {
-          os: "linux",
-          arch: "x64",
-          appVersion,
-          supportedRuntimes: ["gateway-smoke"],
-          maxConcurrentWorkers: 1,
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const response = await fetch(
+      `https://${hostname}/api/workspace-runtime/register`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${humanCredential}`,
+          "Content-Type": "application/json",
         },
-      }),
-    },
-  );
-  const result = await response.json().catch(() => null);
-  if (
-    response.status !== 201 ||
-    !result ||
-    typeof result.workspaceId !== "string" ||
-    typeof result.workspaceRuntimeId !== "string" ||
-    typeof result.runtimeCredential !== "string" ||
-    result.ownerUserId !== ownerId
-  ) {
+        body: JSON.stringify({
+          contractVersion: "1.0",
+          installationId,
+          proposedWorkspaceName: "Production Workspace Registration Smoke",
+          hostname: "github-actions-production-smoke",
+          platform: "linux",
+          architecture: "x64",
+          appVersion,
+          runtimeCapabilities: {
+            os: "linux",
+            arch: "x64",
+            appVersion,
+            supportedRuntimes: ["gateway-smoke"],
+            maxConcurrentWorkers: 1,
+          },
+        }),
+      },
+    );
+    const result = await response.json().catch(() => null);
+    if (
+      response.status === 201 &&
+      result &&
+      typeof result.workspaceId === "string" &&
+      typeof result.workspaceRuntimeId === "string" &&
+      typeof result.runtimeCredential === "string" &&
+      result.ownerUserId === ownerId
+    ) {
+      workspaceId = result.workspaceId;
+      runtimeId = result.workspaceRuntimeId;
+      runtimeToken = result.runtimeCredential;
+      return;
+    }
     const details = result ? JSON.stringify(result) : "non-JSON response";
-    throw new Error(
+    lastError = new Error(
       `Production Workspace registration failed with HTTP ${response.status}: ${details}`,
     );
+    if (result?.code === "registration_conflict" && attempt < 3) {
+      console.warn(`Registration conflict on attempt ${attempt}, retrying in 1s...`);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      continue;
+    }
+    throw lastError;
   }
-  workspaceId = result.workspaceId;
-  runtimeId = result.workspaceRuntimeId;
-  runtimeToken = result.runtimeCredential;
+  throw lastError;
 }
 
 async function main() {
