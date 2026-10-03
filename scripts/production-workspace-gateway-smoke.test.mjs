@@ -148,4 +148,51 @@ describe("production Workspace Gateway smoke schema gate", () => {
 
     expect(script).not.toMatch(/\b(?:ALTER|DROP|CREATE)\s+TABLE\b/i);
   });
+
+  it("runs the Profile Lab audience lifecycle and checks its authorization boundaries", () => {
+    const script = readFileSync(
+      new URL("./production-workspace-gateway-smoke.mjs", import.meta.url),
+      "utf8",
+    );
+
+    for (const contract of [
+      'audience: "conclave.profile-lab.management"',
+      "/api/desktop-auth/intents/",
+      "/approve",
+      "/claim",
+      "claimed_session_id",
+      "conclave.profile-lab.management",
+      "/api/desktop-auth/session",
+      "/api/admin/tool-profiles/definitions",
+      "The profiles:admin permission is required",
+      "/api/workspace-runtime/register",
+      "/api/workspace-runtime/sessions",
+      "DELETE FROM auth_sessions",
+    ]) {
+      expect(script).toContain(contract);
+    }
+  });
+
+  it("requires the browser signing secret and runs auth smoke after migrations", () => {
+    const workflow = readFileSync(
+      new URL("../.github/workflows/deploy-app.yml", import.meta.url),
+      "utf8",
+    );
+    const migrations = workflow.indexOf("name: Apply production D1 migrations");
+    const deployedSmoke = workflow.indexOf(
+      "name: Require production Workspace Gateway smoke test",
+    );
+    const deploy = workflow.indexOf("name: Deploy app.conclaveax.com");
+    const secretRequirement = workflow.indexOf(
+      "name: Require Better Auth signing secret for Profile Lab smoke",
+    );
+
+    expect(secretRequirement).toBeGreaterThan(-1);
+    expect(secretRequirement).toBeLessThan(migrations);
+    expect(migrations).toBeLessThan(deployedSmoke);
+    expect(deployedSmoke).toBeGreaterThan(deploy);
+    expect(workflow).toContain(
+      "BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}",
+    );
+  });
 });

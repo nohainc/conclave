@@ -178,6 +178,16 @@ jobs:
                 }
               });
             '
+      - name: Require Better Auth signing secret for Profile Lab smoke
+        working-directory: .
+        env:
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+        run: |
+          if [ -z "${BETTER_AUTH_SECRET:-}" ]; then
+            echo "Configure the GitHub Actions secret BETTER_AUTH_SECRET with the same value as the conclave-ax-app Cloudflare Worker secret."
+            echo "The production Profile Lab auth smoke uses it to sign a disposable browser approval cookie."
+            exit 1
+          fi
       - name: Apply production D1 migrations
         working-directory: apps/cloud
         env:
@@ -201,6 +211,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
         run: node scripts/production-workspace-gateway-smoke.mjs
       - name: Ensure production smoke runtime is removed
         if: always()

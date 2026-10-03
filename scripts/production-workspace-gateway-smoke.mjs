@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { connect as connectTls } from "node:tls";
 import { fileURLToPath } from "node:url";
@@ -19,16 +19,13 @@ const runId = process.env.GITHUB_RUN_ID
   : (process.env.CONCLAVE_SMOKE_RUN_ID ?? randomUUID());
 const ownerId = `gateway-smoke-user-${runId}`;
 const humanSessionId = `gateway-smoke-session-${runId}`;
-const profileLabSessionId = `gateway-smoke-profile-lab-session-${runId}`;
+const authSessionId = `gateway-smoke-auth-session-${runId}`;
 const profileLabClientName = `Conclave Profile Lab Production Smoke ${runId}`;
 const humanCredential = randomBytes(32).toString("base64url");
 const humanTokenHash = createHash("sha256")
   .update(humanCredential)
   .digest("hex");
-const profileLabCredential = randomBytes(32).toString("base64url");
-const profileLabTokenHash = createHash("sha256")
-  .update(profileLabCredential)
-  .digest("hex");
+const authSessionToken = randomBytes(32).toString("base64url");
 const installationUuid = createHash("sha256")
   .update(`conclave-production-workspace-smoke:${runId}`)
   .digest("hex")
@@ -348,9 +345,23 @@ async function createDisposableHumanSession() {
   const email = `gateway-smoke-${runId}@example.invalid`;
   executeD1(
     `INSERT INTO users (id, email, display_name, status, created_at, updated_at) VALUES (${sqlString(ownerId)}, ${sqlString(email)}, 'Production Workspace Registration Smoke', 'active', ${sqlString(now)}, ${sqlString(now)});
-     INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (${sqlString(humanSessionId)}, ${sqlString(ownerId)}, ${sqlString(humanTokenHash)}, 'conclave.desktop.management', ${sqlString(now)}, ${sqlString(now)}, '9999-12-31T23:59:59.999Z');
-     INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (${sqlString(profileLabSessionId)}, ${sqlString(ownerId)}, ${sqlString(profileLabTokenHash)}, 'conclave.profile-lab.management', ${sqlString(now)}, ${sqlString(now)}, '9999-12-31T23:59:59.999Z');`,
+     INSERT INTO auth_sessions (id, user_id, token, expires_at, created_at, updated_at, user_agent) VALUES (${sqlString(authSessionId)}, ${sqlString(ownerId)}, ${sqlString(authSessionToken)}, '9999-12-31T23:59:59.999Z', ${sqlString(now)}, ${sqlString(now)}, 'Conclave production auth smoke');
+     INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (${sqlString(humanSessionId)}, ${sqlString(ownerId)}, ${sqlString(humanTokenHash)}, 'conclave.desktop.management', ${sqlString(now)}, ${sqlString(now)}, '9999-12-31T23:59:59.999Z');`,
   );
+}
+
+function disposableApprovalCookie() {
+  const secret = process.env.BETTER_AUTH_SECRET;
+  if (!secret) {
+    throw new Error(
+      "BETTER_AUTH_SECRET is required to approve the disposable Profile Lab auth intent",
+    );
+  }
+  const signature = createHmac("sha256", secret)
+    .update(authSessionToken)
+    .digest("base64");
+  const signedValue = encodeURIComponent(`${authSessionToken}.${signature}`);
+  return `__Secure-better-auth.session_token=${signedValue}; better-auth.session_token=${signedValue}`;
 }
 
 function removeDisposableRuntime() {
@@ -376,6 +387,7 @@ function removeDisposableRuntime() {
          );
      DELETE FROM execution_workspaces WHERE owner_user_id = ${sqlString(ownerId)};
      DELETE FROM desktop_auth_intents WHERE client_name = ${sqlString(profileLabClientName)} OR approved_user_id = ${sqlString(ownerId)};
+     DELETE FROM auth_sessions WHERE id = ${sqlString(authSessionId)};
      DELETE FROM desktop_human_sessions WHERE id = ${sqlString(humanSessionId)} OR user_id = ${sqlString(ownerId)};
      DELETE FROM users WHERE id = ${sqlString(ownerId)};`,
   );
@@ -407,36 +419,205 @@ async function verifyProfileLabAuth() {
     );
   }
 
-  const cancelResponse = await fetch(
-    `https://${hostname}/api/desktop-auth/intents/${encodeURIComponent(intent.intentId)}/cancel`,
+  const storedIntent = rowsFromD1(
+    executeD1(
+      `SELECT audience, approved_user_id, claimed_at FROM desktop_auth_intents WHERE id = ${sqlString(intent.intentId)}`,
+    ),
+  )[0];
+  if (
+    storedIntent?.audience !== "conclave.profile-lab.management" ||
+    storedIntent?.approved_user_id !== null ||
+    storedIntent?.claimed_at !== null
+  ) {
+    throw new Error(
+      "Production Profile Lab auth intent was not stored as a pending Profile Lab audience intent",
+    );
+  }
+
+  const approveResponse = await fetch(
+    `https://${hostname}/api/desktop-auth/intents/${encodeURIComponent(intent.intentId)}/approve`,
     {
       method: "POST",
-      headers: { Authorization: `Bearer ${intent.pollToken}` },
+      headers: {
+        Cookie: disposableApprovalCookie(),
+        Origin: `https://${hostname}`,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
     },
   );
-  const cancellation = await cancelResponse.json().catch(() => null);
-  if (cancelResponse.status !== 200 || cancellation?.cancelled !== true) {
+  const approval = await approveResponse.json().catch(() => null);
+  if (
+    approveResponse.status !== 200 ||
+    approval?.approved !== true ||
+    approval?.user?.userId !== ownerId
+  ) {
     throw new Error(
-      `Production Profile Lab auth intent cancellation failed with HTTP ${cancelResponse.status}`,
+      `Production Profile Lab auth intent approval failed with HTTP ${approveResponse.status}${typeof approval?.error === "string" ? `: ${approval.error}` : ""}`,
+    );
+  }
+
+  const approvedIntent = rowsFromD1(
+    executeD1(
+      `SELECT audience, approved_user_id, approved_at, claimed_at FROM desktop_auth_intents WHERE id = ${sqlString(intent.intentId)}`,
+    ),
+  )[0];
+  if (
+    approvedIntent?.audience !== "conclave.profile-lab.management" ||
+    approvedIntent?.approved_user_id !== ownerId ||
+    typeof approvedIntent?.approved_at !== "string" ||
+    approvedIntent?.claimed_at !== null
+  ) {
+    throw new Error(
+      "Production Profile Lab auth intent approval did not persist the disposable test identity",
+    );
+  }
+
+  const claimResponse = await fetch(
+    `https://${hostname}/api/desktop-auth/intents/${encodeURIComponent(intent.intentId)}/claim`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pollToken: intent.pollToken }),
+    },
+  );
+  const claimed = await claimResponse.json().catch(() => null);
+  if (
+    claimResponse.status !== 200 ||
+    claimed?.audience !== "conclave.profile-lab.management" ||
+    claimed?.user?.userId !== ownerId ||
+    typeof claimed?.sessionId !== "string" ||
+    typeof claimed?.credential !== "string" ||
+    !claimed.credential.startsWith("conclave_dhs_")
+  ) {
+    throw new Error(
+      `Production Profile Lab auth claim failed with HTTP ${claimResponse.status}${typeof claimed?.error === "string" ? `: ${claimed.error}` : ""}`,
+    );
+  }
+
+  const [claimedIntent, storedSession] = [
+    rowsFromD1(
+      executeD1(
+        `SELECT audience, approved_user_id, claimed_at, claimed_session_id FROM desktop_auth_intents WHERE id = ${sqlString(intent.intentId)}`,
+      ),
+    )[0],
+    rowsFromD1(
+      executeD1(
+        `SELECT user_id, audience, token_hash, revoked_at, expires_at FROM desktop_human_sessions WHERE id = ${sqlString(claimed.sessionId)}`,
+      ),
+    )[0],
+  ];
+  const claimedTokenHash = createHash("sha256")
+    .update(claimed.credential)
+    .digest("hex");
+  if (
+    claimedIntent?.audience !== "conclave.profile-lab.management" ||
+    claimedIntent?.approved_user_id !== ownerId ||
+    typeof claimedIntent?.claimed_at !== "string" ||
+    claimedIntent?.claimed_session_id !== claimed.sessionId ||
+    storedSession?.user_id !== ownerId ||
+    storedSession?.audience !== "conclave.profile-lab.management" ||
+    storedSession?.token_hash !== claimedTokenHash ||
+    storedSession?.revoked_at !== null
+  ) {
+    throw new Error(
+      "Production Profile Lab auth claim did not persist a matching audience-scoped session",
     );
   }
 
   const sessionResponse = await fetch(
     `https://${hostname}/api/desktop-auth/session`,
-    { headers: { Authorization: `Bearer ${profileLabCredential}` } },
+    { headers: { Authorization: `Bearer ${claimed.credential}` } },
   );
   const session = await sessionResponse.json().catch(() => null);
   if (
     sessionResponse.status !== 200 ||
     session?.audience !== "conclave.profile-lab.management" ||
-    session?.user?.userId !== ownerId
+    session?.user?.userId !== ownerId ||
+    session?.sessionId !== claimed.sessionId
   ) {
     throw new Error(
       `Production Profile Lab session validation failed with HTTP ${sessionResponse.status}${typeof session?.error === "string" ? `: ${session.error}` : ""}`,
     );
   }
+
+  const profileAdminResponse = await fetch(
+    `https://${hostname}/api/admin/tool-profiles/definitions`,
+    { headers: { Authorization: `Bearer ${claimed.credential}` } },
+  );
+  const profileAdminResult = await profileAdminResponse
+    .json()
+    .catch(() => null);
+  if (
+    profileAdminResponse.status !== 403 ||
+    profileAdminResult?.error !== "The profiles:admin permission is required"
+  ) {
+    throw new Error(
+      `Production Profile Lab session did not reach the Profile-admin permission boundary as the disposable non-admin identity (HTTP ${profileAdminResponse.status})`,
+    );
+  }
+
+  const workspaceRegistrationResponse = await fetch(
+    `https://${hostname}/api/workspace-runtime/register`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${claimed.credential}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contractVersion: "1.0",
+        installationId,
+        proposedWorkspaceName: "Profile Lab Audience Isolation Probe",
+        hostname: "production-auth-smoke",
+        platform: "linux",
+        architecture: "x64",
+        appVersion: "0.0.0-smoke",
+        runtimeCapabilities: {
+          os: "linux",
+          arch: "x64",
+          appVersion: "0.0.0-smoke",
+          supportedRuntimes: ["auth-smoke"],
+          maxConcurrentWorkers: 1,
+        },
+      }),
+    },
+  );
+  const workspaceRegistration = await workspaceRegistrationResponse
+    .json()
+    .catch(() => null);
+  if (
+    workspaceRegistrationResponse.status !== 403 ||
+    typeof workspaceRegistration?.error !== "string" ||
+    !workspaceRegistration.error.includes("conclave.profile-lab.management")
+  ) {
+    throw new Error(
+      `Production Profile Lab session was not rejected by Workspace registration audience isolation (HTTP ${workspaceRegistrationResponse.status})`,
+    );
+  }
+
+  const runtimeResponse = await fetch(
+    `https://${hostname}/api/workspace-runtime/sessions`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${claimed.credential}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ workspaceRuntimeId: "profile-lab-smoke-runtime" }),
+    },
+  );
+  const runtimeResult = await runtimeResponse.json().catch(() => null);
+  if (
+    runtimeResponse.status !== 401 ||
+    runtimeResult?.error !== "Runtime session not found or credential revoked"
+  ) {
+    throw new Error(
+      `Production Profile Lab session was not rejected by Workspace runtime transport (HTTP ${runtimeResponse.status})`,
+    );
+  }
   console.log(
-    "PASS production Profile Lab auth: intent creation/cancellation and audience-scoped session validation",
+    "PASS production Profile Lab auth: create, approve and claim; stored audience/session; Profile-admin permission boundary; Workspace registration and runtime transport isolation",
   );
 }
 

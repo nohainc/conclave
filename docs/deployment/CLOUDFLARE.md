@@ -149,17 +149,28 @@ The workflow fails on any missing, unexpected, or drifted contract. This check
 only reads schema metadata; it never repairs table definitions.
 
 After deploying `app.conclaveax.com`, the same script runs as a production
-acceptance gate. It verifies Profile Lab auth intent creation and cancellation,
-validates a disposable Profile Lab audience session, creates a disposable
-Workspace management session, registers a uniquely named Workspace, performs
-an HTTP/1.1 WebSocket upgrade, sends `workspace.hello`, requires the matching
+acceptance gate. It creates a Profile Lab audience auth intent, approves it with
+a disposable Better Auth identity, claims the desktop session, and verifies the
+intent and session rows carry `conclave.profile-lab.management`. It checks that
+the session reaches the Profile-admin authorization boundary and receives the
+expected permission denial for this non-admin disposable identity. It also
+verifies that the Profile Lab credential is rejected by Workspace registration
+and Workspace runtime transport. The smoke then creates a disposable Workspace
+management session, registers a uniquely named Workspace, performs an HTTP/1.1
+WebSocket upgrade, sends `workspace.hello`, requires the matching
 `workspace.hello.ack`, requests synchronization and requires a correlated
 `workspace.sync.result`, verifies the persisted Gateway session, and deletes
-the disposable auth, Workspace, and user rows in `finally` cleanup. The runtime
-token is generated for that run and is never written to workflow logs or a URL.
-A failed schema check, auth request, registration, Gateway exchange, or cleanup
-fails the deployment workflow. The smoke uses DML only for disposable rows and
-does not change production table definitions.
+the disposable auth, Workspace, and user rows in `finally` cleanup. No Profile
+release operation is part of this smoke.
+
+The GitHub Actions secret `BETTER_AUTH_SECRET` must match the
+`conclave-ax-app` Cloudflare Worker secret. The workflow uses it only to sign
+the temporary browser approval cookie for the disposable auth identity; it
+does not print the secret or cookie. The runtime credential and Profile Lab
+session credential are generated for that run and are never written to workflow
+logs or a URL. A failed schema check, auth request, audience check, registration,
+Gateway exchange, or cleanup fails the deployment workflow. The smoke uses DML
+only for disposable rows and does not change production table definitions.
 
 That automated deployment acceptance does not replace the packaged desktop
 lifecycle release run. Before publishing a Workspace desktop release, execute
