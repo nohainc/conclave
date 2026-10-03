@@ -252,9 +252,13 @@ class AxFixtureDataSource implements AxDataSource {
   Future<void> approveDesktopAuthIntent({required String intentId}) async {}
 
   @override
-  Future<String> loadDesktopAuthIntentStatus(
+  Future<AxDesktopAuthIntentStatus> loadDesktopAuthIntentStatus(
           {required String intentId}) async =>
-      'pending';
+      const AxDesktopAuthIntentStatus(
+        status: 'pending',
+        clientName: 'Conclave Workspace',
+        audience: 'conclave.desktop.management',
+      );
 
   @override
   Future<void> denyDesktopAuthIntent({required String intentId}) async {}

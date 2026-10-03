@@ -357,7 +357,7 @@ export async function handleApproveDesktopAuthIntent(
   if (!identity)
     throw new HttpError(
       401,
-      "Sign in to Conclave AX before approving Workspace sign-in",
+      "Sign in to Conclave AX before approving desktop sign-in",
     );
   await provisionConclaveUser(env.CONCLAVE_DB, identity);
   const body: unknown = await request.json().catch(() => ({}));

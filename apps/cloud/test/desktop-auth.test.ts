@@ -1389,7 +1389,7 @@ describe("desktop human authentication", () => {
       authorizeToolProfileAdmin(wsAdminReq, env),
     ).rejects.toMatchObject({
       status: 403,
-      message: "Profile administrator authorization is required",
+      message: "The profiles:admin permission is required",
     });
   });
 });

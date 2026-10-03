@@ -362,6 +362,8 @@ extension _AxAppShellViews on _AxAppStateMixin {
   }
 
   Widget _desktopAuthApprovalView() {
+    final appName =
+        desktopAuthIntentStatus?.applicationName ?? 'desktop application';
     if (desktopAuthApproved || desktopAuthCancelled) {
       return Scaffold(
         body: Center(
@@ -382,7 +384,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                         style: Theme.of(context).textTheme.headlineSmall),
                     const SizedBox(height: 12),
                     Text(desktopAuthApproved
-                        ? 'Return to Conclave Workspace to finish signing in.'
+                        ? 'Return to $appName to finish signing in.'
                         : 'This sign-in request was canceled.'),
                     const SizedBox(height: 8),
                     const Text('You can close this page, window, or tab.'),
@@ -407,11 +409,14 @@ extension _AxAppShellViews on _AxAppStateMixin {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('Sign in to Conclave Workspace',
+                  Text('Sign in to $appName',
                       style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: 12),
-                  Text(
-                      'Approve Conclave Workspace sign-in for ${user?.displayName ?? user?.email ?? 'your account'}? Return to the desktop app after approval.'),
+                  Text(desktopAuthIntentStatus == null
+                      ? 'Loading the desktop sign-in request…'
+                      : desktopAuthIntentStatus!.applicationName == null
+                          ? 'This request came from an unsupported desktop app. It cannot be approved here.'
+                          : 'Approve sign-in to $appName for ${user?.displayName ?? user?.email ?? 'your account'}? Return to that app after approval.'),
                   const SizedBox(height: 22),
                   if (desktopAuthError != null) ...[
                     const SizedBox(height: 8),
@@ -421,7 +426,10 @@ extension _AxAppShellViews on _AxAppStateMixin {
                   ],
                   const SizedBox(height: 16),
                   FilledButton(
-                    onPressed: desktopAuthBusy ? null : _approveDesktopAuth,
+                    onPressed: desktopAuthBusy ||
+                            desktopAuthIntentStatus?.canApprove != true
+                        ? null
+                        : _approveDesktopAuth,
                     child: Text(
                         desktopAuthBusy ? 'Approving…' : 'Approve sign-in'),
                   ),
@@ -441,9 +449,9 @@ extension _AxAppShellViews on _AxAppStateMixin {
 
   Future<void> _approveDesktopAuth() async {
     final intentId = navigation.desktopAuthIntentId;
-    if (intentId == null) {
+    if (intentId == null || desktopAuthIntentStatus?.canApprove != true) {
       _updateState(() => desktopAuthError =
-          'This Workspace sign-in request is incomplete. Start again from the desktop app.');
+          'This desktop sign-in request is incomplete or unsupported. Start again from the requesting app.');
       return;
     }
     _updateState(() {

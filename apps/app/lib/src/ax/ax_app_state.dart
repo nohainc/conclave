@@ -37,6 +37,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   bool desktopAuthBusy = false;
   bool desktopAuthApproved = false;
   bool desktopAuthCancelled = false;
+  AxDesktopAuthIntentStatus? desktopAuthIntentStatus;
   String? _desktopAuthIntentId;
   Timer? _desktopAuthStatusTimer;
   bool _desktopAuthStatusRequestActive = false;
@@ -213,6 +214,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     store = AxStore(widget.dataSource);
     snapshot = AxSnapshot.empty();
     if (_desktopAuthIntentId != null) {
+      unawaited(_pollDesktopAuthStatus());
       _desktopAuthStatusTimer = Timer.periodic(
         const Duration(seconds: 2),
         (_) => unawaited(_pollDesktopAuthStatus()),

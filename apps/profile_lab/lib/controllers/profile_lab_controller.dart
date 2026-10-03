@@ -150,6 +150,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   String? authError;
   String cloudUrl = ProfileLabCloudConfig.buildDefaultOrigin;
   ProfileLabAuthClient? _activeAuthClient;
+  ProfileLabAuthIntent? _activeAuthIntent;
   bool _cancelSignInRequested = false;
 
   void setTab(LabTab tab) {

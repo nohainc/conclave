@@ -164,6 +164,57 @@ class AxWorkRequest {
   }
 }
 
+/// Public metadata used to show which desktop client requested browser approval.
+class AxDesktopAuthIntentStatus {
+  const AxDesktopAuthIntentStatus({
+    required this.status,
+    required this.clientName,
+    required this.audience,
+  });
+
+  final String status;
+  final String clientName;
+  final String audience;
+
+  /// Resolve the application name from the server-controlled audience. The
+  /// display label never trusts a caller-provided clientName.
+  String? get applicationName => switch (audience) {
+        'conclave.desktop.management' => 'Conclave Workspace',
+        'conclave.profile-lab.management' => 'Conclave Profile Lab',
+        _ => null,
+      };
+
+  bool get canApprove => status == 'pending' && applicationName != null;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AxDesktopAuthIntentStatus &&
+      other.status == status &&
+      other.clientName == clientName &&
+      other.audience == audience;
+
+  @override
+  int get hashCode => Object.hash(status, clientName, audience);
+
+  factory AxDesktopAuthIntentStatus.fromJson(Map<String, dynamic> json) {
+    final status = json['status'];
+    final clientName = json['clientName'];
+    final audience = json['audience'];
+    if (status is! String ||
+        !const {'pending', 'approved', 'claimed', 'denied', 'expired'}
+            .contains(status) ||
+        clientName is! String ||
+        audience is! String) {
+      throw const FormatException('Sign-in request metadata is malformed');
+    }
+    return AxDesktopAuthIntentStatus(
+      status: status,
+      clientName: clientName,
+      audience: audience,
+    );
+  }
+}
+
 abstract interface class AxDataSource {
   Future<AxSession> loadSession();
   Future<void> logout();
@@ -238,7 +289,8 @@ abstract interface class AxDataSource {
   Future<void> approveDesktopAuthIntent({
     required String intentId,
   });
-  Future<String> loadDesktopAuthIntentStatus({required String intentId});
+  Future<AxDesktopAuthIntentStatus> loadDesktopAuthIntentStatus(
+      {required String intentId});
   Future<void> denyDesktopAuthIntent({required String intentId});
   Future<List<AxWorkspace>> loadWorkspaces();
   Future<List<AxProject>> loadProjects({bool includeArchived = false});

@@ -200,8 +200,7 @@ mixin _AuthApi on _AxApiClientCore {
       body: jsonEncode(const <String, Object?>{}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      var message =
-          'Workspace sign-in approval failed (${response.statusCode})';
+      var message = 'Desktop sign-in approval failed (${response.statusCode})';
       try {
         final decoded = jsonDecode(response.body);
         if (decoded is Map && decoded['error'] is String) {
@@ -215,17 +214,17 @@ mixin _AuthApi on _AxApiClientCore {
   }
 
   @override
-  Future<String> loadDesktopAuthIntentStatus({
+  Future<AxDesktopAuthIntentStatus> loadDesktopAuthIntentStatus({
     required String intentId,
   }) async {
     final body = await _getJson(Uri.parse(
       '$baseUrl/desktop-auth/intents/${Uri.encodeComponent(intentId)}/browser-status',
     ));
-    final status = body['status'];
-    if (status is! String) {
-      throw const AxApiException('Sign-in request status is malformed');
+    try {
+      return AxDesktopAuthIntentStatus.fromJson(body);
+    } on FormatException {
+      throw const AxApiException('Sign-in request metadata is malformed');
     }
-    return status;
   }
 
   @override

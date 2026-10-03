@@ -271,6 +271,23 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ),
+                  if (c.authError != null && c.currentSession == null) ...[
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: 'Profile Lab sign-in failed: ${c.authError}',
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.error_outline,
+                              size: 16, color: Colors.redAccent),
+                          SizedBox(width: 4),
+                          Text('Sign-in failed',
+                              style: TextStyle(
+                                  fontSize: 10, color: Colors.redAccent)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

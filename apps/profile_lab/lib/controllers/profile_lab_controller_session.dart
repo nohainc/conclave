@@ -34,23 +34,52 @@ mixin _ProfileLabSessionOperations on _ProfileLabControllerState {
     final targetUrl = cloudUrl;
     final client = clientOverride ?? ProfileLabAuthClient(cloudUrl: targetUrl);
     _activeAuthClient = client;
+    ProfileLabAuthIntent? claimedIntent;
+    ProfileLabSession? claimedSession;
+    var sessionSaved = false;
 
     try {
       final intent = await client.createIntent();
+      claimedIntent = intent;
+      _activeAuthIntent = intent;
+      if (_cancelSignInRequested) {
+        throw StateError('Profile Lab sign-in was cancelled.');
+      }
       await client.openVerification(intent);
 
       final session = await client.waitForApprovalAndClaim(
         intent,
         isCancelled: () => _cancelSignInRequested,
       );
+      claimedSession = session;
+      if (_cancelSignInRequested) {
+        throw StateError('Profile Lab sign-in was cancelled.');
+      }
+      await client.validateSession(session);
 
       await _sessionStore.save(session, cloudOrigin: cloudUrl);
       currentSession = session;
+      sessionSaved = true;
     } catch (e) {
       if (!_cancelSignInRequested) {
         authError = e.toString();
       }
     } finally {
+      if (!sessionSaved && claimedSession != null) {
+        try {
+          await client.revokeSession(claimedSession);
+        } on Object {
+          // The uncommitted credential remains short-lived if revocation fails.
+        }
+      } else if (claimedIntent != null && claimedSession == null) {
+        try {
+          await client.cancelIntent(claimedIntent);
+        } on Object {
+          // Approval or expiry may have won the race with local cleanup.
+        }
+      }
+      _activeAuthIntent = null;
+      client.close();
       isSigningIn = false;
       _activeAuthClient = null;
       notifyListeners();
@@ -58,9 +87,25 @@ mixin _ProfileLabSessionOperations on _ProfileLabControllerState {
   }
 
   /// Cancels in-progress browser-assisted sign-in.
-  void cancelSignIn() {
+  Future<void> cancelSignIn() async {
     _cancelSignInRequested = true;
-    _activeAuthClient?.close();
+    final client = _activeAuthClient;
+    final intent = _activeAuthIntent;
+    if (client != null && intent == null) {
+      // Let intent creation finish so its poll token can cancel it remotely.
+      isSigningIn = false;
+      notifyListeners();
+      return;
+    }
+    if (client != null && intent != null) {
+      try {
+        await client.cancelIntent(intent);
+      } on Object {
+        // The browser may have just approved or the intent may have expired.
+      }
+    }
+    client?.close();
+    _activeAuthIntent = null;
     _activeAuthClient = null;
     isSigningIn = false;
     notifyListeners();

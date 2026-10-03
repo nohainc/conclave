@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:conclave_app/src/platform/platform_services.dart';
 import 'package:conclave_app/src/ax/ax_app.dart';
+import 'package:conclave_app/src/ax/ax_work_models.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -22,9 +23,26 @@ class _SignedInDesktopAuthFixture extends AxFixtureDataSource {
 
 class _CanceledDesktopAuthFixture extends _SignedInDesktopAuthFixture {
   @override
-  Future<String> loadDesktopAuthIntentStatus(
+  Future<AxDesktopAuthIntentStatus> loadDesktopAuthIntentStatus(
           {required String intentId}) async =>
-      'denied';
+      const AxDesktopAuthIntentStatus(
+        status: 'denied',
+        clientName: 'Conclave Workspace',
+        audience: 'conclave.desktop.management',
+      );
+}
+
+class _ProfileLabDesktopAuthFixture extends _SignedInDesktopAuthFixture {
+  const _ProfileLabDesktopAuthFixture();
+
+  @override
+  Future<AxDesktopAuthIntentStatus> loadDesktopAuthIntentStatus(
+          {required String intentId}) async =>
+      const AxDesktopAuthIntentStatus(
+        status: 'pending',
+        clientName: 'untrusted caller label',
+        audience: 'conclave.profile-lab.management',
+      );
 }
 
 void main() {
@@ -56,6 +74,33 @@ void main() {
     expect(
         find.text('You can close this page, window, or tab.'), findsOneWidget);
     expect(find.text('Close tab'), findsNothing);
+  });
+
+  testWidgets('approval names and returns to Profile Lab for its audience',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: const _ProfileLabDesktopAuthFixture(),
+        initialUri: Uri(
+          path: '/desktop-auth/approve',
+          queryParameters: {'intentId': 'intent-profile-lab'},
+        ),
+      ),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+
+    expect(find.text('Sign in to Conclave Profile Lab'), findsOneWidget);
+    expect(find.textContaining('Approve sign-in to Conclave Profile Lab'),
+        findsOneWidget);
+    expect(find.textContaining('Workspace'), findsNothing);
+
+    await tester.tap(find.text('Approve sign-in'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Return to Conclave Profile Lab to finish signing in.'),
+        findsOneWidget);
   });
 
   testWidgets('a remotely canceled intent explains how to close the page',

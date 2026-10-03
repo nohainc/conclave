@@ -11,16 +11,19 @@ extension _AxAppController on _AxAppStateMixin {
     }
     _desktopAuthStatusRequestActive = true;
     try {
-      final status = await widget.dataSource.loadDesktopAuthIntentStatus(
+      final intentStatus = await widget.dataSource.loadDesktopAuthIntentStatus(
         intentId: intentId,
       );
-      if (!mounted || status == 'pending') return;
-      if (!{'approved', 'claimed', 'denied', 'expired'}.contains(status)) {
+      if (!mounted) return;
+      if (intentStatus.status == 'pending') {
+        _updateState(() => desktopAuthIntentStatus = intentStatus);
         return;
       }
       browserNavigation.replace(Uri(path: '/'));
-      final approved = status == 'approved' || status == 'claimed';
+      final approved =
+          intentStatus.status == 'approved' || intentStatus.status == 'claimed';
       _updateState(() {
+        desktopAuthIntentStatus = intentStatus;
         desktopAuthApproved = approved;
         desktopAuthCancelled = !approved;
       });
