@@ -61,7 +61,7 @@ describe("Workspace Gateway active-schema regression", () => {
     vi.unstubAllGlobals();
   });
 
-  it("supports Gateway connect, heartbeat, and disconnect on migrations-v8 alone", async () => {
+  it("supports Gateway operations after ordered v8 migrations", async () => {
     const migrationDirectory = fileURLToPath(
       new URL("../migrations-v8/", import.meta.url),
     );

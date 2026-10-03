@@ -8,27 +8,20 @@ Engines, session state, logs, and Work Root in the local data directory.
 
 ## D1 schema lifecycle
 
-The v8 schema is not frozen while the v8 release declaration is withheld. Until
-the freeze is recorded in the release record, `0001_conclave_v8.sql` is the
-mutable canonical baseline. Every change to that file requires production to
-be re-bootstrapped from a newly created D1 database: create the database, apply
-the revised `0001`, carry forward production rows through a reviewed export and
-import, verify row counts and relationships, point the production binding at
-the new database, and complete production smoke checks before retiring the old
-database. Keep the old database available for rollback until acceptance passes.
+`0001_conclave_v8.sql` has been applied to production and is now immutable,
+even though the v8 release declaration remains withheld. Its contents must not
+be edited to repair production. All schema changes use new, ordered forward
+migrations (for example, `0002_<purpose>.sql`) and the normal production
+migration flow. The desktop auth audience correction is recorded in
+[`0002_desktop_auth_multi_audience.sql`](../../apps/cloud/migrations-v8/0002_desktop_auth_multi_audience.sql).
 
-Do not use `wrangler d1 migrations apply` to deploy an edit to an already
-applied `0001`. Wrangler tracks migration filenames; changing the contents of
-that applied file does not make it run again. The production deployment's
-migration step applies only pending migration entries and is not a baseline
-rebootstrap mechanism.
-
-Once schema freeze is recorded with the v8 release, it is permanent:
-`0001_conclave_v8.sql` and every later migration are immutable. All subsequent
-schema changes must be new, ordered forward migrations (for example,
-`0002_<purpose>.sql`) applied through the normal production migration flow.
-Never rewrite, remove, or reorder an applied migration, and never re-bootstrap
-production to deliver a post-freeze schema change.
+Wrangler records applied migrations by filename. Editing an applied migration
+does not make it run again, so never rewrite, remove, or reorder an applied
+migration. New development databases apply the complete ordered migration set.
+Production migrations must preserve existing records, verify migration
+invariants such as before/after row counts, and fail atomically if those checks
+do not pass. Never silently discard active human sessions during a schema
+change.
 
 Project-scoped records derive authorization from Project membership. Execution
 Workspaces are user-owned and connect to Projects only through explicit

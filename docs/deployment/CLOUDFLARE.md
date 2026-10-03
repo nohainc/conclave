@@ -179,8 +179,8 @@ cumulatively. The active runtime binding is `WorkspaceGateway`.
 
 ### D1 Database Provisioning
 New development databases use the clean v8 schema from
-`apps/cloud/migrations-v8`. Apply its single baseline when initializing the
-local database:
+`apps/cloud/migrations-v8`. Apply every ordered migration when initializing
+the local database:
 ```bash
 pnpm exec wrangler d1 migrations apply conclave-development --local --config apps/cloud/wrangler.jsonc
 ```
@@ -194,27 +194,20 @@ Worker deployment and production checks pass. The v8 migration is a clean
 baseline, not an in-place upgrade for a database initialized from an earlier
 migration chain. Do not apply it to the old database.
 
-The v8 release is not declared, so the production schema is still in its
-pre-freeze period. If `0001_conclave_v8.sql` changes, re-bootstrap production
-on a newly created D1 database from the revised baseline and carry forward
-production rows using a reviewed, private export/import. Verify row counts,
-relationships, bindings, and production smoke checks before retiring the old
-database. The production deployment workflow's `wrangler d1 migrations apply`
-step only applies migration filenames Wrangler has not recorded; it will not
-reapply an edited `0001` and must not be treated as this re-bootstrap.
-
-Record schema freeze in the v8 release record. From that point onward, freeze
-is permanent: preserve `0001` and every applied migration byte-for-byte and
-add each schema change as a new ordered forward migration. Use the production
-workflow to apply those pending migrations; do not re-bootstrap production
-for post-freeze schema changes. The complete lifecycle policy is in
+`0001_conclave_v8.sql` has already been applied in production and is immutable.
+Schema changes use new ordered forward migrations; the production deployment
+workflow applies pending migrations before deploying the Worker. Migration
+`0002_desktop_auth_multi_audience.sql` rebuilds the two desktop auth tables,
+preserves existing rows and active sessions, validates before/after row counts,
+and installs the multi-audience constraints. Never re-bootstrap production to
+deliver a schema change. The complete lifecycle policy is in
 [Persistence Contracts](../specifications/PERSISTENCE.md#d1-schema-lifecycle).
 
 The `workspace-gateway-schema-regression.test.ts` test constructs a clean
-SQLite database from the single SQL migration in `apps/cloud/migrations-v8`,
-checks critical runtime tables, and exercises the production Gateway
-connection, heartbeat, and disconnect statements. The clean schema must
-support every SQL statement used by current Cloud runtime code.
+SQLite database by applying the ordered SQL migrations in
+`apps/cloud/migrations-v8`, checks critical runtime tables, and exercises the
+production Gateway connection, heartbeat, and disconnect statements. The clean
+schema must support every SQL statement used by current Cloud runtime code.
 
 The Workspace Gateway Durable Object is authoritative for live connection
 state. Workspace online/offline fields and session history are persisted

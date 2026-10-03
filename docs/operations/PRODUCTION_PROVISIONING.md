@@ -27,26 +27,15 @@ rows was imported and checked against the source counts. The previous
 `conclave-production` database remains available as a rollback copy; do not
 delete it until the v8 app has been deployed and its production checks pass.
 
-### Before v8 schema freeze
+### Forward migrations
 
-The v8 release is still withheld, so `0001_conclave_v8.sql` remains the
-pre-freeze baseline. Whenever it changes, do not deploy the edit through the
-normal migration step: Wrangler records applied migrations by filename and
-will not notice changed SQL under the existing `0001` name. Re-bootstrap
-production on a newly created D1 database instead:
-
-1. Take and protect a fresh export of production data outside the repository.
-2. Create a new D1 database and apply the revised `0001` to that empty database.
-3. Import/carry forward production data with any required reviewed mapping.
-4. Verify aggregate row counts, important parent-child relationships, the
-   production binding, and the production acceptance smoke.
-5. Cut production over to the new database and retain the prior database until
-   the deployment and acceptance checks pass.
-
-Do not edit `0001` in place and continue with the normal deployment workflow;
-that workflow cannot re-bootstrap it. Follow the permanent forward-only policy
-in [Persistence Contracts](../specifications/PERSISTENCE.md#d1-schema-lifecycle)
-once the v8 release record declares schema freeze.
+`0001_conclave_v8.sql` has already been applied to production and is immutable.
+Do not edit or re-bootstrap it to deliver schema changes. Add an ordered
+forward migration and apply it through the production deployment workflow.
+Migration `0002_desktop_auth_multi_audience.sql` rebuilds the desktop auth
+tables, preserves their rows and active sessions, and checks before/after row
+counts. Follow the forward-only policy in
+[Persistence Contracts](../specifications/PERSISTENCE.md#d1-schema-lifecycle).
 
 ## Required deployment order
 
