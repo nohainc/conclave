@@ -1,9 +1,15 @@
 import { readFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import {
   productionSmokeSchemaIssues,
   requiredProductionSmokeColumns,
+  requiredProductionSmokeTableDefinitions,
 } from "./production-workspace-gateway-smoke-schema.mjs";
+
+const canonicalDefinitions = Object.fromEntries(
+  Object.entries(requiredProductionSmokeTableDefinitions),
+);
 
 describe("production Workspace Gateway smoke schema gate", () => {
   it("accepts the required production schema contract", () => {
@@ -12,7 +18,9 @@ describe("production Workspace Gateway smoke schema gate", () => {
       Object.entries(requiredProductionSmokeColumns),
     );
 
-    expect(productionSmokeSchemaIssues(tables, columns)).toEqual([]);
+    expect(
+      productionSmokeSchemaIssues(tables, columns, canonicalDefinitions),
+    ).toEqual([]);
   });
 
   it("tracks the canonical v8 migration columns", () => {
@@ -53,9 +61,82 @@ describe("production Workspace Gateway smoke schema gate", () => {
       "credential_key_ref",
     ];
 
-    expect(productionSmokeSchemaIssues(tables, columns)).toEqual([
+    expect(
+      productionSmokeSchemaIssues(tables, columns, canonicalDefinitions),
+    ).toEqual([
       "workspace_runtime_identities has unexpected columns: credential_key_ref",
       "desktop_auth_intents is missing columns: audience",
+    ]);
+  });
+
+  it("matches sqlite_master definitions after the ordered migrations", () => {
+    const database = new DatabaseSync(":memory:");
+    database.exec(
+      readFileSync(
+        new URL(
+          "../apps/cloud/migrations-v8/0001_conclave_v8.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    database.exec(
+      readFileSync(
+        new URL(
+          "../apps/cloud/migrations-v8/0002_desktop_auth_multi_audience.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    const definitions = Object.fromEntries(
+      database
+        .prepare(
+          "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?, ?)",
+        )
+        .all(
+          "execution_workspaces",
+          "workspace_runtime_identities",
+          "desktop_auth_intents",
+          "desktop_human_sessions",
+        )
+        .map((row) => [row.name, row.sql]),
+    );
+
+    expect(
+      productionSmokeSchemaIssues(
+        Object.keys(requiredProductionSmokeColumns),
+        requiredProductionSmokeColumns,
+        definitions,
+      ),
+    ).toEqual([]);
+    database.close();
+  });
+
+  it("rejects legacy single-audience constraints and table contract drift", () => {
+    const tables = Object.keys(requiredProductionSmokeColumns);
+    const columns = Object.fromEntries(
+      Object.entries(requiredProductionSmokeColumns),
+    );
+    const definitions = { ...canonicalDefinitions };
+    definitions.desktop_auth_intents = definitions.desktop_auth_intents.replace(
+      "'conclave.profile-lab.management'",
+      "'conclave.workspace.legacy'",
+    );
+    definitions.desktop_human_sessions =
+      definitions.desktop_human_sessions.replace(
+        "'conclave.profile-lab.management'",
+        "'conclave.workspace.legacy'",
+      );
+    definitions.execution_workspaces = definitions.execution_workspaces.replace(
+      "'draining'",
+      "'suspended'",
+    );
+
+    expect(productionSmokeSchemaIssues(tables, columns, definitions)).toEqual([
+      "Production D1 execution_workspaces table definition differs from the v8 contract. Apply a forward migration before deployment.",
+      "Production D1 desktop_auth_intents has legacy single-audience constraint. Apply pending migration before deployment.",
+      "Production D1 desktop_human_sessions has legacy single-audience constraint. Apply pending migration before deployment.",
     ]);
   });
 

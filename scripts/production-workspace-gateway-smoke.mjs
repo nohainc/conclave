@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import {
   productionSmokeSchemaIssues,
   requiredProductionSmokeColumns,
+  requiredProductionSmokeTableDefinitions,
 } from "./production-workspace-gateway-smoke-schema.mjs";
 
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -78,9 +79,13 @@ function rowsFromD1(result) {
 }
 
 function verifyProductionSchema() {
-  const tableNames = rowsFromD1(
-    executeD1("SELECT name FROM sqlite_master WHERE type = 'table'"),
-  ).map((row) => row.name);
+  const tableRows = rowsFromD1(
+    executeD1("SELECT name, sql FROM sqlite_master WHERE type = 'table'"),
+  );
+  const tableNames = tableRows.map((row) => row.name);
+  const definitionsByTable = Object.fromEntries(
+    tableRows.map((row) => [row.name, row.sql]),
+  );
   const columnsByTable = Object.fromEntries(
     Object.keys(requiredProductionSmokeColumns).map((table) => [
       table,
@@ -89,14 +94,18 @@ function verifyProductionSchema() {
       ),
     ]),
   );
-  const issues = productionSmokeSchemaIssues(tableNames, columnsByTable);
+  const issues = productionSmokeSchemaIssues(
+    tableNames,
+    columnsByTable,
+    definitionsByTable,
+  );
   if (issues.length > 0) {
     throw new Error(
       `Production D1 schema preflight failed: ${issues.join("; ")}`,
     );
   }
   console.log(
-    `PASS production D1 schema preflight: ${Object.keys(requiredProductionSmokeColumns).length} required tables match the Gateway/auth contract`,
+    `PASS production D1 schema preflight: ${Object.keys(requiredProductionSmokeColumns).length} required tables have the expected columns and ${Object.keys(requiredProductionSmokeTableDefinitions).length} critical table definitions match the Gateway/auth contract`,
   );
 }
 

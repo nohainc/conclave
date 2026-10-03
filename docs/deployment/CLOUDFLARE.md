@@ -141,9 +141,12 @@ deployment.
 After applying production D1 migrations and before deploying
 `app.conclaveax.com`, the workflow runs
 `scripts/production-workspace-gateway-smoke.mjs --schema-only`. It compares the
-production table and column contract with the smoke requirements and fails the
-workflow on a missing, unexpected, or legacy column. This check only reads
-schema metadata; it never repairs table definitions.
+stored `CREATE TABLE` definitions and columns for the Workspace and desktop
+auth tables with the versioned migration contract. It explicitly requires
+both supported audiences in both desktop auth constraints and reports a legacy
+single-audience constraint with an instruction to apply pending migrations.
+The workflow fails on any missing, unexpected, or drifted contract. This check
+only reads schema metadata; it never repairs table definitions.
 
 After deploying `app.conclaveax.com`, the same script runs as a production
 acceptance gate. It verifies Profile Lab auth intent creation and cancellation,
