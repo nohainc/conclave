@@ -443,7 +443,30 @@ async function main() {
   const authIntentColumns = rowsFromD1(
     executeD1("PRAGMA table_info(desktop_auth_intents)"),
   );
-  if (!authIntentColumns.some((col) => col.name === "audience")) {
+  if (authIntentColumns.some((col) => col.name === "user_code_hash")) {
+    console.log(
+      "Aligning desktop_auth_intents to canonical v8 baseline schema...",
+    );
+    executeD1(`
+      DROP TABLE IF EXISTS desktop_auth_intents;
+      CREATE TABLE desktop_auth_intents (
+        id TEXT PRIMARY KEY,
+        poll_token_hash TEXT NOT NULL,
+        client_name TEXT NOT NULL,
+        audience TEXT NOT NULL DEFAULT 'conclave.desktop.management' CHECK (audience IN ('conclave.desktop.management', 'conclave.profile-lab.management')),
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        approved_at TEXT,
+        approved_user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+        claimed_at TEXT,
+        claimed_session_id TEXT,
+        denied_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_desktop_auth_intents_expiry
+        ON desktop_auth_intents(expires_at)
+        WHERE claimed_at IS NULL AND denied_at IS NULL;
+    `);
+  } else if (!authIntentColumns.some((col) => col.name === "audience")) {
     console.log(
       "Adding missing audience column to production desktop_auth_intents...",
     );
