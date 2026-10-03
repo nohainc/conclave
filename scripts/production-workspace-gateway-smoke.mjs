@@ -312,13 +312,27 @@ async function createDisposableHumanSession() {
 
 function removeDisposableRuntime() {
   executeD1(
-    `DELETE FROM execution_workspaces
-      WHERE owner_user_id = ${sqlString(ownerId)}
-        AND id IN (
-          SELECT workspace_id FROM workspace_runtime_identities
-          WHERE installation_id = ${sqlString(installationId)}
-        );
-     DELETE FROM desktop_human_sessions WHERE id = ${sqlString(humanSessionId)};
+    `DELETE FROM workspace_sessions
+      WHERE workspace_id IN (
+        SELECT workspace_id FROM workspace_runtime_identities
+        WHERE installation_id = ${sqlString(installationId)}
+      ) OR workspace_id IN (
+        SELECT id FROM execution_workspaces WHERE owner_user_id = ${sqlString(ownerId)}
+      );
+     DELETE FROM workspace_runtime_facts
+      WHERE workspace_id IN (
+        SELECT workspace_id FROM workspace_runtime_identities
+        WHERE installation_id = ${sqlString(installationId)}
+      ) OR workspace_id IN (
+        SELECT id FROM execution_workspaces WHERE owner_user_id = ${sqlString(ownerId)}
+      );
+     DELETE FROM workspace_runtime_identities
+      WHERE installation_id = ${sqlString(installationId)}
+         OR workspace_id IN (
+           SELECT id FROM execution_workspaces WHERE owner_user_id = ${sqlString(ownerId)}
+         );
+     DELETE FROM execution_workspaces WHERE owner_user_id = ${sqlString(ownerId)};
+     DELETE FROM desktop_human_sessions WHERE id = ${sqlString(humanSessionId)} OR user_id = ${sqlString(ownerId)};
      DELETE FROM users WHERE id = ${sqlString(ownerId)};`,
   );
 }
@@ -360,8 +374,9 @@ async function registerDisposableWorkspace() {
     typeof result.runtimeCredential !== "string" ||
     result.ownerUserId !== ownerId
   ) {
+    const details = result ? JSON.stringify(result) : "non-JSON response";
     throw new Error(
-      `Production Workspace registration failed with HTTP ${response.status}`,
+      `Production Workspace registration failed with HTTP ${response.status}: ${details}`,
     );
   }
   workspaceId = result.workspaceId;
