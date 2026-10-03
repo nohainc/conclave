@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
+
 /// Operating-system services used by the Workspace.
 ///
 /// Protocol, repository, and worker code should depend on this seam instead
 /// of branching on the workspace operating system themselves.
-abstract interface class PlatformRuntime {
+abstract interface class PlatformRuntime implements PlatformProcessSupervisor {
   String get operatingSystem;
   bool get isWindows;
   String get homeDirectory;
@@ -14,6 +16,7 @@ abstract interface class PlatformRuntime {
   List<StreamSubscription<ProcessSignal>> watchTermination(
     void Function() onTermination,
   );
+  @override
   Future<Process> startIsolatedProcess(
     String executable,
     List<String> arguments, {
@@ -21,6 +24,7 @@ abstract interface class PlatformRuntime {
     Map<String, String>? environment,
     bool includeParentEnvironment = true,
   });
+  @override
   Future<void> terminateProcessTree(Process process, {required bool force});
 }
 

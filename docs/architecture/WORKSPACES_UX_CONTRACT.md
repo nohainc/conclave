@@ -52,13 +52,19 @@ The Cloud Worker API is versionless. `GET /api/workers` returns safe inventory; 
 
 ## Workstream execution configuration
 
-Workstream configuration is Cloud-owned and constrained by the [Work v1 Contract](../specifications/WORK_V1_CONTRACT.md). A binding names a logical Worker ID; it does not contain an Engine version, Profile release, provider executable path, or secret.
+Workstream configuration is Cloud-owned and constrained by the [Work v1 Contract](../specifications/WORK_V1_CONTRACT.md). A binding names a local Worker ID. It may also retain a display-name snapshot for explaining a binding whose Worker is no longer available; that snapshot is presentation-only and never affects authorization or scheduling. It does not contain an Engine version, Profile release, provider executable path, or secret.
 
 ~~~json
 {
   "defaultWorkflowId": "full_cycle",
   "bindings": {
-    "direct": { "workerId": "stable-worker-id" },
+    "direct": {
+      "workerId": "stable-worker-id",
+      "workerLabel": {
+        "displayName": "Claude",
+        "workspaceName": "Vitalii's MacBook Pro"
+      }
+    },
     "implement": { "workerId": "stable-worker-id" },
     "verify": {
       "workerId": "stable-worker-id",

@@ -17,6 +17,9 @@ function readRequired(file) {
 
 const assignment = readRequired("apps/workspace/lib/worker_executor.dart");
 const runtime = readRequired("apps/workspace/lib/workspace_runtime.dart");
+const catalogCoordinator = readRequired(
+  "apps/workspace/lib/worker_catalog_coordinator.dart",
+);
 const workspaceConfig = readRequired("apps/workspace/lib/workspace.dart");
 const workspaceRegistration = readRequired(
   "apps/workspace/lib/workspace_configuration.dart",
@@ -36,6 +39,9 @@ const siteProductionDeploy = readRequired(
 );
 const workspaceRelease = readRequired(
   ".github/workflows/release-workspace-macos.yml",
+);
+const profileLabRelease = readRequired(
+  ".github/workflows/release-profile-lab-macos.yml",
 );
 const cloudPackage = JSON.parse(
   readRequired("apps/cloud/package.json") || "{}",
@@ -168,6 +174,16 @@ for (const root of sourceRoots) {
   for (const path of sourceFiles(root)) {
     const source = readFileSync(path, "utf8");
     for (const [label, pattern] of forbiddenArchitecture) {
+      if (
+        (label === "Profile Lab import in Workspace or AX" ||
+          label === "Profile Lab draft class under Workspace" ||
+          label === "desktop application private key signing material") &&
+        (path.startsWith("apps/cloud") ||
+          path.startsWith("packages/security") ||
+          path.startsWith("apps/profile_lab"))
+      ) {
+        continue;
+      }
       if (pattern.test(source)) {
         failures.push(
           `${path} retains retired architecture reference ${label}.`,
@@ -180,14 +196,15 @@ for (const root of sourceRoots) {
 const requiredAssignment = [
   ["logical Worker resolution", /resolveLogicalWorker/],
   ["Tool Profile assignment executor", /executeWithToolProfile/],
-  [
-    "required Profile resolution",
-    /ToolProfileResolver\(toolProfileReleaseStore\)/,
-  ],
+  ["required Profile resolution", /ToolProfileResolver\(/],
   ["CLI Worker Engine execution", /supervisor\.execute\(/],
 ];
 for (const [label, pattern] of requiredAssignment) {
-  if (!pattern.test(assignment) && !pattern.test(runtime)) {
+  if (
+    !pattern.test(assignment) &&
+    !pattern.test(runtime) &&
+    !pattern.test(catalogCoordinator)
+  ) {
     failures.push(`Workspace assignment path is missing ${label}.`);
   }
 }
@@ -293,6 +310,18 @@ if (
 ) {
   failures.push(
     "Workspace releases must require successful main-branch CI for the exact release revision.",
+  );
+}
+if (
+  !profileLabRelease.includes("needs: ci-gate") ||
+  !profileLabRelease.includes("environment: profile-lab-release") ||
+  !profileLabRelease.includes("run: pnpm check") ||
+  !profileLabRelease.includes("bash scripts/test-profile-lab-macos.sh") ||
+  !profileLabRelease.includes("bash scripts/build-profile-lab-macos.sh") ||
+  !profileLabRelease.includes("actions/upload-artifact@v4")
+) {
+  failures.push(
+    "Profile Lab releases must require CI gate, environment authorization, pnpm check, Profile Lab tests, build, and internal artifact upload.",
   );
 }
 if (
@@ -405,6 +434,118 @@ for (const file of [
 ]) {
   if (existsSync(file))
     failures.push(`Retired package or deployment file remains: ${file}.`);
+}
+
+// Phase 32 — Explicit Architecture Guards
+
+// 1. Workspace and AX cannot import Profile Lab, admin APIs, or draft concepts
+const desktopAppLibRoots = ["apps/workspace/lib", "apps/app/lib"].filter(
+  existsSync,
+);
+const profileLabOrDraftPattern =
+  /conclave_profile_lab|profile_lab|DraftProfileStore|LocalDraftProfileCandidate|DraftToolProfile|updateDraftToolProfilePayload|publishDraftToolProfileRelease|\/api\/admin\/workers\//;
+
+for (const root of desktopAppLibRoots) {
+  for (const path of sourceFiles(root)) {
+    const source = readFileSync(path, "utf8");
+    if (profileLabOrDraftPattern.test(source)) {
+      failures.push(
+        `${path} improperly imports or references Profile Lab, admin APIs, or draft concepts.`,
+      );
+    }
+  }
+}
+
+const workspacePubspecRaw = readRequired("apps/workspace/pubspec.yaml");
+const appPubspecRaw = readRequired("apps/app/pubspec.yaml");
+for (const [name, pubspec] of [
+  ["Workspace", workspacePubspecRaw],
+  ["AX App", appPubspecRaw],
+]) {
+  const dependenciesSection = pubspec.split("dev_dependencies:")[0] ?? "";
+  if (dependenciesSection.includes("conclave_profile_lab")) {
+    failures.push(
+      `${name} pubspec.yaml includes Profile Lab as a direct runtime dependency.`,
+    );
+  }
+}
+
+// 2. Prohibit Profile Lab draft classes under apps/workspace
+const workspaceLibFiles = Array.from(sourceFiles("apps/workspace/lib"));
+for (const path of workspaceLibFiles) {
+  const source = readFileSync(path, "utf8");
+  if (
+    /\bclass\s+(?:DraftProfileStore|LocalDraftProfileCandidate|DraftToolProfile|ProfileLabController)\b/.test(
+      source,
+    )
+  ) {
+    failures.push(
+      `${path} declares a Profile Lab draft class under apps/workspace.`,
+    );
+  }
+}
+
+// 3. Prohibit signing private-key material anywhere under desktop apps
+const allDesktopLibRoots = [
+  "apps/workspace/lib",
+  "apps/app/lib",
+  "apps/profile_lab/lib",
+].filter(existsSync);
+const privateKeySigningPattern =
+  /CONCLAVE_WORKSPACE_ED25519_SEED|Ed25519PrivateKey|createPrivateKey\s*\(/;
+
+for (const root of allDesktopLibRoots) {
+  for (const path of sourceFiles(root)) {
+    const source = readFileSync(path, "utf8");
+    if (privateKeySigningPattern.test(source)) {
+      failures.push(
+        `${path} contains signing private-key material under a desktop application library.`,
+      );
+    }
+  }
+}
+
+// 4. Prevent direct D1 access from Profile Lab
+const profileLabLibFiles = Array.from(sourceFiles("apps/profile_lab/lib"));
+const directD1Pattern =
+  /\bD1Database\b|\bCONCLAVE_DB\b|\bSELECT\s+[a-zA-Z0-9_*\s,.()`"]+\s+FROM\s+[a-zA-Z0-9_`"]+|\bINSERT\s+INTO\s+[a-zA-Z0-9_`"]+|\bUPDATE\s+[a-zA-Z0-9_`"]+\s+SET\b|\bDELETE\s+FROM\s+[a-zA-Z0-9_`"]+/;
+
+for (const path of profileLabLibFiles) {
+  const source = readFileSync(path, "utf8");
+  if (directD1Pattern.test(source)) {
+    failures.push(
+      `${path} contains direct Cloud D1 database access or raw SQL inside Profile Lab.`,
+    );
+  }
+}
+
+// 5. Prevent unsigned/local Draft objects from satisfying the signed Profile admission type
+const profileReleaseSource = readRequired(
+  "packages/tool_profile_v1/lib/src/tool_profile_release.dart",
+);
+if (
+  /class\s+LocalDraftProfileCandidate\s+implements\s+ToolProfileReleaseAdmission\b/.test(
+    profileReleaseSource,
+  ) ||
+  !/class\s+LocalDraftProfileCandidate\s+implements\s+ToolProfileCandidate\b/.test(
+    profileReleaseSource,
+  )
+) {
+  failures.push(
+    "LocalDraftProfileCandidate must not implement ToolProfileReleaseAdmission.",
+  );
+}
+if (
+  !/class\s+ToolProfileReleaseAdmission\b[\s\S]*?bool\s+get\s+isSigned\s*=>\s*true;/.test(
+    profileReleaseSource,
+  ) ||
+  !/class\s+LocalDraftProfileCandidate\b[\s\S]*?bool\s+get\s+isSigned\s*=>\s*false;/.test(
+    profileReleaseSource,
+  )
+) {
+  failures.push(
+    "Signed Profile admission type must require isSigned => true, and draft candidates must specify isSigned => false.",
+  );
 }
 
 if (failures.length > 0) {

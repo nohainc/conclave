@@ -25,8 +25,7 @@ class WorkspaceDashboard extends StatefulWidget {
     this.workerRevision = 0,
     this.localWorkerRegistry,
     this.credentialStore = const PlatformSecureCredentialStore(),
-    this.toolProfileReleaseStore,
-    this.toolProfileCatalog,
+    this.workerCatalogCoordinator,
     this.signedIn = false,
     super.key,
   });
@@ -55,8 +54,7 @@ class WorkspaceDashboard extends StatefulWidget {
   final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
   final int workerRevision;
   final SecureCredentialStore credentialStore;
-  final ToolProfileReleaseStore? toolProfileReleaseStore;
-  final ToolProfileCatalogClient? toolProfileCatalog;
+  final WorkerCatalogCoordinator? workerCatalogCoordinator;
   final bool signedIn;
 
   @override
@@ -321,8 +319,8 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                   _WorkersTab(
                     key: ValueKey(widget.workerRevision),
                     registry: widget.localWorkerRegistry,
-                    toolProfileCatalog: widget.toolProfileCatalog,
-                    toolProfileReleaseStore: widget.toolProfileReleaseStore,
+                    catalogCoordinator: widget.workerCatalogCoordinator,
+                    isSelected: _selectedSurface == WorkspaceSurface.workers,
                     onRollbackToolProfile: widget.onRollbackToolProfile,
                     onReadinessCheck: widget.onReadinessCheck,
                   ),

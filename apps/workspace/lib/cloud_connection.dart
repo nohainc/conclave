@@ -166,6 +166,7 @@ class WorkspaceCloudConnection {
     this.assignmentCancellationHandler,
     this.assignmentJournal,
     this.workerInventoryProvider,
+    this.onSessionReady,
     this.workspaceUpdateAvailableHandler,
     this.heartbeat = const Duration(seconds: 15),
     this.reconnectBaseDelay = const Duration(milliseconds: 10),
@@ -198,6 +199,7 @@ class WorkspaceCloudConnection {
   final WorkspaceAssignmentCancellationHandler? assignmentCancellationHandler;
   final AssignmentJournal? assignmentJournal;
   final Future<List<Map<String, Object?>>> Function()? workerInventoryProvider;
+  final Future<void> Function()? onSessionReady;
   final WorkspaceUpdateAvailableHandler? workspaceUpdateAvailableHandler;
   final Duration heartbeat;
   final Duration reconnectBaseDelay;
@@ -242,6 +244,7 @@ class WorkspaceCloudConnection {
   bool _workerInventorySent = false;
   bool _syncResultReceived = false;
   bool _syncReconciliationComplete = false;
+  String? _readyCallbackSessionId;
   String? _helloMessageId;
   String? _syncRequestMessageId;
 
@@ -483,6 +486,7 @@ class WorkspaceCloudConnection {
     _workerInventorySent = workerInventoryProvider == null;
     _syncResultReceived = false;
     _syncReconciliationComplete = false;
+    _readyCallbackSessionId = null;
     late final WorkspaceTransport socket;
     var selectedWebSocket = false;
     try {
@@ -794,6 +798,14 @@ class WorkspaceCloudConnection {
     lastReadyAt = DateTime.now().toUtc();
     lastConnectionError = null;
     lastHttpStatusCode = null;
+    final readyCallback = onSessionReady;
+    final readySessionId = sessionId;
+    if (readyCallback != null &&
+        readySessionId != null &&
+        readySessionId != _readyCallbackSessionId) {
+      _readyCallbackSessionId = readySessionId;
+      unawaited(readyCallback().catchError((_) {}));
+    }
     if (_pendingAssignmentsDuringSync.isNotEmpty) {
       final pending = List<Map<String, dynamic>>.from(
         _pendingAssignmentsDuringSync,

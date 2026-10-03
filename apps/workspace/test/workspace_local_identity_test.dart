@@ -19,13 +19,14 @@ void main() {
       workspaceId: localId,
     );
     final worker = await registry.create(
-      catalogEntry: LogicalWorkerCatalogEntry(
+      catalogEntry: WorkerDescriptor(
         workerTypeId: 'chatgpt',
         displayName: 'ChatGPT',
         description: '',
         profileDefinitionId: 'chatgpt-codex',
         providerToolName: 'codex',
         engineFamily: 'cli',
+        visibilityState: 'visible',
         releaseStage: 'testing',
         capabilities: const ['text'],
         sortOrder: 0,

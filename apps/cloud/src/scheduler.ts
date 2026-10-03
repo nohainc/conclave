@@ -230,6 +230,11 @@ export async function selectProjectExecutionTarget(
             ew.name AS workspace_name, ew.owner_user_id, ew.status AS workspace_status,
             wri.id AS runtime_identity_id,
             i.worker_id, i.worker_type_id,
+            catalog.lifecycle_state AS worker_catalog_lifecycle_state,
+            catalog.visibility_state AS worker_catalog_visibility_state,
+            catalog.release_stage AS worker_catalog_release_stage,
+            profile_channel.channel AS workspace_tool_profile_channel,
+            definition.profile_definition_id AS current_profile_definition_id,
             i.engine_version AS engine_version,
             i.profile_definition_id, i.profile_release_version,
             i.provider_tool_name,
@@ -251,6 +256,21 @@ export async function selectProjectExecutionTarget(
      LEFT JOIN work_requests wr ON wr.id = ?5 AND wr.workstream_id = ?4
      JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
      JOIN workspace_worker_inventory i ON i.workspace_id = ew.id
+     LEFT JOIN workspace_tool_profile_channels profile_channel
+       ON profile_channel.workspace_id = ew.id
+     JOIN worker_catalog catalog
+       ON catalog.worker_type_id = i.worker_type_id
+      AND catalog.lifecycle_state = 'active'
+      AND catalog.visibility_state = 'visible'
+      AND (COALESCE(profile_channel.channel, 'stable') = 'testing'
+           OR (COALESCE(profile_channel.channel, 'stable') = 'beta'
+               AND catalog.release_stage IN ('beta', 'stable'))
+           OR (COALESCE(profile_channel.channel, 'stable') = 'stable'
+               AND catalog.release_stage = 'stable'))
+     JOIN tool_profile_definitions definition
+       ON definition.worker_type_id = catalog.worker_type_id
+      AND definition.profile_definition_id = i.profile_definition_id
+      AND definition.lifecycle_state = 'active'
      JOIN worker_scheduling vs ON vs.worker_id = i.worker_id
      WHERE g.project_id = ?1 AND g.status = 'active'
        AND (g.expires_at IS NULL OR g.expires_at > ?3)
@@ -378,6 +398,31 @@ export async function selectProjectExecutionTarget(
 
     const reject = (reason: string) =>
       rejected.push({ workspaceId, workerId, reason });
+    const catalogReleaseStage = String(row.worker_catalog_release_stage);
+    const workspaceProfileChannel = String(
+      row.workspace_tool_profile_channel ?? "stable",
+    );
+    const catalogStageEligible =
+      workspaceProfileChannel === "testing" ||
+      (workspaceProfileChannel === "beta" &&
+        ["beta", "stable"].includes(catalogReleaseStage)) ||
+      (workspaceProfileChannel === "stable" &&
+        catalogReleaseStage === "stable");
+    if (
+      row.worker_catalog_lifecycle_state !== "active" ||
+      row.worker_catalog_visibility_state !== "visible" ||
+      !catalogStageEligible
+    ) {
+      reject("worker_catalog_unavailable");
+      continue;
+    }
+    if (
+      typeof row.current_profile_definition_id !== "string" ||
+      row.current_profile_definition_id !== row.profile_definition_id
+    ) {
+      reject("worker_profile_definition_unavailable");
+      continue;
+    }
     if (!grantPolicyValid) {
       reject("workspace_grant_policy_invalid");
       continue;

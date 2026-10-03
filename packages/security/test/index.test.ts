@@ -91,6 +91,33 @@ describe("current authorization model", () => {
     expect(() => authorizeProfileAdmin(context, ["another-user"])).toThrow(
       AuthorizationError,
     );
+
+    // Desktop clients must possess conclave.profile-lab.management audience
+    const profileLabDesktopContext: SecurityContext = {
+      ...context,
+      clientType: "desktop",
+      audience: "conclave.profile-lab.management",
+    };
+    expect(() =>
+      authorizeProfileAdmin(profileLabDesktopContext, ["user-1"]),
+    ).not.toThrow();
+
+    const workspaceDesktopContext: SecurityContext = {
+      ...context,
+      clientType: "desktop",
+      audience: "conclave.desktop.management",
+    };
+    expect(() =>
+      authorizeProfileAdmin(workspaceDesktopContext, ["user-1"]),
+    ).toThrow(AuthorizationError);
+
+    const unspecifiedDesktopContext: SecurityContext = {
+      ...context,
+      clientType: "desktop",
+    };
+    expect(() =>
+      authorizeProfileAdmin(unspecifiedDesktopContext, ["user-1"]),
+    ).toThrow(AuthorizationError);
   });
 
   it("resolves human identity and Project roles without legacy aliases", async () => {
@@ -123,9 +150,25 @@ describe("current authorization model", () => {
       sessionId: "session-1",
     });
     expect(resolved.projectRoles).toEqual({ "project-1": "owner" });
+    expect(resolved.clientType).toBe("web");
+    expect(resolved.audience).toBeUndefined();
     expect(resolved).not.toHaveProperty("authorizationModel");
     expect(resolved).not.toHaveProperty("workspaceRole");
     expect(resolved).not.toHaveProperty("organizationId");
+
+    const desktopResolved = await resolveProjectSecurityContextFromIdentity(
+      db,
+      {
+        userId: "user-1",
+        email: "one@example.test",
+        name: "User One",
+        sessionId: "session-1",
+      },
+      "desktop",
+      "conclave.profile-lab.management",
+    );
+    expect(desktopResolved.clientType).toBe("desktop");
+    expect(desktopResolved.audience).toBe("conclave.profile-lab.management");
   });
 });
 

@@ -20,6 +20,7 @@ import {
   handleRegisterWorkspaceFromDesktop,
   handleRevokeDesktopHumanSession,
   handleRotateDesktopHumanSession,
+  authorizeToolProfileAdmin,
 } from "../src/routes/handlers.js";
 
 const migrationsDirectory = fileURLToPath(
@@ -1205,5 +1206,188 @@ describe("desktop human authentication", () => {
       .prepare("SELECT name FROM execution_workspaces LIMIT 1")
       .get() as { name: string };
     expect(workspaceRecord.name).toBe("Updated Workspace Name");
+  });
+
+  it("authenticates Profile Lab with dedicated audience and enforces mutual exclusion with Workspace operations", async () => {
+    const { env } = await setup();
+    // Configure Profile admin user
+    (env as Record<string, unknown>).CONCLAVE_PROFILE_ADMIN_USER_IDS =
+      "human-1";
+
+    // 1. Create Profile Lab auth intent
+    const createRes = await handleCreateDesktopAuthIntent(
+      new Request("https://app.conclave.test/api/desktop-auth/intents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          clientName: "Conclave Profile Lab",
+          contractVersion: "1.1",
+          audience: "conclave.profile-lab.management",
+        }),
+      }),
+      env,
+    );
+    expect(createRes.status).toBe(201);
+    const intentData = (await createRes.json()) as {
+      intentId: string;
+      pollToken: string;
+      verificationUrl: string;
+      audience: string;
+    };
+    expect(intentData.audience).toBe("conclave.profile-lab.management");
+
+    // 2. Check browser status reflects the Profile Lab audience
+    const browserStatusRes = await handleDesktopAuthIntentBrowserStatus(
+      new Request(
+        `https://app.conclave.test/api/desktop-auth/intents/${intentData.intentId}/browser-status`,
+      ),
+      env,
+      intentData.intentId,
+    );
+    expect(browserStatusRes.status).toBe(200);
+    const browserStatus = (await browserStatusRes.json()) as {
+      audience: string;
+      clientName: string;
+      status: string;
+    };
+    expect(browserStatus.audience).toBe("conclave.profile-lab.management");
+    expect(browserStatus.clientName).toBe("Conclave Profile Lab");
+    expect(browserStatus.status).toBe("pending");
+
+    // 3. Approve intent
+    const approveRes = await handleApproveDesktopAuthIntent(
+      new Request(
+        `https://app.conclave.test/api/desktop-auth/intents/${intentData.intentId}/approve`,
+        { method: "POST" },
+      ),
+      env,
+      intentData.intentId,
+    );
+    expect(approveRes.status).toBe(200);
+
+    // 4. Claim intent and verify session audience
+    const claimRes = await handleClaimDesktopAuthIntent(
+      new Request(
+        `https://app.conclave.test/api/desktop-auth/intents/${intentData.intentId}/claim`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ pollToken: intentData.pollToken }),
+        },
+      ),
+      env,
+      intentData.intentId,
+    );
+    expect(claimRes.status).toBe(200);
+    const profileLabSession = (await claimRes.json()) as {
+      credential: string;
+      audience: string;
+      sessionId: string;
+      user: { userId: string };
+    };
+    expect(profileLabSession.audience).toBe("conclave.profile-lab.management");
+    expect(profileLabSession.user.userId).toBe("human-1");
+
+    // 5. Verify Profile Lab session CAN access profile admin routes
+    const adminReq = new Request(
+      "https://app.conclave.test/api/profile-admin/profiles",
+      {
+        headers: {
+          authorization: `Bearer ${profileLabSession.credential}`,
+        },
+      },
+    );
+    const authContext = await authorizeToolProfileAdmin(adminReq, env);
+    expect(authContext.userId).toBe("human-1");
+    expect(authContext.clientType).toBe("desktop");
+    expect(authContext.audience).toBe("conclave.profile-lab.management");
+
+    // 6. Verify Profile Lab session CANNOT register or manipulate workspaces (mutual exclusion)
+    const wsRegisterRes = await handleRegisterWorkspaceFromDesktop(
+      new Request("https://app.conclave.test/api/workspace-runtime/register", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${profileLabSession.credential}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          contractVersion: "1.0",
+          installationId: "install_12345678-1234-4234-8234-123456789abc",
+          proposedWorkspaceName: "Unauthorized Lab Workspace",
+          hostname: "lab-computer",
+          platform: "macos",
+          architecture: "arm64",
+          appVersion: "1.0.0",
+          runtimeCapabilities: {
+            os: "macos",
+            arch: "arm64",
+            appVersion: "1.0.0",
+            supportedRuntimes: ["dart"],
+            maxConcurrentWorkers: 2,
+          },
+        }),
+      }),
+      env,
+    ).catch((err: { status?: number; message?: string }) => err);
+    // In our implementation, findDesktopHumanSession throws HttpError(403) when audience doesn't match
+    expect(wsRegisterRes).toMatchObject({
+      status: 403,
+    });
+
+    // 7. Create a normal Workspace session (conclave.desktop.management)
+    const wsIntentRes = await handleCreateDesktopAuthIntent(
+      new Request("https://app.conclave.test/api/desktop-auth/intents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          clientName: "Conclave Workspace",
+          contractVersion: "1.1",
+        }),
+      }),
+      env,
+    );
+    const wsIntent = (await wsIntentRes.json()) as {
+      intentId: string;
+      pollToken: string;
+      audience: string;
+    };
+    expect(wsIntent.audience).toBe("conclave.desktop.management");
+    await handleApproveDesktopAuthIntent(
+      new Request(
+        `https://app.conclave.test/api/desktop-auth/intents/${wsIntent.intentId}/approve`,
+        { method: "POST" },
+      ),
+      env,
+      wsIntent.intentId,
+    );
+    const wsClaimRes = await handleClaimDesktopAuthIntent(
+      new Request(
+        `https://app.conclave.test/api/desktop-auth/intents/${wsIntent.intentId}/claim`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ pollToken: wsIntent.pollToken }),
+        },
+      ),
+      env,
+      wsIntent.intentId,
+    );
+    const wsSession = (await wsClaimRes.json()) as { credential: string };
+
+    // 8. Verify Workspace session CANNOT access profile admin routes (mutual exclusion)
+    const wsAdminReq = new Request(
+      "https://app.conclave.test/api/profile-admin/profiles",
+      {
+        headers: {
+          authorization: `Bearer ${wsSession.credential}`,
+        },
+      },
+    );
+    await expect(
+      authorizeToolProfileAdmin(wsAdminReq, env),
+    ).rejects.toMatchObject({
+      status: 403,
+      message: "Profile administrator authorization is required",
+    });
   });
 });

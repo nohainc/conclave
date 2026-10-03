@@ -84,8 +84,10 @@ export function normalizeWorkstreamWorkConfig(value: unknown): {
         (key) =>
           ![
             "workerId",
+            "workerLabel",
             "model",
             "fallbackWorkerId",
+            "fallbackWorkerLabel",
             "additionalInstructions",
           ].includes(key),
       )
@@ -94,6 +96,35 @@ export function normalizeWorkstreamWorkConfig(value: unknown): {
         400,
         `workConfig ${bindingId} has unsupported fields`,
       );
+    }
+    for (const key of ["workerLabel", "fallbackWorkerLabel"] as const) {
+      const rawLabel = binding[key];
+      if (rawLabel === undefined) continue;
+      if (
+        !rawLabel ||
+        typeof rawLabel !== "object" ||
+        Array.isArray(rawLabel)
+      ) {
+        throw new HttpError(400, `workConfig ${key} is invalid`);
+      }
+      const label = rawLabel as Record<string, unknown>;
+      if (
+        Object.keys(label).some(
+          (labelKey) => !["displayName", "workspaceName"].includes(labelKey),
+        ) ||
+        typeof label.displayName !== "string" ||
+        label.displayName.trim().length === 0 ||
+        label.displayName.length > 160 ||
+        typeof label.workspaceName !== "string" ||
+        label.workspaceName.trim().length === 0 ||
+        label.workspaceName.length > 160
+      ) {
+        throw new HttpError(400, `workConfig ${key} is invalid`);
+      }
+      normalized[key] = {
+        displayName: label.displayName.trim(),
+        workspaceName: label.workspaceName.trim(),
+      };
     }
     for (const key of ["workerId", "model", "fallbackWorkerId"] as const) {
       if (binding[key] !== undefined) {
@@ -146,6 +177,17 @@ export function normalizeWorkstreamWorkConfig(value: unknown): {
     },
     workerIds: [...workerIds],
   };
+}
+
+export function findUnapprovedWorkstreamWorkerIds(
+  workerIds: readonly string[],
+  eligibleIds: ReadonlySet<string>,
+  previouslyBoundIds: ReadonlySet<string>,
+): string[] {
+  return workerIds.filter(
+    (workerId) =>
+      !eligibleIds.has(workerId) && !previouslyBoundIds.has(workerId),
+  );
 }
 
 export function workstreamMetadata(
@@ -319,11 +361,11 @@ export function eligibilityMessage(
   workerTypeId: string | null,
   code: string,
   readinessIssueCode?: string | null,
+  displayName?: string | null,
 ): string {
   const step = stepKind[0]?.toUpperCase() + stepKind.slice(1);
-  const worker = workerTypeId
-    ? `${workerTypeId === "chatgpt" ? "ChatGPT" : workerTypeId === "gemini" ? "Gemini" : workerTypeId} Worker`
-    : "Worker";
+  const worker =
+    displayName?.trim() || (workerTypeId ? "Selected Worker" : "Worker");
   if (code === "binding_missing") return `${step}: choose a Worker.`;
   if (code === "worker_missing")
     return `${step}: the selected Worker is no longer available.`;
@@ -339,6 +381,8 @@ export function eligibilityMessage(
     }
     return `${step}: ${worker} is not Ready${readinessIssueCode ? ` (${readinessIssueCode.replaceAll("_", " ")})` : ""}.`;
   }
+  if (code === "worker_catalog_unavailable")
+    return `${step}: this Worker is no longer available in the Workspace catalog.`;
   if (code === "worker_scheduling_disabled")
     return `${step}: ${worker} is not enabled for scheduling.`;
   if (code === "capability_missing")
@@ -401,6 +445,12 @@ export async function validateWorkflowWorkerEligibility(
               i.engine_version AS engineVersion,
               i.profile_definition_id AS profileDefinitionId,
               i.profile_release_version AS profileReleaseVersion,
+              catalog.lifecycle_state AS workerCatalogLifecycleState,
+              catalog.visibility_state AS workerCatalogVisibilityState,
+              catalog.release_stage AS workerCatalogReleaseStage,
+              profileChannel.channel AS workspaceToolProfileChannel,
+              definition.profile_definition_id AS currentProfileDefinitionId,
+              catalog.display_name AS workerDisplayName,
               vs.state AS schedulingState,
               g.id AS grantId, g.status AS grantStatus, g.expires_at AS grantExpiresAt,
               g.allowed_worker_ids_json AS allowedWorkerIdsJson,
@@ -412,6 +462,14 @@ export async function validateWorkflowWorkerEligibility(
               ew.status AS workspaceStatus,
               wri.id AS runtimeIdentityId
          FROM workspace_worker_inventory i
+         LEFT JOIN worker_catalog catalog
+           ON catalog.worker_type_id = i.worker_type_id
+         LEFT JOIN workspace_tool_profile_channels profileChannel
+           ON profileChannel.workspace_id = i.workspace_id
+         LEFT JOIN tool_profile_definitions definition
+           ON definition.worker_type_id = i.worker_type_id
+          AND definition.profile_definition_id = i.profile_definition_id
+          AND definition.lifecycle_state = 'active'
          LEFT JOIN worker_scheduling vs ON vs.worker_id = i.worker_id
          LEFT JOIN workspace_project_grants g
            ON g.workspace_id = i.workspace_id AND g.project_id = ?2
@@ -445,8 +503,32 @@ export async function validateWorkflowWorkerEligibility(
           row.readinessIssueCode == null
             ? null
             : String(row.readinessIssueCode),
+          row.workerDisplayName == null ? null : String(row.workerDisplayName),
         ),
       });
+    const catalogReleaseStage = String(row.workerCatalogReleaseStage ?? "");
+    const workspaceToolProfileChannel = String(
+      row.workspaceToolProfileChannel ?? "stable",
+    );
+    const catalogStageEligible =
+      workspaceToolProfileChannel === "testing" ||
+      (workspaceToolProfileChannel === "beta" &&
+        ["beta", "stable"].includes(catalogReleaseStage)) ||
+      (workspaceToolProfileChannel === "stable" &&
+        catalogReleaseStage === "stable");
+    if (
+      row.workerCatalogLifecycleState !== "active" ||
+      row.workerCatalogVisibilityState !== "visible" ||
+      !catalogStageEligible
+    ) {
+      push("worker_catalog_unavailable");
+    }
+    if (
+      typeof row.currentProfileDefinitionId !== "string" ||
+      row.currentProfileDefinitionId !== row.profileDefinitionId
+    ) {
+      push("engine_profile_unavailable");
+    }
     if (
       row.grantId == null ||
       row.grantStatus !== "active" ||
@@ -513,7 +595,15 @@ export async function validateWorkflowWorkerEligibility(
           stepKind: step.kind,
           workerTypeId,
           code: "input_capability_missing",
-          message: inputCapabilityMessage(step.kind, workerTypeId, capability),
+          message: inputCapabilityMessage(
+            step.kind,
+            workerTypeId,
+            capability,
+            false,
+            row.workerDisplayName == null
+              ? null
+              : String(row.workerDisplayName),
+          ),
         });
       }
       if (
@@ -529,6 +619,9 @@ export async function validateWorkflowWorkerEligibility(
             workerTypeId,
             capability,
             true,
+            row.workerDisplayName == null
+              ? null
+              : String(row.workerDisplayName),
           ),
         });
       }
@@ -634,14 +727,11 @@ export function inputCapabilityMessage(
   workerTypeId: string,
   capability: string,
   grantDenied = false,
+  displayName?: string | null,
 ): string {
   const step = stepKind[0]?.toUpperCase() + stepKind.slice(1);
   const worker =
-    workerTypeId === "chatgpt"
-      ? "ChatGPT Worker"
-      : workerTypeId === "gemini"
-        ? "Gemini Worker"
-        : `${workerTypeId} Worker`;
+    displayName?.trim() || (workerTypeId ? "Selected Worker" : "Worker");
   const input = capability === "local_file" ? "local file" : capability;
   return grantDenied
     ? `${step} ${worker} is not granted ${input} input by the Project Workspace grant.`

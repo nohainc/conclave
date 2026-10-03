@@ -93,13 +93,54 @@ describe("v8 architecture guard rejects retired source patterns", () => {
     ["enrollment handler", "handleCreateWorkspaceEnrollment"],
     ["Workspace enrollment factory", "createWorkspaceEnrollment"],
     ["enrollment token prefix", "conclave_enroll_"],
-    ["legacy smoke environment variable", "CONCLAVE_ENROLLMENT_TOKEN"],
     ["AX enrollment model", "AxWorkspaceEnrollment"],
   ])(
     "rejects retired Workspace token enrollment: %s",
     (_description, source) => {
       expect(violationsFor(source)).toContain(
         "retired Workspace token pairing flow",
+      );
+    },
+  );
+
+  it.each([
+    [
+      "Profile Lab package import",
+      "import 'package:conclave_profile_lab/lab.dart';",
+    ],
+    [
+      "Profile Lab local import",
+      "import '../profile_lab/lib/controller.dart';",
+    ],
+    ["Admin worker endpoint route", "/api/admin/workers/catalog"],
+  ])("rejects Profile Lab / admin API imports: %s", (_description, source) => {
+    expect(violationsFor(source)).toContain(
+      "Profile Lab import in Workspace or AX",
+    );
+  });
+
+  it.each([
+    ["DraftProfileStore class", "class DraftProfileStore {}"],
+    ["LocalDraftProfileCandidate class", "class LocalDraftProfileCandidate {}"],
+    ["DraftToolProfile class", "class DraftToolProfile {}"],
+    ["ProfileLabController class", "class ProfileLabController {}"],
+  ])(
+    "rejects Profile Lab draft classes under Workspace: %s",
+    (_description, source) => {
+      expect(violationsFor(source)).toContain(
+        "Profile Lab draft class under Workspace",
+      );
+    },
+  );
+
+  it.each([
+    ["ED25519 signing seed variable", "CONCLAVE_WORKSPACE_ED25519_SEED"],
+    ["Ed25519PrivateKey class reference", "Ed25519PrivateKey"],
+  ])(
+    "rejects desktop private key signing material: %s",
+    (_description, source) => {
+      expect(violationsFor(source)).toContain(
+        "desktop application private key signing material",
       );
     },
   );

@@ -60,6 +60,38 @@ describe("Worker API routes", () => {
     expect(handler).toHaveBeenCalledOnce();
   });
 
+  it("serves the Cloud Worker catalog through the human product API", async () => {
+    const handler = vi.fn(async () => new Response("catalog", { status: 200 }));
+    const response = await routeWorkerRequest(
+      request("/api/workers/catalog"),
+      {} as Parameters<typeof routeWorkerRequest>[1],
+      undefined,
+      {
+        handleListWorkerCatalog: handler,
+      } as unknown as WorkerRouteHandlers,
+      dependencies,
+    );
+    expect(response.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the channel-scoped catalog behind the Workspace runtime API", async () => {
+    const handler = vi.fn(
+      async () => new Response("runtime catalog", { status: 200 }),
+    );
+    const response = await routeWorkerRequest(
+      request("/api/workspace-runtime/workers/catalog"),
+      {} as Parameters<typeof routeWorkerRequest>[1],
+      undefined,
+      {
+        handleListWorkspaceWorkerCatalog: handler,
+      } as unknown as WorkerRouteHandlers,
+      dependencies,
+    );
+    expect(response.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
   it("serves Workspace releases only at the versionless release routes", async () => {
     const routes = [
       [
@@ -119,8 +151,12 @@ describe("Worker API routes", () => {
 
   it("routes v8 Tool Profile resolution and admin lifecycle operations", async () => {
     const handlers = {
+      handleListWorkerCatalog: vi.fn(async () => new Response("human catalog")),
       handleResolveToolProfileChannels: vi.fn(
         async () => new Response("resolved"),
+      ),
+      handleListWorkspaceWorkerCatalog: vi.fn(
+        async () => new Response("catalog"),
       ),
       handleSetWorkspaceToolProfileChannel: vi.fn(
         async () => new Response("channel"),
@@ -146,21 +182,71 @@ describe("Worker API routes", () => {
       handleListToolProfileReleaseAudit: vi.fn(
         async () => new Response("audit"),
       ),
+      handleListAdminWorkerCatalog: vi.fn(
+        async () => new Response("admin catalog"),
+      ),
+      handleListToolProfileDefinitions: vi.fn(
+        async () => new Response("definitions"),
+      ),
+      handleGetToolProfileDefinition: vi.fn(
+        async () => new Response("definition detail"),
+      ),
+      handleGetToolProfileRelease: vi.fn(
+        async () => new Response("release detail"),
+      ),
+      handleListAllToolProfileChannels: vi.fn(
+        async () => new Response("all channels"),
+      ),
+      handleListToolProfileChannels: vi.fn(
+        async () => new Response("definition channels"),
+      ),
+      handleRollbackToolProfileChannel: vi.fn(
+        async () => new Response("rollback"),
+      ),
+      handleListToolProfileReleaseEvidence: vi.fn(
+        async () => new Response("list evidence"),
+      ),
+      handleSubmitToolProfileReleaseEvidence: vi.fn(
+        async () => new Response("submit evidence"),
+      ),
+      handleListToolProfileDefinitionAudit: vi.fn(
+        async () => new Response("definition audit"),
+      ),
+      handleListGlobalToolProfileAudit: vi.fn(
+        async () => new Response("global audit"),
+      ),
     } as unknown as WorkerRouteHandlers;
     const routes = [
       [
         "/api/tool-profiles?workerTypeId=chatgpt&workspaceRuntimeId=runtime-1",
         "GET",
       ],
-      ["/api/tool-profiles?workspaceRuntimeId=runtime-1", "GET"],
+      [
+        "/api/workspace-runtime/workers/catalog?workspaceRuntimeId=runtime-1",
+        "GET",
+      ],
       ["/api/workspaces/workspace-1/tool-profile-channel", "PATCH"],
       ["/api/admin/tool-profiles/definitions", "POST"],
+      ["/api/admin/tool-profiles/definitions", "GET"],
+      ["/api/admin/tool-profiles/definitions/chatgpt-codex", "GET"],
       ["/api/admin/workers/catalog", "POST"],
+      ["/api/admin/workers/catalog", "GET"],
+      ["/api/admin/tool-profiles/channels", "GET"],
+      ["/api/admin/tool-profiles/chatgpt-codex/channels", "GET"],
+      [
+        "/api/admin/tool-profiles/chatgpt-codex/channels/stable/rollback",
+        "POST",
+      ],
+      ["/api/admin/tool-profiles/audit", "GET"],
+      ["/api/admin/tool-profiles/chatgpt-codex/audit", "GET"],
       ["/api/admin/tool-profiles/chatgpt-codex/releases", "POST"],
+      ["/api/admin/tool-profiles/chatgpt-codex/releases/1", "GET"],
       ["/api/admin/tool-profiles/chatgpt-codex/releases/2/publish", "POST"],
       ["/api/admin/tool-profiles/chatgpt-codex/releases/2/promote", "POST"],
       ["/api/admin/tool-profiles/chatgpt-codex/releases/1/revoke", "POST"],
       ["/api/admin/tool-profiles/chatgpt-codex/releases/1/audit", "GET"],
+      ["/api/admin/tool-profiles/chatgpt-codex/releases/1/evidence", "GET"],
+      ["/api/admin/tool-profiles/chatgpt-codex/releases/1/evidence", "POST"],
     ] as const;
     for (const [path, method] of routes) {
       const response = await routeWorkerRequest(
@@ -172,13 +258,51 @@ describe("Worker API routes", () => {
       );
       expect(response.status, `${method} ${path}`).toBe(200);
     }
-    expect(handlers.handleResolveToolProfileChannels).toHaveBeenCalledTimes(2);
+    expect(handlers.handleResolveToolProfileChannels).toHaveBeenCalledOnce();
+    expect(handlers.handleListWorkerCatalog).not.toHaveBeenCalled();
+    expect(handlers.handleListWorkspaceWorkerCatalog).toHaveBeenCalledOnce();
     expect(
       handlers.handleSetWorkspaceToolProfileChannel,
     ).toHaveBeenCalledOnce();
     expect(handlers.handleCreateToolProfileDefinition).toHaveBeenCalledOnce();
+    expect(handlers.handleListToolProfileDefinitions).toHaveBeenCalledOnce();
+    expect(handlers.handleGetToolProfileDefinition).toHaveBeenCalledWith(
+      expect.any(Request),
+      expect.anything(),
+      "chatgpt-codex",
+      undefined,
+    );
     expect(handlers.handleCreateApprovedLogicalWorker).toHaveBeenCalledOnce();
+    expect(handlers.handleListAdminWorkerCatalog).toHaveBeenCalledOnce();
+    expect(handlers.handleListAllToolProfileChannels).toHaveBeenCalledOnce();
+    expect(handlers.handleListToolProfileChannels).toHaveBeenCalledWith(
+      expect.any(Request),
+      expect.anything(),
+      "chatgpt-codex",
+      undefined,
+    );
+    expect(handlers.handleRollbackToolProfileChannel).toHaveBeenCalledWith(
+      expect.any(Request),
+      expect.anything(),
+      "chatgpt-codex",
+      "stable",
+      undefined,
+    );
+    expect(handlers.handleListGlobalToolProfileAudit).toHaveBeenCalledOnce();
+    expect(handlers.handleListToolProfileDefinitionAudit).toHaveBeenCalledWith(
+      expect.any(Request),
+      expect.anything(),
+      "chatgpt-codex",
+      undefined,
+    );
     expect(handlers.handleCreateDraftToolProfileRelease).toHaveBeenCalledOnce();
+    expect(handlers.handleGetToolProfileRelease).toHaveBeenCalledWith(
+      expect.any(Request),
+      expect.anything(),
+      "chatgpt-codex",
+      "1",
+      undefined,
+    );
     expect(
       handlers.handlePublishDraftToolProfileRelease,
     ).toHaveBeenCalledOnce();
@@ -194,5 +318,21 @@ describe("Worker API routes", () => {
       undefined,
     );
     expect(handlers.handleListToolProfileReleaseAudit).toHaveBeenCalledOnce();
+    expect(handlers.handleListToolProfileReleaseEvidence).toHaveBeenCalledWith(
+      expect.any(Request),
+      expect.anything(),
+      "chatgpt-codex",
+      "1",
+      undefined,
+    );
+    expect(
+      handlers.handleSubmitToolProfileReleaseEvidence,
+    ).toHaveBeenCalledWith(
+      expect.any(Request),
+      expect.anything(),
+      "chatgpt-codex",
+      "1",
+      undefined,
+    );
   });
 });

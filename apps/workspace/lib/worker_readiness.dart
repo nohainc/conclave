@@ -8,7 +8,7 @@ import 'cli_worker_engine_supervisor.dart';
 import 'tool_profile_release_store.dart';
 import 'tool_profile_release_verifier.dart';
 import 'tool_profile_resolver.dart';
-import 'tool_profile_catalog.dart';
+import 'worker_catalog_coordinator.dart';
 import 'worker_diagnostic_store.dart';
 import 'workspace_registration.dart';
 
@@ -42,23 +42,21 @@ class WorkerReadinessMonitor {
   WorkerReadinessMonitor({
     required this.registry,
     this.toolProfileReleaseStore,
-    this.toolProfileCatalog,
+    this.workerCatalogCoordinator,
     this.cliWorkerEngineSupervisor,
     this.workerStateDirectory,
     this.profileDiagnosticStoreForWorker,
-    this.ensureToolProfileAvailable,
     this.interval = const Duration(minutes: 5),
     this.assessWorker,
   });
 
   final LocalWorkerRegistry registry;
   final ToolProfileReleaseStore? toolProfileReleaseStore;
-  final ToolProfileCatalogClient? toolProfileCatalog;
+  final WorkerCatalogCoordinator? workerCatalogCoordinator;
   final CliWorkerEngineSupervisor? cliWorkerEngineSupervisor;
   final Directory Function(String workerId)? workerStateDirectory;
   final WorkerDiagnosticStore Function(String workerTypeId)?
       profileDiagnosticStoreForWorker;
-  final Future<void> Function(String workerTypeId)? ensureToolProfileAvailable;
   final Duration interval;
   final Future<WorkerReadinessAssessment> Function(LocalWorker worker)?
       assessWorker;
@@ -100,9 +98,17 @@ class WorkerReadinessMonitor {
     LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
     String? workerTypeId,
     bool includeDisabled = false,
+    bool rerunWhenActive = false,
   }) {
     final active = _activeCheck;
     if (active != null) {
+      if (rerunWhenActive) {
+        return active.catchError((_) {}).then((_) => checkNow(
+              mode: mode,
+              workerTypeId: workerTypeId,
+              includeDisabled: includeDisabled,
+            ));
+      }
       if (mode == LocalWorkerProbeMode.passive && !includeDisabled) {
         return active;
       }
@@ -126,7 +132,7 @@ class WorkerReadinessMonitor {
   /// used for rollback.
   Future<bool> rollbackToolProfile(String workerTypeId) async {
     final timer = Stopwatch()..start();
-    final profileDefinitionId = await _profileDefinitionFor(workerTypeId);
+    final profileDefinitionId = _profileDefinitionFor(workerTypeId);
     final store = toolProfileReleaseStore;
     final engine = cliWorkerEngineSupervisor;
     if (profileDefinitionId == null || store == null || engine == null) {
@@ -249,6 +255,10 @@ class WorkerReadinessMonitor {
           worker.status == LocalWorkerStatus.removed) {
         continue;
       }
+      if (workerCatalogCoordinator != null &&
+          _profileDefinitionFor(worker.workerTypeId) == null) {
+        continue;
+      }
       if (worker.activationState == LocalWorkerActivationState.disabled &&
           mode == LocalWorkerProbeMode.passive &&
           !includeDisabled) {
@@ -338,8 +348,7 @@ class WorkerReadinessMonitor {
     LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
   }) async {
     try {
-      final profileDefinitionId =
-          await _profileDefinitionFor(worker.workerTypeId);
+      final profileDefinitionId = _profileDefinitionFor(worker.workerTypeId);
       if (profileDefinitionId == null || toolProfileReleaseStore == null) {
         return const WorkerReadinessAssessment(
           WorkerReadinessState.runtimeUnavailable,
@@ -374,24 +383,8 @@ class WorkerReadinessMonitor {
     }
   }
 
-  Future<String?> _profileDefinitionFor(String workerTypeId) async {
-    final catalog = toolProfileCatalog;
-    if (catalog == null) return null;
-    var entries = await catalog.loadCatalog();
-    var entry =
-        entries.where((item) => item.workerTypeId == workerTypeId).firstOrNull;
-    if (entry == null) {
-      try {
-        entries = await catalog.syncCatalog();
-        entry = entries
-            .where((item) => item.workerTypeId == workerTypeId)
-            .firstOrNull;
-      } on Object {
-        // An absent cache entry cannot be replaced by a Workspace-side alias.
-      }
-    }
-    return entry?.profileDefinitionId;
-  }
+  String? _profileDefinitionFor(String workerTypeId) =>
+      workerCatalogCoordinator?.profileDefinitionForWorker(workerTypeId);
 
   Future<WorkerReadinessAssessment> _assessToolProfileWorker(
     LocalWorker worker, {
@@ -422,16 +415,12 @@ class WorkerReadinessMonitor {
     final resolver = ToolProfileResolver(store);
     var profileChannel =
         (await store.releaseState(profileDefinitionId)).selectedChannel;
-    late ToolProfileResolution resolution;
+    late ToolProfileResolution<ToolProfileReleaseAdmission> resolution;
     try {
-      resolution = await resolver.resolveForWorker(
-        logicalWorkerTypeId: worker.workerTypeId,
-        profileDefinitionId: profileDefinitionId,
+      resolution = await workerCatalogCoordinator!.resolveProfileForWorker(
+        workerTypeId: worker.workerTypeId,
         engineVersion: cliWorkerEngineVersion,
         providerCliVersion: worker.toolVersion,
-        ensureAvailable: ensureToolProfileAvailable == null
-            ? null
-            : () => ensureToolProfileAvailable!(worker.workerTypeId),
       );
       profileChannel =
           (await store.releaseState(profileDefinitionId)).selectedChannel;

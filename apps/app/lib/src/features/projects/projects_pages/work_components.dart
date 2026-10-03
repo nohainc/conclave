@@ -307,13 +307,9 @@ class _WorkTimelineCard extends StatelessWidget {
         _ => 'waiting',
       };
 
-  String _workerName(AxWorkRequestStep step) => switch (step.workerTypeId) {
-        'chatgpt' => 'ChatGPT',
-        'gemini' => 'Gemini',
-        _ => step.providerToolName ??
-            step.workerTypeId?.split('.').last ??
-            (step.workerId == null ? 'Worker pending' : 'Selected Worker'),
-      };
+  String _workerName(AxWorkRequestStep step) =>
+      step.workerDisplayName ??
+      (step.workerId == null ? 'Worker pending' : 'Selected Worker');
 
   @override
   Widget build(BuildContext context) {
@@ -480,11 +476,8 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
         _ => kind,
       };
 
-  String _workerName(AxWorkRequestStep step) => switch (step.workerTypeId) {
-        'chatgpt' => 'ChatGPT',
-        'gemini' => 'Gemini',
-        _ => step.providerToolName ?? step.workerTypeId ?? 'Worker',
-      };
+  String _workerName(AxWorkRequestStep step) =>
+      step.workerDisplayName ?? 'Worker';
 
   String _timestamp(String? value) {
     if (value == null) return '—';

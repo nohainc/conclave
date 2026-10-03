@@ -10,6 +10,7 @@ import {
   authorizeRequest,
   authorizeWorkstreamAccess,
   discussionReferences,
+  findUnapprovedWorkstreamWorkerIds,
   json,
   normalizeWorkstreamWorkConfig,
   parseJson,
@@ -205,10 +206,58 @@ export async function handleUpdateWorkstream(
   }
   const rawWorkConfig = body.workConfig;
   let workConfig: Record<string, unknown> | undefined;
+  const schedulableWorkerIds = new Set<string>();
   if (rawWorkConfig !== undefined) {
     const normalized = normalizeWorkstreamWorkConfig(rawWorkConfig);
     workConfig = normalized.config;
     if (normalized.workerIds.length > 0) {
+      const placeholders = normalized.workerIds
+        .map((_, index) => `?${index + 1}`)
+        .join(", ");
+      const knownWorkers = await env.CONCLAVE_DB.prepare(
+        `SELECT i.worker_id, catalog.display_name, ew.name AS workspace_name
+           FROM workspace_worker_inventory i
+           JOIN execution_workspaces ew ON ew.id = i.workspace_id
+           LEFT JOIN worker_catalog catalog
+             ON catalog.worker_type_id = i.worker_type_id
+          WHERE i.worker_id IN (${placeholders})`,
+      )
+        .bind(...normalized.workerIds)
+        .all<{
+          worker_id: string;
+          display_name: string | null;
+          workspace_name: string;
+        }>();
+      const labelsByWorkerId = new Map(
+        (knownWorkers.results ?? []).map((worker) => [
+          worker.worker_id,
+          {
+            displayName: worker.display_name ?? worker.worker_id,
+            workspaceName: worker.workspace_name,
+          },
+        ]),
+      );
+      const bindings = workConfig.bindings as Record<
+        string,
+        Record<string, unknown>
+      >;
+      for (const binding of Object.values(bindings)) {
+        if (!binding || typeof binding !== "object") continue;
+        if (
+          typeof binding.workerId === "string" &&
+          binding.workerLabel === undefined
+        ) {
+          const label = labelsByWorkerId.get(binding.workerId);
+          if (label) binding.workerLabel = label;
+        }
+        if (
+          typeof binding.fallbackWorkerId === "string" &&
+          binding.fallbackWorkerLabel === undefined
+        ) {
+          const label = labelsByWorkerId.get(binding.fallbackWorkerId);
+          if (label) binding.fallbackWorkerLabel = label;
+        }
+      }
       const grants = await env.CONCLAVE_DB.prepare(
         `SELECT i.worker_id FROM workspace_worker_inventory i
          JOIN workspace_project_grants g ON g.workspace_id = i.workspace_id
@@ -220,7 +269,36 @@ export async function handleUpdateWorkstream(
       const eligibleIds = new Set(
         (grants.results ?? []).map((row) => row.worker_id),
       );
-      if (normalized.workerIds.some((workerId) => !eligibleIds.has(workerId))) {
+      for (const workerId of eligibleIds) schedulableWorkerIds.add(workerId);
+      const previousConfigRow = await env.CONCLAVE_DB.prepare(
+        "SELECT config_json FROM workstream_work_configs WHERE workstream_id = ?1",
+      )
+        .bind(workstreamId)
+        .first<{ config_json: string }>();
+      const previouslyBoundIds = new Set<string>();
+      if (previousConfigRow?.config_json) {
+        try {
+          const previousConfig = JSON.parse(previousConfigRow.config_json) as {
+            bindings?: Record<string, Record<string, unknown>>;
+          };
+          for (const binding of Object.values(previousConfig.bindings ?? {})) {
+            if (!binding || typeof binding !== "object") continue;
+            if (typeof binding.workerId === "string")
+              previouslyBoundIds.add(binding.workerId);
+            if (typeof binding.fallbackWorkerId === "string")
+              previouslyBoundIds.add(binding.fallbackWorkerId);
+          }
+        } catch {
+          // A malformed old config must not authorize new Worker references.
+        }
+      }
+      if (
+        findUnapprovedWorkstreamWorkerIds(
+          normalized.workerIds,
+          eligibleIds,
+          previouslyBoundIds,
+        ).length > 0
+      ) {
         throw new HttpError(
           409,
           "Selected Workers must belong to a Workspace with an active Project grant",
@@ -274,6 +352,7 @@ export async function handleUpdateWorkstream(
         selectedWorkerIds.add(binding.fallbackWorkerId);
     }
     for (const workerId of selectedWorkerIds) {
+      if (!schedulableWorkerIds.has(workerId)) continue;
       await env.CONCLAVE_DB.prepare(
         `INSERT INTO worker_scheduling (worker_id, state, updated_by_user_id, updated_at)
          VALUES (?1, 'enabled', ?2, ?3)

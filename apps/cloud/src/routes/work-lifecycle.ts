@@ -342,7 +342,8 @@ export async function handleGetWorkRequest(
             wa.error_json AS assignmentErrorJson,
             wi.worker_type_id AS inventoryWorkerTypeId,
             wi.provider_tool_name AS configuredProviderToolName,
-            wi.provider_tool_version AS configuredProviderToolVersion
+            wi.provider_tool_version AS configuredProviderToolVersion,
+            worker_catalog.display_name AS workerDisplayName
        FROM workflow_tasks wt
        JOIN work_requests wr ON wr.id = wt.work_request_id
        LEFT JOIN worker_assignments wa ON wa.id = (
@@ -355,6 +356,10 @@ export async function handleGetWorkRequest(
          json_extract(wr.snapshot_json, '$.resolvedBindings.' ||
            CASE WHEN wr.workflow_id = 'direct' THEN 'direct' ELSE wt.step_kind END || '.workerId')
        )
+       LEFT JOIN worker_catalog
+         ON worker_catalog.worker_type_id = COALESCE(
+           wa.worker_type_id, wi.worker_type_id
+         )
       WHERE wt.work_request_id = ?1
       ORDER BY wt.created_at, wt.id`,
   )
@@ -436,6 +441,10 @@ export async function handleGetWorkRequest(
         workerTypeId: hasAssignment
           ? (task?.logicalWorkerTypeId ?? null)
           : (task?.inventoryWorkerTypeId ?? null),
+        workerDisplayName:
+          typeof task?.workerDisplayName === "string"
+            ? task.workerDisplayName
+            : null,
         engineVersion: hasAssignment
           ? typeof permissionSnapshot.profileDefinitionId === "string"
             ? (task?.engineVersion ?? null)

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
 import 'package:conclave_workspace/worker_trust_policy.dart';
 import 'package:test/test.dart';
 
@@ -40,7 +41,7 @@ void main() {
   });
 
   test('redacts explicitly supplied secrets', () {
-    expect(redactSecrets('Authorization: secret', ['secret']),
+    expect(SafeProviderDiagnostics.redact('Authorization: secret'),
         'Authorization: [REDACTED]');
   });
 

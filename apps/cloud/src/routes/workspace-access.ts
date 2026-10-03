@@ -5,8 +5,6 @@ import {
   type SecurityContext,
 } from "@conclave/security";
 import {
-  canTransitionWorkspaceProjectGrantStatus,
-  isWorkspaceProjectGrantStatus,
   validateWorkspaceConcurrencyPolicy,
   validateWorkspaceGrantCapabilities,
   validateWorkspaceGrantPermissions,

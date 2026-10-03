@@ -2,6 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:conclave_protocol/worker_descriptor.dart';
+
+export 'package:conclave_protocol/worker_descriptor.dart';
+
 import 'self_update.dart';
 import 'tool_profile_release_store.dart';
 import 'tool_profile_release_verifier.dart';
@@ -11,117 +15,7 @@ typedef ToolProfileListLoader = Future<ToolProfileCatalogResult> Function(
   String workerTypeId,
   String defaultChannel,
 );
-typedef LogicalWorkerCatalogLoader = Future<List<Object?>> Function();
-
-class LogicalWorkerCatalogEntry {
-  const LogicalWorkerCatalogEntry({
-    required this.workerTypeId,
-    required this.displayName,
-    required this.description,
-    required this.profileDefinitionId,
-    required this.providerToolName,
-    required this.engineFamily,
-    required this.releaseStage,
-    required this.capabilities,
-    required this.sortOrder,
-  });
-
-  final String workerTypeId;
-  final String displayName;
-  final String description;
-  final String profileDefinitionId;
-  final String providerToolName;
-  final String engineFamily;
-  final String releaseStage;
-  final List<String> capabilities;
-  final int sortOrder;
-
-  factory LogicalWorkerCatalogEntry.fromJson(Map<String, Object?> json) {
-    const fields = {
-      'workerTypeId',
-      'displayName',
-      'description',
-      'profileDefinitionId',
-      'providerToolName',
-      'engineFamily',
-      'visibilityState',
-      'releaseStage',
-      'capabilities',
-      'sortOrder',
-    };
-    const capabilities = {
-      'text',
-      'local_file',
-      'workstream_read',
-      'workstream_write',
-      'durable_session',
-      'image',
-      'audio',
-      'video',
-    };
-    final workerTypeId = json['workerTypeId'];
-    final displayName = json['displayName'];
-    final description = json['description'];
-    final definitionId = json['profileDefinitionId'];
-    final toolName = json['providerToolName'];
-    final engineFamily = json['engineFamily'];
-    final visibility = json['visibilityState'];
-    final stage = json['releaseStage'];
-    final values = json['capabilities'];
-    final sortOrder = json['sortOrder'];
-    if (json.keys.any((key) => !fields.contains(key)) ||
-        workerTypeId is! String ||
-        !RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$').hasMatch(workerTypeId) ||
-        workerTypeId.length > 96 ||
-        displayName is! String ||
-        displayName.trim().isEmpty ||
-        displayName.length > 120 ||
-        description is! String ||
-        description.length > 500 ||
-        definitionId is! String ||
-        !RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$').hasMatch(definitionId) ||
-        toolName is! String ||
-        toolName.isEmpty ||
-        toolName.length > 64 ||
-        engineFamily != 'cli' ||
-        visibility != 'visible' ||
-        !const {'testing', 'beta', 'stable'}.contains(stage) ||
-        values is! List ||
-        values.length > 32 ||
-        values.any(
-            (value) => value is! String || !capabilities.contains(value)) ||
-        values.toSet().length != values.length ||
-        sortOrder is! int ||
-        sortOrder < 0 ||
-        sortOrder > 10000) {
-      throw const FormatException('Logical Worker catalog entry is invalid');
-    }
-    return LogicalWorkerCatalogEntry(
-      workerTypeId: workerTypeId,
-      displayName: displayName,
-      description: description,
-      profileDefinitionId: definitionId,
-      providerToolName: toolName,
-      engineFamily: 'cli',
-      releaseStage: stage as String,
-      capabilities: List.unmodifiable(values.cast<String>()),
-      sortOrder: sortOrder,
-    );
-  }
-
-  Map<String, Object?> toJson() => {
-        'workerTypeId': workerTypeId,
-        'displayName': displayName,
-        'description': description,
-        'profileDefinitionId': profileDefinitionId,
-        'providerToolName': providerToolName,
-        'engineFamily': engineFamily,
-        'visibilityState': 'visible',
-        'releaseStage': releaseStage,
-        'capabilities': capabilities,
-        'sortOrder': sortOrder,
-      };
-}
+typedef WorkerDescriptorLoader = Future<List<Object?>> Function();
 
 class ToolProfileCatalogResult {
   const ToolProfileCatalogResult({
@@ -171,15 +65,16 @@ class ToolProfileCatalogClient {
   final String? authToken;
   final Duration timeout;
   final ToolProfileListLoader? listLoader;
-  final LogicalWorkerCatalogLoader? workerCatalogLoader;
+  final WorkerDescriptorLoader? workerCatalogLoader;
   final ToolProfileTrustRefresher? trustRefresher;
   final ToolProfileCandidateValidator? candidateValidator;
   final ToolProfileRevocationHandler? onRevocationsApplied;
   final HttpClient _client;
-  List<LogicalWorkerCatalogEntry> _workers = const [];
-  List<LogicalWorkerCatalogEntry> get workers => _workers;
+  List<WorkerDescriptor> _workers = const [];
+  bool _catalogPersisted = false;
+  List<WorkerDescriptor> get workers => _workers;
 
-  LogicalWorkerCatalogEntry? entryForWorker(String workerTypeId) =>
+  WorkerDescriptor? entryForWorker(String workerTypeId) =>
       _workers.where((entry) => entry.workerTypeId == workerTypeId).firstOrNull;
 
   String? profileDefinitionForWorker(String workerTypeId) =>
@@ -187,7 +82,7 @@ class ToolProfileCatalogClient {
 
   /// Fetches the approved, Cloud-selected catalog; a bounded local snapshot is
   /// retained for offline rendering. Execution still requires signed releases.
-  Future<List<LogicalWorkerCatalogEntry>> syncCatalog() async {
+  Future<List<WorkerDescriptor>> syncCatalog() async {
     final loader = workerCatalogLoader;
     List<Object?> raw;
     if (loader != null) {
@@ -199,20 +94,18 @@ class ToolProfileCatalogClient {
             'Workspace runtime identity is required for catalog sync');
       }
       final uri = _baseUri().replace(
-        path: _apiPath('/api/tool-profiles'),
+        path: _apiPath('/api/workspace-runtime/workers/catalog'),
         queryParameters: {'workspaceRuntimeId': runtimeId},
       );
       final response = await _get(uri);
       if (response.statusCode != HttpStatus.ok) {
-        throw StateError(
-            'Logical Worker catalog returned HTTP ${response.statusCode}');
+        throw StateError('Worker catalog returned HTTP ${response.statusCode}');
       }
       final decoded = jsonDecode(utf8.decode(await _readBounded(response)));
       if (decoded is! Map ||
           decoded['workers'] is! List ||
           !const {'testing', 'beta', 'stable'}.contains(decoded['channel'])) {
-        throw const FormatException(
-            'Logical Worker catalog response is invalid');
+        throw const FormatException('Worker catalog response is invalid');
       }
       raw = List<Object?>.from(decoded['workers'] as List);
     }
@@ -221,7 +114,7 @@ class ToolProfileCatalogClient {
       throw const FormatException('Logical Worker catalog exceeds its bounds');
     }
     final entries = raw
-        .map((value) => LogicalWorkerCatalogEntry.fromJson(
+        .map((value) => WorkerDescriptor.fromJson(
               Map<String, Object?>.from(value as Map),
             ))
         .toList();
@@ -232,12 +125,16 @@ class ToolProfileCatalogClient {
       throw const FormatException('Logical Worker catalog contains duplicates');
     }
     entries.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    _workers = List.unmodifiable(entries);
-    await _persistCatalog();
+    final nextWorkers = List<WorkerDescriptor>.unmodifiable(entries);
+    final unchanged = _catalogPersisted &&
+        jsonEncode(_workers.map((entry) => entry.toJson()).toList()) ==
+            jsonEncode(nextWorkers.map((entry) => entry.toJson()).toList());
+    _workers = nextWorkers;
+    if (!unchanged) await _persistCatalog();
     return _workers;
   }
 
-  Future<List<LogicalWorkerCatalogEntry>> loadCatalog() async {
+  Future<List<WorkerDescriptor>> loadCatalog() async {
     if (_workers.isNotEmpty) return _workers;
     final file = _catalogFile;
     if (!await file.exists()) return const [];
@@ -251,8 +148,8 @@ class ToolProfileCatalogClient {
         decoded.any((value) => value is! Map)) {
       throw const FormatException('Logical Worker catalog cache is invalid');
     }
-    final cachedWorkers = List<LogicalWorkerCatalogEntry>.unmodifiable(
-        decoded.map((value) => LogicalWorkerCatalogEntry.fromJson(
+    final cachedWorkers = List<WorkerDescriptor>.unmodifiable(
+        decoded.map((value) => WorkerDescriptor.fromJson(
               Map<String, Object?>.from(value as Map),
             )));
     if (cachedWorkers.map((entry) => entry.workerTypeId).toSet().length !=
@@ -266,6 +163,7 @@ class ToolProfileCatalogClient {
           'Logical Worker catalog cache contains duplicates');
     }
     _workers = cachedWorkers;
+    _catalogPersisted = true;
     return _workers;
   }
 
@@ -280,6 +178,7 @@ class ToolProfileCatalogClient {
         jsonEncode(_workers.map((entry) => entry.toJson()).toList()),
         flush: true);
     await temporary.rename(file.path);
+    _catalogPersisted = true;
   }
 
   void close() => _client.close(force: true);

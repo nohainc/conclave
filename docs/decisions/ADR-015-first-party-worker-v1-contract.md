@@ -11,14 +11,19 @@ Workstreams need stable user-facing Worker identities that survive provider CLI 
 
 ### Catalog and cardinality
 
-The first-party v1 catalog contains:
+Conclave v1 initially provisions these official Workers:
 
 | Worker Type ID | Name | Official Profile | Provider CLI | Slots per Workspace |
 | --- | --- | --- | --- | --- |
 | `chatgpt` | ChatGPT | `chatgpt-codex` | Codex CLI (`codex`) | one |
 | `gemini` | Gemini | `gemini-antigravity` | Antigravity CLI (`agy`) | one |
 
-These IDs are the product identities used by AX, Cloud, Workstreams, scheduling, and history. Profile IDs, Engine versions, and provider executable names are implementation details.
+The official Worker Catalog is Cloud-managed and dynamically delivered.
+Additional approved Worker Types can become available without a Workspace
+application release when they can be expressed through an existing Engine
+family and supported Tool Profile schema. These IDs are the initial product
+identities used by AX, Cloud, Workstreams, scheduling, and history. Profile
+IDs, Engine versions, and provider executable names are implementation details.
 
 ### Authentication and billing
 

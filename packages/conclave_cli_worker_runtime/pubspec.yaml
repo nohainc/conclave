@@ -9,6 +9,8 @@ environment:
 dependencies:
   conclave_worker_protocol:
     path: ../conclave_worker_protocol
+  conclave_tool_profile_v1:
+    path: ../tool_profile_v1
 
 dev_dependencies:
   test: ^1.25.0

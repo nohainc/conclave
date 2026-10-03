@@ -202,7 +202,7 @@ void main() {
     }
   });
 
-  test('syncs and caches the approved logical Worker catalog', () async {
+  test('syncs and caches a new Cloud Worker descriptor generically', () async {
     final catalog = ToolProfileCatalogClient(
       cloudUri: Uri.https('cloud.example', '/'),
       store: store,
@@ -210,11 +210,11 @@ void main() {
       trustRefresher: () async {},
       workerCatalogLoader: () async => [
         {
-          'workerTypeId': 'fixture-worker',
-          'displayName': 'Fixture Worker',
-          'description': 'approved fixture',
-          'profileDefinitionId': 'fixture-cli',
-          'providerToolName': 'fixture',
+          'workerTypeId': 'claude',
+          'displayName': 'Claude',
+          'description': 'Claude Code CLI integration',
+          'profileDefinitionId': 'claude-code',
+          'providerToolName': 'claude',
           'engineFamily': 'cli',
           'visibilityState': 'visible',
           'releaseStage': 'testing',
@@ -225,15 +225,14 @@ void main() {
     );
     try {
       final entries = await catalog.syncCatalog();
-      expect(entries.single.workerTypeId, 'fixture-worker');
-      expect(
-          catalog.profileDefinitionForWorker('fixture-worker'), 'fixture-cli');
+      expect(entries.single.workerTypeId, 'claude');
+      expect(catalog.profileDefinitionForWorker('claude'), 'claude-code');
       final registry = LocalWorkerRegistry(
         dataDirectory: Directory('${temporary.path}/workspace'),
         workspaceId: 'workspace-fixture',
       );
       final worker = await registry.create(catalogEntry: entries.single);
-      expect(worker.workerTypeId, 'fixture-worker');
+      expect(worker.workerTypeId, 'claude');
       catalog.close();
 
       final restarted = ToolProfileCatalogClient(
@@ -242,11 +241,56 @@ void main() {
         trustPolicy: signing.trustPolicy,
         trustRefresher: () async {},
       );
-      expect(
-          (await restarted.loadCatalog()).single.displayName, 'Fixture Worker');
+      expect((await restarted.loadCatalog()).single.displayName, 'Claude');
       restarted.close();
     } finally {
       catalog.close();
+    }
+  });
+
+  test('loads the canonical Cloud Worker catalog endpoint', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    late Uri requestUri;
+    late String authorization;
+    server.listen((request) async {
+      requestUri = request.uri;
+      authorization = request.headers.value(HttpHeaders.authorizationHeader)!;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'channel': 'beta',
+        'workers': [
+          {
+            'workerTypeId': 'claude',
+            'displayName': 'Claude',
+            'description': 'Claude Code CLI integration',
+            'profileDefinitionId': 'claude-code',
+            'providerToolName': 'claude',
+            'engineFamily': 'cli',
+            'visibilityState': 'visible',
+            'releaseStage': 'beta',
+            'capabilities': ['text'],
+            'sortOrder': 5,
+          },
+        ],
+      }));
+      await request.response.close();
+    });
+
+    final catalog = ToolProfileCatalogClient(
+      cloudUri: Uri.parse('http://${server.address.address}:${server.port}'),
+      workspaceRuntimeId: 'runtime-1',
+      authToken: 'runtime-token',
+      store: store,
+      trustPolicy: signing.trustPolicy,
+    );
+    try {
+      expect((await catalog.syncCatalog()).single.displayName, 'Claude');
+      expect(requestUri.path, '/api/workspace-runtime/workers/catalog');
+      expect(requestUri.queryParameters, {'workspaceRuntimeId': 'runtime-1'});
+      expect(authorization, 'Bearer runtime-token');
+    } finally {
+      catalog.close();
+      await server.close(force: true);
     }
   });
 

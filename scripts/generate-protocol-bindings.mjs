@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { format } from "prettier";
 
@@ -78,6 +79,17 @@ const generatedFiles = new Map([
 for (const [path, contents] of generatedFiles) {
   if (path.endsWith(".ts")) {
     generatedFiles.set(path, await format(contents, { filepath: path }));
+  } else if (path.endsWith(".dart")) {
+    try {
+      const formatted = execSync("dart format", {
+        input: contents,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      generatedFiles.set(path, formatted);
+    } catch {
+      // Fall back to unformatted if dart executable is absent in environment
+    }
   }
 }
 

@@ -38,6 +38,7 @@ class AxWorkRequestStep {
     required this.status,
     required this.workerId,
     this.workerTypeId,
+    this.workerDisplayName,
     this.engineVersion,
     this.profileDefinitionId,
     this.profileReleaseVersion,
@@ -61,6 +62,7 @@ class AxWorkRequestStep {
   final String status;
   final String? workerId;
   final String? workerTypeId;
+  final String? workerDisplayName;
   final String? engineVersion;
   final String? profileDefinitionId;
   final int? profileReleaseVersion;
@@ -85,6 +87,7 @@ class AxWorkRequestStep {
         status: json['status']?.toString() ?? 'queued',
         workerId: json['workerId']?.toString(),
         workerTypeId: json['workerTypeId']?.toString(),
+        workerDisplayName: json['workerDisplayName']?.toString(),
         engineVersion: json['engineVersion']?.toString(),
         profileDefinitionId: json['profileDefinitionId']?.toString(),
         profileReleaseVersion: json['profileReleaseVersion'] as int?,

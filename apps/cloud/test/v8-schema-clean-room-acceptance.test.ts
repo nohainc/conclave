@@ -190,6 +190,42 @@ describe("v8 clean D1 schema acceptance", () => {
     expect(migration).not.toContain("fixture-worker");
   });
 
+  it("accepts a new application-unknown Worker through catalog data", () => {
+    expect(
+      apply(`
+        INSERT INTO worker_catalog (
+          worker_type_id, display_name, description, created_at, updated_at,
+          engine_family, visibility_state, release_stage, capabilities_json,
+          sort_order
+        ) VALUES (
+          'dynamic-test-worker', 'Dynamic Test Worker',
+          'Catalog-created acceptance Worker.', 'now', 'now', 'cli',
+          'visible', 'stable', '["text"]', 100
+        );
+        INSERT INTO tool_profile_definitions (
+          profile_definition_id, worker_type_id, display_name,
+          provider_tool_name, engine_family, schema_version,
+          lifecycle_state, created_at, updated_at
+        ) VALUES (
+          'dynamic-test-cli', 'dynamic-test-worker', 'Dynamic Test CLI',
+          'Fixture CLI', 'cli', 1, 'active', 'now', 'now'
+        );
+        SELECT worker.worker_type_id, worker.display_name,
+               definition.profile_definition_id
+          FROM worker_catalog worker
+          JOIN tool_profile_definitions definition
+            ON definition.worker_type_id = worker.worker_type_id
+         WHERE worker.worker_type_id = 'dynamic-test-worker';
+      `),
+    ).toEqual([
+      {
+        worker_type_id: "dynamic-test-worker",
+        display_name: "Dynamic Test Worker",
+        profile_definition_id: "dynamic-test-cli",
+      },
+    ]);
+  });
+
   it("does not include retired Workspace token pairing tables", () => {
     const tables = apply(
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;",

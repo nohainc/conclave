@@ -396,7 +396,12 @@ class AxWorker {
   const AxWorker({
     required this.id,
     required this.workspaceId,
+    required this.workspaceName,
     required this.workerTypeId,
+    required this.displayName,
+    this.description,
+    this.catalogLifecycleState = 'active',
+    this.catalogVisibilityState = 'visible',
     required this.status,
     required this.readinessState,
     this.activationState = 'enabled',
@@ -413,7 +418,12 @@ class AxWorker {
 
   final String id;
   final String workspaceId;
+  final String workspaceName;
   final String workerTypeId;
+  final String displayName;
+  final String? description;
+  final String catalogLifecycleState;
+  final String catalogVisibilityState;
   final String status;
   final String readinessState;
   final String activationState;
@@ -430,7 +440,13 @@ class AxWorker {
   factory AxWorker.fromJson(Map<String, dynamic> json) => AxWorker(
         id: _string(json, 'id'),
         workspaceId: _string(json, 'workspaceId'),
+        workspaceName: _string(json, 'workspaceName'),
         workerTypeId: _string(json, 'workerTypeId'),
+        displayName: _string(json, 'displayName'),
+        description: json['description']?.toString(),
+        catalogLifecycleState: _string(json, 'catalogLifecycleState', 'active'),
+        catalogVisibilityState:
+            _string(json, 'catalogVisibilityState', 'visible'),
         status: _string(json, 'status', 'needs_attention'),
         readinessState: _string(json, 'readinessState', 'test_failed'),
         activationState: _string(json, 'activationState', 'enabled'),

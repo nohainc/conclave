@@ -16,6 +16,12 @@ const permissionAssignment = JSON.parse(
 };
 
 function candidate(overrides: Record<string, unknown> = {}) {
+  const workerTypeId = overrides.worker_type_id ?? "chatgpt";
+  const profileDefinitionId =
+    (Object.hasOwn(overrides, "profile_definition_id")
+      ? overrides.profile_definition_id
+      : undefined) ??
+    (workerTypeId === "gemini" ? "gemini-antigravity" : "chatgpt-codex");
   return {
     grant_id: "grant-a",
     project_id: "project-a",
@@ -36,6 +42,10 @@ function candidate(overrides: Record<string, unknown> = {}) {
     runtime_identity_id: "runtime-a",
     worker_id: "worker-a",
     worker_type_id: "chatgpt",
+    worker_catalog_lifecycle_state: "active",
+    worker_catalog_visibility_state: "visible",
+    worker_catalog_release_stage: "stable",
+    workspace_tool_profile_channel: "stable",
     engine_version: "1.0.0",
     profile_definition_id: "chatgpt-codex",
     profile_release_version: 3,
@@ -54,6 +64,12 @@ function candidate(overrides: Record<string, unknown> = {}) {
     allowed_worker_type_ids_json: "[]",
     allowed_models_json: "[]",
     ...overrides,
+    current_profile_definition_id: Object.hasOwn(
+      overrides,
+      "current_profile_definition_id",
+    )
+      ? overrides.current_profile_definition_id
+      : profileDefinitionId,
   };
 }
 
@@ -141,6 +157,35 @@ describe("Project execution scheduler", () => {
     },
   );
 
+  it.each([
+    ["retired", { worker_catalog_lifecycle_state: "retired" }],
+    ["hidden", { worker_catalog_visibility_state: "hidden" }],
+    [
+      "outside the Workspace release channel",
+      {
+        worker_catalog_release_stage: "testing",
+        workspace_tool_profile_channel: "stable",
+      },
+    ],
+    [
+      "without its current active Profile Definition",
+      { current_profile_definition_id: null },
+    ],
+    [
+      "mapped to a different Profile Definition",
+      { current_profile_definition_id: "chatgpt-codex-next" },
+    ],
+  ])("rejects a stale Ready Worker that is %s", async (_case, override) => {
+    await expect(
+      selectProjectExecutionTarget(db([candidate(override)]), {
+        projectId: "project-a",
+        requesterUserId: "user-a",
+        role: "collaborator",
+        capabilities: ["repository"],
+      }),
+    ).resolves.toBeNull();
+  });
+
   it("uses the AX Step binding for Worker and model", async () => {
     const configured = candidate({
       workstream_work_config_json: JSON.stringify({
@@ -205,6 +250,65 @@ describe("Project execution scheduler", () => {
     expect(atLimit).toBeNull();
   });
 
+  it("schedules a Worker type unknown to application code", async () => {
+    const dynamicWorker = candidate({
+      worker_id: "workspace-worker-dynamic",
+      worker_type_id: "dynamic-test-worker",
+      profile_definition_id: "dynamic-test-cli",
+      current_profile_definition_id: "dynamic-test-cli",
+      provider_tool_name: "Fixture CLI",
+      workstream_work_config_json: JSON.stringify({
+        defaultWorkflowId: "direct",
+        bindings: { implement: { workerId: "workspace-worker-dynamic" } },
+      }),
+    });
+
+    const target = await selectProjectExecutionTarget(db([dynamicWorker]), {
+      projectId: "project-a",
+      requesterUserId: "user-a",
+      role: "implementer",
+      capabilities: ["repository"],
+      workstreamId: "workstream-a",
+      workBindingId: "implement",
+    });
+
+    expect(target).toMatchObject({
+      workerId: "workspace-worker-dynamic",
+      workerTypeId: "dynamic-test-worker",
+      profileDefinitionId: "dynamic-test-cli",
+      providerToolName: "Fixture CLI",
+    });
+  });
+
+  it("independently rejects a retired dynamic Worker reported Ready", async () => {
+    const staleDynamicWorker = candidate({
+      worker_id: "workspace-worker-dynamic",
+      worker_type_id: "dynamic-test-worker",
+      worker_catalog_lifecycle_state: "retired",
+      profile_definition_id: "dynamic-test-cli",
+      current_profile_definition_id: "dynamic-test-cli",
+      provider_tool_name: "Fixture CLI",
+      workstream_work_config_json: JSON.stringify({
+        defaultWorkflowId: "direct",
+        bindings: { implement: { workerId: "workspace-worker-dynamic" } },
+      }),
+    });
+
+    const target = await selectProjectExecutionTarget(
+      db([staleDynamicWorker]),
+      {
+        projectId: "project-a",
+        requesterUserId: "user-a",
+        role: "implementer",
+        capabilities: ["repository"],
+        workstreamId: "workstream-a",
+        workBindingId: "implement",
+      },
+    );
+
+    expect(target).toBeNull();
+  });
+
   it("requires AX to configure a Workstream Step before dispatch", async () => {
     const result = await selectProjectExecutionTarget(db([candidate()]), {
       projectId: "project-a",
@@ -262,6 +366,7 @@ describe("Project execution scheduler", () => {
 
   it("selects an enabled, ready Workspace Worker from inventory", async () => {
     const currentCandidate = {
+      ...candidate({ worker_type_id: "gemini" }),
       grant_id: "grant-current",
       project_id: "project-current",
       workspace_id: "workspace-current",
@@ -321,6 +426,7 @@ describe("Project execution scheduler", () => {
 
   it("narrows candidate Workers by Workstream type and model policy", async () => {
     const currentWorker = {
+      ...candidate(),
       grant_id: "grant-current",
       project_id: "project-current",
       workspace_id: "workspace-current",
@@ -430,6 +536,7 @@ describe("Project execution scheduler", () => {
 
   it("uses only the Project role and Workspace Grant at the Cloud boundary", async () => {
     const currentWorker = {
+      ...candidate(),
       grant_id: "grant-current",
       project_id: "project-current",
       workspace_id: "workspace-current",

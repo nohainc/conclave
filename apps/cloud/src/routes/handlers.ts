@@ -82,8 +82,11 @@ export {
   handleCancelWorkRequest,
 } from "./work.js";
 export {
+  handleListWorkerCatalog,
+  handleListWorkspaceWorkerCatalog,
   handleResolveToolProfileChannels,
   handleSetWorkspaceToolProfileChannel,
+  handleListAdminWorkspaceChannels,
   handleCreateToolProfileDefinition,
   handleCreateApprovedLogicalWorker,
   handleCreateDraftToolProfileRelease,
@@ -94,6 +97,17 @@ export {
   handleListToolProfileReleases,
   handleListToolProfileReleaseAudit,
   handleListWorkspaceWorkerInventory,
+  handleListAdminWorkerCatalog,
+  handleListToolProfileDefinitions,
+  handleGetToolProfileDefinition,
+  handleGetToolProfileRelease,
+  handleListAllToolProfileChannels,
+  handleListToolProfileChannels,
+  handleRollbackToolProfileChannel,
+  handleListToolProfileReleaseEvidence,
+  handleSubmitToolProfileReleaseEvidence,
+  handleListToolProfileDefinitionAudit,
+  handleListGlobalToolProfileAudit,
 } from "./profiles.js";
 export {
   handleGetLatestWorkspaceRelease,

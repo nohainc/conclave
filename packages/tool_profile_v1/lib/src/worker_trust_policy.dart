@@ -1,0 +1,191 @@
+import 'dart:convert';
+import 'package:cryptography/cryptography.dart';
+import 'tool_profile_release.dart';
+
+/// Public verification roots shipped with Workspace and Profile Lab.
+/// Values are base64 raw Ed25519 public keys, keyed by publisher and explicit key ID.
+/// This class never accepts signing secrets.
+class WorkerTrustPolicy {
+  WorkerTrustPolicy({
+    Map<String, Map<String, String>> trustedPublicKeys = const {},
+    Set<String> revokedDigests = const {},
+    Set<String> revokedPublishers = const {},
+    Set<String> revokedKeyIds = const {},
+    Set<String> revokedReleaseIds = const {},
+  })  : trustedPublicKeys = Map.unmodifiable({
+          for (final entry in trustedPublicKeys.entries)
+            entry.key: Map<String, String>.unmodifiable(entry.value),
+        }),
+        _revokedDigests = Set.of(revokedDigests),
+        _revokedPublishers = Set.of(revokedPublishers),
+        _revokedKeyIds = Set.of(revokedKeyIds),
+        _revokedReleaseIds = Set.of(revokedReleaseIds);
+
+  final Map<String, Map<String, String>> trustedPublicKeys;
+
+  Set<String> _revokedDigests;
+  Set<String> _revokedPublishers;
+  Set<String> _revokedKeyIds;
+  Set<String> _revokedReleaseIds;
+
+  Set<String> get revokedDigests => Set.unmodifiable(_revokedDigests);
+  Set<String> get revokedPublishers => Set.unmodifiable(_revokedPublishers);
+  Set<String> get revokedKeyIds => Set.unmodifiable(_revokedKeyIds);
+  Set<String> get revokedReleaseIds => Set.unmodifiable(_revokedReleaseIds);
+
+  bool hasTrustedSigningKey(String publisher, String signingKeyId) =>
+      trustedPublicKeys[publisher]?.containsKey(signingKeyId) ?? false;
+
+  bool isToolProfileReleaseRevoked({
+    required String publisher,
+    required String signingKeyId,
+    required String digest,
+    required String releaseId,
+  }) =>
+      _revokedDigests.contains(digest) ||
+      _revokedPublishers.contains(publisher) ||
+      _revokedKeyIds.contains(signingKeyId) ||
+      _revokedReleaseIds.contains(releaseId);
+
+  void updateRevocations({
+    Set<String> digests = const {},
+    Set<String> publishers = const {},
+    Set<String> keyIds = const {},
+    Set<String> releaseIds = const {},
+  }) {
+    _revokedDigests = Set.of(digests);
+    _revokedPublishers = Set.of(publishers);
+    _revokedKeyIds = Set.of(keyIds);
+    _revokedReleaseIds = Set.of(releaseIds);
+  }
+
+  Future<bool> verify({
+    required String publisher,
+    required String signingKeyId,
+    required String digest,
+    required String signature,
+  }) async {
+    if (_revokedDigests.contains(digest) ||
+        _revokedPublishers.contains(publisher) ||
+        _revokedKeyIds.contains(signingKeyId)) {
+      return false;
+    }
+    return _verifySignature(
+      publisher: publisher,
+      signingKeyId: signingKeyId,
+      signature: signature,
+      message: utf8.encode('conclave-workspace-release-v1\n$digest'),
+    );
+  }
+
+  /// Verifies a signed Tool Profile Release envelope. Lifecycle state is
+  /// checked by the caller; it is deliberately absent from signed behavior.
+  Future<bool> verifyToolProfileRelease({
+    required String publisher,
+    required String signingKeyId,
+    required String digest,
+    required String releaseId,
+    required String signature,
+    required String message,
+  }) async {
+    if (isToolProfileReleaseRevoked(
+      publisher: publisher,
+      signingKeyId: signingKeyId,
+      digest: digest,
+      releaseId: releaseId,
+    )) {
+      return false;
+    }
+    return _verifySignature(
+      publisher: publisher,
+      signingKeyId: signingKeyId,
+      signature: signature,
+      message: utf8.encode(message),
+    );
+  }
+
+  Future<bool> verifyWorkspaceRelease({
+    required String publisher,
+    required String signingKeyId,
+    required String digest,
+    required String signature,
+    required Map<String, Object?> metadata,
+  }) async {
+    if (_revokedDigests.contains(digest) ||
+        _revokedPublishers.contains(publisher) ||
+        _revokedKeyIds.contains(signingKeyId) ||
+        _revokedReleaseIds.contains('workspace@${metadata['version']}')) {
+      return false;
+    }
+    final payload = 'conclave-workspace-release-metadata-v1\n'
+        '${canonicalJson({
+          ...metadata,
+          'publisher': publisher,
+          'signingKeyId': signingKeyId,
+          'packageDigest': digest
+        })}';
+    return _verifySignature(
+      publisher: publisher,
+      signingKeyId: signingKeyId,
+      signature: signature,
+      message: utf8.encode(payload),
+    );
+  }
+
+  Future<bool> _verifySignature({
+    required String publisher,
+    required String signingKeyId,
+    required String signature,
+    required List<int> message,
+  }) async {
+    final keyBase64 = trustedPublicKeys[publisher]?[signingKeyId];
+    if (keyBase64 == null) return false;
+    try {
+      final publicKeyBytes = base64.decode(keyBase64);
+      final signatureBytes = base64.decode(signature);
+      if (publicKeyBytes.length != 32 || signatureBytes.length != 64) {
+        return false;
+      }
+      final algorithm = Ed25519();
+      final publicKey = SimplePublicKey(
+        publicKeyBytes,
+        type: KeyPairType.ed25519,
+      );
+      return algorithm.verify(
+        message,
+        signature: Signature(
+          signatureBytes,
+          publicKey: publicKey,
+        ),
+      );
+    } on Object {
+      return false;
+    }
+  }
+}
+
+/// Helper to parse release trust roots from JSON or environment configuration.
+class ReleaseTrustRoots {
+  const ReleaseTrustRoots._();
+
+  static Map<String, Map<String, String>> parse(String jsonString) {
+    try {
+      final value = jsonDecode(jsonString);
+      if (value is! Map) return const {};
+      return {
+        for (final publisher in value.entries)
+          if (publisher.key is String && publisher.value is Map)
+            publisher.key as String: {
+              for (final key in (publisher.value as Map).entries)
+                if (key.key is String && key.value is String)
+                  key.key as String: key.value as String,
+            },
+      };
+    } on Object {
+      return const {};
+    }
+  }
+
+  static WorkerTrustPolicy createPolicy(String jsonString) =>
+      WorkerTrustPolicy(trustedPublicKeys: parse(jsonString));
+}

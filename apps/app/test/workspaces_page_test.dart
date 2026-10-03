@@ -168,6 +168,8 @@ void main() {
         'workspaceId': 'workspace-1',
         'workspaceName': 'Build Mac',
         'workerTypeId': 'chatgpt',
+        'displayName': 'ChatGPT',
+        'description': 'ChatGPT coding assistant',
         'name': 'ChatGPT Personal',
         'status': 'ready',
         'authStrategy': 'browser_auth',
@@ -321,10 +323,13 @@ void main() {
     testWidgets('expanded Workspace lists its Worker projections',
         (tester) async {
       final snapshot = axFixtureSnapshot();
-      const localWorker = AxWorker(
+      final localWorker = const AxWorker(
         id: 'local-worker-1',
         workspaceId: 'workspace-macbook',
+        workspaceName: 'MacBook Pro',
         workerTypeId: 'chatgpt',
+        displayName: 'ChatGPT',
+        description: 'ChatGPT coding assistant',
         status: 'ready',
         readinessState: 'ready',
         localConcurrencyLimit: 2,
@@ -332,7 +337,7 @@ void main() {
       );
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.workspaces,
-        workspaceWorkers: const [localWorker],
+        workspaceWorkers: [localWorker],
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
@@ -351,6 +356,8 @@ void main() {
         'workspaceId': 'workspace-1',
         'workspaceName': 'Build Mac',
         'workerTypeId': 'chatgpt',
+        'displayName': 'ChatGPT',
+        'description': 'ChatGPT coding assistant',
         'status': 'ready',
         'readinessState': 'ready',
         'localConcurrencyLimit': 2,
@@ -405,7 +412,10 @@ void main() {
       final worker = AxWorker.fromJson({
         'id': 'worker-chatgpt',
         'workspaceId': 'workspace-1',
+        'workspaceName': 'Build Mac',
         'workerTypeId': 'chatgpt',
+        'displayName': 'ChatGPT',
+        'description': 'ChatGPT coding assistant',
         'status': 'ready',
         'readinessState': 'ready',
         'localConcurrencyLimit': 1,
@@ -456,11 +466,15 @@ void main() {
             workerCount: 1,
             activeTaskCount: 0,
           );
-      AxWorker worker(String id, String workspaceId, String workerTypeId) =>
+      AxWorker worker(String id, String workspaceId, String workerTypeId,
+              String displayName) =>
           AxWorker(
             id: id,
             workspaceId: workspaceId,
+            workspaceName: 'Workspace $workspaceId',
             workerTypeId: workerTypeId,
+            displayName: displayName,
+            description: '$displayName coding assistant',
             status: 'ready',
             readinessState: 'ready',
             localConcurrencyLimit: 1,
@@ -470,8 +484,8 @@ void main() {
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: [workspace('one'), workspace('two')],
         workspaceWorkers: [
-          worker('one', 'one', 'chatgpt'),
-          worker('two', 'two', 'gemini'),
+          worker('one', 'one', 'chatgpt', 'ChatGPT'),
+          worker('two', 'two', 'gemini', 'Gemini'),
         ],
         onAdd: () {},
         onRename: (_) {},
@@ -500,6 +514,8 @@ void main() {
         'workspaceId': 'workspace-auth',
         'workspaceName': 'Auth Mac',
         'workerTypeId': 'chatgpt',
+        'displayName': 'ChatGPT',
+        'description': 'ChatGPT coding assistant',
         'name': 'ChatGPT Personal',
         'status': 'needs_attention',
         'attentionReasonCode': 'authentication_required',
@@ -601,7 +617,9 @@ void main() {
           AxWorker(
             id: 'worker-disabled',
             workspaceId: 'workspace-enable',
+            workspaceName: 'Enable Mac',
             workerTypeId: 'ollama',
+            displayName: 'Ollama',
             status: 'ready',
             readinessState: 'ready',
             localConcurrencyLimit: 1,

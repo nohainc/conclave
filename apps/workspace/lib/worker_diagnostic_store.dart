@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
+
 import 'platform_runtime.dart';
 
 /// Bounded JSONL logs for one Worker type. Files live beside Worker state,
@@ -358,40 +360,18 @@ final class WorkerDiagnosticStore {
   }
 
   static String _safeLevel(String value) =>
-      const {'debug', 'info', 'warning', 'error'}.contains(value)
-          ? value
-          : 'info';
+      SafeProviderDiagnostics.safeLevel(value);
 
   static String _safeEvent(String value) =>
-      RegExp(r'^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$').hasMatch(value)
-          ? value
-          : 'invalid.event';
+      SafeProviderDiagnostics.safeEvent(value);
 
-  static String _safeToken(String value, {required int maxLength}) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty ||
-        trimmed.length > maxLength ||
-        !RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9_.:+-]*$').hasMatch(trimmed)) {
-      return 'invalid';
-    }
-    return trimmed;
-  }
+  static String _safeToken(String value, {required int maxLength}) =>
+      SafeProviderDiagnostics.safeToken(value, maxLength: maxLength);
 
   static String _safeText(String value, {required int maxLength}) {
     final safe = _redact(value.replaceAll(RegExp(r'[\r\n\t]'), ' '));
     return safe.length <= maxLength ? safe : safe.substring(0, maxLength);
   }
 
-  static String _redact(String value) => value
-      .replaceAll(
-        RegExp(r'(bearer\s+)[a-z0-9._~+/-]+=*', caseSensitive: false),
-        r'$1[REDACTED]',
-      )
-      .replaceAll(
-        RegExp(
-          r'''((?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|cookie|authorization|secret)\s*[:=]\s*)[^\s,;]+''',
-          caseSensitive: false,
-        ),
-        r'$1[REDACTED]',
-      );
+  static String _redact(String value) => SafeProviderDiagnostics.redact(value);
 }

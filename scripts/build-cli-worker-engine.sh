@@ -25,14 +25,21 @@ if [[ ! -f "$ENGINE_DIR/.dart_tool/package_config.json" ]]; then
 fi
 
 mkdir -p "$OUTPUT_DIR"
+mkdir -p "$ROOT/apps/profile_lab/assets/engines"
 if [[ "$(uname -s)" =~ ^(MINGW|MSYS|CYGWIN) ]]; then
   OUTPUT="$OUTPUT_DIR/conclave_cli_worker_engine.exe"
+  PROFILE_LAB_OUTPUT="$ROOT/apps/profile_lab/assets/engines/conclave_cli_worker_engine.exe"
 else
   OUTPUT="$OUTPUT_DIR/conclave_cli_worker_engine"
+  PROFILE_LAB_OUTPUT="$ROOT/apps/profile_lab/assets/engines/conclave_cli_worker_engine"
 fi
 (cd "$ENGINE_DIR" && "$DART_BIN" compile exe \
   "-DENGINE_VERSION=$VERSION" \
   bin/conclave_cli_worker.dart \
   -o "$OUTPUT")
-if [[ "$OUTPUT" != *.exe ]]; then chmod 755 "$OUTPUT"; fi
-echo "Built generic CLI Worker Engine $VERSION: $OUTPUT"
+cp "$OUTPUT" "$PROFILE_LAB_OUTPUT"
+if [[ "$OUTPUT" != *.exe ]]; then
+  chmod 755 "$OUTPUT"
+  chmod 755 "$PROFILE_LAB_OUTPUT"
+fi
+echo "Built generic CLI Worker Engine $VERSION: $OUTPUT and $PROFILE_LAB_OUTPUT"

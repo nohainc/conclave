@@ -1,4 +1,4 @@
-import { hashToken } from "@conclave/security";
+import { DESKTOP_WORKSPACE_AUDIENCE, hashToken } from "@conclave/security";
 
 import {
   disconnectWorkspaceRuntime,
@@ -15,7 +15,12 @@ export async function handleCheckWorkspaceOwnership(
   request: Request,
   env: SecurityEnv,
 ): Promise<Response> {
-  const { session } = await findDesktopHumanSession(request, env);
+  const { session } = await findDesktopHumanSession(
+    request,
+    env,
+    undefined,
+    DESKTOP_WORKSPACE_AUDIENCE,
+  );
   const body = parseJson<Record<string, unknown>>(await request.text(), {});
   const installationId =
     typeof body.installationId === "string" ? body.installationId.trim() : "";
@@ -130,7 +135,12 @@ export async function handleDisconnectDesktopWorkspace(
   request: Request,
   env: SecurityEnv,
 ): Promise<Response> {
-  const { session, now } = await findDesktopHumanSession(request, env);
+  const { session, now } = await findDesktopHumanSession(
+    request,
+    env,
+    undefined,
+    DESKTOP_WORKSPACE_AUDIENCE,
+  );
   const body = parseJson<Record<string, unknown>>(await request.text(), {});
   const installationId =
     typeof body.installationId === "string" ? body.installationId.trim() : "";
@@ -244,7 +254,12 @@ export async function handleReleaseDesktopWorkspace(
   request: Request,
   env: SecurityEnv,
 ): Promise<Response> {
-  const { session, now } = await findDesktopHumanSession(request, env);
+  const { session, now } = await findDesktopHumanSession(
+    request,
+    env,
+    undefined,
+    DESKTOP_WORKSPACE_AUDIENCE,
+  );
   const sessionCreatedAt = Date.parse(session.createdAt);
   if (
     !Number.isFinite(sessionCreatedAt) ||
@@ -377,7 +392,12 @@ export async function handleRegisterWorkspaceFromDesktop(
   request: Request,
   env: SecurityEnv,
 ): Promise<Response> {
-  const { session, now } = await findDesktopHumanSession(request, env);
+  const { session, now } = await findDesktopHumanSession(
+    request,
+    env,
+    undefined,
+    DESKTOP_WORKSPACE_AUDIENCE,
+  );
   const body = parseJson<Record<string, unknown>>(await request.text(), {});
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return json(

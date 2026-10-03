@@ -48,4 +48,16 @@ export const forbiddenArchitecture = [
     "provider-specific Worker executable",
     /provider-specific\s+Worker\s+executable/i,
   ],
+  [
+    "Profile Lab import in Workspace or AX",
+    /package:conclave_profile_lab|import\s+['"][^'"]*profile_lab|\/api\/admin\/workers\//i,
+  ],
+  [
+    "Profile Lab draft class under Workspace",
+    /\b(?:DraftProfileStore|LocalDraftProfileCandidate|DraftToolProfile|ProfileLabController)\b/,
+  ],
+  [
+    "desktop application private key signing material",
+    /CONCLAVE_WORKSPACE_ED25519_SEED|Ed25519PrivateKey/,
+  ],
 ];

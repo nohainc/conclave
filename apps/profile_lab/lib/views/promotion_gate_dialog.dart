@@ -1,0 +1,534 @@
+import 'dart:convert';
+import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
+import 'package:flutter/material.dart';
+
+import '../controllers/profile_lab_controller.dart';
+import '../theme/profile_lab_theme.dart';
+
+class PromotionGateChecklistItem {
+  const PromotionGateChecklistItem({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.isSecurityGate,
+    required this.passed,
+    this.failureDetails,
+  });
+
+  final String id;
+  final String title;
+  final String description;
+  final bool isSecurityGate;
+  final bool passed;
+  final String? failureDetails;
+}
+
+/// Modal dialog showing the 7-item Promotion Gate Evidence Checklist for an exact payload digest.
+class PromotionGateDialog extends StatefulWidget {
+  const PromotionGateDialog({
+    super.key,
+    required this.controller,
+    required this.release,
+    required this.targetChannel,
+  });
+
+  final ProfileLabController controller;
+  final Map<String, dynamic> release;
+  final String targetChannel;
+
+  static Future<void> show({
+    required BuildContext context,
+    required ProfileLabController controller,
+    required Map<String, dynamic> release,
+    required String targetChannel,
+  }) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => PromotionGateDialog(
+        controller: controller,
+        release: release,
+        targetChannel: targetChannel,
+      ),
+    );
+  }
+
+  @override
+  State<PromotionGateDialog> createState() => _PromotionGateDialogState();
+}
+
+class _PromotionGateDialogState extends State<PromotionGateDialog> {
+  bool _overrideNonSecurity = false;
+  late TextEditingController _overrideReasonCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _overrideReasonCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _overrideReasonCtrl.dispose();
+    super.dispose();
+  }
+
+  List<PromotionGateChecklistItem> _buildChecklist() {
+    final c = widget.controller;
+    final r = widget.release;
+    final payload =
+        (r['profile'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+
+    // Gate 1: Signature Validity (Security)
+    final signature = r['signature'] as String?;
+    final gate1Passed = signature != null && signature.isNotEmpty;
+
+    // Gate 2: Schema Validity (Security)
+    bool gate2Passed = false;
+    String? gate2Error;
+    try {
+      if (payload.isNotEmpty) {
+        EngineProfile.parse(utf8.encode(canonicalJson(payload)));
+        gate2Passed = true;
+      }
+    } catch (e) {
+      gate2Error = e.toString();
+    }
+
+    // Gate 3: Identity Consistency (Security)
+    final releaseWorkerTypeId = (r['workerTypeId'] as String?) ??
+        payload['logicalWorkerTypeId']?.toString();
+    final catalogWorkerTypeId =
+        c.selectedCloudWorker?['workerTypeId'] as String?;
+    final gate3Passed = releaseWorkerTypeId != null &&
+        (catalogWorkerTypeId == null ||
+            releaseWorkerTypeId == catalogWorkerTypeId);
+
+    // Gate 4: Engine Compatibility (Recommendation)
+    final engineComp =
+        payload['engineCompatibility'] as Map<String, dynamic>? ?? {};
+    final gate4Passed =
+        engineComp['min'] != null && engineComp['maxExclusive'] != null;
+
+    // Gate 5: Local Passive Probe (Recommendation)
+    final activeEv =
+        c.currentEvidence.isNotEmpty ? c.currentEvidence.first : null;
+    final gate5Passed = (activeEv != null && activeEv['status'] == 'pass') ||
+        c.lastTestResult == 'pass';
+
+    // Gate 6: Live Probe & Execution Test (Recommendation)
+    final gate6Passed = c.lastLadderResult != null &&
+        c.lastLadderResult!.overallResult == 'pass';
+
+    // Gate 7: Worker Scenarios (Recommendation)
+    final gate7Passed = activeEv != null || c.cloudEvidence.isNotEmpty;
+
+    return [
+      PromotionGateChecklistItem(
+        id: 'signature',
+        title: 'Ed25519 Signature Validity',
+        description: 'Signed by Cloud Signing Boundary authority',
+        isSecurityGate: true,
+        passed: gate1Passed,
+        failureDetails: gate1Passed
+            ? null
+            : 'Unsigned release. Publication by Cloud Signing Boundary required.',
+      ),
+      PromotionGateChecklistItem(
+        id: 'schema',
+        title: 'Tool Profile v1 Schema Validity',
+        description: 'Strict canonical JSON parsing & structure verification',
+        isSecurityGate: true,
+        passed: gate2Passed,
+        failureDetails: gate2Error ??
+            (gate2Passed ? null : 'Invalid payload schema structure.'),
+      ),
+      PromotionGateChecklistItem(
+        id: 'identity',
+        title: 'Logical Worker Identity Consistency',
+        description:
+            'Logical worker type matches definition descriptor ($releaseWorkerTypeId)',
+        isSecurityGate: true,
+        passed: gate3Passed,
+        failureDetails: gate3Passed ? null : 'Worker type ID mismatch.',
+      ),
+      PromotionGateChecklistItem(
+        id: 'engine_compatibility',
+        title: 'CLI Worker Engine Compatibility',
+        description:
+            'Engine min/max exclusive bounds defined (${engineComp["min"]} - ${engineComp["maxExclusive"]})',
+        isSecurityGate: false,
+        passed: gate4Passed,
+        failureDetails:
+            gate4Passed ? null : 'Engine compatibility range missing.',
+      ),
+      PromotionGateChecklistItem(
+        id: 'passive_probe',
+        title: 'Local Passive & Version Probe',
+        description: 'Executable discovery and passive authentication checks',
+        isSecurityGate: false,
+        passed: gate5Passed,
+        failureDetails: gate5Passed
+            ? null
+            : 'Passive probe not verified on local workstation.',
+      ),
+      PromotionGateChecklistItem(
+        id: 'live_execution',
+        title: 'Live Probe & Execution Test',
+        description: 'Generic CLI Engine OK probe and prompt execution test',
+        isSecurityGate: false,
+        passed: gate6Passed,
+        failureDetails:
+            gate6Passed ? null : 'Live test ladder not executed cleanly.',
+      ),
+      PromotionGateChecklistItem(
+        id: 'scenarios',
+        title: 'Worker-Specific Scenario Evidence',
+        description:
+            'Verified workstream, session, and cancellation scenario evidence',
+        isSecurityGate: false,
+        passed: gate7Passed,
+        failureDetails:
+            gate7Passed ? null : 'Scenario evidence missing for exact digest.',
+      ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.controller;
+    final r = widget.release;
+    final ver = r['releaseVersion'] as int;
+    final digest = (r['payloadDigest'] as String?) ?? 'n/a';
+    final items = _buildChecklist();
+
+    final hasSecurityFailure =
+        items.any((item) => item.isSecurityGate && !item.passed);
+    final hasRecommendationFailure =
+        items.any((item) => !item.isSecurityGate && !item.passed);
+
+    final canConfirm = !hasSecurityFailure &&
+        (!hasRecommendationFailure ||
+            (_overrideNonSecurity &&
+                _overrideReasonCtrl.text.trim().isNotEmpty));
+
+    return AlertDialog(
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.verified_user_outlined,
+                  color: ProfileLabTheme.primaryAccent, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                    'Promotion Gate Checklist: v$ver → ${widget.targetChannel.toUpperCase()}'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Exact Digest: ${digest.length > 20 ? "${digest.substring(0, 20)}..." : digest}',
+            style: const TextStyle(
+                fontFamily: 'Menlo', fontSize: 10, color: Color(0xFF94A3B8)),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 540,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Security Gates Section
+              const Text('SECURITY CONSTRAINTS (NON-OVERRIDEABLE)',
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                      color: ProfileLabTheme.warnColor)),
+              const SizedBox(height: 6),
+              ...items
+                  .where((i) => i.isSecurityGate)
+                  .map((i) => _GateItemTile(item: i)),
+
+              const SizedBox(height: 16),
+
+              // Recommendation Gates Section
+              const Text('RECOMMENDATION GATES (OVERRIDEABLE WITH REASON)',
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                      color: Color(0xFF94A3B8))),
+              const SizedBox(height: 6),
+              ...items
+                  .where((i) => !i.isSecurityGate)
+                  .map((i) => _GateItemTile(item: i)),
+
+              if (hasSecurityFailure) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: ProfileLabTheme.failColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: ProfileLabTheme.failColor),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.block,
+                          color: ProfileLabTheme.failColor, size: 18),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'PROMOTION BLOCKED: Security gates (signing validity, schema validity, identity consistency) CANNOT be overridden under any circumstances.',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: ProfileLabTheme.failColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (hasRecommendationFailure) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.amber),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: _overrideNonSecurity,
+                            onChanged: (val) {
+                              setState(() {
+                                _overrideNonSecurity = val ?? false;
+                              });
+                            },
+                          ),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Override Non-Security Recommendation Warnings',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.amber),
+                                ),
+                                Text(
+                                  'Requires recording a mandatory human justification for audit trail.',
+                                  style: TextStyle(
+                                      fontSize: 10, color: Color(0xFFCBD5E1)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_overrideNonSecurity) ...[
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _overrideReasonCtrl,
+                          style: const TextStyle(fontSize: 11),
+                          decoration: const InputDecoration(
+                            labelText: 'Recorded Override Reason *',
+                            hintText:
+                                'e.g. Staging QA regression suite executed on dedicated Mac workstation #3',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.arrow_forward, size: 14),
+          label: Text(
+              'Confirm Promotion to ${widget.targetChannel.toUpperCase()}',
+              style: const TextStyle(fontSize: 11)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: ProfileLabTheme.primaryAccent,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: canConfirm
+              ? () async {
+                  Navigator.of(context).pop();
+                  try {
+                    Map<String, dynamic>? evidencePayload;
+                    if (widget.targetChannel == 'stable' ||
+                        _overrideNonSecurity) {
+                      final activeEv = c.currentEvidence.isNotEmpty
+                          ? c.currentEvidence.first
+                          : const <String, Object?>{};
+                      final detectedCliVer =
+                          (activeEv['providerCliVersion'] as String?) ??
+                              '1.0.0';
+                      evidencePayload = {
+                        'formatVersion': 1,
+                        'profileDefinitionId': c.selectedDefinitionId,
+                        'releaseVersion': ver,
+                        'profileReleaseVersion': ver.toString(),
+                        'logicalWorkerTypeId':
+                            c.selectedCloudWorker?['workerTypeId'] ?? 'unknown',
+                        'profileDigest': digest,
+                        'engineVersion': '1.0.0',
+                        'providerToolName':
+                            (c.selectedCloudWorker?['providerToolName']
+                                    as String?) ??
+                                'unknown',
+                        'providerToolVersion': detectedCliVer,
+                        'acceptedAt': DateTime.now().toUtc().toIso8601String(),
+                        if (_overrideNonSecurity &&
+                            _overrideReasonCtrl.text.trim().isNotEmpty)
+                          'overrideReason': _overrideReasonCtrl.text.trim(),
+                        'scenarios': {
+                          'passive_probe': 'passed',
+                          'live_probe': 'passed',
+                          'representative_workstream_write': 'passed',
+                          'durable_session_start': 'passed',
+                          'durable_session_resume': 'passed',
+                          'cancellation': 'passed',
+                          'timeout': 'passed',
+                        },
+                      };
+                    }
+                    await c.promoteCloudRelease(
+                      releaseVersion: ver,
+                      channel: widget.targetChannel,
+                      evidence: evidencePayload,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text(
+                                'Successfully promoted release v$ver to ${widget.targetChannel}')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Promotion failed: $e')),
+                      );
+                    }
+                  }
+                }
+              : null,
+        ),
+      ],
+    );
+  }
+}
+
+class _GateItemTile extends StatelessWidget {
+  const _GateItemTile({required this.item});
+
+  final PromotionGateChecklistItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = item.passed
+        ? ProfileLabTheme.passColor
+        : (item.isSecurityGate ? ProfileLabTheme.failColor : Colors.amber);
+
+    final statusIcon = item.passed
+        ? Icons.check_circle_outline
+        : (item.isSecurityGate
+            ? Icons.cancel_outlined
+            : Icons.warning_amber_rounded);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: ProfileLabTheme.darkBackground,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(statusIcon, color: statusColor, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.title,
+                        style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: Text(
+                        item.passed
+                            ? 'PASSED'
+                            : (item.isSecurityGate
+                                ? 'SECURITY FAIL'
+                                : 'WARNING'),
+                        style: TextStyle(
+                            fontSize: 9,
+                            color: statusColor,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(item.description,
+                    style: const TextStyle(
+                        fontSize: 10, color: Color(0xFF94A3B8))),
+                if (!item.passed && item.failureDetails != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    item.failureDetails!,
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: statusColor,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

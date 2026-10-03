@@ -487,8 +487,10 @@ interface WorkstreamWorkConfig {
     "direct" | StepKind,
     {
       workerId?: string;
+      workerLabel?: { displayName: string; workspaceName: string };
       model?: string;
       fallbackWorkerId?: string;
+      fallbackWorkerLabel?: { displayName: string; workspaceName: string };
       additionalInstructions?: string;
     }
   >>;
@@ -503,6 +505,13 @@ selected logical Worker and, if present, its one fallback Worker. Model and
 additional instructions are optional and remain attached to the selected
 binding. No arbitrary role names, role-specific concurrency values, or
 fallback-to-any policy are part of this contract.
+
+Worker label fields are bounded presentation snapshots only. If a selected
+Worker becomes unavailable, AX keeps its Worker ID and shows the saved label
+with an explicit unavailable state and a user-controlled replacement choice.
+Fallback Workers follow the same rule. Cloud may retain an unchanged stale
+binding so unrelated Workstream edits do not erase user intent; current
+catalog, grant, and readiness checks still determine whether it can execute.
 
 `workstreamInstructions` is an optional Workstream-wide text field, bounded to
 4,000 characters. Project instructions remain in Project settings, and each

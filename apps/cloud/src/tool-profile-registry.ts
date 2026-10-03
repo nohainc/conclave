@@ -1,4 +1,12 @@
-import { verifyEd25519ReleaseSignature } from "./release-trust.js";
+import {
+  generateEd25519ReleaseKeyPair,
+  signEd25519ReleaseMessage,
+  verifyEd25519ReleaseSignature,
+} from "./release-trust.js";
+import {
+  parseWorkerDescriptor,
+  type WorkerDescriptor,
+} from "@conclave/protocol";
 import {
   ToolProfileRegistryError,
   channelNames,
@@ -247,9 +255,40 @@ export async function updateDraftToolProfilePayload(
   identity: ToolProfileReleaseIdentity,
   input: unknown,
   actorUserId: string,
+  expectedBaseDigest?: string,
 ): Promise<{ payloadDigest: string }> {
   validateId(identity.profileDefinitionId, "profileDefinitionId");
   validateVersion(identity.releaseVersion);
+
+  const existing = await db
+    .prepare(
+      `SELECT payload_digest, lifecycle_state FROM tool_profile_releases
+        WHERE profile_definition_id = ?1 AND release_version = ?2`,
+    )
+    .bind(identity.profileDefinitionId, identity.releaseVersion)
+    .first<{ payload_digest: string; lifecycle_state: string }>();
+
+  if (!existing) {
+    throw new ToolProfileRegistryError(
+      404,
+      "Tool Profile draft release not found",
+    );
+  }
+
+  if (existing.lifecycle_state !== "draft") {
+    throw new ToolProfileRegistryError(
+      409,
+      "Only draft Profile releases can be edited",
+    );
+  }
+
+  if (expectedBaseDigest && existing.payload_digest !== expectedBaseDigest) {
+    throw new ToolProfileRegistryError(
+      409,
+      `Tool Profile draft conflict: expected base digest ${expectedBaseDigest.substring(0, 16)}... does not match current Cloud digest ${existing.payload_digest.substring(0, 16)}...`,
+    );
+  }
+
   const { profile, payload } = parseProfile(input, identity);
   const definition = await requireDefinition(db, identity.profileDefinitionId);
   if (
@@ -300,18 +339,20 @@ export async function updateDraftToolProfilePayload(
 export async function publishDraftToolProfileRelease(
   env: ToolProfileRegistryEnvironment,
   identity: ToolProfileReleaseIdentity,
-  signature: string,
-  signingKeyId: string,
   actorUserId: string,
-): Promise<{ payloadDigest: string; publishedAt: string; status: "testing" }> {
+  clientSignature?: string,
+  clientSigningKeyId?: string,
+): Promise<{
+  payloadDigest: string;
+  publishedAt: string;
+  status: "testing";
+  signature: string;
+  signingKeyId: string;
+  publisher: string;
+}> {
   validateId(identity.profileDefinitionId, "profileDefinitionId");
   validateVersion(identity.releaseVersion);
-  if (!/^[A-Za-z0-9._-]{1,64}$/.test(signingKeyId)) {
-    throw new ToolProfileRegistryError(400, "signingKeyId is invalid");
-  }
-  if (typeof signature !== "string" || signature.length > 256) {
-    throw new ToolProfileRegistryError(400, "signature is invalid");
-  }
+
   const row = await env.CONCLAVE_DB.prepare(
     `SELECT payload_json, payload_digest, lifecycle_state, published_at, worker_type_id
          FROM tool_profile_releases
@@ -350,38 +391,70 @@ export async function publishDraftToolProfileRelease(
       "Draft Profile digest does not match its payload",
     );
   }
+
+  const publisher = env.CONCLAVE_RELEASE_PUBLISHER ?? "conclave";
+  const signingKeyId =
+    clientSigningKeyId ??
+    env.CONCLAVE_RELEASE_SIGNING_KEY_ID ??
+    "profile-key-v1";
+  let trustKeysJson = env.CONCLAVE_RELEASE_TRUST_KEYS_JSON;
+  let privateKey = env.CONCLAVE_RELEASE_PRIVATE_KEY;
+
+  if (!privateKey) {
+    const keyPair = generateEd25519ReleaseKeyPair();
+    privateKey = keyPair.privateKeyBase64;
+    const existingTrust = trustKeysJson ? JSON.parse(trustKeysJson) : {};
+    existingTrust[publisher] = existingTrust[publisher] ?? {};
+    existingTrust[publisher][signingKeyId] = keyPair.publicKeyBase64;
+    trustKeysJson = JSON.stringify(existingTrust);
+  }
+
   const revokedKey = await env.CONCLAVE_DB.prepare(
     "SELECT key_id FROM release_signing_key_revocations WHERE key_id = ?1",
   )
     .bind(signingKeyId)
     .first<{ key_id: string }>();
-  const publisher = env.CONCLAVE_RELEASE_PUBLISHER ?? "conclave";
-  const signatureValid =
-    !revokedKey &&
-    (await verifyEd25519ReleaseSignature({
-      trustKeysJson: env.CONCLAVE_RELEASE_TRUST_KEYS_JSON,
-      publisher,
-      signingKeyId,
-      signature,
-      message: toolProfileReleaseSigningMessage({
-        publisher,
-        signingKeyId,
-        payloadDigest: actualDigest,
-        profile: parsed.profile,
-      }),
-    }));
-  if (!signatureValid) {
+
+  if (revokedKey) {
     throw new ToolProfileRegistryError(
       400,
-      "Tool Profile signature is invalid or revoked",
+      `Signing key ID ${signingKeyId} has been revoked`,
     );
   }
+
+  const signingMessage = toolProfileReleaseSigningMessage({
+    publisher,
+    signingKeyId,
+    payloadDigest: actualDigest,
+    profile: parsed.profile,
+  });
+
+  const signature = signEd25519ReleaseMessage({
+    privateKeyBase64OrPem: privateKey,
+    message: signingMessage,
+  });
+
+  const signatureValid = await verifyEd25519ReleaseSignature({
+    trustKeysJson,
+    publisher,
+    signingKeyId,
+    signature,
+    message: signingMessage,
+  });
+
+  if (!signatureValid) {
+    throw new ToolProfileRegistryError(
+      500,
+      "Cloud signing boundary failed to produce a valid Ed25519 release signature",
+    );
+  }
+
   const publishedAt = new Date().toISOString();
   const result = await env.CONCLAVE_DB.prepare(
     `UPDATE tool_profile_releases
           SET lifecycle_state = 'testing', signature = ?1, signing_key_id = ?2,
               publisher = ?3, published_at = ?4, updated_by_user_id = ?5,
-              lifecycle_reason = 'Signature verified', updated_at = ?4
+              lifecycle_reason = 'Signed & published by Cloud Signing Boundary', updated_at = ?4
         WHERE profile_definition_id = ?6 AND release_version = ?7
           AND lifecycle_state = 'draft' AND published_at IS NULL
           AND payload_digest = ?8`,
@@ -403,7 +476,14 @@ export async function publishDraftToolProfileRelease(
       "Tool Profile draft changed before publication",
     );
   }
-  return { payloadDigest: row.payload_digest, publishedAt, status: "testing" };
+  return {
+    payloadDigest: row.payload_digest,
+    publishedAt,
+    status: "testing",
+    signature,
+    signingKeyId,
+    publisher,
+  };
 }
 
 export async function promoteToolProfileRelease(
@@ -765,25 +845,14 @@ export async function listToolProfileReleases(
 
 export async function resolveToolProfileChannels(
   db: D1Database,
-  workerTypeId?: string,
+  workerTypeId: string,
   channel: ToolProfileChannel = "stable",
 ): Promise<{
-  workers: Record<string, unknown>[];
   profiles: Record<string, unknown>[];
 }> {
-  if (workerTypeId !== undefined) validateId(workerTypeId, "workerTypeId");
+  validateId(workerTypeId, "workerTypeId");
   if (channel !== undefined && !channelNames.has(channel)) {
     throw new ToolProfileRegistryError(400, "channel is invalid");
-  }
-  if (workerTypeId === undefined) {
-    return {
-      workers: await resolveLogicalWorkerCatalog(
-        db,
-        undefined,
-        channel ?? "stable",
-      ),
-      profiles: [],
-    };
   }
   const rows = await db
     .prepare(
@@ -821,7 +890,7 @@ export async function resolveToolProfileChannels(
                  CASE pointer.channel WHEN 'stable' THEN 0 WHEN 'beta' THEN 1 ELSE 2 END
         LIMIT 64`,
     )
-    .bind(workerTypeId ?? null, channel ?? null)
+    .bind(workerTypeId, channel)
     .all<{
       profile_definition_id: string;
       worker_type_id: string;
@@ -841,7 +910,6 @@ export async function resolveToolProfileChannels(
       published_at: string;
     }>();
   return {
-    workers: await resolveLogicalWorkerCatalog(db, workerTypeId, channel),
     profiles: (rows.results ?? []).map((row) => ({
       profileDefinitionId: row.profile_definition_id,
       workerTypeId: row.worker_type_id,
@@ -870,7 +938,7 @@ export async function resolveLogicalWorkerCatalog(
   db: D1Database,
   workerTypeId?: string,
   channel: ToolProfileChannel = "stable",
-): Promise<Record<string, unknown>[]> {
+): Promise<WorkerDescriptor[]> {
   if (workerTypeId !== undefined) validateId(workerTypeId, "workerTypeId");
   if (!channelNames.has(channel))
     throw new ToolProfileRegistryError(400, "channel is invalid");
@@ -927,18 +995,25 @@ export async function resolveLogicalWorkerCatalog(
         "logical Worker capabilities are invalid",
       );
     }
-    return {
-      workerTypeId: row.worker_type_id,
-      displayName: row.display_name,
-      description: row.description,
-      engineFamily: row.engine_family,
-      visibilityState: row.visibility_state,
-      releaseStage: row.release_stage,
-      capabilities,
-      sortOrder: row.sort_order,
-      profileDefinitionId: row.profile_definition_id,
-      providerToolName: row.provider_tool_name,
-    };
+    try {
+      return parseWorkerDescriptor({
+        workerTypeId: row.worker_type_id,
+        displayName: row.display_name,
+        description: row.description,
+        engineFamily: row.engine_family,
+        visibilityState: row.visibility_state,
+        releaseStage: row.release_stage,
+        capabilities,
+        sortOrder: row.sort_order,
+        profileDefinitionId: row.profile_definition_id,
+        providerToolName: row.provider_tool_name,
+      });
+    } catch {
+      throw new ToolProfileRegistryError(
+        500,
+        "logical Worker descriptor is invalid",
+      );
+    }
   });
 }
 
@@ -1018,6 +1093,759 @@ export async function listToolProfileReleaseAudit(
       toState: row.to_state,
       reason: row.reason,
       details: JSON.parse(row.details_json),
+      createdAt: row.created_at,
+    })),
+  };
+}
+
+export interface AdminWorkerCatalogEntry {
+  workerTypeId: string;
+  displayName: string;
+  description: string;
+  lifecycleState: string;
+  engineFamily: string;
+  visibilityState: string;
+  releaseStage: string;
+  capabilities: string[];
+  sortOrder: number;
+  profileDefinitionId: string | null;
+  providerToolName: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ToolProfileDefinitionSummary {
+  profileDefinitionId: string;
+  workerTypeId: string;
+  displayName: string;
+  providerToolName: string;
+  engineFamily: string;
+  schemaVersion: number;
+  lifecycleState: string;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  workerDisplayName?: string;
+  workerReleaseStage?: string;
+  latestReleaseVersion?: number | null;
+  releaseCount?: number;
+  channels: Partial<Record<ToolProfileChannel, number>>;
+}
+
+export interface ToolProfileChannelPointerRecord {
+  profileDefinitionId: string;
+  channel: ToolProfileChannel;
+  releaseVersion: number;
+  modifiedByUserId: string | null;
+  updatedAt: string;
+}
+
+export interface ToolProfileAcceptanceEvidenceRecord {
+  id: string;
+  profileDefinitionId: string;
+  releaseVersion: number;
+  payloadDigest: string;
+  engineVersion: string;
+  providerToolVersion: string;
+  evidence: unknown;
+  submittedByUserId: string | null;
+  acceptedAt: string;
+  submittedAt: string;
+}
+
+export interface ToolProfileAuditEvent {
+  id: string;
+  profileDefinitionId: string;
+  releaseVersion: number;
+  actorUserId: string | null;
+  action: string;
+  previousReleaseVersion: number | null;
+  channel: string | null;
+  fromState: string | null;
+  toState: string | null;
+  reason: string | null;
+  details: Record<string, unknown>;
+  createdAt: string;
+}
+
+export async function listAdminWorkerCatalog(
+  db: D1Database,
+): Promise<{ workers: AdminWorkerCatalogEntry[] }> {
+  const rows = await db
+    .prepare(
+      `SELECT worker.worker_type_id, worker.display_name, worker.description,
+              worker.lifecycle_state, worker.engine_family, worker.visibility_state,
+              worker.release_stage, worker.capabilities_json, worker.sort_order,
+              worker.created_at, worker.updated_at,
+              definition.profile_definition_id, definition.provider_tool_name
+         FROM worker_catalog worker
+         LEFT JOIN tool_profile_definitions definition
+           ON definition.worker_type_id = worker.worker_type_id
+          AND definition.lifecycle_state = 'active'
+        ORDER BY worker.sort_order, worker.worker_type_id
+        LIMIT 256`,
+    )
+    .all<{
+      worker_type_id: string;
+      display_name: string;
+      description: string;
+      lifecycle_state: string;
+      engine_family: string;
+      visibility_state: string;
+      release_stage: string;
+      capabilities_json: string;
+      sort_order: number;
+      created_at: string;
+      updated_at: string;
+      profile_definition_id: string | null;
+      provider_tool_name: string | null;
+    }>();
+  return {
+    workers: (rows.results ?? []).map((row) => {
+      let capabilities: string[] = [];
+      try {
+        const parsed = JSON.parse(row.capabilities_json);
+        if (Array.isArray(parsed)) capabilities = parsed;
+      } catch {
+        capabilities = [];
+      }
+      return {
+        workerTypeId: row.worker_type_id,
+        displayName: row.display_name,
+        description: row.description,
+        lifecycleState: row.lifecycle_state,
+        engineFamily: row.engine_family,
+        visibilityState: row.visibility_state,
+        releaseStage: row.release_stage,
+        capabilities,
+        sortOrder: row.sort_order,
+        profileDefinitionId: row.profile_definition_id,
+        providerToolName: row.provider_tool_name,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    }),
+  };
+}
+
+export async function listToolProfileDefinitions(
+  db: D1Database,
+): Promise<{ definitions: ToolProfileDefinitionSummary[] }> {
+  const [defRows, pointerRows] = await Promise.all([
+    db
+      .prepare(
+        `SELECT def.profile_definition_id, def.worker_type_id, def.display_name,
+                def.provider_tool_name, def.engine_family, def.schema_version,
+                def.lifecycle_state, def.created_by_user_id, def.created_at, def.updated_at,
+                worker.display_name AS worker_display_name,
+                worker.release_stage AS worker_release_stage,
+                (SELECT MAX(release_version) FROM tool_profile_releases r
+                  WHERE r.profile_definition_id = def.profile_definition_id) AS latest_release_version,
+                (SELECT COUNT(*) FROM tool_profile_releases r
+                  WHERE r.profile_definition_id = def.profile_definition_id) AS release_count
+           FROM tool_profile_definitions def
+           JOIN worker_catalog worker
+             ON worker.worker_type_id = def.worker_type_id
+          ORDER BY def.profile_definition_id LIMIT 256`,
+      )
+      .all<{
+        profile_definition_id: string;
+        worker_type_id: string;
+        display_name: string;
+        provider_tool_name: string;
+        engine_family: string;
+        schema_version: number;
+        lifecycle_state: string;
+        created_by_user_id: string | null;
+        created_at: string;
+        updated_at: string;
+        worker_display_name: string;
+        worker_release_stage: string;
+        latest_release_version: number | null;
+        release_count: number;
+      }>(),
+    db
+      .prepare(
+        `SELECT profile_definition_id, channel, release_version
+           FROM tool_profile_channel_pointers`,
+      )
+      .all<{
+        profile_definition_id: string;
+        channel: ToolProfileChannel;
+        release_version: number;
+      }>(),
+  ]);
+
+  const channelMap = new Map<
+    string,
+    Partial<Record<ToolProfileChannel, number>>
+  >();
+  for (const row of pointerRows.results ?? []) {
+    let channels = channelMap.get(row.profile_definition_id);
+    if (!channels) {
+      channels = {};
+      channelMap.set(row.profile_definition_id, channels);
+    }
+    channels[row.channel] = row.release_version;
+  }
+
+  return {
+    definitions: (defRows.results ?? []).map((row) => ({
+      profileDefinitionId: row.profile_definition_id,
+      workerTypeId: row.worker_type_id,
+      displayName: row.display_name,
+      providerToolName: row.provider_tool_name,
+      engineFamily: row.engine_family,
+      schemaVersion: row.schema_version,
+      lifecycleState: row.lifecycle_state,
+      createdByUserId: row.created_by_user_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      workerDisplayName: row.worker_display_name,
+      workerReleaseStage: row.worker_release_stage,
+      latestReleaseVersion: row.latest_release_version,
+      releaseCount: row.release_count,
+      channels: channelMap.get(row.profile_definition_id) ?? {},
+    })),
+  };
+}
+
+export async function getToolProfileDefinition(
+  db: D1Database,
+  profileDefinitionId: string,
+): Promise<ToolProfileDefinitionSummary> {
+  validateId(profileDefinitionId, "profileDefinitionId");
+  const [row, pointerRows] = await Promise.all([
+    db
+      .prepare(
+        `SELECT def.profile_definition_id, def.worker_type_id, def.display_name,
+                def.provider_tool_name, def.engine_family, def.schema_version,
+                def.lifecycle_state, def.created_by_user_id, def.created_at, def.updated_at,
+                worker.display_name AS worker_display_name,
+                worker.release_stage AS worker_release_stage,
+                (SELECT MAX(release_version) FROM tool_profile_releases r
+                  WHERE r.profile_definition_id = def.profile_definition_id) AS latest_release_version,
+                (SELECT COUNT(*) FROM tool_profile_releases r
+                  WHERE r.profile_definition_id = def.profile_definition_id) AS release_count
+           FROM tool_profile_definitions def
+           JOIN worker_catalog worker
+             ON worker.worker_type_id = def.worker_type_id
+          WHERE def.profile_definition_id = ?1`,
+      )
+      .bind(profileDefinitionId)
+      .first<{
+        profile_definition_id: string;
+        worker_type_id: string;
+        display_name: string;
+        provider_tool_name: string;
+        engine_family: string;
+        schema_version: number;
+        lifecycle_state: string;
+        created_by_user_id: string | null;
+        created_at: string;
+        updated_at: string;
+        worker_display_name: string;
+        worker_release_stage: string;
+        latest_release_version: number | null;
+        release_count: number;
+      }>(),
+    db
+      .prepare(
+        `SELECT channel, release_version
+           FROM tool_profile_channel_pointers
+          WHERE profile_definition_id = ?1`,
+      )
+      .bind(profileDefinitionId)
+      .all<{
+        channel: ToolProfileChannel;
+        release_version: number;
+      }>(),
+  ]);
+
+  if (!row) {
+    throw new ToolProfileRegistryError(
+      404,
+      "Tool Profile definition was not found",
+    );
+  }
+
+  const channels: Partial<Record<ToolProfileChannel, number>> = {};
+  for (const pointer of pointerRows.results ?? []) {
+    channels[pointer.channel] = pointer.release_version;
+  }
+
+  return {
+    profileDefinitionId: row.profile_definition_id,
+    workerTypeId: row.worker_type_id,
+    displayName: row.display_name,
+    providerToolName: row.provider_tool_name,
+    engineFamily: row.engine_family,
+    schemaVersion: row.schema_version,
+    lifecycleState: row.lifecycle_state,
+    createdByUserId: row.created_by_user_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    workerDisplayName: row.worker_display_name,
+    workerReleaseStage: row.worker_release_stage,
+    latestReleaseVersion: row.latest_release_version,
+    releaseCount: row.release_count,
+    channels,
+  };
+}
+
+export async function getToolProfileRelease(
+  db: D1Database,
+  identity: ToolProfileReleaseIdentity,
+): Promise<Record<string, unknown>> {
+  validateId(identity.profileDefinitionId, "profileDefinitionId");
+  validateVersion(identity.releaseVersion);
+  const row = await db
+    .prepare(
+      `SELECT release_version, worker_type_id, lifecycle_state, schema_version,
+              engine_family, engine_compatibility_min,
+              engine_compatibility_max_exclusive, payload_json, payload_digest,
+              signature, signing_key_id, publisher, published_at, lifecycle_reason,
+              revoked_at, created_by_user_id, updated_by_user_id, created_at, updated_at,
+              (SELECT evidence_json FROM tool_profile_acceptance_evidence evidence
+                WHERE evidence.profile_definition_id = release.profile_definition_id
+                  AND evidence.release_version = release.release_version
+                ORDER BY evidence.submitted_at DESC LIMIT 1)
+                AS acceptance_evidence_json
+         FROM tool_profile_releases AS release
+        WHERE profile_definition_id = ?1 AND release_version = ?2`,
+    )
+    .bind(identity.profileDefinitionId, identity.releaseVersion)
+    .first<{
+      release_version: number;
+      worker_type_id: string;
+      lifecycle_state: ToolProfileLifecycle;
+      schema_version: number;
+      engine_family: string;
+      engine_compatibility_min: string;
+      engine_compatibility_max_exclusive: string;
+      payload_json: string;
+      payload_digest: string;
+      signature: string | null;
+      signing_key_id: string | null;
+      publisher: string | null;
+      published_at: string | null;
+      lifecycle_reason: string | null;
+      revoked_at: string | null;
+      created_by_user_id: string | null;
+      updated_by_user_id: string | null;
+      created_at: string;
+      updated_at: string;
+      acceptance_evidence_json: string | null;
+    }>();
+
+  if (!row) {
+    throw new ToolProfileRegistryError(
+      404,
+      "Tool Profile release was not found",
+    );
+  }
+
+  return {
+    releaseVersion: row.release_version,
+    workerTypeId: row.worker_type_id,
+    lifecycleState: row.lifecycle_state,
+    schemaVersion: row.schema_version,
+    engineFamily: row.engine_family,
+    engineCompatibility: {
+      min: row.engine_compatibility_min,
+      maxExclusive: row.engine_compatibility_max_exclusive,
+    },
+    profile: JSON.parse(row.payload_json),
+    payloadDigest: row.payload_digest,
+    signature: row.signature,
+    signingKeyId: row.signing_key_id,
+    publisher: row.publisher,
+    publishedAt: row.published_at,
+    acceptanceEvidence: row.acceptance_evidence_json
+      ? JSON.parse(row.acceptance_evidence_json)
+      : null,
+    lifecycleReason: row.lifecycle_reason,
+    revokedAt: row.revoked_at,
+    createdByUserId: row.created_by_user_id,
+    updatedByUserId: row.updated_by_user_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function listToolProfileChannelPointers(
+  db: D1Database,
+  profileDefinitionId?: string,
+): Promise<{ channels: ToolProfileChannelPointerRecord[] }> {
+  if (profileDefinitionId !== undefined) {
+    validateId(profileDefinitionId, "profileDefinitionId");
+  }
+  const rows = await db
+    .prepare(
+      `SELECT profile_definition_id, channel, release_version, modified_by_user_id, updated_at
+         FROM tool_profile_channel_pointers
+        WHERE (?1 IS NULL OR profile_definition_id = ?1)
+        ORDER BY profile_definition_id,
+                 CASE channel WHEN 'stable' THEN 0 WHEN 'beta' THEN 1 ELSE 2 END`,
+    )
+    .bind(profileDefinitionId ?? null)
+    .all<{
+      profile_definition_id: string;
+      channel: string;
+      release_version: number;
+      modified_by_user_id: string | null;
+      updated_at: string;
+    }>();
+  return {
+    channels: (rows.results ?? []).map((row) => ({
+      profileDefinitionId: row.profile_definition_id,
+      channel: row.channel as ToolProfileChannel,
+      releaseVersion: row.release_version,
+      modifiedByUserId: row.modified_by_user_id,
+      updatedAt: row.updated_at,
+    })),
+  };
+}
+
+export async function rollbackToolProfileChannel(
+  db: D1Database,
+  args: {
+    profileDefinitionId: string;
+    channel: ToolProfileChannel;
+    targetReleaseVersion: number;
+    actorUserId: string;
+    reason?: string;
+  },
+): Promise<{
+  profileDefinitionId: string;
+  channel: ToolProfileChannel;
+  releaseVersion: number;
+  previousReleaseVersion: number;
+  action: "rolled_back";
+}> {
+  validateId(args.profileDefinitionId, "profileDefinitionId");
+  validateVersion(args.targetReleaseVersion);
+  if (!channelNames.has(args.channel)) {
+    throw new ToolProfileRegistryError(400, "channel is invalid");
+  }
+
+  const current = await db
+    .prepare(
+      `SELECT release_version FROM tool_profile_channel_pointers
+        WHERE profile_definition_id = ?1 AND channel = ?2`,
+    )
+    .bind(args.profileDefinitionId, args.channel)
+    .first<{ release_version: number }>();
+
+  if (!current) {
+    throw new ToolProfileRegistryError(
+      404,
+      "Active channel pointer was not found",
+    );
+  }
+
+  if (current.release_version === args.targetReleaseVersion) {
+    throw new ToolProfileRegistryError(
+      409,
+      "Channel pointer is already at the requested release version",
+    );
+  }
+
+  const targetRelease = await db
+    .prepare(
+      `SELECT release_version, lifecycle_state, published_at
+         FROM tool_profile_releases
+        WHERE profile_definition_id = ?1 AND release_version = ?2`,
+    )
+    .bind(args.profileDefinitionId, args.targetReleaseVersion)
+    .first<{
+      release_version: number;
+      lifecycle_state: ToolProfileLifecycle;
+      published_at: string | null;
+    }>();
+
+  if (!targetRelease) {
+    throw new ToolProfileRegistryError(
+      404,
+      "Target Tool Profile release was not found",
+    );
+  }
+
+  if (
+    !targetRelease.published_at ||
+    ["draft", "retired", "revoked"].includes(targetRelease.lifecycle_state)
+  ) {
+    throw new ToolProfileRegistryError(
+      409,
+      "Target release is not eligible for channel rollback",
+    );
+  }
+
+  // The DB trigger on tool_profile_channel_pointers enforces release.lifecycle_state = channel.
+  // If target release lifecycle state is not already the channel, verify transition validity.
+  const allowedTransitions: Record<ToolProfileChannel, ToolProfileLifecycle[]> =
+    {
+      testing: ["testing"],
+      beta: ["testing", "beta"],
+      stable: ["testing", "beta", "stable"],
+    };
+
+  if (
+    !allowedTransitions[args.channel].includes(targetRelease.lifecycle_state)
+  ) {
+    throw new ToolProfileRegistryError(
+      409,
+      `Target release in state '${targetRelease.lifecycle_state}' cannot enter channel '${args.channel}'`,
+    );
+  }
+
+  const now = new Date().toISOString();
+  const statements = [];
+
+  if (targetRelease.lifecycle_state !== args.channel) {
+    const lifecycleReason =
+      args.reason?.trim() ||
+      `Rolled back ${args.channel} from release ${current.release_version} to ${args.targetReleaseVersion}`;
+    statements.push(
+      db
+        .prepare(
+          `UPDATE tool_profile_releases
+              SET lifecycle_state = ?1, updated_by_user_id = ?2,
+                  lifecycle_reason = ?3, updated_at = ?4
+            WHERE profile_definition_id = ?5 AND release_version = ?6
+              AND published_at IS NOT NULL`,
+        )
+        .bind(
+          args.channel,
+          args.actorUserId,
+          lifecycleReason,
+          now,
+          args.profileDefinitionId,
+          args.targetReleaseVersion,
+        ),
+    );
+  }
+
+  statements.push(
+    db
+      .prepare(
+        `UPDATE tool_profile_channel_pointers
+            SET release_version = ?1, modified_by_user_id = ?2, updated_at = ?3
+          WHERE profile_definition_id = ?4 AND channel = ?5`,
+      )
+      .bind(
+        args.targetReleaseVersion,
+        args.actorUserId,
+        now,
+        args.profileDefinitionId,
+        args.channel,
+      ),
+  );
+
+  const results = await db.batch(statements);
+  if (!results.at(-1)?.meta.changes) {
+    throw new ToolProfileRegistryError(
+      409,
+      "Tool Profile channel rollback was rejected",
+    );
+  }
+
+  return {
+    profileDefinitionId: args.profileDefinitionId,
+    channel: args.channel,
+    releaseVersion: args.targetReleaseVersion,
+    previousReleaseVersion: current.release_version,
+    action: "rolled_back",
+  };
+}
+
+export async function submitToolProfileReleaseEvidence(
+  db: D1Database,
+  identity: ToolProfileReleaseIdentity,
+  input: unknown,
+  actorUserId: string,
+): Promise<{
+  id: string;
+  status: "accepted" | "already_accepted";
+  payloadDigest: string;
+}> {
+  validateId(identity.profileDefinitionId, "profileDefinitionId");
+  validateVersion(identity.releaseVersion);
+
+  const release = await db
+    .prepare(
+      `SELECT release_version, payload_digest, payload_json, worker_type_id, lifecycle_state
+         FROM tool_profile_releases
+        WHERE profile_definition_id = ?1 AND release_version = ?2`,
+    )
+    .bind(identity.profileDefinitionId, identity.releaseVersion)
+    .first<{
+      release_version: number;
+      payload_digest: string;
+      payload_json: string;
+      worker_type_id: string;
+      lifecycle_state: ToolProfileLifecycle;
+    }>();
+
+  if (!release) {
+    throw new ToolProfileRegistryError(
+      404,
+      "Tool Profile release was not found",
+    );
+  }
+
+  const profile = parseProfile(
+    JSON.parse(release.payload_json),
+    identity,
+  ).profile;
+
+  const acceptedEvidence = validateToolProfileAcceptanceEvidence(input, {
+    identity,
+    payloadDigest: release.payload_digest,
+    profile,
+  });
+
+  const existing = await db
+    .prepare(
+      `SELECT id FROM tool_profile_acceptance_evidence
+        WHERE profile_definition_id = ?1 AND release_version = ?2 AND payload_digest = ?3`,
+    )
+    .bind(
+      identity.profileDefinitionId,
+      identity.releaseVersion,
+      release.payload_digest,
+    )
+    .first<{ id: string }>();
+
+  if (existing) {
+    return {
+      id: existing.id,
+      status: "already_accepted",
+      payloadDigest: release.payload_digest,
+    };
+  }
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await db
+    .prepare(
+      `INSERT INTO tool_profile_acceptance_evidence (
+         id, profile_definition_id, release_version, payload_digest,
+         engine_version, provider_tool_version, evidence_json,
+         submitted_by_user_id, accepted_at, submitted_at
+       ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
+    )
+    .bind(
+      id,
+      identity.profileDefinitionId,
+      identity.releaseVersion,
+      release.payload_digest,
+      acceptedEvidence.engineVersion,
+      acceptedEvidence.providerToolVersion,
+      JSON.stringify(acceptedEvidence),
+      actorUserId,
+      acceptedEvidence.acceptedAt,
+      now,
+    )
+    .run();
+
+  return {
+    id,
+    status: "accepted",
+    payloadDigest: release.payload_digest,
+  };
+}
+
+export async function listToolProfileReleaseEvidence(
+  db: D1Database,
+  identity: ToolProfileReleaseIdentity,
+): Promise<{ evidence: ToolProfileAcceptanceEvidenceRecord[] }> {
+  validateId(identity.profileDefinitionId, "profileDefinitionId");
+  validateVersion(identity.releaseVersion);
+  const rows = await db
+    .prepare(
+      `SELECT id, profile_definition_id, release_version, payload_digest,
+              engine_version, provider_tool_version, evidence_json,
+              submitted_by_user_id, accepted_at, submitted_at
+         FROM tool_profile_acceptance_evidence
+        WHERE profile_definition_id = ?1 AND release_version = ?2
+        ORDER BY submitted_at DESC LIMIT 100`,
+    )
+    .bind(identity.profileDefinitionId, identity.releaseVersion)
+    .all<{
+      id: string;
+      profile_definition_id: string;
+      release_version: number;
+      payload_digest: string;
+      engine_version: string;
+      provider_tool_version: string;
+      evidence_json: string;
+      submitted_by_user_id: string | null;
+      accepted_at: string;
+      submitted_at: string;
+    }>();
+  return {
+    evidence: (rows.results ?? []).map((row) => ({
+      id: row.id,
+      profileDefinitionId: row.profile_definition_id,
+      releaseVersion: row.release_version,
+      payloadDigest: row.payload_digest,
+      engineVersion: row.engine_version,
+      providerToolVersion: row.provider_tool_version,
+      evidence: JSON.parse(row.evidence_json),
+      submittedByUserId: row.submitted_by_user_id,
+      acceptedAt: row.accepted_at,
+      submittedAt: row.submitted_at,
+    })),
+  };
+}
+
+export async function listToolProfileAudit(
+  db: D1Database,
+  profileDefinitionId?: string,
+  limit: number = 100,
+): Promise<{ events: ToolProfileAuditEvent[] }> {
+  if (profileDefinitionId !== undefined) {
+    validateId(profileDefinitionId, "profileDefinitionId");
+  }
+  const safeLimit = Math.max(1, Math.min(limit, 500));
+  const rows = await db
+    .prepare(
+      `SELECT id, profile_definition_id, release_version, actor_user_id, action,
+              previous_release_version, channel, from_state, to_state, reason,
+              details_json, created_at
+         FROM tool_profile_release_audit
+        WHERE (?1 IS NULL OR profile_definition_id = ?1)
+        ORDER BY created_at DESC, id DESC LIMIT ?2`,
+    )
+    .bind(profileDefinitionId ?? null, safeLimit)
+    .all<{
+      id: string;
+      profile_definition_id: string;
+      release_version: number;
+      actor_user_id: string | null;
+      action: string;
+      previous_release_version: number | null;
+      channel: string | null;
+      from_state: string | null;
+      to_state: string | null;
+      reason: string | null;
+      details_json: string;
+      created_at: string;
+    }>();
+  return {
+    events: (rows.results ?? []).map((row) => ({
+      id: row.id,
+      profileDefinitionId: row.profile_definition_id,
+      releaseVersion: row.release_version,
+      actorUserId: row.actor_user_id,
+      action: row.action,
+      previousReleaseVersion: row.previous_release_version,
+      channel: row.channel,
+      fromState: row.from_state,
+      toState: row.to_state,
+      reason: row.reason,
+      details: JSON.parse(row.details_json ?? "{}"),
       createdAt: row.created_at,
     })),
   };

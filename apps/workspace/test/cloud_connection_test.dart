@@ -154,6 +154,46 @@ void main() {
     await connection.close();
   });
 
+  test('refreshes catalog after initial sync and each recovered session',
+      () async {
+    final firstSocket = FakeSocket();
+    final secondSocket = FakeSocket();
+    final sockets = [firstSocket, secondSocket];
+    var refreshes = 0;
+    late final WorkspaceCloudConnection connection;
+    connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-refresh'),
+      workspaceRuntimeId: 'runtime-refresh',
+      workspaceId: 'workspace-refresh',
+      factory: (_) async => sockets.removeAt(0),
+      workerInventoryProvider: () async => const [],
+      onSessionReady: () async {
+        refreshes++;
+        await connection.refreshWorkerInventory();
+      },
+      heartbeat: const Duration(hours: 1),
+      reconnectBaseDelay: const Duration(milliseconds: 1),
+      reconnectMaxDelay: const Duration(milliseconds: 2),
+    );
+
+    await connection.connect();
+    await completeHandshake(connection, firstSocket,
+        sessionId: 'first-session');
+    await waitFor(() => refreshes == 1);
+
+    await firstSocket.controller.close();
+    await waitFor(() => secondSocket.sent.any((message) =>
+        (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+        'workspace.hello'));
+    await completeHandshake(connection, secondSocket,
+        sessionId: 'second-session');
+    await waitFor(() => refreshes == 2);
+
+    expect(refreshes, 2);
+    await connection.close();
+  });
+
   test('hands fallback back to WSS only after sync reconciliation', () async {
     final fallback = FakeSocket();
     final recovered = FakeSocket();
@@ -622,14 +662,14 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     connection.reportWorkerInventory([
       {
-        'workerId': 'worker-1',
-        'workerTypeId': 'chatgpt',
+        'workerId': 'workspace-worker-dynamic',
+        'workerTypeId': 'dynamic-test-worker',
         'activationState': 'enabled',
         'readinessState': 'ready',
         'engineVersion': '1.0.0',
-        'profileDefinitionId': 'chatgpt-codex',
+        'profileDefinitionId': 'dynamic-test-cli',
         'profileReleaseVersion': 1,
-        'providerToolName': 'codex',
+        'providerToolName': 'Fixture CLI',
         'providerToolVersion': '1.0.0',
         'capabilities': ['text', 'workstream_read'],
         'localConcurrencyLimit': 1,
@@ -644,11 +684,20 @@ void main() {
     );
     final payload = inventory['payload'] as Map<String, dynamic>;
     expect(payload['fullSnapshot'], isTrue);
-    expect((payload['workers'] as List).single['workerId'], 'worker-1');
+    expect((payload['workers'] as List).single['workerId'],
+        'workspace-worker-dynamic');
     expect((payload['workers'] as List).single['engineVersion'], '1.0.0');
     expect(
       (payload['workers'] as List).single['profileDefinitionId'],
-      'chatgpt-codex',
+      'dynamic-test-cli',
+    );
+    expect(
+      (payload['workers'] as List).single['workerTypeId'],
+      'dynamic-test-worker',
+    );
+    expect(
+      (payload['workers'] as List).single['providerToolName'],
+      'Fixture CLI',
     );
     expect(jsonEncode(payload), isNot(contains('credentialRef')));
     expect(jsonEncode(payload), isNot(contains('providerToolPath')));

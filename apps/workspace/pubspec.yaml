@@ -18,6 +18,8 @@ dependencies:
     path: ../../packages/conclave_worker_protocol
   conclave_tool_profile_v1:
     path: ../../packages/tool_profile_v1
+  conclave_cli_worker_runtime:
+    path: ../../packages/conclave_cli_worker_runtime
   cryptography: ^2.9.0
 
 dev_dependencies:
@@ -25,6 +27,8 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
   test: ^1.25.0
+  conclave_profile_lab:
+    path: ../profile_lab
 
 flutter:
   uses-material-design: true

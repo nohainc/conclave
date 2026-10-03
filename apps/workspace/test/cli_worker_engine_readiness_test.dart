@@ -6,6 +6,7 @@ import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:conclave_workspace/tool_profile_catalog.dart';
 import 'package:conclave_workspace/tool_profile_release_store.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
+import 'package:conclave_workspace/worker_catalog_coordinator.dart';
 import 'package:conclave_workspace/worker_diagnostic_store.dart';
 
 import 'package:test/test.dart';
@@ -110,6 +111,7 @@ void main() {
         logicalWorkerCatalogFixture('chatgpt').toJson(),
       ],
     );
+    await catalog.syncCatalog();
     addTearDown(catalog.close);
     final bundledEngine = File(
       '$repository/apps/workspace/assets/engines/'
@@ -127,10 +129,15 @@ void main() {
     final profileDiagnostics = WorkerDiagnosticStore(
       directory: Directory('${root.path}/Diagnostics'),
     );
+    final coordinator = WorkerCatalogCoordinator(
+      catalog: catalog,
+      releaseStore: profileStore,
+      registry: registry,
+    );
     final monitor = WorkerReadinessMonitor(
       registry: registry,
       toolProfileReleaseStore: profileStore,
-      toolProfileCatalog: catalog,
+      workerCatalogCoordinator: coordinator,
       cliWorkerEngineSupervisor: engine,
       workerStateDirectory: (workerId) =>
           Directory('${root.path}/Workers/$workerId/state'),
@@ -281,6 +288,7 @@ Future<void> main(List<String> arguments) async {
         logicalWorkerCatalogFixture('gemini').toJson(),
       ],
     );
+    await catalog.syncCatalog();
     addTearDown(catalog.close);
     final bundledEngine = File(
       '$repository/apps/workspace/assets/engines/'
@@ -296,10 +304,15 @@ Future<void> main(List<String> arguments) async {
           : ['$repository/engines/cli_worker/bin/conclave_cli_worker.dart'],
       environmentOverrides: {'HOME': root.path},
     );
+    final coordinator = WorkerCatalogCoordinator(
+      catalog: catalog,
+      releaseStore: profileStore,
+      registry: registry,
+    );
     final monitor = WorkerReadinessMonitor(
       registry: registry,
       toolProfileReleaseStore: profileStore,
-      toolProfileCatalog: catalog,
+      workerCatalogCoordinator: coordinator,
       cliWorkerEngineSupervisor: engine,
       workerStateDirectory: (workerId) =>
           Directory('${root.path}/Workers/$workerId/state'),

@@ -531,7 +531,7 @@ export class RealtimeGateway implements DurableObject {
         );
         if (matchingScopes.length === 0) continue;
         const gapScope = isDurableRealtimeEventType(event.type)
-          ? matchingScopes.find((scope) =>
+          ? matchingScopes.find((_scope) =>
               requiresRealtimeReconnect(
                 connected.lastDurableSequences.get(event.workspaceId) ?? null,
                 event.sequence,

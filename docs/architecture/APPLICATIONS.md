@@ -1,8 +1,14 @@
-# Conclave AX Applications
+# Conclave Applications & Architecture Boundaries
 
 **Status:** Current Architecture v8 product/application boundary.
 
-Conclave AX has three primary applications and one extension type.
+Conclave defines four primary product surfaces:
+1. **Conclave AX** (`apps/app`): Human web interface for project orchestration, workstream binding, and approvals.
+2. **Conclave Cloud** (`apps/cloud`): Authoritative Cloud API, database, catalog store, signature authority, and Workspace Gateway.
+3. **Conclave Workspace** (`apps/workspace`): Native machine-side desktop application and execution runtime.
+4. **Conclave Profile Lab** (`apps/profile_lab`): Internal administrative desktop engineering application for Worker catalog management, Profile authoring, sandbox testing, release promotion, and revocation.
+
+---
 
 ## 1. Conclave AX
 
@@ -144,9 +150,14 @@ packages for normal provider CLIs.
 A Worker Type is the stable product/catalog identity for a Logical Worker, not
 a user-installed application and not an AI model.
 
-The frozen first-party v1 product catalog contains two Logical Workers:
+Conclave v1 initially provisions these official Logical Workers:
 - **ChatGPT**, resolved by the `chatgpt-codex` Tool Profile Definition to Codex CLI (`codex`);
 - **Gemini**, resolved by the `gemini-antigravity` Tool Profile Definition to Antigravity CLI (`agy`).
+
+The official Worker Catalog is Cloud-managed and dynamically delivered.
+Additional approved Worker Types can become available without a Workspace
+application release when an existing Engine family and supported Tool Profile
+schema can express them.
 
 Each Workspace has one stable local slot for each type. The provider CLI owns
 sign-in and billing mode; Conclave
@@ -231,3 +242,27 @@ Logical Workers. Official signed Tool Profile Releases map those identities to
 supported Provider CLI behavior. New normal CLI integrations should be added
 through the Cloud Worker catalog and Tool Profile releases when Profile v1 can
 express them.
+
+## 5. Conclave Profile Lab
+
+**Path:** `apps/profile_lab`
+**Internal product name:** Conclave Profile Lab
+
+**Technology**
+- Flutter;
+- Dart;
+- native desktop application.
+
+**Target**
+- macOS only.
+
+**Purpose**
+- internal engineering and operations application for maintaining the Worker and Tool Profile ecosystem;
+- dynamic Worker Catalog browsing and Profile Definition inspection;
+- author, edit, and validate local Draft Profiles;
+- test unsigned local Draft Profile candidates directly against locally installed provider CLIs using the generic CLI Worker Engine in an isolated test sandbox;
+- capture cryptographic test evidence bound to exact Profile payload digests;
+- request immutable signed Profile releases from Cloud;
+- manage release lifecycle promotion (`Testing` → `Beta` → `Stable`), rollback, and revocation.
+
+Conclave Profile Lab is strictly separated from Conclave Workspace and Conclave AX. It never registers as an execution Workspace, never advertises Workers to Cloud inventory, never accepts Work assignments, and never owns Project Work Roots. Provider credentials remain owned by local provider CLIs; Profile Lab never stores provider credentials. See [ADR-019](../decisions/ADR-019-conclave-profile-lab.md).

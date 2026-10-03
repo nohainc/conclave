@@ -72,16 +72,26 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
                 ? Map<String, dynamic>.from(raw)
                 : <String, dynamic>{};
             final localWorkerId = binding['workerId']?.toString() ?? '';
-            final selectedId =
-                _eligibleWorkers.any((worker) => worker.id == localWorkerId)
-                    ? localWorkerId
-                    : '';
             final selectedWorker = _projectWorkers
                 .where((worker) => worker.id == localWorkerId)
                 .firstOrNull;
-            final status = selectedWorker == null
-                ? (localWorkerId.isEmpty ? 'Not assigned' : 'Unavailable')
-                : _workerReadinessLabel(selectedWorker);
+            final catalogUnavailable = selectedWorker != null &&
+                (selectedWorker.catalogLifecycleState != 'active' ||
+                    selectedWorker.catalogVisibilityState != 'visible');
+            final unavailable = localWorkerId.isNotEmpty &&
+                (selectedWorker == null || catalogUnavailable);
+            final selectedId = unavailable ? '' : localWorkerId;
+            final previousLabel = _bindingWorkerLabel(
+              binding,
+              'workerLabel',
+              selectedWorker,
+              localWorkerId,
+            );
+            final status = unavailable
+                ? 'Unavailable'
+                : selectedWorker == null
+                    ? (localWorkerId.isEmpty ? 'Not assigned' : 'Unavailable')
+                    : _workerReadinessLabel(selectedWorker);
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
@@ -89,35 +99,108 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
                   SizedBox(
                       width: 100, child: Text(_stepDisplayName(bindingId))),
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: selectedId,
-                      decoration: const InputDecoration(
-                        labelText: 'Worker',
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem(
-                          value: '',
-                          child: Text('Choose a Worker'),
-                        ),
-                        ..._eligibleWorkers.map((worker) => DropdownMenuItem(
-                              value: worker.id,
-                              child: Text(
-                                '${_workerDisplayName(worker)} · ${_projectWorkspaceNames[worker.workspaceId] ?? worker.workspaceId}',
-                                overflow: TextOverflow.ellipsis,
+                    child: unavailable
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                'Worker unavailable',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color:
+                                          Theme.of(context).colorScheme.error,
+                                    ),
                               ),
-                            )),
-                      ],
-                      onChanged: !_canConfigureWork || _savingWorkConfig
-                          ? null
-                          : (value) => _setStepBinding(
-                                bindingId,
-                                value == null || value.isEmpty
-                                    ? <String, dynamic>{}
-                                    : {...binding, 'workerId': value},
+                              Text('Previously: $previousLabel'),
+                              DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                initialValue: '',
+                                decoration: const InputDecoration(
+                                  labelText: 'Select Worker',
+                                  isDense: true,
+                                  border: OutlineInputBorder(),
+                                ),
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: '',
+                                    child: Text('Select Worker'),
+                                  ),
+                                  ..._eligibleWorkers
+                                      .map((worker) => DropdownMenuItem(
+                                            value: worker.id,
+                                            child: Text(
+                                              '${worker.displayName} · ${worker.workspaceName}',
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          )),
+                                ],
+                                onChanged: !_canConfigureWork ||
+                                        _savingWorkConfig
+                                    ? null
+                                    : (value) {
+                                        if (value == null || value.isEmpty) {
+                                          return;
+                                        }
+                                        final worker =
+                                            _eligibleWorkers.firstWhere(
+                                                (item) => item.id == value);
+                                        _setStepBinding(bindingId, {
+                                          ...binding,
+                                          'workerId': worker.id,
+                                          'workerLabel': _workerLabel(worker),
+                                        });
+                                      },
                               ),
-                    ),
+                            ],
+                          )
+                        : DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            initialValue: selectedId,
+                            decoration: const InputDecoration(
+                              labelText: 'Worker',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                            items: [
+                              const DropdownMenuItem(
+                                value: '',
+                                child: Text('Choose a Worker'),
+                              ),
+                              if (selectedWorker != null &&
+                                  !_eligibleWorkers.any(
+                                      (worker) => worker.id == localWorkerId))
+                                DropdownMenuItem(
+                                  enabled: false,
+                                  value: localWorkerId,
+                                  child: Text(
+                                    '${selectedWorker.displayName} · ${selectedWorker.workspaceName}',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ..._eligibleWorkers
+                                  .map((worker) => DropdownMenuItem(
+                                        value: worker.id,
+                                        child: Text(
+                                          '${worker.displayName} · ${worker.workspaceName}',
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      )),
+                            ],
+                            onChanged: !_canConfigureWork || _savingWorkConfig
+                                ? null
+                                : (value) {
+                                    if (value == null || value.isEmpty) return;
+                                    final worker = _eligibleWorkers
+                                        .firstWhere((item) => item.id == value);
+                                    _setStepBinding(bindingId, {
+                                      ...binding,
+                                      'workerId': worker.id,
+                                      'workerLabel': _workerLabel(worker),
+                                    });
+                                  },
+                          ),
                   ),
                   const SizedBox(width: 10),
                   SizedBox(
@@ -262,6 +345,31 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
     return 'Needs attention';
   }
 
+  Map<String, String> _workerLabel(AxWorker worker) => {
+        'displayName': worker.displayName,
+        'workspaceName': worker.workspaceName,
+      };
+
+  String _bindingWorkerLabel(
+    Map<String, dynamic> binding,
+    String labelKey,
+    AxWorker? inventoryWorker,
+    String workerId,
+  ) {
+    final rawLabel = binding[labelKey];
+    if (rawLabel is Map) {
+      final displayName = rawLabel['displayName']?.toString().trim() ?? '';
+      final workspaceName = rawLabel['workspaceName']?.toString().trim() ?? '';
+      if (displayName.isNotEmpty && workspaceName.isNotEmpty) {
+        return '$displayName — $workspaceName';
+      }
+    }
+    if (inventoryWorker != null) {
+      return '${inventoryWorker.displayName} — ${inventoryWorker.workspaceName}';
+    }
+    return workerId.isEmpty ? 'Unknown Worker' : 'Worker $workerId';
+  }
+
   String _stepAdvancedSummary(Map<String, dynamic> binding) {
     final details = <String>[];
     if ((binding['additionalInstructions']?.toString().trim().isNotEmpty ??
@@ -293,12 +401,6 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
     _updateState(() => _workConfig = {..._workConfig, 'bindings': bindings});
   }
 
-  String _workerDisplayName(AxWorker worker) => switch (worker.workerTypeId) {
-        'chatgpt' => 'ChatGPT',
-        'gemini' => 'Gemini',
-        _ => worker.workerTypeId,
-      };
-
   Future<void> _editStepBinding(
     String bindingId,
     Map<String, dynamic> current,
@@ -310,13 +412,22 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
     );
     final eligibleWorkerIds =
         _eligibleWorkers.map((worker) => worker.id).toSet();
-    var selectedWorker = current['workerId']?.toString() ?? '';
-    if (!eligibleWorkerIds.contains(selectedWorker)) selectedWorker = '';
+    final selectedWorker = current['workerId']?.toString() ?? '';
     var fallbackWorker = current['fallbackWorkerId']?.toString() ?? '';
-    if (!eligibleWorkerIds.contains(fallbackWorker) ||
-        fallbackWorker == selectedWorker) {
-      fallbackWorker = '';
-    }
+    final originalFallbackWorker = fallbackWorker;
+    var fallbackWasChanged = false;
+    final fallbackUnavailable = fallbackWorker.isNotEmpty &&
+        (!eligibleWorkerIds.contains(fallbackWorker) ||
+            fallbackWorker == selectedWorker);
+    const clearFallbackValue = '__clear_fallback__';
+    final previousFallbackLabel = _bindingWorkerLabel(
+      current,
+      'fallbackWorkerLabel',
+      _projectWorkers
+          .where((worker) => worker.id == originalFallbackWorker)
+          .firstOrNull,
+      originalFallbackWorker,
+    );
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -329,23 +440,60 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const SizedBox(height: 12),
+                  if (selectedWorker.isNotEmpty &&
+                      !eligibleWorkerIds.contains(selectedWorker)) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Worker unavailable. Previously: ${_bindingWorkerLabel(current, 'workerLabel', _projectWorkers.where((worker) => worker.id == selectedWorker).firstOrNull, selectedWorker)}',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (fallbackUnavailable) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Fallback Worker unavailable. Previously: $previousFallbackLabel',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   DropdownButtonFormField<String>(
-                    initialValue: fallbackWorker,
-                    decoration: const InputDecoration(
-                        labelText: 'Fallback Worker (optional)'),
+                    isExpanded: true,
+                    initialValue: fallbackUnavailable
+                        ? ''
+                        : fallbackWorker.isEmpty
+                            ? clearFallbackValue
+                            : fallbackWorker,
+                    decoration: InputDecoration(
+                        labelText: fallbackUnavailable
+                            ? 'Select Worker'
+                            : 'Fallback Worker (optional)'),
                     items: [
                       const DropdownMenuItem(
-                          value: '', child: Text('No fallback')),
+                        value: '',
+                        child: Text('Select Worker'),
+                      ),
+                      const DropdownMenuItem(
+                        value: clearFallbackValue,
+                        child: Text('No fallback'),
+                      ),
                       ..._eligibleWorkers
                           .where((worker) => worker.id != selectedWorker)
                           .map((worker) => DropdownMenuItem(
                                 value: worker.id,
                                 child: Text(
-                                    '${_workerDisplayName(worker)} · ${_projectWorkspaceNames[worker.workspaceId] ?? worker.workspaceId}'),
+                                  '${worker.displayName} · ${worker.workspaceName}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               )),
                     ],
-                    onChanged: (value) =>
-                        setDialogState(() => fallbackWorker = value ?? ''),
+                    onChanged: (value) => setDialogState(() {
+                      fallbackWasChanged = true;
+                      fallbackWorker =
+                          value == clearFallbackValue ? '' : value ?? '';
+                    }),
                   ),
                   TextField(
                     controller: modelController,
@@ -383,10 +531,23 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
       ),
     );
     if (saved == true && mounted) {
-      final binding = <String, dynamic>{
-        if (selectedWorker.isNotEmpty) 'workerId': selectedWorker,
-        if (fallbackWorker.isNotEmpty) 'fallbackWorkerId': fallbackWorker,
-      };
+      final binding = Map<String, dynamic>.from(current);
+      if (fallbackWasChanged) {
+        if (fallbackWorker.isEmpty) {
+          binding.remove('fallbackWorkerId');
+          binding.remove('fallbackWorkerLabel');
+        } else {
+          final worker = _eligibleWorkers
+              .where((item) => item.id == fallbackWorker)
+              .firstOrNull;
+          binding['fallbackWorkerId'] = fallbackWorker;
+          if (worker != null) {
+            binding['fallbackWorkerLabel'] = _workerLabel(worker);
+          }
+        }
+      } else if (fallbackWorker != originalFallbackWorker) {
+        binding['fallbackWorkerId'] = originalFallbackWorker;
+      }
       final model = modelController.text.trim();
       final instructions = instructionsController.text.trim();
       if (model.isNotEmpty) binding['model'] = model;

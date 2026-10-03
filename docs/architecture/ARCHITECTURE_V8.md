@@ -657,17 +657,22 @@ Do not accumulate large behavior branches in one profile.
 
 The logical Worker catalog is Cloud/product data, not compiled provider code.
 
-Initial v8 product remains:
+Conclave v1 initially provisions ChatGPT and Gemini as official Workers. The
+official Worker Catalog is Cloud-managed and dynamically delivered. Additional
+approved Worker Types can become available without a Workspace application
+release when an existing Engine family and supported Tool Profile schema can
+express them.
+
+Initial Workers:
 
 ~~~text
 ChatGPT -> chatgpt-codex
 Gemini  -> gemini-antigravity
 ~~~
 
-A future approved CLI Worker may be added without changing Workspace if:
-- existing Engine capabilities are sufficient;
-- a valid signed profile exists;
-- product catalog policy enables it.
+A future approved Worker may be added without changing the Workspace
+application when it fits an existing Engine family, has a valid signed Profile
+using the supported schema, and Cloud catalog policy enables it.
 
 The user cannot add arbitrary catalog/profile entries in v8.
 
@@ -807,17 +812,87 @@ worker_catalog
   release_stage
   capabilities_json
   sort_order
+
+worker_catalog = stable logical product identity and presentation metadata
+tool_profile_definitions = replaceable implementation bindings for a Worker
+tool_profile_releases = immutable, signed, versioned implementation behavior
+
+WorkerDescriptor = worker_catalog row joined to its active
+tool_profile_definitions row:
+  workerTypeId, displayName, description, engineFamily, capabilities,
+  profileDefinitionId, providerToolName, releaseStage, visibilityState,
+  sortOrder
 ~~~
+
+These tables represent separate identities and lifecycles; do not collapse
+`worker_catalog` into `tool_profile_definitions`. Product references use the
+stable `worker_type_id`. A Profile Definition binds that identity to an
+implementation, and signed releases version the behavior of that definition.
+Replacing an implementation retires its old Definition and activates a new
+one while preserving the catalog Worker ID. A partial unique index permits at
+most one active Profile Definition per Worker.
 
 Each active catalog entry is joined to its active Tool Profile definition.
 Workspace receives visible entries eligible for its Cloud-selected channel;
 it cannot request a different channel. Profile release resolution is separate,
 so a Worker can still render while its Profile is unavailable and must remain
-unrunnable until a trusted compatible release is selected. A catalog entry can be created only by a platform
-administrator through the approved catalog operation, which creates its
-logical Worker and Profile definition together. Workspace users cannot create
-catalog entries. Each release remains signed, immutable, and independently
-validated before local activation.
+unrunnable until a trusted compatible release is selected. A catalog entry can
+be created only by a platform administrator through the approved catalog
+operation, which may create the initial logical Worker and Profile Definition
+together. Workspace users cannot create catalog entries. Each release remains
+signed, immutable, and independently validated before local activation.
+
+AX reads descriptors through the authenticated human product API
+`GET /api/workers/catalog`. It returns the stable catalog and never serves
+Profile release payloads. Workspace reads its channel-scoped catalog through
+`GET /api/workspace-runtime/workers/catalog`; signed Profile Release payloads
+are fetched separately from `GET /api/tool-profiles` for one Worker Type. The
+runtime catalog applies the selected-channel stage policy: stable includes
+stable Workers, beta includes beta and stable, and testing includes testing,
+beta, and stable. Both catalog routes use `resolveLogicalWorkerCatalog()` but
+have distinct human and runtime authentication contracts. Adding an approved
+catalog row requires no app deployment.
+
+Workspace's `WorkerCatalogCoordinator` owns catalog/Profile synchronization.
+It publishes cached catalog state first, refreshes and reconciles the Cloud
+catalog, synchronizes Profiles for eligible Workers, resolves local Profile
+selection, then refreshes readiness. Startup, periodic refresh, readiness
+fallback, assignment fallback, and the Workers page use this coordinator rather
+than maintaining separate synchronization policies.
+
+The coordinator snapshot exposes `workers` as render-ready
+`WorkerCatalogWorkerState` records. Each record contains its descriptor, local
+Worker, Profile availability, provider tool state, and readiness. Registry
+mutations refresh this projection. A missing or incompatible local Profile
+never removes a catalog Worker from the page.
+
+The displayed state is derived from these independent facts, not stored in
+`LocalWorker.status`. Catalog retirement and activation are considered first;
+then Profile state, local runtime availability, authentication, provider-tool
+detection, and readiness determine the card state. Workspace can therefore
+show `Setup required`, `Preparing integration…`, `Provider tool not installed`,
+`Authentication required`, `Ready`, `Disabled`, `Incompatible`, `Catalog
+retired`, and `Runtime unavailable` without treating Profile existence as
+Worker existence.
+Once a Cloud catalog refresh succeeds, a previously configured local Worker
+missing from that catalog remains visible as `Catalog retired`; a cached
+catalog alone does not trigger retirement.
+
+An unavailable or invalid Cloud response is a failed synchronization, not an
+empty authoritative catalog. Workspace keeps the last locally validated
+catalog and continues resolving its locally verified signed Profile releases.
+It applies catalog retirements only after a successful, validated Cloud
+catalog response. A failed catalog or Profile refresh therefore does not
+disable an existing Worker when its cached catalog entry, signed Profile,
+local Worker configuration, and provider CLI remain usable.
+
+After a successful catalog refresh, Workspace reconciles descriptors by Worker
+Type ID. New descriptors appear and have their Profile synchronized without
+creating local Worker slots. Changed metadata comes from the current descriptor
+and is not duplicated in local Worker records. A removed or hidden descriptor
+retains its local record for diagnostics, but Workspace excludes it from ready
+inventory, readiness probes, and assignment execution. If the descriptor later
+returns, the existing local slot is reused.
 
 The v8 product-capability list is closed and validated by Cloud and Workspace.
 Workspace maps declared capabilities through fixed permission policy; a Tool
@@ -882,7 +957,10 @@ Cloud inventory should expose logical state plus safe runtime evidence:
 ~~~text
 worker_id
 workspace_id
+workspace_name
 worker_type_id
+display_name
+description
 activation_state
 readiness_state
 readiness_issue_code
@@ -903,6 +981,27 @@ Cloud does not receive:
 - provider session ID;
 - local profile files;
 - provider credentials.
+
+Workspace inventory is based on configured local Workers present in the
+current cached or authoritative catalog. Orphan local records are retained
+for diagnostics but omitted from full inventory snapshots. Cloud composes the
+human inventory read model by joining each local Worker row to its catalog
+display name and description. AX receives those fields directly alongside
+Workspace, activation, readiness, capability, Engine, Profile, and provider
+tool details; it does not derive product names from Worker Type IDs or combine
+multiple API responses. For each reported Worker, Workspace resolves a
+verified Profile compatible with the Worker Type and Engine before reporting
+readiness. Missing or ineligible Profile material or a missing Engine produces
+a non-ready record with no Profile release identity or capabilities, so Cloud
+scheduling cannot treat stale local readiness as executable.
+
+Cloud independently enforces the same catalog boundary when selecting an
+assignment target and validating Workstream Worker bindings. It joins inventory
+to an active, visible catalog entry eligible for the Workspace's release
+channel, and to the matching active Tool Profile Definition. A stale `ready`
+inventory record cannot execute after its Worker is retired, hidden, moved
+outside the Workspace's channel, or remapped to another active Profile
+Definition.
 
 Assignment snapshots and `worker_assignments` rows record Engine/Profile
 identity. Each assignment stores that snapshot at dispatch, including the
@@ -1068,3 +1167,17 @@ All may still expose the same logical Worker/Work orchestration abstraction.
 Architecture v8 succeeds when adding or fixing a normal supported CLI
 integration usually means publishing a tested signed Profile release rather
 than rebuilding the generic CLI Worker Engine.
+
+## 30. Manual Profile Lifecycle Completion & Autonomous AI Maintenance Governance
+
+The manual Profile lifecycle control path is **declared complete and verified**.
+
+The acceptance threshold for the manual Profile lifecycle is satisfied:
+- A human engineer can create a new Logical Worker (`worker_catalog`) and Tool Profile Definition (`tool_profile_definitions`) via REST APIs.
+- An initial Draft Profile payload can be authored and tested against real local provider CLIs in Profile Lab's isolated sandbox (`PlatformProcessSupervisor`).
+- Verified test evidence (`ToolProfileEvidenceContract`) is captured and bound to the exact payload digest before requesting an Ed25519-signed release publication from Cloud.
+- Immutable releases can be promoted through channels (`testing` → `beta` → `stable`), rolled back to earlier versions, or revoked (`revoked_at` blocklist).
+- Conclave Workspace and Conclave AX dynamically discover new Workers, report inventory, display readiness, and execute Workstream steps **without editing or redeploying application source code**.
+
+Only after this manual lifecycle is verified and reliable is autonomous AI profile maintenance permitted to generate or update draft payloads under strict schema, evidence, provenance, and human confirmation controls.
+

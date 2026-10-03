@@ -192,6 +192,19 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    if (request.method === "GET" && url.pathname === "/api/workers/catalog") {
+      return await handlers.handleListWorkerCatalog!(request, env, ctx);
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/workspace-runtime/workers/catalog"
+    ) {
+      return await handlers.handleListWorkspaceWorkerCatalog!(
+        request,
+        env,
+        ctx,
+      );
+    }
     if (request.method === "GET" && url.pathname === "/api/workers") {
       return await handlers.handleListWorkspaceWorkerInventory!(
         request,
@@ -210,6 +223,27 @@ export async function routeWorkerRequest(
       );
     }
     if (
+      request.method === "GET" &&
+      url.pathname === "/api/admin/tool-profiles/definitions"
+    ) {
+      return await handlers.handleListToolProfileDefinitions!(
+        request,
+        env,
+        ctx,
+      );
+    }
+    const toolProfileDefinitionMatch = url.pathname.match(
+      /^\/api\/admin\/tool-profiles\/definitions\/([^/]+)$/,
+    );
+    if (request.method === "GET" && toolProfileDefinitionMatch?.[1]) {
+      return await handlers.handleGetToolProfileDefinition!(
+        request,
+        env,
+        decodeURIComponent(toolProfileDefinitionMatch[1]),
+        ctx,
+      );
+    }
+    if (
       request.method === "POST" &&
       url.pathname === "/api/admin/workers/catalog"
     ) {
@@ -219,8 +253,82 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/admin/workers/catalog"
+    ) {
+      return await handlers.handleListAdminWorkerCatalog!(request, env, ctx);
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/admin/workspace-channels"
+    ) {
+      return await handlers.handleListAdminWorkspaceChannels!(
+        request,
+        env,
+        ctx,
+      );
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/admin/tool-profiles/channels"
+    ) {
+      return await handlers.handleListAllToolProfileChannels!(
+        request,
+        env,
+        ctx,
+      );
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/admin/tool-profiles/audit"
+    ) {
+      return await handlers.handleListGlobalToolProfileAudit!(
+        request,
+        env,
+        ctx,
+      );
+    }
+    const toolProfileChannelRollbackMatch = url.pathname.match(
+      /^\/api\/admin\/tool-profiles\/([^/]+)\/channels\/([^/]+)\/rollback$/,
+    );
+    if (
+      request.method === "POST" &&
+      toolProfileChannelRollbackMatch?.[1] &&
+      toolProfileChannelRollbackMatch?.[2]
+    ) {
+      return await handlers.handleRollbackToolProfileChannel!(
+        request,
+        env,
+        decodeURIComponent(toolProfileChannelRollbackMatch[1]),
+        decodeURIComponent(toolProfileChannelRollbackMatch[2]),
+        ctx,
+      );
+    }
+    const toolProfileChannelsMatch = url.pathname.match(
+      /^\/api\/admin\/tool-profiles\/([^/]+)\/channels$/,
+    );
+    if (request.method === "GET" && toolProfileChannelsMatch?.[1]) {
+      return await handlers.handleListToolProfileChannels!(
+        request,
+        env,
+        decodeURIComponent(toolProfileChannelsMatch[1]),
+        ctx,
+      );
+    }
+    const toolProfileDefAuditMatch = url.pathname.match(
+      /^\/api\/admin\/tool-profiles\/([^/]+)\/audit$/,
+    );
+    if (request.method === "GET" && toolProfileDefAuditMatch?.[1]) {
+      return await handlers.handleListToolProfileDefinitionAudit!(
+        request,
+        env,
+        decodeURIComponent(toolProfileDefAuditMatch[1]),
+        ctx,
+      );
+    }
     const toolProfileReleaseMatch = url.pathname.match(
-      /^\/api\/admin\/tool-profiles\/([^/]+)\/releases(?:\/(\d+)(?:\/(draft|publish|promote|retire|revoke|audit))?)?$/,
+      /^\/api\/admin\/tool-profiles\/([^/]+)\/releases(?:\/(\d+)(?:\/(draft|publish|promote|retire|revoke|audit|evidence))?)?$/,
     );
     if (toolProfileReleaseMatch?.[1]) {
       const profileDefinitionId = decodeURIComponent(
@@ -241,6 +349,33 @@ export async function routeWorkerRequest(
           request,
           env,
           profileDefinitionId,
+          ctx,
+        );
+      }
+      if (version && !action && request.method === "GET") {
+        return await handlers.handleGetToolProfileRelease!(
+          request,
+          env,
+          profileDefinitionId,
+          version,
+          ctx,
+        );
+      }
+      if (version && action === "evidence" && request.method === "GET") {
+        return await handlers.handleListToolProfileReleaseEvidence!(
+          request,
+          env,
+          profileDefinitionId,
+          version,
+          ctx,
+        );
+      }
+      if (version && action === "evidence" && request.method === "POST") {
+        return await handlers.handleSubmitToolProfileReleaseEvidence!(
+          request,
+          env,
+          profileDefinitionId,
+          version,
           ctx,
         );
       }

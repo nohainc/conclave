@@ -4,12 +4,22 @@ import {
   createDraftToolProfileRelease,
   createToolProfileDefinition,
   createApprovedLogicalWorker,
+  getToolProfileDefinition,
+  getToolProfileRelease,
+  listAdminWorkerCatalog,
+  listToolProfileAudit,
+  listToolProfileChannelPointers,
+  listToolProfileDefinitions,
   listToolProfileReleaseAudit,
+  listToolProfileReleaseEvidence,
   listToolProfileReleases,
   promoteToolProfileRelease,
   publishDraftToolProfileRelease,
+  resolveLogicalWorkerCatalog,
   resolveToolProfileChannels,
+  rollbackToolProfileChannel,
   setWorkspaceToolProfileChannel,
+  submitToolProfileReleaseEvidence,
   updateDraftToolProfilePayload,
   type ToolProfileChannel,
 } from "../tool-profile-registry.js";
@@ -19,7 +29,6 @@ import {
   json,
   readToolProfileAdminBody,
   recordAudit,
-  requireWorkspaceContext,
   securityContext,
   toolProfileReleaseVersion,
 } from "./handlers.js";
@@ -34,13 +43,20 @@ export async function handleListWorkspaceWorkerInventory(
   const context = await securityContext(request, env, ctx);
   const workspaceId = new URL(request.url).searchParams.get("workspaceId");
   const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT i.worker_id, i.workspace_id,
+    `SELECT i.worker_id, i.workspace_id, ew.name AS workspace_name,
             i.worker_type_id, i.activation_state, i.readiness_state,
             i.readiness_issue_code, i.capabilities_json,
             i.local_concurrency_limit, i.engine_version,
             i.profile_definition_id, i.profile_release_version,
-            i.provider_tool_name, i.provider_tool_version, i.last_seen_at
+            i.provider_tool_name, i.provider_tool_version, i.last_seen_at,
+            catalog.display_name AS catalog_display_name,
+            catalog.description AS catalog_description,
+            catalog.lifecycle_state AS catalog_lifecycle_state,
+            catalog.visibility_state AS catalog_visibility_state
        FROM workspace_worker_inventory i
+       JOIN execution_workspaces ew ON ew.id = i.workspace_id
+       LEFT JOIN worker_catalog catalog
+         ON catalog.worker_type_id = i.worker_type_id
       WHERE i.owner_user_id = ?1
         AND (?2 IS NULL OR i.workspace_id = ?2)
       ORDER BY i.workspace_id, i.worker_type_id, i.worker_id`,
@@ -59,7 +75,24 @@ export async function handleListWorkspaceWorkerInventory(
     workers: (rows.results ?? []).map((row) => ({
       id: String(row.worker_id),
       workspaceId: String(row.workspace_id),
+      workspaceName: String(row.workspace_name),
       workerTypeId: String(row.worker_type_id),
+      displayName:
+        row.catalog_display_name == null
+          ? String(row.worker_type_id)
+          : String(row.catalog_display_name),
+      description:
+        row.catalog_description == null
+          ? null
+          : String(row.catalog_description),
+      catalogLifecycleState:
+        row.catalog_lifecycle_state == null
+          ? "retired"
+          : String(row.catalog_lifecycle_state),
+      catalogVisibilityState:
+        row.catalog_visibility_state == null
+          ? "hidden"
+          : String(row.catalog_visibility_state),
       activationState: String(row.activation_state),
       readinessState: String(row.readiness_state),
       readinessIssueCode:
@@ -94,15 +127,11 @@ export async function handleListWorkspaceWorkerInventory(
   });
 }
 
-export async function handleResolveToolProfileChannels(
+async function requireWorkspaceProfileContext(
   request: Request,
   env: SecurityEnv,
-): Promise<Response> {
+): Promise<{ workspaceId: string; channel: ToolProfileChannel }> {
   const url = new URL(request.url);
-  const workerTypeId = url.searchParams.get("workerTypeId") ?? undefined;
-  if (url.searchParams.has("channel")) {
-    throw new HttpError(400, "Profile channel is selected by Conclave Cloud");
-  }
   const runtimeId = url.searchParams.get("workspaceRuntimeId");
   const credential = extractBearerToken(request.headers);
   if (!runtimeId || !credential) {
@@ -124,7 +153,50 @@ export async function handleResolveToolProfileChannels(
   )
     .bind(runtime.workspaceId)
     .first<{ channel: ToolProfileChannel }>();
-  const channel = channelRow?.channel ?? "stable";
+  return {
+    workspaceId: runtime.workspaceId,
+    channel: channelRow?.channel ?? "stable",
+  };
+}
+
+/** Returns Cloud-owned Worker metadata for the runtime's selected channel. */
+export async function handleListWorkspaceWorkerCatalog(
+  request: Request,
+  env: SecurityEnv,
+): Promise<Response> {
+  const { channel } = await requireWorkspaceProfileContext(request, env);
+  const workers = await resolveLogicalWorkerCatalog(
+    env.CONCLAVE_DB,
+    undefined,
+    channel,
+  );
+  return json({ workers, channel });
+}
+
+/** Returns the stable Cloud Worker catalog through the human product API. */
+export async function handleListWorkerCatalog(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await securityContext(request, env, ctx);
+  const workers = await resolveLogicalWorkerCatalog(env.CONCLAVE_DB);
+  return json({ workers });
+}
+
+export async function handleResolveToolProfileChannels(
+  request: Request,
+  env: SecurityEnv,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const workerTypeId = url.searchParams.get("workerTypeId") ?? undefined;
+  if (url.searchParams.has("channel")) {
+    throw new HttpError(400, "Profile channel is selected by Conclave Cloud");
+  }
+  if (!workerTypeId) {
+    throw new HttpError(400, "workerTypeId is required for Profile releases");
+  }
+  const { channel } = await requireWorkspaceProfileContext(request, env);
   const result = await resolveToolProfileChannels(
     env.CONCLAVE_DB,
     workerTypeId,
@@ -140,7 +212,6 @@ export async function handleSetWorkspaceToolProfileChannel(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const actor = await authorizeToolProfileAdmin(request, env, ctx);
-  await requireWorkspaceContext(actor, env, workspaceId);
   const body = await readToolProfileAdminBody(request, ["channel"]);
   if (
     typeof body.channel !== "string" ||
@@ -164,6 +235,28 @@ export async function handleSetWorkspaceToolProfileChannel(
     },
   );
   return json(updated);
+}
+
+export async function handleListAdminWorkspaceChannels(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await authorizeToolProfileAdmin(request, env, ctx);
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT w.id, w.name, w.status,
+            COALESCE(ch.channel, 'stable') AS channel,
+            ch.updated_at AS channelUpdatedAt,
+            ch.updated_by_user_id AS channelUpdatedByUserId,
+            f.hostname, f.platform, f.architecture, f.app_version AS appVersion,
+            w.updated_at AS updatedAt
+       FROM execution_workspaces w
+       LEFT JOIN workspace_tool_profile_channels ch ON ch.workspace_id = w.id
+       LEFT JOIN workspace_runtime_facts f ON f.workspace_id = w.id
+      WHERE w.status <> 'revoked'
+      ORDER BY w.name ASC`,
+  ).all();
+  return json({ workspaces: rows.results ?? [] });
 }
 
 export async function handleCreateToolProfileDefinition(
@@ -294,6 +387,10 @@ export async function handleUpdateDraftToolProfileRelease(
   const body = await readToolProfileAdminBody(request, ["profile"]);
   if (body.profile === undefined)
     throw new HttpError(400, "profile is required");
+  const expectedBaseDigest =
+    (body.expectedBaseDigest as string | undefined) ??
+    request.headers.get("If-Match") ??
+    undefined;
   return json(
     await updateDraftToolProfilePayload(
       env.CONCLAVE_DB,
@@ -303,6 +400,7 @@ export async function handleUpdateDraftToolProfileRelease(
       },
       body.profile,
       actor.userId,
+      expectedBaseDigest,
     ),
   );
 }
@@ -315,15 +413,15 @@ export async function handlePublishDraftToolProfileRelease(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const actor = await authorizeToolProfileAdmin(request, env, ctx);
-  const body = await readToolProfileAdminBody(request, [
-    "signature",
-    "signingKeyId",
-  ]);
-  if (
-    typeof body.signature !== "string" ||
-    typeof body.signingKeyId !== "string"
-  ) {
-    throw new HttpError(400, "signature and signingKeyId are required");
+  let clientSignature: string | undefined;
+  let clientSigningKeyId: string | undefined;
+  try {
+    const body = await readToolProfileAdminBody(request, []);
+    if (typeof body.signature === "string") clientSignature = body.signature;
+    if (typeof body.signingKeyId === "string")
+      clientSigningKeyId = body.signingKeyId;
+  } catch {
+    // Body is optional
   }
   return json(
     await publishDraftToolProfileRelease(
@@ -332,9 +430,9 @@ export async function handlePublishDraftToolProfileRelease(
         profileDefinitionId,
         releaseVersion: toolProfileReleaseVersion(versionText),
       },
-      body.signature,
-      body.signingKeyId,
       actor.userId,
+      clientSignature,
+      clientSigningKeyId,
     ),
   );
 }
@@ -435,4 +533,170 @@ export async function handleListToolProfileReleaseAudit(
       releaseVersion: toolProfileReleaseVersion(versionText),
     }),
   );
+}
+
+export async function handleListAdminWorkerCatalog(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await authorizeToolProfileAdmin(request, env, ctx);
+  return json(await listAdminWorkerCatalog(env.CONCLAVE_DB));
+}
+
+export async function handleListToolProfileDefinitions(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await authorizeToolProfileAdmin(request, env, ctx);
+  return json(await listToolProfileDefinitions(env.CONCLAVE_DB));
+}
+
+export async function handleGetToolProfileDefinition(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await authorizeToolProfileAdmin(request, env, ctx);
+  return json(
+    await getToolProfileDefinition(env.CONCLAVE_DB, profileDefinitionId),
+  );
+}
+
+export async function handleGetToolProfileRelease(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  versionText: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await authorizeToolProfileAdmin(request, env, ctx);
+  return json(
+    await getToolProfileRelease(env.CONCLAVE_DB, {
+      profileDefinitionId,
+      releaseVersion: toolProfileReleaseVersion(versionText),
+    }),
+  );
+}
+
+export async function handleListAllToolProfileChannels(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await authorizeToolProfileAdmin(request, env, ctx);
+  return json(await listToolProfileChannelPointers(env.CONCLAVE_DB));
+}
+
+export async function handleListToolProfileChannels(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await authorizeToolProfileAdmin(request, env, ctx);
+  return json(
+    await listToolProfileChannelPointers(env.CONCLAVE_DB, profileDefinitionId),
+  );
+}
+
+export async function handleRollbackToolProfileChannel(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  channel: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  if (!["testing", "beta", "stable"].includes(channel)) {
+    throw new HttpError(400, "channel is invalid");
+  }
+  const body = await readToolProfileAdminBody(request, [
+    "targetReleaseVersion",
+    "reason",
+  ]);
+  if (!Number.isSafeInteger(body.targetReleaseVersion)) {
+    throw new HttpError(400, "targetReleaseVersion is required");
+  }
+  const result = await rollbackToolProfileChannel(env.CONCLAVE_DB, {
+    profileDefinitionId,
+    channel: channel as ToolProfileChannel,
+    targetReleaseVersion: body.targetReleaseVersion as number,
+    actorUserId: actor.userId,
+    reason: typeof body.reason === "string" ? body.reason : undefined,
+  });
+  await recordAudit(
+    env,
+    actor,
+    "tool_profile.channel.rollback",
+    "tool_profile_definition",
+    profileDefinitionId,
+    {
+      channel,
+      targetReleaseVersion: body.targetReleaseVersion,
+      reason: body.reason,
+    },
+  );
+  return json(result);
+}
+
+export async function handleListToolProfileReleaseEvidence(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  versionText: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await authorizeToolProfileAdmin(request, env, ctx);
+  return json(
+    await listToolProfileReleaseEvidence(env.CONCLAVE_DB, {
+      profileDefinitionId,
+      releaseVersion: toolProfileReleaseVersion(versionText),
+    }),
+  );
+}
+
+export async function handleSubmitToolProfileReleaseEvidence(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  versionText: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  const body = await readToolProfileAdminBody(request, ["evidence"]);
+  if (body.evidence === undefined) {
+    throw new HttpError(400, "evidence is required");
+  }
+  const result = await submitToolProfileReleaseEvidence(
+    env.CONCLAVE_DB,
+    {
+      profileDefinitionId,
+      releaseVersion: toolProfileReleaseVersion(versionText),
+    },
+    body.evidence,
+    actor.userId,
+  );
+  return json(result, { status: 201 });
+}
+
+export async function handleListToolProfileDefinitionAudit(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await authorizeToolProfileAdmin(request, env, ctx);
+  return json(await listToolProfileAudit(env.CONCLAVE_DB, profileDefinitionId));
+}
+
+export async function handleListGlobalToolProfileAudit(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await authorizeToolProfileAdmin(request, env, ctx);
+  return json(await listToolProfileAudit(env.CONCLAVE_DB));
 }

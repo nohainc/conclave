@@ -53,7 +53,9 @@ void main() {
         AxWorker(
           id: 'ready-1',
           workspaceId: 'workspace-1',
+          workspaceName: 'MacBook',
           workerTypeId: 'chatgpt',
+          displayName: 'ChatGPT',
           status: 'ready',
           readinessState: 'ready',
           localConcurrencyLimit: 1,
@@ -62,7 +64,9 @@ void main() {
         AxWorker(
           id: 'attention-1',
           workspaceId: 'workspace-1',
+          workspaceName: 'MacBook',
           workerTypeId: 'gemini',
+          displayName: 'Gemini',
           status: 'needs_attention',
           readinessState: 'sign_in_required',
           attentionReasonCode: 'sign_in_required',

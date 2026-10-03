@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
+
 import 'platform_runtime.dart';
-import 'tool_profile_release_verifier.dart';
-import 'worker_trust_policy.dart';
+
+export 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+    show canonicalJson;
 
 class ToolProfileReleaseState {
   const ToolProfileReleaseState({
@@ -785,15 +788,4 @@ int _safeVersion(int value) {
     throw FormatException('Tool Profile release version is invalid');
   }
   return value;
-}
-
-String canonicalJson(Object? value) {
-  if (value is Map) {
-    final entries = value.entries.toList()
-      ..sort(
-          (left, right) => left.key.toString().compareTo(right.key.toString()));
-    return '{${entries.map((entry) => '${jsonEncode(entry.key.toString())}:${canonicalJson(entry.value)}').join(',')}}';
-  }
-  if (value is List) return '[${value.map(canonicalJson).join(',')}]';
-  return jsonEncode(value);
 }

@@ -137,10 +137,19 @@ export type WorkflowId = (typeof WORKFLOW_IDS)[number];
 export const WORKSTREAM_BINDING_IDS = ["direct", ...STEP_KINDS] as const;
 export type WorkstreamBindingId = (typeof WORKSTREAM_BINDING_IDS)[number];
 
+export interface WorkstreamWorkerLabel {
+  readonly displayName: string;
+  readonly workspaceName: string;
+}
+
 export interface WorkstreamStepBinding {
   readonly workerId?: string;
+  /** Presentation snapshot used when the bound Worker is no longer available. */
+  readonly workerLabel?: WorkstreamWorkerLabel;
   readonly model?: string;
   readonly fallbackWorkerId?: string;
+  /** Presentation snapshot used when the fallback Worker is unavailable. */
+  readonly fallbackWorkerLabel?: WorkstreamWorkerLabel;
   readonly additionalInstructions?: string;
 }
 

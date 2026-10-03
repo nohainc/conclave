@@ -83,6 +83,12 @@ Gemini
 A logical Worker Type remains the product-facing identity used by AX, Cloud,
 Workflows, Workstream bindings, scheduling, and history.
 
+This identity is stored in `worker_catalog` and remains distinct from its
+implementation binding in `tool_profile_definitions`. Signed versioned
+behavior belongs to `tool_profile_releases`. An implementation can be
+replaced by retiring its Definition and activating another while retaining the
+same Worker Type ID; at most one Definition may be active for a Worker.
+
 Example:
 
 ~~~text

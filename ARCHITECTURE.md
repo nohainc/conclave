@@ -63,9 +63,12 @@ The repository has converged on the v8 assignment path and clean v8 schema. The 
 
 - [Architecture v8](docs/architecture/ARCHITECTURE_V8.md)
 - [ADR-018: Generic CLI Worker Engine and Tool Profiles](docs/decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md)
+- [ADR-019: Conclave Profile Lab Architecture Contract](docs/decisions/ADR-019-conclave-profile-lab.md)
 - [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md)
 - [First-Party Worker Catalog v1](docs/specifications/FIRST_PARTY_WORKER_CATALOG_V1.md)
 - [Tool Profile v1](docs/specifications/TOOL_PROFILE_V1.md)
+- [Tool Profile Lifecycle](docs/specifications/TOOL_PROFILE_LIFECYCLE.md)
+- [Tool Profile Evidence Contract](docs/specifications/TOOL_PROFILE_EVIDENCE_CONTRACT.md)
 - [Protocol Boundaries](docs/architecture/PROTOCOL_BOUNDARIES.md)
 - [Technology Stack](docs/architecture/TECH_STACK.md)
 - [Workspace UX and data contract](docs/architecture/WORKSPACES_UX_CONTRACT.md)

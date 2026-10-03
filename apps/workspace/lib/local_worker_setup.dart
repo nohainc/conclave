@@ -9,7 +9,7 @@ class LocalWorkerSetupService {
   final LocalWorkerRegistry registry;
 
   Future<LocalWorker> createCatalogWorker({
-    required LogicalWorkerCatalogEntry entry,
+    required WorkerDescriptor entry,
     required List<String> permissions,
   }) {
     if (entry.engineFamily != 'cli') {

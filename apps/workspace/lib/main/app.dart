@@ -704,8 +704,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       workerRevision: _workerRevision,
       localWorkerRegistry: lifecycle.workspace.localWorkerRegistry,
       credentialStore: lifecycle.workspace.credentialStore,
-      toolProfileReleaseStore: lifecycle.workspace.toolProfileReleaseStore,
-      toolProfileCatalog: lifecycle.workspace.toolProfileCatalog,
+      workerCatalogCoordinator: lifecycle.workspace.workerCatalogCoordinator,
       signedIn: true,
     );
   }

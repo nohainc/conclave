@@ -22,10 +22,15 @@ import 'workspace_lifecycle.dart';
 import 'local_management_authenticator.dart';
 import 'copyable_messages.dart';
 import 'cli_worker_engine_supervisor.dart';
-import 'tool_profile_resolver.dart';
 import 'worker_readiness.dart';
+import 'workspace_worker_view.dart';
 
 export 'copyable_messages.dart' show showCopyableErrorSnackBar;
+export 'workspace_worker_view.dart'
+    show
+        deriveLocalWorkerHealth,
+        deriveLocalWorkerReadiness,
+        deriveLocalWorkerStatusBadges;
 
 part 'main/lifecycle.dart';
 part 'main/app.dart';

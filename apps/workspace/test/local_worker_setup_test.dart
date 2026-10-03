@@ -74,6 +74,26 @@ void main() {
     expect(jsonDecode(await file.readAsString())['workers'], hasLength(1));
   });
 
+  test('setup configures a new Worker type from its descriptor', () async {
+    final descriptor = logicalWorkerCatalogFixture(
+      'claude',
+      displayName: 'Claude',
+      profileDefinitionId: 'claude-code',
+      providerToolName: 'claude',
+    );
+
+    final worker =
+        await LocalWorkerSetupService(registry: registry).createCatalogWorker(
+      entry: descriptor,
+      permissions: defaultLocalWorkerPermissions,
+    );
+
+    expect(worker.workerTypeId, descriptor.workerTypeId);
+    expect(worker.localConcurrencyLimit, defaultLocalWorkerConcurrency);
+    expect(worker.status, LocalWorkerStatus.needsAttention);
+    expect(worker.readinessState, WorkerReadinessState.notProbed);
+  });
+
   test('new catalog Worker starts unprobed until its first readiness check',
       () async {
     final worker =

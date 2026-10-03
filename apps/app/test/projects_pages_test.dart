@@ -228,6 +228,167 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
+  testWidgets(
+      'Workstream selects a Worker unknown to AX by Cloud name and local ID',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1200));
+    final dataSource = _GenericWorkerConfigDataSource();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: WorkstreamPage(
+            project: const AxProject(
+              id: 'project-1',
+              name: 'Project One',
+              branch: '',
+              lastActivity: 'today',
+              role: 'collaborator',
+            ),
+            workstream: const AxWorkstream(
+              id: 'workstream-1',
+              projectId: 'project-1',
+              name: 'Implementation',
+              lead: 'Owner',
+              status: 'active',
+              brief: 'Implement the requested change.',
+              primaryWorkspace: 'Not selected',
+              queueStatus: 'Idle',
+              canConfigureWork: true,
+            ),
+            dataSource: dataSource,
+            onBackToProject: _noop,
+            onArchive: _noop,
+            initialTab: 2,
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final selectors = find.byType(DropdownButtonFormField<String>);
+    expect(selectors, findsNWidgets(7));
+    await tester
+        .tap(selectors.at(4)); // Workflow, then Direct/Research/Plan/Implement
+    await tester.pumpAndSettle();
+    expect(find.text('Dynamic Test Worker · Vitalii’s MacBook Pro'),
+        findsOneWidget);
+    expect(find.text('Codex'), findsNothing);
+    expect(find.text('Antigravity'), findsNothing);
+    await tester
+        .tap(find.text('Dynamic Test Worker · Vitalii’s MacBook Pro').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save Work settings'));
+    await tester.tap(find.text('Save Work settings'));
+    await tester.pumpAndSettle();
+
+    expect(
+      dataSource.savedWorkConfig?['bindings']['implement']['workerId'],
+      'local-worker-dynamic-test',
+    );
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets('retired dynamic Worker bindings remain explicit',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    final dataSource = _RetiredWorkerConfigDataSource();
+    const staleConfig = {
+      'defaultWorkflowId': 'direct',
+      'bindings': {
+        'implement': {
+          'workerId': 'local-worker-dynamic-test',
+          'workerLabel': {
+            'displayName': 'Dynamic Test Worker',
+            'workspaceName': 'Vitalii’s MacBook Pro',
+          },
+          'fallbackWorkerId': 'retired-fallback',
+          'fallbackWorkerLabel': {
+            'displayName': 'Gemini',
+            'workspaceName': 'Linux workstation',
+          },
+        },
+      },
+    };
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: WorkstreamPage(
+            project: const AxProject(
+              id: 'project-1',
+              name: 'Project One',
+              branch: '',
+              lastActivity: 'today',
+              role: 'collaborator',
+            ),
+            workstream: const AxWorkstream(
+              id: 'workstream-1',
+              projectId: 'project-1',
+              name: 'Implementation',
+              lead: 'Owner',
+              status: 'active',
+              brief: '',
+              primaryWorkspace: 'Not selected',
+              queueStatus: 'Idle',
+              canConfigureWork: true,
+              workConfig: staleConfig,
+            ),
+            dataSource: dataSource,
+            onBackToProject: _noop,
+            onArchive: _noop,
+            initialTab: 2,
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Worker unavailable'), findsOneWidget);
+    expect(
+      find.text('Previously: Dynamic Test Worker — Vitalii’s MacBook Pro'),
+      findsOneWidget,
+    );
+    expect(find.text('Select Worker'), findsNWidgets(2));
+    expect(
+        find.text('Dynamic Test Worker · Vitalii’s MacBook Pro'), findsNothing);
+
+    await tester.ensureVisible(find.text('Save Work settings'));
+    await tester.tap(find.text('Save Work settings'));
+    await tester.pumpAndSettle();
+    expect(
+      dataSource.savedWorkConfig?['bindings']['implement']['workerId'],
+      'local-worker-dynamic-test',
+    );
+    expect(
+      dataSource.savedWorkConfig?['bindings']['implement']['fallbackWorkerId'],
+      'retired-fallback',
+    );
+
+    await tester.ensureVisible(find.text('Advanced'));
+    await tester.tap(find.text('Advanced'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Step settings'));
+    final configureButtons = find.widgetWithText(TextButton, 'Configure');
+    await tester.tap(configureButtons.at(3));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+          'Fallback Worker unavailable. Previously: Gemini — Linux workstation'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Save').last);
+    await tester.pumpAndSettle();
+    await tester.tap(configureButtons.at(3));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+          'Fallback Worker unavailable. Previously: Gemini — Linux workstation'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Cancel').last);
+    await tester.pumpAndSettle();
+    await tester.binding.setSurfaceSize(null);
+  });
+
   testWidgets('Work history reloads from Cloud after a realtime reconnect gap',
       (tester) async {
     final events = StreamController<Map<String, dynamic>>.broadcast();
@@ -957,6 +1118,85 @@ class _WorkFormDataSource extends AxFixtureDataSource {
             {'kind': 'implement', 'order': 0},
           ],
         }),
+      ];
+}
+
+class _GenericWorkerConfigDataSource extends _WorkFormDataSource {
+  Map<String, dynamic>? savedWorkConfig;
+
+  @override
+  Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => const [
+        AxWorker(
+          id: 'local-worker-dynamic-test',
+          workspaceId: 'workspace-1',
+          workspaceName: 'Vitalii’s MacBook Pro',
+          workerTypeId: 'dynamic-test-worker',
+          displayName: 'Dynamic Test Worker',
+          description: 'Catalog-created acceptance Worker.',
+          status: 'ready',
+          readinessState: 'ready',
+          localConcurrencyLimit: 1,
+          capabilities: [],
+        ),
+      ];
+
+  @override
+  Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
+    required String projectId,
+  }) async =>
+      [
+        {'workspaceId': 'workspace-1', 'workspaceName': 'Ignored grant label'},
+      ];
+
+  @override
+  Future<AxWorkstream> updateWorkstream({
+    required String workstreamId,
+    String? name,
+    String? status,
+    Map<String, dynamic>? workConfig,
+  }) async {
+    savedWorkConfig = workConfig;
+    return AxWorkstream(
+      id: workstreamId,
+      projectId: 'project-1',
+      name: 'Implementation',
+      lead: 'Owner',
+      status: 'active',
+      brief: '',
+      primaryWorkspace: 'Not selected',
+      queueStatus: 'Idle',
+      workConfig: workConfig ?? const {},
+    );
+  }
+}
+
+class _RetiredWorkerConfigDataSource extends _GenericWorkerConfigDataSource {
+  @override
+  Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => [
+        const AxWorker(
+          id: 'local-worker-dynamic-test',
+          workspaceId: 'workspace-retired-1',
+          workspaceName: 'Vitalii’s MacBook Pro',
+          workerTypeId: 'dynamic-test-worker',
+          displayName: 'Dynamic Test Worker',
+          catalogLifecycleState: 'retired',
+          status: 'ready',
+          readinessState: 'ready',
+          localConcurrencyLimit: 1,
+          capabilities: [],
+        ),
+        const AxWorker(
+          id: 'retired-fallback',
+          workspaceId: 'workspace-retired-2',
+          workspaceName: 'Linux workstation',
+          workerTypeId: 'gemini',
+          displayName: 'Gemini',
+          catalogLifecycleState: 'retired',
+          status: 'ready',
+          readinessState: 'ready',
+          localConcurrencyLimit: 1,
+          capabilities: [],
+        ),
       ];
 }
 

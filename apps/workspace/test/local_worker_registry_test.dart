@@ -114,13 +114,14 @@ void main() {
 
   test('creates logical Workers from catalog entries, including future types',
       () async {
-    const entry = LogicalWorkerCatalogEntry(
+    const entry = WorkerDescriptor(
       workerTypeId: 'approved-cli',
       displayName: 'Approved CLI',
       description: 'fixture',
       profileDefinitionId: 'approved-cli-profile',
       providerToolName: 'approved',
       engineFamily: 'cli',
+      visibilityState: 'visible',
       releaseStage: 'testing',
       capabilities: ['text'],
       sortOrder: 30,
@@ -129,13 +130,14 @@ void main() {
     expect(worker.workerTypeId, 'approved-cli');
     expect(
       () => registry.create(
-        catalogEntry: const LogicalWorkerCatalogEntry(
+        catalogEntry: const WorkerDescriptor(
           workerTypeId: 'invalid',
           displayName: 'Invalid',
           description: '',
           profileDefinitionId: 'invalid-profile',
           providerToolName: 'invalid',
           engineFamily: 'native',
+          visibilityState: 'visible',
           releaseStage: 'testing',
           capabilities: ['text'],
           sortOrder: 1,

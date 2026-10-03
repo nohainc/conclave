@@ -12,12 +12,14 @@ import 'workspace_paths.dart';
 import 'worker_readiness.dart';
 import 'tool_profile_catalog.dart';
 import 'tool_profile_release_store.dart';
+import 'worker_catalog_coordinator.dart';
 
 export 'local_worker_registry.dart';
 export 'release_trust_roots.dart';
 export 'tool_profile_release_verifier.dart';
 export 'tool_profile_catalog.dart';
 export 'tool_profile_release_store.dart';
+export 'worker_catalog_coordinator.dart';
 export 'workspace_paths.dart';
 
 typedef WorkspaceStatusProvider = Future<Map<String, Object?>> Function();
@@ -234,6 +236,7 @@ class Workspace {
     SecureCredentialStore? credentialStore,
     this.toolProfileReleaseStore,
     this.toolProfileCatalog,
+    this.workerCatalogCoordinator,
     LocalWorkerRegistry? localWorkerRegistry,
     this.workerReadinessMonitor,
     this.workerShutdownHandler,
@@ -261,6 +264,7 @@ class Workspace {
   final SecureCredentialStore credentialStore;
   final ToolProfileReleaseStore? toolProfileReleaseStore;
   final ToolProfileCatalogClient? toolProfileCatalog;
+  final WorkerCatalogCoordinator? workerCatalogCoordinator;
   final LocalWorkerRegistry? localWorkerRegistry;
   final WorkerReadinessMonitor? workerReadinessMonitor;
   final Future<void> Function()? workerShutdownHandler;
@@ -310,6 +314,7 @@ class Workspace {
       }),
     );
     _running = true;
+    workerCatalogCoordinator?.start();
     await workerReadinessMonitor?.start();
     _signalSubscriptions.addAll(
       currentPlatformRuntime.watchTermination(() => unawaited(stop())),
@@ -330,6 +335,7 @@ class Workspace {
     if (!_running) return;
     _running = false;
     await workerReadinessMonitor?.dispose();
+    workerCatalogCoordinator?.dispose();
     toolProfileCatalog?.close();
     for (final subscription in _signalSubscriptions) {
       await subscription.cancel();

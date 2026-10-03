@@ -304,7 +304,9 @@ void main() {
     final worker = AxWorker.fromJson({
       'id': 'worker-codex',
       'workspaceId': 'workspace-1',
+      'workspaceName': 'Build Mac',
       'workerTypeId': 'chatgpt',
+      'displayName': 'ChatGPT',
       'status': 'ready',
       'readinessState': 'ready',
       'localConcurrencyLimit': 2,

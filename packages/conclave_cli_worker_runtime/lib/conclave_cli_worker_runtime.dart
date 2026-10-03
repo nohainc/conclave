@@ -7,3 +7,6 @@ export 'src/cli_streaming_runner.dart';
 export 'src/worker_deadline_controller.dart';
 export 'src/worker_process_cleanup.dart';
 export 'src/worker_failure.dart';
+export 'src/safe_provider_diagnostics.dart';
+export 'src/platform_process_supervisor.dart';
+export 'src/cli_worker_engine_supervisor.dart';

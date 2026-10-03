@@ -144,6 +144,38 @@ describe("v8 Tool Profile Cloud release domain", () => {
     ]);
   });
 
+  it("preserves Worker identity when its implementation Definition is replaced", () => {
+    expect(
+      apply(`
+        UPDATE tool_profile_definitions
+           SET lifecycle_state = 'retired', updated_at = 'now'
+         WHERE profile_definition_id = 'chatgpt-codex';
+        INSERT INTO tool_profile_definitions (
+          profile_definition_id, worker_type_id, display_name,
+          provider_tool_name, engine_family, schema_version, lifecycle_state,
+          created_at, updated_at
+        ) VALUES (
+          'chatgpt-next-cli', 'chatgpt', 'Replacement CLI',
+          'next-cli', 'cli', 1, 'active', 'now', 'now'
+        );
+        SELECT worker.worker_type_id, worker.display_name,
+               definition.profile_definition_id, definition.provider_tool_name
+          FROM worker_catalog worker
+          JOIN tool_profile_definitions definition
+            ON definition.worker_type_id = worker.worker_type_id
+         WHERE worker.worker_type_id = 'chatgpt'
+           AND definition.lifecycle_state = 'active';
+      `),
+    ).toEqual([
+      {
+        worker_type_id: "chatgpt",
+        display_name: "ChatGPT",
+        profile_definition_id: "chatgpt-next-cli",
+        provider_tool_name: "next-cli",
+      },
+    ]);
+  });
+
   it("defaults Workspaces to stable and stores explicit testing or beta opt-ins", () => {
     const defaultChannel = apply(`
         INSERT INTO users (id, email, display_name, status, created_at, updated_at)

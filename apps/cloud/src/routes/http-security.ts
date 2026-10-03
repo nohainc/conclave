@@ -9,6 +9,7 @@ import {
 import {
   authorize,
   AuthorizationError,
+  hashToken,
   resolveProjectSecurityContextFromIdentity,
   authorizeProjectMembership,
   authorizeWorkspaceOwner,
@@ -217,6 +218,55 @@ export async function securityContext(
   ) {
     return testAuthentication(request, env);
   }
+
+  const token = bearer(request);
+  if (token && token.startsWith("conclave_dhs_")) {
+    const tokenHash = await hashToken(token);
+    const now = new Date().toISOString();
+    const session = await env.CONCLAVE_DB.prepare(
+      `SELECT s.id AS sessionId, s.user_id AS userId, s.audience, s.created_at AS createdAt,
+              s.expires_at AS expiresAt,
+              u.email, u.display_name AS displayName, u.status AS userStatus
+         FROM desktop_human_sessions s JOIN users u ON u.id = s.user_id
+        WHERE s.token_hash = ?1 AND s.revoked_at IS NULL
+          AND s.expires_at > ?2 AND u.status = 'active'`,
+    )
+      .bind(tokenHash, now)
+      .first<{
+        sessionId: string;
+        userId: string;
+        audience: string;
+        createdAt: string;
+        expiresAt: string;
+        email: string;
+        displayName: string;
+        userStatus: string;
+      }>();
+    if (!session) {
+      throw new HttpError(
+        401,
+        "Desktop human session is invalid, expired, or revoked",
+      );
+    }
+    await env.CONCLAVE_DB.prepare(
+      "UPDATE desktop_human_sessions SET last_used_at = ?1 WHERE id = ?2",
+    )
+      .bind(now, session.sessionId)
+      .run();
+
+    return await resolveProjectSecurityContextFromIdentity(
+      env.CONCLAVE_DB,
+      {
+        userId: session.userId,
+        email: session.email,
+        name: session.displayName,
+        sessionId: session.sessionId,
+      },
+      "desktop",
+      session.audience,
+    );
+  }
+
   if (env.BETTER_AUTH_SECRET) {
     const identity = await identityService.resolve(request, env);
     if (!identity) throw new HttpError(401, "Authentication required");

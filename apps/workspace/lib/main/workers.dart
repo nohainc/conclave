@@ -3,16 +3,16 @@ part of '../main.dart';
 class _WorkersTab extends StatefulWidget {
   const _WorkersTab({
     required this.registry,
-    this.toolProfileCatalog,
-    this.toolProfileReleaseStore,
+    required this.isSelected,
+    this.catalogCoordinator,
     this.onRollbackToolProfile,
     this.onReadinessCheck,
     super.key,
   });
 
   final LocalWorkerRegistry? registry;
-  final ToolProfileCatalogClient? toolProfileCatalog;
-  final ToolProfileReleaseStore? toolProfileReleaseStore;
+  final bool isSelected;
+  final WorkerCatalogCoordinator? catalogCoordinator;
   final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
   final Future<void> Function(
       {LocalWorkerProbeMode mode, String? workerTypeId})? onReadinessCheck;
@@ -22,150 +22,43 @@ class _WorkersTab extends StatefulWidget {
 }
 
 class _WorkersTabState extends State<_WorkersTab> {
-  Future<List<LocalWorker>>? _workers;
   final Set<String> _updatingWorkerTypes = {};
-  List<LogicalWorkerCatalogEntry> _catalogEntries = const [];
-  Map<String, Map<String, Object?>> _availableProfiles = {};
   bool _rollingBack = false;
 
   @override
   void initState() {
     super.initState();
-    _loadWorkers();
-    _loadLogicalWorkerCatalog();
-  }
-
-  Future<void> _loadLogicalWorkerCatalog() async {
-    final catalog = widget.toolProfileCatalog;
-    if (catalog == null) {
-      if (mounted) {
-        setState(() {
-          _catalogEntries = const [];
-          _availableProfiles = const {};
-        });
-      }
-      return;
-    }
-    try {
-      final cached = await catalog.loadCatalog();
-      if (cached.isNotEmpty) {
-        await _filterAvailableWorkers(cached);
-      }
-    } on Object {
-      /* A malformed cache is ignored; the signed Cloud response is authoritative. */
-    }
-    try {
-      final current = await catalog.syncCatalog();
-      if (current.isNotEmpty) {
-        await _filterAvailableWorkers(current);
-      }
-    } on Object {
-      if (_catalogEntries.isEmpty) {
-        await _filterAvailableWorkers(const []);
-      }
+    widget.catalogCoordinator?.addListener(_catalogChanged);
+    if (widget.isSelected) {
+      unawaited(
+        widget.catalogCoordinator?.refresh(force: true) ?? Future<void>.value(),
+      );
     }
   }
 
-  Future<void> _filterAvailableWorkers(
-      List<LogicalWorkerCatalogEntry> entries) async {
-    final store =
-        widget.toolProfileReleaseStore ?? widget.toolProfileCatalog?.store;
-    if (store == null) {
-      if (mounted) {
-        setState(() {
-          _catalogEntries = const [];
-          _availableProfiles = const {};
-        });
-      }
-      return;
-    }
-
-    final workers = await widget.registry?.list() ?? const <LocalWorker>[];
-    final availableEntries = <LogicalWorkerCatalogEntry>[];
-    final availableProfiles = <String, Map<String, Object?>>{};
-
-    for (final entry in entries) {
-      final worker = workers
-          .where((w) => w.workerTypeId == entry.workerTypeId)
-          .firstOrNull;
-      final profile = await _resolveWorkerProfile(entry, worker, store);
-      if (profile != null) {
-        availableEntries.add(entry);
-        availableProfiles[entry.workerTypeId] = profile;
-      }
-    }
-
-    if (mounted) {
-      setState(() {
-        _catalogEntries = availableEntries;
-        _availableProfiles = availableProfiles;
-      });
-    }
+  @override
+  void dispose() {
+    widget.catalogCoordinator?.removeListener(_catalogChanged);
+    super.dispose();
   }
 
-  Future<Map<String, Object?>?> _resolveWorkerProfile(
-    LogicalWorkerCatalogEntry entry,
-    LocalWorker? worker,
-    ToolProfileReleaseStore store,
-  ) async {
-    final definitionId = entry.profileDefinitionId;
-    try {
-      final resolver = ToolProfileResolver(store);
-      final profileState = await store.releaseState(definitionId);
-      var resolution = worker?.toolVersion == null
-          ? await resolver.resolveBootstrapProfile(
-              logicalWorkerTypeId: entry.workerTypeId,
-              profileDefinitionId: definitionId,
-              engineVersion: cliWorkerEngineVersion,
-              channel: profileState.selectedChannel,
-            )
-          : await resolver.resolve(
-              logicalWorkerTypeId: entry.workerTypeId,
-              profileDefinitionId: definitionId,
-              engineVersion: cliWorkerEngineVersion,
-              providerCliVersion: worker!.toolVersion!,
-              channel: profileState.selectedChannel,
-            );
-      if (!resolution.isAvailable && worker?.toolVersion != null) {
-        resolution = await resolver.resolveBootstrapProfile(
-          logicalWorkerTypeId: entry.workerTypeId,
-          profileDefinitionId: definitionId,
-          engineVersion: cliWorkerEngineVersion,
-          channel: profileState.selectedChannel,
-        );
-      }
-      if (!resolution.isAvailable) {
-        return null;
-      }
-      return {
-        'displayName': entry.displayName,
-        'definitionId': definitionId,
-        'source': resolution.source.name,
-        'activeVersion': profileState.activeVersion,
-        'lastKnownGoodVersion': profileState.lastKnownGoodVersion,
-        'channel': profileState.selectedChannel,
-        if (resolution.release != null)
-          'releaseVersion': resolution.release!.releaseVersion,
-      };
-    } on Object {
-      return null;
-    }
+  void _catalogChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void didUpdateWidget(covariant _WorkersTab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.registry != widget.registry) _loadWorkers();
-    if (oldWidget.toolProfileCatalog != widget.toolProfileCatalog ||
-        oldWidget.toolProfileReleaseStore != widget.toolProfileReleaseStore) {
-      unawaited(_loadLogicalWorkerCatalog());
+    var refreshCatalog = !oldWidget.isSelected && widget.isSelected;
+    if (oldWidget.catalogCoordinator != widget.catalogCoordinator) {
+      oldWidget.catalogCoordinator?.removeListener(_catalogChanged);
+      widget.catalogCoordinator?.addListener(_catalogChanged);
+      refreshCatalog = widget.isSelected;
     }
-  }
-
-  void _loadWorkers() {
-    _workers = widget.registry?.list();
-    if (widget.toolProfileCatalog != null) {
-      unawaited(_loadLogicalWorkerCatalog());
+    if (refreshCatalog) {
+      unawaited(
+        widget.catalogCoordinator?.refresh(force: true) ?? Future<void>.value(),
+      );
     }
   }
 
@@ -182,7 +75,8 @@ class _WorkersTabState extends State<_WorkersTab> {
         setState(() {
           _rollingBack = false;
         });
-        unawaited(_loadLogicalWorkerCatalog());
+        unawaited(widget.catalogCoordinator?.refresh(force: true) ??
+            Future<void>.value());
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(passed
@@ -217,7 +111,8 @@ class _WorkersTabState extends State<_WorkersTab> {
         workerTypeId: worker.workerTypeId,
       );
     }
-    if (mounted) setState(_loadWorkers);
+    await widget.catalogCoordinator?.refreshLocalWorkers();
+    if (mounted) setState(() {});
   }
 
   @override
@@ -226,43 +121,66 @@ class _WorkersTabState extends State<_WorkersTab> {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Text(
-          'Workers check their provider tools and report readiness to Workspace.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Workers check their provider tools and report readiness to Workspace.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Refresh Worker catalog',
+              onPressed: widget.catalogCoordinator == null
+                  ? null
+                  : () => unawaited(
+                        widget.catalogCoordinator!.refresh(force: true),
+                      ),
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
-        FutureBuilder<List<LocalWorker>>(
-          future: _workers,
-          builder: (context, snapshot) {
-            final records = snapshot.data ?? const <LocalWorker>[];
-            final canConfigure = widget.registry != null && snapshot.hasData;
+        Builder(
+          builder: (context) {
+            final catalog = widget.catalogCoordinator?.snapshot ??
+                const WorkerCatalogSnapshot();
+            final canConfigure = widget.registry != null &&
+                catalog.localRegistryLoaded &&
+                catalog.localRegistryError == null;
             return Column(
               children: [
-                for (final entry in _catalogEntries)
-                  _buildLogicalWorkerCard(
-                    entry,
-                    records,
-                    canConfigure,
-                    theme,
-                    _availableProfiles[entry.workerTypeId],
-                  ),
-                if (_catalogEntries.isEmpty && snapshot.hasData)
+                for (final worker in catalog.workers)
+                  if (worker.descriptor == null)
+                    _buildRetiredWorkerCard(worker, theme)
+                  else
+                    _buildLogicalWorkerCard(worker, canConfigure, theme),
+                if (catalog.descriptors.isEmpty && catalog.localRegistryLoaded)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      'No available Workers with active profiles found.',
+                      'No Workers are available in the Cloud catalog.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),
-                if (snapshot.hasError)
+                if (catalog.catalogError != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: CopyableMessageText(
-                      'Worker status could not be loaded: ${snapshot.error}',
+                      catalog.catalogError!,
+                      style: TextStyle(color: theme.colorScheme.error),
+                      iconColor: theme.colorScheme.error,
+                    ),
+                  ),
+                if (catalog.localRegistryError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: CopyableMessageText(
+                      catalog.localRegistryError!,
                       style: TextStyle(color: theme.colorScheme.error),
                       iconColor: theme.colorScheme.error,
                     ),
@@ -283,28 +201,31 @@ class _WorkersTabState extends State<_WorkersTab> {
   }
 
   Widget _buildLogicalWorkerCard(
-    LogicalWorkerCatalogEntry entry,
-    List<LocalWorker> records,
+    WorkerCatalogWorkerState view,
     bool canConfigure,
     ThemeData theme,
-    Map<String, Object?>? profile,
   ) {
-    final worker = records
-        .where((record) => record.workerTypeId == entry.workerTypeId)
-        .firstOrNull;
+    final entry = view.descriptor;
+    if (entry == null) return const SizedBox.shrink();
+    final worker = view.localWorker;
+    final profile = view.profileAvailability.details;
     final pending = _updatingWorkerTypes.contains(entry.workerTypeId);
-    final readiness = pending
-        ? 'Checking…'
-        : worker == null
-            ? 'Setup required'
-            : deriveLocalWorkerReadiness(worker);
-    final badges = worker == null
-        ? <String>[readiness]
-        : deriveLocalWorkerStatusBadges(worker,
-            readinessLabel: pending ? readiness : null);
+    final readiness = pending ? 'Checking…' : view.readinessLabel;
+    final badges = <String>{
+      ...view.statusBadges(readinessLabelOverride: pending ? readiness : null),
+      view.state.label,
+      'Profile · ${view.profileState.label}',
+    };
     final providerToolName = worker?.toolName ?? entry.providerToolName;
-    final providerToolLabel =
-        providerToolName == 'codex' ? 'Codex CLI' : providerToolName;
+    final providerToolVersion = switch (view.providerToolState) {
+      WorkspaceProviderToolState.unknown =>
+        view.localState == WorkspaceLocalWorkerState.configured
+            ? 'Not detected'
+            : 'Unknown',
+      WorkspaceProviderToolState.missing => 'Not installed',
+      WorkspaceProviderToolState.available =>
+        worker?.toolVersion ?? 'Available',
+    };
     return Card(
       key: Key('worker-catalog-${entry.workerTypeId}'),
       margin: const EdgeInsets.only(bottom: 12),
@@ -313,7 +234,7 @@ class _WorkersTabState extends State<_WorkersTab> {
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-            leading: Icon(_workerTypeIcon(entry.workerTypeId),
+            leading: Icon(Icons.smart_toy_outlined,
                 color: theme.colorScheme.primary),
             title: Text(entry.displayName,
                 style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -328,7 +249,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                   Padding(
                       padding: const EdgeInsets.only(top: 3),
                       child: Text(
-                        '$providerToolLabel ${worker?.toolVersion ?? 'version not detected'}',
+                        '$providerToolName · $providerToolVersion',
                         style: theme.textTheme.bodySmall,
                       )),
                 ]),
@@ -380,6 +301,28 @@ class _WorkersTabState extends State<_WorkersTab> {
                 ),
               ),
               children: [
+                _DetailRow(
+                  label: 'Catalog',
+                  value: 'Available',
+                ),
+                _DetailRow(
+                  label: 'Profile state',
+                  value: view.profileState.label,
+                ),
+                _DetailRow(
+                  label: 'Local Worker',
+                  value: switch (view.localState) {
+                    WorkspaceLocalWorkerState.loading => 'Loading',
+                    WorkspaceLocalWorkerState.unavailable => 'Unavailable',
+                    WorkspaceLocalWorkerState.notConfigured => 'Not configured',
+                    WorkspaceLocalWorkerState.configured =>
+                      worker?.id ?? 'Configured',
+                  },
+                ),
+                _DetailRow(
+                  label: 'Worker state',
+                  value: view.state.label,
+                ),
                 _DetailRow(
                   label: 'Workspace version',
                   value: conclaveWorkspaceAppVersion,
@@ -435,6 +378,11 @@ class _WorkersTabState extends State<_WorkersTab> {
                       ),
                     ),
                 ],
+                if (view.profileAvailability.message != null)
+                  _DetailRow(
+                    label: 'Profile resolution detail',
+                    value: view.profileAvailability.message!,
+                  ),
                 _DetailRow(
                   label: 'Worker Type ID',
                   value: entry.workerTypeId,
@@ -445,7 +393,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                 ),
                 _DetailRow(
                   label: 'Provider CLI version',
-                  value: worker?.toolVersion ?? 'Not detected',
+                  value: providerToolVersion,
                 ),
                 _DetailRow(
                   label: 'Provider tool path (local only)',
@@ -453,9 +401,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                 ),
                 _DetailRow(
                   label: 'Readiness',
-                  value: worker == null
-                      ? 'setup_required'
-                      : '${worker.readinessState.wireValue}${worker.readinessIssueCode == null ? '' : ' · ${worker.readinessIssueCode}'}',
+                  value: readiness,
                 ),
                 _DetailRow(
                   label: 'Last Test',
@@ -478,38 +424,111 @@ class _WorkersTabState extends State<_WorkersTab> {
     );
   }
 
-  Future<void> _configureCatalogWorker(LogicalWorkerCatalogEntry entry) async {
+  Widget _buildRetiredWorkerCard(
+    WorkerCatalogWorkerState view,
+    ThemeData theme,
+  ) {
+    final worker = view.localWorker!;
+    final toolName = worker.toolName ?? 'Provider CLI';
+    final toolVersion = switch (view.providerToolState) {
+      WorkspaceProviderToolState.unknown => 'Not detected',
+      WorkspaceProviderToolState.missing => 'Not installed',
+      WorkspaceProviderToolState.available => worker.toolVersion ?? 'Available',
+    };
+    return Card(
+      key: Key('retired-worker-${worker.workerTypeId}'),
+      margin: const EdgeInsets.only(bottom: 12),
+      color: theme.colorScheme.surfaceContainerLow,
+      child: ListTile(
+        leading: Icon(Icons.inventory_2_outlined,
+            color: theme.colorScheme.onSurfaceVariant),
+        title: Text(worker.workerTypeId,
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                _CatalogStatusBadge(label: view.state.label),
+                _CatalogStatusBadge(label: view.readinessLabel),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text('$toolName · $toolVersion',
+                  style: theme.textTheme.bodySmall),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _configureCatalogWorker(WorkerDescriptor entry) async {
     await _runCatalogAction(entry, () async {
+      final currentEntry = await _refreshCatalogEntry(entry);
+      if (currentEntry == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This Worker is no longer available in Cloud.'),
+            ),
+          );
+        }
+        return;
+      }
       final registry = widget.registry;
       if (registry == null) return;
       await LocalWorkerSetupService(registry: registry).createCatalogWorker(
-        entry: entry,
+        entry: currentEntry,
         permissions: defaultLocalWorkerPermissions,
       );
-      await widget.toolProfileCatalog?.syncWorkerProfiles(entry.workerTypeId);
+      await widget.catalogCoordinator?.ensureWorkerProfileAvailable(
+        entry.workerTypeId,
+        waitForActiveRefresh: true,
+      );
       await widget.onReadinessCheck?.call(
           mode: LocalWorkerProbeMode.live, workerTypeId: entry.workerTypeId);
     });
   }
 
-  Future<void> _testCatalogWorker(
-          LogicalWorkerCatalogEntry entry, LocalWorker worker) =>
-      _runCatalogAction(
-          entry,
-          () =>
-              widget.onReadinessCheck?.call(
-                mode: LocalWorkerProbeMode.live,
-                workerTypeId: worker.workerTypeId,
-              ) ??
-              Future<void>.value());
+  Future<void> _testCatalogWorker(WorkerDescriptor entry, LocalWorker worker) =>
+      _runCatalogAction(entry, () async {
+        final currentEntry = await _refreshCatalogEntry(entry);
+        if (currentEntry == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('This Worker is no longer available in Cloud.'),
+              ),
+            );
+          }
+          return;
+        }
+        await widget.onReadinessCheck?.call(
+          mode: LocalWorkerProbeMode.live,
+          workerTypeId: worker.workerTypeId,
+        );
+      });
+
+  Future<WorkerDescriptor?> _refreshCatalogEntry(WorkerDescriptor entry) async {
+    final coordinator = widget.catalogCoordinator;
+    if (coordinator == null) return entry;
+    await coordinator.refresh(force: true);
+    return coordinator.entryForWorker(entry.workerTypeId);
+  }
 
   Future<void> _runCatalogAction(
-      LogicalWorkerCatalogEntry entry, Future<void> Function() action) async {
+      WorkerDescriptor entry, Future<void> Function() action) async {
     if (!_updatingWorkerTypes.add(entry.workerTypeId)) return;
     setState(() {});
     try {
       await action();
-      if (mounted) setState(_loadWorkers);
+      await widget.catalogCoordinator?.refreshLocalWorkers();
+      if (mounted) setState(() {});
     } on Object {
       if (mounted) {
         showCopyableErrorSnackBar(context,
@@ -520,12 +539,6 @@ class _WorkersTabState extends State<_WorkersTab> {
       if (mounted) setState(() {});
     }
   }
-
-  static IconData _workerTypeIcon(String id) => switch (id) {
-        'chatgpt' => Icons.terminal,
-        'gemini' => Icons.auto_awesome,
-        _ => Icons.smart_toy_outlined,
-      };
 }
 
 class _CatalogStatusBadge extends StatelessWidget {
@@ -536,9 +549,27 @@ class _CatalogStatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (label) {
-      'Ready' => ConclaveBrand.success,
-      'Disabled' => Colors.grey,
-      'Setup required' || 'Not installed' => ConclaveBrand.warning,
+      'Ready' ||
+      'Profile ready' ||
+      'Profile · Available' =>
+        ConclaveBrand.success,
+      'Disabled' ||
+      'Catalog retired' ||
+      'Catalog unavailable' ||
+      'Catalog available' ||
+      'Profile · Resolving' =>
+        Colors.grey,
+      'Setup required' ||
+      'Preparing integration…' ||
+      'Authentication required' ||
+      'Provider tool not installed' ||
+      'Runtime unavailable' ||
+      'Profile unavailable' ||
+      'Incompatible' ||
+      'Profile · Downloading' ||
+      'Profile · Not downloaded' ||
+      'Profile · Incompatible' =>
+        ConclaveBrand.warning,
       _ => ConclaveBrand.error,
     };
     return Container(
@@ -558,49 +589,6 @@ class _CatalogStatusBadge extends StatelessWidget {
       ),
     );
   }
-}
-
-String deriveLocalWorkerHealth(LocalWorker worker) {
-  if (worker.activationState == LocalWorkerActivationState.disabled) {
-    return 'Disabled';
-  }
-  return deriveLocalWorkerReadiness(worker);
-}
-
-List<String> deriveLocalWorkerStatusBadges(
-  LocalWorker worker, {
-  String? readinessLabel,
-}) =>
-    [
-      if (worker.activationState == LocalWorkerActivationState.disabled)
-        'Disabled',
-      readinessLabel ?? deriveLocalWorkerReadiness(worker),
-    ];
-
-String deriveLocalWorkerReadiness(LocalWorker worker) {
-  if (worker.lastLiveTestPassed == false) {
-    final liveIssue = worker.lastLiveTestIssueCode ?? worker.readinessIssueCode;
-    if (liveIssue == 'cli_not_found') return 'Not installed';
-    if (liveIssue == 'setup_required' ||
-        liveIssue == 'authentication_required') {
-      return 'Setup required';
-    }
-    return 'Needs attention';
-  }
-  if (worker.readinessState == WorkerReadinessState.setupRequired &&
-      worker.lastLiveTestPassed == true) {
-    return 'Ready';
-  }
-  final issueCode = worker.readinessIssueCode;
-  if (issueCode == 'cli_not_found') return 'Not installed';
-  if (worker.readinessState == WorkerReadinessState.ready) return 'Ready';
-  if (issueCode == 'setup_required' ||
-      issueCode == 'authentication_required' ||
-      worker.readinessState == WorkerReadinessState.setupRequired ||
-      worker.readinessState == WorkerReadinessState.signInRequired) {
-    return 'Setup required';
-  }
-  return 'Needs attention';
 }
 
 String _lastLiveTestLabel(LocalWorker? worker) {

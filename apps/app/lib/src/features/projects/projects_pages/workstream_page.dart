@@ -53,7 +53,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   List<Map<String, dynamic>> _workAttachments = [];
   List<AxWorker> _projectWorkers = const [];
   List<AxWorker> _eligibleWorkers = const [];
-  Map<String, String> _projectWorkspaceNames = const {};
   late Map<String, dynamic> _workConfig;
   bool _loadingWorkChoices = true;
   bool _savingWorkConfig = false;
@@ -129,22 +128,23 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       ]);
       if (!mounted) return;
       final grants = loaded[1] as List<Map<String, dynamic>>;
-      final names = <String, String>{};
+      final grantedWorkspaceIds = <String>{};
       for (final grant in grants) {
         final id = (grant['workspaceId'] ?? grant['id'] ?? '').toString();
         if (id.isEmpty) continue;
-        names[id] = (grant['workspaceName'] ?? grant['name'] ?? id).toString();
+        grantedWorkspaceIds.add(id);
       }
       setState(() {
         _projectWorkers = (loaded[0] as List<AxWorker>)
-            .where((worker) => names.containsKey(worker.workspaceId))
+            .where((worker) => grantedWorkspaceIds.contains(worker.workspaceId))
             .toList();
         _eligibleWorkers = _projectWorkers
             .where((worker) =>
                 worker.activationState == 'enabled' &&
-                worker.readinessState == 'ready')
+                worker.readinessState == 'ready' &&
+                worker.catalogLifecycleState == 'active' &&
+                worker.catalogVisibilityState == 'visible')
             .toList();
-        _projectWorkspaceNames = names;
         _loadingWorkChoices = false;
       });
     } catch (_) {

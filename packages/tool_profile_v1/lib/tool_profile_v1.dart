@@ -2,6 +2,12 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+export 'src/tool_profile_release.dart';
+export 'src/worker_trust_policy.dart';
+export 'src/tool_profile_verifier.dart';
+export 'src/tool_profile_resolution.dart';
+export 'src/draft_profile_store.dart';
+
 const maxProfileBytes = 256 * 1024;
 const _topLevelKeys = {
   'schemaVersion',

@@ -3,37 +3,13 @@ import 'dart:convert';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 
 import 'tool_profile_release_store.dart';
-import 'tool_profile_release_verifier.dart';
 
-enum ToolProfileResolutionSource { active, stable, lastKnownGood, unavailable }
-
-enum ToolProfileUnavailableReason {
-  noEligibleRelease,
-  unsupportedProviderVersion,
-  incompatibleEngineVersion,
-}
-
-class ToolProfileResolution {
-  const ToolProfileResolution._({
-    required this.source,
-    this.release,
-    this.reason,
-  });
-
-  const ToolProfileResolution.selected({
-    required ToolProfileResolutionSource source,
-    required ToolProfileReleaseAdmission release,
-  }) : this._(source: source, release: release);
-
-  const ToolProfileResolution.unavailable(ToolProfileUnavailableReason reason)
-      : this._(source: ToolProfileResolutionSource.unavailable, reason: reason);
-
-  final ToolProfileResolutionSource source;
-  final ToolProfileReleaseAdmission? release;
-  final ToolProfileUnavailableReason? reason;
-
-  bool get isAvailable => release != null;
-}
+export 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+    show
+        ToolProfileResolutionSource,
+        ToolProfileUnavailableReason,
+        ToolProfileResolution,
+        ToolProfileCompatibility;
 
 /// Resolves only verified, signed, locally cached official Profile releases.
 /// Candidate order is active, Cloud-selected stable, then last-known-good.
@@ -44,14 +20,15 @@ class ToolProfileResolver {
 
   /// Applies the same channel, provider-version, and bootstrap fallback used
   /// by Workspace readiness before selecting a Profile for an assignment.
-  Future<ToolProfileResolution> resolveForWorker({
+  Future<ToolProfileResolution<ToolProfileReleaseAdmission>> resolveForWorker({
     required String logicalWorkerTypeId,
     required String profileDefinitionId,
     required String engineVersion,
     String? providerCliVersion,
     Future<void> Function()? ensureAvailable,
   }) async {
-    Future<ToolProfileResolution> resolveCurrent() async {
+    Future<ToolProfileResolution<ToolProfileReleaseAdmission>>
+        resolveCurrent() async {
       final channel =
           (await store.releaseState(profileDefinitionId)).selectedChannel;
       var result = providerCliVersion == null
@@ -90,7 +67,8 @@ class ToolProfileResolver {
   /// Selects a verified, Engine-compatible Profile to run only its bounded
   /// version probe. The resulting provider version must be passed to [resolve]
   /// before the Profile is used for normal work.
-  Future<ToolProfileResolution> resolveBootstrapProfile({
+  Future<ToolProfileResolution<ToolProfileReleaseAdmission>>
+      resolveBootstrapProfile({
     required String logicalWorkerTypeId,
     required String profileDefinitionId,
     required String engineVersion,
@@ -128,18 +106,18 @@ class ToolProfileResolver {
         utf8.encode(canonicalJson(candidate.profile)),
       );
       if (_engineCompatible(profile, engineVersion)) {
-        return ToolProfileResolution.selected(
+        return ToolProfileResolution<ToolProfileReleaseAdmission>.selected(
             source: source, release: candidate);
       }
     }
-    return ToolProfileResolution.unavailable(
+    return ToolProfileResolution<ToolProfileReleaseAdmission>.unavailable(
       sawCandidate
           ? ToolProfileUnavailableReason.incompatibleEngineVersion
           : ToolProfileUnavailableReason.noEligibleRelease,
     );
   }
 
-  Future<ToolProfileResolution> resolve({
+  Future<ToolProfileResolution<ToolProfileReleaseAdmission>> resolve({
     required String logicalWorkerTypeId,
     required String profileDefinitionId,
     required String engineVersion,
@@ -188,19 +166,22 @@ class ToolProfileResolver {
         providerMismatch = true;
         continue;
       }
-      return ToolProfileResolution.selected(source: source, release: candidate);
+      return ToolProfileResolution<ToolProfileReleaseAdmission>.selected(
+          source: source, release: candidate);
     }
     if (providerMismatch) {
-      return const ToolProfileResolution.unavailable(
+      return const ToolProfileResolution<
+          ToolProfileReleaseAdmission>.unavailable(
         ToolProfileUnavailableReason.unsupportedProviderVersion,
       );
     }
     if (engineMismatch) {
-      return const ToolProfileResolution.unavailable(
+      return const ToolProfileResolution<
+          ToolProfileReleaseAdmission>.unavailable(
         ToolProfileUnavailableReason.incompatibleEngineVersion,
       );
     }
-    return const ToolProfileResolution.unavailable(
+    return const ToolProfileResolution<ToolProfileReleaseAdmission>.unavailable(
       ToolProfileUnavailableReason.noEligibleRelease,
     );
   }
@@ -230,35 +211,9 @@ class ToolProfileResolver {
     }
   }
 
-  bool _engineCompatible(EngineProfile profile, String version) {
-    try {
-      return engineVersionCompatible(profile, version);
-    } on Object {
-      return false;
-    }
-  }
+  bool _engineCompatible(EngineProfile profile, String version) =>
+      ToolProfileCompatibility.isEngineCompatible(profile, version);
 
-  bool _providerCompatible(EngineProfile profile, String version) {
-    final ranges = profile.providerTool['supportedVersions'];
-    if (ranges is! List) return false;
-    for (final range in ranges) {
-      if (range is! Map ||
-          range['min'] is! String ||
-          range['maxExclusive'] is! String) {
-        continue;
-      }
-      try {
-        if (semanticVersionInRange(
-          version,
-          range['min'] as String,
-          range['maxExclusive'] as String,
-        )) {
-          return true;
-        }
-      } on FormatException {
-        continue;
-      }
-    }
-    return false;
-  }
+  bool _providerCompatible(EngineProfile profile, String version) =>
+      ToolProfileCompatibility.isProviderCompatible(profile, version);
 }

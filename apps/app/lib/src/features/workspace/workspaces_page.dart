@@ -317,14 +317,14 @@ class _WorkerRowState extends State<_WorkerRow> {
           leading: Icon(worker.status == 'ready'
               ? Icons.check_circle_outline
               : Icons.warning_amber),
-          title: Text(_workerTypeLabel(worker.workerTypeId)),
+          title: Text(worker.displayName),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Wrap(
               spacing: 8,
               runSpacing: 4,
               children: [
-                _WorkerStatus(text: _workerTypeLabel(worker.workerTypeId)),
+                _WorkerStatus(text: worker.displayName),
                 _WorkerStatus(text: readiness),
                 if (worker.attentionReasonCode != null)
                   _WorkerStatus(text: worker.attentionReasonCode!),
@@ -343,9 +343,7 @@ class _WorkerRowState extends State<_WorkerRow> {
                 spacing: 18,
                 runSpacing: 8,
                 children: [
-                  _Diagnostic(
-                      label: 'Worker Type',
-                      value: _workerTypeLabel(worker.workerTypeId)),
+                  _Diagnostic(label: 'Worker Type', value: worker.displayName),
                   _Diagnostic(
                       label: 'Engine', value: worker.engineVersion ?? '—'),
                   if (worker.profileDefinitionId != null)
@@ -403,21 +401,6 @@ class _Diagnostic extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text('$label · $value');
 }
-
-String _workerTypeLabel(String value) => switch (value.toLowerCase()) {
-      'chatgpt' => 'ChatGPT',
-      'gemini' => 'Gemini',
-      'claude-code' => 'Claude Code',
-      'anthropic-api' => 'Anthropic API',
-      'openai-api' => 'OpenAI API',
-      'gemini-api' => 'Gemini API',
-      'ollama' => 'Ollama',
-      _ => value
-          .split(RegExp(r'[-_]'))
-          .where((part) => part.isNotEmpty)
-          .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
-          .join(' '),
-    };
 
 String _readinessLabel(String value) => switch (value.toLowerCase()) {
       'ready' => 'Ready locally',

@@ -50,10 +50,12 @@ Future<Workspace> buildWorkspaceRuntime(
     effectiveConfig.dataDirectory,
   ).getOrCreate(initialIdentity: effectiveConfig.workspaceId);
   WorkspaceCloudConnection? connection;
+  late final WorkerCatalogCoordinator? workerCatalogCoordinator;
   final localWorkerRegistry = LocalWorkerRegistry(
     dataDirectory: effectiveConfig.dataDirectory,
     workspaceId: localWorkspaceId,
     onChanged: () async {
+      await workerCatalogCoordinator?.refreshLocalWorkers();
       await connection?.refreshWorkerInventory();
     },
     onWorkerRemoving: (workerId) async {
@@ -109,6 +111,24 @@ Future<Workspace> buildWorkspaceRuntime(
             }
           },
         );
+  if (toolProfileCatalog != null) {
+    workerCatalogCoordinator = WorkerCatalogCoordinator(
+      catalog: toolProfileCatalog,
+      releaseStore: toolProfileReleaseStore,
+      registry: localWorkerRegistry,
+      onCatalogReconciled: () async {
+        await connection?.refreshWorkerInventory();
+      },
+      refreshReadiness: () => readinessMonitor
+          .checkNow(
+            mode: LocalWorkerProbeMode.passive,
+            rerunWhenActive: true,
+          )
+          .then((_) => connection?.refreshWorkerInventory()),
+    );
+  } else {
+    workerCatalogCoordinator = null;
+  }
   final activeWorkerIds = (await localWorkerRegistry.list())
       .where((worker) => worker.status == LocalWorkerStatus.ready)
       .map((worker) => worker.id)
@@ -118,11 +138,16 @@ Future<Workspace> buildWorkspaceRuntime(
     resolveLogicalWorker: (workerId) async {
       final worker = await localWorkerRegistry.find(workerId);
       if (worker == null) return null;
+      final catalogEntry = await workerCatalogCoordinator
+          ?.ensureCatalogEntry(worker.workerTypeId);
+      final catalogAvailable =
+          workerCatalogCoordinator == null || catalogEntry != null;
       return AssignmentLogicalWorker(
         id: worker.id,
         workerTypeId: worker.workerTypeId,
-        enabled: worker.activationState == LocalWorkerActivationState.enabled,
-        ready: worker.status == LocalWorkerStatus.ready,
+        enabled: catalogAvailable &&
+            worker.activationState == LocalWorkerActivationState.enabled,
+        ready: catalogAvailable && worker.status == LocalWorkerStatus.ready,
         permissions: worker.localPermissions.toSet(),
         localConcurrencyLimit: worker.localConcurrencyLimit,
         providerCliVersion: worker.toolVersion,
@@ -132,34 +157,18 @@ Future<Workspace> buildWorkspaceRuntime(
     cancelToolProfileAssignment: cliWorkerEngineSupervisor?.cancel,
     executeWithToolProfile: (worker, workingDirectory, context, payload,
         {onProgress}) async {
-      var profileDefinitionId =
-          toolProfileCatalog?.profileDefinitionForWorker(worker.workerTypeId);
-      if (profileDefinitionId == null && toolProfileCatalog != null) {
-        try {
-          await toolProfileCatalog.syncCatalog();
-        } on Object {
-          // Verified local releases remain usable if Cloud is unavailable.
-        }
-        profileDefinitionId =
-            toolProfileCatalog.profileDefinitionForWorker(worker.workerTypeId);
-      }
       final supervisor = cliWorkerEngineSupervisor;
-      if (profileDefinitionId == null || supervisor == null) {
+      final coordinator = workerCatalogCoordinator;
+      if (coordinator == null || supervisor == null) {
         throw AssignmentExecutionFailure(
           code: 'worker_not_ready',
           message: executionErrorMessage('worker_not_ready'),
         );
       }
-      final resolver = ToolProfileResolver(toolProfileReleaseStore);
-      final resolution = await resolver.resolveForWorker(
-        logicalWorkerTypeId: worker.workerTypeId,
-        profileDefinitionId: profileDefinitionId,
+      final resolution = await coordinator.resolveProfileForWorker(
+        workerTypeId: worker.workerTypeId,
         engineVersion: cliWorkerEngineVersion,
         providerCliVersion: worker.providerCliVersion,
-        ensureAvailable: () async {
-          await toolProfileCatalog?.syncCatalog();
-          await toolProfileCatalog?.syncWorkerProfiles(worker.workerTypeId);
-        },
       );
       final release = resolution.release;
       if (release == null) {
@@ -281,52 +290,15 @@ Future<Workspace> buildWorkspaceRuntime(
           assignmentCancellationHandler: workerHandler.cancel,
           workerInventoryProvider: () async {
             final localWorkers = await localWorkerRegistry.list();
-            final lastSeenAt = DateTime.now().toUtc().toIso8601String();
-            return Future.wait(localWorkers.map((worker) async {
-              final catalogEntry =
-                  toolProfileCatalog?.entryForWorker(worker.workerTypeId);
-              final definitionId = catalogEntry?.profileDefinitionId;
-              ToolProfileReleaseAdmission? activeProfile;
-              if (definitionId != null) {
-                try {
-                  activeProfile =
-                      await toolProfileReleaseStore.activeRelease(definitionId);
-                } on Object {
-                  // Missing or revoked Profile evidence is reported as absent.
-                }
-              }
-              final declaredCapabilities =
-                  catalogEntry?.capabilities ?? const <String>[];
-              final capabilities = <String>{
-                ...declaredCapabilities,
-                if (declaredCapabilities.contains('workstream_read'))
-                  'authorized_context_read',
-              }.toList()
-                ..sort();
-              return <String, Object?>{
-                'workerId': worker.id,
-                'workerTypeId': worker.workerTypeId,
-                'activationState': worker.activationState ==
-                        LocalWorkerActivationState.disabled
-                    ? 'disabled'
-                    : 'enabled',
-                'readinessState': worker.readinessState.wireValue,
-                if (worker.readinessIssueCode != null)
-                  'readinessIssueCode': worker.readinessIssueCode,
-                'engineVersion': cliWorkerEngineVersion,
-                'profileDefinitionId': definitionId,
-                'profileReleaseVersion': activeProfile?.releaseVersion,
-                'providerToolName':
-                    worker.toolName ?? catalogEntry?.providerToolName,
-                'providerToolVersion': worker.toolVersion,
-                'capabilities': capabilities,
-                'localConcurrencyLimit': worker.localConcurrencyLimit,
-                'revision': worker.revision,
-                'createdAt': worker.createdAt,
-                'updatedAt': worker.updatedAt,
-                'lastSeenAt': lastSeenAt,
-              };
-            }).toList());
+            return workerCatalogCoordinator?.inventoryForWorkers(
+                  localWorkers,
+                  engineVersion: cliWorkerEngineVersion,
+                  engineAvailable: cliWorkerEngineSupervisor != null,
+                ) ??
+                const <Map<String, Object?>>[];
+          },
+          onSessionReady: () async {
+            await workerCatalogCoordinator?.refresh(force: true);
           },
           workspaceUpdateAvailableHandler: (payload) async {
             final controller = updateController;
@@ -362,7 +334,6 @@ Future<Workspace> buildWorkspaceRuntime(
   readinessMonitor = WorkerReadinessMonitor(
     registry: localWorkerRegistry,
     toolProfileReleaseStore: toolProfileReleaseStore,
-    toolProfileCatalog: toolProfileCatalog,
     cliWorkerEngineSupervisor: cliWorkerEngineSupervisor,
     workerStateDirectory: workspacePaths.workerStateDirectory,
     profileDiagnosticStoreForWorker: (workerTypeId) => WorkerDiagnosticStore(
@@ -371,40 +342,7 @@ Future<Workspace> buildWorkspaceRuntime(
         '${Platform.pathSeparator}logs',
       ),
     ),
-    ensureToolProfileAvailable: (workerTypeId) async {
-      await toolProfileCatalog?.syncCatalog();
-      await toolProfileCatalog?.syncWorkerProfiles(workerTypeId);
-    },
   );
-  if (toolProfileCatalog != null) {
-    var refreshingToolProfiles = false;
-    Future<void> refreshToolProfiles() async {
-      if (refreshingToolProfiles) return;
-      refreshingToolProfiles = true;
-      try {
-        await toolProfileCatalog.loadCatalog();
-        List<LogicalWorkerCatalogEntry> workers;
-        try {
-          workers = await toolProfileCatalog.syncCatalog();
-        } on Object {
-          workers = toolProfileCatalog.workers;
-        }
-        for (final worker in workers) {
-          final workerTypeId = worker.workerTypeId;
-          await toolProfileCatalog.syncWorkerProfiles(workerTypeId);
-        }
-      } on Object {
-        // Keep verified cached Profiles usable and retry on the next interval.
-      } finally {
-        refreshingToolProfiles = false;
-      }
-    }
-
-    Timer.periodic(const Duration(minutes: 10), (_) {
-      unawaited(refreshToolProfiles());
-    });
-    unawaited(refreshToolProfiles());
-  }
   final engine = Workspace(
     config: effectiveConfig,
     credentialStore: secureCredentialStore,
@@ -416,6 +354,7 @@ Future<Workspace> buildWorkspaceRuntime(
     cloudConnection: connection,
     toolProfileReleaseStore: toolProfileReleaseStore,
     toolProfileCatalog: toolProfileCatalog,
+    workerCatalogCoordinator: workerCatalogCoordinator,
     statusProvider: () async {
       await refreshUpdateAvailability();
       final workers = await localWorkerRegistry.list();

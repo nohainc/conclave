@@ -4,7 +4,14 @@ import {
   provisionConclaveUser,
   recordAuthAuditEvent,
 } from "../auth/index.js";
-import { extractBearerToken, hashToken } from "@conclave/security";
+import {
+  DESKTOP_PROFILE_LAB_AUDIENCE,
+  DESKTOP_WORKSPACE_AUDIENCE,
+  SUPPORTED_DESKTOP_AUDIENCES,
+  type DesktopAudience,
+  extractBearerToken,
+  hashToken,
+} from "@conclave/security";
 import { HttpError, json, recordAudit, securityContext } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
 
@@ -99,7 +106,13 @@ export async function handleSessionLogout(
   return response;
 }
 
-const DESKTOP_HUMAN_AUDIENCE = "conclave.desktop.management" as const;
+export {
+  DESKTOP_PROFILE_LAB_AUDIENCE,
+  DESKTOP_WORKSPACE_AUDIENCE,
+  SUPPORTED_DESKTOP_AUDIENCES,
+  type DesktopAudience,
+};
+export const DESKTOP_HUMAN_AUDIENCE = DESKTOP_WORKSPACE_AUDIENCE;
 const DESKTOP_HUMAN_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function randomSecret(prefix: string): string {
@@ -116,13 +129,14 @@ export async function handleCreateDesktopAuthIntent(
   const body = (await request.json().catch(() => ({}))) as {
     clientName?: unknown;
     contractVersion?: unknown;
+    audience?: unknown;
   };
   if (
     !body ||
     typeof body !== "object" ||
     Array.isArray(body) ||
     Object.keys(body).some(
-      (key) => !["clientName", "contractVersion"].includes(key),
+      (key) => !["clientName", "contractVersion", "audience"].includes(key),
     ) ||
     body.contractVersion !== "1.1" ||
     typeof body.clientName !== "string" ||
@@ -133,19 +147,30 @@ export async function handleCreateDesktopAuthIntent(
       "A supported contract version and client name are required",
     );
   }
+  const audience =
+    typeof body.audience === "string"
+      ? (body.audience.trim() as DesktopAudience)
+      : DESKTOP_WORKSPACE_AUDIENCE;
+  if (!SUPPORTED_DESKTOP_AUDIENCES.includes(audience)) {
+    throw new HttpError(
+      400,
+      `Unsupported desktop authentication audience: ${audience}`,
+    );
+  }
   const intentId = crypto.randomUUID();
   const pollToken = randomSecret("conclave_dap_");
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + 10 * 60_000);
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO desktop_auth_intents
-       (id, poll_token_hash, client_name, created_at, expires_at)
-     VALUES (?1, ?2, ?3, ?4, ?5)`,
+       (id, poll_token_hash, client_name, audience, created_at, expires_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
   )
     .bind(
       intentId,
       await hashToken(pollToken),
       body.clientName.trim().slice(0, 128),
+      audience,
       createdAt.toISOString(),
       expiresAt.toISOString(),
     )
@@ -160,6 +185,7 @@ export async function handleCreateDesktopAuthIntent(
       verificationUrl: verificationUrl.toString(),
       expiresAt: expiresAt.toISOString(),
       pollIntervalMs: 2000,
+      audience,
     },
     { status: 201 },
   );
@@ -206,7 +232,8 @@ export async function handleDesktopAuthIntentBrowserStatus(
 ): Promise<Response> {
   const intent = await env.CONCLAVE_DB.prepare(
     `SELECT expires_at AS expiresAt, approved_at AS approvedAt,
-            claimed_at AS claimedAt, denied_at AS deniedAt
+            claimed_at AS claimedAt, denied_at AS deniedAt,
+            client_name AS clientName, audience
        FROM desktop_auth_intents WHERE id = ?1`,
   )
     .bind(intentId)
@@ -215,6 +242,8 @@ export async function handleDesktopAuthIntentBrowserStatus(
       approvedAt: string | null;
       claimedAt: string | null;
       deniedAt: string | null;
+      clientName: string;
+      audience: string;
     }>();
   if (!intent) throw new HttpError(404, "Desktop auth intent not found");
   const status = intent.claimedAt
@@ -226,7 +255,13 @@ export async function handleDesktopAuthIntentBrowserStatus(
         : intent.expiresAt <= new Date().toISOString()
           ? "expired"
           : "pending";
-  return json({ intentId, status, expiresAt: intent.expiresAt });
+  return json({
+    intentId,
+    status,
+    expiresAt: intent.expiresAt,
+    clientName: intent.clientName,
+    audience: intent.audience,
+  });
 }
 
 export async function handleCancelDesktopAuthIntent(
@@ -333,13 +368,13 @@ export async function handleClaimDesktopAuthIntent(
   if (!pollToken)
     throw new HttpError(401, "Desktop auth polling credential required");
   const intent = await env.CONCLAVE_DB.prepare(
-    `SELECT approved_user_id AS userId, expires_at AS expiresAt
+    `SELECT approved_user_id AS userId, expires_at AS expiresAt, audience
        FROM desktop_auth_intents
       WHERE id = ?1 AND poll_token_hash = ?2 AND approved_at IS NOT NULL
         AND claimed_at IS NULL AND denied_at IS NULL AND expires_at > ?3`,
   )
     .bind(intentId, await hashToken(pollToken), new Date().toISOString())
-    .first<{ userId: string; expiresAt: string }>();
+    .first<{ userId: string; expiresAt: string; audience: string }>();
   if (!intent)
     throw new HttpError(
       409,
@@ -376,7 +411,7 @@ export async function handleClaimDesktopAuthIntent(
       sessionId,
       user.userId,
       tokenHash,
-      DESKTOP_HUMAN_AUDIENCE,
+      intent.audience,
       issuedAt.toISOString(),
       expiresAt.toISOString(),
       intentId,
@@ -397,7 +432,7 @@ export async function handleClaimDesktopAuthIntent(
     issuedAt: issuedAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
     sessionId,
-    audience: DESKTOP_HUMAN_AUDIENCE,
+    audience: intent.audience,
   });
 }
 
@@ -424,28 +459,25 @@ export async function findDesktopHumanSession(
   request: Request,
   env: SecurityEnv,
   sessionId?: string,
+  expectedAudience?: string | readonly string[],
 ) {
   const credential = extractBearerToken(request.headers);
   if (!credential) throw new HttpError(401, "Desktop human session required");
   const now = new Date().toISOString();
   const session = await env.CONCLAVE_DB.prepare(
-    `SELECT s.id AS sessionId, s.user_id AS userId, s.created_at AS createdAt,
+    `SELECT s.id AS sessionId, s.user_id AS userId, s.audience, s.created_at AS createdAt,
             s.expires_at AS expiresAt,
             u.email, u.display_name AS displayName
        FROM desktop_human_sessions s JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = ?1 AND s.audience = ?2 AND s.revoked_at IS NULL
-        AND s.expires_at > ?3 AND u.status = 'active'
-        AND (?4 IS NULL OR s.id = ?4)`,
+      WHERE s.token_hash = ?1 AND s.revoked_at IS NULL
+        AND s.expires_at > ?2 AND u.status = 'active'
+        AND (?3 IS NULL OR s.id = ?3)`,
   )
-    .bind(
-      await hashToken(credential),
-      DESKTOP_HUMAN_AUDIENCE,
-      now,
-      sessionId ?? null,
-    )
+    .bind(await hashToken(credential), now, sessionId ?? null)
     .first<{
       sessionId: string;
       userId: string;
+      audience: string;
       createdAt: string;
       expiresAt: string;
       email: string;
@@ -456,6 +488,19 @@ export async function findDesktopHumanSession(
       401,
       "Desktop human session is invalid, expired, or revoked",
     );
+
+  if (expectedAudience) {
+    const allowed = Array.isArray(expectedAudience)
+      ? expectedAudience
+      : [expectedAudience];
+    if (!allowed.includes(session.audience)) {
+      throw new HttpError(
+        403,
+        `Desktop session audience '${session.audience}' is not authorized for this operation`,
+      );
+    }
+  }
+
   await env.CONCLAVE_DB.prepare(
     "UPDATE desktop_human_sessions SET last_used_at = ?1 WHERE id = ?2",
   )
@@ -476,7 +521,7 @@ export async function handleGetDesktopHumanSession(
       displayName: session.displayName,
       email: session.email,
     },
-    audience: DESKTOP_HUMAN_AUDIENCE,
+    audience: session.audience,
     expiresAt: session.expiresAt,
   });
 }
@@ -497,8 +542,8 @@ export async function handleRotateDesktopHumanSession(
   ).toISOString();
   const result = await env.CONCLAVE_DB.prepare(
     `UPDATE desktop_human_sessions SET token_hash = ?1,
-       last_used_at = ?2, expires_at = ?3
-      WHERE id = ?4 AND token_hash = ?5 AND revoked_at IS NULL`,
+        last_used_at = ?2, expires_at = ?3
+       WHERE id = ?4 AND token_hash = ?5 AND revoked_at IS NULL`,
   )
     .bind(
       await hashToken(nextCredential),
@@ -521,6 +566,6 @@ export async function handleRotateDesktopHumanSession(
     issuedAt: now,
     expiresAt,
     sessionId: session.sessionId,
-    audience: DESKTOP_HUMAN_AUDIENCE,
+    audience: session.audience,
   });
 }

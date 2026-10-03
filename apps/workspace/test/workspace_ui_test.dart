@@ -11,7 +11,9 @@ import 'package:conclave_workspace/secure_credentials.dart';
 import 'package:conclave_workspace/tool_profile_catalog.dart';
 import 'package:conclave_workspace/tool_profile_release_store.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
+import 'package:conclave_workspace/worker_catalog_coordinator.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -150,6 +152,29 @@ LocalWorker _disabledChatGptWorker({
     );
 
 void main() {
+  Future<void> waitForCatalogRefresh(WidgetTester tester) async {
+    final dashboard = tester.widget<WorkspaceDashboard>(
+      find.byType(WorkspaceDashboard),
+    );
+    final controller = dashboard.workerCatalogCoordinator;
+    if (controller != null) {
+      await tester.runAsync(() async {
+        final deadline = DateTime.now().add(const Duration(seconds: 5));
+        while (controller.snapshot.refreshing &&
+            DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+    }
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> openWorkers(WidgetTester tester) async {
+    await tester.tap(find.text('Workers').first);
+    await tester.pump();
+    await waitForCatalogRefresh(tester);
+  }
+
   testWidgets('Workspace error notification has a working copy action',
       (tester) async {
     tester.view.physicalSize = const Size(1000, 900);
@@ -256,10 +281,14 @@ void main() {
           cloudUri: Uri.parse('https://catalog.test'),
           store: store,
           trustPolicy: trustPolicy,
-          workerCatalogLoader: () async => [
+          trustRefresher: () => SynchronousFuture<void>(null),
+          listLoader: (workerTypeId, channel) => Future.error(
+            StateError('No Profile release fixture for $workerTypeId'),
+          ),
+          workerCatalogLoader: () => SynchronousFuture([
             logicalWorkerCatalogFixture('chatgpt').toJson(),
             logicalWorkerCatalogFixture('gemini').toJson(),
-          ],
+          ]),
         );
     if (toolProfileCatalog == null) {
       await tester.runAsync(() async {
@@ -281,6 +310,14 @@ void main() {
       });
     }
     addTearDown(catalog.close);
+    final catalogCoordinator = WorkerCatalogCoordinator(
+      catalog: catalog,
+      releaseStore: store,
+      registry: localWorkerRegistry,
+      refreshExecutor: (operation) => Zone.root.run(operation),
+    );
+    addTearDown(catalogCoordinator.dispose);
+
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -301,8 +338,7 @@ void main() {
             onChangeWorkRoot: onChangeWorkRoot,
             onReadinessCheck: onReadinessCheck,
             localWorkerRegistry: localWorkerRegistry,
-            toolProfileCatalog: catalog,
-            toolProfileReleaseStore: store,
+            workerCatalogCoordinator: catalogCoordinator,
             // Build-time widget tests must never read the developer's actual
             // Keychain. Tests covering Keychain behavior provide a mocked
             // native bridge explicitly.
@@ -471,8 +507,7 @@ void main() {
     expect(find.text('Register'), findsOneWidget);
     expect(find.text('Connect'), findsOneWidget);
     expect(find.text('Workers'), findsWidgets);
-    await tester.tap(find.text('Workers').first);
-    await tester.pumpAndSettle();
+    await openWorkers(tester);
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
     await tester.tap(find.text('Workspace').first);
@@ -547,8 +582,7 @@ void main() {
     expect(find.text('Connect'), findsOneWidget);
     expect(find.text('Workspace'), findsWidgets);
     expect(find.text('Workers'), findsWidgets);
-    await tester.tap(find.text('Workers').first);
-    await tester.pumpAndSettle();
+    await openWorkers(tester);
     await tester.tap(find.text('Workspace').first);
     await tester.pumpAndSettle();
     expect(find.text('Connect'), findsOneWidget);
@@ -1263,8 +1297,7 @@ void main() {
     expect(find.text('Add Worker'), findsNothing);
   });
 
-  testWidgets('Workers page always shows the fixed ChatGPT and Gemini catalog',
-      (tester) async {
+  testWidgets('Workers page renders each Cloud catalog entry', (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -1283,16 +1316,15 @@ void main() {
       ),
       localWorkerRegistry: _FakeWorkerRegistry([]),
     );
-    await tester.tap(find.text('Workers').first);
-    await tester.pumpAndSettle();
+    await openWorkers(tester);
     await tester.ensureVisible(find.byKey(const Key('worker-catalog-chatgpt')));
     await tester.pumpAndSettle();
 
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
     expect(find.text('Setup required'), findsNWidgets(2));
-    expect(find.text('Codex CLI version not detected'), findsOneWidget);
-    expect(find.text('agy version not detected'), findsOneWidget);
+    expect(find.text('codex · Unknown'), findsOneWidget);
+    expect(find.text('agy · Unknown'), findsOneWidget);
     expect(find.textContaining('Capabilities:'), findsNothing);
     expect(find.text('Diagnostics'), findsNWidgets(2));
     expect(find.text('Set up ChatGPT'), findsNothing);
@@ -1307,7 +1339,7 @@ void main() {
   });
 
   testWidgets(
-      'Workers page only displays available workers according to active profiles',
+      'Workers page displays catalog Workers independently of local Profiles',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -1326,16 +1358,30 @@ void main() {
       profilesRoot: profileDirectory,
       trustPolicy: trustPolicy,
     );
+    var workerCatalogLoads = 0;
     final catalog = ToolProfileCatalogClient(
       cloudUri: Uri.parse('https://catalog.test'),
       store: store,
       trustPolicy: trustPolicy,
-      workerCatalogLoader: () async => [
-        logicalWorkerCatalogFixture('chatgpt').toJson(),
-        logicalWorkerCatalogFixture('gemini').toJson(),
-      ],
+      trustRefresher: () => SynchronousFuture<void>(null),
+      listLoader: (workerTypeId, channel) => Future.error(
+        StateError('No Profile release fixture for $workerTypeId'),
+      ),
+      workerCatalogLoader: () {
+        workerCatalogLoads++;
+        return SynchronousFuture([
+          logicalWorkerCatalogFixture('chatgpt').toJson(),
+          logicalWorkerCatalogFixture('gemini').toJson(),
+          logicalWorkerCatalogFixture(
+            'dynamic-test-worker',
+            displayName: 'Dynamic Test Worker',
+            profileDefinitionId: 'dynamic-test-cli',
+            providerToolName: 'Fixture CLI',
+          ).toJson(),
+        ]);
+      },
     );
-    // Install profile only for Gemini; ChatGPT profile is unavailable
+    // Install profile only for Gemini; the other catalog entries stay visible.
     await tester.runAsync(() async {
       await _installTestToolProfile(
         store: store,
@@ -1346,7 +1392,16 @@ void main() {
       );
       await catalog.syncCatalog();
     });
+    workerCatalogLoads = 0;
     addTearDown(catalog.close);
+    final registry = _FakeWorkerRegistry([]);
+    final catalogCoordinator = WorkerCatalogCoordinator(
+      catalog: catalog,
+      releaseStore: store,
+      registry: registry,
+      refreshExecutor: (operation) => Zone.root.run(operation),
+    );
+    addTearDown(catalogCoordinator.dispose);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -1361,23 +1416,26 @@ void main() {
               cloudConnected: true,
               workspaceName: 'Office Mac',
             ),
-            localWorkerRegistry: _FakeWorkerRegistry([]),
-            toolProfileCatalog: catalog,
-            toolProfileReleaseStore: store,
+            localWorkerRegistry: registry,
+            workerCatalogCoordinator: catalogCoordinator,
             credentialStore: _MemoryCredentialStore(),
           ),
         ),
       ),
     );
-    await tester.tap(find.text('Workers').first);
-    await tester.pumpAndSettle();
+    expect(workerCatalogLoads, 0);
+    await openWorkers(tester);
+    expect(workerCatalogLoads, 1);
 
-    // ChatGPT is not shown because its profile is unavailable
-    expect(find.text('ChatGPT'), findsNothing);
-    // Gemini is shown because its profile is active and available
+    expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
-    // Diagnostics are available on the active Gemini worker
-    expect(find.text('Diagnostics'), findsOneWidget);
+    expect(find.text('Dynamic Test Worker'), findsOneWidget);
+    expect(find.text('Setup required'), findsNWidgets(3));
+    expect(find.text('Diagnostics'), findsNWidgets(3));
+    final refreshButton = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.refresh),
+    );
+    expect(refreshButton.onPressed, isNotNull);
   });
 
   testWidgets('fixed catalog rows merge local Worker status by type',
@@ -1434,8 +1492,7 @@ void main() {
       ),
       localWorkerRegistry: _FakeWorkerRegistry([chatGptWorker, geminiWorker]),
     );
-    await tester.tap(find.text('Workers').first);
-    await tester.pumpAndSettle();
+    await openWorkers(tester);
     await tester.ensureVisible(find.byKey(const Key('worker-catalog-chatgpt')));
     await tester.pumpAndSettle();
 
@@ -1457,8 +1514,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Setup required'), findsOneWidget);
-    expect(find.text('Codex CLI 1.2.3'), findsOneWidget);
-    expect(find.text('agy version not detected'), findsOneWidget);
+    expect(find.text('Codex CLI · 1.2.3'), findsOneWidget);
+    expect(find.text('agy · Not detected'), findsOneWidget);
     expect(find.text('Test'), findsNWidgets(2));
     expect(find.textContaining('Test failed (execution_test_failed)'),
         findsNothing);
@@ -1489,8 +1546,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Engine & Tool Profiles'), findsNothing);
 
-    await tester.tap(find.text('Workers').first);
-    await tester.pumpAndSettle();
+    await openWorkers(tester);
     await tester.ensureVisible(find.text('Diagnostics').first);
     await tester.tap(find.text('Diagnostics').first);
     await tester.pumpAndSettle();
@@ -1544,8 +1600,7 @@ void main() {
         );
       },
     );
-    await tester.tap(find.text('Workers').first);
-    await tester.pumpAndSettle();
+    await openWorkers(tester);
     final chatGptCard = find.byKey(const Key('worker-catalog-chatgpt'));
     expect(
       find.descendant(of: chatGptCard, matching: find.text('Disabled')),
@@ -1556,6 +1611,10 @@ void main() {
       findsOneWidget,
     );
     await tester.tap(find.text('Test').first);
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 250)),
+    );
     await tester.pumpAndSettle();
 
     expect(activationAtProbe, LocalWorkerActivationState.disabled);
@@ -1617,8 +1676,7 @@ void main() {
         );
       },
     );
-    await tester.tap(find.text('Workers').first);
-    await tester.pumpAndSettle();
+    await openWorkers(tester);
     final chatGptCard = find.byKey(const Key('worker-catalog-chatgpt'));
     expect(
       find.descendant(of: chatGptCard, matching: find.text('Disabled')),
@@ -1629,6 +1687,10 @@ void main() {
       findsOneWidget,
     );
     await tester.tap(find.text('Test').first);
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 250)),
+    );
     await tester.pumpAndSettle();
 
     expect(activationAtProbe, LocalWorkerActivationState.disabled);
@@ -1686,8 +1748,7 @@ void main() {
         probeModes.add(mode);
       },
     );
-    await tester.tap(find.text('Workers').first);
-    await tester.pumpAndSettle();
+    await openWorkers(tester);
 
     await tester.tap(find.byType(Switch).first); // Disable.
     await tester.pumpAndSettle();
@@ -1736,12 +1797,12 @@ void main() {
       ),
       localWorkerRegistry: registry,
     );
-    await tester.tap(find.text('Workers').first);
-    await tester.pumpAndSettle();
+    await openWorkers(tester);
 
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
-    expect(find.text('internal-tool'), findsNothing);
+    expect(find.text('internal-tool'), findsOneWidget);
+    expect(find.text('Catalog retired'), findsOneWidget);
     expect((await registry.list()).single.id, unknownWorker.id);
   });
 

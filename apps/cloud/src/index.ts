@@ -86,8 +86,11 @@ export const routeHandlers = {
   handleGetReleaseTrustState: handlers.handleGetReleaseTrustState,
   handleRevokeReleaseSigningKey: handlers.handleRevokeReleaseSigningKey,
   handleResolveToolProfileChannels: handlers.handleResolveToolProfileChannels,
+  handleListWorkerCatalog: handlers.handleListWorkerCatalog,
+  handleListWorkspaceWorkerCatalog: handlers.handleListWorkspaceWorkerCatalog,
   handleSetWorkspaceToolProfileChannel:
     handlers.handleSetWorkspaceToolProfileChannel,
+  handleListAdminWorkspaceChannels: handlers.handleListAdminWorkspaceChannels,
   handleListWorkspaceWorkerInventory:
     handlers.handleListWorkspaceWorkerInventory,
   handleCreateToolProfileDefinition: handlers.handleCreateToolProfileDefinition,

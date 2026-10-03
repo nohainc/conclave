@@ -55,6 +55,16 @@ export class AuthenticationError extends Error {
 
 export type ClientType = "web" | "desktop" | "cli" | "api";
 
+export const DESKTOP_WORKSPACE_AUDIENCE =
+  "conclave.desktop.management" as const;
+export const DESKTOP_PROFILE_LAB_AUDIENCE =
+  "conclave.profile-lab.management" as const;
+export const SUPPORTED_DESKTOP_AUDIENCES = [
+  DESKTOP_WORKSPACE_AUDIENCE,
+  DESKTOP_PROFILE_LAB_AUDIENCE,
+] as const;
+export type DesktopAudience = (typeof SUPPORTED_DESKTOP_AUDIENCES)[number];
+
 export interface AuthenticatedUser {
   readonly id: string;
   readonly email: string;
@@ -70,6 +80,7 @@ export interface SecurityContext {
   readonly projectRoles: Readonly<Record<string, ProjectRole>>;
   readonly sessionId: string;
   readonly clientType: ClientType;
+  readonly audience?: string;
 }
 
 export function canAccessProject(
@@ -124,6 +135,8 @@ export interface AuthenticatedIdentity {
 export async function resolveProjectSecurityContextFromIdentity(
   db: DatabaseAdapter,
   identity: AuthenticatedIdentity,
+  clientType: ClientType = "web",
+  audience?: string,
 ): Promise<SecurityContext> {
   const userRow = await db
     .prepare(
@@ -171,7 +184,8 @@ export async function resolveProjectSecurityContextFromIdentity(
     user,
     projectRoles,
     sessionId: identity.sessionId,
-    clientType: "web",
+    clientType,
+    ...(audience ? { audience } : {}),
   };
 }
 
@@ -237,13 +251,22 @@ export async function authorizeProjectOwner(
 }
 
 export function authorizeProfileAdmin(
-  context: Pick<SecurityContext, "userId" | "user">,
+  context: Pick<SecurityContext, "userId" | "user"> & {
+    audience?: string;
+    clientType?: ClientType;
+  },
   adminUserIds: readonly string[],
   permission: "profiles:admin" | "profiles:release:manage" = "profiles:admin",
 ): void {
   if (
     context.user.status !== "active" ||
     !adminUserIds.includes(context.userId)
+  ) {
+    throw new AuthorizationError(permission);
+  }
+  if (
+    context.clientType === "desktop" &&
+    context.audience !== DESKTOP_PROFILE_LAB_AUDIENCE
   ) {
     throw new AuthorizationError(permission);
   }

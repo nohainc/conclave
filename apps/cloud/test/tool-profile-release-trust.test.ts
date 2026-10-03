@@ -75,4 +75,26 @@ describe("Tool Profile release trust", () => {
       '{"a":{"b":3,"d":2},"z":1}',
     );
   });
+
+  it("generates Ed25519 key pairs and signs messages verified by trust policy", async () => {
+    const { generateEd25519ReleaseKeyPair, signEd25519ReleaseMessage } =
+      await import("../src/release-trust.js");
+    const keyPair = generateEd25519ReleaseKeyPair();
+    const message = "test-signing-message";
+    const signature = signEd25519ReleaseMessage({
+      privateKeyBase64OrPem: keyPair.privateKeyBase64,
+      message,
+    });
+    const trustKeysJson = JSON.stringify({
+      conclave: { "profile-key-v1": keyPair.publicKeyBase64 },
+    });
+    const valid = await verifyEd25519ReleaseSignature({
+      trustKeysJson,
+      publisher: "conclave",
+      signingKeyId: "profile-key-v1",
+      signature,
+      message,
+    });
+    expect(valid).toBe(true);
+  });
 });

@@ -420,7 +420,7 @@ class LocalWorkerRegistry {
       });
 
   Future<LocalWorker> create({
-    required LogicalWorkerCatalogEntry catalogEntry,
+    required WorkerDescriptor catalogEntry,
     List<String> localPermissions = const [],
     int? localConcurrencyLimit,
     LocalWorkerStatus status = LocalWorkerStatus.needsAttention,

@@ -111,6 +111,12 @@ Constraints:
 - engineFamily v1 is `cli`;
 - logicalWorkerTypeId matches the admitted Worker catalog entry.
 
+The logical Worker Type ID is the stable product identity from
+`worker_catalog`; `profileDefinitionId` identifies its implementation
+binding. A Worker can move to a replacement Profile Definition without
+changing its product identity. Releases remain versioned within one Profile
+Definition, and Cloud allows at most one active Definition per Worker.
+
 ## 5. Engine compatibility
 
 ~~~json
@@ -705,14 +711,18 @@ revoked payload digest, `<profileDefinitionId>@<releaseVersion>`, publisher, or
 signing key ID. Key rotation adds a new key ID and public key to the Workspace
 trust roots before signing with it; key IDs cannot be relabeled after signing.
 
-## 26. Immutability
+## 26. Immutability and Lifecycle
+
+The complete lifecycle state machine and promotion rules are defined by the
+[Tool Profile Lifecycle Specification](TOOL_PROFILE_LIFECYCLE.md).
 
 Once a Profile release is published beyond draft:
-- payload bytes do not change;
+- payload bytes, version, and digest do not change;
 - compatibility claims do not mutate in place;
-- correction requires a new release;
-- lifecycle state/pointers may change;
-- revocation metadata may be appended.
+- any modification produces a new sequential release version;
+- lifecycle promotion changes channel pointers and lifecycle state only, never the payload;
+- rollback moves a channel pointer to an earlier valid release;
+- revocation permanently invalidates the release across Cloud and Workspaces.
 
 ## 27. Validation levels
 
@@ -747,6 +757,26 @@ Once a Profile release is published beyond draft:
 - durable session start and resume when the Profile supports sessions;
 - bounded timeout and assignment cancellation through the Workspace process
   tree supervisor.
+
+### Draft testing lifecycle & signed-release invariant
+
+The profile testing workflow incorporates an iterative draft testing lifecycle inside **Conclave Profile Lab** (`apps/profile_lab`) without weakening production signed-release guarantees:
+
+1. **Unsigned Local Draft Candidate (`LocalDraftProfileCandidate`):**
+   - Represents a mutable, in-development draft profile stored locally in Profile Lab.
+   - Evaluates `isSigned => false`.
+   - Executed **strictly** within Profile Lab's isolated test sandbox via `PlatformProcessSupervisor`.
+   - **MUST NOT** enter Conclave Workspace's trusted profile store (`ToolProfileReleaseStore`), local worker registry, or Cloud scheduling.
+
+2. **Admitted Cryptographic Release (`ToolProfileReleaseAdmission`):**
+   - Represents an immutable, published release signed by Conclave Cloud Ed25519 private key.
+   - Evaluates `isSigned => true`.
+   - Conclave Workspace strictly requires `isSigned => true` for admission. Unsigned draft objects are rejected by static types and runtime verifiers (`WorkerTrustPolicy`).
+
+3. **Evidence-Bound Transition:**
+   - Profile Lab captures a sealed `ToolProfileEvidenceContract` artifact verifying passive probe, live probe, and session execution against real provider binaries.
+   - Any edit to a draft payload recalculates its SHA-256 `payloadDigest` and immediately invalidates all accumulated evidence.
+   - Cloud verifies evidence completeness and signs the payload upon publication (`POST /api/admin/workers/definitions/:id/releases`).
 
 Stable promotion for first-party official Profiles requires all applicable
 levels. The controlled acceptance runner records a JSON evidence artifact bound

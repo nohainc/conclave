@@ -36,6 +36,9 @@ are implementation details shown only in Advanced Diagnostics.
   Workspace Gateway, Worker catalog and Profile release control plane.
 - **Conclave Workspace** — native Flutter/Dart desktop execution/security
   supervisor.
+- **Conclave Profile Lab** — internal macOS Flutter/Dart engineering desktop
+  application for Worker and Tool Profile authoring, testing, and lifecycle
+  management.
 - **CLI Worker Engine** — one standalone Dart console executable used for
   supported local CLI Workers.
 - **Tool Profiles** — signed immutable official provider integration releases.
@@ -128,6 +131,7 @@ Provider secrets never enter Conclave Cloud.
 - [Architecture](ARCHITECTURE.md)
 - [Architecture v8](docs/architecture/ARCHITECTURE_V8.md)
 - [ADR-018: Generic CLI Worker Engine and Tool Profiles](docs/decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md)
+- [ADR-019: Conclave Profile Lab Architecture Contract](docs/decisions/ADR-019-conclave-profile-lab.md)
 - [Tool Profile v1](docs/specifications/TOOL_PROFILE_V1.md)
 - [Architecture v8 implementation plan](docs/roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md)
 - [Work v1 contract](docs/specifications/WORK_V1_CONTRACT.md)

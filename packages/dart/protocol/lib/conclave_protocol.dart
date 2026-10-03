@@ -3,6 +3,7 @@ import 'generated_protocol.dart';
 export 'generated_protocol.dart';
 export 'realtime_events.dart';
 export 'workspace_runtime_protocol.dart';
+export 'worker_descriptor.dart';
 
 bool isExecutionErrorCode(Object? value) => executionErrorCodes.contains(value);
 

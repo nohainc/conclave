@@ -19,6 +19,8 @@ export interface ToolProfileRegistryEnvironment {
   readonly CONCLAVE_DB: D1Database;
   readonly CONCLAVE_RELEASE_TRUST_KEYS_JSON?: string;
   readonly CONCLAVE_RELEASE_PUBLISHER?: string;
+  readonly CONCLAVE_RELEASE_PRIVATE_KEY?: string;
+  readonly CONCLAVE_RELEASE_SIGNING_KEY_ID?: string;
 }
 
 export interface ToolProfileDefinitionInput {
@@ -154,6 +156,24 @@ export function validateToolProfileAcceptanceEvidence(
   if (!input || typeof input !== "object" || Array.isArray(input))
     return fail();
   const evidence = input as Record<string, unknown>;
+  const forbiddenKeys = new Set([
+    "secrets",
+    "env",
+    "environment",
+    "stdout",
+    "stderr",
+    "apiKey",
+    "apiKeys",
+    "token",
+    "tokens",
+    "credentials",
+  ]);
+  if (Object.keys(evidence).some((key) => forbiddenKeys.has(key))) {
+    throw new ToolProfileRegistryError(
+      400,
+      "Raw provider secrets, environment dumps, or unrestricted stdout/stderr are forbidden in Cloud evidence",
+    );
+  }
   const allowedKeys = new Set([
     "formatVersion",
     "profileDefinitionId",
@@ -166,6 +186,16 @@ export function validateToolProfileAcceptanceEvidence(
     "providerToolVersion",
     "acceptedAt",
     "scenarios",
+    "testType",
+    "normalizedResult",
+    "status",
+    "durationMs",
+    "osVersion",
+    "testMachineClass",
+    "issueCode",
+    "issueCodes",
+    "boundedDiagnostics",
+    "overrideReason",
   ]);
   if (Object.keys(evidence).some((key) => !allowedKeys.has(key))) return fail();
   if (
