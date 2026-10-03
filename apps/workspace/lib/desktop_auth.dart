@@ -126,6 +126,86 @@ class DesktopHumanSession {
       };
 }
 
+enum WorkspaceOwnershipState {
+  unbound,
+  ownedByCurrentUser,
+  ownedByOtherUser,
+  localRegistrationStale,
+  installationConflict,
+  released,
+  corruptOrAmbiguous,
+}
+
+class WorkspaceOwnership {
+  const WorkspaceOwnership({
+    required this.state,
+    this.workspaceId,
+    this.workspaceRuntimeId,
+    this.ownerUserId,
+    this.ownerMatchesCurrentSession,
+    this.runtimeState,
+  });
+
+  final WorkspaceOwnershipState state;
+  final String? workspaceId;
+  final String? workspaceRuntimeId;
+  final String? ownerUserId;
+  final bool? ownerMatchesCurrentSession;
+  final String? runtimeState;
+
+  factory WorkspaceOwnership.fromJson(Map<String, dynamic> json) {
+    final state = switch (json['state']) {
+      'unbound' => WorkspaceOwnershipState.unbound,
+      'owned_by_current_user' => WorkspaceOwnershipState.ownedByCurrentUser,
+      'owned_by_other_user' => WorkspaceOwnershipState.ownedByOtherUser,
+      'local_registration_stale' =>
+        WorkspaceOwnershipState.localRegistrationStale,
+      'installation_conflict' => WorkspaceOwnershipState.installationConflict,
+      'released' => WorkspaceOwnershipState.released,
+      'corrupt_or_ambiguous' => WorkspaceOwnershipState.corruptOrAmbiguous,
+      _ => throw const FormatException(
+          'Cloud returned an unsupported Workspace ownership state'),
+    };
+
+    String? optionalString(String key) {
+      final value = json[key];
+      if (value == null) return null;
+      if (value is! String || value.trim().isEmpty) {
+        throw FormatException('Cloud returned an invalid $key');
+      }
+      return value.trim();
+    }
+
+    final result = WorkspaceOwnership(
+      state: state,
+      workspaceId: optionalString('workspaceId'),
+      workspaceRuntimeId: optionalString('workspaceRuntimeId'),
+      ownerUserId: optionalString('ownerUserId'),
+      ownerMatchesCurrentSession: json['ownerMatchesCurrentSession'] is bool
+          ? json['ownerMatchesCurrentSession'] as bool
+          : null,
+      runtimeState: optionalString('runtimeState'),
+    );
+    if (state == WorkspaceOwnershipState.ownedByCurrentUser &&
+        (result.workspaceId == null ||
+            result.workspaceRuntimeId == null ||
+            result.ownerUserId == null ||
+            result.ownerMatchesCurrentSession != true ||
+            result.runtimeState == null)) {
+      throw const FormatException(
+        'Cloud omitted canonical current-owner Workspace details',
+      );
+    }
+    if (state == WorkspaceOwnershipState.ownedByOtherUser &&
+        json.keys.any((key) => key != 'state')) {
+      throw const FormatException(
+        'Cloud exposed details for a Workspace owned by another account',
+      );
+    }
+    return result;
+  }
+}
+
 class DesktopAuthClient {
   DesktopAuthClient({required String cloudUrl, HttpClient? httpClient})
       : _cloudOrigin = _normalizeOrigin(cloudUrl),
@@ -309,7 +389,7 @@ class DesktopAuthClient {
     return rotated;
   }
 
-  Future<String> checkWorkspaceOwnership({
+  Future<WorkspaceOwnership> checkWorkspaceOwnership({
     required DesktopHumanSession session,
     required String installationId,
     String? workspaceId,
@@ -326,11 +406,7 @@ class DesktopAuthClient {
         if (runtimeId != null) 'runtimeId': runtimeId,
       },
     );
-    final ownerUserId = response['ownerUserId'];
-    if (ownerUserId is! String || ownerUserId.trim().isEmpty) {
-      throw const FormatException('Cloud did not confirm Workspace ownership');
-    }
-    return ownerUserId.trim();
+    return WorkspaceOwnership.fromJson(response);
   }
 
   Future<void> releaseWorkspace({

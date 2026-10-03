@@ -10,7 +10,35 @@ import {
 import type { SecurityEnv } from "./handlers.js";
 import { hasControlCharacters } from "./workspaces-shared.js";
 
-/** Verifies that a desktop installation is already bound to its Workspace. */
+type WorkspaceOwnershipRow = {
+  runtimeId: string;
+  workspaceId: string;
+  installationId: string | null;
+  ownerUserId: string;
+  workspaceStatus: string;
+  revokedAt: string | null;
+};
+
+function currentOwnerOwnership(
+  state:
+    | "owned_by_current_user"
+    | "local_registration_stale"
+    | "installation_conflict"
+    | "released",
+  row: WorkspaceOwnershipRow,
+  ownerUserId: string,
+) {
+  return {
+    state,
+    workspaceId: row.workspaceId,
+    workspaceRuntimeId: row.runtimeId,
+    ownerUserId,
+    ownerMatchesCurrentSession: true,
+    runtimeState: row.workspaceStatus,
+  };
+}
+
+/** Returns a privacy-preserving ownership read model for the local installation. */
 export async function handleCheckWorkspaceOwnership(
   request: Request,
   env: SecurityEnv,
@@ -45,89 +73,119 @@ export async function handleCheckWorkspaceOwnership(
 
   const byInstallation = await env.CONCLAVE_DB.prepare(
     `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
-            i.installation_id AS installationId, w.owner_user_id AS ownerUserId
+            i.installation_id AS installationId, w.owner_user_id AS ownerUserId,
+            w.status AS workspaceStatus, i.revoked_at AS revokedAt
        FROM workspace_runtime_identities i
        JOIN execution_workspaces w ON w.id = i.workspace_id
-      WHERE i.installation_id = ?1 ORDER BY i.created_at DESC`,
+      WHERE i.installation_id = ?1 ORDER BY i.created_at DESC, i.id`,
   )
     .bind(installationId)
-    .all<{
-      runtimeId: string;
-      workspaceId: string;
-      installationId: string;
-      ownerUserId: string;
-    }>();
-  const matches = byInstallation.results ?? [];
-  if (workspaceId || runtimeId) {
-    if (!workspaceId || !runtimeId) {
-      return json(
-        {
-          error:
-            "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
-          code: "installation_already_owned",
-        },
-        { status: 409 },
-      );
-    }
-    const local = await env.CONCLAVE_DB.prepare(
+    .all<WorkspaceOwnershipRow>();
+  const boundRows = byInstallation.results ?? [];
+
+  // A foreign owner is represented by one constant response, even when other
+  // inconsistent rows would otherwise reveal their IDs or runtime state.
+  if (boundRows.some((row) => row.ownerUserId !== session.userId)) {
+    return json({ state: "owned_by_other_user" });
+  }
+  if (new Set(boundRows.map((row) => row.workspaceId)).size > 1) {
+    return json({ state: "corrupt_or_ambiguous" });
+  }
+  const activeBindings = boundRows.filter(
+    (row) => row.revokedAt === null && row.workspaceStatus !== "revoked",
+  );
+  if (activeBindings.length > 1) {
+    return json({ state: "corrupt_or_ambiguous" });
+  }
+
+  let localRow: WorkspaceOwnershipRow | null = null;
+  if (workspaceId && runtimeId) {
+    localRow = await env.CONCLAVE_DB.prepare(
       `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
-              i.installation_id AS installationId, w.owner_user_id AS ownerUserId
+              i.installation_id AS installationId, w.owner_user_id AS ownerUserId,
+              w.status AS workspaceStatus, i.revoked_at AS revokedAt
          FROM workspace_runtime_identities i
          JOIN execution_workspaces w ON w.id = i.workspace_id
-        WHERE i.id = ?1 AND i.workspace_id = ?2 AND i.installation_id = ?3`,
+        WHERE i.id = ?1 AND i.workspace_id = ?2`,
     )
-      .bind(runtimeId, workspaceId, installationId)
-      .first<{
-        runtimeId: string;
-        workspaceId: string;
-        installationId: string;
-        ownerUserId: string;
-      }>();
-    if (!local) {
+      .bind(runtimeId, workspaceId)
+      .first<WorkspaceOwnershipRow>();
+    if (localRow && localRow.ownerUserId !== session.userId) {
+      return json({ state: "owned_by_other_user" });
+    }
+  }
+
+  const bound = activeBindings[0];
+  if (bound) {
+    const hasLocalRegistration = Boolean(workspaceId || runtimeId);
+    if (
+      hasLocalRegistration &&
+      (!workspaceId ||
+        !runtimeId ||
+        workspaceId !== bound.workspaceId ||
+        runtimeId !== bound.runtimeId)
+    ) {
+      const conflictingLocalBinding =
+        localRow !== null &&
+        localRow.installationId !== null &&
+        localRow.installationId !== installationId;
       return json(
-        {
-          error:
-            "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
-          code: "installation_already_owned",
-        },
-        { status: 409 },
+        currentOwnerOwnership(
+          conflictingLocalBinding
+            ? "installation_conflict"
+            : "local_registration_stale",
+          bound,
+          session.userId,
+        ),
       );
     }
-    if (!matches.some((item) => item.runtimeId === local.runtimeId)) {
-      matches.push(local);
+    return json(
+      currentOwnerOwnership("owned_by_current_user", bound, session.userId),
+    );
+  }
+
+  if (boundRows.length > 0) {
+    return json({ state: "corrupt_or_ambiguous" });
+  }
+
+  if (localRow) {
+    if (
+      localRow.installationId === null &&
+      localRow.revokedAt !== null &&
+      localRow.workspaceStatus === "revoked"
+    ) {
+      return json(currentOwnerOwnership("released", localRow, session.userId));
     }
+    if (localRow.installationId !== null) {
+      return json(
+        currentOwnerOwnership(
+          "installation_conflict",
+          localRow,
+          session.userId,
+        ),
+      );
+    }
+    return json({ state: "corrupt_or_ambiguous" });
   }
-  if (matches.some((item) => item.ownerUserId !== session.userId)) {
-    return json(
-      {
-        error:
-          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
-        code: "installation_already_owned",
-      },
-      { status: 409 },
-    );
+
+  if (workspaceId || runtimeId) {
+    return json({ state: "local_registration_stale" });
   }
-  if (new Set(matches.map((item) => item.workspaceId)).size > 1) {
-    return json(
-      {
-        error:
-          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
-        code: "installation_already_owned",
-      },
-      { status: 409 },
-    );
-  }
-  if (matches.some((item) => item.installationId !== installationId)) {
-    return json(
-      {
-        error:
-          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
-        code: "installation_already_owned",
-      },
-      { status: 409 },
-    );
-  }
-  return json({ registered: matches.length > 0, ownerUserId: session.userId });
+  const releaseHistory = await env.CONCLAVE_DB.prepare(
+    `SELECT 1 AS released
+       FROM workspace_audit_log
+      WHERE action = 'workspace.ownership.released'
+        AND CASE
+              WHEN json_valid(details_json) = 1
+              THEN json_extract(details_json, '$.installationId')
+              ELSE NULL
+            END = ?1
+      LIMIT 1`,
+  )
+    .bind(installationId)
+    .first<{ released: number }>();
+  if (releaseHistory) return json({ state: "released" });
+  return json({ state: "unbound" });
 }
 
 /** Disconnects runtime participation while retaining the installation owner binding. */

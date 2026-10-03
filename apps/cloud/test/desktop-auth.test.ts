@@ -599,6 +599,18 @@ describe("desktop human authentication", () => {
         installationId,
         now,
       );
+    sqlite
+      .prepare(
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "runtime-a-history",
+        "workspace-a",
+        await hashToken("old-runtime-secret"),
+        installationId,
+        new Date(Date.now() - 1000).toISOString(),
+        now,
+      );
     const addSession = async (
       id: string,
       userId: string,
@@ -639,10 +651,8 @@ describe("desktop human authentication", () => {
       request("human-b-secret"),
       env,
     );
-    expect(denied.status).toBe(409);
-    expect(await denied.json()).toMatchObject({
-      code: "installation_already_owned",
-    });
+    expect(denied.status).toBe(200);
+    expect(await denied.json()).toEqual({ state: "owned_by_other_user" });
     expect(
       sqlite
         .prepare(
@@ -685,7 +695,7 @@ describe("desktop human authentication", () => {
       sqlite
         .prepare("SELECT COUNT(*) AS count FROM workspace_runtime_identities")
         .get(),
-    ).toMatchObject({ count: 1 });
+    ).toMatchObject({ count: 2 });
     expect(
       sqlite
         .prepare(
@@ -700,8 +710,12 @@ describe("desktop human authentication", () => {
     );
     expect(verified.status).toBe(200);
     expect(await verified.json()).toMatchObject({
-      registered: true,
+      state: "owned_by_current_user",
+      workspaceId: "workspace-a",
+      workspaceRuntimeId: "runtime-a",
       ownerUserId: "human-a",
+      ownerMatchesCurrentSession: true,
+      runtimeState: "offline",
     });
     expect(
       sqlite
@@ -727,9 +741,12 @@ describe("desktop human authentication", () => {
       }),
       env,
     );
-    expect(mismatchedInstallation.status).toBe(409);
+    expect(mismatchedInstallation.status).toBe(200);
     expect(await mismatchedInstallation.json()).toMatchObject({
-      code: "installation_already_owned",
+      state: "installation_conflict",
+      workspaceId: "workspace-a",
+      workspaceRuntimeId: "runtime-a",
+      ownerMatchesCurrentSession: true,
     });
     expect(
       sqlite
@@ -771,9 +788,12 @@ describe("desktop human authentication", () => {
       }),
       env,
     );
-    expect(mismatchedWorkspace.status).toBe(409);
+    expect(mismatchedWorkspace.status).toBe(200);
     expect(await mismatchedWorkspace.json()).toMatchObject({
-      code: "installation_already_owned",
+      state: "installation_conflict",
+      workspaceId: "workspace-a",
+      workspaceRuntimeId: "runtime-a",
+      ownerMatchesCurrentSession: true,
     });
     expect(
       sqlite
@@ -783,6 +803,164 @@ describe("desktop human authentication", () => {
         .get("runtime-other"),
     ).toMatchObject({
       installation_id: "install_abcdefab-cdef-4abc-8def-abcdefabcdef",
+    });
+
+    const staleLocalRegistration = await handleCheckWorkspaceOwnership(
+      new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer human-a-secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          contractVersion: "1.0",
+          installationId,
+          workspaceId: "stale-workspace",
+          runtimeId: "stale-runtime",
+        }),
+      }),
+      env,
+    );
+    expect(await staleLocalRegistration.json()).toMatchObject({
+      state: "local_registration_stale",
+      workspaceId: "workspace-a",
+      workspaceRuntimeId: "runtime-a",
+      ownerMatchesCurrentSession: true,
+    });
+
+    const canonicalWithoutLocalIds = await handleCheckWorkspaceOwnership(
+      new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer human-a-secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ contractVersion: "1.0", installationId }),
+      }),
+      env,
+    );
+    expect(await canonicalWithoutLocalIds.json()).toMatchObject({
+      state: "owned_by_current_user",
+      workspaceId: "workspace-a",
+      workspaceRuntimeId: "runtime-a",
+      ownerMatchesCurrentSession: true,
+    });
+
+    // Simulate corrupted data that the production partial unique index blocks.
+    sqlite.exec("DROP INDEX idx_runtime_installation_active");
+    sqlite
+      .prepare(
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run(
+        "runtime-duplicate",
+        "workspace-a",
+        await hashToken("duplicate-runtime-secret"),
+        installationId,
+        now,
+      );
+    const ambiguous = await handleCheckWorkspaceOwnership(
+      request("human-a-secret"),
+      env,
+    );
+    expect(await ambiguous.json()).toEqual({
+      state: "corrupt_or_ambiguous",
+    });
+  });
+
+  it("distinguishes unbound and released installations without exposing owner data", async () => {
+    const { env, sqlite } = await setup();
+    const now = new Date().toISOString();
+    const installationId = "install_12345678-1234-4234-8234-123456789abc";
+    sqlite
+      .prepare(
+        "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run("human-a", "a@example.test", "A", now, now);
+    sqlite
+      .prepare(
+        "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "session-a",
+        "human-a",
+        await hashToken("human-a-secret"),
+        "conclave.desktop.management",
+        now,
+        now,
+        new Date(Date.now() + 60_000).toISOString(),
+      );
+    const request = () =>
+      new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer human-a-secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ contractVersion: "1.0", installationId }),
+      });
+
+    const unbound = await handleCheckWorkspaceOwnership(request(), env);
+    expect(await unbound.json()).toEqual({ state: "unbound" });
+
+    sqlite
+      .prepare(
+        "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'revoked', ?, ?)",
+      )
+      .run("workspace-a", "human-a", "A's Workspace", now, now);
+    sqlite
+      .prepare(
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?, ?, ?, NULL, ?, ?)",
+      )
+      .run(
+        "runtime-a",
+        "workspace-a",
+        await hashToken("runtime-secret"),
+        now,
+        now,
+      );
+    sqlite
+      .prepare(
+        "INSERT INTO workspace_audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?, ?, 'user', ?, 'workspace.ownership.released', 'workspace_runtime', ?, ?, ?)",
+      )
+      .run(
+        "audit-release",
+        "workspace-a",
+        "human-a",
+        "runtime-a",
+        JSON.stringify({ installationId }),
+        now,
+      );
+    const releasedWithLocalIds = await handleCheckWorkspaceOwnership(
+      new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer human-a-secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          contractVersion: "1.0",
+          installationId,
+          workspaceId: "workspace-a",
+          runtimeId: "runtime-a",
+        }),
+      }),
+      env,
+    );
+    expect(await releasedWithLocalIds.json()).toMatchObject({
+      state: "released",
+      workspaceId: "workspace-a",
+      workspaceRuntimeId: "runtime-a",
+      ownerMatchesCurrentSession: true,
+      runtimeState: "revoked",
+    });
+
+    const releasedWithoutLocalIds = await handleCheckWorkspaceOwnership(
+      request(),
+      env,
+    );
+    expect(await releasedWithoutLocalIds.json()).toEqual({
+      state: "released",
     });
   });
 

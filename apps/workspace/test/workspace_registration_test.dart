@@ -28,6 +28,20 @@ class _MemoryCredentials implements SecureCredentialStore {
 }
 
 void main() {
+  test('Workspace ownership read model rejects cross-account details', () {
+    expect(
+      WorkspaceOwnership.fromJson({'state': 'owned_by_other_user'}).state,
+      WorkspaceOwnershipState.ownedByOtherUser,
+    );
+    expect(
+      () => WorkspaceOwnership.fromJson({
+        'state': 'owned_by_other_user',
+        'workspaceId': 'private-workspace',
+      }),
+      throwsFormatException,
+    );
+  });
+
   test('Cloud API URLs normalize configured /api suffixes exactly once', () {
     const configured = 'https://app.conclaveax.com/api/';
 
@@ -60,7 +74,11 @@ void main() {
       });
       request.response.statusCode = HttpStatus.ok;
       request.response.headers.contentType = ContentType.json;
-      request.response.write('{"registered":true,"ownerUserId":"user-a"}');
+      request.response.write(
+        '{"state":"owned_by_current_user","workspaceId":"workspace-1",'
+        '"workspaceRuntimeId":"runtime-1","ownerUserId":"user-a",'
+        '"ownerMatchesCurrentSession":true,"runtimeState":"offline"}',
+      );
       await request.response.close();
     });
     final client = DesktopAuthClient(
@@ -68,7 +86,7 @@ void main() {
     );
     addTearDown(client.close);
 
-    final owner = await client.checkWorkspaceOwnership(
+    final ownership = await client.checkWorkspaceOwnership(
       session: DesktopHumanSession(
         credential: 'desktop-human-secret',
         sessionId: 'session-a',
@@ -82,7 +100,12 @@ void main() {
       runtimeId: 'runtime-1',
     );
 
-    expect(owner, 'user-a');
+    expect(ownership.state, WorkspaceOwnershipState.ownedByCurrentUser);
+    expect(ownership.workspaceId, 'workspace-1');
+    expect(ownership.workspaceRuntimeId, 'runtime-1');
+    expect(ownership.ownerUserId, 'user-a');
+    expect(ownership.ownerMatchesCurrentSession, isTrue);
+    expect(ownership.runtimeState, 'offline');
     await requestFuture;
   });
 

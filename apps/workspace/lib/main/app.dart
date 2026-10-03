@@ -444,16 +444,56 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
           existingRegistration?.installationId ?? identityStore.readSync();
       if (installationId != null) {
         failureContext = 'checking Workspace account ownership';
-        final cloudOwnerUserId = await client.checkWorkspaceOwnership(
+        final ownership = await client.checkWorkspaceOwnership(
           session: session,
           installationId: installationId,
           workspaceId: existingRegistration?.workspaceId,
           runtimeId: existingRegistration?.workspaceRuntimeId,
         );
-        if (cloudOwnerUserId != session.userId) {
-          throw StateError(
-            'This Workspace installation is owned by another Conclave account. Sign in as its current owner, disconnect the Workspace if it is connected, and release ownership before switching accounts.',
-          );
+        String? cloudOwnerUserId;
+        switch (ownership.state) {
+          case WorkspaceOwnershipState.ownedByCurrentUser:
+            if (ownership.ownerMatchesCurrentSession != true ||
+                ownership.ownerUserId != session.userId) {
+              throw StateError(
+                'Cloud could not confirm this account as the Workspace owner.',
+              );
+            }
+            if (existingRegistration != null &&
+                (ownership.workspaceId != existingRegistration.workspaceId ||
+                    ownership.workspaceRuntimeId !=
+                        existingRegistration.workspaceRuntimeId)) {
+              throw StateError(
+                'Cloud returned a different canonical Workspace registration. Reconnect to repair the local registration before switching accounts.',
+              );
+            }
+            cloudOwnerUserId = ownership.ownerUserId;
+            break;
+          case WorkspaceOwnershipState.ownedByOtherUser:
+            throw StateError(
+              'This Workspace installation is owned by another Conclave account. Sign in as its current owner, disconnect the Workspace if it is connected, and release ownership before switching accounts.',
+            );
+          case WorkspaceOwnershipState.unbound:
+            break;
+          case WorkspaceOwnershipState.released:
+            if (existingRegistration != null) {
+              throw StateError(
+                'Cloud confirms this Workspace ownership was released, but the local registration is still present. Reset the local Workspace registration before connecting it again.',
+              );
+            }
+            break;
+          case WorkspaceOwnershipState.localRegistrationStale:
+            throw StateError(
+              'Cloud found a stale local Workspace registration. Reconnect to repair it before switching accounts.',
+            );
+          case WorkspaceOwnershipState.installationConflict:
+            throw StateError(
+              'The local Workspace registration conflicts with its Cloud installation binding. Contact your administrator before continuing.',
+            );
+          case WorkspaceOwnershipState.corruptOrAmbiguous:
+            throw StateError(
+              'Cloud found ambiguous Workspace ownership records. Sign-in was stopped to protect the existing registration.',
+            );
         }
         if (previousSession != null &&
             previousSession.userId != session.userId &&

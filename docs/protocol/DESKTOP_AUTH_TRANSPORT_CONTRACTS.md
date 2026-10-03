@@ -85,15 +85,22 @@ runtime credential and fails closed if Cloud omits it.
 Before replacing a desktop human session for an already registered local
 Workspace, the desktop calls `POST /api/workspace-runtime/ownership` with that
 session, the persistent installation ID, and any locally known Workspace and
-runtime IDs. Cloud compares the authenticated user with the authoritative
-Workspace owner and returns `409 installation_already_owned` on mismatch. It
-does not issue or rotate a runtime credential. Ownership checks require the
-current installation binding; a Workspace/runtime ID pair alone cannot adopt
-an identity without that binding. A failed check does not alter Cloud
+runtime IDs. Cloud returns an explicit `state` from this set: `unbound`,
+`owned_by_current_user`, `owned_by_other_user`, `local_registration_stale`,
+`installation_conflict`, `released`, and `corrupt_or_ambiguous`. The current
+owner receives canonical `workspaceId` and `workspaceRuntimeId`,
+`ownerMatchesCurrentSession: true`, and `runtimeState`. An unbound installation
+has no owner details; a released installation includes canonical details only
+when Cloud can verify the caller still owns that released Workspace. For
+another account Cloud returns only
+`{ "state": "owned_by_other_user" }`, with no Workspace ID, runtime ID, owner
+ID, or runtime status. The check does not issue or rotate a runtime
+credential. A Workspace/runtime ID pair alone cannot adopt an identity without
+the matching installation binding. A failed check does not alter Cloud
 ownership or the desktop's stored human session. The local owner cache is
-refreshed from this Cloud response and remains non-authoritative. Cloud rejects
-local IDs bound to a different installation or to multiple Workspace records,
-even when those records share an owner.
+refreshed only from a confirmed current-owner response and remains
+non-authoritative. Cloud detects local IDs bound to a different installation
+or multiple Workspace records, even when those records share an owner.
 
 `POST /api/workspace-runtime/release` is a separate advanced operation. It
 requires a desktop human session created within the last five minutes, the
