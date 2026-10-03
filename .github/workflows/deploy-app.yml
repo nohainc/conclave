@@ -59,14 +59,18 @@ jobs:
         working-directory: .
         run: node scripts/verify-production-security.mjs
       - name: Preflight production Tool Profile signer and trust root
-        if: secrets.CONCLAVE_RELEASE_PRIVATE_KEY != ''
         working-directory: .
         env:
           CONCLAVE_RELEASE_PRIVATE_KEY: ${{ secrets.CONCLAVE_RELEASE_PRIVATE_KEY }}
           CONCLAVE_RELEASE_PUBLISHER: ${{ vars.CONCLAVE_RELEASE_PUBLISHER }}
           CONCLAVE_RELEASE_SIGNING_KEY_ID: ${{ vars.CONCLAVE_RELEASE_SIGNING_KEY_ID }}
           CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
-        run: node scripts/verify-tool-profile-signer.mjs
+        run: |
+          if [ -z "${CONCLAVE_RELEASE_PRIVATE_KEY:-}" ]; then
+            echo "CONCLAVE_RELEASE_PRIVATE_KEY is not configured; skipping production Tool Profile signer preflight (development phase)."
+          else
+            node scripts/verify-tool-profile-signer.mjs
+          fi
       - name: Sync Better Auth provider secrets to Cloudflare Worker
         working-directory: apps/cloud
         env:
@@ -92,7 +96,6 @@ jobs:
               --config ../../infra/cloudflare/app.wrangler.jsonc
           done
       - name: Sync production Tool Profile signing configuration
-        if: secrets.CONCLAVE_RELEASE_PRIVATE_KEY != ''
         working-directory: apps/cloud
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -103,6 +106,10 @@ jobs:
           CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
         run: |
           set -euo pipefail
+          if [ -z "${CONCLAVE_RELEASE_PRIVATE_KEY:-}" ]; then
+            echo "CONCLAVE_RELEASE_PRIVATE_KEY is not configured; skipping Tool Profile signing sync (development phase)."
+            exit 0
+          fi
           for name in \
             CONCLAVE_RELEASE_PRIVATE_KEY \
             CONCLAVE_RELEASE_PUBLISHER \
@@ -117,7 +124,6 @@ jobs:
               --config ../../infra/cloudflare/app.wrangler.jsonc
           done
       - name: Sync Profile Lab authorization allowlists
-        if: vars.CONCLAVE_PROFILE_ADMIN_USER_IDS != '' || vars.CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS != ''
         working-directory: apps/cloud
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -129,7 +135,7 @@ jobs:
           for name in \
             CONCLAVE_PROFILE_ADMIN_USER_IDS \
             CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS; do
-            value="${!name}"
+            value="${!name:-}"
             if [ -n "$value" ]; then
               printf '%s' "$value" | pnpm exec wrangler secret put "$name" \
                 --config ../../infra/cloudflare/app.wrangler.jsonc
