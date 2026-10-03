@@ -8,7 +8,9 @@ const required = [
 ];
 const missing = required.filter((name) => !process.env[name]?.trim());
 if (missing.length > 0) {
-  console.error(`Missing Tool Profile signer configuration: ${missing.join(", ")}`);
+  console.error(
+    `Missing Tool Profile signer configuration: ${missing.join(", ")}`,
+  );
   process.exit(1);
 }
 
@@ -43,7 +45,9 @@ try {
   const roots = JSON.parse(process.env.CONCLAVE_RELEASE_TRUST_KEYS_JSON);
   const encodedPublicKey = roots?.[publisher]?.[signingKeyId];
   if (typeof encodedPublicKey !== "string") {
-    throw new Error("configured publisher and key ID have no public trust root");
+    throw new Error(
+      "configured publisher and key ID have no public trust root",
+    );
   }
   const rawPublicKey = Buffer.from(encodedPublicKey, "base64");
   if (rawPublicKey.length !== 32) {
@@ -62,9 +66,13 @@ try {
   );
   const signature = sign(null, challenge, privateKey);
   if (!verify(null, challenge, publicKey, signature)) {
-    throw new Error("configured private signer does not match the public trust root");
+    throw new Error(
+      "configured private signer does not match the public trust root",
+    );
   }
-  console.log("Production Tool Profile signer and trust root preflight passed.");
+  console.log(
+    "Production Tool Profile signer and trust root preflight passed.",
+  );
 } catch (error) {
   console.error(
     `Tool Profile signer preflight failed: ${error instanceof Error ? error.message : "invalid configuration"}`,

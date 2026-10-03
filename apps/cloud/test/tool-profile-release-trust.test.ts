@@ -26,9 +26,8 @@ const fixture = JSON.parse(
 
 describe("Tool Profile release trust", () => {
   it("requires a configured signer that matches an active trust root", async () => {
-    const { generateEd25519ReleaseKeyPair } = await import(
-      "../src/release-trust.js"
-    );
+    const { generateEd25519ReleaseKeyPair } =
+      await import("../src/release-trust.js");
     const keyPair = generateEd25519ReleaseKeyPair();
     const statement = {
       first: vi.fn(async () => null),
@@ -76,9 +75,8 @@ describe("Tool Profile release trust", () => {
         "trust_roots_missing",
       ],
     });
-    const { generateEd25519ReleaseKeyPair } = await import(
-      "../src/release-trust.js"
-    );
+    const { generateEd25519ReleaseKeyPair } =
+      await import("../src/release-trust.js");
     const signer = generateEd25519ReleaseKeyPair();
     const differentTrustRoot = generateEd25519ReleaseKeyPair();
     await expect(
@@ -98,9 +96,8 @@ describe("Tool Profile release trust", () => {
   });
 
   it("fails closed when the configured signing key has been revoked", async () => {
-    const { generateEd25519ReleaseKeyPair } = await import(
-      "../src/release-trust.js"
-    );
+    const { generateEd25519ReleaseKeyPair } =
+      await import("../src/release-trust.js");
     const keyPair = generateEd25519ReleaseKeyPair();
     const db = {
       prepare: () => ({
