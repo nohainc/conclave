@@ -82,6 +82,9 @@ installation binding returns `release_required`. Hostname and display-name
 changes never transfer ownership. Runtime credentials remain separate from
 the human credential and are stored by desktop in the OS secure credential
 store.
+Registration determines the current owner exclusively from the
+`workspace_installations` row. Revoked runtime identity history does not
+participate in ownership authorization after that row has been released.
 
 Cloud stores stable ownership in `workspace_installations`, keyed by the
 persistent installation ID and containing its current owner, canonical

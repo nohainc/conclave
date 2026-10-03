@@ -611,6 +611,121 @@ describe("desktop human authentication", () => {
     expect(await revoked.json()).toMatchObject({ code: "release_required" });
   });
 
+  it("uses released current ownership instead of foreign runtime history during registration", async () => {
+    const { env, sqlite } = await setup();
+    const now = new Date().toISOString();
+    const installationId = "install_12345678-1234-4234-8234-123456789abc";
+    for (const [id, email] of [
+      ["former-owner", "former@example.test"],
+      ["current-owner", "current@example.test"],
+    ]) {
+      sqlite
+        .prepare(
+          "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run(id, email, id, now, now);
+    }
+    sqlite
+      .prepare(
+        "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "session-current-owner",
+        "current-owner",
+        await hashToken("current-owner-secret"),
+        "conclave.desktop.management",
+        now,
+        now,
+        new Date(Date.now() + 60_000).toISOString(),
+      );
+    sqlite
+      .prepare(
+        "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'revoked', ?, ?)",
+      )
+      .run("former-workspace", "former-owner", "Former Workspace", now, now);
+    sqlite
+      .prepare(
+        "INSERT INTO workspace_installations (installation_id, owner_user_id, workspace_id, status, created_at, updated_at, released_at) VALUES (?, ?, ?, 'released', ?, ?, ?)",
+      )
+      .run(installationId, "former-owner", "former-workspace", now, now, now);
+    sqlite
+      .prepare(
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "former-runtime",
+        "former-workspace",
+        await hashToken("former-runtime-secret"),
+        installationId,
+        now,
+        now,
+      );
+
+    const response = await handleRegisterWorkspaceFromDesktop(
+      new Request("https://app.conclave.test/api/workspace-runtime/register", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer current-owner-secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          contractVersion: "1.0",
+          installationId,
+          proposedWorkspaceName: "Current Owner's Workspace",
+          hostname: "current-machine",
+          platform: "macos",
+          architecture: "arm64",
+          appVersion: "1.0.0",
+          runtimeCapabilities: {
+            os: "macos",
+            arch: "arm64",
+            appVersion: "1.0.0",
+            supportedRuntimes: ["dart"],
+            maxConcurrentWorkers: 2,
+          },
+        }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(201);
+    const registration = (await response.json()) as {
+      outcome: string;
+      ownerUserId: string;
+      workspaceId: string;
+    };
+    expect(registration).toMatchObject({
+      outcome: "created",
+      ownerUserId: "current-owner",
+    });
+    expect(registration.workspaceId).not.toBe("former-workspace");
+    expect(
+      sqlite
+        .prepare(
+          "SELECT owner_user_id, workspace_id, status FROM workspace_installations WHERE installation_id = ?",
+        )
+        .get(installationId),
+    ).toMatchObject({
+      owner_user_id: "current-owner",
+      workspace_id: registration.workspaceId,
+      status: "active",
+    });
+    expect(
+      sqlite
+        .prepare(
+          `SELECT wi.owner_user_id AS currentOwner, old.owner_user_id AS historicalOwner
+             FROM workspace_installations wi
+             JOIN workspace_runtime_identities i ON i.installation_id = wi.installation_id
+             JOIN execution_workspaces old ON old.id = i.workspace_id
+            WHERE wi.installation_id = ? AND i.id = 'former-runtime'`,
+        )
+        .get(installationId),
+    ).toMatchObject({
+      currentOwner: "current-owner",
+      historicalOwner: "former-owner",
+    });
+  });
+
   it("distinguishes a missing runtime from mismatched local identity on lifecycle operations", async () => {
     const { env, sqlite } = await setup();
     const now = new Date().toISOString();
