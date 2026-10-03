@@ -39,14 +39,12 @@ class _WorkersViewState extends State<WorkersView> {
 
   void _showCreateWorkerDialog() {
     final c = widget.controller;
-    final workerTypeIdCtrl = TextEditingController(text: 'claude');
-    final definitionIdCtrl = TextEditingController(text: 'claude-code');
-    final displayNameCtrl = TextEditingController(text: 'Claude');
-    final descriptionCtrl = TextEditingController(
-        text: 'Anthropic Claude Code AI Assistant Worker');
-    final providerToolCtrl = TextEditingController(text: 'claude');
-    final capabilitiesCtrl =
-        TextEditingController(text: 'code_generation, tool_execution');
+    final workerTypeIdCtrl = TextEditingController();
+    final definitionIdCtrl = TextEditingController();
+    final displayNameCtrl = TextEditingController();
+    final descriptionCtrl = TextEditingController();
+    final providerToolCtrl = TextEditingController();
+    final capabilitiesCtrl = TextEditingController();
     final sortOrderCtrl = TextEditingController(text: '10');
     String releaseStage = 'draft';
 
@@ -71,7 +69,7 @@ class _WorkersViewState extends State<WorkersView> {
                     controller: workerTypeIdCtrl,
                     decoration: const InputDecoration(
                       labelText: 'Stable Worker ID (workerTypeId)',
-                      hintText: 'e.g. claude',
+                      hintText: 'e.g. example-worker',
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -80,7 +78,7 @@ class _WorkersViewState extends State<WorkersView> {
                     decoration: const InputDecoration(
                       labelText:
                           'Initial Profile Definition ID (profileDefinitionId)',
-                      hintText: 'e.g. claude-code',
+                      hintText: 'e.g. example-profile',
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -88,7 +86,7 @@ class _WorkersViewState extends State<WorkersView> {
                     controller: displayNameCtrl,
                     decoration: const InputDecoration(
                       labelText: 'Display Name',
-                      hintText: 'e.g. Claude',
+                      hintText: 'e.g. Example Worker',
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -96,8 +94,7 @@ class _WorkersViewState extends State<WorkersView> {
                     controller: descriptionCtrl,
                     decoration: const InputDecoration(
                       labelText: 'Description',
-                      hintText:
-                          'e.g. Anthropic Claude Code AI Assistant Worker',
+                      hintText: 'Describe the Worker and its purpose',
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -105,7 +102,7 @@ class _WorkersViewState extends State<WorkersView> {
                     controller: providerToolCtrl,
                     decoration: const InputDecoration(
                       labelText: 'Provider Tool Identity (providerToolName)',
-                      hintText: 'e.g. claude',
+                      hintText: 'e.g. provider-tool',
                     ),
                   ),
                   const SizedBox(height: 10),

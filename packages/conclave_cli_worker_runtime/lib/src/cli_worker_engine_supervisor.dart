@@ -257,7 +257,11 @@ final class CliWorkerEngineSupervisor {
         onProgress: onProgress,
       );
       if (result is WorkerErrorFrame) {
-        throw CliWorkerEngineProbeException(result.code, result.message);
+        throw CliWorkerEngineProbeException(
+          result.code,
+          result.message,
+          localDiagnostics: result.diagnostics,
+        );
       }
       if (result is! WorkerResult || result.assignmentId != assignmentId) {
         throw const FormatException(
@@ -274,15 +278,26 @@ final class CliWorkerEngineSupervisor {
       stopped = true;
       return result;
     } on TimeoutException {
+      if (_cancelledAssignments.remove(assignmentId)) {
+        throw const WorkerAssignmentCancelledException();
+      }
       throw const CliWorkerEngineProbeException(
         WorkerIssueCode.deadlineExceeded,
         'Assignment execution exceeded its deadline.',
       );
     } on ProcessException {
+      if (_cancelledAssignments.remove(assignmentId)) {
+        throw const WorkerAssignmentCancelledException();
+      }
       throw const CliWorkerEngineProbeException(
         WorkerIssueCode.providerToolUnavailable,
         'CLI Worker Engine could not be started.',
       );
+    } on Object {
+      if (_cancelledAssignments.remove(assignmentId)) {
+        throw const WorkerAssignmentCancelledException();
+      }
+      rethrow;
     } finally {
       _activeAssignments.remove(assignmentId);
       _activeWorkerByAssignment.remove(assignmentId);
@@ -405,10 +420,22 @@ final class _QueuedEngineAssignment {
 }
 
 final class CliWorkerEngineProbeException implements Exception {
-  const CliWorkerEngineProbeException(this.issueCode, this.safeMessage);
+  const CliWorkerEngineProbeException(
+    this.issueCode,
+    this.safeMessage, {
+    this.localDiagnostics,
+  });
 
   final String issueCode;
   final String safeMessage;
+
+  /// Bounded protocol diagnostics for local operator investigation.
+  /// Never send this field to Cloud or include it in acceptance evidence.
+  final String? localDiagnostics;
+
+  @override
+  String toString() =>
+      'CliWorkerEngineProbeException($issueCode): $safeMessage';
 }
 
 final class WorkerAssignmentCancelledException implements Exception {

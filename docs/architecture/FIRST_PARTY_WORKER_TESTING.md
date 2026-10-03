@@ -27,11 +27,11 @@ variable and an evidence directory when an operator is ready to run it:
 ~~~sh
 CONCLAVE_TEST_REAL_PROFILE_CHATGPT=1 \
 CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/path/to/evidence \
-  flutter test test/tool_profile_real_acceptance_test.dart
+  dart test test/tool_profile_real_acceptance_test.dart
 
 CONCLAVE_TEST_REAL_PROFILE_GEMINI=1 \
 CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/path/to/evidence \
-  flutter test test/tool_profile_real_acceptance_test.dart
+  dart test test/tool_profile_real_acceptance_test.dart
 ~~~
 
 From `apps/workspace`, the live assignment suite covers Direct, Plan & Implement,
@@ -42,8 +42,20 @@ suite.
 ~~~sh
 CONCLAVE_TEST_REAL_PROFILE_CHATGPT=1 \
 CONCLAVE_TEST_REAL_PROFILE_GEMINI=1 \
-  flutter test test/tool_profile_assignment_acceptance_test.dart
+  dart test test/tool_profile_assignment_acceptance_test.dart
 ~~~
+
+Use Dart's standalone test runner for these Workspace acceptance files. It
+avoids Flutter test-runner service output being inherited by the Engine child
+process, whose stdout is reserved for the local worker protocol.
 
 Live-provider acceptance remains a release gate. The generic Engine fixture
 suite provides deterministic coverage without provider accounts or allowance.
+
+The 2026-10-03 local result record is at
+[`docs/acceptance/real-provider/2026-10-03`](../acceptance/real-provider/2026-10-03/README.md).
+Codex passed all four assignments. Gemini's Profile evidence suite passed, but
+two assignment workflows still need to be rerun after configuring a scoped
+headless command permission for the isolated acceptance workspace. The Testing
+Workspace channel-store test passed locally; no Cloud release or remote channel
+was changed.

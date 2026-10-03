@@ -1,5 +1,4 @@
 import {
-  generateEd25519ReleaseKeyPair,
   signEd25519ReleaseMessage,
   verifyEd25519ReleaseSignature,
 } from "./release-trust.js";
@@ -34,6 +33,78 @@ export {
   validateToolProfileAcceptanceEvidence,
   validateToolProfileReleasePayload,
 } from "./tool-profile-validation.js";
+
+export interface ToolProfileSigningPreflight {
+  readonly ready: boolean;
+  readonly publisher?: string;
+  readonly signingKeyId?: string;
+  readonly issues: readonly (
+    | "publisher_missing"
+    | "signing_key_id_missing"
+    | "private_key_missing"
+    | "trust_roots_missing"
+    | "signer_trust_mismatch"
+    | "signing_key_revoked"
+    | "revocation_check_failed"
+  )[];
+}
+
+const signingPreflightMessage =
+  "conclave-tool-profile-signing-preflight-v1\nconclave";
+
+/** Confirms Cloud's configured signer is trusted and not revoked. */
+export async function toolProfileSigningPreflight(
+  env: ToolProfileRegistryEnvironment,
+): Promise<ToolProfileSigningPreflight> {
+  const publisher = env.CONCLAVE_RELEASE_PUBLISHER?.trim();
+  const signingKeyId = env.CONCLAVE_RELEASE_SIGNING_KEY_ID?.trim();
+  const privateKey = env.CONCLAVE_RELEASE_PRIVATE_KEY?.trim();
+  const trustKeysJson = env.CONCLAVE_RELEASE_TRUST_KEYS_JSON?.trim();
+  const issues: ToolProfileSigningPreflight["issues"][number][] = [];
+
+  if (!publisher) issues.push("publisher_missing");
+  if (!signingKeyId) issues.push("signing_key_id_missing");
+  if (!privateKey) issues.push("private_key_missing");
+  if (!trustKeysJson) issues.push("trust_roots_missing");
+
+  if (publisher && signingKeyId && privateKey && trustKeysJson) {
+    try {
+      const signature = signEd25519ReleaseMessage({
+        privateKeyBase64OrPem: privateKey,
+        message: signingPreflightMessage,
+      });
+      const trusted = await verifyEd25519ReleaseSignature({
+        trustKeysJson,
+        publisher,
+        signingKeyId,
+        signature,
+        message: signingPreflightMessage,
+      });
+      if (!trusted) issues.push("signer_trust_mismatch");
+    } catch {
+      issues.push("signer_trust_mismatch");
+    }
+
+    try {
+      const revoked = await env.CONCLAVE_DB.prepare(
+        "SELECT key_id FROM release_signing_key_revocations WHERE key_id = ?1",
+      )
+        .bind(signingKeyId)
+        .first<{ key_id: string }>();
+      if (revoked) issues.push("signing_key_revoked");
+    } catch {
+      // A failed revocation lookup must fail closed without disclosing DB details.
+      issues.push("revocation_check_failed");
+    }
+  }
+
+  return {
+    ready: issues.length === 0,
+    ...(publisher ? { publisher } : {}),
+    ...(signingKeyId ? { signingKeyId } : {}),
+    issues,
+  };
+}
 export type {
   ApprovedLogicalWorkerInput,
   ToolProfileAcceptanceEvidence,
@@ -336,12 +407,103 @@ export async function updateDraftToolProfilePayload(
   return { payloadDigest: digest };
 }
 
+/** Stores verified local execution qualification against the current draft. */
+export async function submitToolProfileLocalQualification(
+  db: D1Database,
+  identity: ToolProfileReleaseIdentity,
+  input: unknown,
+  actorUserId: string,
+): Promise<{
+  qualificationEvidenceId: string;
+  status: "qualified";
+  payloadDigest: string;
+}> {
+  validateId(identity.profileDefinitionId, "profileDefinitionId");
+  validateVersion(identity.releaseVersion);
+  const release = await db
+    .prepare(
+      `SELECT payload_digest, payload_json, worker_type_id,
+              lifecycle_state, published_at
+         FROM tool_profile_releases
+        WHERE profile_definition_id = ?1 AND release_version = ?2`,
+    )
+    .bind(identity.profileDefinitionId, identity.releaseVersion)
+    .first<{
+      payload_digest: string;
+      payload_json: string;
+      worker_type_id: string;
+      lifecycle_state: ToolProfileLifecycle;
+      published_at: string | null;
+    }>();
+
+  if (!release) {
+    throw new ToolProfileRegistryError(
+      404,
+      "Tool Profile release was not found",
+    );
+  }
+  if (release.lifecycle_state !== "draft" || release.published_at !== null) {
+    throw new ToolProfileRegistryError(
+      409,
+      "Local qualification can only be submitted for a mutable draft release",
+    );
+  }
+
+  const profile = parseProfile(
+    JSON.parse(release.payload_json),
+    identity,
+  ).profile;
+  if (profile.logicalWorkerTypeId !== release.worker_type_id) {
+    throw new ToolProfileRegistryError(
+      409,
+      "Profile logical Worker does not match the release record",
+    );
+  }
+  const qualifiedEvidence = validateToolProfileAcceptanceEvidence(
+    input,
+    {
+      identity,
+      payloadDigest: release.payload_digest,
+      profile,
+    },
+    "local qualification",
+  );
+  const qualificationEvidenceId = crypto.randomUUID();
+  const submittedAt = new Date().toISOString();
+  await db
+    .prepare(
+      `INSERT INTO tool_profile_local_qualification_evidence (
+         id, profile_definition_id, release_version, payload_digest,
+         engine_version, provider_tool_version, evidence_json,
+         submitted_by_user_id, qualified_at, submitted_at
+       ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
+    )
+    .bind(
+      qualificationEvidenceId,
+      identity.profileDefinitionId,
+      identity.releaseVersion,
+      release.payload_digest,
+      qualifiedEvidence.engineVersion,
+      qualifiedEvidence.providerToolVersion,
+      JSON.stringify(qualifiedEvidence),
+      actorUserId,
+      qualifiedEvidence.acceptedAt,
+      submittedAt,
+    )
+    .run();
+
+  return {
+    qualificationEvidenceId,
+    status: "qualified",
+    payloadDigest: release.payload_digest,
+  };
+}
+
 export async function publishDraftToolProfileRelease(
   env: ToolProfileRegistryEnvironment,
   identity: ToolProfileReleaseIdentity,
   actorUserId: string,
-  clientSignature?: string,
-  clientSigningKeyId?: string,
+  qualificationEvidenceId: string,
 ): Promise<{
   payloadDigest: string;
   publishedAt: string;
@@ -349,9 +511,20 @@ export async function publishDraftToolProfileRelease(
   signature: string;
   signingKeyId: string;
   publisher: string;
+  qualificationEvidenceId: string;
 }> {
   validateId(identity.profileDefinitionId, "profileDefinitionId");
   validateVersion(identity.releaseVersion);
+  if (
+    typeof qualificationEvidenceId !== "string" ||
+    !qualificationEvidenceId.trim() ||
+    qualificationEvidenceId.length > 128
+  ) {
+    throw new ToolProfileRegistryError(
+      409,
+      "A stored local qualificationEvidenceId is required for publication",
+    );
+  }
 
   const row = await env.CONCLAVE_DB.prepare(
     `SELECT payload_json, payload_digest, lifecycle_state, published_at, worker_type_id
@@ -392,35 +565,43 @@ export async function publishDraftToolProfileRelease(
     );
   }
 
-  const publisher = env.CONCLAVE_RELEASE_PUBLISHER ?? "conclave";
-  const signingKeyId =
-    clientSigningKeyId ??
-    env.CONCLAVE_RELEASE_SIGNING_KEY_ID ??
-    "profile-key-v1";
-  let trustKeysJson = env.CONCLAVE_RELEASE_TRUST_KEYS_JSON;
-  let privateKey = env.CONCLAVE_RELEASE_PRIVATE_KEY;
-
-  if (!privateKey) {
-    const keyPair = generateEd25519ReleaseKeyPair();
-    privateKey = keyPair.privateKeyBase64;
-    const existingTrust = trustKeysJson ? JSON.parse(trustKeysJson) : {};
-    existingTrust[publisher] = existingTrust[publisher] ?? {};
-    existingTrust[publisher][signingKeyId] = keyPair.publicKeyBase64;
-    trustKeysJson = JSON.stringify(existingTrust);
-  }
-
-  const revokedKey = await env.CONCLAVE_DB.prepare(
-    "SELECT key_id FROM release_signing_key_revocations WHERE key_id = ?1",
+  const qualificationRow = await env.CONCLAVE_DB.prepare(
+    `SELECT payload_digest, evidence_json
+       FROM tool_profile_local_qualification_evidence
+      WHERE id = ?1 AND profile_definition_id = ?2 AND release_version = ?3`,
   )
-    .bind(signingKeyId)
-    .first<{ key_id: string }>();
-
-  if (revokedKey) {
+    .bind(
+      qualificationEvidenceId,
+      identity.profileDefinitionId,
+      identity.releaseVersion,
+    )
+    .first<{ payload_digest: string; evidence_json: string }>();
+  if (!qualificationRow || qualificationRow.payload_digest !== actualDigest) {
     throw new ToolProfileRegistryError(
-      400,
-      `Signing key ID ${signingKeyId} has been revoked`,
+      409,
+      "A complete local qualification for this exact draft payload is required before publication",
     );
   }
+  validateToolProfileAcceptanceEvidence(
+    JSON.parse(qualificationRow.evidence_json),
+    {
+      identity,
+      payloadDigest: actualDigest,
+      profile: parsed.profile,
+    },
+    "local qualification",
+  );
+
+  const preflight = await toolProfileSigningPreflight(env);
+  if (!preflight.ready) {
+    throw new ToolProfileRegistryError(
+      503,
+      `Tool Profile release signing is not ready (${preflight.issues.join(", ")})`,
+    );
+  }
+  const publisher = preflight.publisher!;
+  const signingKeyId = preflight.signingKeyId!;
+  const privateKey = env.CONCLAVE_RELEASE_PRIVATE_KEY!;
 
   const signingMessage = toolProfileReleaseSigningMessage({
     publisher,
@@ -435,7 +616,7 @@ export async function publishDraftToolProfileRelease(
   });
 
   const signatureValid = await verifyEd25519ReleaseSignature({
-    trustKeysJson,
+    trustKeysJson: env.CONCLAVE_RELEASE_TRUST_KEYS_JSON,
     publisher,
     signingKeyId,
     signature,
@@ -454,10 +635,21 @@ export async function publishDraftToolProfileRelease(
     `UPDATE tool_profile_releases
           SET lifecycle_state = 'testing', signature = ?1, signing_key_id = ?2,
               publisher = ?3, published_at = ?4, updated_by_user_id = ?5,
-              lifecycle_reason = 'Signed & published by Cloud Signing Boundary', updated_at = ?4
+              lifecycle_reason = ?11, updated_at = ?4
         WHERE profile_definition_id = ?6 AND release_version = ?7
           AND lifecycle_state = 'draft' AND published_at IS NULL
-          AND payload_digest = ?8`,
+          AND payload_digest = ?8
+          AND NOT EXISTS (
+            SELECT 1 FROM release_signing_key_revocations revoked
+             WHERE revoked.key_id = ?9
+          )
+          AND EXISTS (
+            SELECT 1 FROM tool_profile_local_qualification_evidence qualification
+             WHERE qualification.id = ?10
+               AND qualification.profile_definition_id = ?6
+               AND qualification.release_version = ?7
+               AND qualification.payload_digest = ?8
+          )`,
   )
     .bind(
       signature,
@@ -468,6 +660,9 @@ export async function publishDraftToolProfileRelease(
       identity.profileDefinitionId,
       identity.releaseVersion,
       row.payload_digest,
+      signingKeyId,
+      qualificationEvidenceId,
+      `Published with local sandbox qualification ${qualificationEvidenceId}`,
     )
     .run();
   if (!result.meta.changes) {
@@ -483,6 +678,7 @@ export async function publishDraftToolProfileRelease(
     signature,
     signingKeyId,
     publisher,
+    qualificationEvidenceId,
   };
 }
 
@@ -491,11 +687,12 @@ export async function promoteToolProfileRelease(
   identity: ToolProfileReleaseIdentity,
   channel: ToolProfileChannel,
   actorUserId: string,
-  acceptanceEvidence?: unknown,
+  acceptanceEvidenceId?: string,
 ): Promise<{
   channel: ToolProfileChannel;
   releaseVersion: number;
   action: "promoted" | "rolled_back";
+  acceptanceEvidenceId?: string;
 }> {
   validateId(identity.profileDefinitionId, "profileDefinitionId");
   validateVersion(identity.releaseVersion);
@@ -530,8 +727,17 @@ export async function promoteToolProfileRelease(
       "Tool Profile release is not eligible for promotion",
     );
   }
-  let acceptedEvidence: ToolProfileAcceptanceEvidence | null = null;
   if (channel === "stable") {
+    if (
+      typeof acceptanceEvidenceId !== "string" ||
+      !acceptanceEvidenceId.trim() ||
+      acceptanceEvidenceId.length > 128
+    ) {
+      throw new ToolProfileRegistryError(
+        400,
+        "A stored acceptanceEvidenceId is required for stable promotion",
+      );
+    }
     const profile = parseProfile(
       JSON.parse(row.payload_json),
       identity,
@@ -542,18 +748,73 @@ export async function promoteToolProfileRelease(
         "Stable promotion release identity is inconsistent",
       );
     }
-    acceptedEvidence = validateToolProfileAcceptanceEvidence(
-      acceptanceEvidence,
-      {
+    const evidenceRow = await db
+      .prepare(
+        `SELECT id, payload_digest, engine_version, provider_tool_version,
+                evidence_json, accepted_at
+           FROM tool_profile_acceptance_evidence
+          WHERE id = ?1 AND profile_definition_id = ?2
+            AND release_version = ?3 AND payload_digest = ?4`,
+      )
+      .bind(
+        acceptanceEvidenceId,
+        identity.profileDefinitionId,
+        identity.releaseVersion,
+        row.payload_digest,
+      )
+      .first<{
+        id: string;
+        payload_digest: string;
+        engine_version: string;
+        provider_tool_version: string;
+        evidence_json: string;
+        accepted_at: string;
+      }>();
+    if (!evidenceRow) {
+      throw new ToolProfileRegistryError(
+        409,
+        "Stored acceptance evidence does not qualify for this release",
+      );
+    }
+    let evidenceInput: unknown;
+    try {
+      evidenceInput = JSON.parse(evidenceRow.evidence_json);
+    } catch {
+      throw new ToolProfileRegistryError(
+        409,
+        "Stored acceptance evidence is invalid",
+      );
+    }
+    let acceptedEvidence: ToolProfileAcceptanceEvidence;
+    try {
+      acceptedEvidence = validateToolProfileAcceptanceEvidence(evidenceInput, {
         identity,
         payloadDigest: row.payload_digest,
         profile,
-      },
-    );
-  } else if (acceptanceEvidence !== undefined) {
+      });
+    } catch {
+      throw new ToolProfileRegistryError(
+        409,
+        "Stored acceptance evidence does not qualify for this release",
+      );
+    }
+    if (
+      evidenceRow.id !== acceptanceEvidenceId ||
+      evidenceRow.payload_digest !== acceptedEvidence.profileDigest ||
+      evidenceRow.engine_version !== acceptedEvidence.engineVersion ||
+      evidenceRow.provider_tool_version !==
+        acceptedEvidence.providerToolVersion ||
+      evidenceRow.accepted_at !== acceptedEvidence.acceptedAt
+    ) {
+      throw new ToolProfileRegistryError(
+        409,
+        "Stored acceptance evidence metadata is inconsistent",
+      );
+    }
+  } else if (acceptanceEvidenceId !== undefined) {
     throw new ToolProfileRegistryError(
       400,
-      "Acceptance evidence is only accepted for stable promotion",
+      "Acceptance evidence is only referenced for stable promotion",
     );
   }
   if (
@@ -598,33 +859,11 @@ export async function promoteToolProfileRelease(
     .bind(identity.profileDefinitionId, channel)
     .first<{ release_version: number }>();
   if (current?.release_version === identity.releaseVersion) {
-    if (acceptedEvidence) {
-      await db
-        .prepare(
-          `INSERT OR IGNORE INTO tool_profile_acceptance_evidence (
-             id, profile_definition_id, release_version, payload_digest,
-             engine_version, provider_tool_version, evidence_json,
-             submitted_by_user_id, accepted_at, submitted_at
-           ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
-        )
-        .bind(
-          crypto.randomUUID(),
-          identity.profileDefinitionId,
-          identity.releaseVersion,
-          row.payload_digest,
-          acceptedEvidence.engineVersion,
-          acceptedEvidence.providerToolVersion,
-          JSON.stringify(acceptedEvidence),
-          actorUserId,
-          acceptedEvidence.acceptedAt,
-          new Date().toISOString(),
-        )
-        .run();
-    }
     return {
       channel,
       releaseVersion: identity.releaseVersion,
       action: "promoted",
+      ...(acceptanceEvidenceId ? { acceptanceEvidenceId } : {}),
     };
   }
   const action =
@@ -635,30 +874,6 @@ export async function promoteToolProfileRelease(
       : "promoted";
   const now = new Date().toISOString();
   const statements = [];
-  if (acceptedEvidence) {
-    statements.push(
-      db
-        .prepare(
-          `INSERT OR IGNORE INTO tool_profile_acceptance_evidence (
-             id, profile_definition_id, release_version, payload_digest,
-             engine_version, provider_tool_version, evidence_json,
-             submitted_by_user_id, accepted_at, submitted_at
-           ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
-        )
-        .bind(
-          crypto.randomUUID(),
-          identity.profileDefinitionId,
-          identity.releaseVersion,
-          row.payload_digest,
-          acceptedEvidence.engineVersion,
-          acceptedEvidence.providerToolVersion,
-          JSON.stringify(acceptedEvidence),
-          actorUserId,
-          acceptedEvidence.acceptedAt,
-          now,
-        ),
-    );
-  }
   if (row.lifecycle_state !== targetState) {
     statements.push(
       db
@@ -672,7 +887,7 @@ export async function promoteToolProfileRelease(
         .bind(
           targetState,
           actorUserId,
-          `${action} to ${channel}`,
+          `${action} to ${channel}${acceptanceEvidenceId ? ` using acceptance evidence ${acceptanceEvidenceId}` : ""}`,
           now,
           identity.profileDefinitionId,
           identity.releaseVersion,
@@ -706,6 +921,31 @@ export async function promoteToolProfileRelease(
         targetState,
       ),
   );
+  if (channel === "stable" && acceptanceEvidenceId) {
+    statements.push(
+      db
+        .prepare(
+          `UPDATE tool_profile_release_audit
+              SET details_json = json_set(
+                details_json, '$.acceptanceEvidenceId', ?1
+              )
+            WHERE id = (
+              SELECT id FROM tool_profile_release_audit
+               WHERE profile_definition_id = ?2 AND release_version = ?3
+                 AND actor_user_id = ?4 AND channel = 'stable'
+                 AND created_at = ?5
+               ORDER BY created_at DESC LIMIT 1
+            )`,
+        )
+        .bind(
+          acceptanceEvidenceId,
+          identity.profileDefinitionId,
+          identity.releaseVersion,
+          actorUserId,
+          now,
+        ),
+    );
+  }
   const results = await db.batch(statements);
   if (!results.at(-1)?.meta.changes) {
     throw new ToolProfileRegistryError(
@@ -713,7 +953,12 @@ export async function promoteToolProfileRelease(
       "Tool Profile channel promotion was rejected",
     );
   }
-  return { channel, releaseVersion: identity.releaseVersion, action };
+  return {
+    channel,
+    releaseVersion: identity.releaseVersion,
+    action,
+    ...(acceptanceEvidenceId ? { acceptanceEvidenceId } : {}),
+  };
 }
 
 export async function changeToolProfileLifecycle(
@@ -1666,7 +1911,7 @@ export async function submitToolProfileReleaseEvidence(
   actorUserId: string,
 ): Promise<{
   id: string;
-  status: "accepted" | "already_accepted";
+  status: "accepted";
   payloadDigest: string;
 }> {
   validateId(identity.profileDefinitionId, "profileDefinitionId");
@@ -1674,7 +1919,8 @@ export async function submitToolProfileReleaseEvidence(
 
   const release = await db
     .prepare(
-      `SELECT release_version, payload_digest, payload_json, worker_type_id, lifecycle_state
+      `SELECT release_version, payload_digest, payload_json, worker_type_id,
+              lifecycle_state, published_at
          FROM tool_profile_releases
         WHERE profile_definition_id = ?1 AND release_version = ?2`,
     )
@@ -1685,12 +1931,22 @@ export async function submitToolProfileReleaseEvidence(
       payload_json: string;
       worker_type_id: string;
       lifecycle_state: ToolProfileLifecycle;
+      published_at: string | null;
     }>();
 
   if (!release) {
     throw new ToolProfileRegistryError(
       404,
       "Tool Profile release was not found",
+    );
+  }
+  if (
+    !release.published_at ||
+    ["retired", "revoked"].includes(release.lifecycle_state)
+  ) {
+    throw new ToolProfileRegistryError(
+      409,
+      "Acceptance evidence can only be submitted for a published release",
     );
   }
 
@@ -1704,26 +1960,6 @@ export async function submitToolProfileReleaseEvidence(
     payloadDigest: release.payload_digest,
     profile,
   });
-
-  const existing = await db
-    .prepare(
-      `SELECT id FROM tool_profile_acceptance_evidence
-        WHERE profile_definition_id = ?1 AND release_version = ?2 AND payload_digest = ?3`,
-    )
-    .bind(
-      identity.profileDefinitionId,
-      identity.releaseVersion,
-      release.payload_digest,
-    )
-    .first<{ id: string }>();
-
-  if (existing) {
-    return {
-      id: existing.id,
-      status: "already_accepted",
-      payloadDigest: release.payload_digest,
-    };
-  }
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();

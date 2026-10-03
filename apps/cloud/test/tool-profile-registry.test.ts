@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
+import type { ToolProfileV1 } from "@conclave/tool-profile";
 import {
   ToolProfileRegistryError,
   toolProfileReleaseSigningMessage,
@@ -16,6 +17,9 @@ import {
   submitToolProfileReleaseEvidence,
   listToolProfileReleaseEvidence,
   listToolProfileAudit,
+  promoteToolProfileRelease,
+  submitToolProfileLocalQualification,
+  publishDraftToolProfileRelease,
 } from "../src/tool-profile-registry.js";
 
 const fixture = JSON.parse(
@@ -174,7 +178,7 @@ describe("stable Tool Profile acceptance evidence", () => {
   const profile = validateToolProfileReleasePayload(fixture);
   const identity = { profileDefinitionId: "fixture-cli", releaseVersion: 1 };
   const evidence = {
-    formatVersion: 1,
+    formatVersion: 2,
     profileDefinitionId: identity.profileDefinitionId,
     releaseVersion: identity.releaseVersion,
     profileReleaseVersion: "1",
@@ -187,9 +191,10 @@ describe("stable Tool Profile acceptance evidence", () => {
     scenarios: {
       passive_probe: "passed",
       live_probe: "passed",
-      representative_workstream_write: "passed",
-      durable_session_start: "passed",
-      durable_session_resume: "passed",
+      model_selection: "not_applicable",
+      representative_workstream_write: "not_applicable",
+      durable_session_start: "not_applicable",
+      durable_session_resume: "not_applicable",
       cancellation: "passed",
       timeout: "passed",
     },
@@ -203,6 +208,180 @@ describe("stable Tool Profile acceptance evidence", () => {
         profile,
       }),
     ).toMatchObject(evidence);
+  });
+
+  it("rejects incomplete local qualification scenarios", () => {
+    const incomplete = {
+      ...evidence,
+      scenarios: { ...evidence.scenarios, live_probe: "not_applicable" },
+    };
+    expect(() =>
+      validateToolProfileAcceptanceEvidence(
+        incomplete,
+        {
+          identity,
+          payloadDigest: "a".repeat(64),
+          profile,
+        },
+        "local qualification",
+      ),
+    ).toThrow(
+      /Draft publication requires a complete local execution qualification/,
+    );
+  });
+
+  it("stores complete local qualification immutably against a draft digest", async () => {
+    const draftRow = {
+      payload_digest: "a".repeat(64),
+      payload_json: JSON.stringify(fixture),
+      worker_type_id: "fixture-worker",
+      lifecycle_state: "draft",
+      published_at: null,
+    };
+    const statement = {
+      bind: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      first: vi.fn(async () => draftRow),
+      run: vi.fn(async () => ({ meta: { changes: 1 } })),
+    };
+    const db = {
+      prepare: vi.fn(() => statement),
+    } as unknown as D1Database;
+    const result = await submitToolProfileLocalQualification(
+      db,
+      identity,
+      evidence,
+      "admin-1",
+    );
+
+    expect(result).toMatchObject({
+      status: "qualified",
+      payloadDigest: "a".repeat(64),
+    });
+    expect(result.qualificationEvidenceId).toBeTruthy();
+    expect(statement.run).toHaveBeenCalledOnce();
+    expect(statement.bind).toHaveBeenCalledWith(
+      result.qualificationEvidenceId,
+      identity.profileDefinitionId,
+      identity.releaseVersion,
+      "a".repeat(64),
+      "1.0.0",
+      "1.2.3",
+      JSON.stringify(evidence),
+      "admin-1",
+      evidence.acceptedAt,
+      expect.any(String),
+    );
+  });
+
+  it("does not publish without a stored local qualification ID", async () => {
+    await expect(
+      publishDraftToolProfileRelease(
+        {} as unknown as Parameters<typeof publishDraftToolProfileRelease>[0],
+        identity,
+        "admin-1",
+        "",
+      ),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining("qualificationEvidenceId is required"),
+    });
+  });
+
+  it("promotes only by a stored qualifying evidence ID", async () => {
+    const acceptedAt = new Date().toISOString();
+    const storedEvidence = { ...evidence, acceptedAt };
+    const releaseRow = {
+      lifecycle_state: "beta",
+      published_at: acceptedAt,
+      payload_digest: "a".repeat(64),
+      payload_json: JSON.stringify(fixture),
+      worker_type_id: "fixture-worker",
+    };
+    const evidenceRow = {
+      id: "evidence-1",
+      payload_digest: "a".repeat(64),
+      engine_version: "1.0.0",
+      provider_tool_version: "1.2.3",
+      evidence_json: JSON.stringify(storedEvidence),
+      accepted_at: acceptedAt,
+    };
+    const preparedSql: string[] = [];
+    const batch = vi.fn(async (statements: unknown[]) =>
+      statements.map(() => ({ meta: { changes: 1 } })),
+    );
+    const db = {
+      prepare: vi.fn((sql: string) => {
+        preparedSql.push(sql);
+        return {
+          bind: vi.fn(() => ({
+            first: vi.fn(async () => {
+              if (sql.includes("FROM tool_profile_releases")) return releaseRow;
+              if (sql.includes("FROM tool_profile_acceptance_evidence")) {
+                return evidenceRow;
+              }
+              return null;
+            }),
+          })),
+        };
+      }),
+      batch,
+    } as unknown as D1Database;
+
+    const result = await promoteToolProfileRelease(
+      db,
+      identity,
+      "stable",
+      "admin-1",
+      "evidence-1",
+    );
+    expect(result).toMatchObject({
+      channel: "stable",
+      releaseVersion: 1,
+      acceptanceEvidenceId: "evidence-1",
+    });
+    expect(
+      preparedSql.some((sql) =>
+        sql.includes("INSERT INTO tool_profile_acceptance_evidence"),
+      ),
+    ).toBe(false);
+    expect(batch).toHaveBeenCalledOnce();
+  });
+
+  it("rejects unknown, mismatched, or ad-hoc evidence at promotion", async () => {
+    const releaseRow = {
+      lifecycle_state: "beta",
+      published_at: new Date().toISOString(),
+      payload_digest: "a".repeat(64),
+      payload_json: JSON.stringify(fixture),
+      worker_type_id: "fixture-worker",
+    };
+    const db = {
+      prepare: vi.fn((sql: string) => ({
+        bind: vi.fn(() => ({
+          first: vi.fn(async () =>
+            sql.includes("FROM tool_profile_releases") ? releaseRow : null,
+          ),
+        })),
+      })),
+      batch: vi.fn(),
+    } as unknown as D1Database;
+
+    await expect(
+      promoteToolProfileRelease(
+        db,
+        identity,
+        "stable",
+        "admin-1",
+        "unknown-evidence",
+      ),
+    ).rejects.toThrow(/Stored acceptance evidence does not qualify/);
+    await expect(
+      promoteToolProfileRelease(db, identity, "stable", "admin-1", {
+        ...evidence,
+      } as unknown as string),
+    ).rejects.toThrow(/stored acceptanceEvidenceId is required/);
   });
 
   it("rejects missing scenarios, altered digests, and unsupported versions", () => {
@@ -229,6 +408,90 @@ describe("stable Tool Profile acceptance evidence", () => {
         { identity, payloadDigest: "a".repeat(64), profile },
       ),
     ).toThrow(ToolProfileRegistryError);
+  });
+
+  it("derives optional scenario applicability from Profile capabilities", () => {
+    const modelProfile = structuredClone(profile) as ToolProfileV1;
+    modelProfile.model.supported = true;
+    modelProfile.model.allowlist = ["fixture-model"];
+    const modelEvidence = {
+      ...evidence,
+      scenarios: { ...evidence.scenarios, model_selection: "passed" },
+    };
+    expect(
+      validateToolProfileAcceptanceEvidence(modelEvidence, {
+        identity,
+        payloadDigest: "a".repeat(64),
+        profile: modelProfile,
+      }),
+    ).toMatchObject(modelEvidence);
+
+    const workstreamProfile = structuredClone(profile) as ToolProfileV1;
+    (workstreamProfile.capabilities as string[]).push("workstream_write");
+    const applicableEvidence = {
+      ...evidence,
+      scenarios: {
+        ...evidence.scenarios,
+        representative_workstream_write: "passed",
+      },
+    };
+    expect(
+      validateToolProfileAcceptanceEvidence(applicableEvidence, {
+        identity,
+        payloadDigest: "a".repeat(64),
+        profile: workstreamProfile,
+      }),
+    ).toMatchObject(applicableEvidence);
+
+    const sessionProfile = structuredClone(profile) as ToolProfileV1;
+    (sessionProfile.capabilities as string[]).push("durable_session");
+    sessionProfile.session.supported = true;
+    const sessionEvidence = {
+      ...evidence,
+      scenarios: {
+        ...evidence.scenarios,
+        durable_session_start: "passed",
+        durable_session_resume: "passed",
+      },
+    };
+    expect(
+      validateToolProfileAcceptanceEvidence(sessionEvidence, {
+        identity,
+        payloadDigest: "a".repeat(64),
+        profile: sessionProfile,
+      }),
+    ).toMatchObject(sessionEvidence);
+
+    expect(() =>
+      validateToolProfileAcceptanceEvidence(
+        {
+          ...evidence,
+          scenarios: {
+            ...evidence.scenarios,
+            representative_workstream_write: "passed",
+          },
+        },
+        { identity, payloadDigest: "a".repeat(64), profile },
+      ),
+    ).toThrow(
+      /Stable promotion requires complete real Profile acceptance evidence/,
+    );
+
+    const inconsistentSessionProfile = structuredClone(
+      profile,
+    ) as ToolProfileV1;
+    (inconsistentSessionProfile.capabilities as string[]).push(
+      "durable_session",
+    );
+    expect(() =>
+      validateToolProfileAcceptanceEvidence(evidence, {
+        identity,
+        payloadDigest: "a".repeat(64),
+        profile: inconsistentSessionProfile,
+      }),
+    ).toThrow(
+      /Stable promotion requires complete real Profile acceptance evidence/,
+    );
   });
 });
 
@@ -506,7 +769,7 @@ describe("Phase 7 Profile Admin read models and operations", () => {
     const identity = { profileDefinitionId: "fixture-cli", releaseVersion: 1 };
     const digest = "a".repeat(64);
     const validEvidence = {
-      formatVersion: 1,
+      formatVersion: 2,
       profileDefinitionId: identity.profileDefinitionId,
       releaseVersion: identity.releaseVersion,
       profileReleaseVersion: "1",
@@ -519,9 +782,10 @@ describe("Phase 7 Profile Admin read models and operations", () => {
       scenarios: {
         passive_probe: "passed",
         live_probe: "passed",
-        representative_workstream_write: "passed",
-        durable_session_start: "passed",
-        durable_session_resume: "passed",
+        model_selection: "not_applicable",
+        representative_workstream_write: "not_applicable",
+        durable_session_start: "not_applicable",
+        durable_session_resume: "not_applicable",
         cancellation: "passed",
         timeout: "passed",
       },
@@ -533,6 +797,7 @@ describe("Phase 7 Profile Admin read models and operations", () => {
       payload_json: JSON.stringify(fixture),
       worker_type_id: "fixture-worker",
       lifecycle_state: "testing",
+      published_at: new Date().toISOString(),
     };
 
     const runMock = vi.fn(async () => ({ meta: { changes: 1 } }));
@@ -541,7 +806,7 @@ describe("Phase 7 Profile Admin read models and operations", () => {
         bind: vi.fn(() => ({
           first: vi.fn(async () => {
             if (sql.includes("tool_profile_releases")) return releaseRow;
-            return null; // existing evidence check
+            return null;
           }),
           run: runMock,
           all: vi.fn(async () => ({
@@ -572,18 +837,26 @@ describe("Phase 7 Profile Admin read models and operations", () => {
     );
     expect(submission.status).toBe("accepted");
     expect(submission.payloadDigest).toBe(digest);
-    expect(runMock).toHaveBeenCalledOnce();
+    const nextSubmission = await submitToolProfileReleaseEvidence(
+      db,
+      identity,
+      validEvidence,
+      "admin-1",
+    );
+    expect(nextSubmission.status).toBe("accepted");
+    expect(nextSubmission.id).not.toBe(submission.id);
+    expect(runMock).toHaveBeenCalledTimes(2);
 
     const evidenceList = await listToolProfileReleaseEvidence(db, identity);
     expect(evidenceList.evidence).toHaveLength(1);
     expect(evidenceList.evidence![0]!.payloadDigest).toBe(digest);
   });
 
-  it("submits normalized test evidence and rejects raw secrets or env dumps", async () => {
+  it("submits the canonical evidence contract and rejects extras or secrets", async () => {
     const identity = { profileDefinitionId: "fixture-cli", releaseVersion: 1 };
     const digest = "a".repeat(64);
     const normalizedEvidence = {
-      formatVersion: 1,
+      formatVersion: 2,
       profileDefinitionId: identity.profileDefinitionId,
       releaseVersion: identity.releaseVersion,
       profileReleaseVersion: "1",
@@ -593,18 +866,13 @@ describe("Phase 7 Profile Admin read models and operations", () => {
       providerToolName: "Fixture CLI",
       providerToolVersion: "1.2.3",
       acceptedAt: new Date().toISOString(),
-      testType: "local_test_ladder",
-      normalizedResult: "pass",
-      durationMs: 45,
-      osVersion: "macOS 15.0",
-      testMachineClass: "local_mac_workstation",
-      boundedDiagnostics: "Test ladder clean",
       scenarios: {
         passive_probe: "passed",
         live_probe: "passed",
-        representative_workstream_write: "passed",
-        durable_session_start: "passed",
-        durable_session_resume: "passed",
+        model_selection: "not_applicable",
+        representative_workstream_write: "not_applicable",
+        durable_session_start: "not_applicable",
+        durable_session_resume: "not_applicable",
         cancellation: "passed",
         timeout: "passed",
       },
@@ -616,6 +884,7 @@ describe("Phase 7 Profile Admin read models and operations", () => {
       payload_json: JSON.stringify(fixture),
       worker_type_id: "fixture-worker",
       lifecycle_state: "testing",
+      published_at: new Date().toISOString(),
     };
 
     const runMock = vi.fn(async () => ({ meta: { changes: 1 } }));
@@ -638,6 +907,15 @@ describe("Phase 7 Profile Admin read models and operations", () => {
       "admin-1",
     );
     expect(submission.status).toBe("accepted");
+
+    await expect(
+      submitToolProfileReleaseEvidence(
+        db,
+        identity,
+        { ...normalizedEvidence, normalizedResult: "pass" },
+        "admin-1",
+      ),
+    ).rejects.toThrow(ToolProfileRegistryError);
 
     // Must reject raw provider secrets or env dumps
     const dirtyEvidence = {

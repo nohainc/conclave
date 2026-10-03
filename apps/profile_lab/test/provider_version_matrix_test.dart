@@ -17,11 +17,10 @@ void main() {
 
       final evidenceList = <Map<String, Object?>>[
         {
-          'evidenceId': 'ev_1',
-          'providerCliVersion': '0.187.2',
-          'normalizedResult': 'pass',
-          'recordedAt': '2026-10-03T02:00:00Z',
-          'osVersion': 'macOS 15.0',
+          'formatVersion': 2,
+          'providerToolVersion': '0.187.2',
+          'acceptedAt': '2026-10-03T02:00:00Z',
+          'scenarios': {'passive_probe': 'passed'},
         }
       ];
 

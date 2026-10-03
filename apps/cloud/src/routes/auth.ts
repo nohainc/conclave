@@ -36,13 +36,36 @@ export async function handleCompleteStepUp(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
+  return completeStepUpForContext(context, env);
+}
+
+/** Binds a browser-completed passkey proof to the dedicated Profile Lab session. */
+export async function handleCompleteProfileLabStepUp(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  if (
+    context.clientType !== "desktop" ||
+    context.audience !== DESKTOP_PROFILE_LAB_AUDIENCE
+  ) {
+    throw new HttpError(403, "Profile Lab desktop session is required");
+  }
+  return completeStepUpForContext(context, env);
+}
+
+async function completeStepUpForContext(
+  context: Awaited<ReturnType<typeof securityContext>>,
+  env: SecurityEnv,
+): Promise<Response> {
   const event = await env.CONCLAVE_DB.prepare(
-    `SELECT id, method FROM auth_step_up_events
+    `SELECT id, method, created_at FROM auth_step_up_events
      WHERE user_id = ?1 AND consumed_at IS NULL
      ORDER BY created_at DESC LIMIT 1`,
   )
     .bind(context.userId)
-    .first<{ id: string; method: "passkey" | "totp" }>();
+    .first<{ id: string; method: "passkey" | "totp"; created_at: string }>();
   if (!event) {
     return json(
       { error: "No recent strong authentication ceremony is available" },
@@ -51,6 +74,22 @@ export async function handleCompleteStepUp(
   }
 
   const now = new Date();
+  const ceremonyAt = Date.parse(event.created_at);
+  if (
+    !Number.isFinite(ceremonyAt) ||
+    ceremonyAt > now.getTime() ||
+    now.getTime() - ceremonyAt > 5 * 60 * 1000
+  ) {
+    await env.CONCLAVE_DB.prepare(
+      "UPDATE auth_step_up_events SET consumed_at = ?1 WHERE id = ?2 AND consumed_at IS NULL",
+    )
+      .bind(now.toISOString(), event.id)
+      .run();
+    return json(
+      { error: "Strong authentication ceremony is stale; verify again" },
+      { status: 428 },
+    );
+  }
   const authenticatedAt = now.toISOString();
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
   await env.CONCLAVE_DB.batch([

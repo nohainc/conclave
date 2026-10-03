@@ -149,6 +149,21 @@ describe("Worker API routes", () => {
     expect(handlers.handleGetReleaseTrustState).toHaveBeenCalledOnce();
   });
 
+  it("routes the Profile signing preflight", async () => {
+    const handler = vi.fn(async () => new Response("preflight"));
+    const response = await routeWorkerRequest(
+      request("/api/admin/tool-profiles/signing-preflight"),
+      {} as Parameters<typeof routeWorkerRequest>[1],
+      undefined,
+      {
+        handleToolProfileSigningPreflight: handler,
+      } as unknown as WorkerRouteHandlers,
+      dependencies,
+    );
+    expect(response.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
   it("routes v8 Tool Profile resolution and admin lifecycle operations", async () => {
     const handlers = {
       handleListWorkerCatalog: vi.fn(async () => new Response("human catalog")),
@@ -209,6 +224,9 @@ describe("Worker API routes", () => {
       handleSubmitToolProfileReleaseEvidence: vi.fn(
         async () => new Response("submit evidence"),
       ),
+      handleSubmitToolProfileLocalQualification: vi.fn(
+        async () => new Response("submit qualification"),
+      ),
       handleListToolProfileDefinitionAudit: vi.fn(
         async () => new Response("definition audit"),
       ),
@@ -247,6 +265,10 @@ describe("Worker API routes", () => {
       ["/api/admin/tool-profiles/chatgpt-codex/releases/1/audit", "GET"],
       ["/api/admin/tool-profiles/chatgpt-codex/releases/1/evidence", "GET"],
       ["/api/admin/tool-profiles/chatgpt-codex/releases/1/evidence", "POST"],
+      [
+        "/api/admin/tool-profiles/chatgpt-codex/releases/1/qualification",
+        "POST",
+      ],
     ] as const;
     for (const [path, method] of routes) {
       const response = await routeWorkerRequest(

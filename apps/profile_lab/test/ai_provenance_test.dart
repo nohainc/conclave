@@ -86,5 +86,18 @@ void main() {
         ),
       );
     });
+
+    test('identifies experimental local heuristic provenance accurately', () {
+      const provenance = AiProvenance(
+        authorType: 'ai_assistant',
+        modelIdentifier: 'experimental-local-heuristic',
+      );
+
+      final summary = provenance.formatAuditSummary(releaseVersion: 20);
+
+      expect(summary, contains('experimental heuristic suggestion'));
+      expect(summary, contains('(experimental-local-heuristic)'));
+      expect(summary, isNot(contains('AI-assisted change')));
+    });
   });
 }

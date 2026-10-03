@@ -78,7 +78,7 @@ class DiagnosticsView extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // Section: Provider CLIs
+          // Section: Provider executables declared by loaded Workers/Profiles
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -103,20 +103,24 @@ class DiagnosticsView extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  _ProviderRow(
-                    name: 'Codex CLI (codex)',
-                    path: c.detectedProviderPaths['codex'],
-                  ),
-                  const Divider(color: Color(0xFF334155)),
-                  _ProviderRow(
-                    name: 'Gemini CLI / Antigravity (agy)',
-                    path: c.detectedProviderPaths['agy'],
-                  ),
-                  const Divider(color: Color(0xFF334155)),
-                  _ProviderRow(
-                    name: 'Claude Code CLI (claude)',
-                    path: c.detectedProviderPaths['claude'],
-                  ),
+                  if (c.configuredProviderExecutables.isEmpty)
+                    const Text(
+                      'No provider executable is declared by the loaded Worker or Profile data.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF94A3B8),
+                      ),
+                    )
+                  else
+                    for (final executable
+                        in c.configuredProviderExecutables) ...[
+                      if (executable != c.configuredProviderExecutables.first)
+                        const Divider(color: Color(0xFF334155)),
+                      _ProviderRow(
+                        name: executable,
+                        path: c.detectedProviderPaths[executable],
+                      ),
+                    ],
                 ],
               ),
             ),
@@ -191,7 +195,7 @@ class _ProviderRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name,
+                Text('Provider executable: $name',
                     style: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 13)),
                 Text(

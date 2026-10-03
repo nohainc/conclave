@@ -68,6 +68,18 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
   final profileBytes = await profileFile.readAsBytes();
   final digest = sha256.convert(profileBytes).toString();
   final profile = jsonDecode(utf8.decode(profileBytes)) as Map<String, Object?>;
+  final capabilities = (profile['capabilities'] as List).cast<String>().toSet();
+  final session = profile['session'] as Map<String, Object?>;
+  final model = profile['model'] as Map<String, Object?>;
+  final modelAllowlist = (model['allowlist'] as List?)?.cast<String>() ?? [];
+  final modelSelectionTestable =
+      model['supported'] == true && modelAllowlist.isNotEmpty;
+  final durableSessionSupported = capabilities.contains('durable_session');
+  if (durableSessionSupported != (session['supported'] == true)) {
+    throw StateError(
+      'Profile durable_session capability does not match session.supported.',
+    );
+  }
   final profileReleaseVersion = '${profile['releaseVersion']}';
   final root = await Directory.systemTemp.createTemp(
     'conclave-profile-acceptance-${official.definitionId}-',
@@ -77,7 +89,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
     '${root.path}/workstream',
   ).create();
   final evidence = <String, Object?>{
-    'formatVersion': 1,
+    'formatVersion': 2,
     'profileDefinitionId': official.definitionId,
     'releaseVersion': profile['releaseVersion'],
     'profileReleaseVersion': profileReleaseVersion,
@@ -104,6 +116,11 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
     }
   }
 
+  Future<void> notApplicableScenario(String name) async {
+    (evidence['scenarios'] as Map<String, Object?>)[name] = 'not_applicable';
+    await _writeEvidence(evidence, evidenceDirectory);
+  }
+
   try {
     await scenario('passive_probe', () async {
       final engine = await _EngineClient.start(
@@ -124,8 +141,11 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
         );
         expect(result.terminal, isA<ProbeResult>());
         final probe = result.terminal as ProbeResult;
-        expect(probe.ready, isTrue,
-            reason: 'Passive probe reported not ready.');
+        expect(
+          probe.ready,
+          isTrue,
+          reason: 'Passive probe reported not ready: ${probe.toJson()}',
+        );
         expect(probe.providerToolVersion, isNotEmpty);
         evidence['providerToolVersion'] = probe.providerToolVersion;
         expect(
@@ -170,117 +190,158 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
       }
     });
 
-    await scenario('representative_workstream_write', () async {
-      final marker =
-          'profile-acceptance-${DateTime.now().microsecondsSinceEpoch}.txt';
-      const markerContent = 'Conclave Profile acceptance write verified.';
-      final engine = await _EngineClient.start(
-        official: official,
-        repository: repository,
-        profileFile: profileFile,
-        profile: profile,
-        digest: digest,
-        stateDirectory: stateDirectory,
-        workstreamDirectory: workstreamDirectory,
-      );
-      try {
-        final result = await engine.exchange(
-          ExecuteRequest(
-            requestId: 'accept-workstream-write',
-            assignmentId: 'profile-acceptance-write',
-            prompt:
-                'In the current working directory, create $marker containing exactly this line: $markerContent. Do not modify other files. Then reply with exactly WRITE_OK.',
-            timeoutMs: 120000,
-            sessionPolicy: WorkerSessionPolicy.stateless,
-          ),
-          timeout: const Duration(minutes: 3),
+    if (!modelSelectionTestable) {
+      await notApplicableScenario('model_selection');
+    } else {
+      await scenario('model_selection', () async {
+        final engine = await _EngineClient.start(
+          official: official,
+          repository: repository,
+          profileFile: profileFile,
+          profile: profile,
+          digest: digest,
+          stateDirectory: stateDirectory,
+          workstreamDirectory: workstreamDirectory,
         );
-        expect(
-          result.terminal,
-          isA<WorkerResult>(),
-          reason: result.terminal is WorkerErrorFrame
-              ? jsonEncode((result.terminal as WorkerErrorFrame).toJson())
-              : null,
+        try {
+          final result = await engine.exchange(
+            ExecuteRequest(
+              requestId: 'accept-model-selection',
+              assignmentId: 'profile-acceptance-model-selection',
+              prompt: 'Reply with exactly MODEL_OK.',
+              timeoutMs: 120000,
+              sessionPolicy: WorkerSessionPolicy.stateless,
+              model: modelAllowlist.first,
+            ),
+            timeout: const Duration(minutes: 3),
+          );
+          expect(result.terminal, isA<WorkerResult>());
+        } finally {
+          await engine.close();
+        }
+      });
+    }
+
+    if (!capabilities.contains('workstream_write')) {
+      await notApplicableScenario('representative_workstream_write');
+    } else {
+      await scenario('representative_workstream_write', () async {
+        final marker =
+            'profile-acceptance-${DateTime.now().microsecondsSinceEpoch}.txt';
+        const markerContent = 'Conclave Profile acceptance write verified.';
+        final engine = await _EngineClient.start(
+          official: official,
+          repository: repository,
+          profileFile: profileFile,
+          profile: profile,
+          digest: digest,
+          stateDirectory: stateDirectory,
+          workstreamDirectory: workstreamDirectory,
         );
-        expect(
-          (result.terminal as WorkerResult).output,
-          contains('WRITE_OK'),
-        );
-        expect(
-          (await File('${workstreamDirectory.path}/$marker').readAsString())
-              .trimRight(),
-          markerContent,
-        );
-      } finally {
-        await engine.close();
-      }
-    });
+        try {
+          final result = await engine.exchange(
+            ExecuteRequest(
+              requestId: 'accept-workstream-write',
+              assignmentId: 'profile-acceptance-write',
+              prompt:
+                  'In the current working directory, create $marker containing exactly this line: $markerContent. Do not modify other files. Then reply with exactly WRITE_OK.',
+              timeoutMs: 120000,
+              sessionPolicy: WorkerSessionPolicy.stateless,
+            ),
+            timeout: const Duration(minutes: 3),
+          );
+          expect(
+            result.terminal,
+            isA<WorkerResult>(),
+            reason: result.terminal is WorkerErrorFrame
+                ? jsonEncode((result.terminal as WorkerErrorFrame).toJson())
+                : null,
+          );
+          expect(
+            (result.terminal as WorkerResult).output,
+            contains('WRITE_OK'),
+          );
+          expect(
+            (await File('${workstreamDirectory.path}/$marker').readAsString())
+                .trimRight(),
+            markerContent,
+          );
+        } finally {
+          await engine.close();
+        }
+      });
+    }
 
     final sessionKey = 'accept_${DateTime.now().microsecondsSinceEpoch}';
     final rememberedPhrase = 'PROFILE-${DateTime.now().microsecondsSinceEpoch}';
-    await scenario('durable_session_start', () async {
-      final engine = await _EngineClient.start(
-        official: official,
-        repository: repository,
-        profileFile: profileFile,
-        profile: profile,
-        digest: digest,
-        stateDirectory: stateDirectory,
-        workstreamDirectory: workstreamDirectory,
-      );
-      try {
-        final result = await engine.exchange(
-          ExecuteRequest(
-            requestId: 'accept-session-start',
-            assignmentId: 'profile-acceptance-session-start',
-            prompt:
-                'Remember the exact code $rememberedPhrase for the next turn. Reply with exactly SESSION_OK.',
-            timeoutMs: 120000,
-            sessionPolicy: WorkerSessionPolicy.durableSession,
-            sessionKey: sessionKey,
-          ),
-          timeout: const Duration(minutes: 3),
+    if (!durableSessionSupported) {
+      await notApplicableScenario('durable_session_start');
+      await notApplicableScenario('durable_session_resume');
+    } else {
+      await scenario('durable_session_start', () async {
+        final engine = await _EngineClient.start(
+          official: official,
+          repository: repository,
+          profileFile: profileFile,
+          profile: profile,
+          digest: digest,
+          stateDirectory: stateDirectory,
+          workstreamDirectory: workstreamDirectory,
         );
-        expect(result.terminal, isA<WorkerResult>());
-        expect(
-            (result.terminal as WorkerResult).output, contains('SESSION_OK'));
-      } finally {
-        await engine.close();
-      }
-    });
+        try {
+          final result = await engine.exchange(
+            ExecuteRequest(
+              requestId: 'accept-session-start',
+              assignmentId: 'profile-acceptance-session-start',
+              prompt:
+                  'Remember the exact code $rememberedPhrase for the next turn. Reply with exactly SESSION_OK.',
+              timeoutMs: 120000,
+              sessionPolicy: WorkerSessionPolicy.durableSession,
+              sessionKey: sessionKey,
+            ),
+            timeout: const Duration(minutes: 3),
+          );
+          expect(result.terminal, isA<WorkerResult>());
+          expect(
+              (result.terminal as WorkerResult).output, contains('SESSION_OK'));
+        } finally {
+          await engine.close();
+        }
+      });
 
-    await scenario('durable_session_resume', () async {
-      final engine = await _EngineClient.start(
-        official: official,
-        repository: repository,
-        profileFile: profileFile,
-        profile: profile,
-        digest: digest,
-        stateDirectory: stateDirectory,
-        workstreamDirectory: workstreamDirectory,
-      );
-      try {
-        final result = await engine.exchange(
-          ExecuteRequest(
-            requestId: 'accept-session-resume',
-            assignmentId: 'profile-acceptance-session-resume',
-            prompt:
-                'What exact code did I ask you to remember? Reply only with the code.',
-            timeoutMs: 120000,
-            sessionPolicy: WorkerSessionPolicy.durableSession,
-            sessionKey: sessionKey,
-          ),
-          timeout: const Duration(minutes: 3),
+      await scenario('durable_session_resume', () async {
+        final engine = await _EngineClient.start(
+          official: official,
+          repository: repository,
+          profileFile: profileFile,
+          profile: profile,
+          digest: digest,
+          stateDirectory: stateDirectory,
+          workstreamDirectory: workstreamDirectory,
         );
-        expect(result.terminal, isA<WorkerResult>());
-        expect(
-          (result.terminal as WorkerResult).output,
-          contains(rememberedPhrase),
-        );
-      } finally {
-        await engine.close();
-      }
-    });
+        try {
+          final result = await engine.exchange(
+            ExecuteRequest(
+              requestId: 'accept-session-resume',
+              assignmentId: 'profile-acceptance-session-resume',
+              prompt:
+                  'What exact code did I ask you to remember? Reply only with the code.',
+              timeoutMs: 120000,
+              sessionPolicy: WorkerSessionPolicy.durableSession,
+              sessionKey: sessionKey,
+            ),
+            timeout: const Duration(minutes: 3),
+          );
+          expect(result.terminal, isA<WorkerResult>());
+          expect(
+            (result.terminal as WorkerResult).output,
+            contains(rememberedPhrase),
+          );
+        } finally {
+          await engine.close();
+        }
+      });
+    }
 
     await scenario('timeout', () async {
       final engine = await _EngineClient.start(

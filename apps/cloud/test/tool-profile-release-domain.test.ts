@@ -320,8 +320,8 @@ describe("v8 Tool Profile Cloud release domain", () => {
     );
   });
 
-  it("stores digest-bound acceptance evidence immutably", () => {
-    apply(`
+  it("stores multiple digest-bound acceptance records immutably", () => {
+    const inserted = apply(`
       ${publishedRelease(1)}
       INSERT INTO tool_profile_acceptance_evidence (
         id, profile_definition_id, release_version, payload_digest,
@@ -332,9 +332,19 @@ describe("v8 Tool Profile Cloud release domain", () => {
         '1.0.0', '0.180.1', '{"formatVersion":1}',
         '2026-10-01T00:00:00Z', '2026-10-01T00:01:00Z'
       );
-      SELECT payload_digest FROM tool_profile_acceptance_evidence
-       WHERE id = 'evidence-1';
+      INSERT INTO tool_profile_acceptance_evidence (
+        id, profile_definition_id, release_version, payload_digest,
+        engine_version, provider_tool_version, evidence_json,
+        accepted_at, submitted_at
+      ) VALUES (
+        'evidence-2', 'chatgpt-codex', 1, '${"1".repeat(64)}',
+        '1.0.0', '0.180.1', '{"formatVersion":1}',
+        '2026-10-02T00:00:00Z', '2026-10-02T00:01:00Z'
+      );
+      SELECT count(*) AS evidence_count FROM tool_profile_acceptance_evidence
+       WHERE profile_definition_id = 'chatgpt-codex' AND release_version = 1;
     `);
+    expect(inserted).toEqual([{ evidence_count: 2 }]);
     expectSqlFailure(
       `
         ${publishedRelease(1)}

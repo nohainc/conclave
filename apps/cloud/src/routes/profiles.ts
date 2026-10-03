@@ -20,6 +20,8 @@ import {
   rollbackToolProfileChannel,
   setWorkspaceToolProfileChannel,
   submitToolProfileReleaseEvidence,
+  submitToolProfileLocalQualification,
+  toolProfileSigningPreflight,
   updateDraftToolProfilePayload,
   type ToolProfileChannel,
 } from "../tool-profile-registry.js";
@@ -29,11 +31,13 @@ import {
   json,
   readToolProfileAdminBody,
   recordAudit,
+  requireRecentStepUp,
   securityContext,
   toolProfileReleaseVersion,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
 import { WORKER_INPUT_CAPABILITIES } from "@conclave/core";
+import { SENSITIVE_OPERATIONS } from "../auth/step-up.js";
 
 export async function handleListWorkspaceWorkerInventory(
   request: Request,
@@ -211,13 +215,25 @@ export async function handleSetWorkspaceToolProfileChannel(
   workspaceId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  const actor = await authorizeToolProfileAdmin(
+    request,
+    env,
+    ctx,
+    "profiles:release:manage",
+  );
   const body = await readToolProfileAdminBody(request, ["channel"]);
   if (
     typeof body.channel !== "string" ||
     !["testing", "beta", "stable"].includes(body.channel)
   ) {
     throw new HttpError(400, "channel must be testing, beta, or stable");
+  }
+  if (body.channel === "stable") {
+    await requireRecentStepUp(
+      env,
+      actor,
+      SENSITIVE_OPERATIONS.toolProfileStablePromotion,
+    );
   }
   const updated = await setWorkspaceToolProfileChannel(env.CONCLAVE_DB, {
     workspaceId,
@@ -412,16 +428,20 @@ export async function handlePublishDraftToolProfileRelease(
   versionText: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  const actor = await authorizeToolProfileAdmin(request, env, ctx);
-  let clientSignature: string | undefined;
-  let clientSigningKeyId: string | undefined;
-  try {
-    const body = await readToolProfileAdminBody(request, []);
-    if (typeof body.signature === "string") clientSignature = body.signature;
-    if (typeof body.signingKeyId === "string")
-      clientSigningKeyId = body.signingKeyId;
-  } catch {
-    // Body is optional
+  const actor = await authorizeToolProfileAdmin(
+    request,
+    env,
+    ctx,
+    "profiles:release:manage",
+  );
+  const body = await readToolProfileAdminBody(request, [
+    "qualificationEvidenceId",
+  ]);
+  if (typeof body.qualificationEvidenceId !== "string") {
+    throw new HttpError(
+      400,
+      "A stored local qualificationEvidenceId is required for publication",
+    );
   }
   return json(
     await publishDraftToolProfileRelease(
@@ -431,10 +451,44 @@ export async function handlePublishDraftToolProfileRelease(
         releaseVersion: toolProfileReleaseVersion(versionText),
       },
       actor.userId,
-      clientSignature,
-      clientSigningKeyId,
+      body.qualificationEvidenceId,
     ),
   );
+}
+
+export async function handleSubmitToolProfileLocalQualification(
+  request: Request,
+  env: SecurityEnv,
+  profileDefinitionId: string,
+  versionText: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  const body = await readToolProfileAdminBody(request, ["evidence"]);
+  if (body.evidence === undefined) {
+    throw new HttpError(400, "Complete local execution evidence is required");
+  }
+  return json(
+    await submitToolProfileLocalQualification(
+      env.CONCLAVE_DB,
+      {
+        profileDefinitionId,
+        releaseVersion: toolProfileReleaseVersion(versionText),
+      },
+      body.evidence,
+      actor.userId,
+    ),
+    { status: 201 },
+  );
+}
+
+export async function handleToolProfileSigningPreflight(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  await authorizeToolProfileAdmin(request, env, ctx, "profiles:release:manage");
+  return json(await toolProfileSigningPreflight(env));
 }
 
 export async function handlePromoteToolProfileRelease(
@@ -444,10 +498,15 @@ export async function handlePromoteToolProfileRelease(
   versionText: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  const actor = await authorizeToolProfileAdmin(
+    request,
+    env,
+    ctx,
+    "profiles:release:manage",
+  );
   const body = await readToolProfileAdminBody(request, [
     "channel",
-    "acceptanceEvidence",
+    "acceptanceEvidenceId",
   ]);
   if (
     typeof body.channel !== "string" ||
@@ -455,16 +514,27 @@ export async function handlePromoteToolProfileRelease(
   ) {
     throw new HttpError(400, "channel is invalid");
   }
-  if (body.channel === "stable" && body.acceptanceEvidence === undefined) {
+  if (
+    body.channel === "stable" &&
+    (typeof body.acceptanceEvidenceId !== "string" ||
+      body.acceptanceEvidenceId.trim().length === 0)
+  ) {
     throw new HttpError(
       400,
-      "Real Profile acceptance evidence is required for stable promotion",
+      "A stored Profile acceptanceEvidenceId is required for stable promotion",
     );
   }
-  if (body.channel !== "stable" && body.acceptanceEvidence !== undefined) {
+  if (body.channel !== "stable" && body.acceptanceEvidenceId !== undefined) {
     throw new HttpError(
       400,
-      "Acceptance evidence is only accepted for stable promotion",
+      "Acceptance evidence is only referenced for stable promotion",
+    );
+  }
+  if (body.channel === "stable") {
+    await requireRecentStepUp(
+      env,
+      actor,
+      SENSITIVE_OPERATIONS.toolProfileStablePromotion,
     );
   }
   return json(
@@ -476,7 +546,7 @@ export async function handlePromoteToolProfileRelease(
       },
       body.channel as ToolProfileChannel,
       actor.userId,
-      body.acceptanceEvidence,
+      body.acceptanceEvidenceId as string | undefined,
     ),
   );
 }
@@ -489,7 +559,19 @@ export async function handleChangeToolProfileReleaseLifecycle(
   lifecycle: "retired" | "revoked",
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  const actor = await authorizeToolProfileAdmin(
+    request,
+    env,
+    ctx,
+    "profiles:release:manage",
+  );
+  if (lifecycle === "revoked") {
+    await requireRecentStepUp(
+      env,
+      actor,
+      SENSITIVE_OPERATIONS.toolProfileRevoke,
+    );
+  }
   const body = await readToolProfileAdminBody(request, ["reason"]);
   if (typeof body.reason !== "string")
     throw new HttpError(400, "reason is required");
@@ -513,7 +595,7 @@ export async function handleListToolProfileReleases(
   profileDefinitionId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeToolProfileAdmin(request, env, ctx);
+  await authorizeToolProfileAdmin(request, env, ctx, "profiles:release:manage");
   return json(
     await listToolProfileReleases(env.CONCLAVE_DB, profileDefinitionId),
   );
@@ -526,7 +608,7 @@ export async function handleListToolProfileReleaseAudit(
   versionText: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeToolProfileAdmin(request, env, ctx);
+  await authorizeToolProfileAdmin(request, env, ctx, "profiles:release:manage");
   return json(
     await listToolProfileReleaseAudit(env.CONCLAVE_DB, {
       profileDefinitionId,
@@ -572,7 +654,7 @@ export async function handleGetToolProfileRelease(
   versionText: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeToolProfileAdmin(request, env, ctx);
+  await authorizeToolProfileAdmin(request, env, ctx, "profiles:release:manage");
   return json(
     await getToolProfileRelease(env.CONCLAVE_DB, {
       profileDefinitionId,
@@ -586,7 +668,7 @@ export async function handleListAllToolProfileChannels(
   env: SecurityEnv,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeToolProfileAdmin(request, env, ctx);
+  await authorizeToolProfileAdmin(request, env, ctx, "profiles:release:manage");
   return json(await listToolProfileChannelPointers(env.CONCLAVE_DB));
 }
 
@@ -596,7 +678,7 @@ export async function handleListToolProfileChannels(
   profileDefinitionId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeToolProfileAdmin(request, env, ctx);
+  await authorizeToolProfileAdmin(request, env, ctx, "profiles:release:manage");
   return json(
     await listToolProfileChannelPointers(env.CONCLAVE_DB, profileDefinitionId),
   );
@@ -609,7 +691,17 @@ export async function handleRollbackToolProfileChannel(
   channel: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  const actor = await authorizeToolProfileAdmin(
+    request,
+    env,
+    ctx,
+    "profiles:release:manage",
+  );
+  await requireRecentStepUp(
+    env,
+    actor,
+    SENSITIVE_OPERATIONS.toolProfileRollback,
+  );
   if (!["testing", "beta", "stable"].includes(channel)) {
     throw new HttpError(400, "channel is invalid");
   }
@@ -649,7 +741,7 @@ export async function handleListToolProfileReleaseEvidence(
   versionText: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeToolProfileAdmin(request, env, ctx);
+  await authorizeToolProfileAdmin(request, env, ctx, "profiles:release:manage");
   return json(
     await listToolProfileReleaseEvidence(env.CONCLAVE_DB, {
       profileDefinitionId,
@@ -665,7 +757,12 @@ export async function handleSubmitToolProfileReleaseEvidence(
   versionText: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  const actor = await authorizeToolProfileAdmin(request, env, ctx);
+  const actor = await authorizeToolProfileAdmin(
+    request,
+    env,
+    ctx,
+    "profiles:release:manage",
+  );
   const body = await readToolProfileAdminBody(request, ["evidence"]);
   if (body.evidence === undefined) {
     throw new HttpError(400, "evidence is required");

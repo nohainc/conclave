@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'profile_lab_cloud_config.dart';
+
 const profileLabAudience = 'conclave.profile-lab.management';
 const profileLabClientName = 'Conclave Profile Lab';
 const profileLabAuthIntentContractVersion = '1.1';
@@ -99,56 +101,6 @@ class ProfileLabSession {
         'expiresAt': expiresAt.toUtc().toIso8601String(),
         if (issuedAt != null) 'issuedAt': issuedAt!.toUtc().toIso8601String(),
       };
-
-  /// Reads stored session from [file]. Returns null if the file does not exist,
-  /// cannot be parsed, or has expired.
-  static Future<ProfileLabSession?> loadFromFile(File file) async {
-    try {
-      if (!await file.exists()) return null;
-      final raw = await file.readAsString();
-      if (raw.trim().isEmpty) return null;
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) return null;
-      final session = ProfileLabSession.fromStoredJson(
-        Map<String, dynamic>.from(decoded),
-      );
-      if (session.isExpired) {
-        await clearFile(file);
-        return null;
-      }
-      return session;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Writes this session to [file] with restrictive POSIX 0600 permissions.
-  Future<void> saveToFile(File file) async {
-    final parent = file.parent;
-    if (!await parent.exists()) {
-      await parent.create(recursive: true);
-      if (Platform.isMacOS || Platform.isLinux) {
-        try {
-          await Process.run('chmod', ['700', parent.path]);
-        } catch (_) {}
-      }
-    }
-    await file.writeAsString(jsonEncode(toStoredJson()), flush: true);
-    if (Platform.isMacOS || Platform.isLinux) {
-      try {
-        await Process.run('chmod', ['600', file.path]);
-      } catch (_) {}
-    }
-  }
-
-  /// Deletes the stored session file.
-  static Future<void> clearFile(File file) async {
-    try {
-      if (await file.exists()) {
-        await file.delete();
-      }
-    } catch (_) {}
-  }
 }
 
 /// An initiated browser-assisted authentication intent for Profile Lab.
@@ -179,11 +131,16 @@ class ProfileLabAuthIntent {
     }
 
     final url = Uri.tryParse(required('verificationUrl'));
-    if (url == null ||
-        !(url.scheme == 'https' ||
-            (url.scheme == 'http' &&
-                const {'localhost', '127.0.0.1'}.contains(url.host))) ||
-        url.host.isEmpty) {
+    var secureOrigin = false;
+    if (url != null && url.host.isNotEmpty && url.userInfo.isEmpty) {
+      try {
+        ProfileLabCloudConfig.normalizeOrigin(url.origin);
+        secureOrigin = true;
+      } on ArgumentError {
+        secureOrigin = false;
+      }
+    }
+    if (url == null || !secureOrigin) {
       throw const FormatException(
         'Profile Lab sign-in verification URL is invalid',
       );
@@ -209,30 +166,12 @@ class ProfileLabAuthClient {
   ProfileLabAuthClient({
     required String cloudUrl,
     HttpClient? httpClient,
-  })  : _cloudOrigin = _normalizeOrigin(cloudUrl),
+  })  : _cloudOrigin =
+            Uri.parse(ProfileLabCloudConfig.normalizeOrigin(cloudUrl)),
         _http = httpClient ?? HttpClient();
 
   final Uri _cloudOrigin;
   final HttpClient _http;
-
-  static Uri _normalizeOrigin(String value) {
-    final parsed = Uri.tryParse(value.trim());
-    if (parsed == null ||
-        !const {'http', 'https'}.contains(parsed.scheme) ||
-        parsed.host.isEmpty) {
-      throw ArgumentError('Cloud URL must be an HTTP(S) origin.');
-    }
-    if (parsed.scheme != 'https' &&
-        parsed.host != 'localhost' &&
-        parsed.host != '127.0.0.1') {
-      throw ArgumentError('Profile Lab sign-in requires a secure Cloud URL.');
-    }
-    return Uri(
-      scheme: parsed.scheme,
-      host: parsed.host,
-      port: parsed.hasPort ? parsed.port : null,
-    );
-  }
 
   Uri _api(String path) => _cloudOrigin.replace(path: '/api$path');
 
@@ -386,6 +325,17 @@ class ProfileLabAuthClient {
         'Cloud did not confirm the Profile Lab management session',
       );
     }
+  }
+
+  /// Binds a recent browser-completed passkey ceremony to this Profile Lab
+  /// session so Cloud can authorize a sensitive release operation.
+  Future<void> completeStepUp(ProfileLabSession session) async {
+    await _requestJson(
+      'POST',
+      _api('/desktop-auth/profile-lab/step-up/complete'),
+      bearer: session.credential,
+      body: const <String, Object?>{},
+    );
   }
 
   /// Rotates an existing session credential.

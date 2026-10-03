@@ -774,7 +774,7 @@ The profile testing workflow incorporates an iterative draft testing lifecycle i
    - Conclave Workspace strictly requires `isSigned => true` for admission. Unsigned draft objects are rejected by static types and runtime verifiers (`WorkerTrustPolicy`).
 
 3. **Evidence-Bound Transition:**
-   - Profile Lab captures a sealed `ToolProfileEvidenceContract` artifact verifying passive probe, live probe, and session execution against real provider binaries.
+   - The supported Profile Lab sandbox emits a capability-aware contract after applicable Engine scenarios pass. Cloud checks the submitted contract's identity, canonical digest, reported version ranges, freshness, and scenario map, then stores it for lifecycle gating. This is an authenticated client assertion, not remote attestation that a local provider binary executed the scenarios; see the [evidence contract](TOOL_PROFILE_EVIDENCE_CONTRACT.md).
    - Any edit to a draft payload recalculates its SHA-256 `payloadDigest` and immediately invalidates all accumulated evidence.
    - Cloud verifies evidence completeness and signs the payload upon publication (`POST /api/admin/workers/definitions/:id/releases`).
 

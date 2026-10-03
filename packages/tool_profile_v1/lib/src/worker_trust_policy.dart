@@ -151,7 +151,7 @@ class WorkerTrustPolicy {
         publicKeyBytes,
         type: KeyPairType.ed25519,
       );
-      return algorithm.verify(
+      return await algorithm.verify(
         message,
         signature: Signature(
           signatureBytes,

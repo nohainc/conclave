@@ -71,7 +71,7 @@ class AiProvenance {
   }
 
   /// Formats human-readable audit provenance summary string.
-  /// Example: "Draft v20 created by AI-assisted change (gemini-2.5-pro, parent: a1b2c3d4), reviewed by Vitalii, tested on Codex 0.188.0, published by controlled signer, promoted to Testing by Vitalii."
+  /// Example: "Draft v20 created by experimental heuristic suggestion (experimental-local-heuristic, parent: a1b2c3d4), reviewed by Vitalii."
   String formatAuditSummary({
     required int releaseVersion,
     String? testedProviderVersion,
@@ -79,8 +79,13 @@ class AiProvenance {
     String? promotedBy,
     String? channel,
   }) {
-    final changeKind =
-        isAiAssisted ? 'AI-assisted change' : 'manual human edit';
+    final isExperimentalHeuristic =
+        modelIdentifier == 'experimental-local-heuristic';
+    final changeKind = isExperimentalHeuristic
+        ? 'experimental heuristic suggestion'
+        : isAiAssisted
+            ? 'AI-assisted change'
+            : 'manual human edit';
     final modelInfo =
         isAiAssisted && modelIdentifier != null ? ' ($modelIdentifier' : '';
     final parentInfo = parentDigest != null

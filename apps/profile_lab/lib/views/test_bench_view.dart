@@ -88,11 +88,19 @@ class TestBenchView extends StatelessWidget {
                         ),
                         onPressed: c.isTesting ? null : () => c.runTestLadder(),
                       ),
+                      if (c.isTesting) ...[
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.cancel_outlined, size: 14),
+                          label: const Text('Cancel Engine Run'),
+                          onPressed: c.cancelTest,
+                        ),
+                      ],
                       const SizedBox(width: 8),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.build_circle_outlined,
                             size: 14, color: ProfileLabTheme.warnColor),
-                        label: const Text('Auto-Repair with AI...',
+                        label: const Text('Experimental Repair...',
                             style: TextStyle(
                                 fontSize: 11,
                                 color: ProfileLabTheme.warnColor)),
@@ -187,7 +195,7 @@ class TestBenchView extends StatelessWidget {
             Row(
               children: const [
                 Text(
-                  'PROGRESSIVE LOCAL TEST LADDER (9 STAGES)',
+                  'PROGRESSIVE LOCAL TEST LADDER (11 STAGES)',
                   style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -195,7 +203,7 @@ class TestBenchView extends StatelessWidget {
                 ),
                 Spacer(),
                 Text(
-                  'Schema → Compat → Discovery → Version → Passive → Live → Exec → Session → Model',
+                  'Schema → Compat → Discovery → Version → Passive → Live → Exec → Session → Model → Cancel → Timeout',
                   style: TextStyle(fontSize: 10, color: Color(0xFF64748B)),
                 ),
               ],
@@ -242,7 +250,7 @@ class TestBenchView extends StatelessWidget {
               child: c.testLogs.isEmpty
                   ? const Center(
                       child: Text(
-                        'Ready to test. Run Test Ladder to execute the 9 progressive stages.',
+                        'Ready to test. Run Test Ladder to execute the 11 progressive stages.',
                         style:
                             TextStyle(color: Color(0xFF64748B), fontSize: 12),
                       ),

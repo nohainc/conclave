@@ -4,6 +4,7 @@ import 'package:conclave_profile_lab/app.dart';
 import 'package:conclave_profile_lab/controllers/profile_lab_controller.dart';
 import 'package:conclave_profile_lab/profile_lab_auth.dart';
 import 'package:conclave_profile_lab/profile_lab_paths.dart';
+import 'package:conclave_profile_lab/profile_lab_session_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -17,7 +18,10 @@ void main() {
     final temp = Directory.systemTemp.createTempSync('widget_test_lab_');
     try {
       final paths = ProfileLabPaths(homeDirectory: temp.path);
-      final controller = ProfileLabController(paths: paths);
+      final controller = ProfileLabController(
+        paths: paths,
+        sessionStore: ProfileLabSessionStore.inMemoryForTesting(paths),
+      );
       await tester.pumpWidget(ProfileLabApp(controller: controller));
       expect(find.text('CONCLAVE'), findsOneWidget);
       expect(find.text('PROFILE LAB'), findsOneWidget);

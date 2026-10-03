@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:conclave_profile_lab/controllers/profile_lab_controller.dart';
 import 'package:conclave_profile_lab/profile_lab_paths.dart';
+import 'package:conclave_profile_lab/profile_lab_session_store.dart';
 import 'package:conclave_profile_lab/views/promotion_gate_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,7 +16,10 @@ void main() {
     setUp(() async {
       temp = await Directory.systemTemp.createTemp('gate_dialog_test_');
       paths = ProfileLabPaths(homeDirectory: temp.path);
-      controller = ProfileLabController(paths: paths);
+      controller = ProfileLabController(
+        paths: paths,
+        sessionStore: ProfileLabSessionStore.inMemoryForTesting(paths),
+      );
       await controller.initialize();
     });
 

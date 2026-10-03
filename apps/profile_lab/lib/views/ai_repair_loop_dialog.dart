@@ -145,7 +145,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
     final c = widget.controller;
     final provenance = AiProvenance(
       authorType: 'ai_repair_loop',
-      modelIdentifier: 'gemini-2.5-pro',
+      modelIdentifier: 'experimental-local-heuristic',
       parentDigest: c.currentDraft?.payloadDigest,
       parentReleaseVersion: c.currentDraft?.releaseVersion,
       taskIdentifier: 'repair-loop-iter-$_currentIteration',
@@ -181,7 +181,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
           Icon(Icons.build_circle_outlined,
               color: ProfileLabTheme.primaryAccent, size: 22),
           SizedBox(width: 8),
-          Text('Iterative AI Profile Repair Loop'),
+          Text('Experimental Heuristic Profile Repair Loop'),
         ],
       ),
       content: SizedBox(
@@ -191,6 +191,28 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.amber),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.science_outlined, color: Colors.amber, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Experimental local heuristic. No AI model is called; suggestions need human review and real tests, and never count as acceptance evidence.',
+                        style:
+                            TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
               // Strategy Stepper / Information Box
               Container(
                 padding: const EdgeInsets.all(12),

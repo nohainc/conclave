@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../controllers/profile_lab_controller.dart';
+import '../profile_lab_test_sandbox.dart';
 import '../theme/profile_lab_theme.dart';
 import 'provider_version_matrix_card.dart';
 
@@ -40,24 +41,30 @@ class _TestsViewState extends State<TestsView> {
       );
     }
 
-    final hasPassivePass = c.currentEvidence.any(
-      (ev) =>
-          ev['testType'] == 'local_passive_probe' &&
-          ev['normalizedResult'] == 'pass',
-    );
-    final hasLivePass = c.currentEvidence.any(
-      (ev) =>
-          ev['testType'] == 'local_live_probe' &&
-          ev['normalizedResult'] == 'pass',
-    );
-    final isPromotionReady = hasPassivePass && hasLivePass;
-
     final defId = c.selectedDefinitionId ?? draft?.profileDefinitionId ?? '';
     final version =
         draft?.releaseVersion ?? c.selectedCloudRelease?['releaseVersion'] ?? 1;
     final digest = draft?.payloadDigest ??
         c.selectedCloudRelease?['payloadDigest'] ??
         'Unavailable';
+    final activeEvidence =
+        c.currentEvidence.cast<Map<String, Object?>?>().firstWhere(
+              (evidence) => evidence?['profileDigest'] == digest,
+              orElse: () => null,
+            );
+    final acceptanceScenarios =
+        (activeEvidence?['scenarios'] as Map?)?.cast<String, Object?>() ??
+            const <String, Object?>{};
+    final hasPassivePass = acceptanceScenarios['passive_probe'] == 'passed';
+    final hasLivePass = acceptanceScenarios['live_probe'] == 'passed';
+    final expectedScenarios =
+        draft == null ? null : cloudAcceptanceScenarioStatuses(draft.profile);
+    final isPromotionReady = activeEvidence != null &&
+        expectedScenarios != null &&
+        ToolProfileAcceptanceEvidence.hasCloudContractShape(
+          activeEvidence,
+          profile: draft!.profile,
+        );
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -82,40 +89,6 @@ class _TestsViewState extends State<TestsView> {
                               color: Color(0xFF94A3B8)),
                         ),
                       ),
-                      if (c.currentEvidence.isNotEmpty &&
-                          c.currentSession != null)
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.cloud_upload, size: 14),
-                          label: const Text('Submit Evidence to Cloud',
-                              style: TextStyle(fontSize: 11)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: ProfileLabTheme.primaryAccent,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          onPressed: () async {
-                            try {
-                              await c.submitActiveEvidenceToCloud();
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text(
-                                          'Evidence submitted successfully to Cloud')),
-                                );
-                              }
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                      content: Text('Submission failed: $e')),
-                                );
-                              }
-                            }
-                          },
-                        ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -138,6 +111,24 @@ class _TestsViewState extends State<TestsView> {
                           label: 'Gate 3: Promotion Ready',
                           passed: isPromotionReady),
                     ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Card(
+            color: Colors.amber.withValues(alpha: 0.10),
+            child: const Padding(
+              padding: EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.amber, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Submit complete local evidence separately to the matching published release. Cloud stores it immutably; Stable promotion references the stored evidence ID.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
+                    ),
                   ),
                 ],
               ),
@@ -224,7 +215,7 @@ class _TestsViewState extends State<TestsView> {
         ),
         child: const Center(
           child: Text(
-            'No local evidence recorded for the active payload digest.\nRun Passive or Live Probe in the Profiles tab to generate evidence.',
+            'No complete Cloud contract evidence exists for the active payload digest. Failed and incomplete runs remain available in the Test Workbench results.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
           ),
@@ -236,54 +227,46 @@ class _TestsViewState extends State<TestsView> {
       itemCount: c.currentEvidence.length,
       itemBuilder: (ctx, i) {
         final ev = c.currentEvidence[i];
-        final testType = ev['testType'] as String? ?? 'unknown';
-        final result = ev['normalizedResult'] as String? ?? 'fail';
-        final isPass = result == 'pass';
-        final recordedAt = ev['recordedAt'] as String? ?? '';
-        final digest = ev['payloadDigest'] as String? ?? '';
+        final acceptedAt = ev['acceptedAt'] as String? ?? '';
+        final digest = ev['profileDigest'] as String? ?? '';
+        final scenarios = (ev['scenarios'] as Map?)?.cast<String, Object?>() ??
+            const <String, Object?>{};
 
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
             dense: true,
             leading: Icon(
-              isPass ? Icons.check_circle : Icons.cancel,
-              color: isPass
-                  ? ProfileLabTheme.passColor
-                  : ProfileLabTheme.failColor,
+              Icons.verified,
+              color: ProfileLabTheme.passColor,
               size: 20,
             ),
             title: Row(
               children: [
-                Text(testType,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 13)),
+                const Text('Cloud acceptance contract',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 const SizedBox(width: 8),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                   decoration: BoxDecoration(
-                    color: (isPass
-                            ? ProfileLabTheme.passColor
-                            : ProfileLabTheme.failColor)
-                        .withValues(alpha: 0.15),
+                    color: ProfileLabTheme.passColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Text(
-                    result.toUpperCase(),
+                  child: const Text(
+                    'COMPLETE',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: isPass
-                          ? ProfileLabTheme.passColor
-                          : ProfileLabTheme.failColor,
+                      color: ProfileLabTheme.passColor,
                     ),
                   ),
                 ),
               ],
             ),
             subtitle: Text(
-              'Recorded: $recordedAt\nDigest: $digest',
+              'Accepted: $acceptedAt\nDigest: $digest\nScenarios: ${scenarios.length}',
               style: const TextStyle(
                   fontFamily: 'Menlo', fontSize: 10, color: Color(0xFF94A3B8)),
             ),
@@ -393,24 +376,22 @@ class _TestsViewState extends State<TestsView> {
                       runSpacing: 6,
                       children: scenarios.entries.map((entry) {
                         final isPass = entry.value == 'passed';
+                        final isNotApplicable = entry.value == 'not_applicable';
+                        final scenarioColor = isNotApplicable
+                            ? const Color(0xFF94A3B8)
+                            : isPass
+                                ? ProfileLabTheme.passColor
+                                : ProfileLabTheme.failColor;
                         return Chip(
                           visualDensity: VisualDensity.compact,
-                          backgroundColor: (isPass
-                                  ? ProfileLabTheme.passColor
-                                  : ProfileLabTheme.failColor)
-                              .withValues(alpha: 0.15),
+                          backgroundColor:
+                              scenarioColor.withValues(alpha: 0.15),
                           side: BorderSide(
-                              color: (isPass
-                                      ? ProfileLabTheme.passColor
-                                      : ProfileLabTheme.failColor)
-                                  .withValues(alpha: 0.5)),
+                              color: scenarioColor.withValues(alpha: 0.5)),
                           label: Text(
                             '${entry.key}: ${entry.value}',
-                            style: TextStyle(
-                                fontSize: 10,
-                                color: isPass
-                                    ? ProfileLabTheme.passColor
-                                    : ProfileLabTheme.failColor),
+                            style:
+                                TextStyle(fontSize: 10, color: scenarioColor),
                           ),
                         );
                       }).toList(),

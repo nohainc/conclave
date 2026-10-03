@@ -89,6 +89,30 @@ names as GitHub Actions secrets and copies them to the Worker before
 deployment. Client IDs may be ordinary environment configuration, but should
 still be managed per deployment.
 
+Production Profile publication also requires the `CONCLAVE_RELEASE_PRIVATE_KEY`
+GitHub Actions secret and the `CONCLAVE_RELEASE_PUBLISHER`,
+`CONCLAVE_RELEASE_SIGNING_KEY_ID`, and `CONCLAVE_RELEASE_TRUST_KEYS_JSON`
+GitHub Actions variables. The deployment workflow transfers all four values to
+Cloudflare Worker secrets after verifying that the private key matches the
+configured public trust root. It stops before deployment if a value is missing
+or the key pair does not match. The Cloud Profile signing preflight also checks
+the configured key against Cloud's revocation state.
+
+Profile Lab access is controlled by two separate comma-separated user ID
+allowlists: `CONCLAVE_PROFILE_ADMIN_USER_IDS` for catalog and draft work, and
+`CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS` for publication and release
+operations. Configure both as GitHub Actions variables used by the deployment
+workflow; the workflow syncs them to protected Cloud Worker secrets. A release manager does not receive
+catalog or draft administration unless their ID is also in the admin list.
+
+Profile Lab builds default to `https://app.conclaveax.com`. Development builds
+can select local Cloud with
+`--dart-define=CONCLAVE_CLOUD_URL=http://localhost:8787`; the Cloud connection
+settings also allow a local origin override and can reset to the build default.
+The app accepts HTTP only for loopback addresses in development builds. Release
+builds require HTTPS. Saved Profile Lab sessions are bound to the selected
+origin, so switching Cloud targets requires signing in again.
+
 Better Auth uses database-backed HttpOnly sessions in `auth_sessions`. The
 production policy is a 14-day session with daily refresh, no session data
 cookie cache, Secure/HttpOnly/SameSite=Lax cookies, and same-origin mutation

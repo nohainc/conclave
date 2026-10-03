@@ -39,15 +39,17 @@ class ProfileLabPaths {
   Directory get logsDirectory =>
       Directory('$_home/Library/Logs/conclave.profile_lab');
 
-  /// Dedicated isolated credentials storage root:
-  /// `~/Library/Application Support/conclave.profile_lab/credentials/`
+  /// Legacy credentials root used only to remove or migrate old session files.
   Directory get credentialsDirectory =>
       Directory('${applicationSupportDirectory.path}/credentials');
 
-  /// Stored Profile Lab human session file:
-  /// `~/Library/Application Support/conclave.profile_lab/credentials/profile_lab_session.json`
+  /// Legacy session file path. New sessions are stored in macOS Keychain.
   File get sessionFile =>
       File('${credentialsDirectory.path}/profile_lab_session.json');
+
+  /// Non-secret Cloud origin override selected in Profile Lab settings.
+  File get cloudSettingsFile =>
+      File('${applicationSupportDirectory.path}/cloud_settings.json');
 
   /// Bundle identifier and secure Keychain service namespace.
   static const String bundleIdentifier = 'com.conclaveax.profile-lab';
@@ -61,7 +63,6 @@ class ProfileLabPaths {
       draftsDirectory,
       enginesDirectory,
       sandboxDirectory,
-      credentialsDirectory,
       logsDirectory,
     ]) {
       if (!await dir.exists()) {

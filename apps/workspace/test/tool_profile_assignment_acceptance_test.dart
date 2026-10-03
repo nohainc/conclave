@@ -162,19 +162,34 @@ Future<void> _withRuntime(
       WorkerExecutionPolicy policy = WorkerExecutionPolicy.restricted,
     }) async {
       sequence++;
-      final result = await supervisor.execute(
-        admission,
-        profileFile: profileFile,
-        stateDirectory: state,
-        workingDirectory: directory,
-        workerId: profile.workerTypeId,
-        maxConcurrentAssignments: 1,
-        assignmentId: '${profile.workerTypeId}-$step-$sequence',
-        prompt: prompt,
-        timeout: const Duration(minutes: 3),
-        executionPolicy: policy,
-      );
-      return result.output;
+      try {
+        final result = await supervisor.execute(
+          admission,
+          profileFile: profileFile,
+          stateDirectory: state,
+          workingDirectory: directory,
+          workerId: profile.workerTypeId,
+          maxConcurrentAssignments: 1,
+          assignmentId: '${profile.workerTypeId}-$step-$sequence',
+          prompt: prompt,
+          timeout: const Duration(minutes: 3),
+          executionPolicy: policy,
+        );
+        return result.output;
+      } on CliWorkerEngineProbeException catch (error) {
+        final diagnosticsDirectory =
+            Platform.environment['CONCLAVE_PROFILE_ACCEPTANCE_DIAGNOSTICS_DIR'];
+        if (diagnosticsDirectory != null &&
+            diagnosticsDirectory.isNotEmpty &&
+            error.localDiagnostics != null) {
+          final directory = Directory(diagnosticsDirectory);
+          await directory.create(recursive: true);
+          await File(
+            '${directory.path}/${profile.workerTypeId}-$step-$sequence.stderr',
+          ).writeAsString(error.localDiagnostics!);
+        }
+        rethrow;
+      }
     }
 
     await scenario(run, directory);

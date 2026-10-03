@@ -37,6 +37,10 @@ void main() {
         '/Users/testuser/Library/Application Support/conclave.profile_lab/credentials/profile_lab_session.json',
       );
       expect(
+        paths.cloudSettingsFile.path,
+        '/Users/testuser/Library/Application Support/conclave.profile_lab/cloud_settings.json',
+      );
+      expect(
         ProfileLabPaths.bundleIdentifier,
         'com.conclaveax.profile-lab',
       );
@@ -52,7 +56,7 @@ void main() {
         expect(await paths.draftsDirectory.exists(), isTrue);
         expect(await paths.enginesDirectory.exists(), isTrue);
         expect(await paths.sandboxDirectory.exists(), isTrue);
-        expect(await paths.credentialsDirectory.exists(), isTrue);
+        expect(await paths.credentialsDirectory.exists(), isFalse);
         expect(await paths.logsDirectory.exists(), isTrue);
       } finally {
         await temp.delete(recursive: true);

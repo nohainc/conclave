@@ -3,20 +3,25 @@
 **Status:** Canonical Architecture v8 Promotion & Evidence Specification  
 **Decisions:** [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md), [ADR-019](../decisions/ADR-019-conclave-profile-lab.md)  
 **Lifecycle Contract:** [Tool Profile Lifecycle](TOOL_PROFILE_LIFECYCLE.md)  
-**Authority:** Cloud Acceptance Validator (`apps/cloud/src/tool-profile-validation.ts`) & D1 Evidence Store (`tool_profile_acceptance_evidence`)
+**Authority:** Cloud Evidence Validator (`apps/cloud/src/tool-profile-validation.ts`) & D1 qualification/acceptance evidence stores
+
+**Manual Profile lifecycle: COMPLETE** for the implemented control path and
+fixture-backed acceptance. This status does not assert deployed Cloud or
+real-provider rollout completion. Stored evidence is a digest-bound
+authenticated assertion, not remote attestation of local execution.
 
 ---
 
 ## 1. Motivation & Problem Statement
 
-In automated, AI-assisted, and distributed engineering workflows, claims such as *"tests passed"* or *"verified for release v19"* cannot be trusted without cryptographic proof.
+In automated, AI-assisted, and distributed engineering workflows, claims such as *"tests passed"* or *"verified for release v19"* need a bounded contract that Cloud can validate and bind to the exact payload digest.
 
 If testing evidence were associated merely with a human-readable identifier (such as `chatgpt-codex v19`):
 1. An operator or AI model could run tests on candidate $A$, then modify a single argument or timeout value to produce candidate $B$, and promote candidate $B$ without re-testing.
 2. An autonomous AI repair loop could iterate through multiple patches, conflate test results across iterations, and promote a candidate whose actual payload never passed live testing.
-3. A malicious or erroneous actor could submit fabricated or stale test output.
+3. A client could submit a fabricated scenario claim or reuse a contract for a different payload unless Cloud checks the identity and digest.
 
-To guarantee that **only the exact byte sequence that was tested can ever be published or promoted**, Conclave enforces **evidence-bound promotion**.
+Conclave enforces **digest-bound lifecycle records**: each accepted contract is bound to a canonical Profile digest and immutable release identity. This prevents a record for one payload from being reused for a different payload. The contract remains an authenticated Profile Lab assertion: Cloud does not remotely observe the local Engine or provider process and does not cryptographically attest that the submitted scenarios actually ran.
 
 ---
 
@@ -51,8 +56,8 @@ Format:
 
 ## 3. The Evidence Staleness Invariant
 
-> **The Single-Byte Invariant:**  
-> If even a single byte of a draft Profile payload changes, its canonical `payloadDigest` changes immediately and irrevocably. Any prior test evidence referencing the previous digest is automatically classified as **`STALE`**.
+> **The Canonical-Digest Invariant:**
+> A change to the canonical Profile JSON changes its SHA-256 `payloadDigest`. A prior evidence contract remains bound to its original digest and cannot qualify a release with a different digest.
 
 ```text
 Draft v19 (Payload A)
@@ -69,125 +74,80 @@ Draft v19 (Payload B)
 ```
 
 ### Staleness Rules:
-1. **Zero Re-use across Edits:** Profile Lab must immediately flag all previous scenario results as `STALE` the instant the editor buffer is modified.
-2. **Publication Blocker:** Conclave Cloud rejects any `publishDraftToolProfileRelease` call where the submitted test evidence digest does not exactly match the database draft `payload_digest`.
-3. **Promotion Blocker:** Conclave Cloud rejects any `promoteToolProfileRelease` call to `stable` where the acceptance evidence `profileDigest` does not match the release record `payload_digest`.
+1. **No Cross-Digest Reuse:** Profile Lab associates local results with the candidate digest. Cloud checks submitted evidence identity and digest against the current draft or immutable release before storing or using the record.
+2. **Draft → Testing Blocker:** Before publication, Profile Lab submits its complete local execution contract to `POST /api/admin/tool-profiles/{definitionId}/releases/{version}/qualification`. Cloud accepts qualification only while the exact release remains a mutable draft and the evidence identity, digest, Engine/provider version ranges, freshness, and capability-aware scenarios all validate against the stored draft.
+3. **Publication Blocker:** `publishDraftToolProfileRelease` requires a `qualificationEvidenceId`. Cloud reloads that immutable record and repeats all qualification checks against the current draft digest in the signing operation. Missing, stale, mismatched, incomplete, or malformed qualification blocks signature generation and publication.
+4. **Promotion Blocker:** Conclave Cloud accepts only an `acceptanceEvidenceId` that names a separately submitted immutable post-publication record for the same release and payload digest. Promotion requests never contain evidence JSON.
 
 ---
 
 ## 4. Normalized Evidence Schema
 
-Every testing scenario executed in Profile Lab or in a certified test runner must produce a structured evidence record adhering to this schema:
+Local qualification and post-publication acceptance use the same shape validated by `ToolProfileAcceptanceEvidence` in `apps/cloud/src/tool-profile-validation.ts`. It retains all eight scenario keys. Cloud derives applicability from the actual Tool Profile: required scenarios must be `passed`, while scenarios for undeclared or untestable optional capabilities must be `not_applicable`. Failed or incomplete run details stay in the local Test Workbench result and are never submitted as qualification or acceptance evidence.
 
 ```json
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "profileDefinitionId": "chatgpt-codex",
   "releaseVersion": 19,
   "profileReleaseVersion": "19",
   "logicalWorkerTypeId": "chatgpt",
-  "payloadDigest": "7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069",
+  "profileDigest": "7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069",
   "engineVersion": "1.2.0",
   "providerToolName": "codex",
   "providerToolVersion": "0.187.1",
-  "profileLabVersion": "0.1.0",
-  "hostEnvironment": {
-    "os": "macOS",
-    "osVersion": "15.0.1",
-    "kernelVersion": "Darwin 24.0.0",
-    "architecture": "arm64"
-  },
-  "testRun": {
-    "testType": "local_sandbox_suite",
-    "startedAt": "2026-10-03T00:30:00.000Z",
-    "completedAt": "2026-10-03T00:30:15.240Z",
-    "durationMs": 15240,
-    "overallResult": "passed"
-  },
+  "acceptedAt": "2026-10-03T00:30:15.240Z",
   "scenarios": {
-    "schema_validation": {
-      "result": "passed",
-      "durationMs": 12,
-      "issueCode": "NONE"
-    },
-    "engine_compatibility": {
-      "result": "passed",
-      "durationMs": 5,
-      "issueCode": "NONE"
-    },
-    "executable_discovery": {
-      "result": "passed",
-      "durationMs": 45,
-      "issueCode": "NONE",
-      "discoveredPath": "/usr/local/bin/codex"
-    },
-    "provider_version_detection": {
-      "result": "passed",
-      "durationMs": 180,
-      "detectedVersion": "0.187.1",
-      "issueCode": "NONE"
-    },
-    "passive_probe": {
-      "result": "passed",
-      "durationMs": 320,
-      "issueCode": "NONE"
-    },
-    "live_probe": {
-      "result": "passed",
-      "durationMs": 2150,
-      "issueCode": "NONE"
-    },
-    "controlled_execution": {
-      "result": "passed",
-      "durationMs": 3400,
-      "issueCode": "NONE"
-    },
-    "session_create": {
-      "result": "passed",
-      "durationMs": 2800,
-      "issueCode": "NONE"
-    },
-    "session_resume": {
-      "result": "passed",
-      "durationMs": 3100,
-      "issueCode": "NONE"
-    },
-    "cancellation_and_timeout": {
-      "result": "passed",
-      "durationMs": 3228,
-      "issueCode": "NONE"
-    }
-  },
-  "provenance": {
-    "authorType": "human",
-    "actorUserId": "usr_991823ab",
-    "aiModelId": null,
-    "sourceReleaseDigest": "6b21c45..."
+    "passive_probe": "passed",
+    "live_probe": "passed",
+    "model_selection": "not_applicable",
+    "representative_workstream_write": "not_applicable",
+    "durable_session_start": "passed",
+    "durable_session_resume": "passed",
+    "cancellation": "passed",
+    "timeout": "passed"
   }
 }
 ```
+
+Cloud intentionally stores only this bounded contract for both local qualification and post-publication acceptance. The local ladder's stage durations, issue codes, and diagnostic messages remain outside the Cloud evidence object. Qualification and acceptance use separate immutable Cloud tables and IDs. A later fresh run can qualify after an earlier record expires. Cloud validates the submitted metadata and scenario statuses; it cannot independently verify the local process, provider version, or execution result, so these values are not remote device attestation.
+
+Version 2 adds `model_selection` and `not_applicable` status semantics. Cloud rejects version 1 evidence for new validation; historical version 1 rows remain stored unchanged.
+
+Local qualification, publication, acceptance, and promotion are separate requests:
+
+```text
+POST /api/admin/tool-profiles/{definitionId}/releases/{version}/qualification
+{ "evidence": { ...complete formatVersion 2 contract... } }
+-> { "qualificationEvidenceId": "<immutable ID>" }
+
+POST /api/admin/tool-profiles/{definitionId}/releases/{version}/publish
+{ "qualificationEvidenceId": "<ID returned by qualification>" }
+
+POST /api/admin/tool-profiles/{definitionId}/releases/{version}/evidence
+{ "evidence": { ...complete formatVersion 2 contract... } }
+
+POST /api/admin/tool-profiles/{definitionId}/releases/{version}/promote
+{ "channel": "stable", "acceptanceEvidenceId": "<ID returned by evidence submission>" }
+```
+
+The publish endpoint rejects client signature/key fields and requires a stored local qualification ID. The promotion endpoint rejects `acceptanceEvidence` JSON. Cloud resolves each ID within the same release and digest and revalidates its immutable record before the transition.
 
 ### 4.1 Required Metadata Attributes:
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `formatVersion` | `1` | Schema version of the evidence format. |
+| `formatVersion` | `2` | Schema version of the capability-aware evidence format. |
 | `profileDefinitionId` | `string` | Target Profile Definition identifier (e.g. `chatgpt-codex`). |
 | `releaseVersion` | `integer` | Target integer release version (e.g. `19`). |
-| `payloadDigest` | `string` | Exact 64-character SHA-256 hash of the canonical payload. |
+| `profileReleaseVersion` | `string` | Decimal representation of `releaseVersion`. |
+| `profileDigest` | `string` | Exact 64-character SHA-256 hash of the canonical payload. |
 | `logicalWorkerTypeId` | `string` | Logical worker identity (e.g. `chatgpt`). |
 | `engineVersion` | `string` | Semver of the CLI Worker Engine used during testing. |
 | `providerToolName` | `string` | Binary name of the provider CLI (e.g. `codex`). |
 | `providerToolVersion`| `string` | Semver of the installed provider CLI tool tested against. |
-| `profileLabVersion` | `string` | Version of the Profile Lab desktop application. |
-| `hostEnvironment.os`| `string` | Operating system (`macOS`). |
-| `hostEnvironment.osVersion`| `string` | macOS version string (e.g. `15.0.1`). |
-| `testRun.startedAt` | `ISO 8601` | Precise UTC start timestamp. |
-| `testRun.completedAt`| `ISO 8601` | Precise UTC completion timestamp. |
-| `testRun.durationMs`| `integer` | Total test execution duration in milliseconds. |
-| `testRun.overallResult`| `enum` | Normalized result: `"passed"` or `"failed"`. |
-| `scenarios` | `map` | Breakdown of individual test scenarios and results. |
-| `provenance` | `object` | Author provenance (`human`, `ai_generated`, `ai_assisted`). |
+| `acceptedAt` | `ISO 8601` | Client-reported UTC completion time for required scenarios. Cloud checks its format and freshness. |
+| `scenarios` | `map<string, "passed" | "not_applicable">` | Exactly the eight Cloud scenarios. Statuses must match capability applicability derived by Cloud. |
 
 ---
 
@@ -222,8 +182,8 @@ Promotion through the lifecycle channels requires meeting specific evidence crit
        | Local Sandbox Test Suite
        v
 +-------------------------------+
-| Gate 1: Publish to Testing    | ---> Requires 100% pass on all 10 local sandbox scenarios
-+-------------------------------+      bound to payloadDigest
+| Gate 1: Publish to Testing    | ---> Requires complete local Engine qualification
++-------------------------------+      bound to profileDigest; optional scenarios may be not_applicable
        |
        v
 [ Testing Channel ]
@@ -240,14 +200,52 @@ Promotion through the lifecycle channels requires meeting specific evidence crit
        | Full Real-Provider Acceptance Suite
        v
 +-------------------------------+
-| Gate 3: Promote to Stable     | ---> Strictly requires complete acceptance evidence artifact:
-+-------------------------------+      - payloadDigest match
+| Gate 3: Promote to Stable     | ---> Requires a complete Cloud-validated acceptance contract:
++-------------------------------+      - profileDigest match
                                        - engineVersion within supported range
                                        - providerToolVersion within supported range
                                        - acceptedAt within 90 days
-                                       - all required acceptance scenarios "passed"
+                                       - required scenarios "passed" and optional scenarios "not_applicable" according to the Profile
                                        - explicit human confirmation
 ```
+
+Cloud's gate validates the submitted contract's shape, identity, digest,
+version claims, freshness, and capability-aware statuses. It does not verify
+the local executable, observe the test process, or provide device attestation.
+The Profile Lab client enforces the supported execution flow by producing a
+contract only after its sandbox scenarios pass; a caller with API access can
+still submit a contract directly. Treat stored evidence IDs as immutable,
+digest-bound records of an authenticated assertion, not independent proof of
+local execution.
+
+### Gate 1: Draft → Testing local qualification
+
+Profile Lab emits qualification only after the full Test Ladder reports overall
+pass. Schema validation, Engine compatibility, executable discovery, provider
+version detection, passive probe, and live probe must pass. The sandbox must
+also execute the applicable real Engine scenarios:
+
+- `passive_probe`, `live_probe`, `cancellation`, and `timeout` are always
+  required and must be `passed`;
+- `model_selection` must be `passed` when the Profile supports model selection
+  and has an allowlisted test model, otherwise `not_applicable`;
+- `representative_workstream_write` must be `passed` when the Profile declares
+  `workstream_write`, otherwise `not_applicable`;
+- `durable_session_start` and `durable_session_resume` must be `passed` when
+  `durable_session` is declared and `session.supported` is true, otherwise
+  `not_applicable`.
+
+The sandbox emits the evidence contract only after its real Engine scenarios
+pass, and Profile Lab submits that contract to Cloud before publication. Cloud
+checks the current draft digest and identity, declared Engine/provider version
+ranges, the 90-day freshness bound, and all eight scenario statuses. It stores qualification in
+`tool_profile_local_qualification_evidence`; publication must reference that
+stored ID and Cloud repeats validation immediately before signing. This
+server-side gate validates the submitted contract; the local sandbox is the
+execution authority in the supported Profile Lab flow and emits no contract
+after a failed or incomplete run. The Cloud API accepts authenticated contract
+submissions and does not prove which client produced them or observe a provider
+CLI on the operator's machine. This workflow is not device attestation.
 
 ### Gate 3: Stable Promotion Validation Invariants
 As enforced by `validateToolProfileAcceptanceEvidence()` in `apps/cloud/src/tool-profile-validation.ts`:
@@ -256,15 +254,16 @@ As enforced by `validateToolProfileAcceptanceEvidence()` in `apps/cloud/src/tool
 3. **Engine Range Inclusion:** `evidence.engineVersion` must fall within `profile.engineCompatibility` range `[min, maxExclusive)`.
 4. **Tool Range Inclusion:** `evidence.providerToolVersion` must fall within one of `profile.providerTool.supportedVersions` ranges.
 5. **Freshness:** `acceptedAt` timestamp must not be in the future (within clock skew) and must be $\le 90\text{ days}$ old.
-6. **Required Scenarios Passed:** Every scenario in `requiredAcceptanceScenarios` must have status `"passed"`:
+6. **Capability-Aware Scenarios:** Cloud expects every scenario key and derives applicable statuses from the signed Tool Profile:
    - `passive_probe`
    - `live_probe`
-   - `representative_workstream_write`
-   - `durable_session_start`
-   - `durable_session_resume`
+   - `model_selection` (`passed` when model selection is supported with an allowlisted test model; otherwise `not_applicable`)
+   - `representative_workstream_write` (`passed` only when `workstream_write` is declared; otherwise `not_applicable`)
+   - `durable_session_start` and `durable_session_resume` (`passed` only when `durable_session` is declared and `session.supported` is true; otherwise `not_applicable`)
    - `cancellation`
    - `timeout`
-7. **Database Persistence:** Evidence is stored immutably in `tool_profile_acceptance_evidence` upon successful promotion.
+   The `durable_session` capability and `session.supported` must agree; inconsistent Profile declarations cannot be promoted.
+7. **Database Persistence:** Evidence is stored immutably in `tool_profile_acceptance_evidence` when submitted, separately from promotion. Multiple immutable records may exist for one release digest.
 
 ---
 
@@ -272,8 +271,8 @@ As enforced by `validateToolProfileAcceptanceEvidence()` in `apps/cloud/src/tool
 
 When AI models participate in Profile maintenance (e.g. self-healing Profiles when a provider CLI updates):
 
-1. **No Evidence Spoofing:** An AI agent cannot manufacture evidence. The evidence must be generated by the Profile Lab test sandbox or controlled acceptance runner executing the real provider CLI process.
-2. **Automatic Staleness on AI Edits:** When an AI model applies a patch to a draft Profile, the `payloadDigest` changes. Any previous test evidence gathered by the AI model on prior iterations is rendered `STALE`.
+1. **Proposal Is Not Evidence:** The model-backed Draft proposal flow cannot submit qualification or acceptance records. The supported Profile Lab test path emits a contract only after its Engine scenarios pass. Cloud validates the record shape and digest binding but does not independently attest to local execution.
+2. **Digest Binding after AI Edits:** When an operator applies a model proposal to a Draft, the candidate digest is recomputed when saved. Evidence for the previous digest cannot qualify the changed payload.
 3. **Closed-Loop AI Verification:** An automated AI repair cycle must follow:
    $$\text{Failing Test} \longrightarrow \text{AI Generates Draft Patch} \longrightarrow \text{Re-calculate Digest} \longrightarrow \text{Run Sandbox Tests} \longrightarrow \text{Digest-Bound Evidence Recorded}$$
-4. **Immutable Audit Record:** Cloud audit tables capture the AI model name, prompt hash, and parent release digest to guarantee complete traceability.
+4. **Local Proposal Provenance:** Profile Lab stores proposal provenance in local Draft metadata. Cloud lifecycle audit records publication and channel transitions; they do not currently attest to or store the model name, prompt hash, or local execution transcript.

@@ -58,10 +58,10 @@ class ProfileAiRepairLoopResult {
 
 class ProfileAiRepairLoopRunner {
   ProfileAiRepairLoopRunner({
-    this.assistantService = const ProfileAiAssistantService(),
+    this.assistantService = const ProfileAiHeuristicRepairService(),
   });
 
-  final ProfileAiAssistantService assistantService;
+  final ProfileAiHeuristicRepairService assistantService;
 
   /// Normalizes test ladder failures into safe structured diagnostic records.
   List<Map<String, dynamic>> normalizeLadderFailures(

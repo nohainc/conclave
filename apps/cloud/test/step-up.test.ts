@@ -24,6 +24,9 @@ describe("sensitive operation step-up policy", () => {
     expect(Object.keys(STEP_UP_REQUIREMENTS)).toEqual([
       SENSITIVE_OPERATIONS.workspaceOwnershipTransfer,
       SENSITIVE_OPERATIONS.billingSecurityChange,
+      SENSITIVE_OPERATIONS.toolProfileStablePromotion,
+      SENSITIVE_OPERATIONS.toolProfileRollback,
+      SENSITIVE_OPERATIONS.toolProfileRevoke,
     ]);
     expect(
       STEP_UP_REQUIREMENTS[SENSITIVE_OPERATIONS.workspaceOwnershipTransfer]
@@ -39,6 +42,28 @@ describe("sensitive operation step-up policy", () => {
         now,
       ),
     ).toBe(true);
+  });
+
+  it("requires fresh proof for stable promotion, rollback, and revocation", () => {
+    for (const operation of [
+      SENSITIVE_OPERATIONS.toolProfileStablePromotion,
+      SENSITIVE_OPERATIONS.toolProfileRollback,
+      SENSITIVE_OPERATIONS.toolProfileRevoke,
+    ]) {
+      expect(STEP_UP_REQUIREMENTS[operation].maxAgeMs).toBe(5 * 60 * 1000);
+      expect(STEP_UP_REQUIREMENTS[operation].methods).toEqual(["passkey"]);
+      expect(isStepUpSatisfied(record(), operation, now)).toBe(true);
+      expect(
+        isStepUpSatisfied(record({ method: "totp" }), operation, now),
+      ).toBe(false);
+      expect(
+        isStepUpSatisfied(
+          record({ authenticated_at: "2026-09-23T11:54:59.000Z" }),
+          operation,
+          now,
+        ),
+      ).toBe(false);
+    }
   });
 
   it("rejects missing, expired, stale, and unsupported proofs", () => {

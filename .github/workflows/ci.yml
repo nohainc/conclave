@@ -43,6 +43,21 @@ jobs:
       - run: flutter analyze
       - run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
 
+  profile-lab-macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Run Profile Lab checks and fixture based Engine acceptance
+        run: bash scripts/test-profile-lab-macos.sh
+      - name: Build Profile Lab for macOS
+        env:
+          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
+        run: bash scripts/build-profile-lab-macos.sh --release
+
   site-astro:
     runs-on: ubuntu-latest
     defaults:

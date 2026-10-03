@@ -85,6 +85,8 @@ The application dynamically queries Cloud for catalog and Profile state:
 
 No conditional branch such as `if worker == 'chatgpt'` or `if worker == 'gemini'` is permitted for normal Worker lifecycle behavior. Adding a new Worker (such as `claude`) in Profile Lab makes it discoverable by Workspace and orchestratable by AX without modifying application source code.
 
+Profile Lab must not keep a built-in list of provider executables. Local discovery derives executable names from the Worker catalog and loaded Tool Profiles, including Profile-declared executable candidates and standard locations. Provider session formats and resume arguments are Profile data; diagnostics and repair suggestions must not invent these settings from a provider name or a failed session scenario.
+
 ---
 
 ## 4. Product Boundaries: Profile Lab vs Workspace vs AX
@@ -203,7 +205,7 @@ Production Profile signing keys **MUST NEVER** be stored in, accessible to, or m
 The publication workflow delegates signing to a secure Cloud/CI signing boundary:
 1. Profile Lab completes local testing and validates all test evidence against the candidate `payloadDigest`.
 2. Profile Lab submits a publication request to Conclave Cloud containing the candidate payload and normalized test evidence.
-3. Conclave Cloud validates the payload schema, verifies operator authorization, and checks step-up authentication.
+3. Conclave Cloud validates the payload schema and requires release-manager authorization. Stable promotion, channel rollback, release revocation, and assignment to the Stable channel require fresh session-bound step-up authentication.
 4. The isolated Cloud/CI signer signs the canonical payload digest with the production private key.
 5. Cloud records the immutable `SignedProfileRelease` row and assigns it to the initial release stage (e.g., `Testing`).
 
@@ -303,7 +305,7 @@ Profile Lab reuses Conclave's browser-assisted human sign-in pattern (intents, a
 2. **Cloud Authorization Gates:**
    - Profile administrative endpoints (`/api/profile-admin/*`, `/api/profiles/*`, `/api/releases/*`) require permissions `profiles:admin` and `profiles:release:manage`.
    - When accessed by a desktop client, `authorizeProfileAdmin` strictly requires `context.audience === 'conclave.profile-lab.management'`.
-   - The user must also be explicitly enrolled in `CONCLAVE_PROFILE_ADMIN_USER_IDS`.
+   - Catalog and draft administration requires `CONCLAVE_PROFILE_ADMIN_USER_IDS`; publication and rollout management requires the separate `CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS` allowlist.
 
 3. **Mutual Exclusion:**
    - A normal Workspace session token (`conclave.desktop.management`) presented to Profile administrative endpoints is rejected with HTTP 403.
@@ -311,8 +313,12 @@ Profile Lab reuses Conclave's browser-assisted human sign-in pattern (intents, a
    - Workspace credentials and Profile Lab credentials cannot be interchanged or accidentally escalated.
 
 4. **Isolated Local Credential Namespace:**
-   - Profile Lab stores active sessions in `~/Library/Application Support/conclave.profile_lab/credentials/profile_lab_session.json` with restricted POSIX `0600` permissions.
+   - Profile Lab stores active sessions in the macOS login Keychain under the `com.conclaveax.profile-lab` service.
+   - Keychain session envelopes include the normalized Cloud origin. A session is loaded only for that same origin; changing origins clears the local session. Legacy sessions that lack origin binding are discarded and their plaintext files removed.
    - Profile Lab never interacts with Workspace's Keychain namespace, installation IDs, or local database state.
+
+### Cloud Origin Configuration:
+Profile Lab's build default is `https://app.conclaveax.com`; `CONCLAVE_CLOUD_URL` can set an environment-specific build default. A local development build may use `http://localhost:8787`. The Cloud connection settings persist an origin override and can reset it to the build default. Every HTTP client requires an origin-only URL and permits plaintext HTTP only for loopback in non-release builds.
 
 ---
 
@@ -321,9 +327,13 @@ Profile Lab reuses Conclave's browser-assisted human sign-in pattern (intents, a
 Profile Lab interacts with Conclave Cloud exclusively via bounded HTTP/JSON endpoints. **Profile Lab never connects directly to Cloudflare D1 or runs raw SQL queries.** All persistence, validation, immutability triggers, and audit logging remain owned by Cloud routes.
 
 Every administrative endpoint is guarded by `authorizeToolProfileAdmin(request, env, ctx)`, which enforces:
-1. A valid authenticated user in `CONCLAVE_PROFILE_ADMIN_USER_IDS`.
+1. A valid authenticated user in the allowlist for the required permission: `CONCLAVE_PROFILE_ADMIN_USER_IDS` for administration or `CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS` for release management.
 2. Required permissions (`profiles:admin` or `profiles:release:manage`).
 3. The dedicated desktop audience `conclave.profile-lab.management`.
+
+Stable promotion, Stable channel assignment, release revocation, and channel rollback additionally require a fresh session-bound passkey step-up (five-minute maximum age). The desktop session binds a browser-completed passkey ceremony through `POST /api/desktop-auth/profile-lab/step-up/complete`; stale ceremonies are rejected. Missing or stale step-up proof returns HTTP 428. Publication and other release-manager actions require `profiles:release:manage` but do not require step-up.
+
+Profile Lab execution creates unique scratch directories under its dedicated sandbox root. The root and run directory must be real directories contained at the expected path. Active Engine assignments are cancelled and the supervisor is disposed during teardown; cleanup errors are surfaced and prevent a passing ladder result.
 
 ### Administrative Read and Write Endpoints:
 
@@ -339,7 +349,7 @@ Every administrative endpoint is guarded by `authorizeToolProfileAdmin(request, 
 | `POST` | `/api/admin/tool-profiles/:profileDefinitionId/releases` | Creates a new draft release version with strict schema and credential-leak validation. |
 | `PUT` | `/api/admin/tool-profiles/:profileDefinitionId/releases/:version/draft` | Updates the payload of an unreleased draft version (recomputing `payloadDigest`). |
 | `POST` | `/api/admin/tool-profiles/:profileDefinitionId/releases/:version/publish` | Freezes and cryptographically signs a draft release, transitioning it to `testing`. Payload becomes immutable. |
-| `POST` | `/api/admin/tool-profiles/:profileDefinitionId/releases/:version/promote` | Promotes a release into `beta` or `stable`. Promoting to `stable` requires complete verified acceptance evidence bound to the exact payload digest. |
+| `POST` | `/api/admin/tool-profiles/:profileDefinitionId/releases/:version/promote` | Promotes a release into `beta` or `stable`. Promoting to `stable` requires a complete Cloud-validated acceptance contract bound to the exact payload digest. |
 | `POST` | `/api/admin/tool-profiles/:profileDefinitionId/releases/:version/retire` | Retires a release (must not be targeted by an active channel pointer). |
 | `POST` | `/api/admin/tool-profiles/:profileDefinitionId/releases/:version/revoke` | Revokes a release immediately and clears any channel pointers targeting it via DB triggers. |
 | `GET` | `/api/admin/tool-profiles/channels` | Lists all active channel pointers across all profile definitions. |
@@ -360,17 +370,15 @@ Every administrative endpoint is guarded by `authorizeToolProfileAdmin(request, 
 ## 8. Manual Profile Lifecycle Acceptance & AI Maintenance Boundary
 
 ### Manual Lifecycle Acceptance Decision:
-The manual Profile lifecycle is **accepted and declared complete**. The system reliably guarantees that a human engineer can:
-1. Create a completely new Worker and Profile Definition dynamically via REST APIs;
-2. Author and locally test a Draft Profile payload against real installed provider CLIs in an isolated sandbox;
-3. Capture verified test evidence and request Ed25519-signed release publication;
-4. Manage channel promotion (`testing` → `beta` → `stable`), rollback, and emergency revocation;
-5. Observe the new Worker dynamically in Conclave Workspace and Conclave AX **without modifying application source code**.
+**Manual Profile lifecycle: COMPLETE** for the implemented control path. Profile Lab and Cloud provide Worker/Profile creation, local Draft editing and Engine-backed qualification, signed publication, channel promotion, rollback, and revocation. Fixture acceptance verifies dynamic Workspace discovery and Work execution through AX without Worker-specific source changes. Publication and Stable promotion require separately stored Cloud qualification and acceptance record IDs.
+
+This status does not mean Cloud cryptographically attests that a local provider CLI executed the submitted evidence scenarios. Cloud validates the authenticated contract's identity, payload digest, version ranges, freshness, and capability-derived scenario map, then stores it immutably. Real-provider coverage and deployed Testing Workspace rollout are tracked independently in the acceptance records. See the [evidence contract](../specifications/TOOL_PROFILE_EVIDENCE_CONTRACT.md) for these limits.
 
 ### AI Maintenance Boundary:
 Autonomous AI agents are permitted to participate in Profile maintenance **only** by generating and proposing candidate Draft Profile revisions within this verified manual framework:
 - Conclave owns persistent state and enforces strict schema validation and signature checks.
-- AI proposals execute as unsigned `LocalDraftProfileCandidate` instances in Profile Lab's isolated sandbox.
-- Material changes require explicit human review and step-up confirmation before release publication or channel promotion.
+- Model-backed proposals run through the generic CLI Worker Engine using a Cloud-selected Stable Worker Profile whose signature and revocation state Profile Lab verifies. The unsigned target Draft is never used as the model runner.
+- The operator explicitly consents before Draft content and bounded diagnostics are sent to the selected provider CLI. Provider credentials remain under local CLI ownership and are never collected by Profile Lab.
+- Model output must validate as a Tool Profile and preserve Worker, Profile, release version, and provider identity. Profile Lab presents a diff and requires an explicit human review-and-apply action; proposal provenance is kept in local Draft metadata.
+- AI proposals modify only local Draft state. Qualification, publication, signing, Stable promotion, rollback, and revocation remain separate human-controlled workflows with their existing Cloud authorization and step-up checks.
 - Uncontrolled AI release authority is strictly prohibited.
-

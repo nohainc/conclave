@@ -36,6 +36,9 @@ echo "Running Conclave Profile Lab macOS verification pipeline"
 cd "$PROFILE_LAB_DIR"
 flutter pub get
 
+echo "Building the production CLI Worker Engine binary for fixture acceptance..."
+bash "$ROOT/scripts/build-cli-worker-engine.sh"
+
 echo "Running formatting check..."
 dart format --output=none --set-exit-if-changed lib test
 

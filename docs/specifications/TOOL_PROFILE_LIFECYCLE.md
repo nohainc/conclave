@@ -74,7 +74,7 @@ The lifecycle defines six mutually exclusive states stored in `tool_profile_rele
 | `draft` | **Mutable** | No | None | **Forbidden** (Profile Lab sandbox only) | Active candidate undergoing editing, schema validation, and local CLI sandbox testing. |
 | `testing` | **Immutable** | **Yes** (Ed25519) | `testing` | Workspaces on `testing` channel | Published and signed release deployed to testing Workspaces for integration verification. |
 | `beta` | **Immutable** | **Yes** (Ed25519) | `testing`, `beta` | Workspaces on `testing` or `beta` channels | Promoted release evaluated in broader operational environments. |
-| `stable` | **Immutable** | **Yes** (Ed25519) | `testing`, `beta`, `stable` | All Workspaces | General production release. Requires verified acceptance evidence bound to payload digest. |
+| `stable` | **Immutable** | **Yes** (Ed25519) | `testing`, `beta`, `stable` | All Workspaces | General production release. Requires a Cloud-validated acceptance contract bound to the payload digest. |
 | `retired` | **Immutable** | Yes | None | Existing executions finish; no new deployments | Deprecated release. Cannot be targeted by active channel pointers. |
 | `revoked` | **Immutable** | N/A | None | **Rejected immediately** | Critical defect or security hazard. Channel pointers cleared automatically; execution blocked. |
 
@@ -120,7 +120,7 @@ State transitions are strictly validated by Cloud registry routes and enforced i
 | :--- | :--- | :--- | :--- |
 | `draft` | `testing`, `retired`, `revoked` | Publication requires valid Ed25519 signature over canonical signing message. | `beta`, `stable` (cannot skip testing) |
 | `testing` | `beta`, `stable`, `retired`, `revoked` | Promotion requires operator authorization. `stable` requires acceptance evidence. | `draft` (cannot un-publish) |
-| `beta` | `stable`, `retired`, `revoked` | `stable` promotion requires verified acceptance evidence. | `draft`, `testing` |
+| `beta` | `stable`, `retired`, `revoked` | `stable` promotion requires a Cloud-validated acceptance contract. | `draft`, `testing` |
 | `stable` | `retired`, `revoked` | Retiring requires active channel pointer to be moved first. Revocation requires reason. | `draft`, `testing`, `beta` |
 | `retired` | `revoked` | Emergency revocation of previously retired release. | `draft`, `testing`, `beta`, `stable` |
 | `revoked` | *(None — Terminal)* | Irreversible security boundary. | Any transition out of `revoked` |
@@ -155,23 +155,22 @@ State transitions are strictly validated by Cloud registry routes and enforced i
   5. Controlled execution & output parsing (JSONL events).
   6. Session creation & session resumption.
   7. Timeout, error mapping, and cancellation process cleanup.
-- **Evidence Binding:** Every test outcome is recorded and cryptographically bound to the candidate's SHA-256 `payloadDigest` according to the [Tool Profile Evidence-Bound Promotion Contract](TOOL_PROFILE_EVIDENCE_CONTRACT.md).
-- **Stale Evidence Invariant:** If the draft payload is edited, its `payloadDigest` changes immediately, rendering all prior test evidence `STALE`.
+- **Evidence Binding:** A passing run emits the capability-aware Cloud evidence contract bound to the candidate's canonical SHA-256 `payloadDigest`. Profile Lab submits it as local qualification before publication. Cloud validates the submitted contract against the stored draft and returns the qualification ID required by publication.
+- **Digest Binding:** If a draft edit changes its canonical payload, its `payloadDigest` changes. A record for the prior digest cannot qualify the changed payload.
 
 ### Step 4: Publish & Freeze (`draft` $\to$ `testing`)
 - **Action:** Profile Lab operator requests release publication.
 - **Preconditions:**
-  1. All required local tests pass with non-stale evidence bound to the current `payloadDigest`.
+  1. The complete local Test Ladder passes and a fresh qualification record is stored in Cloud for the current `payloadDigest`.
   2. Candidate payload passes static validation.
   3. User holds `profiles:release:manage` or `profiles:admin` authority.
 - **Signing Ceremony:**
-  1. Profile Lab submits candidate payload and test evidence to Conclave Cloud.
-  2. Cloud verifies the payload digest and user authorization.
-  3. Isolated Cloud/CI signing infrastructure signs the canonical message:
+  1. Profile Lab submits the local sandbox contract to the draft qualification endpoint; Cloud checks identity, digest, supported Engine/provider versions, freshness, and all required scenario statuses before storing an immutable qualification record.
+  2. Profile Lab submits the returned `qualificationEvidenceId` with the publish request. Cloud reloads and revalidates that record against the current draft, checks user authorization and signer readiness, then signs the canonical message:
      ```text
      CONCLAVE_TOOL_PROFILE_RELEASE:v1:<publisher>:<signingKeyId>:<payloadDigest>:<profileDefinitionId>:<releaseVersion>:<logicalWorkerTypeId>:<engineFamily>:<minEngine>:<maxExclusiveEngine>
      ```
-  4. Cloud updates the release record: `signature`, `signing_key_id`, `publisher`, `published_at = NOW()`, `lifecycle_state = 'testing'`.
+  3. Cloud updates the release record: `signature`, `signing_key_id`, `publisher`, `published_at = NOW()`, `lifecycle_state = 'testing'`. The lifecycle audit records the qualification ID.
 - **Database Trigger:** `tool_profile_release_payload_immutable` activates. From this timestamp forward, any SQL UPDATE targeting payload or identity fields will abort with:
   `"published Tool Profile release payload is immutable"`.
   Any DELETE will abort with:
@@ -187,17 +186,25 @@ State transitions are strictly validated by Cloud registry routes and enforced i
 
 ### Step 6: Promotion to Stable (`beta` or `testing` $\to$ `stable`)
 - **Action:** Release is promoted to the production `stable` channel.
-- **Strict Evidence Gate:** Stable promotion strictly requires verified acceptance evidence (`tool_profile_acceptance_evidence`) meeting all requirements in the [Tool Profile Evidence-Bound Promotion Contract](TOOL_PROFILE_EVIDENCE_CONTRACT.md):
+- **Evidence Gate:** Stable promotion requires an acceptance contract stored in `tool_profile_acceptance_evidence` and meeting the Cloud checks in the [Tool Profile Evidence-Bound Promotion Contract](TOOL_PROFILE_EVIDENCE_CONTRACT.md):
   - Must match the release's exact `payload_digest`.
-  - Must report passing scenarios for passive probe, live probe, full-cycle execution, session resume, and cancellation.
-  - Must be generated against real provider CLI software within the allowable version range.
+  - Must be referenced by its stored `acceptanceEvidenceId`; promotion requests do not carry evidence JSON.
+  - Cloud reloads the immutable record and revalidates all eight capability-aware scenarios.
+  - The client-reported provider CLI version must be within the Profile's declared range. Cloud cannot attest to the local binary.
   - Must be no older than 90 days.
 - **Payload Effect:** **ZERO.** Payload is never edited.
 - **Database Operations:**
-  1. Insert acceptance evidence into `tool_profile_acceptance_evidence`.
-  2. Update `tool_profile_releases.lifecycle_state = 'stable'`.
-  3. Update `tool_profile_channel_pointers` for channel `'stable'` to point to `release_version`.
-  4. Audit row inserted: `promoted_to_stable`.
+  1. Before promotion, submit evidence separately to Cloud; Cloud inserts the validated record into `tool_profile_acceptance_evidence` and returns its ID.
+  2. Promotion references that stored evidence ID, which Cloud revalidates against the exact release digest.
+  3. Update `tool_profile_releases.lifecycle_state = 'stable'`.
+  4. Update `tool_profile_channel_pointers` for channel `'stable'` to point to `release_version`.
+  5. Audit row inserted: `promoted_to_stable`, with the evidence ID recorded in its reason.
+
+Cloud checks the submitted contract and stores it immutably, but does not
+observe local Engine or provider execution. The Profile Lab flow emits a
+contract only after its applicable local scenarios pass; Cloud API access alone
+does not prove that the submitter used that flow. See the [evidence contract](TOOL_PROFILE_EVIDENCE_CONTRACT.md)
+for the trust boundary and the separately tracked real-provider rollout gates.
 
 ---
 

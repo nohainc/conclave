@@ -53,65 +53,37 @@ void main() {
         throwsA(isA<FormatException>()),
       );
     });
-
-    test('persists to file with isolated namespace and loads successfully',
-        () async {
-      final tempDir =
-          await Directory.systemTemp.createTemp('profile_lab_session_test_');
-      addTearDown(() => tempDir.delete(recursive: true));
-
-      final sessionFile =
-          File('${tempDir.path}/credentials/profile_lab_session.json');
-      final expiresAt = DateTime.now().toUtc().add(const Duration(days: 30));
-      final session = ProfileLabSession(
-        credential: 'conclave_dhs_sample_cred',
-        sessionId: 'session-sample-1',
-        userId: 'admin-1',
-        displayName: 'Security Admin',
-        email: 'admin@conclave.test',
-        expiresAt: expiresAt,
-      );
-
-      await session.saveToFile(sessionFile);
-      expect(await sessionFile.exists(), isTrue);
-
-      final loaded = await ProfileLabSession.loadFromFile(sessionFile);
-      expect(loaded, isNotNull);
-      expect(loaded!.credential, 'conclave_dhs_sample_cred');
-      expect(loaded.sessionId, 'session-sample-1');
-      expect(loaded.userId, 'admin-1');
-      expect(loaded.audience, 'conclave.profile-lab.management');
-
-      await ProfileLabSession.clearFile(sessionFile);
-      expect(await sessionFile.exists(), isFalse);
-    });
-
-    test('ignores and clears expired stored sessions', () async {
-      final tempDir =
-          await Directory.systemTemp.createTemp('profile_lab_expired_test_');
-      addTearDown(() => tempDir.delete(recursive: true));
-
-      final sessionFile =
-          File('${tempDir.path}/credentials/profile_lab_session.json');
-      final expired = ProfileLabSession(
-        credential: 'expired-cred',
-        sessionId: 'session-expired',
-        userId: 'admin-1',
-        displayName: 'Expired Admin',
-        email: 'admin@conclave.test',
-        expiresAt: DateTime.now().toUtc().subtract(const Duration(minutes: 5)),
-      );
-
-      await expired.saveToFile(sessionFile);
-      expect(await sessionFile.exists(), isTrue);
-
-      final loaded = await ProfileLabSession.loadFromFile(sessionFile);
-      expect(loaded, isNull);
-      expect(await sessionFile.exists(), isFalse);
-    });
   });
 
   group('ProfileLabAuthClient', () {
+    test('binds browser passkey proof to the Profile Lab session', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        expect(request.method, 'POST');
+        expect(
+            request.uri.path, '/api/desktop-auth/profile-lab/step-up/complete');
+        expect(request.headers.value(HttpHeaders.authorizationHeader),
+            'Bearer profile-lab-token');
+        request.response.headers.contentType = ContentType.json;
+        request.response.write('{"ok":true,"method":"passkey"}');
+        await request.response.close();
+      });
+      final client =
+          ProfileLabAuthClient(cloudUrl: 'http://127.0.0.1:${server.port}');
+      addTearDown(client.close);
+      final session = ProfileLabSession(
+        credential: 'profile-lab-token',
+        sessionId: 'session-step-up',
+        userId: 'admin-1',
+        displayName: 'Admin',
+        email: 'admin@conclave.test',
+        expiresAt: DateTime.now().toUtc().add(const Duration(days: 1)),
+      );
+
+      await client.completeStepUp(session);
+    });
+
     test(
         'creates intent with conclave.profile-lab.management audience and clientName',
         () async {

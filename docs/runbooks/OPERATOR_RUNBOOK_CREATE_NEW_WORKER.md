@@ -4,11 +4,13 @@
 **Surface:** Conclave Profile Lab (`apps/profile_lab`)  
 **Scope:** Creating a new Logical Worker, Tool Profile Definition, testing initial Draft payload, publishing a signed release, and promoting through release channels.
 
+Before publication, complete the local Test Ladder for the exact draft. Profile Lab submits the resulting qualification to Cloud, and Cloud requires its returned ID to publish. Stable promotion separately requires post-publication Cloud acceptance evidence.
+
 ---
 
 ## Prerequisites
 
-1. **Profile Lab Access:** Maintainer account with `profiles:admin` scope authenticated in Profile Lab (`apps/profile_lab`).
+1. **Profile Lab Access:** `profiles:admin` for catalog and draft work, plus `profiles:release:manage` for publication and rollout. Stable promotion, Stable channel assignment, rollback, and revocation also require a recent passkey step-up in the Profile Lab session.
 2. **Provider CLI Binary:** Target provider CLI binary installed on the maintainer's workstation (e.g. `claude`, `codex`, or `agy`).
 3. **Environment:** macOS environment with local provider CLI authenticated via vendor login flow (e.g., `claude login`).
 
@@ -60,16 +62,15 @@
    - Profile Lab executes the CLI in sandbox mode and validates event streaming and stdout parsing.
 4. Click **Run Session Diagnostic Test**:
    - Verifies multi-turn session creation and resumption.
-5. Review the **Evidence Checklist**. All indicators (Schema, Passive Probe, Live Probe, Session Test) must show green checkmarks.
+5. Run the complete **Test Ladder**. Schema, Engine compatibility, discovery, version, passive/live probes, applicable model/write/session scenarios, cancellation, and timeout must pass; only capability-inapplicable scenarios may be marked not applicable.
 
 ---
 
 ## Step 4: Request Signed Release Publication
 
-1. With all evidence checklist items passing, click **Publish Signed Release**.
-2. Profile Lab packages the Draft JSON payload and the sealed `ToolProfileEvidenceContract` artifact.
-3. Profile Lab sends `POST /api/admin/workers/definitions/claude-code/releases` to Conclave Cloud.
-4. Cloud validates evidence completeness, generates the Ed25519 signature over the payload digest, and writes an immutable `tool_profile_releases` row (e.g., `Version 1`).
+1. Review the Draft payload and matching local qualification, then click **Qualify, Publish & Sign**.
+2. Profile Lab submits the exact qualification contract to Cloud and receives an immutable `qualificationEvidenceId`.
+3. Cloud revalidates the stored qualification against the current draft and requires its ID on the publish request before signing and writing the immutable release row (e.g., `Version 1`).
 
 ---
 
@@ -93,10 +94,9 @@
 
 ---
 
-## Step 7: Promote to Beta and Stable
+## Step 7: Promote to Beta
 
 1. After successful operational verification in the `testing` channel:
    - Return to Profile Lab -> **Releases & Channels**.
    - Promote Version 1 to **Beta Channel**.
-   - After broader testing, promote Version 1 to **Stable Channel**.
-2. All production Workspaces on `stable` channel now receive `Claude` automatically upon next catalog sync.
+2. Stable promotion requires a separate post-publication acceptance evidence record stored in Cloud. Profile Lab submits the qualifying evidence separately and promotes using only the returned evidence ID.

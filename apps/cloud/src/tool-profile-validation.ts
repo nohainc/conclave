@@ -44,16 +44,17 @@ export interface ToolProfileReleaseIdentity {
 }
 
 export interface ToolProfileAcceptanceEvidence {
-  readonly formatVersion: 1;
+  readonly formatVersion: 2;
   readonly profileDefinitionId: string;
   readonly releaseVersion: number;
+  readonly profileReleaseVersion: string;
   readonly profileDigest: string;
   readonly logicalWorkerTypeId: string;
   readonly engineVersion: string;
   readonly providerToolName: string;
   readonly providerToolVersion: string;
   readonly acceptedAt: string;
-  readonly scenarios: Readonly<Record<string, "passed">>;
+  readonly scenarios: Readonly<Record<string, "passed" | "not_applicable">>;
 }
 
 export const channelNames = new Set<ToolProfileChannel>([
@@ -71,15 +72,63 @@ export const productCapabilities = new Set([
   "audio",
   "video",
 ]);
-const requiredAcceptanceScenarios = [
+const acceptanceScenarios = [
   "passive_probe",
   "live_probe",
+  "model_selection",
   "representative_workstream_write",
   "durable_session_start",
   "durable_session_resume",
   "cancellation",
   "timeout",
 ] as const;
+
+export type ToolProfileAcceptanceScenario =
+  (typeof acceptanceScenarios)[number];
+export type ToolProfileAcceptanceScenarioStatus = "passed" | "not_applicable";
+
+/**
+ * Returns the exact scenario statuses expected for a Tool Profile. Cloud and
+ * Profile Lab retain all eight scenario keys; optional capabilities are
+ * explicitly recorded as not_applicable rather than omitted or passed.
+ */
+export function toolProfileAcceptanceScenarioStatuses(
+  profile: ToolProfileV1,
+): Readonly<
+  Record<ToolProfileAcceptanceScenario, ToolProfileAcceptanceScenarioStatus>
+> {
+  const supportsDurableSession =
+    profile.capabilities.includes("durable_session");
+  if (supportsDurableSession !== profile.session.supported) {
+    throw new ToolProfileRegistryError(
+      409,
+      "Tool Profile durable_session capability does not match its session configuration",
+    );
+  }
+  const statuses: Record<
+    ToolProfileAcceptanceScenario,
+    ToolProfileAcceptanceScenarioStatus
+  > = {
+    passive_probe: "passed",
+    live_probe: "passed",
+    model_selection:
+      profile.model.supported && (profile.model.allowlist?.length ?? 0) > 0
+        ? "passed"
+        : "not_applicable",
+    representative_workstream_write: profile.capabilities.includes(
+      "workstream_write",
+    )
+      ? "passed"
+      : "not_applicable",
+    durable_session_start: supportsDurableSession ? "passed" : "not_applicable",
+    durable_session_resume: supportsDurableSession
+      ? "passed"
+      : "not_applicable",
+    cancellation: "passed",
+    timeout: "passed",
+  };
+  return statuses;
+}
 
 function compareReleaseSemver(left: string, right: string): number {
   const parse = (value: string) => {
@@ -146,11 +195,14 @@ export function validateToolProfileAcceptanceEvidence(
     payloadDigest: string;
     profile: ToolProfileV1;
   },
+  purpose: "acceptance" | "local qualification" = "acceptance",
 ): ToolProfileAcceptanceEvidence {
   const fail = (): never => {
     throw new ToolProfileRegistryError(
       409,
-      "Stable promotion requires complete real Profile acceptance evidence",
+      purpose === "acceptance"
+        ? "Stable promotion requires complete real Profile acceptance evidence"
+        : "Draft publication requires a complete local execution qualification",
     );
   };
   if (!input || typeof input !== "object" || Array.isArray(input))
@@ -186,20 +238,10 @@ export function validateToolProfileAcceptanceEvidence(
     "providerToolVersion",
     "acceptedAt",
     "scenarios",
-    "testType",
-    "normalizedResult",
-    "status",
-    "durationMs",
-    "osVersion",
-    "testMachineClass",
-    "issueCode",
-    "issueCodes",
-    "boundedDiagnostics",
-    "overrideReason",
   ]);
   if (Object.keys(evidence).some((key) => !allowedKeys.has(key))) return fail();
   if (
-    evidence.formatVersion !== 1 ||
+    evidence.formatVersion !== 2 ||
     evidence.profileDefinitionId !== expected.identity.profileDefinitionId ||
     evidence.releaseVersion !== expected.identity.releaseVersion ||
     evidence.profileReleaseVersion !==
@@ -226,10 +268,22 @@ export function validateToolProfileAcceptanceEvidence(
   ) {
     return fail();
   }
+  let expectedScenarioStatuses: ReturnType<
+    typeof toolProfileAcceptanceScenarioStatuses
+  >;
+  try {
+    expectedScenarioStatuses = toolProfileAcceptanceScenarioStatuses(
+      expected.profile,
+    );
+  } catch {
+    return fail();
+  }
   const scenarios = evidence.scenarios as Record<string, unknown>;
   if (
-    Object.keys(scenarios).length !== requiredAcceptanceScenarios.length ||
-    requiredAcceptanceScenarios.some((name) => scenarios[name] !== "passed")
+    Object.keys(scenarios).length !== acceptanceScenarios.length ||
+    acceptanceScenarios.some(
+      (name) => scenarios[name] !== expectedScenarioStatuses[name],
+    )
   ) {
     return fail();
   }

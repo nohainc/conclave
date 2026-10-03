@@ -30,14 +30,18 @@ export async function authorizeToolProfileAdmin(
   permission: "profiles:admin" | "profiles:release:manage" = "profiles:admin",
 ): Promise<SecurityContext> {
   const actor = await securityContext(request, env, ctx);
-  const adminUserIds = (env.CONCLAVE_PROFILE_ADMIN_USER_IDS ?? "")
+  const configuredUsers =
+    permission === "profiles:release:manage"
+      ? env.CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS
+      : env.CONCLAVE_PROFILE_ADMIN_USER_IDS;
+  const adminUserIds = (configuredUsers ?? "")
     .split(",")
     .map((userId) => userId.trim())
     .filter(Boolean);
   try {
     authorizeSecurityProfileAdmin(actor, adminUserIds, permission);
   } catch {
-    throw new HttpError(403, "Profile administrator authorization is required");
+    throw new HttpError(403, `The ${permission} permission is required`);
   }
   return actor;
 }

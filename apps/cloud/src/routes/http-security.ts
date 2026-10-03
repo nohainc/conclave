@@ -145,10 +145,13 @@ export class HttpError extends Error {
 }
 
 export type SecurityEnv = Env & {
-  /** Comma-separated user IDs permitted to administer Profiles and releases. */
+  /** Comma-separated user IDs permitted to administer catalog entries and drafts. */
   readonly CONCLAVE_PROFILE_ADMIN_USER_IDS?: string;
+  readonly CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS?: string;
   readonly CONCLAVE_RELEASE_TRUST_KEYS_JSON?: string;
   readonly CONCLAVE_RELEASE_PUBLISHER?: string;
+  readonly CONCLAVE_RELEASE_PRIVATE_KEY?: string;
+  readonly CONCLAVE_RELEASE_SIGNING_KEY_ID?: string;
   readonly BETTER_AUTH_SECRET?: string;
   readonly BETTER_AUTH_URL?: string;
   readonly CONCLAVE_AUTH_GITHUB_CLIENT_ID?: string;
@@ -310,7 +313,11 @@ export async function authorizeRequest(
     permission === "profiles:admin" ||
     permission === "profiles:release:manage"
   ) {
-    const adminUserIds = (env.CONCLAVE_PROFILE_ADMIN_USER_IDS ?? "")
+    const configuredUsers =
+      permission === "profiles:release:manage"
+        ? env.CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS
+        : env.CONCLAVE_PROFILE_ADMIN_USER_IDS;
+    const adminUserIds = (configuredUsers ?? "")
       .split(",")
       .map((userId) => userId.trim())
       .filter(Boolean);

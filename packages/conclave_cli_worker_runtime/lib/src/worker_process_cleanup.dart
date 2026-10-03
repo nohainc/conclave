@@ -6,16 +6,66 @@ import 'dart:io';
 class WorkerProcessCleanup {
   const WorkerProcessCleanup();
 
+  Future<void> terminateTree(Process process, {required bool force}) async {
+    if (Platform.isWindows) {
+      await Process.run('taskkill', [
+        '/PID',
+        '${process.pid}',
+        '/T',
+        if (force) '/F',
+      ]);
+      return;
+    }
+
+    final descendants = await _descendantsOf(process.pid);
+    final signal = force ? ProcessSignal.sigkill : ProcessSignal.sigterm;
+    for (final pid in descendants) {
+      Process.killPid(pid, signal);
+    }
+    process.kill(signal);
+  }
+
   Future<int> terminate(
     Process process, {
     Duration grace = const Duration(seconds: 2),
   }) async {
-    process.kill(ProcessSignal.sigterm);
+    await terminateTree(process, force: false);
     try {
       return await process.exitCode.timeout(grace);
     } on TimeoutException {
-      process.kill(ProcessSignal.sigkill);
+      await terminateTree(process, force: true);
       return process.exitCode;
+    }
+  }
+
+  Future<List<int>> _descendantsOf(int rootPid) async {
+    try {
+      final result = await Process.run('ps', ['-axo', 'pid=,ppid=']);
+      if (result.exitCode != 0) return const [];
+      final childrenByParent = <int, List<int>>{};
+      for (final line in result.stdout.toString().split('\n')) {
+        final values = line.trim().split(RegExp(r'\s+'));
+        if (values.length != 2) continue;
+        final pid = int.tryParse(values[0]);
+        final parentPid = int.tryParse(values[1]);
+        if (pid != null && parentPid != null) {
+          childrenByParent.putIfAbsent(parentPid, () => []).add(pid);
+        }
+      }
+      final ordered = <int>[];
+      final visited = <int>{};
+      void visit(int parentPid) {
+        for (final childPid in childrenByParent[parentPid] ?? const <int>[]) {
+          if (!visited.add(childPid)) continue;
+          visit(childPid);
+          ordered.add(childPid);
+        }
+      }
+
+      visit(rootPid);
+      return ordered;
+    } on Object {
+      return const [];
     }
   }
 }

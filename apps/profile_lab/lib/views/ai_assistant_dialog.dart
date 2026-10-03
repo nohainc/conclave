@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../controllers/profile_lab_controller.dart';
@@ -6,6 +6,7 @@ import '../theme/profile_lab_theme.dart';
 import '../utils/ai_provenance.dart';
 import '../utils/profile_ai_assistant.dart';
 import '../utils/profile_domain_diff.dart';
+import '../utils/profile_lab_model_proposals.dart';
 
 class AiAssistantDialog extends StatefulWidget {
   const AiAssistantDialog({super.key, required this.controller});
@@ -27,11 +28,16 @@ class AiAssistantDialog extends StatefulWidget {
 class _AiAssistantDialogState extends State<AiAssistantDialog> {
   final _instructionCtrl = TextEditingController(
     text:
-        'Analyze passive probe and execution arguments, then propose an updated Tool Profile candidate.',
+        'Review the current Draft and recent test diagnostics. Suggest a minimal safe improvement.',
   );
-  final _assistantService = const ProfileAiAssistantService();
+  final _contextBuilder = const ProfileAiAssistantContextBuilder();
 
   late AiAssistantContext _context;
+  List<ProfileLabAiModelOption> _models = [];
+  String? _selectedModelId;
+  String? _generationError;
+  bool _loadingModels = true;
+  bool _shareContextConfirmed = false;
   Map<String, dynamic>? _proposedPayload;
   List<DomainDiffGroup> _proposedDiffs = [];
   bool _isGenerating = false;
@@ -39,31 +45,68 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
   @override
   void initState() {
     super.initState();
-    _context = _assistantService.gatherContext(widget.controller);
+    _context = _contextBuilder.gatherContext(widget.controller);
+    unawaited(_loadModels());
   }
 
   @override
   void dispose() {
+    if (_isGenerating) {
+      unawaited(widget.controller.cancelAiDraftProposal());
+    }
     _instructionCtrl.dispose();
     super.dispose();
   }
 
-  void _generateProposal() {
-    setState(() => _isGenerating = true);
+  Future<void> _loadModels() async {
+    try {
+      final models = await widget.controller.loadAvailableAiModels();
+      if (!mounted) return;
+      setState(() {
+        _models = models;
+        _selectedModelId = models.firstOrNull?.id;
+        _generationError =
+            models.isEmpty ? widget.controller.aiProposalError : null;
+        _loadingModels = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _generationError = error.toString();
+        _loadingModels = false;
+      });
+    }
+  }
 
-    final proposed = _assistantService.proposeCandidateDraft(
-      context: _context,
-      userInstruction: _instructionCtrl.text.trim(),
-    );
-
-    final diffs = ProfileDomainDiffCalculator.computeDiff(
-        _context.currentDraft, proposed);
-
+  Future<void> _generateProposal() async {
+    final modelId = _selectedModelId;
+    if (modelId == null) return;
     setState(() {
-      _proposedPayload = proposed;
-      _proposedDiffs = diffs;
-      _isGenerating = false;
+      _isGenerating = true;
+      _generationError = null;
+      _proposedPayload = null;
+      _proposedDiffs = [];
     });
+    try {
+      final proposed = await widget.controller.generateAiDraftProposal(
+        modelOptionId: modelId,
+        userInstruction: _instructionCtrl.text.trim(),
+        dataSharingConfirmed: _shareContextConfirmed,
+      );
+      final diffs = ProfileDomainDiffCalculator.computeDiff(
+        _context.currentDraft,
+        proposed,
+      );
+      if (!mounted) return;
+      setState(() {
+        _proposedPayload = proposed;
+        _proposedDiffs = diffs;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _generationError = error.toString());
+    } finally {
+      if (mounted) setState(() => _isGenerating = false);
+    }
   }
 
   @override
@@ -76,7 +119,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
           Icon(Icons.auto_awesome,
               color: ProfileLabTheme.primaryAccent, size: 22),
           SizedBox(width: 8),
-          Text('AI Profile Candidate Assistant'),
+          Expanded(child: Text('AI Profile Draft Proposal')),
         ],
       ),
       content: SizedBox(
@@ -86,6 +129,28 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.amber),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.science_outlined, color: Colors.amber, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'A signed Stable Worker Profile runs through the local generic Engine. The model proposes a Draft edit only. Review the diff, apply it yourself, and run the real test ladder; model output is never evidence.',
+                        style:
+                            TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
               // Ingested Context Badges Box
               Container(
                 padding: const EdgeInsets.all(12),
@@ -133,7 +198,40 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
               ),
               const SizedBox(height: 14),
 
-              const Text('AI Generation Prompt / Target Goal:',
+              const Text('Model Profile:',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              if (_loadingModels)
+                const LinearProgressIndicator(minHeight: 2)
+              else if (_models.isEmpty)
+                Text(
+                  _generationError ??
+                      'No trusted Stable Worker Profile is available.',
+                  style: const TextStyle(fontSize: 11, color: Colors.amber),
+                )
+              else
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedModelId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  ),
+                  items: _models
+                      .map((model) => DropdownMenuItem<String>(
+                            value: model.id,
+                            child: Text(model.label,
+                                overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  onChanged: _isGenerating
+                      ? null
+                      : (value) => setState(() => _selectedModelId = value),
+                ),
+              const SizedBox(height: 12),
+
+              const Text('Draft change request:',
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
               TextField(
@@ -147,18 +245,43 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                 ),
               ),
               const SizedBox(height: 10),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _shareContextConfirmed,
+                onChanged: _isGenerating
+                    ? null
+                    : (value) =>
+                        setState(() => _shareContextConfirmed = value ?? false),
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text(
+                  'I agree to send this Draft and its bounded test diagnostics to the selected provider.',
+                  style: TextStyle(fontSize: 11),
+                ),
+                subtitle: const Text(
+                  'Provider authentication stays in its locally installed CLI. Profile Lab does not store provider credentials.',
+                  style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                ),
+              ),
+              const SizedBox(height: 6),
 
               Row(
                 children: [
                   ElevatedButton.icon(
-                    onPressed: _isGenerating ? null : _generateProposal,
+                    onPressed: _isGenerating ||
+                            _loadingModels ||
+                            _selectedModelId == null ||
+                            !_shareContextConfirmed
+                        ? null
+                        : _generateProposal,
                     icon: _isGenerating
                         ? const SizedBox(
                             width: 14,
                             height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.auto_awesome, size: 16),
-                    label: const Text('Generate Candidate Proposal'),
+                    label: Text(_isGenerating
+                        ? 'Generating with Model…'
+                        : 'Generate Draft Proposal'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: ProfileLabTheme.primaryAccent,
                       foregroundColor: Colors.white,
@@ -167,6 +290,27 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                 ],
               ),
               const SizedBox(height: 16),
+
+              if (_isGenerating)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: widget.controller.cancelAiDraftProposal,
+                    icon: const Icon(Icons.stop_circle_outlined),
+                    label: const Text('Cancel model request'),
+                  ),
+                ),
+              if (_generationError != null &&
+                  !_loadingModels &&
+                  _models.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    _generationError!,
+                    style:
+                        const TextStyle(color: Colors.redAccent, fontSize: 11),
+                  ),
+                ),
 
               if (_proposedPayload != null) ...[
                 const Divider(color: Color(0xFF334155)),
@@ -262,7 +406,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Safety Policy: AI proposals always land in local Draft. AI cannot publish, Ed25519 sign, promote Stable, or alter evidence. You must test and promote via promotion gates.',
+                          'Human review required: Applying only updates the local Draft editor. Publication remains a separate human action that requires successful local qualification and Cloud signer preflight. Stable promotion requires separate Cloud acceptance evidence.',
                           style: TextStyle(
                               fontSize: 10,
                               color: Color(0xFF94A3B8),
@@ -286,32 +430,32 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
           onPressed: _proposedPayload == null
               ? null
               : () {
+                  final selectedModel = _models.firstWhere(
+                    (model) => model.id == _selectedModelId,
+                  );
                   final provenance = AiProvenance(
                     authorType: 'ai_assistant',
-                    modelIdentifier: 'gemini-2.5-pro',
+                    modelIdentifier: selectedModel.modelIdentifier,
                     parentDigest: c.currentDraft?.payloadDigest,
                     parentReleaseVersion: c.currentDraft?.releaseVersion,
                     taskIdentifier: _instructionCtrl.text.trim(),
                     diffDigest: AiProvenance.computeDiffDigest(_proposedDiffs),
-                    reviewedBy: c.currentSession?.displayName ?? 'Vitalii',
-                    actor: c.currentSession?.displayName ?? 'Vitalii',
+                    reviewedBy: c.currentSession?.displayName,
+                    actor: c.currentSession?.displayName,
                   );
-                  final payloadToSave =
-                      Map<String, dynamic>.from(_proposedPayload!);
-                  payloadToSave['_provenance'] = provenance.toJson();
-
-                  final encoder = const JsonEncoder.withIndent('  ');
-                  final jsonText = encoder.convert(payloadToSave);
-                  c.updateJsonText(jsonText);
+                  c.applyAiDraftProposal(
+                    profile: Map<String, dynamic>.from(_proposedPayload!),
+                    provenance: provenance.toJson(),
+                  );
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                         content: Text(
-                            'AI candidate proposal with provenance applied to local Draft.')),
+                            'Reviewed model proposal applied to the local Draft.')),
                   );
                 },
           icon: const Icon(Icons.check, size: 16),
-          label: const Text('Apply Proposal to Draft'),
+          label: const Text('Review & Apply to Draft'),
           style: ElevatedButton.styleFrom(
             backgroundColor: ProfileLabTheme.passColor,
             foregroundColor: Colors.white,

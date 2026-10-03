@@ -17,6 +17,7 @@ export * from "./profile-admin.js";
 export {
   handleSession,
   handleCompleteStepUp,
+  handleCompleteProfileLabStepUp,
   handleSessionLogout,
   handleCreateDesktopAuthIntent,
   handleDesktopAuthIntentStatus,
@@ -92,6 +93,7 @@ export {
   handleCreateDraftToolProfileRelease,
   handleUpdateDraftToolProfileRelease,
   handlePublishDraftToolProfileRelease,
+  handleToolProfileSigningPreflight,
   handlePromoteToolProfileRelease,
   handleChangeToolProfileReleaseLifecycle,
   handleListToolProfileReleases,
@@ -106,6 +108,7 @@ export {
   handleRollbackToolProfileChannel,
   handleListToolProfileReleaseEvidence,
   handleSubmitToolProfileReleaseEvidence,
+  handleSubmitToolProfileLocalQualification,
   handleListToolProfileDefinitionAudit,
   handleListGlobalToolProfileAudit,
 } from "./profiles.js";

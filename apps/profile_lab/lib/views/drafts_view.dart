@@ -274,7 +274,7 @@ class _DraftsViewState extends State<DraftsView> {
                           OutlinedButton.icon(
                             icon: const Icon(Icons.auto_awesome,
                                 size: 14, color: ProfileLabTheme.primaryAccent),
-                            label: const Text('AI Assist...',
+                            label: const Text('AI Draft Proposal...',
                                 style: TextStyle(
                                     fontSize: 11,
                                     color: ProfileLabTheme.primaryAccent)),
@@ -381,7 +381,7 @@ class _DraftsViewState extends State<DraftsView> {
                             const SizedBox(width: 6),
                             ElevatedButton.icon(
                               icon: const Icon(Icons.verified, size: 14),
-                              label: const Text('Publish & Cloud Sign',
+                              label: const Text('Qualify, Publish & Sign',
                                   style: TextStyle(fontSize: 11)),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.indigo,
@@ -400,7 +400,7 @@ class _DraftsViewState extends State<DraftsView> {
                                                   .showSnackBar(
                                                 const SnackBar(
                                                   content: Text(
-                                                      'Draft published & Ed25519 signed by Cloud Signing Boundary.'),
+                                                      'Local qualification passed; draft published and signed by Cloud.'),
                                                 ),
                                               );
                                             }

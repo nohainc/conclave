@@ -3,7 +3,9 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:flutter/material.dart';
 
 import '../controllers/profile_lab_controller.dart';
+import '../profile_lab_test_sandbox.dart';
 import '../theme/profile_lab_theme.dart';
+import 'profile_lab_step_up.dart';
 
 class PromotionGateChecklistItem {
   const PromotionGateChecklistItem({
@@ -57,19 +59,38 @@ class PromotionGateDialog extends StatefulWidget {
 }
 
 class _PromotionGateDialogState extends State<PromotionGateDialog> {
-  bool _overrideNonSecurity = false;
-  late TextEditingController _overrideReasonCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _overrideReasonCtrl = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _overrideReasonCtrl.dispose();
-    super.dispose();
+  Map<String, dynamic>? _findQualifyingCloudEvidence(
+    Map<String, dynamic> release,
+    Map<String, dynamic> profile,
+  ) {
+    final releaseVersion = release['releaseVersion'];
+    final releaseDigest = release['payloadDigest'];
+    if (releaseVersion is! int || releaseDigest is! String) return null;
+    final now = DateTime.now().toUtc();
+    for (final record in widget.controller.cloudEvidence) {
+      final evidence = record['evidence'];
+      if (record['releaseVersion'] != releaseVersion ||
+          record['payloadDigest'] != releaseDigest ||
+          record['id'] is! String ||
+          evidence is! Map) {
+        continue;
+      }
+      final contract = evidence.cast<String, Object?>();
+      if (!ToolProfileAcceptanceEvidence.hasCloudContractShape(
+        contract,
+        profile: profile.cast<String, Object?>(),
+      )) {
+        continue;
+      }
+      final acceptedAt = DateTime.tryParse(contract['acceptedAt'] as String);
+      if (acceptedAt == null ||
+          acceptedAt.isAfter(now.add(const Duration(minutes: 5))) ||
+          now.difference(acceptedAt) > const Duration(days: 90)) {
+        continue;
+      }
+      return record;
+    }
+    return null;
   }
 
   List<PromotionGateChecklistItem> _buildChecklist() {
@@ -109,18 +130,39 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
     final gate4Passed =
         engineComp['min'] != null && engineComp['maxExclusive'] != null;
 
-    // Gate 5: Local Passive Probe (Recommendation)
-    final activeEv =
-        c.currentEvidence.isNotEmpty ? c.currentEvidence.first : null;
-    final gate5Passed = (activeEv != null && activeEv['status'] == 'pass') ||
-        c.lastTestResult == 'pass';
-
-    // Gate 6: Live Probe & Execution Test (Recommendation)
-    final gate6Passed = c.lastLadderResult != null &&
-        c.lastLadderResult!.overallResult == 'pass';
-
-    // Gate 7: Worker Scenarios (Recommendation)
-    final gate7Passed = activeEv != null || c.cloudEvidence.isNotEmpty;
+    final isStablePromotion = widget.targetChannel.toLowerCase() == 'stable';
+    final releaseDigest = r['payloadDigest'] as String?;
+    final cloudRecord =
+        isStablePromotion ? _findQualifyingCloudEvidence(r, payload) : null;
+    final activeEv = isStablePromotion
+        ? (cloudRecord?['evidence'] as Map?)?.cast<String, Object?>()
+        : c.currentEvidence.cast<Map<String, Object?>?>().firstWhere(
+              (evidence) => evidence?['profileDigest'] == releaseDigest,
+              orElse: () => null,
+            );
+    final scenarios =
+        (activeEv?['scenarios'] as Map?)?.cast<String, Object?>() ??
+            const <String, Object?>{};
+    final expectedScenarios =
+        cloudAcceptanceScenarioStatuses(payload.cast<String, Object?>());
+    final evidenceMatchesProfile = activeEv != null &&
+        ToolProfileAcceptanceEvidence.hasCloudContractShape(
+          activeEv,
+          profile: payload.cast<String, Object?>(),
+        );
+    final gate5Passed = scenarios['passive_probe'] == 'passed';
+    final gate6Passed = scenarios['live_probe'] == 'passed';
+    final gate7Passed = evidenceMatchesProfile &&
+        expectedScenarios != null &&
+        const [
+          'model_selection',
+          'representative_workstream_write',
+          'durable_session_start',
+          'durable_session_resume',
+          'cancellation',
+          'timeout',
+        ].every(
+            (scenario) => scenarios[scenario] == expectedScenarios[scenario]);
 
     return [
       PromotionGateChecklistItem(
@@ -169,7 +211,7 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
         passed: gate5Passed,
         failureDetails: gate5Passed
             ? null
-            : 'Passive probe not verified on local workstation.',
+            : 'No sandbox acceptance evidence records a passing passive probe for this release digest.',
       ),
       PromotionGateChecklistItem(
         id: 'live_execution',
@@ -177,18 +219,23 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
         description: 'Generic CLI Engine OK probe and prompt execution test',
         isSecurityGate: false,
         passed: gate6Passed,
-        failureDetails:
-            gate6Passed ? null : 'Live test ladder not executed cleanly.',
+        failureDetails: gate6Passed
+            ? null
+            : 'No sandbox acceptance evidence records a passing live probe for this release digest.',
       ),
       PromotionGateChecklistItem(
         id: 'scenarios',
         title: 'Worker-Specific Scenario Evidence',
-        description:
-            'Verified workstream, session, and cancellation scenario evidence',
+        description: isStablePromotion
+            ? 'Cloud stored evidence ID: ${cloudRecord?['id'] ?? 'missing'}'
+            : 'Verified workstream, session, and cancellation scenario evidence',
         isSecurityGate: false,
         passed: gate7Passed,
-        failureDetails:
-            gate7Passed ? null : 'Scenario evidence missing for exact digest.',
+        failureDetails: gate7Passed
+            ? null
+            : isStablePromotion
+                ? 'A current, qualifying Cloud evidence record is required for this release.'
+                : 'Sandbox acceptance evidence is missing required scenarios for this release digest.',
       ),
     ];
   }
@@ -200,6 +247,14 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
     final ver = r['releaseVersion'] as int;
     final digest = (r['payloadDigest'] as String?) ?? 'n/a';
     final items = _buildChecklist();
+    final isStablePromotion = widget.targetChannel.toLowerCase() == 'stable';
+    final storedEvidence = isStablePromotion
+        ? _findQualifyingCloudEvidence(
+            r,
+            (r['profile'] as Map<String, dynamic>?) ?? <String, dynamic>{},
+          )
+        : null;
+    final storedEvidenceId = storedEvidence?['id'] as String?;
 
     final hasSecurityFailure =
         items.any((item) => item.isSecurityGate && !item.passed);
@@ -207,9 +262,8 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
         items.any((item) => !item.isSecurityGate && !item.passed);
 
     final canConfirm = !hasSecurityFailure &&
-        (!hasRecommendationFailure ||
-            (_overrideNonSecurity &&
-                _overrideReasonCtrl.text.trim().isNotEmpty));
+        !hasRecommendationFailure &&
+        (!isStablePromotion || storedEvidenceId != null);
 
     return AlertDialog(
       title: Column(
@@ -241,6 +295,30 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (isStablePromotion && storedEvidenceId == null) ...[
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.amber),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.lock_outline, color: Colors.amber, size: 18),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Stable promotion requires current acceptance evidence already stored and validated by Cloud. Submit the complete sandbox evidence from the Evidence view.',
+                          style:
+                              TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               // Security Gates Section
               const Text('SECURITY CONSTRAINTS (NON-OVERRIDEABLE)',
                   style: TextStyle(
@@ -256,7 +334,7 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
               const SizedBox(height: 16),
 
               // Recommendation Gates Section
-              const Text('RECOMMENDATION GATES (OVERRIDEABLE WITH REASON)',
+              const Text('RECOMMENDATION GATES (REQUIRED FOR BETA)',
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
@@ -302,55 +380,18 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: Colors.amber),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: const Row(
                     children: [
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: _overrideNonSecurity,
-                            onChanged: (val) {
-                              setState(() {
-                                _overrideNonSecurity = val ?? false;
-                              });
-                            },
-                          ),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Override Non-Security Recommendation Warnings',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.amber),
-                                ),
-                                Text(
-                                  'Requires recording a mandatory human justification for audit trail.',
-                                  style: TextStyle(
-                                      fontSize: 10, color: Color(0xFFCBD5E1)),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (_overrideNonSecurity) ...[
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _overrideReasonCtrl,
-                          style: const TextStyle(fontSize: 11),
-                          decoration: const InputDecoration(
-                            labelText: 'Recorded Override Reason *',
-                            hintText:
-                                'e.g. Staging QA regression suite executed on dedicated Mac workstation #3',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onChanged: (_) => setState(() {}),
+                      Icon(Icons.warning_amber_rounded,
+                          color: Colors.amber, size: 18),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Promotion is blocked until all listed checks pass. Stable promotion additionally requires current evidence already validated and stored by Cloud.',
+                          style:
+                              TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
                         ),
-                      ],
+                      ),
                     ],
                   ),
                 ),
@@ -377,48 +418,10 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
               ? () async {
                   Navigator.of(context).pop();
                   try {
-                    Map<String, dynamic>? evidencePayload;
-                    if (widget.targetChannel == 'stable' ||
-                        _overrideNonSecurity) {
-                      final activeEv = c.currentEvidence.isNotEmpty
-                          ? c.currentEvidence.first
-                          : const <String, Object?>{};
-                      final detectedCliVer =
-                          (activeEv['providerCliVersion'] as String?) ??
-                              '1.0.0';
-                      evidencePayload = {
-                        'formatVersion': 1,
-                        'profileDefinitionId': c.selectedDefinitionId,
-                        'releaseVersion': ver,
-                        'profileReleaseVersion': ver.toString(),
-                        'logicalWorkerTypeId':
-                            c.selectedCloudWorker?['workerTypeId'] ?? 'unknown',
-                        'profileDigest': digest,
-                        'engineVersion': '1.0.0',
-                        'providerToolName':
-                            (c.selectedCloudWorker?['providerToolName']
-                                    as String?) ??
-                                'unknown',
-                        'providerToolVersion': detectedCliVer,
-                        'acceptedAt': DateTime.now().toUtc().toIso8601String(),
-                        if (_overrideNonSecurity &&
-                            _overrideReasonCtrl.text.trim().isNotEmpty)
-                          'overrideReason': _overrideReasonCtrl.text.trim(),
-                        'scenarios': {
-                          'passive_probe': 'passed',
-                          'live_probe': 'passed',
-                          'representative_workstream_write': 'passed',
-                          'durable_session_start': 'passed',
-                          'durable_session_resume': 'passed',
-                          'cancellation': 'passed',
-                          'timeout': 'passed',
-                        },
-                      };
-                    }
                     await c.promoteCloudRelease(
                       releaseVersion: ver,
                       channel: widget.targetChannel,
-                      evidence: evidencePayload,
+                      acceptanceEvidenceId: storedEvidenceId,
                     );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -429,8 +432,11 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
                     }
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Promotion failed: $e')),
+                      showProfileLabOperationFailure(
+                        context,
+                        c,
+                        'Promotion',
+                        e,
                       );
                     }
                   }

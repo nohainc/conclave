@@ -236,8 +236,7 @@ class _AuditViewState extends State<AuditView> {
                                       releaseVersion: int.tryParse(ver) ?? 1,
                                       testedProviderVersion:
                                           details['testedProviderVersion']
-                                                  as String? ??
-                                              'Codex 0.188.0',
+                                              as String?,
                                       publishedBy: action == 'release.published'
                                           ? 'controlled signer'
                                           : null,

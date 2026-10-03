@@ -52,9 +52,10 @@ evidence linked from the release record.
 
 | Gate | Required evidence | Current recorded state |
 | --- | --- | --- |
-| Real provider assignments | Direct, Plan & Implement, Implement & Verify, and Full Cycle with ChatGPT and Gemini through the generic Engine | **Open.** The last recorded run on 2026-10-01 passed all four ChatGPT scenarios and two Gemini scenarios; Gemini Plan & Implement and Implement & Verify failed. Rerun after fixes. |
-| Work v1 full path | Each built-in Workflow exercises Cloud scheduling, Workspace assignment, Engine execution, persistence, results, and evidence | **Open.** Fixture-backed coverage exists; fresh full-path real-provider evidence is still required. |
-| Profile release lifecycle | Signed release validation, promotion, rollback, and revocation across Cloud and Workspace | **Open.** Domain/store coverage exists; operational release evidence is not recorded here. |
+| Dynamic Worker E2E | A Worker unknown to source is created through Profile Lab, qualified against the bundled Engine and fixture CLI, admitted by Workspace from the Cloud catalog, projected for AX, and executes a Work assignment | **Passed with fixtures on 2026-10-03.** The full journey creates a unique Worker ID at test runtime, uses the real bundled Engine and Workspace HTTP catalog/Profile endpoints, calls AX's real Work Request API, dispatches the bound request to Workspace, and loads the result in AX. Cloud signing and Cloud storage are represented by an in-process test boundary with a test-only Ed25519 key. See the [Phase 13 acceptance record](../acceptance/dynamic-worker/2026-10-03/README.md). |
+| Real provider assignments | Direct, Plan & Implement, Implement & Verify, and Full Cycle with ChatGPT and Gemini through the generic Engine | **Open.** On 2026-10-03, Codex passed all four workflows. Gemini passed Direct; Plan & Implement passed once and failed on rerun, while Implement & Verify and Full Cycle failed with provider errors. Antigravity's headless CLI reported auto-denying a shell command without an explicit `command` permission. Both Profile evidence suites passed. See the [2026-10-03 evidence record](../acceptance/real-provider/2026-10-03/README.md). |
+| Work v1 full path | Each built-in Workflow exercises Cloud scheduling, Workspace assignment, Engine execution, persistence, results, and evidence | **Open.** Dynamic Worker Direct Work execution is covered with the Phase 13 fixture acceptance. Each built-in Workflow still needs fresh full-path acceptance and real-provider evidence. |
+| Profile release lifecycle | Signed release validation, promotion, rollback, and revocation across Cloud and Workspace | **Implementation complete; operational release acceptance open.** The manual Profile control path and fixture-backed dynamic Worker acceptance are complete. Deployed Cloud, real-provider workflow coverage, and a Testing Workspace rollout remain separate release gates. See the [manual lifecycle status](../specifications/PROFILE_LAB.md) and dated acceptance records. |
 | Failure and security behavior | Process-tree cleanup, timeout, cancellation, inventory recovery, session resumption, scheduler authorization, reconnect, and Profile rollback | **Partially covered.** Link the current CI results and any remaining end-to-end recovery evidence. |
 | Clean v8 database | Fresh database migration, seed separation, and production deployment/cutover evidence | **Implemented.** The production provisioning record reports the v8 database initialized and production rows copied and checked. Attach the immutable deployment and validation record to the release. |
 | Workspace release validation | Signed package install, lifecycle, reconnect/fallback, ownership, and Work Root preservation scenarios | **Open.** Complete the [Workspace lifecycle release validation](../operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md) against a candidate package and Cloud deployment. |
@@ -65,14 +66,17 @@ version/date and link the immutable acceptance evidence.
 
 ## Next work
 
-1. Resolve the recorded Gemini workflow failures and rerun the four-scenario
-   real-provider matrix for both official Workers.
-2. Complete full-path Work v1 acceptance through the generic Engine and both
-   providers.
-3. Record operational Profile promotion, rollback, and revocation evidence.
-4. Run the candidate Workspace desktop lifecycle matrix, including reconnect,
+1. Configure a narrowly scoped Antigravity headless command permission for the
+   isolated acceptance workspace, then rerun Gemini Implement & Verify and
+   Full Cycle. Keep the terminal sandbox enabled and do not use the all-tools
+   permission bypass.
+2. Publish the accepted Profile digest to the dedicated Testing Workspace and
+   verify live execution there.
+3. Complete full-path Work v1 acceptance for every built-in Workflow through the generic Engine and both providers.
+4. Record operational Profile promotion, rollback, and revocation evidence.
+5. Run the candidate Workspace desktop lifecycle matrix, including reconnect,
    cancellation, and Work Root preservation.
-5. Attach Cloud/database deployment and security/recovery evidence to the
+6. Attach Cloud/database deployment and security/recovery evidence to the
    release record; then make the release decision.
 
 ## Change discipline

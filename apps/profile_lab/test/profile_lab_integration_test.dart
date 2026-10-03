@@ -5,6 +5,7 @@ import 'package:conclave_profile_lab/controllers/profile_lab_controller.dart';
 import 'package:conclave_profile_lab/profile_admin_api_client.dart';
 import 'package:conclave_profile_lab/profile_lab_auth.dart';
 import 'package:conclave_profile_lab/profile_lab_paths.dart';
+import 'package:conclave_profile_lab/profile_lab_session_store.dart';
 import 'package:conclave_profile_lab/profile_lab_test_sandbox.dart';
 import 'package:conclave_profile_lab/utils/profile_domain_diff.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
@@ -90,7 +91,10 @@ void main() {
     paths = ProfileLabPaths(homeDirectory: tempDir.path);
     await paths.ensureDirectoriesExist();
     draftStore = DraftProfileStore(draftsRoot: paths.draftsDirectory);
-    controller = ProfileLabController(paths: paths);
+    controller = ProfileLabController(
+      paths: paths,
+      sessionStore: ProfileLabSessionStore.inMemoryForTesting(paths),
+    );
     await controller.initialize();
   });
 
@@ -201,11 +205,20 @@ void main() {
       final ladderRes =
           await sandbox.executeTestLadder(candidate: validCandidate);
 
-      expect(ladderRes.stages.length, equals(9));
+      expect(ladderRes.stages.length, equals(11));
       expect(ladderRes.stages[0].stageId, equals('schema'));
       expect(ladderRes.stages[0].status, equals('passed'));
       expect(ladderRes.stages[1].stageId, equals('engine_compatibility'));
       expect(ladderRes.stages[1].status, equals('passed'));
+      expect(
+        ladderRes.stages
+            .where(
+                (stage) => stage.stageId == 'representative_workstream_write')
+            .single
+            .status,
+        isNot(equals('passed')),
+      );
+      expect(ladderRes.overallResult, equals('fail'));
 
       // Clean scratch directory teardown verification
       final scratchItems = await paths.sandboxDirectory.list().toList();
@@ -224,6 +237,12 @@ void main() {
         if (path.contains('/draft')) {
           request.response
               .write(jsonEncode({'success': true, 'draftVersion': 1}));
+        } else if (path.contains('/qualification')) {
+          request.response.write(jsonEncode({
+            'status': 'qualified',
+            'qualificationEvidenceId': 'qualification-1',
+            'payloadDigest': 'sha256:abc123mock',
+          }));
         } else if (path.contains('/publish')) {
           request.response.write(jsonEncode({
             'success': true,
@@ -277,9 +296,21 @@ void main() {
         );
         expect(syncRes['success'], isTrue);
 
+        final qualification = await client.submitLocalQualification(
+          profileDefinitionId: 'opencode-cli',
+          releaseVersion: 1,
+          evidence: const {'formatVersion': 2},
+        );
+        expect(
+          qualification['qualificationEvidenceId'],
+          equals('qualification-1'),
+        );
+
         final pubRes = await client.publishRelease(
           profileDefinitionId: 'opencode-cli',
           releaseVersion: 1,
+          qualificationEvidenceId:
+              qualification['qualificationEvidenceId'] as String,
         );
         expect(pubRes['release']['releaseVersion'], equals(1));
         expect(pubRes['release']['signature'], equals('mock_ed25519_sig'));

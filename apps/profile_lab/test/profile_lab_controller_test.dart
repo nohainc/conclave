@@ -1,25 +1,57 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_profile_lab/controllers/profile_lab_controller.dart';
 import 'package:conclave_profile_lab/profile_admin_api_client.dart';
 import 'package:conclave_profile_lab/profile_lab_auth.dart';
 import 'package:conclave_profile_lab/profile_lab_paths.dart';
+import 'package:conclave_profile_lab/profile_lab_session_store.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  // These tests use local HttpServer fixtures; keep Dart's real HTTP client.
+  HttpOverrides.global = null;
+
   group('ProfileLabController', () {
     late Directory temp;
     late ProfileLabPaths paths;
     late ProfileLabController controller;
+    final sessionValues = <String, String>{};
+    const sessionChannel = MethodChannel('profile-lab-controller-session-test');
 
     setUp(() async {
       temp = await Directory.systemTemp.createTemp('lab_ctrl_test_');
       paths = ProfileLabPaths(homeDirectory: temp.path);
-      controller = ProfileLabController(paths: paths);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(sessionChannel, (call) async {
+        final account = (call.arguments as Map)['account'] as String;
+        if (call.method == 'read') {
+          return sessionValues[account];
+        }
+        if (call.method == 'write') {
+          sessionValues[account] = (call.arguments as Map)['value'] as String;
+        }
+        if (call.method == 'delete') {
+          sessionValues.remove(account);
+        }
+        return null;
+      });
+      controller = ProfileLabController(
+        paths: paths,
+        sessionStore: ProfileLabSessionStore.forTesting(
+          paths,
+          channel: sessionChannel,
+        ),
+      );
       await controller.initialize();
     });
 
     tearDown(() async {
+      sessionValues.clear();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(sessionChannel, null);
       await temp.delete(recursive: true);
     });
 
@@ -52,6 +84,37 @@ void main() {
       expect(controller.isDirty, isFalse);
     });
 
+    test('discovers only executable names declared by Worker and Profile data',
+        () async {
+      await controller.createNewDraft(
+        profileDefinitionId: 'dynamic-provider-profile',
+        workerTypeId: 'dynamic-worker',
+        providerToolName: 'example-runtime',
+      );
+      final editedProfile =
+          jsonDecode(controller.currentJsonText) as Map<String, dynamic>;
+      final providerTool =
+          editedProfile['providerTool'] as Map<String, dynamic>;
+      providerTool['name'] = 'profile-tool';
+      providerTool['executableCandidates'] = ['profile-candidate'];
+      controller.updateJsonText(jsonEncode(editedProfile));
+      controller.cloudWorkers = [
+        {'providerToolName': 'catalog-runtime'},
+      ];
+
+      await controller.discoverInstalledProviders();
+
+      expect(
+        controller.configuredProviderExecutables,
+        [
+          'catalog-runtime',
+          'example-runtime',
+          'profile-candidate',
+          'profile-tool',
+        ],
+      );
+    });
+
     test('switches tabs cleanly', () {
       expect(controller.selectedTab, LabTab.workers);
 
@@ -81,7 +144,7 @@ void main() {
       expect(controller.selectedDefinitionId, isNull);
     });
 
-    test('loads saved session from dedicated credentials directory', () async {
+    test('loads saved session from Keychain', () async {
       expect(controller.currentSession, isNull);
 
       final session = ProfileLabSession(
@@ -92,17 +155,45 @@ void main() {
         email: 'test@conclave.test',
         expiresAt: DateTime.now().toUtc().add(const Duration(days: 7)),
       );
-      await session.saveToFile(paths.sessionFile);
+      await ProfileLabSessionStore.forTesting(paths, channel: sessionChannel)
+          .save(session, cloudOrigin: controller.cloudUrl);
 
       await controller.loadSavedSession();
       expect(controller.currentSession, isNotNull);
       expect(controller.currentSession!.credential, 'conclave_dhs_saved_cred');
       expect(controller.currentSession!.displayName, 'Test Admin');
 
-      // Sign out clears local file and session
+      // Sign out clears Keychain session.
       await controller.signOut();
       expect(controller.currentSession, isNull);
       expect(await paths.sessionFile.exists(), isFalse);
+    });
+
+    test('persists Cloud origin settings and clears sign-in on origin change',
+        () async {
+      controller.currentSession = ProfileLabSession(
+        credential: 'origin-bound-credential',
+        sessionId: 'origin-bound-session',
+        userId: 'admin-1',
+        displayName: 'Test Admin',
+        email: 'test@conclave.test',
+        expiresAt: DateTime.now().toUtc().add(const Duration(days: 1)),
+      );
+      sessionValues['profile-lab-human-session'] = 'saved-session';
+
+      await controller.setCloudUrl('http://localhost:8787');
+
+      expect(controller.cloudUrl, 'http://localhost:8787');
+      expect(controller.currentSession, isNull);
+      expect(sessionValues, isEmpty);
+      expect(await paths.cloudSettingsFile.exists(), isTrue);
+
+      await controller.loadCloudConfiguration();
+      expect(controller.cloudUrl, 'http://localhost:8787');
+
+      await controller.resetCloudUrl();
+      expect(controller.cloudUrl, 'https://app.conclaveax.com');
+      expect(await paths.cloudSettingsFile.exists(), isFalse);
     });
 
     test('reverts unsaved edits and duplicates draft as next release version',
@@ -432,20 +523,21 @@ class FakeProfileAdminApiClient extends ProfileAdminApiClient {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> fetchReleases(
+  Future<List<ProfileLabReleaseReadModel>> fetchReleases(
       String profileDefinitionId) async {
     return [
-      {
+      ProfileLabReleaseReadModel.fromJson({
         'releaseVersion': 19,
         'lifecycleState': revokeCallCount > 0 ? 'revoked' : 'stable',
         'lifecycleReason': lastRevokedReason
-      },
-      {'releaseVersion': 18, 'lifecycleState': 'published'},
+      }),
+      ProfileLabReleaseReadModel.fromJson(
+          {'releaseVersion': 18, 'lifecycleState': 'published'}),
     ];
   }
 
   @override
-  Future<List<Map<String, dynamic>>> fetchAudit(
+  Future<List<ProfileLabAuditEventReadModel>> fetchAudit(
       [String? profileDefinitionId]) async {
     return [];
   }
@@ -470,9 +562,9 @@ class FakeProfileAdminApiClient extends ProfileAdminApiClient {
   }
 
   @override
-  Future<Map<String, dynamic>> fetchRelease(
+  Future<ProfileLabReleaseReadModel> fetchRelease(
       String profileDefinitionId, int releaseVersion) async {
-    return {
+    return ProfileLabReleaseReadModel.fromJson({
       'profileDefinitionId': profileDefinitionId,
       'releaseVersion': releaseVersion,
       'profile': {
@@ -480,6 +572,6 @@ class FakeProfileAdminApiClient extends ProfileAdminApiClient {
         'profileDefinitionId': profileDefinitionId
       },
       'payloadDigest': 'server-digest-1',
-    };
+    });
   }
 }

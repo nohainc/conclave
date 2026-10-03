@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'controllers/profile_lab_controller.dart';
 import 'theme/profile_lab_theme.dart';
 import 'views/audit_view.dart';
+import 'views/cloud_settings_dialog.dart';
 import 'views/profiles_view.dart';
 import 'views/releases_view.dart';
 import 'views/tests_view.dart';
@@ -139,6 +140,11 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                   ),
 
                   const SizedBox(width: 12),
+                  IconButton(
+                    icon: const Icon(Icons.cloud_outlined, size: 17),
+                    tooltip: 'Cloud connection: ${c.cloudUrl}',
+                    onPressed: () => CloudSettingsDialog.show(context, c),
+                  ),
                   // Active Draft status chip
                   if (c.selectedDefinitionId != null) ...[
                     Container(

@@ -60,6 +60,7 @@ while [[ $# -gt 0 ]]; do
       echo ""
       echo "Environment variables:"
       echo "  CONCLAVE_PROFILE_LAB_VERSION         Profile Lab version override"
+      echo "  CONCLAVE_RELEASE_TRUST_KEYS_JSON     Public Ed25519 Profile trust roots"
       echo "  CONCLAVE_MACOS_SIGN_IDENTITY         Signing identity"
       echo "  CONCLAVE_MACOS_NOTARY_PROFILE        Keychain profile for notarization"
       exit 0
@@ -85,11 +86,13 @@ bash "$ROOT/scripts/build-cli-worker-engine.sh"
 
 if [[ "$MODE" == "debug" ]]; then
   flutter build macos --debug \
-    --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION"
+    --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION" \
+    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}"
   APP="$PROFILE_LAB_DIR/build/macos/Build/Products/Debug/Conclave Profile Lab.app"
 else
   flutter build macos --release \
-    --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION"
+    --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION" \
+    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}"
   APP="$PROFILE_LAB_DIR/build/macos/Build/Products/Release/Conclave Profile Lab.app"
 fi
 

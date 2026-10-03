@@ -192,6 +192,16 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/admin/tool-profiles/signing-preflight"
+    ) {
+      return await handlers.handleToolProfileSigningPreflight!(
+        request,
+        env,
+        ctx,
+      );
+    }
     if (request.method === "GET" && url.pathname === "/api/workers/catalog") {
       return await handlers.handleListWorkerCatalog!(request, env, ctx);
     }
@@ -328,7 +338,7 @@ export async function routeWorkerRequest(
       );
     }
     const toolProfileReleaseMatch = url.pathname.match(
-      /^\/api\/admin\/tool-profiles\/([^/]+)\/releases(?:\/(\d+)(?:\/(draft|publish|promote|retire|revoke|audit|evidence))?)?$/,
+      /^\/api\/admin\/tool-profiles\/([^/]+)\/releases(?:\/(\d+)(?:\/(draft|publish|promote|retire|revoke|audit|evidence|qualification))?)?$/,
     );
     if (toolProfileReleaseMatch?.[1]) {
       const profileDefinitionId = decodeURIComponent(
@@ -372,6 +382,15 @@ export async function routeWorkerRequest(
       }
       if (version && action === "evidence" && request.method === "POST") {
         return await handlers.handleSubmitToolProfileReleaseEvidence!(
+          request,
+          env,
+          profileDefinitionId,
+          version,
+          ctx,
+        );
+      }
+      if (version && action === "qualification" && request.method === "POST") {
+        return await handlers.handleSubmitToolProfileLocalQualification!(
           request,
           env,
           profileDefinitionId,

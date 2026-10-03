@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../controllers/profile_lab_controller.dart';
+import '../profile_lab_test_sandbox.dart';
 import '../theme/profile_lab_theme.dart';
 
 class EvidenceView extends StatelessWidget {
@@ -16,16 +17,25 @@ class EvidenceView extends StatelessWidget {
       return const Center(child: Text('No draft selected.'));
     }
 
-    final hasPassivePass = c.currentEvidence.any(
-      (ev) =>
-          ev['testType'] == 'local_passive_probe' &&
-          ev['normalizedResult'] == 'pass',
-    );
-    final hasLivePass = c.currentEvidence.any(
-      (ev) =>
-          ev['testType'] == 'local_live_probe' &&
-          ev['normalizedResult'] == 'pass',
-    );
+    final activeEvidence =
+        c.currentEvidence.cast<Map<String, Object?>?>().firstWhere(
+              (evidence) => evidence?['profileDigest'] == draft.payloadDigest,
+              orElse: () => null,
+            );
+    final scenarios =
+        (activeEvidence?['scenarios'] as Map?)?.cast<String, Object?>() ??
+            const <String, Object?>{};
+    final hasPassivePass = scenarios['passive_probe'] == 'passed';
+    final hasLivePass = scenarios['live_probe'] == 'passed';
+    final isAcceptanceReady = activeEvidence != null &&
+        ToolProfileAcceptanceEvidence.hasCloudContractShape(
+          activeEvidence,
+          profile: draft.profile,
+        );
+    final hasMatchingPublishedRelease = c.cloudReleases.any((release) =>
+        release['releaseVersion'] == draft.releaseVersion &&
+        release['payloadDigest'] == draft.payloadDigest &&
+        release['publishedAt'] is String);
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -67,7 +77,7 @@ class EvidenceView extends StatelessWidget {
                       const SizedBox(width: 12),
                       _GateStatusBadge(
                         label: 'Gate 3 (Promotion Ready)',
-                        passed: hasPassivePass && hasLivePass,
+                        passed: isAcceptanceReady,
                       ),
                     ],
                   ),
@@ -78,26 +88,78 @@ class EvidenceView extends StatelessWidget {
           const SizedBox(height: 16),
 
           // Evidence records list
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Text(
-                'EVIDENCE RECORDS FOR ACTIVE DIGEST (${c.currentEvidence.length})',
-                style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF94A3B8)),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'EVIDENCE RECORDS FOR ACTIVE DIGEST (${c.currentEvidence.length})',
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF94A3B8)),
+                ),
               ),
-              TextButton.icon(
-                icon: const Icon(Icons.cleaning_services, size: 14),
-                label: const Text('Purge Stale Evidence'),
-                onPressed: () async {
-                  await c.store.clearEvidence(
-                    profileDefinitionId: draft.profileDefinitionId,
-                    retainPayloadDigest: draft.payloadDigest,
-                  );
-                  await c.refreshEvidence();
-                },
+              Wrap(
+                spacing: 8,
+                children: [
+                  TextButton.icon(
+                    icon: const Icon(Icons.cleaning_services, size: 14),
+                    label: const Text('Purge Stale Evidence'),
+                    onPressed: () async {
+                      await c.store.clearEvidence(
+                        profileDefinitionId: draft.profileDefinitionId,
+                        retainPayloadDigest: draft.payloadDigest,
+                      );
+                      await c.refreshEvidence();
+                    },
+                  ),
+                  ElevatedButton.icon(
+                    icon: c.isSubmittingCloudEvidence
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.cloud_upload_outlined, size: 15),
+                    label: const Text('Submit to Cloud'),
+                    onPressed: isAcceptanceReady &&
+                            hasMatchingPublishedRelease &&
+                            !c.isSubmittingCloudEvidence
+                        ? () async {
+                            try {
+                              final result =
+                                  await c.submitCloudAcceptanceEvidence(
+                                activeEvidence,
+                              );
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Cloud stored evidence ${result['id']}.',
+                                    ),
+                                  ),
+                                );
+                              }
+                            } catch (error) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Evidence submission failed: $error',
+                                    ),
+                                  ),
+                                );
+                              }
+                            }
+                          }
+                        : null,
+                  ),
+                ],
               ),
             ],
           ),
@@ -113,7 +175,7 @@ class EvidenceView extends StatelessWidget {
                     ),
                     child: const Center(
                       child: Text(
-                        'No evidence collected yet for this exact payload digest.\nRun tests in the Test Workbench to collect cryptographic evidence.',
+                        'No complete Cloud contract evidence exists for this exact payload digest. Failed and incomplete runs remain in the Test Workbench results.',
                         textAlign: TextAlign.center,
                         style:
                             TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
@@ -124,20 +186,20 @@ class EvidenceView extends StatelessWidget {
                     itemCount: c.currentEvidence.length,
                     itemBuilder: (ctx, idx) {
                       final ev = c.currentEvidence[idx];
-                      final isPass = ev['normalizedResult'] == 'pass';
+                      final scenarios =
+                          (ev['scenarios'] as Map?)?.cast<String, Object?>() ??
+                              const <String, Object?>{};
                       return Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
                           leading: Icon(
-                            isPass ? Icons.check_circle : Icons.cancel,
-                            color: isPass
-                                ? ProfileLabTheme.passColor
-                                : ProfileLabTheme.failColor,
+                            Icons.verified,
+                            color: ProfileLabTheme.passColor,
                           ),
                           title: Row(
                             children: [
                               Text(
-                                ev['testType'] as String? ?? 'unknown',
+                                'Cloud acceptance contract',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold, fontSize: 13),
                               ),
@@ -146,34 +208,28 @@ class EvidenceView extends StatelessWidget {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: isPass
-                                      ? ProfileLabTheme.passColor
-                                          .withValues(alpha: 0.2)
-                                      : ProfileLabTheme.failColor
-                                          .withValues(alpha: 0.2),
+                                  color: ProfileLabTheme.passColor
+                                      .withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  (ev['normalizedResult'] as String? ?? '')
-                                      .toUpperCase(),
+                                  'COMPLETE',
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
-                                    color: isPass
-                                        ? ProfileLabTheme.passColor
-                                        : ProfileLabTheme.failColor,
+                                    color: ProfileLabTheme.passColor,
                                   ),
                                 ),
                               ),
                             ],
                           ),
                           subtitle: Text(
-                            'Provider CLI: ${ev["providerCliVersion"]} | Engine: ${ev["engineVersion"]} | Time: ${ev["startedAt"]}',
+                            'Provider CLI: ${ev["providerToolVersion"]} | Engine: ${ev["engineVersion"]} | Accepted: ${ev["acceptedAt"]} | Scenarios: ${scenarios.length}',
                             style: const TextStyle(
                                 fontSize: 11, color: Color(0xFF94A3B8)),
                           ),
                           trailing: Text(
-                            '${ev["durationMs"]} ms',
+                            '${scenarios.length} scenarios',
                             style: const TextStyle(
                                 fontFamily: 'Menlo', fontSize: 11),
                           ),

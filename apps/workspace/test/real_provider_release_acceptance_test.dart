@@ -5,14 +5,9 @@ import 'package:conclave_profile_lab/profile_admin_api_client.dart';
 import 'package:conclave_profile_lab/profile_lab_auth.dart';
 import 'package:conclave_profile_lab/profile_lab_test_sandbox.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
-import 'package:conclave_workspace/local_worker_registry.dart';
-import 'package:conclave_workspace/tool_profile_catalog.dart';
-import 'package:conclave_workspace/tool_profile_release_store.dart';
-import 'package:conclave_workspace/worker_catalog_coordinator.dart';
 import 'package:test/test.dart';
 
 import 'support/compile_dart_executable.dart';
-import 'support/ed25519_release_fixture.dart';
 
 void main() {
   final officialProfiles = <_OfficialCandidate>[
@@ -35,7 +30,7 @@ void main() {
 
   for (final official in officialProfiles) {
     test(
-      'Phase 29 — Real-provider release acceptance for ${official.definitionId}',
+      'Phase 29 — Mock Engine cannot certify ${official.definitionId}',
       () async {
         await _runRealProviderReleaseAcceptance(official);
       },
@@ -79,17 +74,12 @@ Future<void> _runRealProviderReleaseAcceptance(
     name: 'mock_engine_binary',
   );
 
-  // 2. Prepare Ed25519 Signing Fixture
-  final signingFixture = await Ed25519ReleaseFixture.create();
-
-  // 3. Mock Cloud Admin & Catalog HTTP Server
+  // 2. Mock Cloud Admin & Catalog HTTP Server
   HttpOverrides.global = null;
   final mockServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
 
   final storedReleases = <String, List<Map<String, dynamic>>>{};
   final storedWorkers = <Map<String, dynamic>>[];
-  final workspaceChannels = <String, String>{}; // workspaceId -> channel
-  final submittedEvidence = <String, List<Map<String, dynamic>>>{};
 
   mockServer.listen((request) async {
     final path = request.uri.path;
@@ -106,64 +96,11 @@ Future<void> _runRealProviderReleaseAcceptance(
       }
     } else if (path.contains('/draft')) {
       request.response.write(jsonEncode({'success': true, 'draftVersion': 1}));
-    } else if (path.contains('/evidence')) {
-      final bodyStr = await utf8.decoder.bind(request).join();
-      final body = jsonDecode(bodyStr) as Map<String, dynamic>;
-      final evList = submittedEvidence[official.definitionId] ?? [];
-      evList.add(body);
-      submittedEvidence[official.definitionId] = evList;
-      request.response.write(
-          jsonEncode({'success': true, 'evidenceId': 'ev_${evList.length}'}));
     } else if (path.contains('/publish')) {
-      final releaseList = storedReleases[official.definitionId] ?? [];
-      final rawProfile = releaseList.first['profile'] as Map<String, dynamic>;
-
-      final releaseToSign = <String, Object?>{
-        'profileDefinitionId': official.definitionId,
-        'workerTypeId': official.logicalWorkerTypeId,
-        'displayName': official.providerToolName,
-        'providerToolName': official.providerToolName,
-        'channel': 'testing',
-        'releaseVersion': 1,
-        'profile': rawProfile,
-        'schemaVersion': 1,
-        'engineFamily': 'cli',
-        'engineCompatibility': rawProfile['engineCompatibility'],
-        'lifecycleState': 'testing',
-      };
-
-      await signingFixture.signToolProfileRelease(releaseToSign);
-      storedReleases[official.definitionId] = [releaseToSign];
-
+      request.response.statusCode = HttpStatus.conflict;
       request.response.write(jsonEncode({
-        'success': true,
-        'release': releaseToSign,
+        'error': 'A qualifying Cloud evidence record is required.',
       }));
-    } else if (path.contains('/promote')) {
-      final bodyStr = await utf8.decoder.bind(request).join();
-      final body = jsonDecode(bodyStr) as Map<String, dynamic>;
-      final targetChannel = body['channel'] as String;
-
-      if (storedReleases[official.definitionId] != null &&
-          storedReleases[official.definitionId]!.isNotEmpty) {
-        storedReleases[official.definitionId]!.first['channel'] = targetChannel;
-        storedReleases[official.definitionId]!.first['lifecycleState'] =
-            targetChannel;
-      }
-
-      request.response.write(jsonEncode({
-        'success': true,
-        'channel': targetChannel,
-        'releaseVersion': 1,
-      }));
-    } else if (path.contains('/tool-profile-channel')) {
-      final bodyStr = await utf8.decoder.bind(request).join();
-      final body = jsonDecode(bodyStr) as Map<String, dynamic>;
-      final wsId = Uri.decodeComponent(
-          path.split('/workspaces/')[1].split('/tool-profile-channel')[0]);
-      workspaceChannels[wsId] = body['channel'] as String;
-      request.response.write(jsonEncode(
-          {'success': true, 'workspaceId': wsId, 'channel': body['channel']}));
     } else if (path.contains('/releases')) {
       final rels = storedReleases[official.definitionId] ?? [];
       request.response.write(jsonEncode({'releases': rels}));
@@ -192,7 +129,7 @@ Future<void> _runRealProviderReleaseAcceptance(
   expect(candidate.isSigned, isFalse);
 
   // -----------------------------------------------------------------------
-  // STEP 2: Execute Lab Progressive Ladder & Collect Physical Evidence
+  // STEP 2: Exercise the ladder with a mock Engine that cannot run a provider.
   // -----------------------------------------------------------------------
   final sandbox = ProfileLabTestSandbox(
     sandboxRoot: sandboxDir,
@@ -200,37 +137,19 @@ Future<void> _runRealProviderReleaseAcceptance(
   );
 
   final ladderRes = await sandbox.executeTestLadder(candidate: candidate);
-  expect(ladderRes.stages.length, equals(9));
+  expect(ladderRes.stages.length, equals(11));
   expect(ladderRes.stages[0].status, equals('passed')); // schema
   expect(ladderRes.stages[1].status, equals('passed')); // engine compatibility
-
-  // Detailed Physical Acceptance Evidence Record
-  final physicalEvidence = <String, dynamic>{
-    'formatVersion': 1,
-    'profileDefinitionId': official.definitionId,
-    'releaseVersion': candidate.releaseVersion,
-    'logicalWorkerTypeId': official.logicalWorkerTypeId,
-    'payloadDigest': candidate.payloadDigest,
-    'engineVersion': '1.0.0',
-    'providerToolName': official.providerToolName,
-    'providerToolVersion': '1.0.0',
-    'acceptedAt': DateTime.now().toUtc().toIso8601String(),
-    'scenarios': {
-      'schema_validation': 'passed',
-      'engine_compatibility': 'passed',
-      'passive_probe': ladderRes.stages[4].status,
-      'live_probe': ladderRes.stages[5].status,
-      'controlled_execution': ladderRes.stages[6].status,
-      'session_behavior':
-          profileMap['session']?['supported'] == true ? 'passed' : 'skipped',
-      'failure_mapping': 'verified',
-    },
-    'ladderResult': ladderRes.overallResult,
-    'stages': ladderRes.stages.map((s) => s.toJson()).toList(),
-  };
+  expect(ladderRes.overallResult, equals('fail'));
+  expect(
+    ladderRes.stages
+        .singleWhere((stage) => stage.stageId == 'passive_probe')
+        .status,
+    equals('failed'),
+  );
 
   // -----------------------------------------------------------------------
-  // STEP 3: Admin Sync Draft & Submit Physical Evidence
+  // STEP 3: Cloud refuses publication without qualifying evidence.
   // -----------------------------------------------------------------------
   final adminClient = ProfileAdminApiClient(
     baseUrl: baseUrl,
@@ -258,14 +177,6 @@ Future<void> _runRealProviderReleaseAcceptance(
     sortOrder: 1,
   );
 
-  storedReleases[official.definitionId] = [
-    {
-      'profileDefinitionId': official.definitionId,
-      'releaseVersion': 1,
-      'profile': profileMap,
-    }
-  ];
-
   final draftRes = await adminClient.updateDraft(
     profileDefinitionId: official.definitionId,
     releaseVersion: 1,
@@ -273,108 +184,20 @@ Future<void> _runRealProviderReleaseAcceptance(
   );
   expect(draftRes['success'], isTrue);
 
-  final evidenceRes = await adminClient.submitReleaseEvidence(
-    profileDefinitionId: official.definitionId,
-    releaseVersion: 1,
-    evidence: physicalEvidence,
-  );
-  expect(evidenceRes['success'], isTrue);
-  expect(submittedEvidence[official.definitionId], isNotEmpty);
-
   // -----------------------------------------------------------------------
-  // STEP 4: Publish Signed Release Candidate (Lifecycle: Testing)
-  // -----------------------------------------------------------------------
-  final publishRes = await adminClient.publishRelease(
-    profileDefinitionId: official.definitionId,
-    releaseVersion: 1,
+  await expectLater(
+    adminClient.publishRelease(
+      profileDefinitionId: official.definitionId,
+      releaseVersion: 1,
+      qualificationEvidenceId: 'unissued-qualification-id',
+    ),
+    throwsA(isA<StateError>().having(
+      (error) => error.message,
+      'message',
+      contains('qualifying Cloud evidence record'),
+    )),
   );
-  expect(publishRes['success'], isTrue);
-  expect(publishRes['release']['signature'], isNotNull);
-  expect(publishRes['release']['lifecycleState'], equals('testing'));
-
-  // -----------------------------------------------------------------------
-  // STEP 5: Promote to Dedicated Testing Workspace Before Stable
-  // -----------------------------------------------------------------------
-  const testingWorkspaceId = 'workspace-testing-lab';
-  final setWsChanRes = await adminClient.setWorkspaceChannel(
-    workspaceId: testingWorkspaceId,
-    channel: 'testing',
-  );
-  expect(setWsChanRes['success'], isTrue);
-  expect(workspaceChannels[testingWorkspaceId], equals('testing'));
-
-  final promoteTestingRes = await adminClient.promoteRelease(
-    profileDefinitionId: official.definitionId,
-    releaseVersion: 1,
-    channel: 'testing',
-    acceptanceEvidence: physicalEvidence,
-  );
-  expect(promoteTestingRes['channel'], equals('testing'));
-
-  // -----------------------------------------------------------------------
-  // STEP 6: Workspace Channel Sync & Release Activation Verification
-  // -----------------------------------------------------------------------
-  final profileStore = ToolProfileReleaseStore(
-    profilesRoot: Directory('${tempDir.path}/WorkspaceProfiles'),
-    trustPolicy: signingFixture.trustPolicy,
-  );
-
-  final catalogClient = ToolProfileCatalogClient(
-    cloudUri: Uri.parse(baseUrl),
-    store: profileStore,
-    trustPolicy: signingFixture.trustPolicy,
-    trustRefresher: () async {},
-    candidateValidator: (admission, file) async => await file.exists(),
-    workerCatalogLoader: () async {
-      return [
-        WorkerDescriptor(
-          workerTypeId: official.logicalWorkerTypeId,
-          displayName: official.providerToolName,
-          description: 'Official Provider Worker',
-          profileDefinitionId: official.definitionId,
-          providerToolName: official.providerToolName,
-          engineFamily: 'cli',
-          visibilityState: 'visible',
-          releaseStage: 'testing',
-          capabilities: const ['text'],
-          sortOrder: 1,
-        ).toJson()
-      ];
-    },
-    listLoader: (wTypeId, channel) async {
-      final rels = storedReleases[official.definitionId] ?? [];
-      return ToolProfileCatalogResult(
-        channel: channel,
-        releases: rels,
-      );
-    },
-  );
-
-  final registry = LocalWorkerRegistry(
-    dataDirectory: Directory('${tempDir.path}/Registry'),
-    workspaceId: testingWorkspaceId,
-    idGenerator: () => 'local-${official.definitionId}',
-  );
-
-  final coordinator = WorkerCatalogCoordinator(
-    catalog: catalogClient,
-    releaseStore: profileStore,
-    registry: registry,
-  );
-
-  await coordinator.refresh(force: true);
-  expect(coordinator.entryForWorker(official.logicalWorkerTypeId), isNotNull);
-
-  await catalogClient.syncWorkerProfiles(official.logicalWorkerTypeId,
-      channel: 'testing');
-
-  final activeRelease = await profileStore.activeRelease(official.definitionId);
-  expect(activeRelease, isNotNull);
-  expect(activeRelease!.releaseVersion, equals(1));
-  expect(activeRelease.channel, equals('testing'));
-
-  catalogClient.close();
-  coordinator.dispose();
+  expect(storedReleases[official.definitionId], isNull);
 }
 
 const _mockEngineSource = r'''
@@ -413,24 +236,26 @@ Future<void> main(List<String> args) async {
           'type': 'probe.result',
           'requestId': request['requestId'],
           'mode': request['mode'] ?? 'passive',
-          'ready': true,
+          'ready': false,
+          'issueCode': 'provider_tool_unavailable',
           'providerToolName': profile['providerTool']?['name'] ?? 'Provider CLI',
           'providerToolVersion': '1.0.0',
           'checks': [
             {
               'code': 'provider_tool_version',
-              'status': 'passed',
-              'message': 'Provider tool version check passed',
+              'status': 'failed',
+              'message': 'Mock Engine does not run a provider probe',
             }
           ],
         }));
       case 'execute.request':
         stdout.writeln(jsonEncode({
-          'type': 'result',
+          'type': 'error',
           'requestId': request['requestId'],
           'assignmentId': request['assignmentId'],
-          'output': 'RELEASE_ACCEPTANCE_OK',
-          'artifacts': <String>[],
+          'code': 'provider_tool_unavailable',
+          'message': 'Mock Engine does not execute a provider CLI',
+          'retryable': false,
         }));
     }
   }

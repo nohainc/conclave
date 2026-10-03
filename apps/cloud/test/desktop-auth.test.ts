@@ -1213,6 +1213,8 @@ describe("desktop human authentication", () => {
     // Configure Profile admin user
     (env as Record<string, unknown>).CONCLAVE_PROFILE_ADMIN_USER_IDS =
       "human-1";
+    (env as Record<string, unknown>).CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS =
+      "human-1";
 
     // 1. Create Profile Lab auth intent
     const createRes = await handleCreateDesktopAuthIntent(

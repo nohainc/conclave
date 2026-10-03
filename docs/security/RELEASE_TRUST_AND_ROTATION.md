@@ -31,6 +31,7 @@ The release workflows use GitHub Environments and repository variables:
 | --- | --- | --- |
 | Workspace app release metadata | `CONCLAVE_WORKSPACE_ED25519_SEED` | `CONCLAVE_WORKSPACE_SIGNING_KEY_ID` |
 | Release publication authorization | `CONCLAVE_RELEASE_PUBLISH_TOKEN` | `CLOUD_API_URL` |
+| Tool Profile release signing | `CONCLAVE_RELEASE_PRIVATE_KEY` | `CONCLAVE_RELEASE_PUBLISHER`, `CONCLAVE_RELEASE_SIGNING_KEY_ID`, `CONCLAVE_RELEASE_TRUST_KEYS_JSON` |
 | macOS Developer ID/notarization | `CONCLAVE_MACOS_CERTIFICATE_P12`, password and Apple credentials | — |
 | Workspace client trust anchors | — | `CONCLAVE_RELEASE_TRUST_KEYS_JSON` |
 
@@ -39,6 +40,15 @@ Ed25519 public keys encoded as base64, keyed by publisher and key ID in
 `CONCLAVE_RELEASE_TRUST_KEYS_JSON`. Never print or upload signing seeds,
 certificate passwords, Apple credentials, or publication tokens in workflow
 logs or artifacts.
+
+Cloud Profile publication requires all four Tool Profile signing settings. The
+private key must match the public key under the configured publisher and key ID
+in `CONCLAVE_RELEASE_TRUST_KEYS_JSON`, and the key ID must not be revoked. The
+admin-only `GET /api/admin/tool-profiles/signing-preflight` checks that exact
+configuration without returning key material. Profile Lab checks it before
+publication, and Cloud repeats the check inside the publication operation.
+Missing settings, malformed keys, mismatched trust roots, failed revocation
+checks, and revoked keys block publication.
 
 ## Planned rotation
 

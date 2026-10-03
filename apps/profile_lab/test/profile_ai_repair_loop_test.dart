@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:conclave_profile_lab/bundled_cli_worker_engine_loader.dart';
 import 'package:conclave_profile_lab/controllers/profile_lab_controller.dart';
 import 'package:conclave_profile_lab/profile_lab_paths.dart';
+import 'package:conclave_profile_lab/profile_lab_session_store.dart';
 import 'package:conclave_profile_lab/profile_lab_test_sandbox.dart';
 import 'package:conclave_profile_lab/utils/profile_ai_repair_loop.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,7 +21,10 @@ void main() {
     tempPaths = ProfileLabPaths(homeDirectory: tempDir.path);
     await tempPaths.ensureDirectoriesExist();
 
-    controller = ProfileLabController(paths: tempPaths);
+    controller = ProfileLabController(
+      paths: tempPaths,
+      sessionStore: ProfileLabSessionStore.inMemoryForTesting(tempPaths),
+    );
     await controller.createNewDraft(
       profileDefinitionId: 'repair-loop-test',
       workerTypeId: 'claude',
@@ -57,7 +61,7 @@ void main() {
         startedAt: DateTime.now(),
         endedAt: DateTime.now(),
         stages: stageResults,
-        evidenceRecord: {},
+        acceptanceEvidence: null,
         logs: [],
       );
 

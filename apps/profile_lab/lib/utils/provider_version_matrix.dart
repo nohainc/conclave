@@ -69,16 +69,14 @@ class ProviderVersionMatrix {
 
     final testedEntries = <TestedVersionEntry>[];
     for (final ev in evidenceList) {
-      final cliVer = ev['providerCliVersion'] as String?;
+      final cliVer = ev['providerToolVersion'] as String?;
       if (cliVer != null && cliVer.isNotEmpty && cliVer != 'unknown') {
         testedEntries.add(TestedVersionEntry(
           version: cliVer,
-          result: ev['normalizedResult'] as String? ?? 'fail',
-          recordedAt:
-              ev['recordedAt'] as String? ?? ev['startedAt'] as String? ?? '',
-          osVersion:
-              ev['osVersion'] as String? ?? Platform.operatingSystemVersion,
-          testType: ev['testType'] as String? ?? 'local_test',
+          result: 'pass',
+          recordedAt: ev['acceptedAt'] as String? ?? '',
+          osVersion: Platform.operatingSystemVersion,
+          testType: 'cloud_acceptance_contract',
         ));
       }
     }

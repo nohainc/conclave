@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'profile_release_diff_view.dart';
 import 'promotion_gate_dialog.dart';
+import 'profile_lab_step_up.dart';
 
 import '../controllers/profile_lab_controller.dart';
 import '../theme/profile_lab_theme.dart';
@@ -171,8 +172,11 @@ class _ReleasesViewState extends State<ReleasesView> {
                         }
                       } catch (e) {
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Rollback failed: $e')),
+                          showProfileLabOperationFailure(
+                            context,
+                            c,
+                            'Rollback',
+                            e,
                           );
                         }
                       }
@@ -311,8 +315,11 @@ class _ReleasesViewState extends State<ReleasesView> {
                           }
                         } catch (e) {
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Revocation failed: $e')),
+                            showProfileLabOperationFailure(
+                              context,
+                              c,
+                              'Revocation',
+                              e,
                             );
                           }
                         }
@@ -325,10 +332,17 @@ class _ReleasesViewState extends State<ReleasesView> {
     );
   }
 
-  void _showPromoteDialog(Map<String, dynamic> release) {
+  Future<void> _showPromoteDialog(Map<String, dynamic> release) async {
     final c = widget.controller;
     final currentState = release['lifecycleState'] as String? ?? 'testing';
     final targetChannel = currentState == 'testing' ? 'beta' : 'stable';
+    if (targetChannel == 'stable') {
+      await c.fetchCloudEvidence(
+        profileDefinitionId: c.selectedDefinitionId,
+        version: release['releaseVersion'] as int?,
+      );
+    }
+    if (!mounted) return;
 
     PromotionGateDialog.show(
       context: context,
@@ -410,6 +424,25 @@ class _ReleasesViewState extends State<ReleasesView> {
         ),
 
         // Split view: Left Releases Table, Right Release Inspector
+        Card(
+          margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+          color: Colors.blue.withValues(alpha: 0.10),
+          child: const Padding(
+            padding: EdgeInsets.all(10),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.lightBlue, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Stable promotion requires a qualifying evidence record stored by Cloud. Profile Lab submits evidence separately, then promotes by its Cloud evidence ID.',
+                    style: TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         Expanded(
           child: Row(
             children: [
@@ -481,7 +514,9 @@ class _ReleasesViewState extends State<ReleasesView> {
                                     icon: const Icon(Icons.upgrade,
                                         size: 18,
                                         color: ProfileLabTheme.primaryAccent),
-                                    tooltip: 'Promote',
+                                    tooltip: state == 'testing'
+                                        ? 'Promote to Beta'
+                                        : 'Promote to Stable using Cloud evidence',
                                     onPressed: () => _showPromoteDialog(rel),
                                   )
                                 : null,
@@ -548,13 +583,18 @@ class _ReleaseInspectorPane extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               Text('Release v$ver Details',
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.bold)),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   OutlinedButton.icon(
                     icon: const Icon(Icons.compare_arrows, size: 14),
@@ -586,7 +626,6 @@ class _ReleaseInspectorPane extends StatelessWidget {
                       );
                     },
                   ),
-                  const SizedBox(width: 8),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.edit_note, size: 14),
                     label: Text('Create Next Draft (v${ver + 1})',
@@ -611,12 +650,11 @@ class _ReleaseInspectorPane extends StatelessWidget {
                       }
                     },
                   ),
-                  if (state == 'testing' || state == 'beta') ...[
-                    const SizedBox(width: 8),
+                  if (state == 'testing') ...[
                     ElevatedButton.icon(
                       icon: const Icon(Icons.arrow_upward, size: 14),
-                      label:
-                          const Text('Promote', style: TextStyle(fontSize: 11)),
+                      label: const Text('Promote to Beta',
+                          style: TextStyle(fontSize: 11)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: ProfileLabTheme.primaryAccent,
                         foregroundColor: Colors.white,
@@ -627,8 +665,18 @@ class _ReleaseInspectorPane extends StatelessWidget {
                       onPressed: onPromote,
                     ),
                   ],
+                  if (state == 'beta') ...[
+                    const Tooltip(
+                      message:
+                          'Stable promotion requires qualifying Cloud evidence.',
+                      child: Chip(
+                        avatar: Icon(Icons.cloud_done_outlined, size: 14),
+                        label: Text('Requires Cloud evidence'),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ],
                   if (state != 'revoked') ...[
-                    const SizedBox(width: 8),
                     OutlinedButton.icon(
                       icon: const Icon(Icons.block, size: 14),
                       label: const Text('Revoke Release...',

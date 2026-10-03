@@ -101,6 +101,9 @@ export const routeHandlers = {
     handlers.handleUpdateDraftToolProfileRelease,
   handlePublishDraftToolProfileRelease:
     handlers.handlePublishDraftToolProfileRelease,
+  handleSubmitToolProfileLocalQualification:
+    handlers.handleSubmitToolProfileLocalQualification,
+  handleToolProfileSigningPreflight: handlers.handleToolProfileSigningPreflight,
   handlePromoteToolProfileRelease: handlers.handlePromoteToolProfileRelease,
   handleChangeToolProfileReleaseLifecycle:
     handlers.handleChangeToolProfileReleaseLifecycle,
@@ -244,6 +247,12 @@ export default {
       ) {
         handlers.requireSameOriginForCookieMutation(request);
         return handlers.handleCompleteStepUp(request, env, ctx);
+      }
+      if (
+        request.method === "POST" &&
+        url.pathname === "/api/desktop-auth/profile-lab/step-up/complete"
+      ) {
+        return handlers.handleCompleteProfileLabStepUp(request, env, ctx);
       }
       if (
         url.pathname === "/api/auth" ||

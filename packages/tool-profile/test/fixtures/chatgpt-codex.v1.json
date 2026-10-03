@@ -18,7 +18,7 @@
       "source": "stdout",
       "extract": { "kind": "regex_capture", "patternId": "semver" }
     },
-    "supportedVersions": [{ "min": "0.176.0", "maxExclusive": "0.190.0" }]
+    "supportedVersions": [{ "min": "0.158.0", "maxExclusive": "0.190.0" }]
   },
   "environment": {
     "passthrough": [

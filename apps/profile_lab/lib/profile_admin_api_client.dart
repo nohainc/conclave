@@ -3,6 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'profile_lab_auth.dart';
+import 'profile_lab_cloud_config.dart';
+import 'models/profile_admin_read_models.dart';
+
+export 'models/profile_admin_read_models.dart';
 
 /// HTTP Client for Conclave Cloud Profile Admin API endpoints.
 ///
@@ -10,10 +14,11 @@ import 'profile_lab_auth.dart';
 /// and never connects directly to Cloudflare D1.
 class ProfileAdminApiClient {
   ProfileAdminApiClient({
-    required this.baseUrl,
+    required String baseUrl,
     this.session,
     HttpClient? httpClient,
-  }) : _http = httpClient ?? HttpClient();
+  })  : baseUrl = ProfileLabCloudConfig.normalizeOrigin(baseUrl),
+        _http = httpClient ?? HttpClient();
 
   final String baseUrl;
   final ProfileLabSession? session;
@@ -68,10 +73,14 @@ class ProfileAdminApiClient {
   }
 
   /// Lists all logical workers across all lifecycle states, stages, and visibility.
-  Future<List<Map<String, dynamic>>> fetchWorkerCatalog() async {
+  Future<List<ProfileLabWorkerReadModel>> fetchWorkerCatalog() async {
     final result = await _request('GET', _api('/api/admin/workers/catalog'));
     if (result is Map && result['workers'] is List) {
-      return (result['workers'] as List).cast<Map<String, dynamic>>();
+      return _readModels(
+        result['workers'] as List,
+        ProfileLabWorkerReadModel.fromJson,
+        'workers',
+      );
     }
     return [];
   }
@@ -108,17 +117,21 @@ class ProfileAdminApiClient {
   }
 
   /// Lists all Profile definitions with aggregated channel pointers and release counts.
-  Future<List<Map<String, dynamic>>> fetchDefinitions() async {
+  Future<List<ProfileLabDefinitionReadModel>> fetchDefinitions() async {
     final result =
         await _request('GET', _api('/api/admin/tool-profiles/definitions'));
     if (result is Map && result['definitions'] is List) {
-      return (result['definitions'] as List).cast<Map<String, dynamic>>();
+      return _readModels(
+        result['definitions'] as List,
+        ProfileLabDefinitionReadModel.fromJson,
+        'definitions',
+      );
     }
     return [];
   }
 
   /// Retrieves a single Profile definition by ID.
-  Future<Map<String, dynamic>> fetchDefinition(
+  Future<ProfileLabDefinitionReadModel> fetchDefinition(
       String profileDefinitionId) async {
     final result = await _request(
       'GET',
@@ -126,13 +139,14 @@ class ProfileAdminApiClient {
           '/api/admin/tool-profiles/definitions/${Uri.encodeComponent(profileDefinitionId)}'),
     );
     if (result is Map) {
-      return Map<String, dynamic>.from(result);
+      return ProfileLabDefinitionReadModel.fromJson(
+          Map<String, dynamic>.from(result));
     }
     throw StateError('Invalid definition response');
   }
 
   /// Lists all releases for a specific Profile definition.
-  Future<List<Map<String, dynamic>>> fetchReleases(
+  Future<List<ProfileLabReleaseReadModel>> fetchReleases(
       String profileDefinitionId) async {
     final result = await _request(
       'GET',
@@ -140,13 +154,17 @@ class ProfileAdminApiClient {
           '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases'),
     );
     if (result is Map && result['releases'] is List) {
-      return (result['releases'] as List).cast<Map<String, dynamic>>();
+      return _readModels(
+        result['releases'] as List,
+        ProfileLabReleaseReadModel.fromJson,
+        'releases',
+      );
     }
     return [];
   }
 
   /// Retrieves a single release by version with parsed payload.
-  Future<Map<String, dynamic>> fetchRelease(
+  Future<ProfileLabReleaseReadModel> fetchRelease(
       String profileDefinitionId, int releaseVersion) async {
     final result = await _request(
       'GET',
@@ -154,20 +172,25 @@ class ProfileAdminApiClient {
           '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion'),
     );
     if (result is Map) {
-      return Map<String, dynamic>.from(result);
+      return ProfileLabReleaseReadModel.fromJson(
+          Map<String, dynamic>.from(result));
     }
     throw StateError('Invalid release response');
   }
 
   /// Lists channel pointers globally or scoped to a definition.
-  Future<List<Map<String, dynamic>>> fetchChannelPointers(
+  Future<List<ProfileLabChannelPointerReadModel>> fetchChannelPointers(
       [String? profileDefinitionId]) async {
     final path = profileDefinitionId != null
         ? '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/channels'
         : '/api/admin/tool-profiles/channels';
     final result = await _request('GET', _api(path));
     if (result is Map && result['channels'] is List) {
-      return (result['channels'] as List).cast<Map<String, dynamic>>();
+      return _readModels(
+        result['channels'] as List,
+        ProfileLabChannelPointerReadModel.fromJson,
+        'channels',
+      );
     }
     return [];
   }
@@ -195,7 +218,7 @@ class ProfileAdminApiClient {
   }
 
   /// Lists acceptance evidence submitted to Cloud for a release version.
-  Future<List<Map<String, dynamic>>> fetchReleaseEvidence(
+  Future<List<ProfileLabEvidenceReadModel>> fetchReleaseEvidence(
     String profileDefinitionId,
     int releaseVersion,
   ) async {
@@ -205,16 +228,20 @@ class ProfileAdminApiClient {
           '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/evidence'),
     );
     if (result is Map && result['evidence'] is List) {
-      return (result['evidence'] as List).cast<Map<String, dynamic>>();
+      return _readModels(
+        result['evidence'] as List,
+        ProfileLabEvidenceReadModel.fromJson,
+        'evidence',
+      );
     }
     return [];
   }
 
-  /// Submits verified acceptance evidence bound to the exact release payload digest.
+  /// Submits one complete sandbox acceptance contract as immutable Cloud evidence.
   Future<Map<String, dynamic>> submitReleaseEvidence({
     required String profileDefinitionId,
     required int releaseVersion,
-    required Map<String, dynamic> evidence,
+    required Map<String, Object?> evidence,
   }) async {
     final result = await _request(
       'POST',
@@ -225,18 +252,22 @@ class ProfileAdminApiClient {
     if (result is Map) {
       return Map<String, dynamic>.from(result);
     }
-    throw StateError('Invalid evidence submission response');
+    throw StateError('Invalid submit evidence response');
   }
 
   /// Lists audit events globally or scoped to a definition.
-  Future<List<Map<String, dynamic>>> fetchAudit(
+  Future<List<ProfileLabAuditEventReadModel>> fetchAudit(
       [String? profileDefinitionId]) async {
     final path = profileDefinitionId != null
         ? '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/audit'
         : '/api/admin/tool-profiles/audit';
     final result = await _request('GET', _api(path));
     if (result is Map && result['events'] is List) {
-      return (result['events'] as List).cast<Map<String, dynamic>>();
+      return _readModels(
+        result['events'] as List,
+        ProfileLabAuditEventReadModel.fromJson,
+        'events',
+      );
     }
     return [];
   }
@@ -270,17 +301,13 @@ class ProfileAdminApiClient {
   Future<Map<String, dynamic>> publishRelease({
     required String profileDefinitionId,
     required int releaseVersion,
-    String? signature,
-    String? signingKeyId,
+    required String qualificationEvidenceId,
   }) async {
     final result = await _request(
       'POST',
       _api(
           '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/publish'),
-      body: {
-        if (signature != null) 'signature': signature,
-        if (signingKeyId != null) 'signingKeyId': signingKeyId,
-      },
+      body: {'qualificationEvidenceId': qualificationEvidenceId},
     );
     if (result is Map) {
       return Map<String, dynamic>.from(result);
@@ -288,21 +315,76 @@ class ProfileAdminApiClient {
     throw StateError('Invalid publish response');
   }
 
-  /// Promotes a published release into beta or stable channel.
+  /// Submits complete local Engine qualification for a mutable Cloud draft.
+  Future<Map<String, dynamic>> submitLocalQualification({
+    required String profileDefinitionId,
+    required int releaseVersion,
+    required Map<String, Object?> evidence,
+  }) async {
+    final result = await _request(
+      'POST',
+      _api(
+        '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/qualification',
+      ),
+      body: {'evidence': evidence},
+    );
+    if (result is Map) return Map<String, dynamic>.from(result);
+    throw StateError('Invalid local qualification response');
+  }
+
+  /// Checks that Cloud's configured Profile signer is trusted and not revoked.
+  Future<ProfileLabSigningPreflightReadModel> checkSigningPreflight() async {
+    final result = await _request(
+      'GET',
+      _api('/api/admin/tool-profiles/signing-preflight'),
+    );
+    if (result is Map) {
+      return ProfileLabSigningPreflightReadModel.fromJson(
+          Map<String, dynamic>.from(result));
+    }
+    throw StateError('Invalid signing preflight response');
+  }
+
+  /// Reads Cloud's current release signing key and Profile revocations.
+  Future<ProfileLabReleaseTrustReadModel> fetchReleaseTrust() async {
+    final result = await _request('GET', _api('/api/release-trust'));
+    if (result is Map) {
+      return ProfileLabReleaseTrustReadModel.fromJson(
+          Map<String, dynamic>.from(result));
+    }
+    throw StateError('Invalid release trust response');
+  }
+
+  /// Promotes a published release. Stable promotion must reference evidence
+  /// that was submitted and accepted by Cloud in a separate request.
   Future<Map<String, dynamic>> promoteRelease({
     required String profileDefinitionId,
     required int releaseVersion,
     required String channel,
-    Map<String, dynamic>? acceptanceEvidence,
+    String? acceptanceEvidenceId,
   }) async {
+    final normalizedChannel = channel.toLowerCase();
+    if (!{'beta', 'stable'}.contains(normalizedChannel)) {
+      throw StateError(
+        'Profile Lab can only promote releases to beta or stable.',
+      );
+    }
+    if (normalizedChannel == 'stable' &&
+        (acceptanceEvidenceId == null || acceptanceEvidenceId.trim().isEmpty)) {
+      throw StateError('Stable promotion requires a stored Cloud evidence ID.');
+    }
+    if (normalizedChannel != 'stable' && acceptanceEvidenceId != null) {
+      throw StateError(
+          'Only stable promotion may reference acceptance evidence.');
+    }
     final result = await _request(
       'POST',
       _api(
           '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/promote'),
       body: {
-        'channel': channel,
-        if (acceptanceEvidence != null)
-          'acceptanceEvidence': acceptanceEvidence,
+        'channel': normalizedChannel,
+        if (acceptanceEvidenceId != null)
+          'acceptanceEvidenceId': acceptanceEvidenceId,
       },
     );
     if (result is Map) {
@@ -331,10 +413,15 @@ class ProfileAdminApiClient {
   }
 
   /// Lists all registered development/test workspaces with their tool profile channel assignments.
-  Future<List<Map<String, dynamic>>> listWorkspaceChannels() async {
+  Future<List<ProfileLabWorkspaceChannelReadModel>>
+      listWorkspaceChannels() async {
     final result = await _request('GET', _api('/api/admin/workspace-channels'));
     if (result is Map && result['workspaces'] is List) {
-      return (result['workspaces'] as List).cast<Map<String, dynamic>>();
+      return _readModels(
+        result['workspaces'] as List,
+        ProfileLabWorkspaceChannelReadModel.fromJson,
+        'workspaces',
+      );
     }
     return [];
   }
@@ -357,4 +444,17 @@ class ProfileAdminApiClient {
   }
 
   void close() => _http.close(force: true);
+}
+
+List<T> _readModels<T extends ProfileAdminReadModel>(
+  List values,
+  T Function(Map<String, dynamic>) parse,
+  String field,
+) {
+  return List<T>.unmodifiable(values.map((value) {
+    if (value is! Map) {
+      throw StateError('Invalid $field response item');
+    }
+    return parse(Map<String, dynamic>.from(value));
+  }));
 }

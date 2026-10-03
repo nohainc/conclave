@@ -13,6 +13,12 @@ Conclave Profile Lab is an internal macOS desktop application (`apps/profile_lab
 
 Under Architecture v8, provider-specific Worker executables are replaced by one generic CLI Worker Engine (`engines/cli_worker`) configured by signed, immutable Tool Profiles. Vendor CLI tools evolve rapidly. Profile Lab is the operational control surface that enables engineers and maintainers to keep provider CLI integrations up to date without releasing new Workspace application binaries.
 
+### Current release controls
+
+Profile Lab stores complete sandbox evidence locally in the exact Cloud contract shape. Before publication, it submits that contract as local qualification for the exact draft digest; Cloud stores it immutably and requires its ID to sign and publish. After publication, an operator can submit a separate acceptance record for Stable promotion. Promotion references only the returned Cloud evidence ID; Profile Lab never includes evidence JSON in a promotion request.
+
+The Profile Draft Assistant uses a Cloud-trusted Stable Worker Profile and the local generic CLI Worker Engine to request model-backed Draft proposals. Before each request, the operator confirms that the Draft and bounded test diagnostics may be sent through that provider CLI. Profile Lab does not collect or store provider credentials. The separate Repair Loop remains an experimental local heuristic. Both flows can propose Draft edits only; their output is never test evidence or acceptance evidence.
+
 ---
 
 ## 2. Product Boundaries & Architecture Surfaces
@@ -62,6 +68,14 @@ Provider CLI (local executable binary)
 
 No Worker identity (such as `chatgpt` or `gemini`) is hardcoded in Profile Lab, Workspace, or AX. Conclave Cloud is the sole authority for catalog descriptors and profile bindings. Adding a new Worker in Profile Lab makes it discoverable by Workspaces and selectable in AX without application redeployment or code modifications.
 
+Profile Lab executable discovery follows the same rule: it gathers executable names from the loaded Worker catalog's `providerToolName` and from Tool Profile `providerTool.name` and `providerTool.executableCandidates`. Profile-declared `standardLocations` are used for those candidates. Diagnostics list only the names found in loaded Worker/Profile data; the application does not maintain a built-in provider inventory. Session formats and resume arguments remain Profile data, and a failed session diagnostic does not let repair logic infer them from a provider name.
+
+Profile Lab builds default to `https://app.conclaveax.com`. Development builds can set `CONCLAVE_CLOUD_URL=http://localhost:8787` with a Dart define or choose an origin in the Cloud connection settings. The settings override persists locally and can be reset to the build default. Cloud origins must be HTTPS except for loopback HTTP in development builds; URLs with credentials, paths, queries, or fragments are rejected. Saved Keychain sessions are bound to their Cloud origin and are cleared when the origin changes. Legacy sessions without origin binding are discarded.
+
+### Profile Lab application boundaries
+
+The `ProfileLabController` remains the UI-facing façade, with draft editing and sync, Engine testing, session handling, and Cloud administration implemented in separate controller components. `ProfileAdminApiClient` decodes Cloud reads into typed read models for Workers, definitions, releases, evidence, audit events, channel pointers, Workspace assignments, and signing preflight. The Tool Profile payload remains an open JSON object because its schema evolves independently. The controller currently converts Cloud read models to JSON-shaped presentation state so existing screens can migrate independently; new application logic should use typed read model fields directly.
+
 ---
 
 ## 4. Draft Authoring & Sandbox Testing
@@ -71,22 +85,23 @@ Profile Lab allows engineers to author and iteratively refine Draft Profiles bef
 - **Local Draft Store (`DraftProfileStore`):** Persists draft configurations locally under Profile Lab's dedicated application support directory (`~/Library/Application Support/conclave_profile_lab/drafts/`).
 - **Unsigned Draft Candidate (`LocalDraftProfileCandidate`):** Implements `ToolProfileCandidate` with `isSigned => false`. Unsigned drafts are strictly barred from entering Workspace's trusted profile store (`ToolProfileReleaseStore`).
 - **Sandbox Test Supervisor:** Uses `PlatformProcessSupervisor` from `conclave_cli_worker_runtime` to run tests out of process with hard execution deadlines, process tree cleanup, and secret redaction (`SafeProviderDiagnostics`).
-- **Probe Suite:**
-  - **Passive Probe:** Validates binary existence, version allowance, and zero-prompt execution.
-  - **Live Probe:** Executes a bounded test prompt against the installed CLI to verify stdout/stderr stream parsing, event rules, and exit status.
-  - **Session Test:** Verifies session creation, session resumption (`resume` pattern), and multi-turn state retention.
+- **Progressive Test Ladder:** Keeps schema, Engine compatibility, executable discovery, version, passive probe, and live probe as preflight stages. It then submits actual assignments through the generic CLI Worker Engine, including a file write verified inside the isolated sandbox. Session create/resume and model selection each submit real Engine assignments when the profile declares a testable capability; unsupported or untestable capabilities are shown as skipped, never passed.
+- **Cancellation and Deadline Tests:** The ladder submits a cancellable Engine assignment and a separate assignment with a bounded deadline. A cancellation/deadline stage passes only when the Engine reports the expected outcome and terminates the process tree. The operator can also cancel the currently active Engine assignment from the Test Bench.
+- **Evidence Result:** The sandbox emits all eight Cloud scenario keys. It records `passed` only after observing an applicable scenario succeed and records `not_applicable` for model selection without an allowlisted test model, workstream writes without the `workstream_write` capability, or durable sessions the Tool Profile does not declare. Cloud independently derives the same expected statuses from the release Profile. Durable session capability and `session.supported` must agree. Failed or incomplete run diagnostics remain in the local Test Workbench and do not become acceptance evidence.
+- **macOS CI Acceptance:** The Profile Lab macOS verification script builds the actual CLI Worker Engine executable from `engines/cli_worker`, saves and reloads an unsigned Profile Lab Draft through `DraftProfileStore`, and runs the full 11-stage ladder against a local fixture provider. The check requires the real Engine and every applicable scenario to pass, validates the resulting Cloud evidence contract against the Draft digest, and verifies sandbox cleanup. It uses no live provider account or credential.
 
 ---
 
 ## 5. Cryptographic Evidence & Release Publication
 
-To publish a Draft Profile as a signed release, Profile Lab captures evidence bound to the exact payload SHA-256 digest:
+Profile Lab stores local sandbox contracts against the canonical payload SHA-256 digest. Before publication, it submits the matching contract to Cloud as local qualification. Cloud validates and stores the submitted contract, then returns an ID that the publish request must include. This is a digest-bound authenticated assertion, not remote attestation of the local process; only the supported Profile Lab client emits a contract after applicable Engine scenarios pass. The request carries no signature or signing-key ID. Before this flow, Profile Lab checks the admin-only Cloud signing preflight. Cloud verifies that its configured private key matches the public trust root for the configured publisher/key ID and that the key is not revoked. Publication repeats signer and qualification checks and fails closed if either is invalid or unavailable:
 
-1. **Evidence Contract (`ToolProfileEvidenceContract`):** Collects binary paths, exact CLI version strings, passive probe results, live probe outputs, and diagnostic session status.
+1. **Local Qualification:** The sandbox emits the capability-aware `ToolProfileAcceptanceEvidence` contract only when all required Engine scenarios pass. Cloud validates current draft identity/digest, reported Engine and provider compatibility, freshness, and required statuses, then stores an immutable qualification record before publication. Failed or incomplete ladder diagnostics remain in the Test Workbench and cannot qualify a draft through the supported client.
 2. **Digest Invalidation:** Any mutation to a Draft Profile payload changes its SHA-256 `payloadDigest` and invalidates all previously gathered test evidence.
-3. **Cloud Admin API (`POST /api/admin/workers/definitions/:id/releases`):** Submits the draft JSON payload and verified test evidence artifact.
-4. **Cloud Signing Boundary:** Cloud verifies administrative scope (`profiles:admin`), checks payload schema, validates evidence completeness, and signs the release using Cloud's Ed25519 private key.
-5. **Signed Admission (`ToolProfileReleaseAdmission`):** Returned to clients with `isSigned => true`. Production Workspaces load and verify these signed releases using public keys (`ReleaseTrustRoots`).
+3. **Cloud Signing Boundary:** Cloud requires the stored qualification ID, reloads and validates it against the current draft, verifies release-manager scope (`profiles:release:manage`) and signer readiness, and signs the release using Cloud's Ed25519 private key. Stable promotion, Stable channel assignment, rollback, and revocation require a recent session-bound passkey step-up.
+4. **Cloud Acceptance Evidence API:** After publication, Profile Lab can separately submit an acceptance contract for the signed release. Cloud validates it and returns an immutable acceptance evidence ID.
+5. **Stable Promotion:** Profile Lab sends only the stored Cloud evidence ID. Cloud reloads and revalidates that record against the signed Profile and digest before promotion.
+6. **Signed Admission (`ToolProfileReleaseAdmission`):** Returned to clients with `isSigned => true`. Production Workspaces load and verify these signed releases using public keys (`ReleaseTrustRoots`).
 
 ---
 
@@ -95,7 +110,7 @@ To publish a Draft Profile as a signed release, Profile Lab captures evidence bo
 Profile releases move through a controlled lifecycle managed via Profile Lab:
 
 ```text
-Local Draft → Published Release → Testing Channel → Beta Channel → Stable Channel
+Local Draft → Cloud Qualification → Published Release → Testing Channel → Beta Channel → Stable Channel
                                         |                |
                                      Rollback         Revocation
 ```
@@ -107,20 +122,26 @@ Local Draft → Published Release → Testing Channel → Beta Channel → Stabl
 
 ---
 
-## 7. AI Repair Loop & Provenance Tracking
+## 7. Model-backed Draft Proposals & Experimental Repair Loop
 
-Profile Lab supports an iterative AI-assisted repair loop for Profile maintenance:
+The AI Draft Assistant resolves available model runners from the Cloud Worker catalog's current Stable channel pointers. It verifies each Profile signature against build-injected public trust roots and applies Cloud's current signing-key and Profile revocations before offering a model. A selected signed Profile executes locally through the generic CLI Worker Engine; the unsigned Profile being edited is never used as the model runner. Model selection uses a Profile-declared allowlist where available and otherwise delegates to the provider CLI's configured default.
 
-1. **Iteration Workflow:** Generate candidate → Validate JSON schema → Run local probe suite → Normalize failure log → Prompt AI for revision → Display diff → Retest.
+Before sending a request, the operator explicitly consents to sending the current Draft and bounded test diagnostics to the selected provider. Credential-like fields and secret-like values in the Draft are rejected. Provider authentication remains in the installed CLI. The response must be a complete schema-valid Profile and must preserve the Draft's Worker, Profile, release version, and provider identity. Profile Lab displays a domain diff and requires an explicit human review-and-apply action. Apply updates only the local Draft editor. Provenance is stored in local Draft metadata and never inserted into the signed Profile payload. Saving, local qualification, Cloud publication, and Stable promotion remain separate human-controlled workflows.
+
+The separate Repair Loop remains an experimental local heuristic and is not model-backed:
+
+1. **Iteration Workflow:** Generate candidate → Validate JSON schema → Run local probe suite → Normalize failure log → Apply local heuristic repair rules → Display diff → Retest.
 2. **Iteration Ceilings:** Automatically caps iterations (default: 3) and requires explicit human confirmation before applying material changes.
-3. **AI Provenance Model:** Every draft records:
-   - Creator/Modifier origin (`human` vs `ai`);
-   - AI model and provider identifier (e.g. `gpt-4o`, `claude-3-5-sonnet`);
+3. **Proposal Provenance:** Draft metadata records:
+   - Creator/Modifier origin (`human`, model-backed Draft Assistant, or experimental heuristic repair loop);
+   - the selected Worker Profile and model identifier when model-backed;
    - Parent release version and digest;
    - Prompt/task reference;
    - Resulting diff digest.
 
 Audit records provide clear operational history (e.g. *"Draft v20 created by AI-assisted change, reviewed by Vitalii, tested on Codex 0.188.0, published by controlled signer, promoted to Testing by Vitalii"*).
+
+Profile Lab's `CONCLAVE_RELEASE_TRUST_KEYS_JSON` build define contains public Ed25519 trust roots only. If no valid root is configured, no model runner is offered. Production and development builds must receive the same managed public trust configuration used to validate Workspace Tool Profile releases.
 
 ---
 
@@ -137,22 +158,17 @@ Profile Lab enforces strict security boundaries verified by automated repository
 
 ## 9. Manual Profile Lifecycle Completion & Autonomous AI Maintenance Governance
 
-### Acceptance Declaration
-The **manual Profile lifecycle is declared complete** and verified across all operational surfaces.
+### Acceptance Criteria and Current Status
 
-### Human Acceptance Threshold:
-Before autonomous AI profile maintenance is permitted, the manual Profile Lab control path must satisfy the following acceptance threshold without exception:
+**Manual Profile lifecycle: COMPLETE** for the implemented control path. Profile Lab supports human Worker/Profile creation, Draft editing, local Engine qualification, Cloud-signed publication, channel management, and lifecycle administration. Fixture acceptance covers dynamic Workspace discovery, AX projection, and Work execution without Worker-specific source changes. Publication and Stable promotion reference separately stored Cloud qualification and acceptance records.
 
-1. **Human Creation:** A human operator can create a completely new Logical Worker (`worker_catalog`) and Tool Profile Definition (`tool_profile_definitions`) via Profile Lab and Cloud admin REST APIs.
-2. **Local Real CLI Testing:** A human operator can author an initial Draft Profile payload and execute passive probes, live probes, and diagnostic session tests directly against a real local CLI binary installed on macOS.
-3. **Cryptographic Release Publication:** Profile Lab captures verified test evidence (`ToolProfileEvidenceContract`), computes the exact payload digest, and requests an Ed25519-signed release from Cloud (`POST /api/admin/workers/definitions/:id/releases`).
-4. **Channel Promotion & Rollback:** The release can be promoted through channels (`testing` → `beta` → `stable`), rolled back to an earlier immutable version, or revoked (`revoked_at` blocklist enforcement).
-5. **Dynamic Discovery:** Conclave Workspace and Conclave AX dynamically discover the new Worker, report inventory, display readiness, and execute Workstream steps **without editing or redeploying application source code**.
+This status does not claim that all real-provider workflows pass or that a deployed Testing Workspace rollout has completed. The [real-provider acceptance record](../acceptance/real-provider/2026-10-03/README.md) documents provider-specific results and remaining rollout gates. Cloud validates the submitted evidence contract and binds it to the release digest, but does not remotely observe or attest to the local provider process; see the [evidence contract](TOOL_PROFILE_EVIDENCE_CONTRACT.md).
 
-### Autonomous AI Maintenance Boundary:
-Autonomous AI agents may propose draft modifications, analyze failure logs, and suggest profile updates **only** within the bounds of this verified manual lifecycle:
+### Human Control and AI Proposal Boundary
+
+Model-backed assistance is limited to proposing Draft edits within this human-controlled lifecycle:
 - AI models propose state changes by generating draft candidate JSON payloads.
 - Conclave owns persistent state, validates JSON schemas against `TOOL_PROFILE_LIMITS`, and enforces signature verification.
-- Material profile changes require explicit human review and confirmation before release publication.
-- Autonomous background tasks must never be given uncontrolled release publishing or channel promotion authority.
-
+- The operator consents before Draft context and bounded diagnostics are sent, reviews the proposal diff, and explicitly applies it to the local Draft.
+- Qualification, publication, signing, Stable promotion, rollback, and revocation remain separate human-controlled Cloud workflows.
+- Proposal output is not qualification or acceptance evidence. Cloud's evidence contract is an authenticated assertion validated and bound to a release; it is not device attestation or independent proof of local execution.

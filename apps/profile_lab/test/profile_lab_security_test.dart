@@ -169,7 +169,7 @@ Environment: API_KEY=super_secret_val; DATABASE_URL=postgres://localhost:5432/db
 
         expect(await paths.applicationSupportDirectory.exists(), isTrue);
         expect(await paths.draftsDirectory.exists(), isTrue);
-        expect(await paths.credentialsDirectory.exists(), isTrue);
+        expect(await paths.credentialsDirectory.exists(), isFalse);
         expect(await paths.logsDirectory.exists(), isTrue);
       } finally {
         await tempHome.delete(recursive: true);

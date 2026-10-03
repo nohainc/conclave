@@ -210,11 +210,16 @@ through an active Project → Workspace Grant; Project membership alone does not
 grant machine access. Workstream access is checked separately by the Workstream
 policy.
 
-Tool Profile administration and release operations use the explicit Cloud
-`CONCLAVE_PROFILE_ADMIN_USER_IDS` allowlist. Workspace ownership and Project
-roles do not grant Profile administration. Sensitive Profile and release
-operations continue to require session-bound step-up authentication where
-specified.
+Tool Profile administration and release operations use separate Cloud
+allowlists: `CONCLAVE_PROFILE_ADMIN_USER_IDS` grants catalog and draft
+administration, while `CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS` grants
+publication and rollout management. Workspace ownership and Project roles do
+not grant either permission. Stable promotion, channel rollback, and release
+revocation require fresh session-bound passkey step-up authentication.
+Profile Lab stores its desktop session in the macOS Keychain and removes legacy
+plaintext session files during migration. Sandbox runs use unique private
+scratch directories, cancel active Engine work during teardown, and fail if
+cleanup cannot be verified.
 
 ### 4.3 Conclave Workspace
 
@@ -1170,14 +1175,25 @@ than rebuilding the generic CLI Worker Engine.
 
 ## 30. Manual Profile Lifecycle Completion & Autonomous AI Maintenance Governance
 
-The manual Profile lifecycle control path is **declared complete and verified**.
+**Manual Profile lifecycle: COMPLETE**
 
-The acceptance threshold for the manual Profile lifecycle is satisfied:
-- A human engineer can create a new Logical Worker (`worker_catalog`) and Tool Profile Definition (`tool_profile_definitions`) via REST APIs.
-- An initial Draft Profile payload can be authored and tested against real local provider CLIs in Profile Lab's isolated sandbox (`PlatformProcessSupervisor`).
-- Verified test evidence (`ToolProfileEvidenceContract`) is captured and bound to the exact payload digest before requesting an Ed25519-signed release publication from Cloud.
-- Immutable releases can be promoted through channels (`testing` → `beta` → `stable`), rolled back to earlier versions, or revoked (`revoked_at` blocklist).
-- Conclave Workspace and Conclave AX dynamically discover new Workers, report inventory, display readiness, and execute Workstream steps **without editing or redeploying application source code**.
+The implemented human control path covers Worker and Profile creation, local
+Draft editing and Engine-backed qualification, Cloud publication and signing,
+channel promotion, rollback, revocation, and dynamic Worker discovery. The
+fixture-backed Phase 13 acceptance verifies the generic Engine and Workspace
+to AX Work path without Worker-specific source changes. Cloud stores
+qualification and acceptance contracts separately and requires their returned
+immutable IDs at publication and Stable promotion respectively.
 
-Only after this manual lifecycle is verified and reliable is autonomous AI profile maintenance permitted to generate or update draft payloads under strict schema, evidence, provenance, and human confirmation controls.
+This completion status describes the implemented lifecycle and its automated
+fixture coverage. It does not claim that Cloud remotely observes or attests to
+local provider execution, that every real provider workflow has passed, or
+that a deployed Testing Workspace rollout has completed. The real-provider
+acceptance record and rollout gates remain authoritative for those operational
+claims. See the [evidence contract](../specifications/TOOL_PROFILE_EVIDENCE_CONTRACT.md)
+for the exact trust boundary.
 
+AI-assisted Profile maintenance is limited to model-backed Draft proposals.
+The operator consents to sharing bounded Draft context, reviews the diff, and
+applies it explicitly. Qualification, publication, signing, promotion,
+rollback, and revocation remain separate human-controlled workflows.

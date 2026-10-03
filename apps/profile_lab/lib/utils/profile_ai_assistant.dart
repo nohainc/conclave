@@ -28,8 +28,8 @@ class AiAssistantContext {
 }
 
 /// Service that gathers context and synthesizes AI-proposed Tool Profile candidate drafts.
-class ProfileAiAssistantService {
-  const ProfileAiAssistantService();
+class ProfileAiHeuristicRepairService {
+  const ProfileAiHeuristicRepairService();
 
   /// Gathers safe, non-credential context for AI draft generation.
   AiAssistantContext gatherContext(ProfileLabController controller) {
@@ -194,19 +194,15 @@ class ProfileAiAssistantService {
             base['probe'] = probe;
             break;
           case 'live_probe':
-          case 'execution_test':
+          case 'representative_workstream_write':
             final exec =
                 Map<String, dynamic>.from(base['execution'] as Map? ?? {});
             exec['arguments'] = ['run', '{{prompt}}'];
             base['execution'] = exec;
             break;
-          case 'session_test':
-            base['session'] = {
-              'supported': true,
-              'formatId': 'claude-session-v1',
-              'resumeArguments': ['--resume', '{{sessionId}}']
-            };
-            break;
+          // Session identifiers and resume arguments are provider Profile
+          // data. A failed session scenario is diagnostic input, not evidence
+          // for synthesizing a session format or command-line arguments.
         }
       }
     }
@@ -246,4 +242,13 @@ class ProfileAiAssistantService {
 
     return base;
   }
+}
+
+/// Builds the read-only context shown in the model proposal interface.
+/// Candidate generation belongs to ProfileLabModelProposalService.
+class ProfileAiAssistantContextBuilder {
+  const ProfileAiAssistantContextBuilder();
+
+  AiAssistantContext gatherContext(ProfileLabController controller) =>
+      const ProfileAiHeuristicRepairService().gatherContext(controller);
 }

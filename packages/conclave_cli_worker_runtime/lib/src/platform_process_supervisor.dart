@@ -49,7 +49,7 @@ class StandardProcessSupervisor implements PlatformProcessSupervisor {
     required bool force,
   }) async {
     if (force) {
-      process.kill(ProcessSignal.sigkill);
+      await cleanup.terminateTree(process, force: true);
       try {
         await process.exitCode.timeout(const Duration(milliseconds: 500));
       } on TimeoutException {

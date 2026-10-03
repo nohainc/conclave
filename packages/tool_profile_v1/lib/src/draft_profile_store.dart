@@ -12,6 +12,7 @@ class DraftProfileMetadata {
     required this.lastPayloadDigest,
     this.author = 'developer',
     this.notes = '',
+    this.provenance,
   });
 
   final String profileDefinitionId;
@@ -20,6 +21,7 @@ class DraftProfileMetadata {
   final String lastPayloadDigest;
   final String author;
   final String notes;
+  final Map<String, Object?>? provenance;
 
   Map<String, Object?> toJson() => {
         'profileDefinitionId': profileDefinitionId,
@@ -28,6 +30,7 @@ class DraftProfileMetadata {
         'lastPayloadDigest': lastPayloadDigest,
         'author': author,
         'notes': notes,
+        if (provenance != null) 'provenance': provenance,
       };
 
   factory DraftProfileMetadata.fromJson(Map<String, Object?> json) {
@@ -38,6 +41,9 @@ class DraftProfileMetadata {
       lastPayloadDigest: json['lastPayloadDigest'] as String,
       author: (json['author'] as String?) ?? 'developer',
       notes: (json['notes'] as String?) ?? '',
+      provenance: json['provenance'] is Map
+          ? Map<String, Object?>.from(json['provenance'] as Map)
+          : null,
     );
   }
 }
@@ -106,6 +112,7 @@ class DraftProfileStore {
     required Map<String, Object?> profileJson,
     String author = 'developer',
     String notes = '',
+    Map<String, Object?>? provenance,
   }) async {
     // Strict schema and integrity validation
     final canonical = canonicalJson(profileJson);
@@ -135,6 +142,7 @@ class DraftProfileStore {
       lastPayloadDigest: candidate.payloadDigest,
       author: author,
       notes: notes.isNotEmpty ? notes : (existingMeta?.notes ?? ''),
+      provenance: provenance ?? existingMeta?.provenance,
     );
 
     // Atomic file write for draft and metadata

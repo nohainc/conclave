@@ -91,6 +91,12 @@ describe("current authorization model", () => {
     expect(() => authorizeProfileAdmin(context, ["another-user"])).toThrow(
       AuthorizationError,
     );
+    expect(() =>
+      authorizeProfileAdmin(context, ["user-1"], "profiles:release:manage"),
+    ).not.toThrow();
+    expect(() =>
+      authorizeProfileAdmin(context, ["admin-only"], "profiles:release:manage"),
+    ).toThrow(AuthorizationError);
 
     // Desktop clients must possess conclave.profile-lab.management audience
     const profileLabDesktopContext: SecurityContext = {

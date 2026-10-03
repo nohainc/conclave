@@ -32,6 +32,11 @@ void main() {
         profileJson: profileMap,
         author: 'ai_agent',
         notes: 'Initial draft for testing',
+        provenance: {
+          'authorType': 'ai_assistant',
+          'modelIdentifier': 'chatgpt/chatgpt-codex@4',
+          'reviewedBy': 'Profile Admin',
+        },
       );
 
       expect(candidate.isSigned, isFalse);
@@ -50,6 +55,8 @@ void main() {
       expect(metadata, isNotNull);
       expect(metadata!.author, 'ai_agent');
       expect(metadata.notes, 'Initial draft for testing');
+      expect(metadata.provenance?['authorType'], 'ai_assistant');
+      expect(metadata.provenance?['reviewedBy'], 'Profile Admin');
       expect(metadata.lastPayloadDigest, candidate.payloadDigest);
     });
 

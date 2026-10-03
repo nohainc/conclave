@@ -29,6 +29,8 @@ dev_dependencies:
   test: ^1.25.0
   conclave_profile_lab:
     path: ../profile_lab
+  conclave_app:
+    path: ../app
 
 flutter:
   uses-material-design: true
