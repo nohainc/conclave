@@ -7,6 +7,7 @@ import {
   toolProfileReleaseSigningMessage,
   validateToolProfileAcceptanceEvidence,
   validateToolProfileReleasePayload,
+  validateProviderCompatibilityForPublication,
   resolveLogicalWorkerCatalog,
   listAdminWorkerCatalog,
   listToolProfileDefinitions,
@@ -35,6 +36,28 @@ const fixture = JSON.parse(
 ) as Record<string, unknown>;
 
 describe("Tool Profile release payload admission", () => {
+  it("requires configured, non-placeholder provider ranges for publication", () => {
+    const profile = validateToolProfileReleasePayload(fixture);
+    expect(() =>
+      validateProviderCompatibilityForPublication(profile),
+    ).not.toThrow();
+    expect(() =>
+      validateProviderCompatibilityForPublication({
+        ...profile,
+        providerTool: { ...profile.providerTool, supportedVersions: [] },
+      }),
+    ).toThrow(/must be configured/);
+    expect(() =>
+      validateProviderCompatibilityForPublication({
+        ...profile,
+        providerTool: {
+          ...profile.providerTool,
+          supportedVersions: [{ min: "0.0.1", maxExclusive: "99.0.0" }],
+        },
+      }),
+    ).toThrow(/placeholder range/);
+  });
+
   it("binds identity and compatibility metadata to the signed payload digest", () => {
     const profile = validateToolProfileReleasePayload(fixture);
     const signingMessage = toolProfileReleaseSigningMessage({
@@ -186,7 +209,7 @@ describe("stable Tool Profile acceptance evidence", () => {
     profileDigest: "a".repeat(64),
     engineVersion: "1.0.0",
     providerToolName: "Fixture CLI",
-    providerToolVersion: "1.2.3",
+    providerToolVersion: "0.3.0",
     acceptedAt: new Date().toISOString(),
     scenarios: {
       passive_probe: "passed",
@@ -267,7 +290,7 @@ describe("stable Tool Profile acceptance evidence", () => {
       identity.releaseVersion,
       "a".repeat(64),
       "1.0.0",
-      "1.2.3",
+      "0.3.0",
       JSON.stringify(evidence),
       "admin-1",
       evidence.acceptedAt,
@@ -303,7 +326,7 @@ describe("stable Tool Profile acceptance evidence", () => {
       id: "evidence-1",
       payload_digest: "a".repeat(64),
       engine_version: "1.0.0",
-      provider_tool_version: "1.2.3",
+      provider_tool_version: "0.3.0",
       evidence_json: JSON.stringify(storedEvidence),
       accepted_at: acceptedAt,
     };
@@ -777,7 +800,7 @@ describe("Phase 7 Profile Admin read models and operations", () => {
       profileDigest: digest,
       engineVersion: "1.0.0",
       providerToolName: "Fixture CLI",
-      providerToolVersion: "1.2.3",
+      providerToolVersion: "0.3.0",
       acceptedAt: new Date().toISOString(),
       scenarios: {
         passive_probe: "passed",
@@ -817,7 +840,7 @@ describe("Phase 7 Profile Admin read models and operations", () => {
                 release_version: 1,
                 payload_digest: digest,
                 engine_version: "1.0.0",
-                provider_tool_version: "1.2.3",
+                provider_tool_version: "0.3.0",
                 evidence_json: JSON.stringify(validEvidence),
                 submitted_by_user_id: "admin-1",
                 accepted_at: validEvidence.acceptedAt,
@@ -864,7 +887,7 @@ describe("Phase 7 Profile Admin read models and operations", () => {
       profileDigest: digest,
       engineVersion: "1.0.0",
       providerToolName: "Fixture CLI",
-      providerToolVersion: "1.2.3",
+      providerToolVersion: "0.3.0",
       acceptedAt: new Date().toISOString(),
       scenarios: {
         passive_probe: "passed",

@@ -69,6 +69,22 @@ void main() {
       expect(controller.currentDraft, isNotNull);
       expect(controller.currentDraft!.profileDefinitionId, 'test-codex');
       expect(controller.jsonValidationError, isNull);
+      expect(
+        (controller.currentDraft!.profile['providerTool']
+            as Map)['supportedVersions'],
+        isEmpty,
+      );
+      await controller.applyRecommendedProviderCompatibilityRange(
+        min: '0.187.2',
+        maxExclusive: '0.188.0',
+      );
+      expect(controller.isDirty, isFalse);
+      expect(
+        ((controller.currentDraft!.profile['providerTool']
+                as Map)['supportedVersions'] as List)
+            .single,
+        {'min': '0.187.2', 'maxExclusive': '0.188.0'},
+      );
 
       // Editing JSON with invalid syntax
       controller.updateJsonText('{ invalid json');
@@ -239,7 +255,7 @@ void main() {
             'extract': {'kind': 'regex_capture', 'patternId': 'semver'}
           },
           'supportedVersions': [
-            {'min': '0.0.1', 'maxExclusive': '99.0.0'}
+            {'min': '1.2.3', 'maxExclusive': '1.3.0'}
           ],
         },
         'environment': {
@@ -369,7 +385,7 @@ void main() {
             'extract': {'kind': 'regex_capture', 'patternId': 'semver'}
           },
           'supportedVersions': [
-            {'min': '0.0.1', 'maxExclusive': '99.0.0'}
+            {'min': '1.2.3', 'maxExclusive': '1.3.0'}
           ],
         },
         'environment': {
@@ -436,6 +452,58 @@ void main() {
       expect(controller.currentJsonText, contains('"code_generation"'));
     });
 
+    test('creates an absent Cloud v1 draft with POST before updating it',
+        () async {
+      final fakeApi = FakeProfileAdminApiClient();
+      fakeApi.missingCloudReleaseVersions.add(1);
+      controller.setApiClientForTesting(fakeApi);
+
+      await controller.createNewDraft(
+        profileDefinitionId: 'new-cloud-worker',
+        workerTypeId: 'new-worker',
+        providerToolName: 'new-cli',
+      );
+      await controller.saveCurrentDraftToCloud();
+
+      expect(fakeApi.createDraftCallCount, 1);
+      expect(fakeApi.updateCallCount, 0);
+      expect(controller.cloudDraftExists, isTrue);
+      expect(controller.baseCloudDigest, 'created-cloud-digest-1');
+
+      final edited =
+          jsonDecode(controller.currentJsonText) as Map<String, dynamic>;
+      (edited['timeout'] as Map<String, dynamic>)['providerReserveMs'] = 1;
+      controller
+          .updateJsonText(const JsonEncoder.withIndent('  ').convert(edited));
+      await controller.saveCurrentDraftToCloud();
+      expect(fakeApi.createDraftCallCount, 1);
+      expect(fakeApi.updateCallCount, 1);
+    });
+
+    test('creates Cloud v2 when starting from a published stable v1', () async {
+      final fakeApi = FakeProfileAdminApiClient();
+      fakeApi.missingCloudReleaseVersions.add(2);
+      controller.setApiClientForTesting(fakeApi);
+
+      await controller.createNewDraft(
+        profileDefinitionId: 'stable-worker-profile',
+        workerTypeId: 'stable-worker',
+        providerToolName: 'stable-cli',
+      );
+      final stableV1 =
+          jsonDecode(controller.currentJsonText) as Map<String, dynamic>;
+      await controller.createDraftFromRelease(
+        profileDefinitionId: 'stable-worker-profile',
+        releasePayload: stableV1,
+      );
+
+      expect(controller.currentDraft!.releaseVersion, 2);
+      expect(controller.cloudDraftExists, isFalse);
+      await controller.saveCurrentDraftToCloud();
+      expect(fakeApi.createDraftCallCount, 1);
+      expect(fakeApi.updateCallCount, 0);
+    });
+
     test('executes channel pointer rollback to prior known-good release',
         () async {
       final fakeApi = FakeProfileAdminApiClient();
@@ -480,7 +548,9 @@ class FakeProfileAdminApiClient extends ProfileAdminApiClient {
 
   final bool _simulateConflict;
   int updateCallCount = 0;
+  int createDraftCallCount = 0;
   String? lastExpectedBaseDigest;
+  final Set<int> missingCloudReleaseVersions = {};
 
   int rollbackCallCount = 0;
   String? lastRollbackChannel;
@@ -562,11 +632,28 @@ class FakeProfileAdminApiClient extends ProfileAdminApiClient {
   }
 
   @override
+  Future<Map<String, dynamic>> createDraftRelease({
+    required String profileDefinitionId,
+    required int releaseVersion,
+    required Map<String, dynamic> profile,
+  }) async {
+    createDraftCallCount++;
+    return {
+      'status': 'draft',
+      'payloadDigest': 'created-cloud-digest-$createDraftCallCount',
+    };
+  }
+
+  @override
   Future<ProfileLabReleaseReadModel> fetchRelease(
       String profileDefinitionId, int releaseVersion) async {
+    if (missingCloudReleaseVersions.contains(releaseVersion)) {
+      throw ProfileAdminNotFoundException('Tool Profile release was not found');
+    }
     return ProfileLabReleaseReadModel.fromJson({
       'profileDefinitionId': profileDefinitionId,
       'releaseVersion': releaseVersion,
+      'lifecycleState': 'draft',
       'profile': {
         'schemaVersion': 1,
         'profileDefinitionId': profileDefinitionId

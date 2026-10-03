@@ -1,3 +1,4 @@
+import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:flutter/material.dart';
 
 import '../controllers/profile_lab_controller.dart';
@@ -44,9 +45,9 @@ class _WorkersViewState extends State<WorkersView> {
     final displayNameCtrl = TextEditingController();
     final descriptionCtrl = TextEditingController();
     final providerToolCtrl = TextEditingController();
-    final capabilitiesCtrl = TextEditingController();
     final sortOrderCtrl = TextEditingController(text: '10');
-    String releaseStage = 'draft';
+    final selectedCapabilities = <String>{'text'};
+    String releaseStage = 'testing';
 
     showDialog<void>(
       context: context,
@@ -106,11 +107,29 @@ class _WorkersViewState extends State<WorkersView> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  TextField(
-                    controller: capabilitiesCtrl,
+                  InputDecorator(
                     decoration: const InputDecoration(
-                      labelText: 'Capabilities (comma separated)',
-                      hintText: 'e.g. code_generation, tool_execution',
+                      labelText: 'Capabilities',
+                    ),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: canonicalWorkerCapabilities
+                          .map((capability) => FilterChip(
+                                label: Text(capability),
+                                selected:
+                                    selectedCapabilities.contains(capability),
+                                onSelected: (selected) {
+                                  setDlgState(() {
+                                    if (selected) {
+                                      selectedCapabilities.add(capability);
+                                    } else {
+                                      selectedCapabilities.remove(capability);
+                                    }
+                                  });
+                                },
+                              ))
+                          .toList(),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -127,8 +146,6 @@ class _WorkersViewState extends State<WorkersView> {
                               value: releaseStage,
                               isExpanded: true,
                               items: const [
-                                DropdownMenuItem(
-                                    value: 'draft', child: Text('Draft')),
                                 DropdownMenuItem(
                                     value: 'testing', child: Text('Testing')),
                                 DropdownMenuItem(
@@ -176,10 +193,8 @@ class _WorkersViewState extends State<WorkersView> {
                 final dName = displayNameCtrl.text.trim();
                 final desc = descriptionCtrl.text.trim();
                 final pTool = providerToolCtrl.text.trim();
-                final caps = capabilitiesCtrl.text
-                    .split(',')
-                    .map((s) => s.trim())
-                    .where((s) => s.isNotEmpty)
+                final caps = canonicalWorkerCapabilities
+                    .where(selectedCapabilities.contains)
                     .toList();
                 final sortOrder = int.tryParse(sortOrderCtrl.text.trim()) ?? 10;
 
@@ -190,6 +205,13 @@ class _WorkersViewState extends State<WorkersView> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                         content: Text('Please fill out all required fields.')),
+                  );
+                  return;
+                }
+                if (caps.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Select at least one capability.')),
                   );
                   return;
                 }
@@ -387,50 +409,54 @@ class _WorkersViewState extends State<WorkersView> {
                           final toolName =
                               worker['providerToolName'] as String? ?? '';
 
-                          return ListTile(
-                            dense: true,
-                            selected: isSelected,
-                            selectedTileColor: ProfileLabTheme.primaryAccent
-                                .withValues(alpha: 0.12),
-                            title: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    worker['displayName'] as String? ??
-                                        workerTypeId,
-                                    style: TextStyle(
-                                      fontWeight: isSelected
-                                          ? FontWeight.bold
-                                          : FontWeight.w600,
-                                      fontSize: 13,
+                          return Material(
+                            color: ProfileLabTheme.darkSurface,
+                            child: ListTile(
+                              dense: true,
+                              selected: isSelected,
+                              selectedTileColor: ProfileLabTheme.primaryAccent
+                                  .withValues(alpha: 0.12),
+                              title: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      worker['displayName'] as String? ??
+                                          workerTypeId,
+                                      style: TextStyle(
+                                        fontWeight: isSelected
+                                            ? FontWeight.bold
+                                            : FontWeight.w600,
+                                        fontSize: 13,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                _StageBadge(stage: stage),
-                              ],
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(height: 2),
-                                Text(
-                                  workerTypeId,
-                                  style: const TextStyle(
-                                      fontFamily: 'Menlo',
-                                      fontSize: 10,
-                                      color: Color(0xFF94A3B8)),
-                                ),
-                                if (toolName.isNotEmpty) ...[
+                                  _StageBadge(stage: stage),
+                                ],
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
                                   const SizedBox(height: 2),
                                   Text(
-                                    'CLI: $toolName',
+                                    workerTypeId,
                                     style: const TextStyle(
-                                        fontSize: 10, color: Color(0xFF64748B)),
+                                        fontFamily: 'Menlo',
+                                        fontSize: 10,
+                                        color: Color(0xFF94A3B8)),
                                   ),
+                                  if (toolName.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'CLI: $toolName',
+                                      style: const TextStyle(
+                                          fontSize: 10,
+                                          color: Color(0xFF64748B)),
+                                    ),
+                                  ],
                                 ],
-                              ],
+                              ),
+                              onTap: () => c.selectWorker(worker),
                             ),
-                            onTap: () => c.selectWorker(worker),
                           );
                         },
                       ),

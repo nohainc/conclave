@@ -395,7 +395,10 @@ const profileSchema = z
               .strict(),
           })
           .strict(),
-        supportedVersions: z.array(versionRange).min(1).max(16),
+        // Empty means provider compatibility has not been established yet.
+        // Cloud publication and signed-release admission require a non-empty
+        // range after local qualification.
+        supportedVersions: z.array(versionRange).max(16),
       })
       .strict(),
     environment: z

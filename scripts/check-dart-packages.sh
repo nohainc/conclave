@@ -44,6 +44,10 @@ for package_path in "${flutter_packages[@]}"; do
   resolve_flutter_package_dependencies "$package_path"
 done
 
+# Workspace acceptance tests exercise the Engine executable through the real
+# Profile Lab and Workspace path; build it before Flutter starts those tests.
+bash "$ROOT/scripts/build-cli-worker-engine.sh"
+
 dart format --output=none --set-exit-if-changed apps/app apps/workspace engines packages
 
 check_dart_package() {

@@ -96,6 +96,12 @@ void main() {
         workerTypeId: workerTypeId,
         profileDefinitionId: profileDefinitionId,
       );
+      final createdDraft = await admin.createDraftRelease(
+        profileDefinitionId: profileDefinitionId,
+        releaseVersion: 1,
+        profile: profile,
+      );
+      expect(createdDraft['success'], isTrue);
       final cloudDraft = await admin.updateDraft(
         profileDefinitionId: profileDefinitionId,
         releaseVersion: 1,
@@ -128,7 +134,35 @@ void main() {
         engineExecutable: engine,
         environmentOverrides: {'PATH': path, 'HOME': root.path},
       );
-      final labResult = await sandbox.executeTestLadder(candidate: candidate!);
+      final discoveryResult =
+          await sandbox.executeTestLadder(candidate: candidate!);
+      expect(discoveryResult.overallResult, 'fail');
+      final versionStage = discoveryResult.stages
+          .firstWhere((stage) => stage.stageId == 'cli_version');
+      expect(versionStage.status, 'failed');
+      final suggestedMin = versionStage.details['suggestedMin']! as String;
+      final suggestedMax =
+          versionStage.details['suggestedMaxExclusive']! as String;
+      (profile['providerTool']! as Map<String, Object?>)['supportedVersions'] =
+          [
+        {'min': suggestedMin, 'maxExclusive': suggestedMax},
+      ];
+      final configuredDraft = await admin.updateDraft(
+        profileDefinitionId: profileDefinitionId,
+        releaseVersion: 1,
+        profile: profile,
+      );
+      expect(configuredDraft['success'], isTrue);
+      await labStore.saveDraft(
+        profileDefinitionId: profileDefinitionId,
+        profileJson: profile,
+        author: 'Phase 13 Profile Lab acceptance',
+      );
+      final configuredCandidate = await labStore.loadDraft(profileDefinitionId);
+      expect(configuredCandidate, isNotNull);
+
+      final labResult =
+          await sandbox.executeTestLadder(candidate: configuredCandidate!);
       expect(
         labResult.overallResult,
         'pass',
@@ -139,7 +173,7 @@ void main() {
       );
       final qualification = labResult.acceptanceEvidence!.toJson();
       expect(qualification['logicalWorkerTypeId'], workerTypeId);
-      expect(qualification['profileDigest'], candidate.payloadDigest);
+      expect(qualification['profileDigest'], configuredCandidate.payloadDigest);
       final qualificationResponse = await admin.submitLocalQualification(
         profileDefinitionId: profileDefinitionId,
         releaseVersion: 1,
@@ -148,7 +182,7 @@ void main() {
       final qualificationEvidenceId =
           qualificationResponse['qualificationEvidenceId']! as String;
       expect(mockCloud.qualificationEvidence?['profileDigest'],
-          candidate.payloadDigest);
+          configuredCandidate.payloadDigest);
 
       // The fake Cloud boundary applies a test-only signing key after it has
       // received the exact qualification ID. Production signing remains Cloud-owned.
@@ -375,9 +409,7 @@ Map<String, Object?> _dynamicProfile({
           'source': 'stdout',
           'extract': {'kind': 'regex_capture', 'patternId': 'semver'},
         },
-        'supportedVersions': [
-          {'min': '0.0.1', 'maxExclusive': '99.0.0'},
-        ],
+        'supportedVersions': <Map<String, String>>[],
       },
       'environment': {
         'passthrough': ['PATH', 'HOME'],
@@ -496,6 +528,7 @@ final class _DynamicWorkerCloud {
   final String workerTypeId;
   final String profileDefinitionId;
   Map<String, dynamic>? createdWorker;
+  final Map<int, Map<String, Object?>> cloudDrafts = {};
   Map<String, Object?>? draftProfile;
   Map<String, Object?>? qualificationEvidence;
   String? publishedQualificationId;
@@ -599,9 +632,37 @@ final class _DynamicWorkerCloud {
         request.method == 'POST') {
       createdWorker = Map<String, dynamic>.from(body);
       request.response.write(jsonEncode({'success': true, 'worker': body}));
+    } else if (path.endsWith('/releases') && request.method == 'POST') {
+      final version = body['releaseVersion']! as int;
+      if (cloudDrafts.containsKey(version)) {
+        request.response.statusCode = HttpStatus.conflict;
+        request.response.write(jsonEncode({'error': 'draft already exists'}));
+      } else {
+        final profile = Map<String, Object?>.from(body['profile']! as Map);
+        cloudDrafts[version] = profile;
+        draftProfile = profile;
+        request.response.statusCode = HttpStatus.created;
+        request.response.write(jsonEncode({
+          'success': true,
+          'status': 'draft',
+          'payloadDigest': 'phase13-draft-digest-$version',
+        }));
+      }
     } else if (path.endsWith('/draft') && request.method == 'PUT') {
-      draftProfile = Map<String, Object?>.from(body['profile']! as Map);
-      request.response.write(jsonEncode({'success': true, 'draftVersion': 1}));
+      final version = int.parse(path.split('/').reversed.skip(1).first);
+      if (!cloudDrafts.containsKey(version)) {
+        request.response.statusCode = HttpStatus.notFound;
+        request.response
+            .write(jsonEncode({'error': 'draft release not found'}));
+      } else {
+        draftProfile = Map<String, Object?>.from(body['profile']! as Map);
+        cloudDrafts[version] = draftProfile!;
+        request.response.write(jsonEncode({
+          'success': true,
+          'draftVersion': version,
+          'payloadDigest': 'phase13-updated-digest-$version',
+        }));
+      }
     } else if (path.endsWith('/qualification') && request.method == 'POST') {
       qualificationEvidence =
           Map<String, Object?>.from(body['evidence']! as Map);

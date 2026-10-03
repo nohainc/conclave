@@ -134,6 +134,7 @@ State transitions are strictly validated by Cloud registry routes and enforced i
 - **Version Assignment:** Automatically assigned `MAX(release_version) + 1` for the definition.
 - **Initial State:** `lifecycle_state = 'draft'`, `published_at = NULL`, `signature = NULL`.
 - **Database Trigger:** Fires `tool_profile_release_draft_audit` inserting an audit row with action `draft_created`.
+- **Cloud Synchronization:** Profile Lab reads the Cloud release at the candidate's definition and version. It creates an absent Cloud draft with `POST /api/admin/tool-profiles/:profileDefinitionId/releases`, then saves later edits with `PUT /api/admin/tool-profiles/:profileDefinitionId/releases/:version/draft`. A published release is immutable; editing it starts the next version and creates that Cloud draft with `POST`.
 
 ### Step 2: Local Validation
 - **Action:** Executed within Profile Lab prior to running local tests.

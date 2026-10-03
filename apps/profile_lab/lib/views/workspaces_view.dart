@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../controllers/profile_lab_controller.dart';
 import '../theme/profile_lab_theme.dart';
+import 'profile_lab_step_up.dart';
 
 class WorkspacesView extends StatefulWidget {
   const WorkspacesView({super.key, required this.controller});
@@ -33,6 +34,21 @@ class _WorkspacesViewState extends State<WorkspacesView> {
       default:
         return const Color(0xFF10B981); // Emerald
     }
+  }
+
+  Future<void> _updateWorkspaceChannel(
+    String workspaceId,
+    String channel,
+  ) async {
+    final controller = widget.controller;
+    await controller.updateWorkspaceChannel(workspaceId, channel);
+    if (!mounted || controller.workspaceError == null) return;
+    showProfileLabOperationFailure(
+      context,
+      controller,
+      'Workspace channel update',
+      StateError(controller.workspaceError!),
+    );
   }
 
   @override
@@ -363,8 +379,10 @@ class _WorkspacesViewState extends State<WorkspacesView> {
                                   onChanged: (newChannel) {
                                     if (newChannel != null &&
                                         newChannel != channel) {
-                                      c.updateWorkspaceChannel(
-                                          wsId, newChannel);
+                                      _updateWorkspaceChannel(
+                                        wsId,
+                                        newChannel,
+                                      );
                                     }
                                   },
                                 ),

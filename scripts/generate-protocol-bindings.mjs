@@ -81,7 +81,7 @@ for (const [path, contents] of generatedFiles) {
     generatedFiles.set(path, await format(contents, { filepath: path }));
   } else if (path.endsWith(".dart")) {
     try {
-      const formatted = execSync("dart format", {
+      const formatted = execSync("dart format --language-version=3.5", {
         input: contents,
         encoding: "utf8",
         stdio: ["pipe", "pipe", "ignore"],

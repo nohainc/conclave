@@ -112,22 +112,6 @@ class TestBenchView extends StatelessWidget {
                             ? null
                             : () => AiRepairLoopDialog.show(context, c),
                       ),
-                      const SizedBox(width: 8),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.speed, size: 14),
-                        label: const Text('Passive Probe',
-                            style: TextStyle(fontSize: 11)),
-                        onPressed:
-                            c.isTesting ? null : () => c.runTest(live: false),
-                      ),
-                      const SizedBox(width: 8),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.play_arrow, size: 14),
-                        label: const Text('Live Probe',
-                            style: TextStyle(fontSize: 11)),
-                        onPressed:
-                            c.isTesting ? null : () => c.runTest(live: true),
-                      ),
                     ],
                   ),
                 ],
@@ -229,6 +213,35 @@ class TestBenchView extends StatelessWidget {
             ),
             const SizedBox(height: 16),
           ],
+
+          if (c.activeLadderStages.isNotEmpty)
+            for (final stage in c.activeLadderStages)
+              if (stage.stageId == 'cli_version' &&
+                  stage.details['suggestedMin'] is String &&
+                  stage.details['suggestedMaxExclusive'] is String) ...[
+                Card(
+                  color: ProfileLabTheme.darkSurface,
+                  child: ListTile(
+                    leading: const Icon(Icons.verified_outlined,
+                        color: ProfileLabTheme.primaryAccent),
+                    title: const Text('Provider version discovered'),
+                    subtitle: Text(
+                      'Suggested compatibility: ${stage.details['suggestedMin']} to ${stage.details['suggestedMaxExclusive']} (exclusive). Applying it saves the local Draft; rerun qualification afterward.',
+                    ),
+                    trailing: OutlinedButton(
+                      onPressed: c.isTesting
+                          ? null
+                          : () => c.applyRecommendedProviderCompatibilityRange(
+                                min: stage.details['suggestedMin'] as String,
+                                maxExclusive: stage
+                                    .details['suggestedMaxExclusive'] as String,
+                              ),
+                      child: const Text('Apply range'),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
 
           // Output console
           const Text(

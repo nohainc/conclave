@@ -28,6 +28,9 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     baseCloudDigest = null;
     cloudDigest = null;
     cloudDraftPayload = null;
+    cloudDraftExists = null;
+    cloudDraftVersion = null;
+    cloudReleaseLifecycleState = null;
     syncState = DraftSyncState.saved;
 
     if (currentDraft != null) {
@@ -49,16 +52,28 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
         selectedDefinitionId!,
         currentDraft!.releaseVersion,
       );
+      cloudDraftVersion = currentDraft!.releaseVersion;
+      cloudReleaseLifecycleState = release.lifecycleState.toLowerCase();
+      cloudDraftExists = cloudReleaseLifecycleState == 'draft';
       if (release.profile != null) {
         cloudDraftPayload = Map<String, dynamic>.from(release.profile!);
-        cloudDigest = release.payloadDigest ??
-            release['profileDigest'] as String? ??
-            sha256
-                .convert(utf8.encode(canonicalJson(cloudDraftPayload!)))
-                .toString();
-        baseCloudDigest ??= cloudDigest;
-        updateSyncState();
+        if (cloudDraftExists == true) {
+          cloudDigest = release.payloadDigest ??
+              release['profileDigest'] as String? ??
+              sha256
+                  .convert(utf8.encode(canonicalJson(cloudDraftPayload!)))
+                  .toString();
+          baseCloudDigest ??= cloudDigest;
+          updateSyncState();
+        }
       }
+    } on ProfileAdminNotFoundException {
+      cloudDraftVersion = currentDraft!.releaseVersion;
+      cloudDraftExists = false;
+      cloudReleaseLifecycleState = null;
+      cloudDigest = null;
+      baseCloudDigest = null;
+      cloudDraftPayload = null;
     } catch (_) {
       updateSyncState();
     }
@@ -203,6 +218,36 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     notifyListeners();
   }
 
+  Future<void> applyRecommendedProviderCompatibilityRange({
+    required String min,
+    required String maxExclusive,
+  }) async {
+    if (selectedDefinitionId == null || currentDraft == null) return;
+    try {
+      final decoded =
+          Map<String, Object?>.from(jsonDecode(currentJsonText) as Map);
+      final tool = Map<String, Object?>.from(decoded['providerTool'] as Map);
+      final ranges = tool['supportedVersions'];
+      final parsed = EngineProfile.parse(utf8.encode(canonicalJson(decoded)));
+      if (ranges is List &&
+          ranges.isNotEmpty &&
+          !ToolProfileCompatibility.hasPlaceholderProviderRange(parsed)) {
+        return;
+      }
+      tool['supportedVersions'] = [
+        {'min': min, 'maxExclusive': maxExclusive},
+      ];
+      decoded['providerTool'] = tool;
+      updateJsonText(const JsonEncoder.withIndent('  ').convert(decoded));
+      await saveCurrentDraft(
+        notes: 'Set provider compatibility from tested version $min',
+      );
+    } on Object catch (error) {
+      jsonValidationError = 'Could not apply provider compatibility: $error';
+      notifyListeners();
+    }
+  }
+
   Future<void> saveCurrentDraftToCloud({
     bool force = false,
     String author = 'developer',
@@ -223,17 +268,41 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     await refreshEvidence();
 
     try {
-      final resp = await apiClient.updateDraft(
-        profileDefinitionId: selectedDefinitionId!,
-        releaseVersion: currentDraft!.releaseVersion,
-        profile: decoded,
-        expectedBaseDigest: force ? null : baseCloudDigest,
-      );
-      final newDigest =
-          (resp['digest'] as String?) ?? currentDraft!.payloadDigest;
+      if (cloudDraftVersion != currentDraft!.releaseVersion ||
+          cloudDraftExists == null) {
+        await fetchAndSyncCloudDraft();
+      }
+      if (cloudDraftExists == null) {
+        throw StateError(
+          'Could not determine whether this release draft exists on Cloud. Check the Cloud connection and try again.',
+        );
+      }
+      if (!cloudDraftExists! && cloudReleaseLifecycleState != null) {
+        throw StateError(
+          'Cloud release v${currentDraft!.releaseVersion} is ${cloudReleaseLifecycleState!} and cannot be edited as a draft.',
+        );
+      }
+      final resp = cloudDraftExists == true
+          ? await apiClient.updateDraft(
+              profileDefinitionId: selectedDefinitionId!,
+              releaseVersion: currentDraft!.releaseVersion,
+              profile: Map<String, dynamic>.from(decoded),
+              expectedBaseDigest: force ? null : baseCloudDigest,
+            )
+          : await apiClient.createDraftRelease(
+              profileDefinitionId: selectedDefinitionId!,
+              releaseVersion: currentDraft!.releaseVersion,
+              profile: Map<String, dynamic>.from(decoded),
+            );
+      final newDigest = (resp['payloadDigest'] as String?) ??
+          (resp['digest'] as String?) ??
+          currentDraft!.payloadDigest;
       baseCloudDigest = newDigest;
       cloudDigest = newDigest;
       cloudDraftPayload = Map<String, dynamic>.from(decoded);
+      cloudDraftExists = true;
+      cloudDraftVersion = currentDraft!.releaseVersion;
+      cloudReleaseLifecycleState = 'draft';
       isDirty = false;
       syncState = DraftSyncState.saved;
       cloudError = null;
@@ -300,9 +369,7 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
           'source': 'stdout',
           'extract': {'kind': 'regex_capture', 'patternId': 'semver'}
         },
-        'supportedVersions': [
-          {'min': '0.0.1', 'maxExclusive': '99.0.0'}
-        ],
+        'supportedVersions': <Map<String, String>>[],
       },
       'environment': {
         'passthrough': ['PATH', 'HOME'],

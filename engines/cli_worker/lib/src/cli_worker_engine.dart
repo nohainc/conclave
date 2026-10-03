@@ -7,6 +7,8 @@ import 'package:conclave_cli_worker_runtime/src/cli_environment_builder.dart';
 import 'package:conclave_cli_worker_runtime/src/cli_executable_locator.dart';
 import 'package:conclave_cli_worker_runtime/src/cli_streaming_runner.dart';
 import 'package:conclave_cli_worker_runtime/src/worker_process_cleanup.dart';
+import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
+    show ProfileVersionProbe;
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 
@@ -242,36 +244,29 @@ class CliWorkerEngine {
     String? issue;
     try {
       final executable = await _resolveTool();
-      final versionProbe = _map(_profile.providerTool['versionProbe']);
       final discovery = _map(_profile.providerTool['discovery']);
       final env = _environment();
-      final versionContext = _context(
-        ExecuteRequest(
-          requestId: request.requestId,
-          assignmentId: 'version-probe',
-          prompt: 'version probe',
-          timeoutMs: _int(versionProbe['timeoutMs']),
-          sessionPolicy: WorkerSessionPolicy.stateless,
-        ),
-        null,
+      final workingDirectory = Directory.current.path;
+      final versionContext = ProfileVersionProbe.buildContext(
+        profile: _profile,
+        workingDirectory: workingDirectory,
+        homeDirectory: Platform.environment['HOME'] ?? workingDirectory,
+        workerStateDirectory: options.statePath,
       );
       final versionEnvironment = Map<String, String>.from(env);
       if (discovery['allowPathSearch'] != true) {
         versionEnvironment.remove('PATH');
       }
-      final versionResult = await _commandRunner.run(
-        executable,
-        _stringList(
-          versionProbe['arguments'],
-        ).map((argument) => _template(argument, versionContext)).toList(),
+      final versionResult = await ProfileVersionProbe.run(
+        profile: _profile,
+        executable: executable,
+        commandRunner: _commandRunner,
         environment: versionEnvironment,
-        workingDirectory: Directory.current.path,
-        timeout: remaining(profileLimitMs: _int(versionProbe['timeoutMs'])),
+        workingDirectory: workingDirectory,
+        context: versionContext,
+        deadline: remaining(),
       );
-      final versionSource = versionProbe['source'] == 'stderr'
-          ? versionResult.stderr
-          : versionResult.stdout;
-      final version = _extractSemver(versionSource);
+      final version = versionResult.version;
       if (versionResult.exitCode != 0 || version == null) {
         throw const EngineProviderException(
           WorkerIssueCode.unsupportedProviderToolVersion,
@@ -279,7 +274,7 @@ class CliWorkerEngine {
         );
       }
       _providerVersion = version;
-      if (!_supportedProviderVersion(version)) {
+      if (!versionResult.supported) {
         issue = WorkerIssueCode.unsupportedProviderToolVersion;
         checks.add(
           ProbeCheck(
@@ -647,6 +642,15 @@ class CliWorkerEngine {
         workingDirectory: context['workingDirectory']!,
         stdinText: stdinText,
         timeout: Duration(milliseconds: request.timeoutMs),
+        onStarted: () => _write(
+          sink,
+          WorkerProgress(
+            requestId: request.requestId,
+            assignmentId: request.assignmentId,
+            percentage: 0,
+            message: workerProviderExecutionStartedMessage,
+          ),
+        ),
         onStdoutLine: (line) async {
           stdoutBytes += utf8.encode(line).length + 1;
           if (stdoutBytes > 4 * 1024 * 1024) {
@@ -995,26 +999,6 @@ class CliWorkerEngine {
         'Profile discovery location is not Engine-approved',
       );
     return location;
-  }
-
-  bool _supportedProviderVersion(String version) {
-    final ranges = _profile.providerTool['supportedVersions'];
-    if (ranges is! List) return false;
-    for (final raw in ranges) {
-      final range = _map(raw);
-      try {
-        if (semanticVersionInRange(
-          version,
-          _string(range['min']),
-          _string(range['maxExclusive']),
-        )) {
-          return true;
-        }
-      } on FormatException {
-        continue;
-      }
-    }
-    return false;
   }
 
   List<(int, String)> _progressForLine(
@@ -1425,14 +1409,6 @@ class _InterpretedOutput {
 bool _isSemver(String value) => RegExp(
   r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$',
 ).hasMatch(value);
-String? _extractSemver(String value) {
-  final match = RegExp(
-    r'(?<![A-Za-z0-9])v?((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)(?![A-Za-z0-9])',
-  ).firstMatch(value);
-  final version = match?.group(1);
-  return version != null && isSemanticVersion(version) ? version : null;
-}
-
 Map<String, Object?> _map(Object? value) => value is Map
     ? Map<String, Object?>.from(value)
     : throw const FormatException('expected Profile object');

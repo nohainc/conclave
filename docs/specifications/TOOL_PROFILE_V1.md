@@ -169,6 +169,20 @@ Conceptual:
 }
 ~~~
 
+The Engine executes `providerTool.executableCandidates`' discovered executable
+with the declared `versionProbe.arguments`, bounded by `versionProbe.timeoutMs`.
+It extracts only from the configured `source` stream and applies the declared
+`extract` rule before checking `supportedVersions`. The CLI Worker Engine and
+Profile Lab use the same shared runtime interpreter for this operation.
+
+An empty `supportedVersions` array represents an incomplete mutable Draft before
+provider discovery. It is not publishable or admissible as a signed release.
+After a successful local version probe, Profile Lab may suggest a bounded range
+starting at the discovered version and ending at the next minor boundary. This
+does not claim compatibility with older versions. Cloud publication rejects an
+empty range list and obvious near-universal placeholder ranges such as
+`0.0.1` to `99.0.0`; qualification must also record the exact tested version.
+
 ### 6.1 Discovery restrictions
 
 - executable candidate names cannot contain path separators;

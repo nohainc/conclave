@@ -1,4 +1,8 @@
-import { parseToolProfileV1, type ToolProfileV1 } from "@conclave/tool-profile";
+import {
+  compareSemver,
+  parseToolProfileV1,
+  type ToolProfileV1,
+} from "@conclave/tool-profile";
 import { canonicalReleaseJson } from "./release-trust.js";
 
 export type ToolProfileChannel = "testing" | "beta" | "stable";
@@ -12,6 +16,31 @@ export class ToolProfileRegistryError extends Error {
   ) {
     super(message);
     this.name = "ToolProfileRegistryError";
+  }
+}
+
+/** Publication requires an explicitly bounded provider compatibility claim. */
+export function validateProviderCompatibilityForPublication(
+  profile: ToolProfileV1,
+): void {
+  const ranges = profile.providerTool.supportedVersions;
+  if (ranges.length === 0) {
+    throw new ToolProfileRegistryError(
+      409,
+      "Provider compatibility must be configured before publication",
+    );
+  }
+  if (
+    ranges.some(
+      (range) =>
+        compareSemver(range.min, "1.0.0") <= 0 &&
+        compareSemver(range.maxExclusive, "50.0.0") >= 0,
+    )
+  ) {
+    throw new ToolProfileRegistryError(
+      409,
+      "Provider compatibility contains an unsupported placeholder range",
+    );
   }
 }
 

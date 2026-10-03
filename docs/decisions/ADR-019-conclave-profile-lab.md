@@ -225,6 +225,8 @@ Profile Lab validates Profile candidates across a standardized 10-step verificat
 9. **Session Resume Test:** Asserts resumption of an existing session using configured resume arguments.
 10. **Failure & Cancellation Test:** Asserts process termination, timeout handling, and normalized error mapping.
 
+Passive Probe and Live Probe are stages within the full acceptance ladder, not standalone actions. Profile Lab exposes only the full ladder until isolated probe execution is implemented, so a probe label cannot trigger the remaining stages implicitly.
+
 ### Cryptographic Evidence Invariant:
 Every test run generates a structured evidence record bound to the exact SHA-256 `payloadDigest` of the tested Profile:
 
@@ -347,7 +349,7 @@ Profile Lab execution creates unique scratch directories under its dedicated san
 | `GET` | `/api/admin/tool-profiles/:profileDefinitionId/releases` | Lists all releases for a definition (up to 100, newest first) with metadata, digest, signature, and latest acceptance evidence. |
 | `GET` | `/api/admin/tool-profiles/:profileDefinitionId/releases/:version` | Retrieves a single release by version including parsed Tool Profile v1 payload and verification metadata. |
 | `POST` | `/api/admin/tool-profiles/:profileDefinitionId/releases` | Creates a new draft release version with strict schema and credential-leak validation. |
-| `PUT` | `/api/admin/tool-profiles/:profileDefinitionId/releases/:version/draft` | Updates the payload of an unreleased draft version (recomputing `payloadDigest`). |
+| `PUT` | `/api/admin/tool-profiles/:profileDefinitionId/releases/:version/draft` | Updates the payload of an unreleased draft version (recomputing `payloadDigest`); accepts the quoted base SHA-256 digest in `If-Match` for optimistic concurrency. |
 | `POST` | `/api/admin/tool-profiles/:profileDefinitionId/releases/:version/publish` | Freezes and cryptographically signs a draft release, transitioning it to `testing`. Payload becomes immutable. |
 | `POST` | `/api/admin/tool-profiles/:profileDefinitionId/releases/:version/promote` | Promotes a release into `beta` or `stable`. Promoting to `stable` requires a complete Cloud-validated acceptance contract bound to the exact payload digest. |
 | `POST` | `/api/admin/tool-profiles/:profileDefinitionId/releases/:version/retire` | Retires a release (must not be targeted by an active channel pointer). |

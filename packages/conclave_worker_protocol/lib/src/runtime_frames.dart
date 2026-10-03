@@ -5,6 +5,12 @@ import 'limits.dart';
 import 'protocol_version.dart';
 import 'worker_issue_codes.dart';
 
+/// Internal WorkerProgress control marker emitted once the Engine has started
+/// the provider process. Host supervisors consume it for deterministic tests
+/// and do not forward it as user-facing progress.
+const workerProviderExecutionStartedMessage =
+    'conclave.engine.provider_execution_started.v1';
+
 enum WorkerProbeMode { passive, live }
 
 enum WorkerSessionPolicy { stateless, durableSession }

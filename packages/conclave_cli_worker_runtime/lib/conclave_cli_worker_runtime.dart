@@ -10,3 +10,4 @@ export 'src/worker_failure.dart';
 export 'src/safe_provider_diagnostics.dart';
 export 'src/platform_process_supervisor.dart';
 export 'src/cli_worker_engine_supervisor.dart';
+export 'src/profile_version_probe.dart';

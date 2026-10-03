@@ -178,6 +178,10 @@ CONCLAVE_MODEL_OUTPUT
         ..createSync(recursive: true);
       final provider = File('${providerBin.path}/tool')
         ..writeAsStringSync(r'''#!/bin/sh
+if [ "$1" = "info" ] && [ "$2" = "--version" ]; then
+  echo "tool version v1.2.3" >&2
+  exit 0
+fi
 if [ "$1" = "--version" ]; then
   echo "tool 1.2.3"
   exit 0
@@ -215,13 +219,13 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
           'executableCandidates': ['tool'],
           'discovery': {'standardLocations': [], 'allowPathSearch': true},
           'versionProbe': {
-            'arguments': ['--version'],
+            'arguments': ['info', '--version'],
             'timeoutMs': 10000,
-            'source': 'stdout',
+            'source': 'stderr',
             'extract': {'kind': 'regex_capture', 'patternId': 'semver'}
           },
           'supportedVersions': [
-            {'min': '0.0.1', 'maxExclusive': '99.0.0'}
+            {'min': '1.2.3', 'maxExclusive': '1.3.0'}
           ],
         },
         'environment': {

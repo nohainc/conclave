@@ -79,8 +79,7 @@ void main() {
       ).encode(),
     );
     await process.stdin.flush();
-    expect(await lines.moveNext().timeout(const Duration(seconds: 20)), isTrue);
-    final failure = decodeWorkerFrame(lines.current) as WorkerErrorFrame;
+    final failure = await _nextTerminalFrame(lines) as WorkerErrorFrame;
     expect(failure.code, WorkerIssueCode.providerFailure);
   });
 
@@ -216,11 +215,17 @@ void main() {
         ).encode(),
       );
       await process.stdin.flush();
-      expect(
-        await lines.moveNext().timeout(const Duration(seconds: 60)),
-        isTrue,
-      );
-      final result = decodeWorkerFrame(lines.current) as WorkerResult;
+      var providerStartObserved = false;
+      final result =
+          await _nextTerminalFrame(
+                lines,
+                onProgress: (progress) {
+                  providerStartObserved |=
+                      progress.message == workerProviderExecutionStartedMessage;
+                },
+              )
+              as WorkerResult;
+      expect(providerStartObserved, isTrue);
       expect(result.output, 'fixture echo: hello engine');
 
       final marker = '${stateDirectory.path}/shell-injection-marker';
@@ -235,11 +240,7 @@ void main() {
         ).encode(),
       );
       await process.stdin.flush();
-      expect(
-        await lines.moveNext().timeout(const Duration(seconds: 60)),
-        isTrue,
-      );
-      final hostileResult = decodeWorkerFrame(lines.current) as WorkerResult;
+      final hostileResult = await _nextTerminalFrame(lines) as WorkerResult;
       expect(hostileResult.output, 'fixture echo: $hostilePrompt');
       expect(File(marker).existsSync(), isFalse);
       await process.stdin.close();
@@ -249,3 +250,18 @@ void main() {
 }
 
 String _sha256(List<int> bytes) => sha256.convert(bytes).toString();
+
+Future<WorkerFrame> _nextTerminalFrame(
+  StreamIterator<String> lines, {
+  void Function(WorkerProgress progress)? onProgress,
+}) async {
+  while (await lines.moveNext().timeout(const Duration(seconds: 60))) {
+    final frame = decodeWorkerFrame(lines.current);
+    if (frame is WorkerProgress) {
+      onProgress?.call(frame);
+      continue;
+    }
+    return frame;
+  }
+  throw StateError('CLI Worker Engine closed before a terminal frame');
+}

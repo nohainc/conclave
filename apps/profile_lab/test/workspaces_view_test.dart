@@ -4,6 +4,7 @@ import 'package:conclave_profile_lab/app.dart';
 import 'package:conclave_profile_lab/controllers/profile_lab_controller.dart';
 import 'package:conclave_profile_lab/profile_lab_paths.dart';
 import 'package:conclave_profile_lab/profile_lab_session_store.dart';
+import 'package:conclave_profile_lab/profile_admin_api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -82,4 +83,41 @@ void main() {
     expect(find.text('Beta: 1'), findsOneWidget);
     expect(find.text('Stable: 1'), findsOneWidget);
   });
+
+  testWidgets('offers passkey step-up when Stable assignment requires it',
+      (WidgetTester tester) async {
+    controller.setApiClientForTesting(_StepUpRequiredApiClient());
+    controller.setTab(LabTab.workspaces);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ProfileLabApp(controller: controller)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('STABLE').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'Complete a passkey verification in Conclave in your browser, then bind it to this Profile Lab session.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Bind passkey'), findsOneWidget);
+  });
+}
+
+class _StepUpRequiredApiClient extends ProfileAdminApiClient {
+  _StepUpRequiredApiClient() : super(baseUrl: 'http://127.0.0.1:8787');
+
+  @override
+  Future<Map<String, dynamic>> setWorkspaceChannel({
+    required String workspaceId,
+    required String channel,
+  }) async {
+    throw StateError('Fresh strong authentication required');
+  }
 }

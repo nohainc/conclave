@@ -12,6 +12,7 @@ void main() {
     late String lastPath;
     late String lastMethod;
     late Map<String, dynamic> lastBody;
+    String? lastIfMatch;
     var requestCount = 0;
 
     test('requires secure non-loopback Cloud API origins', () {
@@ -32,6 +33,7 @@ void main() {
         requestCount++;
         lastMethod = req.method;
         lastPath = req.uri.path;
+        lastIfMatch = req.headers.value(HttpHeaders.ifMatchHeader);
         final bodyStr = await utf8.decoder.bind(req).join();
         if (bodyStr.isNotEmpty) {
           lastBody = jsonDecode(bodyStr) as Map<String, dynamic>;
@@ -60,6 +62,23 @@ void main() {
                 'releaseStage': 'draft',
               }
             ],
+          }));
+        } else if (req.uri.path ==
+                '/api/admin/tool-profiles/claude-code/releases' &&
+            req.method == 'POST') {
+          req.response.statusCode = 201;
+          req.response.headers.contentType = ContentType.json;
+          req.response.write(jsonEncode({
+            'status': 'draft',
+            'payloadDigest': List.filled(64, 'a').join(),
+          }));
+        } else if (req.uri.path ==
+                '/api/admin/tool-profiles/claude-code/releases/2/draft' &&
+            req.method == 'PUT') {
+          req.response.statusCode = 200;
+          req.response.headers.contentType = ContentType.json;
+          req.response.write(jsonEncode({
+            'payloadDigest': List.filled(64, 'b').join(),
           }));
         } else if (req.uri.path ==
                 '/api/admin/tool-profiles/signing-preflight' &&
@@ -248,6 +267,65 @@ void main() {
       expect(lastBody, {'qualificationEvidenceId': 'qualification-1'});
       expect(lastBody.containsKey('signature'), isFalse);
       expect(lastBody.containsKey('signingKeyId'), isFalse);
+    });
+
+    test('new draft release uses POST with version and profile payload',
+        () async {
+      final profile = <String, dynamic>{
+        'profileDefinitionId': 'claude-code',
+        'releaseVersion': 2,
+      };
+      final result = await client.createDraftRelease(
+        profileDefinitionId: 'claude-code',
+        releaseVersion: 2,
+        profile: profile,
+      );
+
+      expect(lastMethod, 'POST');
+      expect(lastPath, '/api/admin/tool-profiles/claude-code/releases');
+      expect(lastBody, {'releaseVersion': 2, 'profile': profile});
+      expect(result['status'], 'draft');
+      expect(result['payloadDigest'], List.filled(64, 'a').join());
+    });
+
+    test('draft update sends If-Match and keeps the JSON body to profile',
+        () async {
+      final digest = List.filled(64, 'a').join();
+      final profile = <String, dynamic>{
+        'profileDefinitionId': 'claude-code',
+        'releaseVersion': 2,
+      };
+      final result = await client.updateDraft(
+        profileDefinitionId: 'claude-code',
+        releaseVersion: 2,
+        profile: profile,
+        expectedBaseDigest: digest,
+      );
+
+      expect(lastMethod, 'PUT');
+      expect(
+        lastPath,
+        '/api/admin/tool-profiles/claude-code/releases/2/draft',
+      );
+      expect(lastBody, {'profile': profile});
+      expect(lastIfMatch, '"$digest"');
+      expect(result['payloadDigest'], List.filled(64, 'b').join());
+
+      await client.updateDraft(
+        profileDefinitionId: 'claude-code',
+        releaseVersion: 2,
+        profile: profile,
+      );
+      expect(lastBody, {'profile': profile});
+      expect(lastIfMatch, isNull);
+    });
+
+    test('missing Cloud release is distinguishable from other request errors',
+        () async {
+      await expectLater(
+        client.fetchRelease('claude-code', 2),
+        throwsA(isA<ProfileAdminNotFoundException>()),
+      );
     });
 
     test('local qualification is submitted before publication', () async {

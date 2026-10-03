@@ -31,6 +31,14 @@ describe("Tool Profile v1 canonical schema", () => {
     expect(TOOL_PROFILE_LIMITS.arguments).toBe(128);
   });
 
+  it("allows provider compatibility to remain incomplete in an unsigned Draft", () => {
+    const draft = fixture("fixture-cli.v1");
+    draft.providerTool.supportedVersions = [];
+    expect(parseToolProfileV1(draft).providerTool.supportedVersions).toEqual(
+      [],
+    );
+  });
+
   const invalidCases: Array<[string, (profile: Record<string, any>) => void]> =
     [
       [

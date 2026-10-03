@@ -403,10 +403,11 @@ export async function handleUpdateDraftToolProfileRelease(
   const body = await readToolProfileAdminBody(request, ["profile"]);
   if (body.profile === undefined)
     throw new HttpError(400, "profile is required");
-  const expectedBaseDigest =
-    (body.expectedBaseDigest as string | undefined) ??
-    request.headers.get("If-Match") ??
-    undefined;
+  const ifMatch = request.headers.get("If-Match")?.trim();
+  const expectedBaseDigest = ifMatch?.match(/^"([a-f0-9]{64})"$/i)?.[1];
+  if (ifMatch && !expectedBaseDigest) {
+    throw new HttpError(400, "If-Match must contain one quoted SHA-256 digest");
+  }
   return json(
     await updateDraftToolProfilePayload(
       env.CONCLAVE_DB,

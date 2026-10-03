@@ -68,6 +68,8 @@ Provider CLI (local executable binary)
 
 No Worker identity (such as `chatgpt` or `gemini`) is hardcoded in Profile Lab, Workspace, or AX. Conclave Cloud is the sole authority for catalog descriptors and profile bindings. Adding a new Worker in Profile Lab makes it discoverable by Workspaces and selectable in AX without application redeployment or code modifications.
 
+The Create Worker form starts new catalog entries in the `testing` release stage and offers only `testing`, `beta`, or `stable`. Capabilities are selected from the canonical Worker capability contract: `text`, `local_file`, `workstream_read`, `workstream_write`, `durable_session`, `image`, `audio`, and `video`.
+
 Profile Lab executable discovery follows the same rule: it gathers executable names from the loaded Worker catalog's `providerToolName` and from Tool Profile `providerTool.name` and `providerTool.executableCandidates`. Profile-declared `standardLocations` are used for those candidates. Diagnostics list only the names found in loaded Worker/Profile data; the application does not maintain a built-in provider inventory. Session formats and resume arguments remain Profile data, and a failed session diagnostic does not let repair logic infer them from a provider name.
 
 Profile Lab builds default to `https://app.conclaveax.com`. Development builds can set `CONCLAVE_CLOUD_URL=http://localhost:8787` with a Dart define or choose an origin in the Cloud connection settings. The settings override persists locally and can be reset to the build default. Cloud origins must be HTTPS except for loopback HTTP in development builds; URLs with credentials, paths, queries, or fragments are rejected. Saved Keychain sessions are bound to their Cloud origin and are cleared when the origin changes. Legacy sessions without origin binding are discarded.
@@ -86,7 +88,7 @@ Profile Lab allows engineers to author and iteratively refine Draft Profiles bef
 - **Unsigned Draft Candidate (`LocalDraftProfileCandidate`):** Implements `ToolProfileCandidate` with `isSigned => false`. Unsigned drafts are strictly barred from entering Workspace's trusted profile store (`ToolProfileReleaseStore`).
 - **Sandbox Test Supervisor:** Uses `PlatformProcessSupervisor` from `conclave_cli_worker_runtime` to run tests out of process with hard execution deadlines, process tree cleanup, and secret redaction (`SafeProviderDiagnostics`).
 - **Progressive Test Ladder:** Keeps schema, Engine compatibility, executable discovery, version, passive probe, and live probe as preflight stages. It then submits actual assignments through the generic CLI Worker Engine, including a file write verified inside the isolated sandbox. Session create/resume and model selection each submit real Engine assignments when the profile declares a testable capability; unsupported or untestable capabilities are shown as skipped, never passed.
-- **Cancellation and Deadline Tests:** The ladder submits a cancellable Engine assignment and a separate assignment with a bounded deadline. A cancellation/deadline stage passes only when the Engine reports the expected outcome and terminates the process tree. The operator can also cancel the currently active Engine assignment from the Test Bench.
+- **Cancellation and Deadline Tests:** The Engine emits an internal start marker after the provider process is spawned; the host supervisor consumes it and wakes the ladder. Cancellation is requested as soon as that marker arrives, with no fixed sleep. The timeout case gives the provider a 100 ms Engine execution deadline after spawn while retaining a separate outer supervisor deadline. A stage passes only when the Engine reports the expected outcome and terminates the process tree. The operator can also cancel the currently active Engine assignment from the Test Bench.
 - **Evidence Result:** The sandbox emits all eight Cloud scenario keys. It records `passed` only after observing an applicable scenario succeed and records `not_applicable` for model selection without an allowlisted test model, workstream writes without the `workstream_write` capability, or durable sessions the Tool Profile does not declare. Cloud independently derives the same expected statuses from the release Profile. Durable session capability and `session.supported` must agree. Failed or incomplete run diagnostics remain in the local Test Workbench and do not become acceptance evidence.
 - **macOS CI Acceptance:** The Profile Lab macOS verification script builds the actual CLI Worker Engine executable from `engines/cli_worker`, saves and reloads an unsigned Profile Lab Draft through `DraftProfileStore`, and runs the full 11-stage ladder against a local fixture provider. The check requires the real Engine and every applicable scenario to pass, validates the resulting Cloud evidence contract against the Draft digest, and verifies sandbox cleanup. It uses no live provider account or credential.
 
@@ -172,3 +174,11 @@ Model-backed assistance is limited to proposing Draft edits within this human-co
 - The operator consents before Draft context and bounded diagnostics are sent, reviews the proposal diff, and explicitly applies it to the local Draft.
 - Qualification, publication, signing, Stable promotion, rollback, and revocation remain separate human-controlled Cloud workflows.
 - Proposal output is not qualification or acceptance evidence. Cloud's evidence contract is an authenticated assertion validated and bound to a release; it is not device attestation or independent proof of local execution.
+
+### Provider compatibility
+
+Provider compatibility starts incomplete for a new Draft. A successful
+version probe can offer a narrow range beginning at the discovered version and
+ending at the next minor boundary. Applying the suggestion saves the local
+Draft; qualification must then be rerun. Cloud publication rejects missing or
+obvious near-universal placeholder ranges.

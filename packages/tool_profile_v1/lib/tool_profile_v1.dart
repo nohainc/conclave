@@ -111,11 +111,56 @@ class EngineProfile {
       tool['versionProbe'],
       'providerTool.versionProbe',
     );
+    _expectOnly(
+      versionProbe,
+      const {'arguments', 'timeoutMs', 'source', 'extract'},
+      'providerTool.versionProbe',
+    );
     _validateArgumentStrings(
       versionProbe['arguments'],
       'providerTool.versionProbe.arguments',
       max: 32,
     );
+    if (versionProbe['timeoutMs'] is! int ||
+        (versionProbe['timeoutMs'] as int) < 100 ||
+        (versionProbe['timeoutMs'] as int) > 30000 ||
+        !const {'stdout', 'stderr'}.contains(versionProbe['source'])) {
+      throw const FormatException('provider version probe is invalid');
+    }
+    final versionExtract = _object(
+      versionProbe['extract'],
+      'providerTool.versionProbe.extract',
+    );
+    _expectOnly(
+      versionExtract,
+      const {'kind', 'patternId'},
+      'providerTool.versionProbe.extract',
+    );
+    if (versionExtract['kind'] != 'regex_capture' ||
+        versionExtract['patternId'] != 'semver') {
+      throw const FormatException('provider version extraction is invalid');
+    }
+    final supportedVersions = tool['supportedVersions'];
+    if (supportedVersions is! List || supportedVersions.length > 16) {
+      throw const FormatException('provider compatibility ranges are invalid');
+    }
+    for (final value in supportedVersions) {
+      if (value is! Map ||
+          value.keys
+              .toSet()
+              .difference(const {'min', 'maxExclusive'}).isNotEmpty ||
+          value['min'] is! String ||
+          value['maxExclusive'] is! String) {
+        throw const FormatException('provider compatibility range is invalid');
+      }
+      final min = value['min'] as String;
+      final max = value['maxExclusive'] as String;
+      if (!isSemanticVersion(min) ||
+          !isSemanticVersion(max) ||
+          compareSemanticVersions(min, max) >= 0) {
+        throw const FormatException('provider compatibility range is invalid');
+      }
+    }
     final execution = _object(json['execution'], 'execution');
     final args = execution['arguments'];
     if (args is! List ||

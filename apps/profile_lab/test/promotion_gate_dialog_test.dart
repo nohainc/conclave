@@ -47,7 +47,7 @@ void main() {
             'extract': {'kind': 'regex_capture', 'patternId': 'semver'}
           },
           'supportedVersions': [
-            {'min': '0.0.1', 'maxExclusive': '99.0.0'}
+            {'min': '1.2.3', 'maxExclusive': '1.3.0'}
           ],
         },
         'environment': {

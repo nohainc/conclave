@@ -15,6 +15,7 @@ import {
   toolProfileReleaseSigningMessage,
   validateId,
   validateToolProfileAcceptanceEvidence,
+  validateProviderCompatibilityForPublication,
   validateVersion,
 } from "./tool-profile-validation.js";
 import type {
@@ -31,6 +32,7 @@ export {
   ToolProfileRegistryError,
   toolProfileReleaseSigningMessage,
   validateToolProfileAcceptanceEvidence,
+  validateProviderCompatibilityForPublication,
   validateToolProfileReleasePayload,
 } from "./tool-profile-validation.js";
 
@@ -551,6 +553,7 @@ export async function publishDraftToolProfileRelease(
     );
   }
   const parsed = parseProfile(JSON.parse(row.payload_json), identity);
+  validateProviderCompatibilityForPublication(parsed.profile);
   if (parsed.profile.logicalWorkerTypeId !== row.worker_type_id) {
     throw new ToolProfileRegistryError(
       409,

@@ -35,6 +35,7 @@ class CliStreamingRunner {
     required String stdinText,
     required Duration timeout,
     required CliLineHandler onStdoutLine,
+    FutureOr<void> Function()? onStarted,
   }) async {
     final process = await Process.start(
       executable,
@@ -90,6 +91,7 @@ class CliStreamingRunner {
       }
     }();
     try {
+      await onStarted?.call();
       process.stdin.write(stdinText);
       await process.stdin.close();
       final code = await process.exitCode.timeout(timeout);

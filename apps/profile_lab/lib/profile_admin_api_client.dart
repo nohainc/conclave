@@ -39,6 +39,7 @@ class ProfileAdminApiClient {
     String method,
     Uri uri, {
     Object? body,
+    Map<String, String>? headers,
   }) async {
     final request =
         await _http.openUrl(method, uri).timeout(const Duration(seconds: 15));
@@ -46,6 +47,7 @@ class ProfileAdminApiClient {
       request.headers.set(
           HttpHeaders.authorizationHeader, 'Bearer ${session!.credential}');
     }
+    headers?.forEach(request.headers.set);
     if (body != null) {
       request.headers.contentType = ContentType.json;
       request.write(jsonEncode(body));
@@ -66,6 +68,9 @@ class ProfileAdminApiClient {
       String errorMessage = 'Request failed (${response.statusCode})';
       if (decoded is Map && decoded['error'] is String) {
         errorMessage = decoded['error'] as String;
+      }
+      if (response.statusCode == HttpStatus.notFound) {
+        throw ProfileAdminNotFoundException(errorMessage);
       }
       throw StateError(errorMessage);
     }
@@ -283,16 +288,33 @@ class ProfileAdminApiClient {
       'PUT',
       _api(
           '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/draft'),
-      body: {
-        'profile': profile,
-        if (expectedBaseDigest != null)
-          'expectedBaseDigest': expectedBaseDigest,
-      },
+      headers: expectedBaseDigest == null
+          ? null
+          : {HttpHeaders.ifMatchHeader: '"$expectedBaseDigest"'},
+      body: {'profile': profile},
     );
     if (result is Map) {
       return Map<String, dynamic>.from(result);
     }
     throw StateError('Invalid update draft response');
+  }
+
+  /// Creates a new mutable Cloud draft release.
+  Future<Map<String, dynamic>> createDraftRelease({
+    required String profileDefinitionId,
+    required int releaseVersion,
+    required Map<String, dynamic> profile,
+  }) async {
+    final result = await _request(
+      'POST',
+      _api(
+          '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases'),
+      body: {'releaseVersion': releaseVersion, 'profile': profile},
+    );
+    if (result is Map) {
+      return Map<String, dynamic>.from(result);
+    }
+    throw StateError('Invalid create draft response');
   }
 
   /// Requests Cloud publication and Ed25519 signing for a draft release version.
@@ -444,6 +466,10 @@ class ProfileAdminApiClient {
   }
 
   void close() => _http.close(force: true);
+}
+
+class ProfileAdminNotFoundException extends StateError {
+  ProfileAdminNotFoundException(super.message);
 }
 
 List<T> _readModels<T extends ProfileAdminReadModel>(

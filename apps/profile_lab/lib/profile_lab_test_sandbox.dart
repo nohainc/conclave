@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,24 +7,6 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'utils/profile_lab_security.dart';
-
-class ProfileLabTestResult {
-  const ProfileLabTestResult({
-    required this.normalizedResult,
-    required this.startedAt,
-    required this.endedAt,
-    required this.durationMs,
-    required this.acceptanceEvidence,
-    required this.logs,
-  });
-
-  final String normalizedResult; // 'pass' or 'fail'
-  final DateTime startedAt;
-  final DateTime endedAt;
-  final int durationMs;
-  final ToolProfileAcceptanceEvidence? acceptanceEvidence;
-  final List<String> logs;
-}
 
 /// A single stage result in the progressive test ladder.
 class ProfileLabLadderStageResult {
@@ -577,42 +560,59 @@ class ProfileLabTestSandbox {
       );
     } else {
       try {
-        final providerTool =
-            candidate.profile['providerTool'] as Map<String, Object?>? ?? {};
-        final runRes = await Process.run(
-          discoveredExecPath!,
-          ['--version'],
-          environment: ProfileLabSecurity.buildIsolatedEnvironment(),
-        ).timeout(const Duration(seconds: 5));
-        final versionProbe =
-            providerTool['versionProbe'] as Map<String, Object?>? ?? {};
-        final versionOutput = versionProbe['source'] == 'stderr'
-            ? runRes.stderr.toString().trim()
-            : runRes.stdout.toString().trim();
+        final profile = parsedProfile!;
+        final workingDirectory = Directory.current.path;
+        final versionResult = await ProfileVersionProbe.run(
+          profile: profile,
+          executable: discoveredExecPath!,
+          commandRunner: const CliCommandRunner(maxOutputBytes: 64 * 1024),
+          environment: {
+            ...ProfileLabSecurity.buildIsolatedEnvironment(),
+            ...environmentOverrides,
+          },
+          workingDirectory: workingDirectory,
+          context: ProfileVersionProbe.buildContext(
+            profile: profile,
+            workingDirectory: workingDirectory,
+            homeDirectory: Platform.environment['HOME'] ?? workingDirectory,
+            workerStateDirectory: sandboxRoot.absolute.path,
+          ),
+          deadline: const Duration(seconds: 30),
+        );
         s4Timer.stop();
-        if (runRes.exitCode == 0) {
-          final versionMatch = RegExp(
-            r'(?<![0-9])(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?',
-          ).firstMatch(versionOutput);
-          detectedProviderToolVersion = versionMatch?.group(0);
-          final supportedVersions =
-              (providerTool['supportedVersions'] as List?) ?? const [];
-          final detectedVersion = detectedProviderToolVersion;
-          final isSupported = detectedVersion != null &&
-              supportedVersions.any((range) {
-                if (range is! Map) return false;
-                final min = range['min'];
-                final maxExclusive = range['maxExclusive'];
-                if (min is! String || maxExclusive is! String) return false;
-                final lower = _compareReleaseSemver(detectedVersion, min);
-                final upper =
-                    _compareReleaseSemver(detectedVersion, maxExclusive);
-                return lower != null &&
-                    upper != null &&
-                    lower >= 0 &&
-                    upper < 0;
-              });
-          if (isSupported) {
+        detectedProviderToolVersion = versionResult.version;
+        if (versionResult.exitCode == 0 && versionResult.version != null) {
+          final compatibilityRanges =
+              profile.providerTool['supportedVersions'] as List? ?? const [];
+          final placeholder =
+              ToolProfileCompatibility.hasPlaceholderProviderRange(profile);
+          if (compatibilityRanges.isEmpty || placeholder) {
+            haltExecution = true;
+            final recommendation =
+                ToolProfileCompatibility.recommendedProviderRange(
+              versionResult.version!,
+            );
+            addStage(
+              stageId: 'cli_version',
+              displayName: 'CLI Version Probe',
+              status: 'failed',
+              durationMs: s4Timer.elapsedMilliseconds,
+              diagnostics: recommendation == null
+                  ? 'Provider CLI version $detectedProviderToolVersion was discovered, but a bounded compatibility range must be configured before qualification.'
+                  : 'Provider CLI version $detectedProviderToolVersion was discovered. Configure the suggested narrow range before rerunning qualification.',
+              consumesQuota: false,
+              issueCode: placeholder
+                  ? 'provider_compatibility_placeholder'
+                  : 'provider_compatibility_unconfigured',
+              details: {
+                if (recommendation != null) ...{
+                  'detectedProviderVersion': versionResult.version,
+                  'suggestedMin': recommendation['min'],
+                  'suggestedMaxExclusive': recommendation['maxExclusive'],
+                },
+              },
+            );
+          } else if (versionResult.supported) {
             addStage(
               stageId: 'cli_version',
               displayName: 'CLI Version Probe',
@@ -644,7 +644,7 @@ class ProfileLabTestSandbox {
             status: 'failed',
             durationMs: s4Timer.elapsedMilliseconds,
             diagnostics:
-                'Provider CLI version probe exited with code ${runRes.exitCode}',
+                'Provider CLI version probe exited with code ${versionResult.exitCode}',
             consumesQuota: false,
             issueCode: 'version_probe_failed',
           );
@@ -695,6 +695,8 @@ class ProfileLabTestSandbox {
         WorkerSessionPolicy sessionPolicy = WorkerSessionPolicy.stateless,
         String? sessionKey,
         String? model,
+        Duration? engineExecutionTimeout,
+        void Function()? onExecutionStarted,
       }) {
         final assignmentId = 'lab-${label.replaceAll('_', '-')}-'
             '${DateTime.now().microsecondsSinceEpoch}';
@@ -710,6 +712,8 @@ class ProfileLabTestSandbox {
           assignmentId: assignmentId,
           prompt: prompt,
           timeout: timeout,
+          engineExecutionTimeout: engineExecutionTimeout,
+          onExecutionStarted: onExecutionStarted,
           sessionPolicy: sessionPolicy,
           sessionKey: sessionKey,
           model: model,
@@ -1095,15 +1099,19 @@ class ProfileLabTestSandbox {
             diagnostics: 'Skipped because a prior Engine execution failed.',
             consumesQuota: false);
       } else {
+        final providerStarted = Completer<void>();
         final assignment = executeAssignment(
           label: 'cancellation',
           prompt:
               'Conclave Lab cancellation probe. This request will be cancelled.',
           timeout: const Duration(seconds: 30),
+          onExecutionStarted: () {
+            if (!providerStarted.isCompleted) providerStarted.complete();
+          },
         );
-        await Future<void>.delayed(const Duration(milliseconds: 750));
-        await cancelCurrentTest();
         try {
+          await providerStarted.future.timeout(const Duration(seconds: 15));
+          await cancelCurrentTest();
           await assignment;
           s10Timer.stop();
           addStage(
@@ -1128,6 +1136,7 @@ class ProfileLabTestSandbox {
                   'The active Engine assignment and provider process tree were cancelled.',
               consumesQuota: true);
         } on Object catch (error) {
+          await cancelCurrentTest();
           s10Timer.stop();
           observedAcceptanceScenarios['cancellation'] = 'failed';
           addStage(
@@ -1153,12 +1162,19 @@ class ProfileLabTestSandbox {
             diagnostics: 'Skipped because a prior Engine execution failed.',
             consumesQuota: false);
       } else {
+        final providerStarted = Completer<void>();
+        final assignment = executeAssignment(
+          label: 'timeout',
+          prompt: 'Conclave Lab timeout probe. Complete this request.',
+          timeout: const Duration(seconds: 30),
+          engineExecutionTimeout: const Duration(milliseconds: 100),
+          onExecutionStarted: () {
+            if (!providerStarted.isCompleted) providerStarted.complete();
+          },
+        );
         try {
-          await executeAssignment(
-            label: 'timeout',
-            prompt: 'Conclave Lab timeout probe. Complete this request.',
-            timeout: const Duration(seconds: 10),
-          );
+          await providerStarted.future.timeout(const Duration(seconds: 15));
+          await assignment;
           s11Timer.stop();
           addStage(
               stageId: 'timeout_test',
@@ -1166,7 +1182,7 @@ class ProfileLabTestSandbox {
               status: 'failed',
               durationMs: s11Timer.elapsedMilliseconds,
               diagnostics:
-                  'The Engine returned before its ten-second deadline; timeout behavior was not observed.',
+                  'The provider completed before the short post-start Engine deadline; timeout behavior was not observed.',
               consumesQuota: true,
               issueCode: 'timeout_not_observed');
         } on CliWorkerEngineProbeException catch (error) {
@@ -1184,6 +1200,20 @@ class ProfileLabTestSandbox {
               consumesQuota: true,
               issueCode: passed ? null : error.issueCode);
           if (!passed) haltExecution = true;
+        } on Object catch (error) {
+          s11Timer.stop();
+          haltExecution = true;
+          observedAcceptanceScenarios['timeout'] = 'failed';
+          addStage(
+            stageId: 'timeout_test',
+            displayName: 'Execution Timeout',
+            status: 'failed',
+            durationMs: s11Timer.elapsedMilliseconds,
+            diagnostics:
+                'Timeout was not confirmed after provider start: $error',
+            consumesQuota: true,
+            issueCode: 'timeout_test_failed',
+          );
         }
       }
       _activeSupervisor = null;
@@ -1279,28 +1309,6 @@ class ProfileLabTestSandbox {
       stages: stages,
       acceptanceEvidence: acceptanceEvidence,
       logs: logs,
-    );
-  }
-
-  /// Single probe execution wrapper for backward compatibility and quick probes.
-  Future<ProfileLabTestResult> executeTest({
-    required LocalDraftProfileCandidate candidate,
-    required bool live,
-    void Function(String level, String message)? onLog,
-  }) async {
-    final ladderRes = await executeTestLadder(
-      candidate: candidate,
-      onLog: onLog,
-    );
-
-    return ProfileLabTestResult(
-      normalizedResult: ladderRes.overallResult,
-      startedAt: ladderRes.startedAt,
-      endedAt: ladderRes.endedAt,
-      durationMs:
-          ladderRes.endedAt.difference(ladderRes.startedAt).inMilliseconds,
-      acceptanceEvidence: ladderRes.acceptanceEvidence,
-      logs: ladderRes.logs,
     );
   }
 

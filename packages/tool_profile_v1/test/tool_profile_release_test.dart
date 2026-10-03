@@ -89,6 +89,38 @@ Map<String, Object?> validProfileMap({
 
 void main() {
   group('Tool Profile Release & Candidate Primitives', () {
+    test('incomplete provider ranges are valid Draft state only', () async {
+      final profile = validProfileMap();
+      (profile['providerTool'] as Map<String, Object?>)['supportedVersions'] =
+          <Map<String, String>>[];
+      final parsed = EngineProfile.parse(
+        utf8.encode(canonicalJson(profile)),
+      );
+      expect(parsed.providerTool['supportedVersions'], isEmpty);
+      expect(
+        ToolProfileCompatibility.recommendedProviderRange('0.187.2'),
+        {'min': '0.187.2', 'maxExclusive': '0.188.0'},
+      );
+      expect(
+        ToolProfileCompatibility.recommendedProviderRange('1.4.0-beta.1'),
+        {'min': '1.4.0-beta.1', 'maxExclusive': '1.5.0'},
+      );
+    });
+
+    test('legacy near-universal provider range is identified as placeholder',
+        () {
+      final profile = validProfileMap();
+      (profile['providerTool'] as Map<String, Object?>)['supportedVersions'] = [
+        {'min': '0.0.1', 'maxExclusive': '99.0.0'},
+      ];
+      expect(
+        ToolProfileCompatibility.hasPlaceholderProviderRange(
+          EngineProfile.parse(utf8.encode(canonicalJson(profile))),
+        ),
+        isTrue,
+      );
+    });
+
     test(
         'LocalDraftProfileCandidate computes canonical digest and identifies as unsigned',
         () {

@@ -40,6 +40,43 @@ class ToolProfileResolution<T extends ToolProfileCandidate> {
 
 /// Common resolution and compatibility matcher used by Workspace and Profile Lab.
 abstract final class ToolProfileCompatibility {
+  /// Recommends a narrow minor-line range starting at the version actually
+  /// discovered and tested. Older versions are never inferred as compatible.
+  static Map<String, String>? recommendedProviderRange(String testedVersion) {
+    if (!isSemanticVersion(testedVersion)) return null;
+    final match = RegExp(r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)')
+        .firstMatch(testedVersion);
+    if (match == null) return null;
+    final major = int.parse(match.group(1)!);
+    final minor = int.parse(match.group(2)!);
+    if (minor == 999999999) return null;
+    return {
+      'min': testedVersion,
+      'maxExclusive': '$major.${minor + 1}.0',
+    };
+  }
+
+  /// Identifies the legacy near-universal range used as a placeholder.
+  static bool hasPlaceholderProviderRange(EngineProfile profile) {
+    final ranges = profile.providerTool['supportedVersions'];
+    if (ranges is! List) return false;
+    return ranges.any((value) {
+      if (value is! Map ||
+          value['min'] is! String ||
+          value['maxExclusive'] is! String) {
+        return false;
+      }
+      try {
+        return compareSemanticVersions(value['min'] as String, '1.0.0') <= 0 &&
+            compareSemanticVersions(
+                    value['maxExclusive'] as String, '50.0.0') >=
+                0;
+      } on FormatException {
+        return false;
+      }
+    });
+  }
+
   static bool isEngineCompatible(EngineProfile profile, String engineVersion) {
     try {
       return engineVersionCompatible(profile, engineVersion);

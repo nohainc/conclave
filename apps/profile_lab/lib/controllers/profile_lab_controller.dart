@@ -99,6 +99,9 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   String? baseCloudDigest;
   String? cloudDigest;
   Map<String, dynamic>? cloudDraftPayload;
+  bool? cloudDraftExists;
+  int? cloudDraftVersion;
+  String? cloudReleaseLifecycleState;
 
   // Test bench state
   bool isTesting = false;

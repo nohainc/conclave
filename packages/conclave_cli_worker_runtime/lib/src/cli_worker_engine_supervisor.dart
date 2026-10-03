@@ -164,6 +164,8 @@ final class CliWorkerEngineSupervisor {
     String? sessionKey,
     String? model,
     WorkerExecutionPolicy executionPolicy = WorkerExecutionPolicy.restricted,
+    Duration? engineExecutionTimeout,
+    void Function()? onExecutionStarted,
     void Function(WorkerProgress progress)? onProgress,
   }) async {
     final boundedTimeout =
@@ -171,10 +173,17 @@ final class CliWorkerEngineSupervisor {
             const Duration(milliseconds: WorkerProtocolLimits.maxTimeoutMs)
         ? const Duration(milliseconds: WorkerProtocolLimits.maxTimeoutMs)
         : timeout;
+    final requestedEngineTimeout = engineExecutionTimeout ?? boundedTimeout;
+    final boundedEngineTimeout =
+        requestedEngineTimeout >
+            const Duration(milliseconds: WorkerProtocolLimits.maxTimeoutMs)
+        ? const Duration(milliseconds: WorkerProtocolLimits.maxTimeoutMs)
+        : requestedEngineTimeout;
 
-    if (boundedTimeout < const Duration(milliseconds: 100)) {
+    if (boundedTimeout < const Duration(milliseconds: 100) ||
+        boundedEngineTimeout < const Duration(milliseconds: 100)) {
       throw ArgumentError.value(
-        timeout,
+        engineExecutionTimeout ?? timeout,
         'timeout',
         'assignment timeout is too short',
       );
@@ -246,7 +255,7 @@ final class CliWorkerEngineSupervisor {
           requestId: 'engine-exec-${DateTime.now().microsecondsSinceEpoch}',
           assignmentId: assignmentId,
           prompt: prompt,
-          timeoutMs: boundedTimeout.inMilliseconds,
+          timeoutMs: boundedEngineTimeout.inMilliseconds,
           sessionPolicy: sessionPolicy,
           sessionKey: sessionKey,
           model: model,
@@ -254,7 +263,13 @@ final class CliWorkerEngineSupervisor {
         ),
 
         _remaining(boundedTimeout, timer),
-        onProgress: onProgress,
+        onProgress: (progress) {
+          if (progress.message == workerProviderExecutionStartedMessage) {
+            onExecutionStarted?.call();
+          } else {
+            onProgress?.call(progress);
+          }
+        },
       );
       if (result is WorkerErrorFrame) {
         throw CliWorkerEngineProbeException(

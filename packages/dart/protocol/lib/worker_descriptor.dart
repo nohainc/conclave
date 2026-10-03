@@ -1,5 +1,16 @@
 /// Cloud-owned logical Worker metadata. Local readiness and installed Profile
 /// state belong to Workspace inventory and are intentionally absent.
+const canonicalWorkerCapabilities = <String>[
+  'text',
+  'local_file',
+  'workstream_read',
+  'workstream_write',
+  'durable_session',
+  'image',
+  'audio',
+  'video',
+];
+
 class WorkerDescriptor {
   const WorkerDescriptor({
     required this.workerTypeId,
@@ -63,7 +74,7 @@ class WorkerDescriptor {
         capabilities.any((value) =>
             value is! String ||
             value.length > 64 ||
-            !_capabilities.contains(value)) ||
+            !canonicalWorkerCapabilities.contains(value)) ||
         capabilities.toSet().length != capabilities.length ||
         profileDefinitionId is! String ||
         !_identifier.hasMatch(profileDefinitionId) ||
@@ -105,16 +116,5 @@ class WorkerDescriptor {
         'sortOrder': sortOrder,
       };
 }
-
-const _capabilities = {
-  'text',
-  'local_file',
-  'workstream_read',
-  'workstream_write',
-  'durable_session',
-  'image',
-  'audio',
-  'video',
-};
 
 final _identifier = RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$');

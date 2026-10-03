@@ -97,6 +97,7 @@ export const routeHandlers = {
   handleCreateApprovedLogicalWorker: handlers.handleCreateApprovedLogicalWorker,
   handleCreateDraftToolProfileRelease:
     handlers.handleCreateDraftToolProfileRelease,
+  handleGetToolProfileRelease: handlers.handleGetToolProfileRelease,
   handleUpdateDraftToolProfileRelease:
     handlers.handleUpdateDraftToolProfileRelease,
   handlePublishDraftToolProfileRelease:
