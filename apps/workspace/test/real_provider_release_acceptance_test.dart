@@ -64,6 +64,8 @@ Future<void> _runRealProviderReleaseAcceptance(
 
   final sandboxDir = Directory('${tempDir.path}/sandbox')
     ..createSync(recursive: true);
+  final providerBinDir = Directory('${tempDir.path}/provider-bin')
+    ..createSync(recursive: true);
 
   // 1. Prepare Mock Engine Binary for standalone testing when live provider CLI is unconfigured
   final mockEngineSourceFile = File('${tempDir.path}/mock_engine.dart')
@@ -128,12 +130,36 @@ Future<void> _runRealProviderReleaseAcceptance(
   expect(candidate.logicalWorkerTypeId, equals(official.logicalWorkerTypeId));
   expect(candidate.isSigned, isFalse);
 
+  final providerTool = profileMap['providerTool'] as Map<String, dynamic>;
+  final executableName =
+      (providerTool['executableCandidates'] as List<dynamic>).first as String;
+  final supportedVersions = providerTool['supportedVersions'] as List<dynamic>;
+  final supportedVersion =
+      (supportedVersions.first as Map<String, dynamic>)['min'] as String;
+  final providerStub = File('${providerBinDir.path}/$executableName')
+    ..writeAsStringSync(
+      '#!/bin/sh\n'
+      'if [ "\$1" = "--version" ]; then\n'
+      '  echo "$supportedVersion"\n'
+      '  exit 0\n'
+      'fi\n'
+      'exit 1\n',
+    );
+  final chmodResult = await Process.run('chmod', ['700', providerStub.path]);
+  if (chmodResult.exitCode != 0) {
+    throw StateError('Could not make the test provider stub executable.');
+  }
+
   // -----------------------------------------------------------------------
   // STEP 2: Exercise the ladder with a mock Engine that cannot run a provider.
   // -----------------------------------------------------------------------
   final sandbox = ProfileLabTestSandbox(
     sandboxRoot: sandboxDir,
     engineExecutable: mockEngineBinary,
+    environmentOverrides: {
+      'PATH':
+          '${providerBinDir.path}${Platform.isWindows ? ';' : ':'}${Platform.environment['PATH'] ?? ''}',
+    },
   );
 
   final ladderRes = await sandbox.executeTestLadder(candidate: candidate);

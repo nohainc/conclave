@@ -219,8 +219,7 @@ void main() {
     expect(copiedText, error);
   });
 
-  testWidgets(
-      'launch-at-login preference is applied through the native desktop API',
+  testWidgets('launch-at-login uses the native desktop API only when supported',
       (tester) async {
     final methods = <MethodCall>[];
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -236,9 +235,17 @@ void main() {
               null,
             ));
 
-    await WorkspaceLifecycleController.setLaunchAtLogin(true);
-    expect(methods.single.method, 'setLaunchAtLogin');
-    expect(methods.single.arguments, isTrue);
+    if (Platform.isMacOS) {
+      await WorkspaceLifecycleController.setLaunchAtLogin(true);
+      expect(methods.single.method, 'setLaunchAtLogin');
+      expect(methods.single.arguments, isTrue);
+    } else {
+      await expectLater(
+        WorkspaceLifecycleController.setLaunchAtLogin(true),
+        throwsUnsupportedError,
+      );
+      expect(methods, isEmpty);
+    }
   });
 
   Future<void> pumpDashboard(
