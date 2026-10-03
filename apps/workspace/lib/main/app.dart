@@ -407,6 +407,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     DesktopHumanSession? previousSession;
     var failureContext = 'creating the sign-in request';
     DesktopHumanSession? claimedSession;
+    var sessionCommitted = false;
     try {
       final previousRecord = await lifecycle.workspace.credentialStore
           .read(desktopHumanCredentialKey);
@@ -438,6 +439,9 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       final existingRegistration = WorkspaceRegistrationStore(
         lifecycle.workspace.config.dataDirectory,
       ).readSync();
+      var effectiveRegistration = existingRegistration;
+      var registrationRepaired = false;
+      WorkspaceOwnership? staleOwnershipForRepair;
       final identityStore =
           InstallationIdentityStore(lifecycle.workspace.config.dataDirectory);
       final installationId =
@@ -483,9 +487,13 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
             }
             break;
           case WorkspaceOwnershipState.localRegistrationStale:
-            throw StateError(
-              'Cloud found a stale local Workspace registration. Reconnect to repair it before switching accounts.',
-            );
+            if (ownership.ownerMatchesCurrentSession != true ||
+                ownership.ownerUserId != session.userId) {
+              throw StateError(
+                'Cloud could not confirm this account as the owner of the canonical Workspace.',
+              );
+            }
+            staleOwnershipForRepair = ownership;
           case WorkspaceOwnershipState.installationConflict:
             throw StateError(
               'The local Workspace registration conflicts with its Cloud installation binding. Contact your administrator before continuing.',
@@ -501,7 +509,33 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
           throw StateError(
               'Local authentication is required to switch accounts.');
         }
-        if (existingRegistration != null) {
+        if (staleOwnershipForRepair != null) {
+          final staleRegistration = existingRegistration;
+          final ownership = staleOwnershipForRepair;
+          final canonicalWorkspaceId = ownership.workspaceId;
+          final canonicalRuntimeId = ownership.workspaceRuntimeId;
+          if (staleRegistration == null ||
+              canonicalWorkspaceId == null ||
+              canonicalRuntimeId == null) {
+            throw StateError(
+              'Cloud found a stale local Workspace registration but could not provide a canonical owner and identity. Check Cloud ownership before retrying.',
+            );
+          }
+          failureContext = 'repairing the stale Workspace registration';
+          effectiveRegistration = await WorkspaceRegistrationService(
+            dataDirectory: lifecycle.workspace.config.dataDirectory,
+            credentialStore: lifecycle.workspace.credentialStore,
+          ).recoverStaleRegistration(
+            registration: staleRegistration,
+            desktopCredential: session.credential,
+            expectedOwnerUserId: session.userId,
+            confirmedOwnerUserId: ownership.ownerUserId!,
+            canonicalWorkspaceId: canonicalWorkspaceId,
+          );
+          registrationRepaired = true;
+          cloudOwnerUserId = session.userId;
+        }
+        if (existingRegistration != null && !registrationRepaired) {
           await WorkspaceRegistrationStore(
             lifecycle.workspace.config.dataDirectory,
           ).write(WorkspaceRegistration(
@@ -526,6 +560,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
         desktopHumanCredentialKey,
         jsonEncode(session.toSecureJson()),
       );
+      sessionCommitted = true;
       if (previousSession != null &&
           previousSession.sessionId != session.sessionId) {
         try {
@@ -539,7 +574,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       );
       final preferences = preferenceStore.readSync();
       await preferenceStore.write(WorkspaceLifecyclePreferences(
-        desiredRuntime: existingRegistration == null
+        desiredRuntime: effectiveRegistration == null
             ? DesiredRuntimeState.disconnected
             : preferences.desiredRuntime,
         launchAtLogin: preferences.launchAtLogin,
@@ -548,13 +583,32 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
         ownerUserId: session.userId,
         ownerDisplayName: session.displayName,
       ));
+      Object? restartFailure;
+      if (registrationRepaired) {
+        try {
+          final config = WorkspaceConfig.fromArgs(
+            const [],
+            credentialStore: lifecycle.workspace.credentialStore,
+          );
+          await lifecycle.replaceWorkspace(await buildWorkspaceRuntime(
+            config,
+            credentialStore: lifecycle.workspace.credentialStore,
+          ));
+        } on Object catch (error) {
+          restartFailure = error;
+        }
+      }
       if (!mounted) return;
       setState(() => _workerRevision++);
       ScaffoldMessenger.of(dialogContext).showSnackBar(
-        SnackBar(content: Text('Signed in as ${session.displayName}.')),
+        SnackBar(
+          content: Text(restartFailure == null
+              ? 'Signed in as ${session.displayName}.'
+              : 'Signed in as ${session.displayName}, but the repaired Workspace could not restart: $restartFailure'),
+        ),
       );
     } catch (error) {
-      if (claimedSession != null) {
+      if (claimedSession != null && !sessionCommitted) {
         try {
           await client.revokeSession(claimedSession);
         } on Object {
@@ -564,7 +618,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       if (mounted) {
         showCopyableErrorSnackBar(
           dialogContext,
-          'Sign-in failed while $failureContext: $error',
+          '${sessionCommitted ? 'Signed in, but' : 'Sign-in failed while'} $failureContext: $error',
         );
       }
     } finally {

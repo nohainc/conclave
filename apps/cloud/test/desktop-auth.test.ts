@@ -962,6 +962,9 @@ describe("desktop human authentication", () => {
         "install_abcdefab-cdef-4abc-8def-abcdefabcdef",
         now,
       );
+    sqlite
+      .prepare("UPDATE execution_workspaces SET owner_user_id = ? WHERE id = ?")
+      .run("human-b", "workspace-other");
     const mismatchedWorkspace = await handleCheckWorkspaceOwnership(
       new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
         method: "POST",
@@ -980,9 +983,10 @@ describe("desktop human authentication", () => {
     );
     expect(mismatchedWorkspace.status).toBe(200);
     expect(await mismatchedWorkspace.json()).toMatchObject({
-      state: "installation_conflict",
+      state: "local_registration_stale",
       workspaceId: "workspace-a",
       workspaceRuntimeId: "runtime-a",
+      ownerUserId: "human-a",
       ownerMatchesCurrentSession: true,
     });
     expect(

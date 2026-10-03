@@ -106,11 +106,48 @@ class WorkspaceRegistrationService {
     );
   }
 
+  /// Replaces stale local IDs only after Cloud confirms the same owner and
+  /// supplies a canonical Workspace identity for this installation.
+  Future<WorkspaceRegistration> recoverStaleRegistration({
+    required WorkspaceRegistration registration,
+    required String desktopCredential,
+    required String expectedOwnerUserId,
+    required String confirmedOwnerUserId,
+    required String canonicalWorkspaceId,
+  }) async {
+    if (confirmedOwnerUserId != expectedOwnerUserId ||
+        canonicalWorkspaceId.trim().isEmpty) {
+      throw StateError(
+        'Cloud did not confirm the signed-in account as the Workspace owner.',
+      );
+    }
+    final repaired = await registerWithDesktopSession(
+      cloudUrl: registration.cloudUrl,
+      desktopCredential: desktopCredential,
+      expectedOwnerUserId: expectedOwnerUserId,
+      expectedWorkspaceId: canonicalWorkspaceId,
+      facts: SafeMachineFacts.collect(
+        installationId: registration.installationId,
+        name: registration.name,
+        hostname: registration.hostname,
+      ),
+    );
+    if (repaired.workspaceRuntimeId != registration.workspaceRuntimeId) {
+      try {
+        await _credentialStore.delete(registration.workspaceRuntimeId);
+      } on Object {
+        // Cloud has revoked the old runtime identity; local cleanup is best effort.
+      }
+    }
+    return repaired;
+  }
+
   Future<WorkspaceRegistration> registerWithDesktopSession({
     required String cloudUrl,
     required String desktopCredential,
     required SafeMachineFacts facts,
     required String expectedOwnerUserId,
+    String? expectedWorkspaceId,
   }) async {
     final client = WorkspaceRegistrationClient(cloudUrl: cloudUrl);
     try {
@@ -122,6 +159,12 @@ class WorkspaceRegistrationService {
           result.ownerUserId != expectedOwnerUserId) {
         throw StateError(
           'Cloud returned a Workspace owned by a different Conclave account.',
+        );
+      }
+      if (expectedWorkspaceId != null &&
+          result.workspaceId != expectedWorkspaceId) {
+        throw StateError(
+          'The canonical Workspace changed during registration recovery. Check ownership and retry.',
         );
       }
       await _credentialStore.write(

@@ -40,6 +40,24 @@ void main() {
       }),
       throwsFormatException,
     );
+    final stale = WorkspaceOwnership.fromJson({
+      'state': 'local_registration_stale',
+      'workspaceId': 'workspace-canonical',
+      'workspaceRuntimeId': 'runtime-canonical',
+      'ownerUserId': 'user-a',
+      'ownerMatchesCurrentSession': true,
+      'runtimeState': 'offline',
+    });
+    expect(stale.state, WorkspaceOwnershipState.localRegistrationStale);
+    expect(stale.workspaceId, 'workspace-canonical');
+    expect(
+      () => WorkspaceOwnership.fromJson({
+        'state': 'local_registration_stale',
+        'workspaceId': 'workspace-canonical',
+        'ownerUserId': 'user-a',
+      }),
+      throwsFormatException,
+    );
   });
 
   test('only the confirmed foreign-owner code prompts for ownership release',
@@ -260,6 +278,89 @@ void main() {
       '${temp.path}/workspace-registration.json',
     ).readAsString();
     expect(persisted, isNot(contains('replacement-runtime-secret')));
+  });
+
+  test('same-owner stale registration is replaced with canonical Cloud IDs',
+      () async {
+    final temp = await Directory.systemTemp.createTemp('workspace-stale-');
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async {
+      await server.close(force: true);
+      await temp.delete(recursive: true);
+    });
+    final credentials = _MemoryCredentials()
+      ..values['runtime-stale'] = 'revoked-runtime-secret';
+    final oldRegistration = WorkspaceRegistration(
+      workspaceRuntimeId: 'runtime-stale',
+      workspaceId: 'workspace-stale',
+      cloudUrl: 'http://127.0.0.1:${server.port}',
+      name: 'Recovered computer',
+      hostname: 'recovered-machine',
+      installationId: 'install_12345678-1234-4234-8234-123456789abc',
+      ownerUserId: 'user-a',
+    );
+    await WorkspaceRegistrationStore(temp).write(oldRegistration);
+
+    final requestFuture = server.first.then((request) async {
+      expect(request.method, 'POST');
+      expect(request.uri.path, '/api/workspace-runtime/register');
+      expect(
+        request.headers.value(HttpHeaders.authorizationHeader),
+        'Bearer desktop-human-secret',
+      );
+      final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+      expect(
+        body['installationId'],
+        'install_12345678-1234-4234-8234-123456789abc',
+      );
+      expect(body['proposedWorkspaceName'], 'Recovered computer');
+      request.response.statusCode = HttpStatus.created;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'outcome': 'recovered',
+        'workspaceId': 'workspace-canonical',
+        'workspaceRuntimeId': 'runtime-fresh',
+        'workspaceName': 'Recovered computer',
+        'ownerUserId': 'user-a',
+        'runtimeCredential': 'runtime-fresh-secret',
+        'credentialIssuedAt': DateTime.now().toUtc().toIso8601String(),
+        'credentialExpiresAt': null,
+        'completedAt': DateTime.now().toUtc().toIso8601String(),
+      }));
+      await request.response.close();
+    });
+
+    final service = WorkspaceRegistrationService(
+      dataDirectory: temp,
+      credentialStore: credentials,
+    );
+    await expectLater(
+      service.recoverStaleRegistration(
+        registration: oldRegistration,
+        desktopCredential: 'desktop-human-secret',
+        expectedOwnerUserId: 'user-a',
+        confirmedOwnerUserId: 'user-b',
+        canonicalWorkspaceId: 'workspace-canonical',
+      ),
+      throwsStateError,
+    );
+
+    final repaired = await service.recoverStaleRegistration(
+      registration: oldRegistration,
+      desktopCredential: 'desktop-human-secret',
+      expectedOwnerUserId: 'user-a',
+      confirmedOwnerUserId: 'user-a',
+      canonicalWorkspaceId: 'workspace-canonical',
+    );
+    await requestFuture;
+
+    expect(repaired.workspaceId, 'workspace-canonical');
+    expect(repaired.workspaceRuntimeId, 'runtime-fresh');
+    expect(credentials.values, {'runtime-fresh': 'runtime-fresh-secret'});
+    final saved = WorkspaceRegistrationStore(temp).readSync();
+    expect(saved?.workspaceId, 'workspace-canonical');
+    expect(saved?.workspaceRuntimeId, 'runtime-fresh');
+    expect(saved?.ownerUserId, 'user-a');
   });
 
   test('registration rejects a Workspace owned by another account', () async {

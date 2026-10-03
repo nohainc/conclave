@@ -106,7 +106,13 @@ the matching installation binding. A failed check does not alter Cloud
 ownership or the desktop's stored human session. The local owner cache is
 refreshed only from a confirmed current-owner response and remains
 non-authoritative. Cloud detects local IDs bound to a different installation
-or multiple Workspace records, even when those records share an owner.
+or multiple Workspace records, even when those records share an owner. When
+the supplied installation is actively bound to the signed-in user but its
+local Workspace/runtime IDs are stale, Cloud returns
+`local_registration_stale` with the canonical IDs and confirmed owner. The
+desktop verifies that owner, re-registers the same installation to receive a
+fresh runtime credential, replaces the stale local registration, and resumes
+sign-in. This same-owner repair does not require ownership release.
 
 Disconnect and Release report `workspace_runtime_missing` when the requested
 runtime identity no longer exists and `workspace_identity_mismatch` when the

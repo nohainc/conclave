@@ -196,6 +196,17 @@ class WorkspaceOwnership {
         'Cloud omitted canonical current-owner Workspace details',
       );
     }
+    if (state == WorkspaceOwnershipState.localRegistrationStale &&
+        (result.workspaceId != null || result.workspaceRuntimeId != null) &&
+        (result.workspaceId == null ||
+            result.workspaceRuntimeId == null ||
+            result.ownerUserId == null ||
+            result.ownerMatchesCurrentSession != true ||
+            result.runtimeState == null)) {
+      throw const FormatException(
+        'Cloud returned incomplete canonical details for a stale Workspace registration',
+      );
+    }
     if (state == WorkspaceOwnershipState.ownedByOtherUser &&
         json.keys.any((key) => key != 'state')) {
       throw const FormatException(

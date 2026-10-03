@@ -204,18 +204,22 @@ export async function handleCheckWorkspaceOwnership(
     .all<WorkspaceOwnershipRow>();
   const boundRows = byInstallation.results ?? [];
 
-  // A foreign owner is represented by one constant response, even when other
-  // inconsistent rows would otherwise reveal their IDs or runtime state.
-  if (boundRows.some((row) => row.ownerUserId !== session.userId)) {
+  const activeBindings = boundRows.filter(
+    (row) => row.revokedAt === null && row.workspaceStatus !== "revoked",
+  );
+  // Only an active binding proves that another account currently owns this
+  // installation. Historical foreign rows are ambiguous, not proof of current
+  // ownership, and never expose the former owner's Workspace details.
+  if (activeBindings.some((row) => row.ownerUserId !== session.userId)) {
     return json({ state: "owned_by_other_user" });
   }
   if (new Set(boundRows.map((row) => row.workspaceId)).size > 1) {
     return json({ state: "corrupt_or_ambiguous" });
   }
-  const activeBindings = boundRows.filter(
-    (row) => row.revokedAt === null && row.workspaceStatus !== "revoked",
-  );
   if (activeBindings.length > 1) {
+    return json({ state: "corrupt_or_ambiguous" });
+  }
+  if (boundRows.some((row) => row.ownerUserId !== session.userId)) {
     return json({ state: "corrupt_or_ambiguous" });
   }
 
@@ -231,9 +235,6 @@ export async function handleCheckWorkspaceOwnership(
     )
       .bind(runtimeId, workspaceId)
       .first<WorkspaceOwnershipRow>();
-    if (localRow && localRow.ownerUserId !== session.userId) {
-      return json({ state: "owned_by_other_user" });
-    }
   }
 
   const bound = activeBindings[0];
@@ -246,15 +247,9 @@ export async function handleCheckWorkspaceOwnership(
         workspaceId !== bound.workspaceId ||
         runtimeId !== bound.runtimeId)
     ) {
-      const conflictingLocalBinding =
-        localRow !== null &&
-        localRow.installationId !== null &&
-        localRow.installationId !== installationId;
       return json(
         currentOwnerOwnership(
-          conflictingLocalBinding
-            ? "installation_conflict"
-            : "local_registration_stale",
+          "local_registration_stale",
           bound,
           session.userId,
         ),
@@ -270,6 +265,9 @@ export async function handleCheckWorkspaceOwnership(
   }
 
   if (localRow) {
+    if (localRow.ownerUserId !== session.userId) {
+      return json({ state: "local_registration_stale" });
+    }
     if (
       localRow.installationId === null &&
       localRow.revokedAt !== null &&
