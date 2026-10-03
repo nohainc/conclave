@@ -185,7 +185,9 @@ export async function handleCheckWorkspaceOwnership(
     .bind(installationId)
     .first<{ released: number }>();
   if (releaseHistory) return json({ state: "released" });
-  return json({ state: "unbound" });
+  // Keep ownerUserId as a compatibility alias for older Workspace clients;
+  // with an unbound installation it identifies only the authenticated caller.
+  return json({ state: "unbound", ownerUserId: session.userId });
 }
 
 /** Disconnects runtime participation while retaining the installation owner binding. */

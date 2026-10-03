@@ -901,7 +901,10 @@ describe("desktop human authentication", () => {
       });
 
     const unbound = await handleCheckWorkspaceOwnership(request(), env);
-    expect(await unbound.json()).toEqual({ state: "unbound" });
+    expect(await unbound.json()).toEqual({
+      state: "unbound",
+      ownerUserId: "human-a",
+    });
 
     sqlite
       .prepare(

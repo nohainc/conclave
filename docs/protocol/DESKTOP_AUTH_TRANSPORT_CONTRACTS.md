@@ -90,8 +90,10 @@ runtime IDs. Cloud returns an explicit `state` from this set: `unbound`,
 `installation_conflict`, `released`, and `corrupt_or_ambiguous`. The current
 owner receives canonical `workspaceId` and `workspaceRuntimeId`,
 `ownerMatchesCurrentSession: true`, and `runtimeState`. An unbound installation
-has no owner details; a released installation includes canonical details only
-when Cloud can verify the caller still owns that released Workspace. For
+has no bound-owner details; its `ownerUserId` compatibility field contains
+only the authenticated caller's ID. A released installation includes canonical
+details only when Cloud can verify the caller still owns that released
+Workspace. For
 another account Cloud returns only
 `{ "state": "owned_by_other_user" }`, with no Workspace ID, runtime ID, owner
 ID, or runtime status. The check does not issue or rotate a runtime
