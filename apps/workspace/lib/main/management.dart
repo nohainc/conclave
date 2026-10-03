@@ -130,6 +130,15 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
       } finally {
         authClient.close();
       }
+      await WorkspaceRegistrationService(
+        dataDirectory: dataDirectory,
+        credentialStore: lifecycle.workspace.credentialStore,
+      ).recoverMissingRuntimeCredential(
+        registration: registration,
+        desktopCredential: session.credential,
+        expectedOwnerUserId: session.userId,
+        name: name,
+      );
       final preferenceStore = WorkspaceLifecyclePreferencesStore(dataDirectory);
       final preferences = preferenceStore.readSync();
       try {

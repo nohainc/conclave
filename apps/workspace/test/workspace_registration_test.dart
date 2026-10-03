@@ -149,6 +149,72 @@ void main() {
     expect(raw, isNot(contains('runtime-secret')));
   });
 
+  test('same-owner connect recovers a missing runtime credential', () async {
+    final temp = await Directory.systemTemp.createTemp('workspace-recovery-');
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async {
+      await server.close(force: true);
+      await temp.delete(recursive: true);
+    });
+    final requestFuture = server.first.then((request) async {
+      expect(request.method, 'POST');
+      expect(request.uri.path, '/api/workspace-runtime/register');
+      expect(
+        request.headers.value(HttpHeaders.authorizationHeader),
+        'Bearer desktop-human-secret',
+      );
+      final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+      expect(
+        body['installationId'],
+        'install_12345678-1234-4234-8234-123456789abc',
+      );
+      expect(body['proposedWorkspaceName'], 'Existing Workspace');
+      request.response.statusCode = HttpStatus.created;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'outcome': 'recovered',
+        'workspaceId': 'workspace-1',
+        'workspaceRuntimeId': 'runtime-1',
+        'workspaceName': 'Existing Workspace',
+        'ownerUserId': 'user-a',
+        'runtimeCredential': 'replacement-runtime-secret',
+        'credentialIssuedAt': DateTime.now().toUtc().toIso8601String(),
+        'credentialExpiresAt': null,
+        'completedAt': DateTime.now().toUtc().toIso8601String(),
+      }));
+      await request.response.close();
+    });
+
+    final credentials = _MemoryCredentials();
+    await WorkspaceRegistrationService(
+      dataDirectory: temp,
+      credentialStore: credentials,
+    ).recoverMissingRuntimeCredential(
+      registration: WorkspaceRegistration(
+        workspaceRuntimeId: 'runtime-1',
+        workspaceId: 'workspace-1',
+        cloudUrl: 'http://127.0.0.1:${server.port}',
+        name: 'Existing Workspace',
+        hostname: 'existing-host',
+        installationId: 'install_12345678-1234-4234-8234-123456789abc',
+        ownerUserId: 'user-a',
+      ),
+      desktopCredential: 'desktop-human-secret',
+      expectedOwnerUserId: 'user-a',
+    );
+    await requestFuture;
+
+    expect(credentials.values['runtime-1'], 'replacement-runtime-secret');
+    expect(
+      WorkspaceRegistrationStore(temp).readSync()?.installationId,
+      'install_12345678-1234-4234-8234-123456789abc',
+    );
+    final persisted = await File(
+      '${temp.path}/workspace-registration.json',
+    ).readAsString();
+    expect(persisted, isNot(contains('replacement-runtime-secret')));
+  });
+
   test('registration rejects a Workspace owned by another account', () async {
     final temp =
         await Directory.systemTemp.createTemp('workspace-owner-check-');

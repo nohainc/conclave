@@ -79,6 +79,33 @@ class WorkspaceRegistrationService {
   final Directory dataDirectory;
   final SecureCredentialStore _credentialStore;
 
+  /// Recovers a missing local runtime credential for this registered install.
+  /// Cloud verifies the signed-in owner against the persistent installation ID
+  /// before it issues a replacement credential.
+  Future<void> recoverMissingRuntimeCredential({
+    required WorkspaceRegistration registration,
+    required String desktopCredential,
+    required String expectedOwnerUserId,
+    String? name,
+  }) async {
+    final existing = await _credentialStore.read(
+      registration.workspaceRuntimeId,
+    );
+    if (existing?.trim().isNotEmpty == true) return;
+
+    await registerWithDesktopSession(
+      cloudUrl: registration.cloudUrl,
+      desktopCredential: desktopCredential,
+      expectedOwnerUserId: expectedOwnerUserId,
+      facts: SafeMachineFacts.collect(
+        installationId: registration.installationId,
+        name:
+            name?.trim().isNotEmpty == true ? name!.trim() : registration.name,
+        hostname: registration.hostname,
+      ),
+    );
+  }
+
   Future<WorkspaceRegistration> registerWithDesktopSession({
     required String cloudUrl,
     required String desktopCredential,
