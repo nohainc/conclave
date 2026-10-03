@@ -1689,7 +1689,7 @@ void main() {
     await tester.tap(find.text('Test').first);
     await tester.pump();
     await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 250)),
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
     );
     await tester.pumpAndSettle();
 

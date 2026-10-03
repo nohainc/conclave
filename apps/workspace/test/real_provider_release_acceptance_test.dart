@@ -231,6 +231,7 @@ Future<void> main(List<String> args) async {
           'profileSchemaVersion': profile['schemaVersion'],
           'capabilities': profile['capabilities'],
         }));
+        await stdout.flush();
       case 'probe.request':
         stdout.writeln(jsonEncode({
           'type': 'probe.result',
@@ -248,6 +249,7 @@ Future<void> main(List<String> args) async {
             }
           ],
         }));
+        await stdout.flush();
       case 'execute.request':
         stdout.writeln(jsonEncode({
           'type': 'error',
@@ -257,6 +259,7 @@ Future<void> main(List<String> args) async {
           'message': 'Mock Engine does not execute a provider CLI',
           'retryable': false,
         }));
+        await stdout.flush();
     }
   }
 }
