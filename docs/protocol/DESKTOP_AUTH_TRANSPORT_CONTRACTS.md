@@ -73,11 +73,15 @@ provider credentials, local paths, cookies, and filesystem data.
 
 Cloud creates a Workspace for a previously unseen installation. For an existing
 installation owned by the same authenticated user, it recovers that Workspace
-and issues a fresh runtime credential. An installation bound to another user
-returns `409 installation_already_owned`; changing the account requires the
-existing explicit disconnect/release workflow. Hostname and display-name changes
-never transfer ownership. Runtime credentials remain separate from the human
-credential and are stored by desktop in the OS secure credential store.
+and issues a fresh runtime credential. An installation currently bound to
+another user returns `409 workspace_owned_by_other_account`; only this case
+uses the account ownership conflict message and requires the existing explicit
+disconnect/release workflow. Conflicting records return
+`installation_binding_ambiguous`; a revoked Workspace that still has an
+installation binding returns `release_required`. Hostname and display-name
+changes never transfer ownership. Runtime credentials remain separate from
+the human credential and are stored by desktop in the OS secure credential
+store.
 Registration responses include the authenticated `ownerUserId`; the current
 desktop checks it against the signed-in session before storing the returned
 runtime credential and fails closed if Cloud omits it.
@@ -103,6 +107,15 @@ ownership or the desktop's stored human session. The local owner cache is
 refreshed only from a confirmed current-owner response and remains
 non-authoritative. Cloud detects local IDs bound to a different installation
 or multiple Workspace records, even when those records share an owner.
+
+Disconnect and Release report `workspace_runtime_missing` when the requested
+runtime identity no longer exists and `workspace_identity_mismatch` when the
+provided Workspace/runtime/installation tuple does not identify the same
+Cloud binding. These conditions do not imply another account owns the
+installation and do not instruct users to release it. `local_registration_stale`
+is returned by the ownership read model when local IDs cannot be reconciled;
+when Cloud can verify the current owner, that response also supplies the
+canonical IDs for repair.
 
 `POST /api/workspace-runtime/release` is a separate advanced operation. It
 requires a desktop human session created within the last five minutes, the

@@ -42,6 +42,30 @@ void main() {
     );
   });
 
+  test('only the confirmed foreign-owner code prompts for ownership release',
+      () {
+    final foreignOwner = WorkspaceRegistrationException.fromError(
+      statusCode: 409,
+      serverCode: 'workspace_owned_by_other_account',
+    );
+    expect(
+      foreignOwner.kind,
+      WorkspaceRegistrationErrorKind.workspaceOwnedByOtherAccount,
+    );
+    expect(
+        foreignOwner.toString(), contains('owned by another Conclave account'));
+
+    final legacyConflict = WorkspaceRegistrationException.fromError(
+      statusCode: 409,
+      serverCode: 'installation_already_owned',
+    );
+    expect(
+      legacyConflict.kind,
+      WorkspaceRegistrationErrorKind.registrationConflict,
+    );
+    expect(legacyConflict.toString(), isNot(contains('release ownership')));
+  });
+
   test('Cloud API URLs normalize configured /api suffixes exactly once', () {
     const configured = 'https://app.conclaveax.com/api/';
 

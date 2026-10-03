@@ -19,6 +19,127 @@ type WorkspaceOwnershipRow = {
   revokedAt: string | null;
 };
 
+type WorkspaceOwnershipFailureCode =
+  | "workspace_owned_by_other_account"
+  | "installation_binding_ambiguous"
+  | "workspace_runtime_missing"
+  | "workspace_identity_mismatch"
+  | "release_required";
+
+const otherAccountOwnershipMessage =
+  "This Workspace installation is owned by another Conclave account. Sign in as its current owner, then disconnect and release ownership before switching accounts.";
+
+function workspaceOwnershipFailure(
+  code: WorkspaceOwnershipFailureCode,
+  error: string,
+  status: number,
+): Response {
+  return json({ error, code }, { status });
+}
+
+async function workspaceInstallationBindingIssue(
+  env: SecurityEnv,
+  sessionUserId: string,
+  installationId: string,
+): Promise<Response | null> {
+  const bindings = await env.CONCLAVE_DB.prepare(
+    `SELECT i.workspace_id AS workspaceId, i.revoked_at AS revokedAt,
+            w.owner_user_id AS ownerUserId, w.status AS workspaceStatus
+       FROM workspace_runtime_identities i
+       JOIN execution_workspaces w ON w.id = i.workspace_id
+      WHERE i.installation_id = ?1
+      ORDER BY i.created_at DESC`,
+  )
+    .bind(installationId)
+    .all<{
+      workspaceId: string;
+      revokedAt: string | null;
+      ownerUserId: string;
+      workspaceStatus: string;
+    }>();
+  const rows = bindings.results ?? [];
+  if (
+    rows.some(
+      (row) =>
+        row.ownerUserId !== sessionUserId &&
+        row.revokedAt === null &&
+        row.workspaceStatus !== "revoked",
+    )
+  ) {
+    return workspaceOwnershipFailure(
+      "workspace_owned_by_other_account",
+      otherAccountOwnershipMessage,
+      409,
+    );
+  }
+  if (
+    rows.some((row) => row.ownerUserId !== sessionUserId) ||
+    new Set(rows.map((row) => row.workspaceId)).size > 1 ||
+    rows.filter(
+      (row) => row.revokedAt === null && row.workspaceStatus !== "revoked",
+    ).length > 1
+  ) {
+    return workspaceOwnershipFailure(
+      "installation_binding_ambiguous",
+      "Cloud found conflicting Workspace bindings for this installation. Do not continue until the binding is reviewed.",
+      409,
+    );
+  }
+  return null;
+}
+
+/** Classifies failed local IDs without exposing a foreign account's identity. */
+async function workspaceIdentityFailure(
+  env: SecurityEnv,
+  sessionUserId: string,
+  installationId: string,
+  workspaceId: string,
+  runtimeId: string,
+): Promise<Response> {
+  const bindingIssue = await workspaceInstallationBindingIssue(
+    env,
+    sessionUserId,
+    installationId,
+  );
+  if (bindingIssue) return bindingIssue;
+
+  const runtime = await env.CONCLAVE_DB.prepare(
+    `SELECT i.workspace_id AS workspaceId, i.installation_id AS installationId,
+            w.owner_user_id AS ownerUserId
+       FROM workspace_runtime_identities i
+       JOIN execution_workspaces w ON w.id = i.workspace_id
+      WHERE i.id = ?1`,
+  )
+    .bind(runtimeId)
+    .first<{
+      workspaceId: string;
+      installationId: string | null;
+      ownerUserId: string;
+    }>();
+  if (!runtime) {
+    return workspaceOwnershipFailure(
+      "workspace_runtime_missing",
+      "The Workspace runtime identity no longer exists in Cloud.",
+      404,
+    );
+  }
+  if (
+    runtime.ownerUserId !== sessionUserId &&
+    runtime.installationId === installationId
+  ) {
+    return workspaceOwnershipFailure(
+      "workspace_owned_by_other_account",
+      otherAccountOwnershipMessage,
+      409,
+    );
+  }
+  return workspaceOwnershipFailure(
+    "workspace_identity_mismatch",
+    "The stored Workspace/runtime identity does not match this installation. Check the local registration before retrying.",
+    409,
+  );
+}
+
 function currentOwnerOwnership(
   state:
     | "owned_by_current_user"
@@ -217,6 +338,12 @@ export async function handleDisconnectDesktopWorkspace(
       { status: 400 },
     );
   }
+  const bindingIssue = await workspaceInstallationBindingIssue(
+    env,
+    session.userId,
+    installationId,
+  );
+  if (bindingIssue) return bindingIssue;
   const owned = await env.CONCLAVE_DB.prepare(
     `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId, i.credential_token_hash AS credentialHash,
             i.installation_id AS installationId, i.revoked_at AS revokedAt,
@@ -235,13 +362,12 @@ export async function handleDisconnectDesktopWorkspace(
       workspaceStatus: string;
     }>();
   if (!owned || owned.ownerUserId !== session.userId) {
-    return json(
-      {
-        error:
-          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
-        code: "installation_already_owned",
-      },
-      { status: 409 },
+    return workspaceIdentityFailure(
+      env,
+      session.userId,
+      installationId,
+      workspaceId,
+      runtimeId,
     );
   }
   if (owned.revokedAt !== null)
@@ -349,6 +475,12 @@ export async function handleReleaseDesktopWorkspace(
       { status: 400 },
     );
   }
+  const bindingIssue = await workspaceInstallationBindingIssue(
+    env,
+    session.userId,
+    installationId,
+  );
+  if (bindingIssue) return bindingIssue;
   const owned = await env.CONCLAVE_DB.prepare(
     `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
             w.owner_user_id AS ownerUserId, w.status AS workspaceStatus
@@ -364,13 +496,12 @@ export async function handleReleaseDesktopWorkspace(
       workspaceStatus: string;
     }>();
   if (!owned || owned.ownerUserId !== session.userId) {
-    return json(
-      {
-        error:
-          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
-        code: "installation_already_owned",
-      },
-      { status: 409 },
+    return workspaceIdentityFailure(
+      env,
+      session.userId,
+      installationId,
+      workspaceId,
+      runtimeId,
     );
   }
 
@@ -415,8 +546,9 @@ export async function handleReleaseDesktopWorkspace(
   if ((reserved.meta?.changes ?? 0) !== 1) {
     return json(
       {
-        error: "Workspace ownership changed concurrently",
-        code: "installation_already_owned",
+        error:
+          "The Workspace identity changed while ownership was being released. Check its current state and retry.",
+        code: "workspace_identity_mismatch",
       },
       { status: 409 },
     );
@@ -562,20 +694,36 @@ export async function handleRegisterWorkspaceFromDesktop(
       installationId: string;
     }>();
   const history = bindings.results ?? [];
-  const active = history.find(
+  const activeBindings = history.filter(
     (item) => item.revokedAt === null && item.workspaceStatus !== "revoked",
   );
-  if (history.some((item) => item.ownerUserId !== session.userId)) {
-    return json(
-      {
-        error:
-          "This Workspace belongs to another Conclave account. Disconnect and release it from the current account before switching users.",
-        code: "installation_already_owned",
-      },
-      { status: 409 },
+  if (activeBindings.some((item) => item.ownerUserId !== session.userId)) {
+    return workspaceOwnershipFailure(
+      "workspace_owned_by_other_account",
+      otherAccountOwnershipMessage,
+      409,
     );
   }
+  if (
+    history.some((item) => item.ownerUserId !== session.userId) ||
+    new Set(history.map((item) => item.workspaceId)).size > 1 ||
+    activeBindings.length > 1
+  ) {
+    return workspaceOwnershipFailure(
+      "installation_binding_ambiguous",
+      "Cloud found conflicting Workspace bindings for this installation. Do not reconnect until the binding is reviewed.",
+      409,
+    );
+  }
+  const active = activeBindings[0];
   const existing = active ?? history[0];
+  if (existing?.workspaceStatus === "revoked") {
+    return workspaceOwnershipFailure(
+      "release_required",
+      "This revoked Workspace must be explicitly released before it can be registered again.",
+      409,
+    );
+  }
   const outcome = existing ? "recovered" : "created";
   const workspaceId = existing?.workspaceId ?? `ws-${crypto.randomUUID()}`;
   const workspaceName =

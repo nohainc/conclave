@@ -430,7 +430,7 @@ describe("desktop human authentication", () => {
     const accountSwitchDenied = await register("human-b");
     expect(accountSwitchDenied.status).toBe(409);
     expect(await accountSwitchDenied.json()).toMatchObject({
-      code: "installation_already_owned",
+      code: "workspace_owned_by_other_account",
     });
 
     const released = await handleReleaseDesktopWorkspace(
@@ -454,6 +454,196 @@ describe("desktop human authentication", () => {
     expect(await transferred.json()).toMatchObject({
       outcome: "created",
       ownerUserId: "human-b",
+    });
+  });
+
+  it("returns precise registration errors for ambiguous bindings and revoked Workspaces", async () => {
+    const { env, sqlite } = await setup();
+    const now = new Date().toISOString();
+    const installationId = "install_12345678-1234-4234-8234-123456789abc";
+    sqlite
+      .prepare(
+        "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run("human-a", "a@example.test", "A", now, now);
+    sqlite
+      .prepare(
+        "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run("human-b", "b@example.test", "B", now, now);
+    sqlite
+      .prepare(
+        "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "session-a",
+        "human-a",
+        await hashToken("human-a-secret"),
+        "conclave.desktop.management",
+        now,
+        now,
+        new Date(Date.now() + 60_000).toISOString(),
+      );
+    const registration = (name = "A's Workspace") =>
+      handleRegisterWorkspaceFromDesktop(
+        new Request(
+          "https://app.conclave.test/api/workspace-runtime/register",
+          {
+            method: "POST",
+            headers: {
+              authorization: "Bearer human-a-secret",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              contractVersion: "1.0",
+              installationId,
+              proposedWorkspaceName: name,
+              hostname: "a-machine",
+              platform: "macos",
+              architecture: "arm64",
+              appVersion: "1.0.0",
+              runtimeCapabilities: {
+                os: "macos",
+                arch: "arm64",
+                appVersion: "1.0.0",
+                supportedRuntimes: ["dart"],
+                maxConcurrentWorkers: 2,
+              },
+            }),
+          },
+        ),
+        env,
+      );
+    for (const workspaceId of ["workspace-a", "workspace-b"]) {
+      sqlite
+        .prepare(
+          "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'offline', ?, ?)",
+        )
+        .run(workspaceId, "human-a", workspaceId, now, now);
+      sqlite
+        .prepare(
+          "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .run(
+          `runtime-${workspaceId}`,
+          workspaceId,
+          await hashToken(`secret-${workspaceId}`),
+          installationId,
+          now,
+          now,
+        );
+    }
+
+    const ambiguous = await registration();
+    expect(ambiguous.status).toBe(409);
+    expect(await ambiguous.json()).toMatchObject({
+      code: "installation_binding_ambiguous",
+    });
+
+    sqlite
+      .prepare(
+        "UPDATE execution_workspaces SET owner_user_id = ?, status = 'revoked' WHERE id = ?",
+      )
+      .run("human-b", "workspace-b");
+    sqlite
+      .prepare(
+        "UPDATE workspace_runtime_identities SET revoked_at = ? WHERE workspace_id = ?",
+      )
+      .run(now, "workspace-b");
+    const historicalForeignBinding = await registration();
+    expect(historicalForeignBinding.status).toBe(409);
+    expect(await historicalForeignBinding.json()).toMatchObject({
+      code: "installation_binding_ambiguous",
+    });
+
+    sqlite
+      .prepare(
+        "DELETE FROM workspace_runtime_identities WHERE workspace_id = ?",
+      )
+      .run("workspace-b");
+    sqlite
+      .prepare(
+        "UPDATE execution_workspaces SET status = 'revoked' WHERE id = ?",
+      )
+      .run("workspace-a");
+    const revoked = await registration();
+    expect(revoked.status).toBe(409);
+    expect(await revoked.json()).toMatchObject({ code: "release_required" });
+  });
+
+  it("distinguishes a missing runtime from mismatched local identity on lifecycle operations", async () => {
+    const { env, sqlite } = await setup();
+    const now = new Date().toISOString();
+    const installationId = "install_12345678-1234-4234-8234-123456789abc";
+    const otherInstallationId = "install_abcdefab-cdef-4abc-8def-abcdefabcdef";
+    sqlite
+      .prepare(
+        "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run("human-a", "a@example.test", "A", now, now);
+    sqlite
+      .prepare(
+        "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "session-a",
+        "human-a",
+        await hashToken("human-a-secret"),
+        "conclave.desktop.management",
+        now,
+        now,
+        new Date(Date.now() + 60_000).toISOString(),
+      );
+    sqlite
+      .prepare(
+        "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'offline', ?, ?)",
+      )
+      .run("workspace-a", "human-a", "A's Workspace", now, now);
+    sqlite
+      .prepare(
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run(
+        "runtime-a",
+        "workspace-a",
+        await hashToken("runtime-secret"),
+        installationId,
+        now,
+      );
+    const lifecycleRequest = (
+      path: "disconnect" | "release",
+      requestInstallationId: string,
+      runtimeId: string,
+    ) =>
+      new Request(`https://app.conclave.test/api/workspace-runtime/${path}`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer human-a-secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          installationId: requestInstallationId,
+          workspaceId: "workspace-a",
+          runtimeId,
+        }),
+      });
+
+    const identityMismatch = await handleDisconnectDesktopWorkspace(
+      lifecycleRequest("disconnect", otherInstallationId, "runtime-a"),
+      env,
+    );
+    expect(identityMismatch.status).toBe(409);
+    expect(await identityMismatch.json()).toMatchObject({
+      code: "workspace_identity_mismatch",
+    });
+
+    const missingRuntime = await handleReleaseDesktopWorkspace(
+      lifecycleRequest("release", installationId, "runtime-missing"),
+      env,
+    );
+    expect(missingRuntime.status).toBe(404);
+    expect(await missingRuntime.json()).toMatchObject({
+      code: "workspace_runtime_missing",
     });
   });
 
@@ -557,7 +747,7 @@ describe("desktop human authentication", () => {
     );
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({
-      code: "installation_already_owned",
+      code: "workspace_owned_by_other_account",
     });
     expect(
       sqlite
@@ -689,7 +879,7 @@ describe("desktop human authentication", () => {
     );
     expect(connectDenied.status).toBe(409);
     expect(await connectDenied.json()).toMatchObject({
-      code: "installation_already_owned",
+      code: "workspace_owned_by_other_account",
     });
     expect(
       sqlite
@@ -1038,7 +1228,7 @@ describe("desktop human authentication", () => {
     );
     expect(denied.status).toBe(409);
     expect(await denied.json()).toMatchObject({
-      code: "installation_already_owned",
+      code: "workspace_owned_by_other_account",
     });
     expect(
       sqlite

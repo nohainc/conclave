@@ -203,7 +203,12 @@ class SafeMachineFacts {
 enum WorkspaceRegistrationErrorKind {
   authenticationRequired,
   cloudUnavailable,
-  installationAlreadyOwned,
+  workspaceOwnedByOtherAccount,
+  localRegistrationStale,
+  installationBindingAmbiguous,
+  workspaceRuntimeMissing,
+  workspaceIdentityMismatch,
+  releaseRequired,
   registrationConflict,
   accessDenied,
   serverValidationFailure,
@@ -255,12 +260,68 @@ class WorkspaceRegistrationException implements Exception {
         serverCode: serverCode,
       );
     }
-    if (lowerCode == 'installation_already_owned') {
+    if (lowerCode == 'workspace_owned_by_other_account') {
       return WorkspaceRegistrationException(
-        kind: WorkspaceRegistrationErrorKind.installationAlreadyOwned,
-        message: 'This Workspace belongs to another Conclave account.',
+        kind: WorkspaceRegistrationErrorKind.workspaceOwnedByOtherAccount,
+        message:
+            'This Workspace installation is owned by another Conclave account.',
         action:
-            'Disconnect and release it from the current account before switching users.',
+            'Sign in as its current owner, then disconnect and release ownership before switching accounts.',
+        statusCode: statusCode,
+        serverError: serverError,
+        serverCode: serverCode,
+      );
+    }
+    if (lowerCode == 'local_registration_stale') {
+      return WorkspaceRegistrationException(
+        kind: WorkspaceRegistrationErrorKind.localRegistrationStale,
+        message: 'The local Workspace registration is out of date.',
+        action:
+            'Reconnect to refresh the canonical Cloud registration before continuing.',
+        statusCode: statusCode,
+        serverError: serverError,
+        serverCode: serverCode,
+      );
+    }
+    if (lowerCode == 'installation_binding_ambiguous') {
+      return WorkspaceRegistrationException(
+        kind: WorkspaceRegistrationErrorKind.installationBindingAmbiguous,
+        message: 'Cloud found conflicting Workspace bindings.',
+        action:
+            'Do not reconnect until the installation binding has been reviewed.',
+        statusCode: statusCode,
+        serverError: serverError,
+        serverCode: serverCode,
+      );
+    }
+    if (lowerCode == 'workspace_runtime_missing') {
+      return WorkspaceRegistrationException(
+        kind: WorkspaceRegistrationErrorKind.workspaceRuntimeMissing,
+        message: 'The registered Workspace runtime no longer exists in Cloud.',
+        action: 'Reconnect to create or recover the Workspace runtime.',
+        statusCode: statusCode,
+        serverError: serverError,
+        serverCode: serverCode,
+      );
+    }
+    if (lowerCode == 'workspace_identity_mismatch') {
+      return WorkspaceRegistrationException(
+        kind: WorkspaceRegistrationErrorKind.workspaceIdentityMismatch,
+        message: 'The local Workspace identity does not match Cloud.',
+        action:
+            'Check the local registration and retry after correcting the identity.',
+        statusCode: statusCode,
+        serverError: serverError,
+        serverCode: serverCode,
+      );
+    }
+    if (lowerCode == 'release_required') {
+      return WorkspaceRegistrationException(
+        kind: WorkspaceRegistrationErrorKind.releaseRequired,
+        message:
+            'This installation must be released before it can be transferred.',
+        action:
+            'Sign in as the current owner and use Release ownership before connecting another account.',
         statusCode: statusCode,
         serverError: serverError,
         serverCode: serverCode,
