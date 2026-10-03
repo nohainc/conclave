@@ -108,6 +108,21 @@ const tableDefinitionSources = Object.freeze({
   ],
 });
 
+const indexDefinitionSources = Object.freeze({
+  idx_runtime_installation_active: [
+    "apps/cloud/migrations-v8/0001_conclave_v8.sql",
+    "workspace_runtime_identities",
+  ],
+  idx_workspace_installations_active_workspace: [
+    "apps/cloud/migrations-v8/0003_workspace_installations.sql",
+    "workspace_installations",
+  ],
+  idx_workspace_runtime_identities_active_workspace: [
+    "apps/cloud/migrations-v8/0004_workspace_runtime_identity_uniqueness.sql",
+    "workspace_runtime_identities",
+  ],
+});
+
 function extractCreateTableDefinition(sql, tableName) {
   const escapedTableName = tableName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = sql.match(
@@ -120,6 +135,20 @@ function extractCreateTableDefinition(sql, tableName) {
     throw new Error(
       `Missing canonical CREATE TABLE definition for ${tableName}`,
     );
+  }
+  return match[0].replace(/;\s*$/, "");
+}
+
+function extractCreateIndexDefinition(sql, indexName) {
+  const escapedIndexName = indexName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = sql.match(
+    new RegExp(
+      `CREATE UNIQUE INDEX\\s+${escapedIndexName}\\s+ON\\s+[\\w]+\\s*\\([\\s\\S]*?\\)\\s+WHERE\\s+[\\s\\S]*?;`,
+      "i",
+    ),
+  );
+  if (!match) {
+    throw new Error(`Missing canonical CREATE UNIQUE INDEX for ${indexName}`);
   }
   return match[0].replace(/;\s*$/, "");
 }
@@ -141,6 +170,26 @@ export const requiredProductionSmokeTableDefinitions = Object.freeze(
           `$1${tableName}`,
         );
         return [tableName, definition];
+      },
+    ),
+  ),
+);
+
+export const requiredProductionSmokeIndexes = Object.freeze(
+  Object.fromEntries(
+    Object.entries(indexDefinitionSources).map(
+      ([indexName, [migrationPath, tableName]]) => {
+        const migrationSql = readFileSync(
+          join(repositoryRoot, migrationPath),
+          "utf8",
+        );
+        return [
+          indexName,
+          {
+            tableName,
+            sql: extractCreateIndexDefinition(migrationSql, indexName),
+          },
+        ];
       },
     ),
   ),
@@ -169,6 +218,7 @@ export function productionSmokeSchemaIssues(
   tableNames,
   columnsByTable,
   definitionsByTable = {},
+  indexesByName = {},
 ) {
   const tables = new Set(tableNames);
   const issues = [];
@@ -226,6 +276,27 @@ export function productionSmokeSchemaIssues(
     ) {
       issues.push(
         `Production D1 ${table} table definition differs from the v8 contract. Apply a forward migration before deployment.`,
+      );
+    }
+  }
+
+  for (const [indexName, expectedIndex] of Object.entries(
+    requiredProductionSmokeIndexes,
+  )) {
+    const actualIndex = indexesByName[indexName];
+    if (!actualIndex) {
+      issues.push(
+        `Production D1 is missing required unique partial index ${indexName}. Apply pending migration before deployment.`,
+      );
+      continue;
+    }
+    if (
+      actualIndex.tbl_name !== expectedIndex.tableName ||
+      normalizeTableDefinition(actualIndex.sql) !==
+        normalizeTableDefinition(expectedIndex.sql)
+    ) {
+      issues.push(
+        `Production D1 index ${indexName} differs from the v8 contract. Apply pending migration before deployment.`,
       );
     }
   }

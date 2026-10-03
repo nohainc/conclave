@@ -1123,6 +1123,7 @@ describe("desktop human authentication", () => {
 
     // Simulate corrupted data that the production partial unique index blocks.
     sqlite.exec("DROP INDEX idx_runtime_installation_active");
+    sqlite.exec("DROP INDEX idx_workspace_runtime_identities_active_workspace");
     sqlite
       .prepare(
         "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?)",

@@ -217,7 +217,9 @@ remain in `workspace_runtime_identities` and can be rotated or revoked without
 changing ownership. Explicit release changes the installation record to
 `released`; re-registration by another account can then create a new Workspace
 binding. The legacy runtime `installation_id` column is retained for deployed
-schema compatibility, but it is not an ownership authority.
+schema compatibility, but it is not an ownership authority. D1 primary and
+unique partial indexes enforce one ownership row per installation, one active
+installation per Workspace, and one unrevoked runtime identity per Workspace.
 
 Tool Profile administration and release operations use separate Cloud
 allowlists: `CONCLAVE_PROFILE_ADMIN_USER_IDS` grants catalog and draft

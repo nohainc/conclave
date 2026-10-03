@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import {
   productionSmokeSchemaIssues,
   requiredProductionSmokeColumns,
+  requiredProductionSmokeIndexes,
   requiredProductionSmokeTableDefinitions,
 } from "./production-workspace-gateway-smoke-schema.mjs";
 
@@ -83,6 +84,14 @@ function verifyProductionSchema() {
   const definitionsByTable = Object.fromEntries(
     tableRows.map((row) => [row.name, row.sql]),
   );
+  const indexRows = rowsFromD1(
+    executeD1(
+      "SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL",
+    ),
+  );
+  const indexesByName = Object.fromEntries(
+    indexRows.map((row) => [row.name, row]),
+  );
   const columnsByTable = Object.fromEntries(
     Object.keys(requiredProductionSmokeColumns).map((table) => [
       table,
@@ -95,6 +104,7 @@ function verifyProductionSchema() {
     tableNames,
     columnsByTable,
     definitionsByTable,
+    indexesByName,
   );
   if (issues.length > 0) {
     throw new Error(
@@ -102,7 +112,7 @@ function verifyProductionSchema() {
     );
   }
   console.log(
-    `PASS production D1 schema preflight: ${Object.keys(requiredProductionSmokeColumns).length} required tables have the expected columns and ${Object.keys(requiredProductionSmokeTableDefinitions).length} critical table definitions match the Gateway/auth contract`,
+    `PASS production D1 schema preflight: ${Object.keys(requiredProductionSmokeColumns).length} required tables, ${Object.keys(requiredProductionSmokeTableDefinitions).length} critical table definitions, and ${Object.keys(requiredProductionSmokeIndexes).length} required indexes match the Gateway/auth contract`,
   );
 }
 

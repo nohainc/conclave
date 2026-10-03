@@ -4,11 +4,18 @@ import { describe, expect, it } from "vitest";
 import {
   productionSmokeSchemaIssues,
   requiredProductionSmokeColumns,
+  requiredProductionSmokeIndexes,
   requiredProductionSmokeTableDefinitions,
 } from "./production-workspace-gateway-smoke-schema.mjs";
 
 const canonicalDefinitions = Object.fromEntries(
   Object.entries(requiredProductionSmokeTableDefinitions),
+);
+const canonicalIndexes = Object.fromEntries(
+  Object.entries(requiredProductionSmokeIndexes).map(([name, index]) => [
+    name,
+    { name, tbl_name: index.tableName, sql: index.sql },
+  ]),
 );
 
 describe("production Workspace Gateway smoke schema gate", () => {
@@ -19,7 +26,12 @@ describe("production Workspace Gateway smoke schema gate", () => {
     );
 
     expect(
-      productionSmokeSchemaIssues(tables, columns, canonicalDefinitions),
+      productionSmokeSchemaIssues(
+        tables,
+        columns,
+        canonicalDefinitions,
+        canonicalIndexes,
+      ),
     ).toEqual([]);
   });
 
@@ -29,6 +41,7 @@ describe("production Workspace Gateway smoke schema gate", () => {
       "0001_conclave_v8.sql",
       "0002_desktop_auth_multi_audience.sql",
       "0003_workspace_installations.sql",
+      "0004_workspace_runtime_identity_uniqueness.sql",
     ]) {
       database.exec(
         readFileSync(
@@ -67,7 +80,12 @@ describe("production Workspace Gateway smoke schema gate", () => {
     ];
 
     expect(
-      productionSmokeSchemaIssues(tables, columns, canonicalDefinitions),
+      productionSmokeSchemaIssues(
+        tables,
+        columns,
+        canonicalDefinitions,
+        canonicalIndexes,
+      ),
     ).toEqual([
       "workspace_runtime_identities has unexpected columns: credential_key_ref",
       "desktop_auth_intents is missing columns: audience",
@@ -84,9 +102,26 @@ describe("production Workspace Gateway smoke schema gate", () => {
         tables,
         requiredProductionSmokeColumns,
         canonicalDefinitions,
+        canonicalIndexes,
       ),
     ).toContain(
       "Production D1 workspace_installations is missing. Apply pending migration before deployment.",
+    );
+  });
+
+  it("requires the active Workspace runtime uniqueness index", () => {
+    const indexes = { ...canonicalIndexes };
+    delete indexes.idx_workspace_runtime_identities_active_workspace;
+
+    expect(
+      productionSmokeSchemaIssues(
+        Object.keys(requiredProductionSmokeColumns),
+        requiredProductionSmokeColumns,
+        canonicalDefinitions,
+        indexes,
+      ),
+    ).toContain(
+      "Production D1 is missing required unique partial index idx_workspace_runtime_identities_active_workspace. Apply pending migration before deployment.",
     );
   });
 
@@ -119,6 +154,15 @@ describe("production Workspace Gateway smoke schema gate", () => {
         "utf8",
       ),
     );
+    database.exec(
+      readFileSync(
+        new URL(
+          "../apps/cloud/migrations-v8/0004_workspace_runtime_identity_uniqueness.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     const definitions = Object.fromEntries(
       database
         .prepare(
@@ -133,12 +177,21 @@ describe("production Workspace Gateway smoke schema gate", () => {
         )
         .map((row) => [row.name, row.sql]),
     );
+    const indexes = Object.fromEntries(
+      database
+        .prepare(
+          "SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL",
+        )
+        .all()
+        .map((row) => [row.name, row]),
+    );
 
     expect(
       productionSmokeSchemaIssues(
         Object.keys(requiredProductionSmokeColumns),
         requiredProductionSmokeColumns,
         definitions,
+        indexes,
       ),
     ).toEqual([]);
     database.close();
@@ -164,7 +217,14 @@ describe("production Workspace Gateway smoke schema gate", () => {
       "'suspended'",
     );
 
-    expect(productionSmokeSchemaIssues(tables, columns, definitions)).toEqual([
+    expect(
+      productionSmokeSchemaIssues(
+        tables,
+        columns,
+        definitions,
+        canonicalIndexes,
+      ),
+    ).toEqual([
       "Production D1 execution_workspaces table definition differs from the v8 contract. Apply a forward migration before deployment.",
       "Production D1 desktop_auth_intents has legacy single-audience constraint. Apply pending migration before deployment.",
       "Production D1 desktop_human_sessions has legacy single-audience constraint. Apply pending migration before deployment.",

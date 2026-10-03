@@ -40,6 +40,10 @@ Migration `0003_workspace_installations.sql` creates stable installation
 ownership separately from runtime credentials. It preserves the current owner
 and Workspace across runtime rotation, restores released ownership from audit
 history, and fails when legacy rows disagree on the binding.
+Migration `0004_workspace_runtime_identity_uniqueness.sql` adds a unique
+partial index enforcing one active runtime identity per Workspace. It stops
+when legacy data contains duplicate active identities so they can be reviewed
+and resolved explicitly before deployment.
 
 ## Required deployment order
 

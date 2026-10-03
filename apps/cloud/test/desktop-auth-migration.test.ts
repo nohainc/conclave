@@ -280,3 +280,110 @@ describe("Workspace installation ownership migration", () => {
     database.close();
   });
 });
+
+describe("Workspace runtime identity uniqueness migration", () => {
+  function databaseBeforeMigration4(): DatabaseSync {
+    const database = createDatabase();
+    for (const migration of [
+      "0001_conclave_v8.sql",
+      "0002_desktop_auth_multi_audience.sql",
+      "0003_workspace_installations.sql",
+    ]) {
+      database.exec(migrationSql(migration));
+    }
+    return database;
+  }
+
+  it("installs one-active-runtime-per-Workspace and rejects a second live identity", () => {
+    const database = databaseBeforeMigration4();
+    database.exec(`
+      INSERT INTO users (id, email, display_name, created_at, updated_at)
+      VALUES ('owner', 'owner@example.invalid', 'Owner', 'now', 'now');
+      INSERT INTO execution_workspaces
+        (id, owner_user_id, name, status, created_at, updated_at)
+      VALUES ('workspace', 'owner', 'Workspace', 'offline', 'now', 'now');
+      INSERT INTO workspace_installations
+        (installation_id, owner_user_id, workspace_id, status, created_at, updated_at)
+      VALUES ('install_11111111-1111-4111-8111-111111111111', 'owner', 'workspace', 'active', 'now', 'now');
+      INSERT INTO workspace_runtime_identities
+        (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at)
+      VALUES
+        ('runtime-old', 'workspace', 'hash-old',
+         'install_11111111-1111-4111-8111-111111111111', 'old', 'revoked'),
+        ('runtime-current', 'workspace', 'hash-current',
+         'install_11111111-1111-4111-8111-111111111111', 'current', NULL);
+    `);
+
+    database.exec(
+      migrationSql("0004_workspace_runtime_identity_uniqueness.sql"),
+    );
+
+    expect(
+      database
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?",
+        )
+        .get("idx_workspace_runtime_identities_active_workspace"),
+    ).toBeTruthy();
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO workspace_installations
+            (installation_id, owner_user_id, workspace_id, status, created_at, updated_at)
+           VALUES (?, ?, ?, 'active', ?, ?)`,
+        )
+        .run(
+          "install_11111111-1111-4111-8111-111111111111",
+          "owner",
+          "workspace",
+          "duplicate",
+          "duplicate",
+        ),
+    ).toThrow();
+    expect(() =>
+      database
+        .prepare(
+          `INSERT INTO workspace_runtime_identities
+            (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at)
+           VALUES (?, ?, ?, ?, ?, NULL)`,
+        )
+        .run(
+          "runtime-duplicate",
+          "workspace",
+          "hash-duplicate",
+          "install_22222222-2222-4222-8222-222222222222",
+          "duplicate",
+        ),
+    ).toThrow();
+    database.close();
+  });
+
+  it("fails closed when a Workspace already has multiple active runtime identities", () => {
+    const database = databaseBeforeMigration4();
+    database.exec(`
+      INSERT INTO users (id, email, display_name, created_at, updated_at)
+      VALUES ('owner', 'owner@example.invalid', 'Owner', 'now', 'now');
+      INSERT INTO execution_workspaces
+        (id, owner_user_id, name, status, created_at, updated_at)
+      VALUES ('workspace', 'owner', 'Workspace', 'offline', 'now', 'now');
+      INSERT INTO workspace_installations
+        (installation_id, owner_user_id, workspace_id, status, created_at, updated_at)
+      VALUES ('install_11111111-1111-4111-8111-111111111111', 'owner', 'workspace', 'active', 'now', 'now');
+      DROP INDEX idx_runtime_installation_active;
+      INSERT INTO workspace_runtime_identities
+        (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at)
+      VALUES
+        ('runtime-a', 'workspace', 'hash-a',
+         'install_11111111-1111-4111-8111-111111111111', 'a', NULL),
+        ('runtime-b', 'workspace', 'hash-b',
+         'install_11111111-1111-4111-8111-111111111111', 'b', NULL);
+    `);
+
+    expect(() =>
+      database.exec(
+        migrationSql("0004_workspace_runtime_identity_uniqueness.sql"),
+      ),
+    ).toThrow();
+    database.close();
+  });
+});

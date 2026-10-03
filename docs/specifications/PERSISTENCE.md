@@ -18,7 +18,9 @@ migration flow. The desktop auth audience correction is recorded in
 introduces stable installation ownership independently from runtime
 credentials. It seeds ownership from runtime identity history and release audit
 events, and aborts if one legacy installation maps to multiple Workspaces or
-owners.
+owners. [`0004_workspace_runtime_identity_uniqueness.sql`](../../apps/cloud/migrations-v8/0004_workspace_runtime_identity_uniqueness.sql)
+adds a unique partial index that permits at most one unrevoked runtime identity
+per Workspace. It aborts if preexisting rows violate that invariant.
 
 Wrangler records applied migrations by filename. Editing an applied migration
 does not make it run again, so never rewrite, remove, or reorder an applied
@@ -68,8 +70,11 @@ separate Workstream membership table.
 
 Every Workspace runtime identity has a credential hash. Stable installation
 ownership lives in `workspace_installations`, which records the owner,
-canonical Workspace, and active/released state. Runtime identity rows can be
-rotated or revoked independently. Explicit release revokes runtime identities,
+canonical Workspace, and active/released state. Its primary key permits one
+ownership row per installation, and a unique partial index permits a Workspace
+to have only one active installation binding. Runtime identity rows can be
+rotated or revoked independently; a unique partial index permits one unrevoked
+runtime identity per Workspace. Explicit release revokes runtime identities,
 clears their legacy installation ID values, and marks the ownership row
 released so another account can register the installation. The legacy runtime
 `installation_id` column remains for schema compatibility but does not decide

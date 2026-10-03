@@ -220,6 +220,10 @@ Migration `0003_workspace_installations.sql` adds stable installation
 ownership, seeded from runtime identity history and release audit events. It
 fails closed when legacy rows disagree about an installation's Workspace or
 owner. Runtime credentials remain independently rotatable.
+Migration `0004_workspace_runtime_identity_uniqueness.sql` adds the
+database-enforced one-unrevoked-runtime-identity-per-Workspace invariant and
+fails closed if existing rows violate it. The production schema smoke checks
+the required unique partial indexes before proceeding.
 
 The `workspace-gateway-schema-regression.test.ts` test constructs a clean
 SQLite database by applying the ordered SQL migrations in
