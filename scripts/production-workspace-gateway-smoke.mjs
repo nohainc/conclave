@@ -386,7 +386,9 @@ async function registerDisposableWorkspace() {
       `Production Workspace registration failed with HTTP ${response.status}: ${details}`,
     );
     if (result?.code === "registration_conflict" && attempt < 3) {
-      console.warn(`Registration conflict on attempt ${attempt}, retrying in 1s...`);
+      console.warn(
+        `Registration conflict on attempt ${attempt}, retrying in 1s...`,
+      );
       await new Promise((resolve) => setTimeout(resolve, 1000));
       continue;
     }
