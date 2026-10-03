@@ -440,6 +440,30 @@ async function main() {
     );
   }
 
+  const authIntentColumns = rowsFromD1(
+    executeD1("PRAGMA table_info(desktop_auth_intents)"),
+  );
+  if (!authIntentColumns.some((col) => col.name === "audience")) {
+    console.log(
+      "Adding missing audience column to production desktop_auth_intents...",
+    );
+    executeD1(
+      "ALTER TABLE desktop_auth_intents ADD COLUMN audience TEXT NOT NULL DEFAULT 'conclave.desktop.management'",
+    );
+  }
+
+  const humanSessionColumns = rowsFromD1(
+    executeD1("PRAGMA table_info(desktop_human_sessions)"),
+  );
+  if (!humanSessionColumns.some((col) => col.name === "audience")) {
+    console.log(
+      "Adding missing audience column to production desktop_human_sessions...",
+    );
+    executeD1(
+      "ALTER TABLE desktop_human_sessions ADD COLUMN audience TEXT NOT NULL DEFAULT 'conclave.desktop.management'",
+    );
+  }
+
   let socket;
   let setupAttempted = false;
   try {
