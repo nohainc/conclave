@@ -4,6 +4,10 @@ import { once } from "node:events";
 import { connect as connectTls } from "node:tls";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import {
+  productionSmokeSchemaIssues,
+  requiredProductionSmokeColumns,
+} from "./production-workspace-gateway-smoke-schema.mjs";
 
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const wrangler = join(repositoryRoot, "node_modules/.bin/wrangler");
@@ -14,9 +18,15 @@ const runId = process.env.GITHUB_RUN_ID
   : (process.env.CONCLAVE_SMOKE_RUN_ID ?? randomUUID());
 const ownerId = `gateway-smoke-user-${runId}`;
 const humanSessionId = `gateway-smoke-session-${runId}`;
+const profileLabSessionId = `gateway-smoke-profile-lab-session-${runId}`;
+const profileLabClientName = `Conclave Profile Lab Production Smoke ${runId}`;
 const humanCredential = randomBytes(32).toString("base64url");
 const humanTokenHash = createHash("sha256")
   .update(humanCredential)
+  .digest("hex");
+const profileLabCredential = randomBytes(32).toString("base64url");
+const profileLabTokenHash = createHash("sha256")
+  .update(profileLabCredential)
   .digest("hex");
 const installationUuid = createHash("sha256")
   .update(`conclave-production-workspace-smoke:${runId}`)
@@ -65,6 +75,29 @@ function rowsFromD1(result) {
     return result.flatMap((statement) => statement?.results ?? []);
   }
   return result?.results ?? [];
+}
+
+function verifyProductionSchema() {
+  const tableNames = rowsFromD1(
+    executeD1("SELECT name FROM sqlite_master WHERE type = 'table'"),
+  ).map((row) => row.name);
+  const columnsByTable = Object.fromEntries(
+    Object.keys(requiredProductionSmokeColumns).map((table) => [
+      table,
+      rowsFromD1(executeD1(`PRAGMA table_info(${table})`)).map(
+        (column) => column.name,
+      ),
+    ]),
+  );
+  const issues = productionSmokeSchemaIssues(tableNames, columnsByTable);
+  if (issues.length > 0) {
+    throw new Error(
+      `Production D1 schema preflight failed: ${issues.join("; ")}`,
+    );
+  }
+  console.log(
+    `PASS production D1 schema preflight: ${Object.keys(requiredProductionSmokeColumns).length} required tables match the Gateway/auth contract`,
+  );
 }
 
 class SocketReader {
@@ -306,7 +339,8 @@ async function createDisposableHumanSession() {
   const email = `gateway-smoke-${runId}@example.invalid`;
   executeD1(
     `INSERT INTO users (id, email, display_name, status, created_at, updated_at) VALUES (${sqlString(ownerId)}, ${sqlString(email)}, 'Production Workspace Registration Smoke', 'active', ${sqlString(now)}, ${sqlString(now)});
-     INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (${sqlString(humanSessionId)}, ${sqlString(ownerId)}, ${sqlString(humanTokenHash)}, 'conclave.desktop.management', ${sqlString(now)}, ${sqlString(now)}, '9999-12-31T23:59:59.999Z');`,
+     INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (${sqlString(humanSessionId)}, ${sqlString(ownerId)}, ${sqlString(humanTokenHash)}, 'conclave.desktop.management', ${sqlString(now)}, ${sqlString(now)}, '9999-12-31T23:59:59.999Z');
+     INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (${sqlString(profileLabSessionId)}, ${sqlString(ownerId)}, ${sqlString(profileLabTokenHash)}, 'conclave.profile-lab.management', ${sqlString(now)}, ${sqlString(now)}, '9999-12-31T23:59:59.999Z');`,
   );
 }
 
@@ -332,8 +366,68 @@ function removeDisposableRuntime() {
            SELECT id FROM execution_workspaces WHERE owner_user_id = ${sqlString(ownerId)}
          );
      DELETE FROM execution_workspaces WHERE owner_user_id = ${sqlString(ownerId)};
+     DELETE FROM desktop_auth_intents WHERE client_name = ${sqlString(profileLabClientName)} OR approved_user_id = ${sqlString(ownerId)};
      DELETE FROM desktop_human_sessions WHERE id = ${sqlString(humanSessionId)} OR user_id = ${sqlString(ownerId)};
      DELETE FROM users WHERE id = ${sqlString(ownerId)};`,
+  );
+}
+
+async function verifyProfileLabAuth() {
+  const intentResponse = await fetch(
+    `https://${hostname}/api/desktop-auth/intents`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clientName: profileLabClientName,
+        contractVersion: "1.1",
+        audience: "conclave.profile-lab.management",
+      }),
+    },
+  );
+  const intent = await intentResponse.json().catch(() => null);
+  if (
+    intentResponse.status !== 201 ||
+    !intent ||
+    typeof intent.intentId !== "string" ||
+    typeof intent.pollToken !== "string" ||
+    intent.audience !== "conclave.profile-lab.management"
+  ) {
+    throw new Error(
+      `Production Profile Lab auth intent failed with HTTP ${intentResponse.status}${typeof intent?.error === "string" ? `: ${intent.error}` : ""}`,
+    );
+  }
+
+  const cancelResponse = await fetch(
+    `https://${hostname}/api/desktop-auth/intents/${encodeURIComponent(intent.intentId)}/cancel`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${intent.pollToken}` },
+    },
+  );
+  const cancellation = await cancelResponse.json().catch(() => null);
+  if (cancelResponse.status !== 200 || cancellation?.cancelled !== true) {
+    throw new Error(
+      `Production Profile Lab auth intent cancellation failed with HTTP ${cancelResponse.status}`,
+    );
+  }
+
+  const sessionResponse = await fetch(
+    `https://${hostname}/api/desktop-auth/session`,
+    { headers: { Authorization: `Bearer ${profileLabCredential}` } },
+  );
+  const session = await sessionResponse.json().catch(() => null);
+  if (
+    sessionResponse.status !== 200 ||
+    session?.audience !== "conclave.profile-lab.management" ||
+    session?.user?.userId !== ownerId
+  ) {
+    throw new Error(
+      `Production Profile Lab session validation failed with HTTP ${sessionResponse.status}${typeof session?.error === "string" ? `: ${session.error}` : ""}`,
+    );
+  }
+  console.log(
+    "PASS production Profile Lab auth: intent creation/cancellation and audience-scoped session validation",
   );
 }
 
@@ -408,84 +502,12 @@ async function main() {
     return;
   }
 
-  const requiredTables = new Set(
-    rowsFromD1(
-      executeD1(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('desktop_human_sessions', 'workspace_sessions', 'workspace_runtime_facts', 'workspace_runtime_identities')",
-      ),
-    ).map((row) => row.name),
-  );
-  for (const table of [
-    "desktop_human_sessions",
-    "workspace_sessions",
-    "workspace_runtime_facts",
-    "workspace_runtime_identities",
-  ]) {
-    if (!requiredTables.has(table)) {
-      throw new Error(
-        `Production D1 is missing required Gateway table: ${table}`,
-      );
-    }
+  if (process.argv.includes("--schema-only")) {
+    verifyProductionSchema();
+    return;
   }
 
-  const identityColumns = rowsFromD1(
-    executeD1("PRAGMA table_info(workspace_runtime_identities)"),
-  );
-  if (identityColumns.some((col) => col.name === "credential_key_ref")) {
-    console.log(
-      "Pruning legacy credential_key_ref column from production workspace_runtime_identities...",
-    );
-    executeD1(
-      "ALTER TABLE workspace_runtime_identities DROP COLUMN credential_key_ref",
-    );
-  }
-
-  const authIntentColumns = rowsFromD1(
-    executeD1("PRAGMA table_info(desktop_auth_intents)"),
-  );
-  if (authIntentColumns.some((col) => col.name === "user_code_hash")) {
-    console.log(
-      "Aligning desktop_auth_intents to canonical v8 baseline schema...",
-    );
-    executeD1(`
-      DROP TABLE IF EXISTS desktop_auth_intents;
-      CREATE TABLE desktop_auth_intents (
-        id TEXT PRIMARY KEY,
-        poll_token_hash TEXT NOT NULL,
-        client_name TEXT NOT NULL,
-        audience TEXT NOT NULL DEFAULT 'conclave.desktop.management' CHECK (audience IN ('conclave.desktop.management', 'conclave.profile-lab.management')),
-        created_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL,
-        approved_at TEXT,
-        approved_user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
-        claimed_at TEXT,
-        claimed_session_id TEXT,
-        denied_at TEXT
-      );
-      CREATE INDEX IF NOT EXISTS idx_desktop_auth_intents_expiry
-        ON desktop_auth_intents(expires_at)
-        WHERE claimed_at IS NULL AND denied_at IS NULL;
-    `);
-  } else if (!authIntentColumns.some((col) => col.name === "audience")) {
-    console.log(
-      "Adding missing audience column to production desktop_auth_intents...",
-    );
-    executeD1(
-      "ALTER TABLE desktop_auth_intents ADD COLUMN audience TEXT NOT NULL DEFAULT 'conclave.desktop.management'",
-    );
-  }
-
-  const humanSessionColumns = rowsFromD1(
-    executeD1("PRAGMA table_info(desktop_human_sessions)"),
-  );
-  if (!humanSessionColumns.some((col) => col.name === "audience")) {
-    console.log(
-      "Adding missing audience column to production desktop_human_sessions...",
-    );
-    executeD1(
-      "ALTER TABLE desktop_human_sessions ADD COLUMN audience TEXT NOT NULL DEFAULT 'conclave.desktop.management'",
-    );
-  }
+  verifyProductionSchema();
 
   let socket;
   let setupAttempted = false;
@@ -493,6 +515,7 @@ async function main() {
     removeDisposableRuntime();
     setupAttempted = true;
     await createDisposableHumanSession();
+    await verifyProfileLabAuth();
     await registerDisposableWorkspace();
     socket = await connectAndHello();
     await waitForSessionRecord();

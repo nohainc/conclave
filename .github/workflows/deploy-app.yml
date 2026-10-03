@@ -184,6 +184,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm exec wrangler d1 migrations apply conclave-v8-production --remote --config ../../infra/cloudflare/app.wrangler.jsonc
+      - name: Verify production D1 schema before Worker deploy
+        working-directory: .
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/production-workspace-gateway-smoke.mjs --schema-only
       - name: Deploy app.conclaveax.com
         working-directory: apps/cloud
         env:

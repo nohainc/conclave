@@ -138,16 +138,25 @@ runs the v8 clean-schema and Work v1 regression acceptance tests. CI also runs
 the v8 runtime and Work v1 end-to-end suites. Failures stop the production
 deployment.
 
-After deploying `app.conclaveax.com`, the same workflow runs
-`scripts/production-workspace-gateway-smoke.mjs` as a production acceptance
-gate. It creates a uniquely named temporary user, Workspace, and runtime
-credential in production D1, verifies the required Gateway tables, performs an
-HTTP/1.1 WebSocket upgrade, sends `workspace.hello`, requires the matching
+After applying production D1 migrations and before deploying
+`app.conclaveax.com`, the workflow runs
+`scripts/production-workspace-gateway-smoke.mjs --schema-only`. It compares the
+production table and column contract with the smoke requirements and fails the
+workflow on a missing, unexpected, or legacy column. This check only reads
+schema metadata; it never repairs table definitions.
+
+After deploying `app.conclaveax.com`, the same script runs as a production
+acceptance gate. It verifies Profile Lab auth intent creation and cancellation,
+validates a disposable Profile Lab audience session, creates a disposable
+Workspace management session, registers a uniquely named Workspace, performs
+an HTTP/1.1 WebSocket upgrade, sends `workspace.hello`, requires the matching
 `workspace.hello.ack`, requests synchronization and requires a correlated
-`workspace.sync.result`, verifies the session row, and deletes the temporary
-Workspace and user in a `finally` cleanup. The runtime token is generated for
-that run and is never written to workflow logs or a URL. A failed handshake,
-protocol exchange, schema check, or cleanup fails the deployment workflow.
+`workspace.sync.result`, verifies the persisted Gateway session, and deletes
+the disposable auth, Workspace, and user rows in `finally` cleanup. The runtime
+token is generated for that run and is never written to workflow logs or a URL.
+A failed schema check, auth request, registration, Gateway exchange, or cleanup
+fails the deployment workflow. The smoke uses DML only for disposable rows and
+does not change production table definitions.
 
 That automated deployment acceptance does not replace the packaged desktop
 lifecycle release run. Before publishing a Workspace desktop release, execute
