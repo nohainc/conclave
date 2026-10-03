@@ -82,6 +82,15 @@ installation binding returns `release_required`. Hostname and display-name
 changes never transfer ownership. Runtime credentials remain separate from
 the human credential and are stored by desktop in the OS secure credential
 store.
+
+Cloud stores stable ownership in `workspace_installations`, keyed by the
+persistent installation ID and containing its current owner, canonical
+Workspace, and active/released state. `workspace_runtime_identities` stores
+revocable runtime credentials. Rotating or disconnecting a runtime identity
+does not change installation ownership; explicit Release revokes runtime
+identities and marks the ownership row released. The legacy runtime
+`installation_id` column remains in the deployed schema for compatibility and
+migration history, but Cloud ownership decisions use `workspace_installations`.
 Registration responses include the authenticated `ownerUserId`; the current
 desktop checks it against the signed-in session before storing the returned
 runtime credential and fails closed if Cloud omits it.
@@ -128,7 +137,8 @@ requires a desktop human session created within the last five minutes, the
 same authoritative owner, the exact installation/Workspace/runtime binding,
 and no active assignments. Cloud first fences the Workspace from scheduling,
 then revokes runtime identities, disconnects the Gateway, revokes Project
-grants, clears installation bindings, and records an audit event. It does not
+grants, marks the stable installation ownership record released, clears legacy
+runtime installation bindings, and records an audit event. It does not
 delete local Worker records, provider CLI sign-in state, or Work Root files. A
 different account can register the stable installation ID only after this
 explicit release succeeds.

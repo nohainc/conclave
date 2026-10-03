@@ -23,6 +23,15 @@ export const requiredProductionSmokeColumns = Object.freeze({
     "created_at",
     "updated_at",
   ],
+  workspace_installations: [
+    "installation_id",
+    "owner_user_id",
+    "workspace_id",
+    "status",
+    "created_at",
+    "updated_at",
+    "released_at",
+  ],
   workspace_runtime_identities: [
     "id",
     "workspace_id",
@@ -80,6 +89,10 @@ const tableDefinitionSources = Object.freeze({
   execution_workspaces: [
     "apps/cloud/migrations-v8/0001_conclave_v8.sql",
     "execution_workspaces",
+  ],
+  workspace_installations: [
+    "apps/cloud/migrations-v8/0003_workspace_installations.sql",
+    "workspace_installations",
   ],
   workspace_runtime_identities: [
     "apps/cloud/migrations-v8/0001_conclave_v8.sql",
@@ -164,7 +177,11 @@ export function productionSmokeSchemaIssues(
     requiredProductionSmokeColumns,
   )) {
     if (!tables.has(table)) {
-      issues.push(`missing table ${table}`);
+      issues.push(
+        table === "workspace_installations"
+          ? "Production D1 workspace_installations is missing. Apply pending migration before deployment."
+          : `missing table ${table}`,
+      );
       continue;
     }
 

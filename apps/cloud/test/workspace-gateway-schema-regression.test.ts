@@ -76,6 +76,7 @@ describe("Workspace Gateway active-schema regression", () => {
 
     const expectedTables = [
       "execution_workspaces",
+      "workspace_installations",
       "workspace_runtime_identities",
       "workspace_sessions",
       "workspace_runtime_facts",

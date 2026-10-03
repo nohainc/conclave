@@ -23,29 +23,34 @@ describe("production Workspace Gateway smoke schema gate", () => {
     ).toEqual([]);
   });
 
-  it("tracks the canonical v8 migration columns", () => {
-    const migration = readFileSync(
-      new URL(
-        "../apps/cloud/migrations-v8/0001_conclave_v8.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    );
+  it("tracks canonical columns after all forward migrations", () => {
+    const database = new DatabaseSync(":memory:");
+    for (const migration of [
+      "0001_conclave_v8.sql",
+      "0002_desktop_auth_multi_audience.sql",
+      "0003_workspace_installations.sql",
+    ]) {
+      database.exec(
+        readFileSync(
+          new URL(`../apps/cloud/migrations-v8/${migration}`, import.meta.url),
+          "utf8",
+        ),
+      );
+    }
 
     for (const [table, expectedColumns] of Object.entries(
       requiredProductionSmokeColumns,
     )) {
-      const definition = migration.match(
-        new RegExp(`CREATE TABLE ${table} \\(([\\s\\S]*?)\\n\\);`),
-      );
-      expect(definition, `canonical migration table ${table}`).not.toBeNull();
-      const actualColumns = [...definition[1].matchAll(/^ {2}([a-z_]+)\s+/gm)]
-        .map((match) => match[1])
+      const actualColumns = database
+        .prepare(`PRAGMA table_info(${table})`)
+        .all()
+        .map((column) => column.name)
         .sort();
       expect(actualColumns, `${table} columns`).toEqual(
         [...expectedColumns].sort(),
       );
     }
+    database.close();
   });
 
   it("fails on missing auth audience columns and legacy schema columns", () => {
@@ -69,6 +74,22 @@ describe("production Workspace Gateway smoke schema gate", () => {
     ]);
   });
 
+  it("requires the stable Workspace ownership table before deployment", () => {
+    const tables = Object.keys(requiredProductionSmokeColumns).filter(
+      (table) => table !== "workspace_installations",
+    );
+
+    expect(
+      productionSmokeSchemaIssues(
+        tables,
+        requiredProductionSmokeColumns,
+        canonicalDefinitions,
+      ),
+    ).toContain(
+      "Production D1 workspace_installations is missing. Apply pending migration before deployment.",
+    );
+  });
+
   it("matches sqlite_master definitions after the ordered migrations", () => {
     const database = new DatabaseSync(":memory:");
     database.exec(
@@ -89,13 +110,23 @@ describe("production Workspace Gateway smoke schema gate", () => {
         "utf8",
       ),
     );
+    database.exec(
+      readFileSync(
+        new URL(
+          "../apps/cloud/migrations-v8/0003_workspace_installations.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     const definitions = Object.fromEntries(
       database
         .prepare(
-          "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?, ?)",
+          "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?, ?, ?)",
         )
         .all(
           "execution_workspaces",
+          "workspace_installations",
           "workspace_runtime_identities",
           "desktop_auth_intents",
           "desktop_human_sessions",

@@ -368,19 +368,26 @@ function removeDisposableRuntime() {
   executeD1(
     `DELETE FROM workspace_sessions
       WHERE workspace_id IN (
-        SELECT workspace_id FROM workspace_runtime_identities
+        SELECT workspace_id FROM workspace_installations
         WHERE installation_id = ${sqlString(installationId)}
       ) OR workspace_id IN (
         SELECT id FROM execution_workspaces WHERE owner_user_id = ${sqlString(ownerId)}
       );
      DELETE FROM workspace_runtime_facts
       WHERE workspace_id IN (
-        SELECT workspace_id FROM workspace_runtime_identities
+        SELECT workspace_id FROM workspace_installations
         WHERE installation_id = ${sqlString(installationId)}
       ) OR workspace_id IN (
         SELECT id FROM execution_workspaces WHERE owner_user_id = ${sqlString(ownerId)}
       );
      DELETE FROM workspace_runtime_identities
+      WHERE workspace_id IN (
+           SELECT workspace_id FROM workspace_installations
+           WHERE installation_id = ${sqlString(installationId)}
+         ) OR workspace_id IN (
+           SELECT id FROM execution_workspaces WHERE owner_user_id = ${sqlString(ownerId)}
+         );
+     DELETE FROM workspace_installations
       WHERE installation_id = ${sqlString(installationId)}
          OR workspace_id IN (
            SELECT id FROM execution_workspaces WHERE owner_user_id = ${sqlString(ownerId)}

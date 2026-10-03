@@ -210,6 +210,15 @@ through an active Project → Workspace Grant; Project membership alone does not
 grant machine access. Workstream access is checked separately by the Workstream
 policy.
 
+Desktop installation ownership is stored independently in the Cloud
+`workspace_installations` table, keyed by the persistent installation ID and
+pointing to one owner and canonical Execution Workspace. Runtime credentials
+remain in `workspace_runtime_identities` and can be rotated or revoked without
+changing ownership. Explicit release changes the installation record to
+`released`; re-registration by another account can then create a new Workspace
+binding. The legacy runtime `installation_id` column is retained for deployed
+schema compatibility, but it is not an ownership authority.
+
 Tool Profile administration and release operations use separate Cloud
 allowlists: `CONCLAVE_PROFILE_ADMIN_USER_IDS` grants catalog and draft
 administration, while `CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS` grants

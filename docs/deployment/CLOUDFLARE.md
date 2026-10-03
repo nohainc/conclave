@@ -216,6 +216,10 @@ preserves existing rows and active sessions, validates before/after row counts,
 and installs the multi-audience constraints. Never re-bootstrap production to
 deliver a schema change. The complete lifecycle policy is in
 [Persistence Contracts](../specifications/PERSISTENCE.md#d1-schema-lifecycle).
+Migration `0003_workspace_installations.sql` adds stable installation
+ownership, seeded from runtime identity history and release audit events. It
+fails closed when legacy rows disagree about an installation's Workspace or
+owner. Runtime credentials remain independently rotatable.
 
 The `workspace-gateway-schema-regression.test.ts` test constructs a clean
 SQLite database by applying the ordered SQL migrations in

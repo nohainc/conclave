@@ -513,12 +513,9 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
           final staleRegistration = existingRegistration;
           final ownership = staleOwnershipForRepair;
           final canonicalWorkspaceId = ownership.workspaceId;
-          final canonicalRuntimeId = ownership.workspaceRuntimeId;
-          if (staleRegistration == null ||
-              canonicalWorkspaceId == null ||
-              canonicalRuntimeId == null) {
+          if (staleRegistration == null || canonicalWorkspaceId == null) {
             throw StateError(
-              'Cloud found a stale local Workspace registration but could not provide a canonical owner and identity. Check Cloud ownership before retrying.',
+              'Cloud found a stale local Workspace registration but could not provide its canonical Workspace and owner. Check Cloud ownership before retrying.',
             );
           }
           failureContext = 'repairing the stale Workspace registration';

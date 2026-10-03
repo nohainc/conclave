@@ -18,6 +18,15 @@ type WorkspaceOwnershipRow = {
   workspaceStatus: string;
   revokedAt: string | null;
 };
+type WorkspaceInstallationRow = {
+  installationId: string;
+  ownerUserId: string;
+  workspaceId: string;
+  status: "active" | "released";
+  releasedAt: string | null;
+  workspaceStatus: string;
+  workspaceName: string;
+};
 
 type WorkspaceOwnershipFailureCode =
   | "workspace_owned_by_other_account"
@@ -42,29 +51,21 @@ async function workspaceInstallationBindingIssue(
   sessionUserId: string,
   installationId: string,
 ): Promise<Response | null> {
-  const bindings = await env.CONCLAVE_DB.prepare(
-    `SELECT i.workspace_id AS workspaceId, i.revoked_at AS revokedAt,
-            w.owner_user_id AS ownerUserId, w.status AS workspaceStatus
-       FROM workspace_runtime_identities i
-       JOIN execution_workspaces w ON w.id = i.workspace_id
-      WHERE i.installation_id = ?1
-      ORDER BY i.created_at DESC`,
+  const installation = await env.CONCLAVE_DB.prepare(
+    `SELECT wi.installation_id AS installationId,
+            wi.owner_user_id AS ownerUserId, wi.workspace_id AS workspaceId,
+            wi.status AS status, wi.released_at AS releasedAt,
+            w.status AS workspaceStatus, w.name AS workspaceName
+       FROM workspace_installations wi
+       JOIN execution_workspaces w ON w.id = wi.workspace_id
+      WHERE wi.installation_id = ?1`,
   )
     .bind(installationId)
-    .all<{
-      workspaceId: string;
-      revokedAt: string | null;
-      ownerUserId: string;
-      workspaceStatus: string;
-    }>();
-  const rows = bindings.results ?? [];
+    .first<WorkspaceInstallationRow>();
+  if (!installation) return null;
   if (
-    rows.some(
-      (row) =>
-        row.ownerUserId !== sessionUserId &&
-        row.revokedAt === null &&
-        row.workspaceStatus !== "revoked",
-    )
+    installation.status === "active" &&
+    installation.ownerUserId !== sessionUserId
   ) {
     return workspaceOwnershipFailure(
       "workspace_owned_by_other_account",
@@ -72,16 +73,16 @@ async function workspaceInstallationBindingIssue(
       409,
     );
   }
-  if (
-    rows.some((row) => row.ownerUserId !== sessionUserId) ||
-    new Set(rows.map((row) => row.workspaceId)).size > 1 ||
-    rows.filter(
-      (row) => row.revokedAt === null && row.workspaceStatus !== "revoked",
-    ).length > 1
-  ) {
+  const activeRuntime = await env.CONCLAVE_DB.prepare(
+    `SELECT COUNT(*) AS count FROM workspace_runtime_identities
+      WHERE workspace_id = ?1 AND revoked_at IS NULL`,
+  )
+    .bind(installation.workspaceId)
+    .first<{ count: number }>();
+  if ((activeRuntime?.count ?? 0) > 1) {
     return workspaceOwnershipFailure(
       "installation_binding_ambiguous",
-      "Cloud found conflicting Workspace bindings for this installation. Do not continue until the binding is reviewed.",
+      "Cloud found multiple active runtime identities for this Workspace. Do not continue until the runtime state is reviewed.",
       409,
     );
   }
@@ -104,8 +105,7 @@ async function workspaceIdentityFailure(
   if (bindingIssue) return bindingIssue;
 
   const runtime = await env.CONCLAVE_DB.prepare(
-    `SELECT i.workspace_id AS workspaceId, i.installation_id AS installationId,
-            w.owner_user_id AS ownerUserId
+    `SELECT i.workspace_id AS workspaceId, w.owner_user_id AS ownerUserId
        FROM workspace_runtime_identities i
        JOIN execution_workspaces w ON w.id = i.workspace_id
       WHERE i.id = ?1`,
@@ -113,7 +113,6 @@ async function workspaceIdentityFailure(
     .bind(runtimeId)
     .first<{
       workspaceId: string;
-      installationId: string | null;
       ownerUserId: string;
     }>();
   if (!runtime) {
@@ -121,16 +120,6 @@ async function workspaceIdentityFailure(
       "workspace_runtime_missing",
       "The Workspace runtime identity no longer exists in Cloud.",
       404,
-    );
-  }
-  if (
-    runtime.ownerUserId !== sessionUserId &&
-    runtime.installationId === installationId
-  ) {
-    return workspaceOwnershipFailure(
-      "workspace_owned_by_other_account",
-      otherAccountOwnershipMessage,
-      409,
     );
   }
   return workspaceOwnershipFailure(
@@ -146,16 +135,16 @@ function currentOwnerOwnership(
     | "local_registration_stale"
     | "installation_conflict"
     | "released",
-  row: WorkspaceOwnershipRow,
-  ownerUserId: string,
+  installation: WorkspaceInstallationRow,
+  runtime?: { runtimeId: string; workspaceStatus: string } | null,
 ) {
   return {
     state,
-    workspaceId: row.workspaceId,
-    workspaceRuntimeId: row.runtimeId,
-    ownerUserId,
+    workspaceId: installation.workspaceId,
+    ...(runtime ? { workspaceRuntimeId: runtime.runtimeId } : {}),
+    ownerUserId: installation.ownerUserId,
     ownerMatchesCurrentSession: true,
-    runtimeState: row.workspaceStatus,
+    runtimeState: runtime?.workspaceStatus ?? installation.workspaceStatus,
   };
 }
 
@@ -192,36 +181,17 @@ export async function handleCheckWorkspaceOwnership(
     );
   }
 
-  const byInstallation = await env.CONCLAVE_DB.prepare(
-    `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
-            i.installation_id AS installationId, w.owner_user_id AS ownerUserId,
-            w.status AS workspaceStatus, i.revoked_at AS revokedAt
-       FROM workspace_runtime_identities i
-       JOIN execution_workspaces w ON w.id = i.workspace_id
-      WHERE i.installation_id = ?1 ORDER BY i.created_at DESC, i.id`,
+  const installation = await env.CONCLAVE_DB.prepare(
+    `SELECT wi.installation_id AS installationId,
+            wi.owner_user_id AS ownerUserId, wi.workspace_id AS workspaceId,
+            wi.status AS status, wi.released_at AS releasedAt,
+            w.status AS workspaceStatus, w.name AS workspaceName
+       FROM workspace_installations wi
+       JOIN execution_workspaces w ON w.id = wi.workspace_id
+      WHERE wi.installation_id = ?1`,
   )
     .bind(installationId)
-    .all<WorkspaceOwnershipRow>();
-  const boundRows = byInstallation.results ?? [];
-
-  const activeBindings = boundRows.filter(
-    (row) => row.revokedAt === null && row.workspaceStatus !== "revoked",
-  );
-  // Only an active binding proves that another account currently owns this
-  // installation. Historical foreign rows are ambiguous, not proof of current
-  // ownership, and never expose the former owner's Workspace details.
-  if (activeBindings.some((row) => row.ownerUserId !== session.userId)) {
-    return json({ state: "owned_by_other_user" });
-  }
-  if (new Set(boundRows.map((row) => row.workspaceId)).size > 1) {
-    return json({ state: "corrupt_or_ambiguous" });
-  }
-  if (activeBindings.length > 1) {
-    return json({ state: "corrupt_or_ambiguous" });
-  }
-  if (boundRows.some((row) => row.ownerUserId !== session.userId)) {
-    return json({ state: "corrupt_or_ambiguous" });
-  }
+    .first<WorkspaceInstallationRow>();
 
   let localRow: WorkspaceOwnershipRow | null = null;
   if (workspaceId && runtimeId) {
@@ -237,54 +207,96 @@ export async function handleCheckWorkspaceOwnership(
       .first<WorkspaceOwnershipRow>();
   }
 
-  const bound = activeBindings[0];
-  if (bound) {
+  if (installation?.status === "active") {
+    if (installation.ownerUserId !== session.userId) {
+      return json({ state: "owned_by_other_user" });
+    }
+    const activeRuntimeCount = await env.CONCLAVE_DB.prepare(
+      `SELECT COUNT(*) AS count FROM workspace_runtime_identities
+        WHERE workspace_id = ?1 AND revoked_at IS NULL`,
+    )
+      .bind(installation.workspaceId)
+      .first<{ count: number }>();
+    if ((activeRuntimeCount?.count ?? 0) > 1) {
+      return json({ state: "corrupt_or_ambiguous" });
+    }
+    const runtime = await env.CONCLAVE_DB.prepare(
+      `SELECT i.id AS runtimeId, w.status AS workspaceStatus
+         FROM workspace_runtime_identities i
+         JOIN execution_workspaces w ON w.id = i.workspace_id
+        WHERE i.workspace_id = ?1 AND i.revoked_at IS NULL
+        ORDER BY i.created_at DESC, i.id DESC
+        LIMIT 1`,
+    )
+      .bind(installation.workspaceId)
+      .first<{ runtimeId: string; workspaceStatus: string }>();
     const hasLocalRegistration = Boolean(workspaceId || runtimeId);
     if (
       hasLocalRegistration &&
       (!workspaceId ||
         !runtimeId ||
-        workspaceId !== bound.workspaceId ||
-        runtimeId !== bound.runtimeId)
+        workspaceId !== installation.workspaceId ||
+        runtimeId !== runtime?.runtimeId)
     ) {
       return json(
         currentOwnerOwnership(
           "local_registration_stale",
-          bound,
-          session.userId,
+          installation,
+          runtime,
         ),
+      );
+    }
+    if (!runtime) {
+      return json(
+        currentOwnerOwnership("local_registration_stale", installation),
       );
     }
     return json(
-      currentOwnerOwnership("owned_by_current_user", bound, session.userId),
+      currentOwnerOwnership("owned_by_current_user", installation, runtime),
     );
   }
 
-  if (boundRows.length > 0) {
-    return json({ state: "corrupt_or_ambiguous" });
+  if (installation?.status === "released") {
+    if (installation.ownerUserId !== session.userId) {
+      return json({ state: "released" });
+    }
+    const latestRuntime = await env.CONCLAVE_DB.prepare(
+      `SELECT i.id AS runtimeId, w.status AS workspaceStatus
+         FROM workspace_runtime_identities i
+         JOIN execution_workspaces w ON w.id = i.workspace_id
+        WHERE i.workspace_id = ?1
+        ORDER BY i.created_at DESC, i.id DESC
+        LIMIT 1`,
+    )
+      .bind(installation.workspaceId)
+      .first<{ runtimeId: string; workspaceStatus: string }>();
+    return json(currentOwnerOwnership("released", installation, latestRuntime));
   }
 
-  if (localRow) {
-    if (localRow.ownerUserId !== session.userId) {
-      return json({ state: "local_registration_stale" });
-    }
-    if (
-      localRow.installationId === null &&
-      localRow.revokedAt !== null &&
-      localRow.workspaceStatus === "revoked"
-    ) {
-      return json(currentOwnerOwnership("released", localRow, session.userId));
-    }
-    if (localRow.installationId !== null) {
+  if (localRow?.ownerUserId === session.userId) {
+    const localInstallation = await env.CONCLAVE_DB.prepare(
+      `SELECT wi.installation_id AS installationId,
+              wi.owner_user_id AS ownerUserId, wi.workspace_id AS workspaceId,
+              wi.status AS status, wi.released_at AS releasedAt,
+              w.status AS workspaceStatus, w.name AS workspaceName
+         FROM workspace_installations wi
+         JOIN execution_workspaces w ON w.id = wi.workspace_id
+        WHERE wi.workspace_id = ?1 AND wi.status = 'active'`,
+    )
+      .bind(localRow.workspaceId)
+      .first<WorkspaceInstallationRow>();
+    if (localInstallation?.ownerUserId === session.userId) {
       return json(
-        currentOwnerOwnership(
-          "installation_conflict",
-          localRow,
-          session.userId,
-        ),
+        currentOwnerOwnership("installation_conflict", localInstallation, {
+          runtimeId: localRow.runtimeId,
+          workspaceStatus: localRow.workspaceStatus,
+        }),
       );
     }
-    return json({ state: "corrupt_or_ambiguous" });
+  }
+
+  if (localRow?.ownerUserId === session.userId) {
+    return json({ state: "local_registration_stale" });
   }
 
   if (workspaceId || runtimeId) {
@@ -343,18 +355,21 @@ export async function handleDisconnectDesktopWorkspace(
   );
   if (bindingIssue) return bindingIssue;
   const owned = await env.CONCLAVE_DB.prepare(
-    `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId, i.credential_token_hash AS credentialHash,
-            i.installation_id AS installationId, i.revoked_at AS revokedAt,
-            w.owner_user_id AS ownerUserId, w.status AS workspaceStatus
-       FROM workspace_runtime_identities i JOIN execution_workspaces w ON w.id = i.workspace_id
-      WHERE i.installation_id = ?1 AND i.workspace_id = ?2 AND i.id = ?3`,
+    `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
+            i.credential_token_hash AS credentialHash,
+            i.revoked_at AS revokedAt, wi.owner_user_id AS ownerUserId,
+            w.status AS workspaceStatus
+       FROM workspace_runtime_identities i
+       JOIN execution_workspaces w ON w.id = i.workspace_id
+       JOIN workspace_installations wi ON wi.workspace_id = i.workspace_id
+      WHERE wi.installation_id = ?1 AND wi.status = 'active'
+        AND i.workspace_id = ?2 AND i.id = ?3`,
   )
     .bind(installationId, workspaceId, runtimeId)
     .first<{
       runtimeId: string;
       workspaceId: string;
       credentialHash: string;
-      installationId: string;
       revokedAt: string | null;
       ownerUserId: string;
       workspaceStatus: string;
@@ -391,8 +406,8 @@ export async function handleDisconnectDesktopWorkspace(
   const result = await env.CONCLAVE_DB.batch([
     env.CONCLAVE_DB.prepare(
       `UPDATE workspace_runtime_identities SET revoked_at = ?1
-        WHERE id = ?2 AND workspace_id = ?3 AND installation_id = ?4 AND revoked_at IS NULL`,
-    ).bind(disconnectedAt, runtimeId, workspaceId, installationId),
+        WHERE id = ?2 AND workspace_id = ?3 AND revoked_at IS NULL`,
+    ).bind(disconnectedAt, runtimeId, workspaceId),
     env.CONCLAVE_DB.prepare(
       `UPDATE execution_workspaces SET status = 'offline', updated_at = ?1
         WHERE id = ?2 AND owner_user_id = ?3 AND status <> 'revoked'`,
@@ -481,10 +496,12 @@ export async function handleReleaseDesktopWorkspace(
   if (bindingIssue) return bindingIssue;
   const owned = await env.CONCLAVE_DB.prepare(
     `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
-            w.owner_user_id AS ownerUserId, w.status AS workspaceStatus
+            wi.owner_user_id AS ownerUserId, w.status AS workspaceStatus
        FROM workspace_runtime_identities i
        JOIN execution_workspaces w ON w.id = i.workspace_id
-      WHERE i.installation_id = ?1 AND i.workspace_id = ?2 AND i.id = ?3`,
+       JOIN workspace_installations wi ON wi.workspace_id = i.workspace_id
+      WHERE wi.installation_id = ?1 AND wi.status = 'active'
+        AND i.workspace_id = ?2 AND i.id = ?3`,
   )
     .bind(installationId, workspaceId, runtimeId)
     .first<{
@@ -552,12 +569,18 @@ export async function handleReleaseDesktopWorkspace(
     );
   }
 
-  await env.CONCLAVE_DB.batch([
+  const released = await env.CONCLAVE_DB.batch([
     env.CONCLAVE_DB.prepare(
       `UPDATE workspace_runtime_identities
           SET revoked_at = COALESCE(revoked_at, ?1), installation_id = NULL
         WHERE workspace_id = ?2`,
     ).bind(now, workspaceId),
+    env.CONCLAVE_DB.prepare(
+      `UPDATE workspace_installations
+          SET status = 'released', released_at = ?1, updated_at = ?1
+        WHERE installation_id = ?2 AND workspace_id = ?3
+          AND owner_user_id = ?4 AND status = 'active'`,
+    ).bind(now, installationId, workspaceId, session.userId),
     env.CONCLAVE_DB.prepare(
       `UPDATE workspace_project_grants SET status = 'revoked', updated_at = ?1
         WHERE workspace_id = ?2 AND status IN ('active', 'suspended')`,
@@ -575,6 +598,13 @@ export async function handleReleaseDesktopWorkspace(
       now,
     ),
   ]);
+  if ((released[1]?.meta?.changes ?? 0) !== 1) {
+    return workspaceOwnershipFailure(
+      "workspace_identity_mismatch",
+      "The Workspace installation ownership changed while it was being released. Check its current state and retry.",
+      409,
+    );
+  }
   return json({ released: true, workspaceId, installationId, releasedAt: now });
 }
 
@@ -673,48 +703,28 @@ export async function handleRegisterWorkspaceFromDesktop(
   ) {
     return json({ error: "Runtime capabilities are invalid" }, { status: 400 });
   }
-  const bindings = await env.CONCLAVE_DB.prepare(
-    `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId, i.installation_id AS installationId,
-            i.revoked_at AS revokedAt,
-            w.owner_user_id AS ownerUserId, w.name AS workspaceName, w.status AS workspaceStatus
-       FROM workspace_runtime_identities i JOIN execution_workspaces w ON w.id = i.workspace_id
-      WHERE i.installation_id = ?1
-      ORDER BY i.created_at DESC`,
+  const installation = await env.CONCLAVE_DB.prepare(
+    `SELECT wi.installation_id AS installationId,
+            wi.owner_user_id AS ownerUserId, wi.workspace_id AS workspaceId,
+            wi.status AS status, wi.released_at AS releasedAt,
+            w.name AS workspaceName, w.status AS workspaceStatus
+       FROM workspace_installations wi
+       JOIN execution_workspaces w ON w.id = wi.workspace_id
+      WHERE wi.installation_id = ?1`,
   )
     .bind(installationId)
-    .all<{
-      runtimeId: string;
-      workspaceId: string;
-      revokedAt: string | null;
-      ownerUserId: string;
-      workspaceName: string;
-      workspaceStatus: string;
-      installationId: string;
-    }>();
-  const history = bindings.results ?? [];
-  const activeBindings = history.filter(
-    (item) => item.revokedAt === null && item.workspaceStatus !== "revoked",
-  );
-  if (activeBindings.some((item) => item.ownerUserId !== session.userId)) {
+    .first<WorkspaceInstallationRow>();
+  if (
+    installation?.status === "active" &&
+    installation.ownerUserId !== session.userId
+  ) {
     return workspaceOwnershipFailure(
       "workspace_owned_by_other_account",
       otherAccountOwnershipMessage,
       409,
     );
   }
-  if (
-    history.some((item) => item.ownerUserId !== session.userId) ||
-    new Set(history.map((item) => item.workspaceId)).size > 1 ||
-    activeBindings.length > 1
-  ) {
-    return workspaceOwnershipFailure(
-      "installation_binding_ambiguous",
-      "Cloud found conflicting Workspace bindings for this installation. Do not reconnect until the binding is reviewed.",
-      409,
-    );
-  }
-  const active = activeBindings[0];
-  const existing = active ?? history[0];
+  const existing = installation?.status === "active" ? installation : null;
   if (existing?.workspaceStatus === "revoked") {
     return workspaceOwnershipFailure(
       "release_required",
@@ -722,6 +732,23 @@ export async function handleRegisterWorkspaceFromDesktop(
       409,
     );
   }
+  if (existing) {
+    const activeRuntime = await env.CONCLAVE_DB.prepare(
+      `SELECT COUNT(*) AS count FROM workspace_runtime_identities
+        WHERE workspace_id = ?1 AND revoked_at IS NULL`,
+    )
+      .bind(existing.workspaceId)
+      .first<{ count: number }>();
+    if ((activeRuntime?.count ?? 0) > 1) {
+      return workspaceOwnershipFailure(
+        "installation_binding_ambiguous",
+        "Cloud found multiple active runtime identities for this Workspace. Do not reconnect until the runtime state is reviewed.",
+        409,
+      );
+    }
+  }
+  // A released installation can be claimed by the authenticated caller as a
+  // new Workspace; a still-active record above remains owner-bound.
   const outcome = existing ? "recovered" : "created";
   const workspaceId = existing?.workspaceId ?? `ws-${crypto.randomUUID()}`;
   const workspaceName =
@@ -745,18 +772,35 @@ export async function handleRegisterWorkspaceFromDesktop(
       ).bind(workspaceName, now, workspaceId),
     );
   }
-  if (!existing)
+  if (!existing) {
     statements.push(
       env.CONCLAVE_DB.prepare(
         `INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?1, ?2, ?3, 'offline', ?4, ?4)`,
       ).bind(workspaceId, session.userId, workspaceName, now),
     );
-  if (active)
     statements.push(
       env.CONCLAVE_DB.prepare(
-        `UPDATE workspace_runtime_identities SET revoked_at = ?1 WHERE installation_id = ?2 AND revoked_at IS NULL`,
-      ).bind(now, installationId),
+        `INSERT INTO workspace_installations
+          (installation_id, owner_user_id, workspace_id, status, created_at, updated_at, released_at)
+         VALUES (?1, ?2, ?3, 'active', ?4, ?4, NULL)
+         ON CONFLICT(installation_id) DO UPDATE SET
+           owner_user_id = excluded.owner_user_id,
+           workspace_id = excluded.workspace_id,
+           status = 'active',
+           updated_at = excluded.updated_at,
+           released_at = NULL
+         WHERE workspace_installations.status = 'released'`,
+      ).bind(installationId, session.userId, workspaceId, now),
     );
+  }
+  if (existing) {
+    statements.push(
+      env.CONCLAVE_DB.prepare(
+        `UPDATE workspace_runtime_identities SET revoked_at = ?1
+          WHERE workspace_id = ?2 AND revoked_at IS NULL`,
+      ).bind(now, workspaceId),
+    );
+  }
   statements.push(
     env.CONCLAVE_DB.prepare(
       `INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?1, ?2, ?3, ?4, ?5, NULL)`,

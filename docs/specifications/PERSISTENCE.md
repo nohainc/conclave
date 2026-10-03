@@ -14,6 +14,11 @@ be edited to repair production. All schema changes use new, ordered forward
 migrations (for example, `0002_<purpose>.sql`) and the normal production
 migration flow. The desktop auth audience correction is recorded in
 [`0002_desktop_auth_multi_audience.sql`](../../apps/cloud/migrations-v8/0002_desktop_auth_multi_audience.sql).
+[`0003_workspace_installations.sql`](../../apps/cloud/migrations-v8/0003_workspace_installations.sql)
+introduces stable installation ownership independently from runtime
+credentials. It seeds ownership from runtime identity history and release audit
+events, and aborts if one legacy installation maps to multiple Workspaces or
+owners.
 
 Wrangler records applied migrations by filename. Editing an applied migration
 does not make it run again, so never rewrite, remove, or reorder an applied
@@ -61,10 +66,14 @@ Workstream authorization is evaluated from current Project membership and the
 Workstream access policy. The database does not duplicate Project roles in a
 separate Workstream membership table.
 
-Every Workspace runtime identity has a credential hash. Its stable installation
-ID remains bound while the identity is active. Explicit release revokes the
-identity and clears that binding so the installation can be registered again;
-release itself is not an installation-recovery path.
+Every Workspace runtime identity has a credential hash. Stable installation
+ownership lives in `workspace_installations`, which records the owner,
+canonical Workspace, and active/released state. Runtime identity rows can be
+rotated or revoked independently. Explicit release revokes runtime identities,
+clears their legacy installation ID values, and marks the ownership row
+released so another account can register the installation. The legacy runtime
+`installation_id` column remains for schema compatibility but does not decide
+ownership.
 
 `worker_assignments.worker_type_id` identifies the logical Worker type;
 `workspace_worker_id` identifies the Workspace's local Worker slot. The clean

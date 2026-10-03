@@ -75,6 +75,31 @@ class TestD1 {
   }
 }
 
+function seedWorkspaceInstallation(
+  sqlite: DatabaseSync,
+  installationId: string,
+  ownerUserId: string,
+  workspaceId: string,
+  status: "active" | "released" = "active",
+  now = new Date().toISOString(),
+): void {
+  sqlite
+    .prepare(
+      `INSERT INTO workspace_installations
+        (installation_id, owner_user_id, workspace_id, status, created_at, updated_at, released_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      installationId,
+      ownerUserId,
+      workspaceId,
+      status,
+      now,
+      now,
+      status === "released" ? now : null,
+    );
+}
+
 describe("desktop human authentication", () => {
   const databases: DatabaseSync[] = [];
   afterEach(() => {
@@ -415,6 +440,17 @@ describe("desktop human authentication", () => {
     const firstRuntime = (await connected.json()) as {
       workspaceId: string;
     };
+    expect(
+      sqlite
+        .prepare(
+          "SELECT owner_user_id, workspace_id, status FROM workspace_installations WHERE installation_id = ?",
+        )
+        .get(installationId),
+    ).toMatchObject({
+      owner_user_id: "human-a",
+      workspace_id: firstRuntime.workspaceId,
+      status: "active",
+    });
     const recovered = await register("human-a");
     expect(recovered.status).toBe(201);
     const recoveredRuntime = (await recovered.json()) as {
@@ -449,12 +485,30 @@ describe("desktop human authentication", () => {
       env,
     );
     expect(released.status).toBe(200);
+    expect(
+      sqlite
+        .prepare(
+          "SELECT owner_user_id, workspace_id, status FROM workspace_installations WHERE installation_id = ?",
+        )
+        .get(installationId),
+    ).toMatchObject({
+      owner_user_id: "human-a",
+      workspace_id: firstRuntime.workspaceId,
+      status: "released",
+    });
     const transferred = await register("human-b");
     expect(transferred.status).toBe(201);
     expect(await transferred.json()).toMatchObject({
       outcome: "created",
       ownerUserId: "human-b",
     });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT owner_user_id, status FROM workspace_installations WHERE installation_id = ?",
+        )
+        .get(installationId),
+    ).toMatchObject({ owner_user_id: "human-b", status: "active" });
   });
 
   it("returns precise registration errors for ambiguous bindings and revoked Workspaces", async () => {
@@ -514,53 +568,39 @@ describe("desktop human authentication", () => {
         ),
         env,
       );
-    for (const workspaceId of ["workspace-a", "workspace-b"]) {
-      sqlite
-        .prepare(
-          "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'offline', ?, ?)",
-        )
-        .run(workspaceId, "human-a", workspaceId, now, now);
-      sqlite
-        .prepare(
-          "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .run(
-          `runtime-${workspaceId}`,
-          workspaceId,
-          await hashToken(`secret-${workspaceId}`),
-          installationId,
-          now,
-          now,
-        );
-    }
+    sqlite
+      .prepare(
+        "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'offline', ?, ?)",
+      )
+      .run("workspace-a", "human-a", "Workspace A", now, now);
+    sqlite
+      .prepare(
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "runtime-old",
+        "workspace-a",
+        await hashToken("secret-a"),
+        installationId,
+        now,
+        now,
+      );
+    seedWorkspaceInstallation(
+      sqlite,
+      installationId,
+      "human-a",
+      "workspace-a",
+      "active",
+      now,
+    );
 
-    const ambiguous = await registration();
-    expect(ambiguous.status).toBe(409);
-    expect(await ambiguous.json()).toMatchObject({
-      code: "installation_binding_ambiguous",
+    const recovered = await registration();
+    expect(recovered.status).toBe(201);
+    expect(await recovered.json()).toMatchObject({
+      outcome: "recovered",
+      workspaceId: "workspace-a",
     });
 
-    sqlite
-      .prepare(
-        "UPDATE execution_workspaces SET owner_user_id = ?, status = 'revoked' WHERE id = ?",
-      )
-      .run("human-b", "workspace-b");
-    sqlite
-      .prepare(
-        "UPDATE workspace_runtime_identities SET revoked_at = ? WHERE workspace_id = ?",
-      )
-      .run(now, "workspace-b");
-    const historicalForeignBinding = await registration();
-    expect(historicalForeignBinding.status).toBe(409);
-    expect(await historicalForeignBinding.json()).toMatchObject({
-      code: "installation_binding_ambiguous",
-    });
-
-    sqlite
-      .prepare(
-        "DELETE FROM workspace_runtime_identities WHERE workspace_id = ?",
-      )
-      .run("workspace-b");
     sqlite
       .prepare(
         "UPDATE execution_workspaces SET status = 'revoked' WHERE id = ?",
@@ -705,6 +745,14 @@ describe("desktop human authentication", () => {
         installationId,
         now,
       );
+    seedWorkspaceInstallation(
+      sqlite,
+      installationId,
+      "human-a",
+      "workspace-a",
+      "active",
+      now,
+    );
     sqlite
       .prepare(
         "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -801,6 +849,14 @@ describe("desktop human authentication", () => {
         new Date(Date.now() - 1000).toISOString(),
         now,
       );
+    seedWorkspaceInstallation(
+      sqlite,
+      installationId,
+      "human-a",
+      "workspace-a",
+      "active",
+      now,
+    );
     const addSession = async (
       id: string,
       userId: string,
@@ -1022,6 +1078,31 @@ describe("desktop human authentication", () => {
       ownerMatchesCurrentSession: true,
     });
 
+    sqlite
+      .prepare(
+        "UPDATE workspace_runtime_identities SET revoked_at = ? WHERE id = ?",
+      )
+      .run(now, "runtime-a");
+    const staleRegistrationWithoutRuntime = await handleCheckWorkspaceOwnership(
+      request("human-a-secret"),
+      env,
+    );
+    const staleRegistrationBody =
+      (await staleRegistrationWithoutRuntime.json()) as Record<string, unknown>;
+    expect(staleRegistrationBody).toMatchObject({
+      state: "local_registration_stale",
+      workspaceId: "workspace-a",
+      ownerUserId: "human-a",
+      ownerMatchesCurrentSession: true,
+      runtimeState: "offline",
+    });
+    expect(staleRegistrationBody.workspaceRuntimeId).toBeUndefined();
+    sqlite
+      .prepare(
+        "UPDATE workspace_runtime_identities SET revoked_at = NULL WHERE id = ?",
+      )
+      .run("runtime-a");
+
     const canonicalWithoutLocalIds = await handleCheckWorkspaceOwnership(
       new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
         method: "POST",
@@ -1116,6 +1197,14 @@ describe("desktop human authentication", () => {
         now,
         now,
       );
+    seedWorkspaceInstallation(
+      sqlite,
+      installationId,
+      "human-a",
+      "workspace-a",
+      "released",
+      now,
+    );
     sqlite
       .prepare(
         "INSERT INTO workspace_audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?, ?, 'user', ?, 'workspace.ownership.released', 'workspace_runtime', ?, ?, ?)",
@@ -1156,8 +1245,13 @@ describe("desktop human authentication", () => {
       request(),
       env,
     );
-    expect(await releasedWithoutLocalIds.json()).toEqual({
+    expect(await releasedWithoutLocalIds.json()).toMatchObject({
       state: "released",
+      workspaceId: "workspace-a",
+      workspaceRuntimeId: "runtime-a",
+      ownerUserId: "human-a",
+      ownerMatchesCurrentSession: true,
+      runtimeState: "revoked",
     });
   });
 
@@ -1191,6 +1285,14 @@ describe("desktop human authentication", () => {
         installationId,
         now,
       );
+    seedWorkspaceInstallation(
+      sqlite,
+      installationId,
+      "human-a",
+      "workspace-a",
+      "active",
+      now,
+    );
     const addSession = async (
       id: string,
       userId: string,
@@ -1325,6 +1427,13 @@ describe("desktop human authentication", () => {
         .prepare("SELECT status FROM execution_workspaces WHERE id = ?")
         .get("workspace-a"),
     ).toMatchObject({ status: "revoked" });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT status, released_at FROM workspace_installations WHERE installation_id = ?",
+        )
+        .get(installationId),
+    ).toMatchObject({ status: "released", released_at: expect.any(String) });
   });
 
   it("disconnects through the owner human session and retains installation ownership", async () => {
@@ -1352,6 +1461,14 @@ describe("desktop human authentication", () => {
         installationId,
         now,
       );
+    seedWorkspaceInstallation(
+      sqlite,
+      installationId,
+      "human-a",
+      "workspace-a",
+      "active",
+      now,
+    );
     sqlite
       .prepare(
         "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -1415,6 +1532,13 @@ describe("desktop human authentication", () => {
         .prepare("SELECT status FROM execution_workspaces WHERE id = ?")
         .get("workspace-a"),
     ).toMatchObject({ status: "offline" });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT status FROM workspace_installations WHERE installation_id = ?",
+        )
+        .get(installationId),
+    ).toMatchObject({ status: "active" });
     expect(
       sqlite
         .prepare(

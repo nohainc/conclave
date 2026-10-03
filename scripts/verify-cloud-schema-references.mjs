@@ -2,10 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { resolve, relative, extname } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const migrationPath = resolve(
-  root,
-  "apps/cloud/migrations-v8/0001_conclave_v8.sql",
-);
+const migrationsDirectory = resolve(root, "apps/cloud/migrations-v8");
 const cloudSource = resolve(root, "apps/cloud/src");
 
 async function filesUnder(directory) {
@@ -62,14 +59,33 @@ function lineAt(source, offset) {
   return line;
 }
 
-const migration = await readFile(migrationPath, "utf8");
-const knownTables = new Set(
-  [
-    ...migration.matchAll(
-      /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?([\w]+)/gi,
-    ),
-  ].map((match) => match[1].toLowerCase()),
-);
+const migrationFiles = (await readdir(migrationsDirectory))
+  .filter((file) => file.endsWith(".sql"))
+  .sort();
+const knownTables = new Set();
+for (const filename of migrationFiles) {
+  const migration = await readFile(
+    resolve(migrationsDirectory, filename),
+    "utf8",
+  );
+  const tableOperations =
+    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?([\w]+)|DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?["`]?([\w]+)|ALTER\s+TABLE\s+["`]?([\w]+)["`]?\s+RENAME\s+TO\s+["`]?([\w]+)/gi;
+  for (const match of migration.matchAll(tableOperations)) {
+    if (match[1]) {
+      const tableName = match[1].toLowerCase();
+      if (!tableName.startsWith("__migration_")) knownTables.add(tableName);
+    } else if (match[2]) {
+      knownTables.delete(match[2].toLowerCase());
+    } else if (match[3] && match[4]) {
+      const oldName = match[3].toLowerCase();
+      const newName = match[4].toLowerCase();
+      const oldWasKnown = knownTables.delete(oldName);
+      if (oldWasKnown || !newName.startsWith("__migration_")) {
+        knownTables.add(newName);
+      }
+    }
+  }
+}
 const sources = await filesUnder(cloudSource);
 const errors = [];
 const tableReference =

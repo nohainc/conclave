@@ -183,3 +183,100 @@ describe("desktop auth multi-audience migration", () => {
     database.close();
   });
 });
+
+describe("Workspace installation ownership migration", () => {
+  it("preserves active ownership across rotated runtime identities and restores released ownership from audit history", () => {
+    const database = createDatabase();
+    database.exec(migrationSql("0001_conclave_v8.sql"));
+    database.exec(migrationSql("0002_desktop_auth_multi_audience.sql"));
+    database.exec(`
+      INSERT INTO users
+        (id, email, display_name, created_at, updated_at)
+      VALUES ('owner', 'owner@example.invalid', 'Owner', 'now', 'now');
+      INSERT INTO execution_workspaces
+        (id, owner_user_id, name, status, created_at, updated_at)
+      VALUES
+        ('active-workspace', 'owner', 'Active', 'offline', 'created', 'updated'),
+        ('released-workspace', 'owner', 'Released', 'revoked', 'created', 'updated');
+      INSERT INTO workspace_runtime_identities
+        (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at)
+      VALUES
+        ('runtime-old', 'active-workspace', 'hash-old', 'install_11111111-1111-4111-8111-111111111111', 'old', 'rotated'),
+        ('runtime-current', 'active-workspace', 'hash-current', 'install_11111111-1111-4111-8111-111111111111', 'current', NULL),
+        ('runtime-released', 'released-workspace', 'hash-released', NULL, 'released', 'released');
+      INSERT INTO workspace_audit_log
+        (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
+      VALUES
+        ('audit-release', 'released-workspace', 'user', 'owner',
+         'workspace.ownership.released', 'workspace_runtime', 'runtime-released',
+         '{"installationId":"install_22222222-2222-4222-8222-222222222222"}', 'released-at');
+    `);
+    const runtimeRowsBefore = database
+      .prepare("SELECT * FROM workspace_runtime_identities ORDER BY id")
+      .all();
+
+    database.exec(migrationSql("0003_workspace_installations.sql"));
+
+    expect(
+      database
+        .prepare(
+          "SELECT installation_id, owner_user_id, workspace_id, status, released_at FROM workspace_installations ORDER BY installation_id",
+        )
+        .all(),
+    ).toEqual([
+      {
+        installation_id: "install_11111111-1111-4111-8111-111111111111",
+        owner_user_id: "owner",
+        workspace_id: "active-workspace",
+        status: "active",
+        released_at: null,
+      },
+      {
+        installation_id: "install_22222222-2222-4222-8222-222222222222",
+        owner_user_id: "owner",
+        workspace_id: "released-workspace",
+        status: "released",
+        released_at: "released-at",
+      },
+    ]);
+    expect(
+      database
+        .prepare("SELECT * FROM workspace_runtime_identities ORDER BY id")
+        .all(),
+    ).toEqual(runtimeRowsBefore);
+    expect(
+      database
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?",
+        )
+        .get("idx_workspace_installations_active_workspace"),
+    ).toBeTruthy();
+    database.close();
+  });
+
+  it("fails closed when one legacy installation points to multiple Workspaces", () => {
+    const database = createDatabase();
+    database.exec(migrationSql("0001_conclave_v8.sql"));
+    database.exec(migrationSql("0002_desktop_auth_multi_audience.sql"));
+    database.exec(`
+      INSERT INTO users
+        (id, email, display_name, created_at, updated_at)
+      VALUES ('owner', 'owner@example.invalid', 'Owner', 'now', 'now');
+      INSERT INTO execution_workspaces
+        (id, owner_user_id, name, status, created_at, updated_at)
+      VALUES
+        ('workspace-a', 'owner', 'A', 'offline', 'now', 'now'),
+        ('workspace-b', 'owner', 'B', 'offline', 'now', 'now');
+      INSERT INTO workspace_runtime_identities
+        (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at)
+      VALUES
+        ('runtime-a', 'workspace-a', 'hash-a', 'install_33333333-3333-4333-8333-333333333333', 'now', NULL),
+        ('runtime-b', 'workspace-b', 'hash-b', 'install_33333333-3333-4333-8333-333333333333', 'now', 'revoked');
+    `);
+
+    expect(() =>
+      database.exec(migrationSql("0003_workspace_installations.sql")),
+    ).toThrow();
+    database.close();
+  });
+});

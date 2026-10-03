@@ -197,9 +197,12 @@ class WorkspaceOwnership {
       );
     }
     if (state == WorkspaceOwnershipState.localRegistrationStale &&
-        (result.workspaceId != null || result.workspaceRuntimeId != null) &&
+        (result.workspaceId != null ||
+            result.workspaceRuntimeId != null ||
+            result.ownerUserId != null ||
+            result.ownerMatchesCurrentSession != null ||
+            result.runtimeState != null) &&
         (result.workspaceId == null ||
-            result.workspaceRuntimeId == null ||
             result.ownerUserId == null ||
             result.ownerMatchesCurrentSession != true ||
             result.runtimeState == null)) {

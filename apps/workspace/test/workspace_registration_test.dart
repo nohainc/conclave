@@ -50,6 +50,14 @@ void main() {
     });
     expect(stale.state, WorkspaceOwnershipState.localRegistrationStale);
     expect(stale.workspaceId, 'workspace-canonical');
+    final staleWithoutRuntime = WorkspaceOwnership.fromJson({
+      'state': 'local_registration_stale',
+      'workspaceId': 'workspace-canonical',
+      'ownerUserId': 'user-a',
+      'ownerMatchesCurrentSession': true,
+      'runtimeState': 'offline',
+    });
+    expect(staleWithoutRuntime.workspaceRuntimeId, isNull);
     expect(
       () => WorkspaceOwnership.fromJson({
         'state': 'local_registration_stale',

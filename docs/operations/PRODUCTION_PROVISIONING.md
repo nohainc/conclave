@@ -36,6 +36,10 @@ Migration `0002_desktop_auth_multi_audience.sql` rebuilds the desktop auth
 tables, preserves their rows and active sessions, and checks before/after row
 counts. Follow the forward-only policy in
 [Persistence Contracts](../specifications/PERSISTENCE.md#d1-schema-lifecycle).
+Migration `0003_workspace_installations.sql` creates stable installation
+ownership separately from runtime credentials. It preserves the current owner
+and Workspace across runtime rotation, restores released ownership from audit
+history, and fails when legacy rows disagree on the binding.
 
 ## Required deployment order
 
