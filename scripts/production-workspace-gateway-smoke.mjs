@@ -428,6 +428,18 @@ async function main() {
     }
   }
 
+  const identityColumns = rowsFromD1(
+    executeD1("PRAGMA table_info(workspace_runtime_identities)"),
+  );
+  if (identityColumns.some((col) => col.name === "credential_key_ref")) {
+    console.log(
+      "Pruning legacy credential_key_ref column from production workspace_runtime_identities...",
+    );
+    executeD1(
+      "ALTER TABLE workspace_runtime_identities DROP COLUMN credential_key_ref",
+    );
+  }
+
   let socket;
   let setupAttempted = false;
   try {
