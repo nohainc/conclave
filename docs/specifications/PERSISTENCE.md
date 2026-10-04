@@ -80,6 +80,15 @@ released so another account can register the installation. The legacy runtime
 `installation_id` column remains for schema compatibility but does not decide
 ownership.
 
+If a known pre-v8 registration has its runtime identity but lacks the v8
+`workspace_installations` row, Workspace may request explicit reconciliation
+after a fresh browser-approved desktop sign-in. Cloud verifies the exact local
+Workspace/runtime IDs, current Workspace owner, persistent installation ID,
+absence of competing active bindings, and absence of a recorded Release. Cloud
+then inserts the canonical ownership row and an audit event atomically. Email
+matching is never used. Ambiguous or foreign-owner state fails closed; an
+active foreign owner must Release the installation first.
+
 `worker_assignments.worker_type_id` identifies the logical Worker type;
 `workspace_worker_id` identifies the Workspace's local Worker slot. The clean
 v8 baseline stores the Cloud Workflow instance ID on

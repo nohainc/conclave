@@ -136,7 +136,7 @@ function currentOwnerOwnership(
     | "installation_conflict"
     | "released",
   installation: WorkspaceInstallationRow,
-  runtime?: { runtimeId: string; workspaceStatus: string } | null,
+  runtime?: { runtimeId?: string; workspaceStatus: string } | null,
 ) {
   return {
     state,
@@ -319,6 +319,221 @@ export async function handleCheckWorkspaceOwnership(
   // Keep ownerUserId as a compatibility alias for older Workspace clients;
   // with an unbound installation it identifies only the authenticated caller.
   return json({ state: "unbound", ownerUserId: session.userId });
+}
+
+/** Repairs only a missing v8 ownership row backed by the caller's exact legacy registration. */
+export async function handleReconcileWorkspaceOwnership(
+  request: Request,
+  env: SecurityEnv,
+): Promise<Response> {
+  const { session, now } = await findDesktopHumanSession(
+    request,
+    env,
+    undefined,
+    DESKTOP_WORKSPACE_AUDIENCE,
+  );
+  const sessionCreatedAt = Date.parse(session.createdAt);
+  if (
+    !Number.isFinite(sessionCreatedAt) ||
+    sessionCreatedAt < Date.now() - 5 * 60_000
+  ) {
+    return json(
+      {
+        error: "Fresh browser sign-in is required to reconcile this Workspace",
+        code: "fresh_auth_required",
+      },
+      { status: 403 },
+    );
+  }
+
+  const body = parseJson<Record<string, unknown>>(await request.text(), {});
+  const installationId =
+    typeof body.installationId === "string" ? body.installationId.trim() : "";
+  const workspaceId =
+    typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
+  const runtimeId =
+    typeof body.runtimeId === "string" ? body.runtimeId.trim() : "";
+  if (
+    Object.keys(body).some(
+      (key) =>
+        ![
+          "contractVersion",
+          "installationId",
+          "workspaceId",
+          "runtimeId",
+        ].includes(key),
+    ) ||
+    body.contractVersion !== "1.0" ||
+    !/^install_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      installationId,
+    ) ||
+    !workspaceId ||
+    !runtimeId
+  ) {
+    return json(
+      {
+        error: "Workspace reconciliation details are invalid",
+        code: "invalid_reconciliation_identity",
+      },
+      { status: 400 },
+    );
+  }
+
+  const existing = await env.CONCLAVE_DB.prepare(
+    `SELECT wi.installation_id AS installationId,
+            wi.owner_user_id AS ownerUserId, wi.workspace_id AS workspaceId,
+            wi.status AS status, wi.released_at AS releasedAt,
+            w.status AS workspaceStatus, w.name AS workspaceName
+       FROM workspace_installations wi
+       JOIN execution_workspaces w ON w.id = wi.workspace_id
+      WHERE wi.installation_id = ?1`,
+  )
+    .bind(installationId)
+    .first<WorkspaceInstallationRow>();
+  if (existing?.status === "active") {
+    if (existing.ownerUserId !== session.userId) {
+      return json({ state: "owned_by_other_user" });
+    }
+    const runtime = await env.CONCLAVE_DB.prepare(
+      `SELECT i.id AS runtimeId, w.status AS workspaceStatus
+         FROM workspace_runtime_identities i
+         JOIN execution_workspaces w ON w.id = i.workspace_id
+        WHERE i.workspace_id = ?1 AND i.revoked_at IS NULL
+        ORDER BY i.created_at DESC, i.id DESC LIMIT 1`,
+    )
+      .bind(existing.workspaceId)
+      .first<{ runtimeId: string; workspaceStatus: string }>();
+    return json(
+      currentOwnerOwnership("local_registration_stale", existing, runtime),
+    );
+  }
+  if (existing?.status === "released") return json({ state: "released" });
+
+  const releaseHistory = await env.CONCLAVE_DB.prepare(
+    `SELECT 1 AS released
+       FROM workspace_audit_log
+      WHERE action = 'workspace.ownership.released'
+        AND CASE WHEN json_valid(details_json) = 1
+          THEN json_extract(details_json, '$.installationId') ELSE NULL END = ?1
+      LIMIT 1`,
+  )
+    .bind(installationId)
+    .first<{ released: number }>();
+  if (releaseHistory) return json({ state: "released" });
+
+  const legacy = await env.CONCLAVE_DB.prepare(
+    `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
+            i.installation_id AS installationId, w.owner_user_id AS ownerUserId,
+            w.status AS workspaceStatus, i.revoked_at AS revokedAt,
+            w.name AS workspaceName,
+            (SELECT COUNT(*) FROM workspace_audit_log a
+              WHERE a.workspace_id = i.workspace_id
+                AND a.target_type = 'workspace_runtime'
+                AND a.target_id = i.id
+                AND a.action IN ('workspace.registered', 'workspace.recovered')
+                AND CASE WHEN json_valid(a.details_json) = 1
+                  THEN json_extract(a.details_json, '$.installationId')
+                  ELSE NULL END = ?3) AS auditBinding
+       FROM workspace_runtime_identities i
+       JOIN execution_workspaces w ON w.id = i.workspace_id
+      WHERE i.id = ?1 AND i.workspace_id = ?2`,
+  )
+    .bind(runtimeId, workspaceId, installationId)
+    .first<
+      WorkspaceOwnershipRow & { workspaceName: string; auditBinding: number }
+    >();
+  if (
+    legacy &&
+    (legacy.installationId === installationId || legacy.auditBinding > 0) &&
+    legacy.ownerUserId !== session.userId &&
+    legacy.revokedAt === null &&
+    legacy.workspaceStatus !== "revoked"
+  ) {
+    return json({ state: "owned_by_other_user" });
+  }
+  if (
+    !legacy ||
+    legacy.ownerUserId !== session.userId ||
+    (legacy.installationId !== installationId && legacy.auditBinding === 0) ||
+    (legacy.installationId !== null &&
+      legacy.installationId !== installationId) ||
+    legacy.workspaceStatus === "revoked"
+  ) {
+    return json({ state: "not_reconcilable" }, { status: 409 });
+  }
+
+  const competing = await env.CONCLAVE_DB.prepare(
+    `SELECT
+       (SELECT COUNT(DISTINCT i.workspace_id)
+          FROM workspace_runtime_identities i
+          JOIN execution_workspaces w ON w.id = i.workspace_id
+         WHERE i.installation_id = ?1
+           AND (i.workspace_id <> ?2 OR w.owner_user_id <> ?3)) AS conflictingHistory,
+       (SELECT COUNT(*) FROM workspace_runtime_identities i
+          WHERE i.installation_id = ?1 AND i.revoked_at IS NULL
+            AND i.workspace_id <> ?2) AS competingActiveRuntime,
+       (SELECT COUNT(*) FROM workspace_installations wi
+          WHERE wi.workspace_id = ?2 AND wi.status = 'active') AS competingWorkspaceBinding,
+       (SELECT COUNT(*) FROM workspace_runtime_identities i
+          WHERE i.workspace_id = ?2 AND i.revoked_at IS NULL) AS activeRuntimeCount`,
+  )
+    .bind(installationId, workspaceId, session.userId)
+    .first<{
+      conflictingHistory: number;
+      competingActiveRuntime: number;
+      competingWorkspaceBinding: number;
+      activeRuntimeCount: number;
+    }>();
+  if (
+    !competing ||
+    competing.conflictingHistory > 0 ||
+    competing.competingActiveRuntime > 0 ||
+    competing.competingWorkspaceBinding > 0 ||
+    competing.activeRuntimeCount > 1
+  ) {
+    return json({ state: "corrupt_or_ambiguous" }, { status: 409 });
+  }
+
+  const auditId = `audit-${crypto.randomUUID()}`;
+  try {
+    await env.CONCLAVE_DB.batch([
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO workspace_installations
+          (installation_id, owner_user_id, workspace_id, status, created_at, updated_at, released_at)
+         VALUES (?1, ?2, ?3, 'active', ?4, ?4, NULL)`,
+      ).bind(installationId, session.userId, workspaceId, now),
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO workspace_audit_log
+          (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
+         VALUES (?1, ?2, 'user', ?3, 'workspace.ownership.reconciled', 'workspace_installation', ?4, ?5, ?6)`,
+      ).bind(
+        auditId,
+        workspaceId,
+        session.userId,
+        installationId,
+        JSON.stringify({ source: "legacy_runtime_identity", runtimeId }),
+        now,
+      ),
+    ]);
+  } catch {
+    return json({ state: "corrupt_or_ambiguous" }, { status: 409 });
+  }
+
+  const reconciled: WorkspaceInstallationRow = {
+    installationId,
+    ownerUserId: session.userId,
+    workspaceId,
+    status: "active",
+    releasedAt: null,
+    workspaceStatus: legacy.workspaceStatus,
+    workspaceName: legacy.workspaceName,
+  };
+  return json(
+    currentOwnerOwnership("local_registration_stale", reconciled, {
+      ...(legacy.revokedAt === null ? { runtimeId } : {}),
+      workspaceStatus: legacy.workspaceStatus,
+    }),
+  );
 }
 
 /** Disconnects runtime participation while retaining the installation owner binding. */

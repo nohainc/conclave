@@ -25,6 +25,9 @@ export async function routeWorkerRequest(
     const desktopWorkspaceOwnershipCheck =
       request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/ownership";
+    const desktopWorkspaceOwnershipReconcile =
+      request.method === "POST" &&
+      url.pathname === "/api/workspace-runtime/ownership/reconcile";
     const desktopWorkspaceRelease =
       request.method === "POST" &&
       url.pathname === "/api/workspace-runtime/release";
@@ -46,6 +49,7 @@ export async function routeWorkerRequest(
     if (
       !desktopWorkspaceRegistration &&
       !desktopWorkspaceOwnershipCheck &&
+      !desktopWorkspaceOwnershipReconcile &&
       !desktopWorkspaceRelease &&
       !desktopWorkspaceDisconnect &&
       !workspaceRuntimeTransport &&
@@ -66,6 +70,9 @@ export async function routeWorkerRequest(
     }
     if (desktopWorkspaceOwnershipCheck) {
       return await handlers.handleCheckWorkspaceOwnership!(request, env);
+    }
+    if (desktopWorkspaceOwnershipReconcile) {
+      return await handlers.handleReconcileWorkspaceOwnership!(request, env);
     }
     if (desktopWorkspaceRelease) {
       return await handlers.handleReleaseDesktopWorkspace!(request, env);

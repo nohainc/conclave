@@ -61,6 +61,14 @@ Profile administration and release management use the dedicated `profiles:admin`
 
 Sensitive ownership or release operations may require a recent step-up proof tied to the current human session. Each route declares its required assurance and Cloud checks it before mutation. Security-relevant authorization, ownership, Workspace, Workstream, and Profile changes are written to the applicable audit stream without credentials or secret payloads.
 
+Workspace ownership reconciliation is a narrow migration recovery operation.
+It requires a desktop session created by fresh browser approval and an exact
+local Workspace/runtime identity that Cloud can prove belongs to the signed-in
+user. Cloud may reconstruct a missing v8 installation binding only when there
+is no competing active binding and no recorded Release. It never transfers an
+active foreign-owned installation or uses email equality as ownership proof.
+The reconciliation is audited; ambiguous state requires operator investigation.
+
 ## Secret boundary
 
 Provider credentials stay in the local provider CLI configuration. Runtime credentials are stored in the operating system secure store. Cloud persistence, assignment messages, diagnostics, audit records, and artifacts must not contain plaintext secrets.

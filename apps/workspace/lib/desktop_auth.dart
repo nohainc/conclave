@@ -423,6 +423,26 @@ class DesktopAuthClient {
     return WorkspaceOwnership.fromJson(response);
   }
 
+  Future<WorkspaceOwnership> reconcileWorkspaceOwnership({
+    required DesktopHumanSession session,
+    required String installationId,
+    required String workspaceId,
+    required String runtimeId,
+  }) async {
+    final response = await _requestJson(
+      'POST',
+      _api('/workspace-runtime/ownership/reconcile'),
+      bearer: session.credential,
+      body: {
+        'contractVersion': '1.0',
+        'installationId': installationId,
+        'workspaceId': workspaceId,
+        'runtimeId': runtimeId,
+      },
+    );
+    return WorkspaceOwnership.fromJson(response);
+  }
+
   Future<void> releaseWorkspace({
     required DesktopHumanSession session,
     required String installationId,

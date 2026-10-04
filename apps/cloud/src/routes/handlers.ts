@@ -49,6 +49,7 @@ export {
 export {
   handleListWorkspaces,
   handleCheckWorkspaceOwnership,
+  handleReconcileWorkspaceOwnership,
   handleDisconnectDesktopWorkspace,
   handleReleaseDesktopWorkspace,
   handleRegisterWorkspaceFromDesktop,

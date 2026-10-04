@@ -135,6 +135,19 @@ is returned by the ownership read model when local IDs cannot be reconciled;
 when Cloud can verify the current owner, that response also supplies the
 canonical IDs for repair.
 
+For a known pre-v8/migration inconsistency where the v8 ownership row is
+missing, the desktop may call
+`POST /api/workspace-runtime/ownership/reconcile` with the same fresh browser-
+approved session and its exact local Workspace/runtime IDs. Cloud requires the
+current Workspace owner to match the session, the supplied persistent
+installation ID to match the legacy binding (or the pre-v8 unbound runtime
+record), no competing active binding, and no recorded Release. It restores the
+ownership row and writes `workspace.ownership.reconciled` in one atomic batch,
+then returns the canonical same-owner IDs for normal runtime recovery. A
+foreign active owner receives only `owned_by_other_user`; they must sign in and
+Release from their own account before another account can register the
+installation. Ambiguous or released legacy state is not reconciled.
+
 `POST /api/workspace-runtime/release` is a separate advanced operation. It
 requires a desktop human session created within the last five minutes, the
 same authoritative owner, the exact installation/Workspace/runtime binding,

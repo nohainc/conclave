@@ -273,6 +273,16 @@ human session valid?
 
 If Cloud reports that the installation belongs to another user, the desktop presents an explicit ownership conflict. It does not reset automatically.
 
+For a pre-v8 migration inconsistency, Workspace can request explicit
+ownership reconciliation after browser approval has created a fresh desktop
+human session. Cloud may restore a missing v8 installation row only from the
+exact local Workspace/runtime registration when the current Workspace owner
+matches that session, the persistent installation ID matches, no competing
+active binding exists, and Cloud has no Release record for the installation.
+Cloud records the repair in the Workspace audit log. It never uses email
+matching or transfers an active installation from another account; that owner
+must first release it.
+
 ### 9. Security boundary
 
 Human desktop authentication does not allow provider secrets into Cloud.

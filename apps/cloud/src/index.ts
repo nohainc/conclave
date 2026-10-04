@@ -71,6 +71,7 @@ export const routeHandlers = {
   handleRevokeDesktopHumanSession: handlers.handleRevokeDesktopHumanSession,
   handleGetDesktopHumanSession: handlers.handleGetDesktopHumanSession,
   handleCheckWorkspaceOwnership: handlers.handleCheckWorkspaceOwnership,
+  handleReconcileWorkspaceOwnership: handlers.handleReconcileWorkspaceOwnership,
   handleDisconnectDesktopWorkspace: handlers.handleDisconnectDesktopWorkspace,
   handleReleaseDesktopWorkspace: handlers.handleReleaseDesktopWorkspace,
   handleRegisterWorkspaceFromDesktop:

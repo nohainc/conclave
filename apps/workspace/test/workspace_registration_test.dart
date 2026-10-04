@@ -159,6 +159,59 @@ void main() {
     await requestFuture;
   });
 
+  test('ownership reconciliation uses its explicit fresh-auth endpoint',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final requestFuture = server.first.then((request) async {
+      expect(
+        request.uri.path,
+        '/api/workspace-runtime/ownership/reconcile',
+      );
+      expect(
+        request.headers.value(HttpHeaders.authorizationHeader),
+        'Bearer desktop-human-secret',
+      );
+      final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+      expect(body, {
+        'contractVersion': '1.0',
+        'installationId': 'install_12345678-1234-4234-8234-123456789abc',
+        'workspaceId': 'workspace-1',
+        'runtimeId': 'runtime-1',
+      });
+      request.response.statusCode = HttpStatus.ok;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(
+        '{"state":"local_registration_stale","workspaceId":"workspace-1",'
+        '"workspaceRuntimeId":"runtime-1","ownerUserId":"user-a",'
+        '"ownerMatchesCurrentSession":true,"runtimeState":"offline"}',
+      );
+      await request.response.close();
+    });
+    final client = DesktopAuthClient(
+      cloudUrl: 'http://127.0.0.1:${server.port}',
+    );
+    addTearDown(client.close);
+
+    final ownership = await client.reconcileWorkspaceOwnership(
+      session: DesktopHumanSession(
+        credential: 'desktop-human-secret',
+        sessionId: 'session-a',
+        userId: 'user-a',
+        displayName: 'A',
+        email: 'a@example.test',
+        expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+      ),
+      installationId: 'install_12345678-1234-4234-8234-123456789abc',
+      workspaceId: 'workspace-1',
+      runtimeId: 'runtime-1',
+    );
+
+    expect(ownership.state, WorkspaceOwnershipState.localRegistrationStale);
+    expect(ownership.ownerMatchesCurrentSession, isTrue);
+    await requestFuture;
+  });
+
   test('registration uses desktop auth and stores runtime credentials securely',
       () async {
     final temp = await Directory.systemTemp.createTemp('workspace-register-');

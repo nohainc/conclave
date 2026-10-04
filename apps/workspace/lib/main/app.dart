@@ -487,13 +487,30 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
             }
             break;
           case WorkspaceOwnershipState.localRegistrationStale:
+            var confirmedOwnership = ownership;
             if (ownership.ownerMatchesCurrentSession != true ||
                 ownership.ownerUserId != session.userId) {
+              final staleRegistration = existingRegistration;
+              if (staleRegistration == null) {
+                throw StateError(
+                  'Cloud found a stale Workspace registration without a local identity to verify.',
+                );
+              }
+              failureContext = 'reconciling the migrated Workspace ownership';
+              confirmedOwnership = await client.reconcileWorkspaceOwnership(
+                session: session,
+                installationId: installationId,
+                workspaceId: staleRegistration.workspaceId,
+                runtimeId: staleRegistration.workspaceRuntimeId,
+              );
+            }
+            if (confirmedOwnership.ownerMatchesCurrentSession != true ||
+                confirmedOwnership.ownerUserId != session.userId) {
               throw StateError(
                 'Cloud could not confirm this account as the owner of the canonical Workspace.',
               );
             }
-            staleOwnershipForRepair = ownership;
+            staleOwnershipForRepair = confirmedOwnership;
           case WorkspaceOwnershipState.installationConflict:
             throw StateError(
               'The local Workspace registration conflicts with its Cloud installation binding. Contact your administrator before continuing.',

@@ -15,6 +15,7 @@ import {
   handleDenyDesktopAuthIntent,
   handleGetDesktopHumanSession,
   handleCheckWorkspaceOwnership,
+  handleReconcileWorkspaceOwnership,
   handleDisconnectDesktopWorkspace,
   handleReleaseDesktopWorkspace,
   handleRegisterWorkspaceFromDesktop,
@@ -618,7 +619,7 @@ describe("desktop human authentication", () => {
     for (const [id, email] of [
       ["former-owner", "former@example.test"],
       ["current-owner", "current@example.test"],
-    ]) {
+    ] as const) {
       sqlite
         .prepare(
           "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
@@ -1369,6 +1370,216 @@ describe("desktop human authentication", () => {
       ownerMatchesCurrentSession: true,
       runtimeState: "revoked",
     });
+  });
+
+  it("reconciles only a fresh same-owner legacy binding and audits the repair", async () => {
+    const { env, sqlite } = await setup();
+    const now = new Date().toISOString();
+    const installationId = "install_12345678-1234-4234-8234-123456789abc";
+    sqlite
+      .prepare(
+        "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run("human-a", "a@example.test", "A", now, now);
+    sqlite
+      .prepare(
+        "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "session-a",
+        "human-a",
+        await hashToken("human-a-secret"),
+        "conclave.desktop.management",
+        now,
+        now,
+        new Date(Date.now() + 60_000).toISOString(),
+      );
+    sqlite
+      .prepare(
+        "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'offline', ?, ?)",
+      )
+      .run("workspace-a", "human-a", "A's Workspace", now, now);
+    sqlite
+      .prepare(
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?, ?, ?, NULL, ?, ?)",
+      )
+      .run(
+        "runtime-a",
+        "workspace-a",
+        await hashToken("runtime-secret"),
+        now,
+        now,
+      );
+    sqlite
+      .prepare(
+        "INSERT INTO workspace_audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?, ?, 'user', ?, 'workspace.registered', 'workspace_runtime', ?, ?, ?)",
+      )
+      .run(
+        "audit-register",
+        "workspace-a",
+        "human-a",
+        "runtime-a",
+        JSON.stringify({ installationId }),
+        now,
+      );
+    const reconcile = () =>
+      handleReconcileWorkspaceOwnership(
+        new Request(
+          "https://app.conclave.test/api/workspace-runtime/ownership/reconcile",
+          {
+            method: "POST",
+            headers: {
+              authorization: "Bearer human-a-secret",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              contractVersion: "1.0",
+              installationId,
+              workspaceId: "workspace-a",
+              runtimeId: "runtime-a",
+            }),
+          },
+        ),
+        env,
+      );
+
+    const result = await reconcile();
+    expect(result.status).toBe(200);
+    expect(await result.json()).toMatchObject({
+      state: "local_registration_stale",
+      workspaceId: "workspace-a",
+      ownerUserId: "human-a",
+      ownerMatchesCurrentSession: true,
+    });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT owner_user_id, workspace_id, status FROM workspace_installations WHERE installation_id = ?",
+        )
+        .get(installationId),
+    ).toEqual({
+      owner_user_id: "human-a",
+      workspace_id: "workspace-a",
+      status: "active",
+    });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT actor_id, action, target_id, details_json FROM workspace_audit_log WHERE action = 'workspace.ownership.reconciled'",
+        )
+        .get(),
+    ).toMatchObject({
+      actor_id: "human-a",
+      action: "workspace.ownership.reconciled",
+      target_id: installationId,
+      details_json: JSON.stringify({
+        source: "legacy_runtime_identity",
+        runtimeId: "runtime-a",
+      }),
+    });
+  });
+
+  it("does not reconcile stale sessions or an active foreign owner", async () => {
+    const { env, sqlite } = await setup();
+    const now = new Date().toISOString();
+    const installationId = "install_12345678-1234-4234-8234-123456789abc";
+    for (const [id, email] of [
+      ["human-a", "a@example.test"],
+      ["human-b", "b@example.test"],
+    ] as const) {
+      sqlite
+        .prepare(
+          "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run(id, email, id, now, now);
+    }
+    const staleCreatedAt = new Date(Date.now() - 10 * 60_000).toISOString();
+    sqlite
+      .prepare(
+        "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "session-a",
+        "human-a",
+        await hashToken("human-a-secret"),
+        "conclave.desktop.management",
+        staleCreatedAt,
+        now,
+        new Date(Date.now() + 60_000).toISOString(),
+      );
+    sqlite
+      .prepare(
+        "INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?, ?, ?, 'offline', ?, ?)",
+      )
+      .run("workspace-b", "human-b", "B's Workspace", now, now);
+    sqlite
+      .prepare(
+        "INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run(
+        "runtime-b",
+        "workspace-b",
+        await hashToken("runtime-secret"),
+        installationId,
+        now,
+      );
+    const request = () =>
+      new Request(
+        "https://app.conclave.test/api/workspace-runtime/ownership/reconcile",
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer human-a-secret",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            contractVersion: "1.0",
+            installationId,
+            workspaceId: "workspace-b",
+            runtimeId: "runtime-b",
+          }),
+        },
+      );
+    const result = await handleReconcileWorkspaceOwnership(request(), env);
+    expect(result.status).toBe(403);
+    expect(await result.json()).toMatchObject({ code: "fresh_auth_required" });
+
+    sqlite
+      .prepare("UPDATE desktop_human_sessions SET created_at = ? WHERE id = ?")
+      .run(now, "session-a");
+    const legacyForeignResult = await handleReconcileWorkspaceOwnership(
+      request(),
+      env,
+    );
+    expect(legacyForeignResult.status).toBe(200);
+    expect(await legacyForeignResult.json()).toEqual({
+      state: "owned_by_other_user",
+    });
+    seedWorkspaceInstallation(
+      sqlite,
+      installationId,
+      "human-b",
+      "workspace-b",
+      "active",
+      now,
+    );
+    const freshResult = await handleReconcileWorkspaceOwnership(request(), env);
+    expect(freshResult.status).toBe(200);
+    expect(await freshResult.json()).toEqual({ state: "owned_by_other_user" });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT owner_user_id FROM workspace_installations WHERE installation_id = ?",
+        )
+        .get(installationId),
+    ).toMatchObject({ owner_user_id: "human-b" });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT COUNT(*) AS count FROM workspace_audit_log WHERE action = 'workspace.ownership.reconciled'",
+        )
+        .get(),
+    ).toMatchObject({ count: 0 });
   });
 
   it("allows only a fresh Workspace owner session to release the installation binding", async () => {
