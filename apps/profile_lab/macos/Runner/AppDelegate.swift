@@ -41,8 +41,7 @@ class AppDelegate: FlutterAppDelegate {
   private func keychainQuery() -> [String: Any] {
     [kSecClass as String: kSecClassGenericPassword,
      kSecAttrService as String: profileLabKeychainService,
-     kSecAttrAccount as String: "profile-lab-human-session",
-     kSecUseDataProtectionKeychain as String: true]
+     kSecAttrAccount as String: "profile-lab-human-session"]
   }
 
   private func readKeychain(result: FlutterResult) {
@@ -65,12 +64,17 @@ class AppDelegate: FlutterAppDelegate {
       result(FlutterError(code: "invalid_value", message: "Keychain value is not UTF-8", details: nil))
       return
     }
-    var query = keychainQuery()
-    let update = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+    let query = keychainQuery()
+    let attributes: [String: Any] = [
+      kSecValueData as String: data,
+      kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+    ]
+    let update = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
     if update == errSecItemNotFound {
-      query[kSecValueData as String] = data
-      query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-      let status = SecItemAdd(query as CFDictionary, nil)
+      var item = query
+      item[kSecValueData as String] = data
+      item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+      let status = SecItemAdd(item as CFDictionary, nil)
       guard status == errSecSuccess else {
         result(FlutterError(code: "keychain_write_failed", message: "Could not save Profile Lab session to Keychain", details: status))
         return
