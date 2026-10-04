@@ -1,15 +1,92 @@
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { identityService } from "../src/auth/index.js";
+import {
+  authorizeToolProfileAdmin,
+  handleApproveDesktopAuthIntent,
+  handleClaimDesktopAuthIntent,
+  handleCreateDesktopAuthIntent,
+  handleGetDesktopHumanSession,
+  handleRegisterWorkspaceFromDesktop,
+} from "../src/routes/handlers.js";
+import type { SecurityEnv } from "../src/routes/handlers.js";
 
 const migrationsDirectory = fileURLToPath(
   new URL("../migrations-v8/", import.meta.url),
 );
+const fixturesDirectory = fileURLToPath(
+  new URL("./fixtures/", import.meta.url),
+);
+const databases: DatabaseSync[] = [];
+
+class TestStatement {
+  constructor(
+    private readonly database: DatabaseSync,
+    private readonly sql: string,
+    private readonly values: unknown[] = [],
+  ) {}
+
+  bind(...values: unknown[]): TestStatement {
+    return new TestStatement(this.database, this.sql, values);
+  }
+
+  async first<T>(): Promise<T | null> {
+    return (
+      (this.database
+        .prepare(this.sql)
+        .get(...(this.values as SQLInputValue[])) as T | undefined) ?? null
+    );
+  }
+
+  async all<T>(): Promise<{ results: T[] }> {
+    return {
+      results: this.database
+        .prepare(this.sql)
+        .all(...(this.values as SQLInputValue[])) as T[],
+    };
+  }
+
+  async run(): Promise<{ meta: { changes: number } }> {
+    const result = this.database
+      .prepare(this.sql)
+      .run(...(this.values as SQLInputValue[]));
+    return { meta: { changes: Number(result.changes) } };
+  }
+}
+
+class TestD1 {
+  constructor(private readonly database: DatabaseSync) {}
+
+  prepare(sql: string): TestStatement {
+    return new TestStatement(this.database, sql);
+  }
+
+  async batch(statements: readonly TestStatement[]): Promise<unknown[]> {
+    this.database.exec("BEGIN");
+    try {
+      const results = [];
+      for (const statement of statements) results.push(await statement.run());
+      this.database.exec("COMMIT");
+      return results;
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+}
 
 function migrationSql(name: string): string {
   return readFileSync(join(migrationsDirectory, name), "utf8");
+}
+
+function legacyAuthFixtureSql(): string {
+  return readFileSync(
+    join(fixturesDirectory, "desktop-auth-single-audience.sql"),
+    "utf8",
+  );
 }
 
 function orderedMigrationFiles(): string[] {
@@ -19,42 +96,61 @@ function orderedMigrationFiles(): string[] {
 }
 
 function legacyProductionBaseline(): string {
-  let sql = migrationSql("0001_conclave_v8.sql");
-  const oldAuthIntentDefinition = sql.replace(
-    / {2}audience TEXT NOT NULL DEFAULT 'conclave\.desktop\.management' CHECK \(audience IN \('conclave\.desktop\.management', 'conclave\.profile-lab\.management'\)\),\n/,
-    "",
+  const cleanBaseline = migrationSql("0001_conclave_v8.sql");
+  const authStart = cleanBaseline.indexOf(
+    "CREATE TABLE desktop_auth_intents (",
   );
-  expect(oldAuthIntentDefinition).not.toBe(sql);
-  sql = oldAuthIntentDefinition.replace(
-    /audience TEXT NOT NULL CHECK \(audience IN \('conclave\.desktop\.management', 'conclave\.profile-lab\.management'\)\)/,
-    "audience TEXT NOT NULL CHECK (audience = 'conclave.desktop.management')",
+  const followingTable = cleanBaseline.indexOf(
+    "CREATE TABLE workspace_worker_inventory",
+    authStart,
   );
-  expect(sql).not.toBe(oldAuthIntentDefinition);
-  return sql;
+  expect(authStart).toBeGreaterThanOrEqual(0);
+  expect(followingTable).toBeGreaterThan(authStart);
+  return `${cleanBaseline.slice(0, authStart)}${cleanBaseline.slice(followingTable)}\n${legacyAuthFixtureSql()}`;
 }
 
 function createDatabase(): DatabaseSync {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
+  databases.push(database);
   return database;
 }
 
+afterEach(() => {
+  vi.restoreAllMocks();
+  for (const database of databases.splice(0)) database.close();
+});
+
 describe("desktop auth multi-audience migration", () => {
-  it("preserves existing intents and active human sessions from the deployed baseline", () => {
+  it("migrates the deployed single-audience schema and authenticates both desktop clients", async () => {
     const database = createDatabase();
     database.exec(legacyProductionBaseline());
+    const legacyIntentColumns = database
+      .prepare("PRAGMA table_info(desktop_auth_intents)")
+      .all()
+      .map((column) => (column as { name: string }).name);
+    expect(legacyIntentColumns).toContain("user_code_hash");
+    expect(legacyIntentColumns).not.toContain("audience");
+    const legacySessionDefinition = database
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'desktop_human_sessions'",
+      )
+      .get() as { sql: string };
+    expect(legacySessionDefinition.sql).toContain(
+      "CHECK (audience = 'conclave.desktop.management')",
+    );
     database.exec(`
       INSERT INTO users
         (id, email, display_name, created_at, updated_at)
       VALUES ('owner', 'owner@example.invalid', 'Owner', 'now', 'now');
 
       INSERT INTO desktop_auth_intents
-        (id, poll_token_hash, client_name, created_at, expires_at,
+        (id, user_code_hash, poll_token_hash, client_name, created_at, expires_at,
          approved_at, approved_user_id, claimed_at, claimed_session_id, denied_at)
       VALUES
-        ('pending-intent', 'poll-hash-pending', 'Workspace', 'created', 'expires',
+        ('pending-intent', 'user-code-pending', 'poll-hash-pending', 'Workspace', 'created', 'expires',
          NULL, NULL, NULL, NULL, NULL),
-        ('claimed-intent', 'poll-hash-claimed', 'Workspace', 'created-2', 'expires-2',
+        ('claimed-intent', 'user-code-claimed', 'poll-hash-claimed', 'Workspace', 'created-2', 'expires-2',
          'approved', 'owner', 'claimed', 'active-session', NULL);
 
       INSERT INTO desktop_human_sessions
@@ -67,8 +163,13 @@ describe("desktop auth multi-audience migration", () => {
          'created-2', 'last-used-2', 'expires-2', 'revoked');
     `);
 
+    const preservedIntentColumns = `id, poll_token_hash, client_name, created_at,
+      expires_at, approved_at, approved_user_id, claimed_at, claimed_session_id,
+      denied_at`;
     const intentsBefore = database
-      .prepare("SELECT * FROM desktop_auth_intents ORDER BY id")
+      .prepare(
+        `SELECT ${preservedIntentColumns} FROM desktop_auth_intents ORDER BY id`,
+      )
       .all();
     const sessionsBefore = database
       .prepare("SELECT * FROM desktop_human_sessions ORDER BY id")
@@ -76,8 +177,17 @@ describe("desktop auth multi-audience migration", () => {
 
     database.exec(migrationSql("0002_desktop_auth_multi_audience.sql"));
 
+    for (const filename of [
+      "0003_workspace_installations.sql",
+      "0004_workspace_runtime_identity_uniqueness.sql",
+    ]) {
+      database.exec(migrationSql(filename));
+    }
+
     const intentsAfter = database
-      .prepare("SELECT * FROM desktop_auth_intents ORDER BY id")
+      .prepare(
+        `SELECT ${preservedIntentColumns}, audience FROM desktop_auth_intents ORDER BY id`,
+      )
       .all();
     expect(intentsAfter).toHaveLength(intentsBefore.length);
     expect(intentsAfter).toEqual(
@@ -113,26 +223,6 @@ describe("desktop auth multi-audience migration", () => {
         ),
     ).toHaveLength(2);
 
-    database
-      .prepare(
-        `
-      INSERT INTO desktop_auth_intents
-        (id, poll_token_hash, client_name, audience, created_at, expires_at)
-      VALUES ('lab-intent', 'lab-poll-hash', 'Profile Lab',
-        'conclave.profile-lab.management', 'created', 'expires')
-    `,
-      )
-      .run();
-    database
-      .prepare(
-        `
-      INSERT INTO desktop_human_sessions
-        (id, user_id, token_hash, audience, created_at, last_used_at, expires_at)
-      VALUES ('lab-session', 'owner', 'lab-session-hash',
-        'conclave.profile-lab.management', 'created', 'last-used', 'expires')
-    `,
-      )
-      .run();
     expect(() =>
       database
         .prepare(
@@ -158,7 +248,166 @@ describe("desktop auth multi-audience migration", () => {
         .run(),
     ).toThrow();
 
-    database.close();
+    const env = {
+      CONCLAVE_DB: new TestD1(database),
+      CONCLAVE_PROFILE_ADMIN_USER_IDS: "owner",
+      CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS: "owner",
+      CONCLAVE_WORKSPACE_GATEWAY: {
+        getByName: () => ({
+          fetch: async () => Response.json({ online: false }),
+        }),
+      },
+    } as unknown as SecurityEnv;
+    vi.spyOn(identityService, "resolve").mockResolvedValue({
+      userId: "owner",
+      email: "owner@example.invalid",
+      name: "Owner",
+      sessionId: "browser-session",
+    });
+
+    const createAndClaim = async (input: {
+      clientName: string;
+      audience?: string;
+    }) => {
+      const created = await handleCreateDesktopAuthIntent(
+        new Request("https://app.conclave.test/api/desktop-auth/intents", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...input,
+            contractVersion: "1.1",
+          }),
+        }),
+        env,
+      );
+      expect(created.status).toBe(201);
+      const intent = (await created.json()) as {
+        intentId: string;
+        pollToken: string;
+        audience: string;
+      };
+
+      const approved = await handleApproveDesktopAuthIntent(
+        new Request("https://app.conclave.test/api/desktop-auth/approve", {
+          method: "POST",
+          headers: { cookie: "better-auth-session=fixture" },
+        }),
+        env,
+        intent.intentId,
+      );
+      expect(approved.status).toBe(200);
+
+      const claimed = await handleClaimDesktopAuthIntent(
+        new Request("https://app.conclave.test/api/desktop-auth/claim", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ pollToken: intent.pollToken }),
+        }),
+        env,
+        intent.intentId,
+      );
+      expect(claimed.status).toBe(200);
+      const session = (await claimed.json()) as {
+        credential: string;
+        audience: string;
+        user: { userId: string };
+      };
+      expect(session.audience).toBe(intent.audience);
+      expect(session.user.userId).toBe("owner");
+
+      const sessionResponse = await handleGetDesktopHumanSession(
+        new Request("https://app.conclave.test/api/desktop-auth/session", {
+          headers: { authorization: `Bearer ${session.credential}` },
+        }),
+        env,
+      );
+      expect(sessionResponse.status).toBe(200);
+      expect(await sessionResponse.json()).toMatchObject({
+        audience: intent.audience,
+        user: { userId: "owner" },
+      });
+      return session;
+    };
+
+    const workspaceSession = await createAndClaim({
+      clientName: "Conclave Workspace",
+    });
+    const profileLabSession = await createAndClaim({
+      clientName: "Conclave Profile Lab",
+      audience: "conclave.profile-lab.management",
+    });
+
+    const registrationBody = {
+      contractVersion: "1.0",
+      installationId: "install_12345678-1234-4234-8234-123456789abc",
+      proposedWorkspaceName: "Fixture Workspace",
+      hostname: "fixture-mac",
+      platform: "macos",
+      architecture: "arm64",
+      appVersion: "1.0.0",
+      runtimeCapabilities: {
+        os: "macos",
+        arch: "arm64",
+        appVersion: "1.0.0",
+        supportedRuntimes: ["dart"],
+        maxConcurrentWorkers: 2,
+      },
+    };
+    const workspaceRegistration = await handleRegisterWorkspaceFromDesktop(
+      new Request("https://app.conclave.test/api/workspace-runtime/register", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${workspaceSession.credential}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(registrationBody),
+      }),
+      env,
+    );
+    expect(workspaceRegistration.status).toBe(201);
+
+    await expect(
+      authorizeToolProfileAdmin(
+        new Request("https://app.conclave.test/api/profile-admin/profiles", {
+          headers: {
+            authorization: `Bearer ${profileLabSession.credential}`,
+          },
+        }),
+        env,
+      ),
+    ).resolves.toMatchObject({
+      userId: "owner",
+      audience: "conclave.profile-lab.management",
+    });
+
+    await expect(
+      authorizeToolProfileAdmin(
+        new Request("https://app.conclave.test/api/profile-admin/profiles", {
+          headers: { authorization: `Bearer ${workspaceSession.credential}` },
+        }),
+        env,
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+
+    await expect(
+      handleRegisterWorkspaceFromDesktop(
+        new Request(
+          "https://app.conclave.test/api/workspace-runtime/register",
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${profileLabSession.credential}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              ...registrationBody,
+              installationId: "install_22345678-1234-4234-8234-123456789abc",
+            }),
+          },
+        ),
+        env,
+      ),
+    ).rejects.toMatchObject({ status: 403 });
   });
 
   it("applies after the current clean baseline", () => {
@@ -179,8 +428,6 @@ describe("desktop auth multi-audience migration", () => {
         )
         .all(),
     ).toEqual([]);
-
-    database.close();
   });
 });
 
@@ -251,7 +498,6 @@ describe("Workspace installation ownership migration", () => {
         )
         .get("idx_workspace_installations_active_workspace"),
     ).toBeTruthy();
-    database.close();
   });
 
   it("fails closed when one legacy installation points to multiple Workspaces", () => {
@@ -277,7 +523,6 @@ describe("Workspace installation ownership migration", () => {
     expect(() =>
       database.exec(migrationSql("0003_workspace_installations.sql")),
     ).toThrow();
-    database.close();
   });
 });
 
@@ -355,7 +600,6 @@ describe("Workspace runtime identity uniqueness migration", () => {
           "duplicate",
         ),
     ).toThrow();
-    database.close();
   });
 
   it("fails closed when a Workspace already has multiple active runtime identities", () => {
@@ -384,6 +628,5 @@ describe("Workspace runtime identity uniqueness migration", () => {
         migrationSql("0004_workspace_runtime_identity_uniqueness.sql"),
       ),
     ).toThrow();
-    database.close();
   });
 });

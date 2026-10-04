@@ -149,19 +149,23 @@ The workflow fails on any missing, unexpected, or drifted contract. This check
 only reads schema metadata; it never repairs table definitions.
 
 After deploying `app.conclaveax.com`, the same script runs as a production
-acceptance gate. It creates a Profile Lab audience auth intent, approves it with
-a disposable Better Auth identity, claims the desktop session, and verifies the
-intent and session rows carry `conclave.profile-lab.management`. It checks that
-the session reaches the Profile-admin authorization boundary and receives the
-expected permission denial for this non-admin disposable identity. It also
-verifies that the Profile Lab credential is rejected by Workspace registration
-and Workspace runtime transport. The smoke then creates a disposable Workspace
-management session, registers a uniquely named Workspace, performs an HTTP/1.1
-WebSocket upgrade, sends `workspace.hello`, requires the matching
-`workspace.hello.ack`, requests synchronization and requires a correlated
-`workspace.sync.result`, verifies the persisted Gateway session, and deletes
-the disposable auth, Workspace, and user rows in `finally` cleanup. No Profile
-release operation is part of this smoke.
+acceptance gate. It creates one disposable AX browser session and exercises the
+full desktop-auth lifecycle twice: create a Workspace intent, approve it in the
+browser session, claim it, and validate the resulting
+`conclave.desktop.management` session; then repeat for the Profile Lab audience
+and validate `conclave.profile-lab.management`. It verifies each audience in
+the stored intent/session rows and through the desktop session endpoint. The
+Profile Lab credential must be rejected by Workspace registration and runtime
+transport, and the Workspace credential must be rejected by the Profile Lab
+administration boundary. The Profile Lab session also reaches the Profile-admin
+authorization boundary and receives the expected permission denial for this
+non-admin disposable identity. The smoke uses the Workspace session to register
+a uniquely named Workspace, performs an HTTP/1.1 WebSocket upgrade, sends
+`workspace.hello`, requires the matching `workspace.hello.ack`, requests
+synchronization and requires a correlated `workspace.sync.result`, verifies the
+persisted Gateway session, and deletes both desktop auth flows plus the
+disposable Workspace and user rows in `finally` cleanup. No Profile release
+operation is part of this smoke.
 
 The GitHub Actions secret `BETTER_AUTH_SECRET` must match the
 `conclave-ax-app` Cloudflare Worker secret. The workflow uses it only to sign

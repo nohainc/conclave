@@ -657,6 +657,16 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
               ),
           ],
         ),
+        if (isRegistered) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Disconnect keeps this installation owned by your account. '
+            'Release lets another account claim it.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
         _WorkspaceDiagnosticsSection(
           snapshot: widget.snapshot,

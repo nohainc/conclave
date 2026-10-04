@@ -135,6 +135,14 @@ is returned by the ownership read model when local IDs cannot be reconciled;
 when Cloud can verify the current owner, that response also supplies the
 canonical IDs for repair.
 
+The ownership read model preserves the lifecycle distinction. After Disconnect,
+the active installation binding remains authoritative: its owner receives
+`local_registration_stale` with the canonical offline Workspace and can
+register again to obtain a new runtime credential; another account receives
+only `owned_by_other_user`. After Release, the binding is marked released, so
+the previous owner's runtime history does not block a new account from
+registering and becoming the current owner.
+
 For a known pre-v8/migration inconsistency where the v8 ownership row is
 missing, the desktop may call
 `POST /api/workspace-runtime/ownership/reconcile` with the same fresh browser-

@@ -241,7 +241,7 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
       builder: (context) => AlertDialog(
         title: const Text('Release Workspace from this account?'),
         content: const Text(
-          'This revokes the runtime credential, disconnects Cloud, and releases the installation owner binding so another Conclave account can connect it. Local Workers, provider credentials, Tool Profiles, and Work Root files remain on this computer.',
+          'This revokes the runtime credential, disconnects Cloud, and releases the installation owner binding. After Release succeeds, another Conclave account can claim this installation. Local Workers, provider credentials, Tool Profiles, and Work Root files remain on this computer.',
         ),
         actions: [
           TextButton(
@@ -369,9 +369,10 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
                 content: const Text(
                   'This computer will stop accepting Cloud work.\n\n'
                   'Active assignments will finish before it disconnects.\n\n'
+                  'This keeps the installation owned by your Conclave account. Another account cannot connect it until you release it.\n\n'
                   'Local Worker credentials, configurations, and Workstream files remain on this machine unless '
                   'you explicitly choose to remove them.\n\n'
-                  'You can reconnect to a Workspace at any time.',
+                  'You can reconnect to this Workspace with the same account at any time.',
                 ),
                 actions: [
                   TextButton(

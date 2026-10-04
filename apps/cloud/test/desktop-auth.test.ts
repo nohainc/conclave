@@ -435,11 +435,36 @@ describe("desktop human authentication", () => {
         ),
         env,
       );
+    const checkOwnership = (
+      userId: string,
+      workspaceId?: string,
+      runtimeId?: string,
+    ) =>
+      handleCheckWorkspaceOwnership(
+        new Request(
+          "https://app.conclave.test/api/workspace-runtime/ownership",
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${userId}-secret`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              contractVersion: "1.0",
+              installationId,
+              ...(workspaceId ? { workspaceId } : {}),
+              ...(runtimeId ? { runtimeId } : {}),
+            }),
+          },
+        ),
+        env,
+      );
 
     const connected = await register("human-a");
     expect(connected.status).toBe(201);
     const firstRuntime = (await connected.json()) as {
       workspaceId: string;
+      workspaceRuntimeId: string;
     };
     expect(
       sqlite
@@ -452,6 +477,64 @@ describe("desktop human authentication", () => {
       workspace_id: firstRuntime.workspaceId,
       status: "active",
     });
+    const initialOwnership = await checkOwnership(
+      "human-a",
+      firstRuntime.workspaceId,
+      firstRuntime.workspaceRuntimeId,
+    );
+    expect(await initialOwnership.json()).toMatchObject({
+      state: "owned_by_current_user",
+      ownerMatchesCurrentSession: true,
+      workspaceId: firstRuntime.workspaceId,
+    });
+
+    const disconnected = await handleDisconnectDesktopWorkspace(
+      new Request(
+        "https://app.conclave.test/api/workspace-runtime/disconnect",
+        {
+          method: "POST",
+          headers: {
+            authorization: "Bearer human-a-secret",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            installationId,
+            workspaceId: firstRuntime.workspaceId,
+            runtimeId: firstRuntime.workspaceRuntimeId,
+          }),
+        },
+      ),
+      env,
+    );
+    expect(disconnected.status).toBe(200);
+    expect(await disconnected.json()).toMatchObject({ disconnected: true });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT owner_user_id, workspace_id, status FROM workspace_installations WHERE installation_id = ?",
+        )
+        .get(installationId),
+    ).toMatchObject({
+      owner_user_id: "human-a",
+      workspace_id: firstRuntime.workspaceId,
+      status: "active",
+    });
+    const sameOwnerAfterDisconnect = await checkOwnership(
+      "human-a",
+      firstRuntime.workspaceId,
+      firstRuntime.workspaceRuntimeId,
+    );
+    expect(await sameOwnerAfterDisconnect.json()).toMatchObject({
+      state: "local_registration_stale",
+      ownerMatchesCurrentSession: true,
+      workspaceId: firstRuntime.workspaceId,
+      runtimeState: "offline",
+    });
+    const otherOwnerAfterDisconnect = await checkOwnership("human-b");
+    expect(await otherOwnerAfterDisconnect.json()).toEqual({
+      state: "owned_by_other_user",
+    });
+
     const recovered = await register("human-a");
     expect(recovered.status).toBe(201);
     const recoveredRuntime = (await recovered.json()) as {
@@ -461,6 +544,16 @@ describe("desktop human authentication", () => {
     };
     expect(recoveredRuntime).toMatchObject({
       outcome: "recovered",
+      workspaceId: firstRuntime.workspaceId,
+    });
+    const reconnectedOwnership = await checkOwnership(
+      "human-a",
+      recoveredRuntime.workspaceId,
+      recoveredRuntime.workspaceRuntimeId,
+    );
+    expect(await reconnectedOwnership.json()).toMatchObject({
+      state: "owned_by_current_user",
+      ownerMatchesCurrentSession: true,
       workspaceId: firstRuntime.workspaceId,
     });
 
@@ -497,6 +590,8 @@ describe("desktop human authentication", () => {
       workspace_id: firstRuntime.workspaceId,
       status: "released",
     });
+    const otherOwnerAfterRelease = await checkOwnership("human-b");
+    expect(await otherOwnerAfterRelease.json()).toEqual({ state: "released" });
     const transferred = await register("human-b");
     expect(transferred.status).toBe(201);
     expect(await transferred.json()).toMatchObject({
@@ -510,6 +605,368 @@ describe("desktop human authentication", () => {
         )
         .get(installationId),
     ).toMatchObject({ owner_user_id: "human-b", status: "active" });
+  });
+
+  it("matches the Workspace ownership-state acceptance matrix", async () => {
+    const { env, sqlite } = await setup();
+    const now = new Date().toISOString();
+    const users = [
+      ["human-a", "a@example.test"],
+      ["human-b", "b@example.test"],
+    ] as const;
+    for (const [id, email] of users) {
+      sqlite
+        .prepare(
+          "INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run(id, email, id, now, now);
+    }
+    const addSession = async (
+      userId: string,
+      credential: string,
+      sessionId = `session-${userId}`,
+    ) =>
+      sqlite
+        .prepare(
+          "INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .run(
+          sessionId,
+          userId,
+          await hashToken(credential),
+          "conclave.desktop.management",
+          now,
+          now,
+          new Date(Date.now() + 60_000).toISOString(),
+        );
+    await addSession("human-a", "human-a-secret");
+    await addSession("human-b", "human-b-secret");
+
+    const registrationBody = (installationId: string) => ({
+      contractVersion: "1.0",
+      installationId,
+      proposedWorkspaceName: "Acceptance Mac",
+      hostname: "acceptance-mac",
+      platform: "macos",
+      architecture: "arm64",
+      appVersion: "1.0.0",
+      runtimeCapabilities: {
+        os: "macos",
+        arch: "arm64",
+        appVersion: "1.0.0",
+        supportedRuntimes: ["dart"],
+        maxConcurrentWorkers: 2,
+      },
+    });
+    const register = (userId: string, installationId: string) =>
+      handleRegisterWorkspaceFromDesktop(
+        new Request(
+          "https://app.conclave.test/api/workspace-runtime/register",
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${userId}-secret`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(registrationBody(installationId)),
+          },
+        ),
+        env,
+      );
+    const checked = (
+      userId: string,
+      installationId: string,
+      workspaceId?: string,
+      runtimeId?: string,
+    ) =>
+      handleCheckWorkspaceOwnership(
+        new Request(
+          "https://app.conclave.test/api/workspace-runtime/ownership",
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${userId}-secret`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              contractVersion: "1.0",
+              installationId,
+              ...(workspaceId ? { workspaceId } : {}),
+              ...(runtimeId ? { runtimeId } : {}),
+            }),
+          },
+        ),
+        env,
+      );
+    const disconnect = (
+      installationId: string,
+      workspaceId: string,
+      runtimeId: string,
+    ) =>
+      handleDisconnectDesktopWorkspace(
+        new Request(
+          "https://app.conclave.test/api/workspace-runtime/disconnect",
+          {
+            method: "POST",
+            headers: {
+              authorization: "Bearer human-a-secret",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ installationId, workspaceId, runtimeId }),
+          },
+        ),
+        env,
+      );
+    const release = (
+      installationId: string,
+      workspaceId: string,
+      runtimeId: string,
+    ) =>
+      handleReleaseDesktopWorkspace(
+        new Request("https://app.conclave.test/api/workspace-runtime/release", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer human-a-secret",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ installationId, workspaceId, runtimeId }),
+        }),
+        env,
+      );
+    const requireRegistration = async (
+      response: Response,
+      expectedOutcome: string,
+      expectedOwner: string,
+    ) => {
+      expect(response.status).toBe(201);
+      const value = (await response.json()) as {
+        outcome: string;
+        workspaceId: string;
+        workspaceRuntimeId: string;
+        ownerUserId: string;
+      };
+      expect(value).toMatchObject({
+        outcome: expectedOutcome,
+        ownerUserId: expectedOwner,
+      });
+      return value;
+    };
+
+    const sameOwnerInstall = `install_${crypto.randomUUID()}`;
+    const created = await requireRegistration(
+      await register("human-a", sameOwnerInstall),
+      "created",
+      "human-a",
+    );
+    const existingSameOwner = await requireRegistration(
+      await register("human-a", sameOwnerInstall),
+      "recovered",
+      "human-a",
+    );
+    expect(existingSameOwner.workspaceId).toBe(created.workspaceId);
+    expect(
+      sqlite
+        .prepare(
+          "SELECT revoked_at FROM workspace_runtime_identities WHERE id = ?",
+        )
+        .get(created.workspaceRuntimeId),
+    ).toMatchObject({ revoked_at: expect.any(String) });
+
+    const staleRuntimeOwnership = await checked(
+      "human-a",
+      sameOwnerInstall,
+      existingSameOwner.workspaceId,
+      "runtime-missing-from-cloud",
+    );
+    expect(await staleRuntimeOwnership.json()).toMatchObject({
+      state: "local_registration_stale",
+      workspaceId: existingSameOwner.workspaceId,
+      workspaceRuntimeId: existingSameOwner.workspaceRuntimeId,
+      ownerMatchesCurrentSession: true,
+    });
+    const recoveredStaleRuntime = await requireRegistration(
+      await register("human-a", sameOwnerInstall),
+      "recovered",
+      "human-a",
+    );
+    expect(recoveredStaleRuntime.workspaceId).toBe(created.workspaceId);
+    const currentOwnerWithRevokedHistory = await checked(
+      "human-a",
+      sameOwnerInstall,
+      recoveredStaleRuntime.workspaceId,
+      recoveredStaleRuntime.workspaceRuntimeId,
+    );
+    expect(await currentOwnerWithRevokedHistory.json()).toMatchObject({
+      state: "owned_by_current_user",
+      ownerMatchesCurrentSession: true,
+      workspaceId: created.workspaceId,
+      workspaceRuntimeId: recoveredStaleRuntime.workspaceRuntimeId,
+    });
+    const revokedRuntimeCount = sqlite
+      .prepare(
+        `SELECT COUNT(*) AS count FROM workspace_runtime_identities
+          WHERE workspace_id = ? AND revoked_at IS NOT NULL`,
+      )
+      .get(created.workspaceId) as { count: number };
+    expect(revokedRuntimeCount.count).toBeGreaterThan(0);
+
+    const activeForeignState = await checked("human-b", sameOwnerInstall);
+    expect(await activeForeignState.json()).toEqual({
+      state: "owned_by_other_user",
+    });
+    const activeForeignRegistration = await register(
+      "human-b",
+      sameOwnerInstall,
+    );
+    expect(activeForeignRegistration.status).toBe(409);
+    expect(await activeForeignRegistration.json()).toMatchObject({
+      code: "workspace_owned_by_other_account",
+    });
+
+    const disconnectedInstall = `install_${crypto.randomUUID()}`;
+    const disconnectedInitial = await requireRegistration(
+      await register("human-a", disconnectedInstall),
+      "created",
+      "human-a",
+    );
+    const disconnectResponse = await disconnect(
+      disconnectedInstall,
+      disconnectedInitial.workspaceId,
+      disconnectedInitial.workspaceRuntimeId,
+    );
+    expect(disconnectResponse.status).toBe(200);
+    const disconnectedOwnerState = await checked(
+      "human-a",
+      disconnectedInstall,
+      disconnectedInitial.workspaceId,
+      disconnectedInitial.workspaceRuntimeId,
+    );
+    expect(await disconnectedOwnerState.json()).toMatchObject({
+      state: "local_registration_stale",
+      ownerMatchesCurrentSession: true,
+      runtimeState: "offline",
+    });
+    const disconnectedForeignState = await checked(
+      "human-b",
+      disconnectedInstall,
+    );
+    expect(await disconnectedForeignState.json()).toEqual({
+      state: "owned_by_other_user",
+    });
+    const disconnectedForeignRegistration = await register(
+      "human-b",
+      disconnectedInstall,
+    );
+    expect(disconnectedForeignRegistration.status).toBe(409);
+    expect(await disconnectedForeignRegistration.json()).toMatchObject({
+      code: "workspace_owned_by_other_account",
+    });
+    const reconnected = await requireRegistration(
+      await register("human-a", disconnectedInstall),
+      "recovered",
+      "human-a",
+    );
+    expect(reconnected.workspaceId).toBe(disconnectedInitial.workspaceId);
+
+    const releasedInstall = `install_${crypto.randomUUID()}`;
+    const releasedInitial = await requireRegistration(
+      await register("human-a", releasedInstall),
+      "created",
+      "human-a",
+    );
+    expect(
+      (
+        await disconnect(
+          releasedInstall,
+          releasedInitial.workspaceId,
+          releasedInitial.workspaceRuntimeId,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await release(
+          releasedInstall,
+          releasedInitial.workspaceId,
+          releasedInitial.workspaceRuntimeId,
+        )
+      ).status,
+    ).toBe(200);
+    expect(await (await checked("human-b", releasedInstall)).json()).toEqual({
+      state: "released",
+    });
+    const claimedAfterRelease = await requireRegistration(
+      await register("human-b", releasedInstall),
+      "created",
+      "human-b",
+    );
+    expect(claimedAfterRelease.workspaceId).not.toBe(
+      releasedInitial.workspaceId,
+    );
+
+    const missingLocalInstall = `install_${crypto.randomUUID()}`;
+    const cloudOwner = await requireRegistration(
+      await register("human-a", missingLocalInstall),
+      "created",
+      "human-a",
+    );
+    const missingLocalWorkspace = await checked(
+      "human-a",
+      missingLocalInstall,
+      "workspace-no-longer-present",
+      "runtime-no-longer-present",
+    );
+    expect(await missingLocalWorkspace.json()).toMatchObject({
+      state: "local_registration_stale",
+      workspaceId: cloudOwner.workspaceId,
+      workspaceRuntimeId: cloudOwner.workspaceRuntimeId,
+      ownerUserId: "human-a",
+      ownerMatchesCurrentSession: true,
+    });
+    const recoveredMissingLocalWorkspace = await requireRegistration(
+      await register("human-a", missingLocalInstall),
+      "recovered",
+      "human-a",
+    );
+    expect(recoveredMissingLocalWorkspace.workspaceId).toBe(
+      cloudOwner.workspaceId,
+    );
+
+    const ambiguousInstall = `install_${crypto.randomUUID()}`;
+    const ambiguousInitial = await requireRegistration(
+      await register("human-a", ambiguousInstall),
+      "created",
+      "human-a",
+    );
+    sqlite.exec("DROP INDEX idx_runtime_installation_active");
+    sqlite.exec("DROP INDEX idx_workspace_runtime_identities_active_workspace");
+    sqlite
+      .prepare(
+        `INSERT INTO workspace_runtime_identities
+          (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at)
+         VALUES (?, ?, ?, ?, ?, NULL)`,
+      )
+      .run(
+        "runtime-ambiguous-active",
+        ambiguousInitial.workspaceId,
+        await hashToken("runtime-ambiguous-secret"),
+        ambiguousInstall,
+        new Date(Date.now() + 1).toISOString(),
+      );
+    const corruptOwnerState = await checked("human-a", ambiguousInstall);
+    expect(await corruptOwnerState.json()).toEqual({
+      state: "corrupt_or_ambiguous",
+    });
+    const corruptOwnerRegistration = await register(
+      "human-a",
+      ambiguousInstall,
+    );
+    expect(corruptOwnerRegistration.status).toBe(409);
+    const corruptOwnerError = (await corruptOwnerRegistration.json()) as {
+      code: string;
+    };
+    expect(corruptOwnerError.code).toBe("installation_binding_ambiguous");
+    expect(corruptOwnerError.code).not.toBe("workspace_owned_by_other_account");
   });
 
   it("returns precise registration errors for ambiguous bindings and revoked Workspaces", async () => {

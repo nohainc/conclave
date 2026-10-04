@@ -19,13 +19,9 @@ const runId = process.env.GITHUB_RUN_ID
   ? `${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}`
   : (process.env.CONCLAVE_SMOKE_RUN_ID ?? randomUUID());
 const ownerId = `gateway-smoke-user-${runId}`;
-const humanSessionId = `gateway-smoke-session-${runId}`;
 const authSessionId = `gateway-smoke-auth-session-${runId}`;
+const workspaceClientName = `Conclave Workspace Production Smoke ${runId}`;
 const profileLabClientName = `Conclave Profile Lab Production Smoke ${runId}`;
-const humanCredential = randomBytes(32).toString("base64url");
-const humanTokenHash = createHash("sha256")
-  .update(humanCredential)
-  .digest("hex");
 const authSessionToken = randomBytes(32).toString("base64url");
 const installationUuid = createHash("sha256")
   .update(`conclave-production-workspace-smoke:${runId}`)
@@ -40,6 +36,7 @@ const installationId = `install_${installationUuid
 let workspaceId;
 let runtimeId;
 let runtimeToken;
+let workspaceHumanCredential;
 
 function sqlString(value) {
   return `'${String(value).replaceAll("'", "''")}'`;
@@ -350,13 +347,12 @@ async function waitForSessionRecord() {
   );
 }
 
-async function createDisposableHumanSession() {
+async function createDisposableWebSession() {
   const now = new Date().toISOString();
   const email = `gateway-smoke-${runId}@example.invalid`;
   executeD1(
-    `INSERT INTO users (id, email, display_name, status, created_at, updated_at) VALUES (${sqlString(ownerId)}, ${sqlString(email)}, 'Production Workspace Registration Smoke', 'active', ${sqlString(now)}, ${sqlString(now)});
-     INSERT INTO auth_sessions (id, user_id, token, expires_at, created_at, updated_at, user_agent) VALUES (${sqlString(authSessionId)}, ${sqlString(ownerId)}, ${sqlString(authSessionToken)}, '9999-12-31T23:59:59.999Z', ${sqlString(now)}, ${sqlString(now)}, 'Conclave production auth smoke');
-     INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at) VALUES (${sqlString(humanSessionId)}, ${sqlString(ownerId)}, ${sqlString(humanTokenHash)}, 'conclave.desktop.management', ${sqlString(now)}, ${sqlString(now)}, '9999-12-31T23:59:59.999Z');`,
+    `INSERT INTO users (id, email, display_name, status, created_at, updated_at) VALUES (${sqlString(ownerId)}, ${sqlString(email)}, 'Production Desktop Auth Smoke', 'active', ${sqlString(now)}, ${sqlString(now)});
+     INSERT INTO auth_sessions (id, user_id, token, expires_at, created_at, updated_at, user_agent) VALUES (${sqlString(authSessionId)}, ${sqlString(ownerId)}, ${sqlString(authSessionToken)}, '9999-12-31T23:59:59.999Z', ${sqlString(now)}, ${sqlString(now)}, 'Conclave production desktop auth smoke');`,
   );
 }
 
@@ -403,14 +399,152 @@ function removeDisposableRuntime() {
            SELECT id FROM execution_workspaces WHERE owner_user_id = ${sqlString(ownerId)}
          );
      DELETE FROM execution_workspaces WHERE owner_user_id = ${sqlString(ownerId)};
-     DELETE FROM desktop_auth_intents WHERE client_name = ${sqlString(profileLabClientName)} OR approved_user_id = ${sqlString(ownerId)};
+     DELETE FROM desktop_auth_intents WHERE client_name IN (${sqlString(workspaceClientName)}, ${sqlString(profileLabClientName)}) OR approved_user_id = ${sqlString(ownerId)};
      DELETE FROM auth_sessions WHERE id = ${sqlString(authSessionId)};
-     DELETE FROM desktop_human_sessions WHERE id = ${sqlString(humanSessionId)} OR user_id = ${sqlString(ownerId)};
+     DELETE FROM desktop_human_sessions WHERE user_id = ${sqlString(ownerId)};
      DELETE FROM users WHERE id = ${sqlString(ownerId)};`,
   );
 }
 
-async function verifyProfileLabAuth() {
+async function verifyWorkspaceAuth() {
+  const intentResponse = await fetch(
+    `https://${hostname}/api/desktop-auth/intents`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clientName: workspaceClientName,
+        contractVersion: "1.1",
+        audience: "conclave.desktop.management",
+      }),
+    },
+  );
+  const intent = await intentResponse.json().catch(() => null);
+  if (
+    intentResponse.status !== 201 ||
+    !intent ||
+    typeof intent.intentId !== "string" ||
+    typeof intent.pollToken !== "string" ||
+    intent.audience !== "conclave.desktop.management"
+  ) {
+    throw new Error(
+      `Production Workspace auth intent failed with HTTP ${intentResponse.status}${typeof intent?.error === "string" ? `: ${intent.error}` : ""}`,
+    );
+  }
+
+  const storedIntent = rowsFromD1(
+    executeD1(
+      `SELECT audience, approved_user_id, claimed_at FROM desktop_auth_intents WHERE id = ${sqlString(intent.intentId)}`,
+    ),
+  )[0];
+  if (
+    storedIntent?.audience !== "conclave.desktop.management" ||
+    storedIntent?.approved_user_id !== null ||
+    storedIntent?.claimed_at !== null
+  ) {
+    throw new Error(
+      "Production Workspace auth intent was not stored as a pending Workspace audience intent",
+    );
+  }
+
+  const approveResponse = await fetch(
+    `https://${hostname}/api/desktop-auth/intents/${encodeURIComponent(intent.intentId)}/approve`,
+    {
+      method: "POST",
+      headers: {
+        Cookie: disposableApprovalCookie(),
+        Origin: `https://${hostname}`,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    },
+  );
+  const approval = await approveResponse.json().catch(() => null);
+  if (
+    approveResponse.status !== 200 ||
+    approval?.approved !== true ||
+    approval?.user?.userId !== ownerId
+  ) {
+    throw new Error(
+      `Production Workspace auth approval failed with HTTP ${approveResponse.status}${typeof approval?.error === "string" ? `: ${approval.error}` : ""}`,
+    );
+  }
+
+  const claimResponse = await fetch(
+    `https://${hostname}/api/desktop-auth/intents/${encodeURIComponent(intent.intentId)}/claim`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pollToken: intent.pollToken }),
+    },
+  );
+  const claimed = await claimResponse.json().catch(() => null);
+  if (
+    claimResponse.status !== 200 ||
+    claimed?.audience !== "conclave.desktop.management" ||
+    claimed?.user?.userId !== ownerId ||
+    typeof claimed?.sessionId !== "string" ||
+    typeof claimed?.credential !== "string" ||
+    !claimed.credential.startsWith("conclave_dhs_")
+  ) {
+    throw new Error(
+      `Production Workspace auth claim failed with HTTP ${claimResponse.status}${typeof claimed?.error === "string" ? `: ${claimed.error}` : ""}`,
+    );
+  }
+
+  const [claimedIntent, storedSession] = [
+    rowsFromD1(
+      executeD1(
+        `SELECT audience, approved_user_id, claimed_at, claimed_session_id FROM desktop_auth_intents WHERE id = ${sqlString(intent.intentId)}`,
+      ),
+    )[0],
+    rowsFromD1(
+      executeD1(
+        `SELECT user_id, audience, token_hash, revoked_at FROM desktop_human_sessions WHERE id = ${sqlString(claimed.sessionId)}`,
+      ),
+    )[0],
+  ];
+  const claimedTokenHash = createHash("sha256")
+    .update(claimed.credential)
+    .digest("hex");
+  if (
+    claimedIntent?.audience !== "conclave.desktop.management" ||
+    claimedIntent?.approved_user_id !== ownerId ||
+    typeof claimedIntent?.claimed_at !== "string" ||
+    claimedIntent?.claimed_session_id !== claimed.sessionId ||
+    storedSession?.user_id !== ownerId ||
+    storedSession?.audience !== "conclave.desktop.management" ||
+    storedSession?.token_hash !== claimedTokenHash ||
+    storedSession?.revoked_at !== null
+  ) {
+    throw new Error(
+      "Production Workspace auth claim did not persist a matching audience-scoped session",
+    );
+  }
+
+  const sessionResponse = await fetch(
+    `https://${hostname}/api/desktop-auth/session`,
+    { headers: { Authorization: `Bearer ${claimed.credential}` } },
+  );
+  const session = await sessionResponse.json().catch(() => null);
+  if (
+    sessionResponse.status !== 200 ||
+    session?.audience !== "conclave.desktop.management" ||
+    session?.user?.userId !== ownerId ||
+    session?.sessionId !== claimed.sessionId
+  ) {
+    throw new Error(
+      `Production Workspace session validation failed with HTTP ${sessionResponse.status}${typeof session?.error === "string" ? `: ${session.error}` : ""}`,
+    );
+  }
+
+  console.log(
+    "PASS production Workspace auth: create, approve and claim; stored audience/session; session validation",
+  );
+  return claimed.credential;
+}
+
+async function verifyProfileLabAuth(workspaceCredential) {
   const intentResponse = await fetch(
     `https://${hostname}/api/desktop-auth/intents`,
     {
@@ -613,6 +747,23 @@ async function verifyProfileLabAuth() {
     );
   }
 
+  const workspaceProfileAdminResponse = await fetch(
+    `https://${hostname}/api/admin/tool-profiles/definitions`,
+    { headers: { Authorization: `Bearer ${workspaceCredential}` } },
+  );
+  const workspaceProfileAdminResult = await workspaceProfileAdminResponse
+    .json()
+    .catch(() => null);
+  if (
+    workspaceProfileAdminResponse.status !== 403 ||
+    workspaceProfileAdminResult?.error !==
+      "The profiles:admin permission is required"
+  ) {
+    throw new Error(
+      `Production Workspace session crossed the Profile Lab administration boundary (HTTP ${workspaceProfileAdminResponse.status})`,
+    );
+  }
+
   const runtimeResponse = await fetch(
     `https://${hostname}/api/workspace-runtime/sessions`,
     {
@@ -634,7 +785,7 @@ async function verifyProfileLabAuth() {
     );
   }
   console.log(
-    "PASS production Profile Lab auth: create, approve and claim; stored audience/session; Profile-admin permission boundary; Workspace registration and runtime transport isolation",
+    "PASS production Profile Lab auth: create, approve and claim; stored audience/session; Profile-admin authorization; mutual exclusion from Workspace registration and Profile Lab administration",
   );
 }
 
@@ -647,7 +798,7 @@ async function registerDisposableWorkspace() {
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${humanCredential}`,
+          Authorization: `Bearer ${workspaceHumanCredential}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -721,8 +872,9 @@ async function main() {
   try {
     removeDisposableRuntime();
     setupAttempted = true;
-    await createDisposableHumanSession();
-    await verifyProfileLabAuth();
+    await createDisposableWebSession();
+    workspaceHumanCredential = await verifyWorkspaceAuth();
+    await verifyProfileLabAuth(workspaceHumanCredential);
     await registerDisposableWorkspace();
     socket = await connectAndHello();
     await waitForSessionRecord();

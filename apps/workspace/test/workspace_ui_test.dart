@@ -1215,6 +1215,12 @@ void main() {
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('/workspace/root'), findsOneWidget);
     expect(find.text('Disconnect'), findsOneWidget);
+    expect(
+      find.text(
+        'Disconnect keeps this installation owned by your account. Release lets another account claim it.',
+      ),
+      findsOneWidget,
+    );
     await tester.ensureVisible(find.text('Disconnect'));
     await tester.tap(find.text('Disconnect'));
     expect(disconnected, isTrue);

@@ -178,14 +178,14 @@ jobs:
                 }
               });
             '
-      - name: Require Better Auth signing secret for Profile Lab smoke
+      - name: Require Better Auth signing secret for desktop auth smoke
         working-directory: .
         env:
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
         run: |
           if [ -z "${BETTER_AUTH_SECRET:-}" ]; then
             echo "Configure the GitHub Actions secret BETTER_AUTH_SECRET with the same value as the conclave-ax-app Cloudflare Worker secret."
-            echo "The production Profile Lab auth smoke uses it to sign a disposable browser approval cookie."
+            echo "The production dual desktop-auth smoke uses it to sign a disposable AX browser approval cookie."
             exit 1
           fi
       - name: Apply production D1 migrations
@@ -206,7 +206,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm exec wrangler deploy --config ../../infra/cloudflare/app.wrangler.jsonc
-      - name: Require production Workspace Gateway smoke test
+      - name: Require production dual desktop-auth and Workspace Gateway acceptance
         working-directory: .
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
