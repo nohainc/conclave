@@ -357,4 +357,34 @@ describe("Worker API routes", () => {
       undefined,
     );
   });
+
+  it("exports every handler invoked by the router in routeHandlers", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const routerSource = fs.readFileSync(
+      path.resolve(__dirname, "../src/routes/router.ts"),
+      "utf8",
+    );
+    const { routeHandlers } = await import("../src/index.js");
+
+    const routerHandlerNames = new Set<string>();
+    for (const match of routerSource.matchAll(/handlers\.([a-zA-Z0-9_]+)!/g)) {
+      if (match[1]) {
+        routerHandlerNames.add(match[1]);
+      }
+    }
+
+    const exportedHandlerNames = new Set(Object.keys(routeHandlers));
+    const missing: string[] = [];
+    for (const name of routerHandlerNames) {
+      if (!exportedHandlerNames.has(name)) {
+        missing.push(name);
+      }
+    }
+
+    expect(
+      missing,
+      `Missing handlers in routeHandlers: ${missing.join(", ")}`,
+    ).toEqual([]);
+  });
 });

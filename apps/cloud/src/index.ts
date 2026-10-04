@@ -149,6 +149,21 @@ export const routeHandlers = {
   handleRetryWorkRequest: handlers.handleRetryWorkRequest,
   handleValidateWorkRequest: handlers.handleValidateWorkRequest,
   handleCancelWorkRequest: handlers.handleCancelWorkRequest,
+  handleGetWorkRequest: handlers.handleGetWorkRequest,
+  handleListWorkRequests: handlers.handleListWorkRequests,
+  handleGetToolProfileDefinition: handlers.handleGetToolProfileDefinition,
+  handleListAdminWorkerCatalog: handlers.handleListAdminWorkerCatalog,
+  handleListAllToolProfileChannels: handlers.handleListAllToolProfileChannels,
+  handleListGlobalToolProfileAudit: handlers.handleListGlobalToolProfileAudit,
+  handleListToolProfileChannels: handlers.handleListToolProfileChannels,
+  handleListToolProfileDefinitionAudit:
+    handlers.handleListToolProfileDefinitionAudit,
+  handleListToolProfileDefinitions: handlers.handleListToolProfileDefinitions,
+  handleListToolProfileReleaseEvidence:
+    handlers.handleListToolProfileReleaseEvidence,
+  handleRollbackToolProfileChannel: handlers.handleRollbackToolProfileChannel,
+  handleSubmitToolProfileReleaseEvidence:
+    handlers.handleSubmitToolProfileReleaseEvidence,
 } as unknown as WorkerRouteHandlers;
 
 const routeDependencies = {
