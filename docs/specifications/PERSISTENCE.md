@@ -26,6 +26,10 @@ or one Workspace mapped to multiple installation IDs.
 [`0004_workspace_runtime_identity_uniqueness.sql`](../../apps/cloud/migrations-v8/0004_workspace_runtime_identity_uniqueness.sql)
 adds a unique partial index that permits at most one unrevoked runtime identity
 per Workspace. It aborts if preexisting rows violate that invariant.
+[`0005_workspace_schema_alignment.sql`](../../apps/cloud/migrations-v8/0005_workspace_schema_alignment.sql)
+aligns the deployed `execution_workspaces` and `workspace_runtime_identities`
+table definitions and indexes with the v8 canonical contract while preserving all
+existing rows.
 
 Wrangler records applied migrations by filename. Editing an applied migration
 does not make it run again, so never rewrite, remove, or reorder an applied

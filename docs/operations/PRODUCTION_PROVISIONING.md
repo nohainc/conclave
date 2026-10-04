@@ -48,6 +48,9 @@ Migration `0004_workspace_runtime_identity_uniqueness.sql` adds a unique
 partial index enforcing one active runtime identity per Workspace. It stops
 when legacy data contains duplicate active identities so they can be reviewed
 and resolved explicitly before deployment.
+Migration `0005_workspace_schema_alignment.sql` aligns the deployed
+`execution_workspaces` and `workspace_runtime_identities` table definitions
+and indexes with the v8 canonical contract while preserving all existing rows.
 
 ## Required deployment order
 

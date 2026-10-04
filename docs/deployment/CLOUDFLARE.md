@@ -232,6 +232,9 @@ Migration `0004_workspace_runtime_identity_uniqueness.sql` adds the
 database-enforced one-unrevoked-runtime-identity-per-Workspace invariant and
 fails closed if existing rows violate it. The production schema smoke checks
 the required unique partial indexes before proceeding.
+Migration `0005_workspace_schema_alignment.sql` aligns the deployed
+`execution_workspaces` and `workspace_runtime_identities` table definitions
+and indexes with the v8 canonical contract while preserving all existing rows.
 
 The `workspace-gateway-schema-regression.test.ts` test constructs a clean
 SQLite database by applying the ordered SQL migrations in

@@ -163,6 +163,15 @@ describe("production Workspace Gateway smoke schema gate", () => {
         "utf8",
       ),
     );
+    database.exec(
+      readFileSync(
+        new URL(
+          "../apps/cloud/migrations-v8/0005_workspace_schema_alignment.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     const definitions = Object.fromEntries(
       database
         .prepare(
