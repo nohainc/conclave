@@ -221,9 +221,13 @@ and installs the multi-audience constraints. Never re-bootstrap production to
 deliver a schema change. The complete lifecycle policy is in
 [Persistence Contracts](../specifications/PERSISTENCE.md#d1-schema-lifecycle).
 Migration `0003_workspace_installations.sql` adds stable installation
-ownership, seeded from runtime identity history and release audit events. It
-fails closed when legacy rows disagree about an installation's Workspace or
-owner. Runtime credentials remain independently rotatable.
+ownership, seeded from runtime identity history and release audit events. If
+legacy history reused an installation ID across multiple Workspaces, it keeps
+the same owner and selects the sole non-revoked Workspace; if every associated
+Workspace is revoked, it selects the newest historical Workspace and retains
+that owner. It fails closed on mixed owners, multiple non-revoked Workspaces,
+live credentials attached to revoked Workspaces, or one Workspace mapped to
+multiple installation IDs. Runtime credentials remain independently rotatable.
 Migration `0004_workspace_runtime_identity_uniqueness.sql` adds the
 database-enforced one-unrevoked-runtime-identity-per-Workspace invariant and
 fails closed if existing rows violate it. The production schema smoke checks

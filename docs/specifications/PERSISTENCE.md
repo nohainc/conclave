@@ -17,8 +17,13 @@ migration flow. The desktop auth audience correction is recorded in
 [`0003_workspace_installations.sql`](../../apps/cloud/migrations-v8/0003_workspace_installations.sql)
 introduces stable installation ownership independently from runtime
 credentials. It seeds ownership from runtime identity history and release audit
-events, and aborts if one legacy installation maps to multiple Workspaces or
-owners. [`0004_workspace_runtime_identity_uniqueness.sql`](../../apps/cloud/migrations-v8/0004_workspace_runtime_identity_uniqueness.sql)
+events. If legacy history reuses an installation ID across multiple Workspaces,
+it preserves a single owner and selects the sole non-revoked Workspace; when
+all associated Workspaces and runtime identities are revoked, it selects the
+newest historical Workspace while retaining that owner. It aborts on mixed
+owners, multiple non-revoked Workspaces, a live runtime on a revoked Workspace,
+or one Workspace mapped to multiple installation IDs.
+[`0004_workspace_runtime_identity_uniqueness.sql`](../../apps/cloud/migrations-v8/0004_workspace_runtime_identity_uniqueness.sql)
 adds a unique partial index that permits at most one unrevoked runtime identity
 per Workspace. It aborts if preexisting rows violate that invariant.
 

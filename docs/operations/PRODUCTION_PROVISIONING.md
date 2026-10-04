@@ -38,8 +38,12 @@ counts. Follow the forward-only policy in
 [Persistence Contracts](../specifications/PERSISTENCE.md#d1-schema-lifecycle).
 Migration `0003_workspace_installations.sql` creates stable installation
 ownership separately from runtime credentials. It preserves the current owner
-and Workspace across runtime rotation, restores released ownership from audit
-history, and fails when legacy rows disagree on the binding.
+and Workspace across runtime rotation and restores released ownership from
+audit history. For legacy installation IDs reused across Workspaces, it keeps
+the owner and selects the sole non-revoked Workspace; if the full chain is
+revoked, it selects the newest historical Workspace. It fails closed on mixed
+owners, multiple non-revoked Workspaces, live credentials attached to revoked
+Workspaces, or one Workspace mapped to multiple installation IDs.
 Migration `0004_workspace_runtime_identity_uniqueness.sql` adds a unique
 partial index enforcing one active runtime identity per Workspace. It stops
 when legacy data contains duplicate active identities so they can be reviewed
