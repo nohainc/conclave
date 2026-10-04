@@ -140,6 +140,7 @@ class WorkspaceOwnership {
   const WorkspaceOwnership({
     required this.state,
     this.workspaceId,
+    this.workspaceName,
     this.workspaceRuntimeId,
     this.ownerUserId,
     this.ownerMatchesCurrentSession,
@@ -148,6 +149,7 @@ class WorkspaceOwnership {
 
   final WorkspaceOwnershipState state;
   final String? workspaceId;
+  final String? workspaceName;
   final String? workspaceRuntimeId;
   final String? ownerUserId;
   final bool? ownerMatchesCurrentSession;
@@ -179,6 +181,7 @@ class WorkspaceOwnership {
     final result = WorkspaceOwnership(
       state: state,
       workspaceId: optionalString('workspaceId'),
+      workspaceName: optionalString('workspaceName'),
       workspaceRuntimeId: optionalString('workspaceRuntimeId'),
       ownerUserId: optionalString('ownerUserId'),
       ownerMatchesCurrentSession: json['ownerMatchesCurrentSession'] is bool

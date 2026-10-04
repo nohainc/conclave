@@ -141,6 +141,7 @@ function currentOwnerOwnership(
   return {
     state,
     workspaceId: installation.workspaceId,
+    workspaceName: installation.workspaceName,
     ...(runtime ? { workspaceRuntimeId: runtime.runtimeId } : {}),
     ownerUserId: installation.ownerUserId,
     ownerMatchesCurrentSession: true,

@@ -126,6 +126,7 @@ void main() {
       request.response.headers.contentType = ContentType.json;
       request.response.write(
         '{"state":"owned_by_current_user","workspaceId":"workspace-1",'
+        '"workspaceName":"Workspace One",'
         '"workspaceRuntimeId":"runtime-1","ownerUserId":"user-a",'
         '"ownerMatchesCurrentSession":true,"runtimeState":"offline"}',
       );
@@ -152,6 +153,7 @@ void main() {
 
     expect(ownership.state, WorkspaceOwnershipState.ownedByCurrentUser);
     expect(ownership.workspaceId, 'workspace-1');
+    expect(ownership.workspaceName, 'Workspace One');
     expect(ownership.workspaceRuntimeId, 'runtime-1');
     expect(ownership.ownerUserId, 'user-a');
     expect(ownership.ownerMatchesCurrentSession, isTrue);

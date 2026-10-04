@@ -105,7 +105,7 @@ runtime IDs. Cloud returns an explicit `state` from this set: `unbound`,
 `owned_by_current_user`, `owned_by_other_user`, `local_registration_stale`,
 `installation_conflict`, `released`, and `corrupt_or_ambiguous`. The current
 owner receives canonical `workspaceId` and `workspaceRuntimeId`,
-`ownerMatchesCurrentSession: true`, and `runtimeState`. An unbound installation
+`workspaceName`, `ownerMatchesCurrentSession: true`, and `runtimeState`. An unbound installation
 has no bound-owner details; its `ownerUserId` compatibility field contains
 only the authenticated caller's ID. A released installation includes canonical
 details only when Cloud can verify the caller still owns that released
@@ -147,6 +147,13 @@ then returns the canonical same-owner IDs for normal runtime recovery. A
 foreign active owner receives only `owned_by_other_user`; they must sign in and
 Release from their own account before another account can register the
 installation. Ambiguous or released legacy state is not reconciled.
+
+Workspace keeps its previously stored human session until the new browser-
+approved session passes validation, ownership preflight, and any same-owner
+registration recovery. When Cloud confirms current ownership but the local
+registration is absent, Workspace uses the canonical Workspace name and ID to
+obtain and store a fresh runtime credential before committing the new human
+session.
 
 `POST /api/workspace-runtime/release` is a separate advanced operation. It
 requires a desktop human session created within the last five minutes, the

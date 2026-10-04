@@ -436,6 +436,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       claimedSession = session;
       failureContext = 'validating the desktop session';
       await client.validateSession(session);
+      // Preflight the installation against the claimed session before replacing
+      // the currently stored human session.
       final existingRegistration = WorkspaceRegistrationStore(
         lifecycle.workspace.config.dataDirectory,
       ).readSync();
@@ -463,15 +465,14 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
                 'Cloud could not confirm this account as the Workspace owner.',
               );
             }
-            if (existingRegistration != null &&
-                (ownership.workspaceId != existingRegistration.workspaceId ||
-                    ownership.workspaceRuntimeId !=
-                        existingRegistration.workspaceRuntimeId)) {
-              throw StateError(
-                'Cloud returned a different canonical Workspace registration. Reconnect to repair the local registration before switching accounts.',
-              );
+            if (existingRegistration == null ||
+                ownership.workspaceId != existingRegistration.workspaceId ||
+                ownership.workspaceRuntimeId !=
+                    existingRegistration.workspaceRuntimeId) {
+              staleOwnershipForRepair = ownership;
+            } else {
+              cloudOwnerUserId = ownership.ownerUserId;
             }
-            cloudOwnerUserId = ownership.ownerUserId;
             break;
           case WorkspaceOwnershipState.ownedByOtherUser:
             throw StateError(
@@ -530,22 +531,36 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
           final staleRegistration = existingRegistration;
           final ownership = staleOwnershipForRepair;
           final canonicalWorkspaceId = ownership.workspaceId;
-          if (staleRegistration == null || canonicalWorkspaceId == null) {
+          final canonicalOwnerUserId = ownership.ownerUserId;
+          if (canonicalWorkspaceId == null ||
+              canonicalOwnerUserId != session.userId) {
             throw StateError(
-              'Cloud found a stale local Workspace registration but could not provide its canonical Workspace and owner. Check Cloud ownership before retrying.',
+              'Cloud found a stale Workspace registration but could not provide its canonical Workspace and owner. Check Cloud ownership before retrying.',
             );
           }
           failureContext = 'repairing the stale Workspace registration';
-          effectiveRegistration = await WorkspaceRegistrationService(
+          final registrationService = WorkspaceRegistrationService(
             dataDirectory: lifecycle.workspace.config.dataDirectory,
             credentialStore: lifecycle.workspace.credentialStore,
-          ).recoverStaleRegistration(
-            registration: staleRegistration,
-            desktopCredential: session.credential,
-            expectedOwnerUserId: session.userId,
-            confirmedOwnerUserId: ownership.ownerUserId!,
-            canonicalWorkspaceId: canonicalWorkspaceId,
           );
+          effectiveRegistration = staleRegistration == null
+              ? await registrationService.registerWithDesktopSession(
+                  cloudUrl: cloudUrl,
+                  desktopCredential: session.credential,
+                  expectedOwnerUserId: session.userId,
+                  expectedWorkspaceId: canonicalWorkspaceId,
+                  facts: SafeMachineFacts.collect(
+                    installationId: installationId,
+                    name: ownership.workspaceName ?? Platform.localHostname,
+                  ),
+                )
+              : await registrationService.recoverStaleRegistration(
+                  registration: staleRegistration,
+                  desktopCredential: session.credential,
+                  expectedOwnerUserId: session.userId,
+                  confirmedOwnerUserId: canonicalOwnerUserId!,
+                  canonicalWorkspaceId: canonicalWorkspaceId,
+                );
           registrationRepaired = true;
           cloudOwnerUserId = session.userId;
         }
@@ -570,6 +585,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
         throw StateError(
             'Local authentication is required to switch accounts.');
       }
+      // Ownership checks and any same-owner recovery above must finish before
+      // the new human session becomes the locally trusted session.
       await lifecycle.workspace.credentialStore.write(
         desktopHumanCredentialKey,
         jsonEncode(session.toSecureJson()),
