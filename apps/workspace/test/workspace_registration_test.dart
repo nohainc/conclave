@@ -28,6 +28,45 @@ class _MemoryCredentials implements SecureCredentialStore {
 }
 
 void main() {
+  test('failed ownership preflight preserves the previous human session',
+      () async {
+    final previousSession = DesktopHumanSession(
+      credential: 'previous-owner-secret',
+      sessionId: 'previous-session',
+      userId: 'previous-owner',
+      displayName: 'Previous owner',
+      email: 'previous@example.test',
+      expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+    );
+    final previousRecord = jsonEncode(previousSession.toSecureJson());
+    final credentials = _MemoryCredentials()
+      ..values[desktopHumanCredentialKey] = previousRecord;
+    final newSession = DesktopHumanSession(
+      credential: 'new-human-secret',
+      sessionId: 'new-session',
+      userId: 'new-owner',
+      displayName: 'New owner',
+      email: 'new@example.test',
+      expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+    );
+
+    await expectLater(
+      persistDesktopHumanSessionAfterPreflight(
+        credentialStore: credentials,
+        session: newSession,
+        preflight: () async {
+          throw StateError('Cloud ownership check rejected account switch');
+        },
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(
+      credentials.values[desktopHumanCredentialKey],
+      previousRecord,
+    );
+  });
+
   test('Workspace ownership read model rejects cross-account details', () {
     expect(
       WorkspaceOwnership.fromJson({'state': 'owned_by_other_user'}).state,

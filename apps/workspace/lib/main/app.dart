@@ -434,162 +434,165 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       );
       if (session == null) return;
       claimedSession = session;
-      failureContext = 'validating the desktop session';
-      await client.validateSession(session);
-      // Preflight the installation against the claimed session before replacing
-      // the currently stored human session.
-      final existingRegistration = WorkspaceRegistrationStore(
-        lifecycle.workspace.config.dataDirectory,
-      ).readSync();
-      var effectiveRegistration = existingRegistration;
+      WorkspaceRegistration? effectiveRegistration;
       var registrationRepaired = false;
-      WorkspaceOwnership? staleOwnershipForRepair;
-      final identityStore =
-          InstallationIdentityStore(lifecycle.workspace.config.dataDirectory);
-      final installationId =
-          existingRegistration?.installationId ?? identityStore.readSync();
-      if (installationId != null) {
-        failureContext = 'checking Workspace account ownership';
-        final ownership = await client.checkWorkspaceOwnership(
-          session: session,
-          installationId: installationId,
-          workspaceId: existingRegistration?.workspaceId,
-          runtimeId: existingRegistration?.workspaceRuntimeId,
-        );
-        String? cloudOwnerUserId;
-        switch (ownership.state) {
-          case WorkspaceOwnershipState.ownedByCurrentUser:
-            if (ownership.ownerMatchesCurrentSession != true ||
-                ownership.ownerUserId != session.userId) {
-              throw StateError(
-                'Cloud could not confirm this account as the Workspace owner.',
-              );
-            }
-            if (existingRegistration == null ||
-                ownership.workspaceId != existingRegistration.workspaceId ||
-                ownership.workspaceRuntimeId !=
-                    existingRegistration.workspaceRuntimeId) {
-              staleOwnershipForRepair = ownership;
-            } else {
-              cloudOwnerUserId = ownership.ownerUserId;
-            }
-            break;
-          case WorkspaceOwnershipState.ownedByOtherUser:
-            throw StateError(
-              'This Workspace installation is owned by another Conclave account. Sign in as its current owner, disconnect the Workspace if it is connected, and release ownership before switching accounts.',
+      await persistDesktopHumanSessionAfterPreflight(
+        credentialStore: lifecycle.workspace.credentialStore,
+        session: session,
+        preflight: () async {
+          failureContext = 'validating the desktop session';
+          await client.validateSession(session);
+          // Preflight the installation against the claimed session before
+          // replacing the currently stored human session.
+          final existingRegistration = WorkspaceRegistrationStore(
+            lifecycle.workspace.config.dataDirectory,
+          ).readSync();
+          effectiveRegistration = existingRegistration;
+          WorkspaceOwnership? staleOwnershipForRepair;
+          final identityStore = InstallationIdentityStore(
+            lifecycle.workspace.config.dataDirectory,
+          );
+          final installationId =
+              existingRegistration?.installationId ?? identityStore.readSync();
+          if (installationId != null) {
+            failureContext = 'checking Workspace account ownership';
+            final ownership = await client.checkWorkspaceOwnership(
+              session: session,
+              installationId: installationId,
+              workspaceId: existingRegistration?.workspaceId,
+              runtimeId: existingRegistration?.workspaceRuntimeId,
             );
-          case WorkspaceOwnershipState.unbound:
-            break;
-          case WorkspaceOwnershipState.released:
-            if (existingRegistration != null) {
-              throw StateError(
-                'Cloud confirms this Workspace ownership was released, but the local registration is still present. Reset the local Workspace registration before connecting it again.',
-              );
-            }
-            break;
-          case WorkspaceOwnershipState.localRegistrationStale:
-            var confirmedOwnership = ownership;
-            if (ownership.ownerMatchesCurrentSession != true ||
-                ownership.ownerUserId != session.userId) {
-              final staleRegistration = existingRegistration;
-              if (staleRegistration == null) {
+            String? cloudOwnerUserId;
+            switch (ownership.state) {
+              case WorkspaceOwnershipState.ownedByCurrentUser:
+                if (ownership.ownerMatchesCurrentSession != true ||
+                    ownership.ownerUserId != session.userId) {
+                  throw StateError(
+                    'Cloud could not confirm this account as the Workspace owner.',
+                  );
+                }
+                if (existingRegistration == null ||
+                    ownership.workspaceId != existingRegistration.workspaceId ||
+                    ownership.workspaceRuntimeId !=
+                        existingRegistration.workspaceRuntimeId) {
+                  staleOwnershipForRepair = ownership;
+                } else {
+                  cloudOwnerUserId = ownership.ownerUserId;
+                }
+                break;
+              case WorkspaceOwnershipState.ownedByOtherUser:
                 throw StateError(
-                  'Cloud found a stale Workspace registration without a local identity to verify.',
+                  'This Workspace installation is owned by another Conclave account. Sign in as its current owner, disconnect the Workspace if it is connected, and release ownership before switching accounts.',
+                );
+              case WorkspaceOwnershipState.unbound:
+                break;
+              case WorkspaceOwnershipState.released:
+                if (existingRegistration != null) {
+                  throw StateError(
+                    'Cloud confirms this Workspace ownership was released, but the local registration is still present. Reset the local Workspace registration before connecting it again.',
+                  );
+                }
+                break;
+              case WorkspaceOwnershipState.localRegistrationStale:
+                var confirmedOwnership = ownership;
+                if (ownership.ownerMatchesCurrentSession != true ||
+                    ownership.ownerUserId != session.userId) {
+                  final staleRegistration = existingRegistration;
+                  if (staleRegistration == null) {
+                    throw StateError(
+                      'Cloud found a stale Workspace registration without a local identity to verify.',
+                    );
+                  }
+                  failureContext =
+                      'reconciling the migrated Workspace ownership';
+                  confirmedOwnership = await client.reconcileWorkspaceOwnership(
+                    session: session,
+                    installationId: installationId,
+                    workspaceId: staleRegistration.workspaceId,
+                    runtimeId: staleRegistration.workspaceRuntimeId,
+                  );
+                }
+                if (confirmedOwnership.ownerMatchesCurrentSession != true ||
+                    confirmedOwnership.ownerUserId != session.userId) {
+                  throw StateError(
+                    'Cloud could not confirm this account as the owner of the canonical Workspace.',
+                  );
+                }
+                staleOwnershipForRepair = confirmedOwnership;
+              case WorkspaceOwnershipState.installationConflict:
+                throw StateError(
+                  'The local Workspace registration conflicts with its Cloud installation binding. Contact your administrator before continuing.',
+                );
+              case WorkspaceOwnershipState.corruptOrAmbiguous:
+                throw StateError(
+                  'Cloud found ambiguous Workspace ownership records. Sign-in was stopped to protect the existing registration.',
+                );
+            }
+            if (previousSession != null &&
+                previousSession.userId != session.userId &&
+                !await _requireStepUp('Switch the Workspace account')) {
+              throw StateError(
+                  'Local authentication is required to switch accounts.');
+            }
+            if (staleOwnershipForRepair != null) {
+              final staleRegistration = existingRegistration;
+              final ownership = staleOwnershipForRepair;
+              final canonicalWorkspaceId = ownership.workspaceId;
+              final canonicalOwnerUserId = ownership.ownerUserId;
+              if (canonicalWorkspaceId == null ||
+                  canonicalOwnerUserId != session.userId) {
+                throw StateError(
+                  'Cloud found a stale Workspace registration but could not provide its canonical Workspace and owner. Check Cloud ownership before retrying.',
                 );
               }
-              failureContext = 'reconciling the migrated Workspace ownership';
-              confirmedOwnership = await client.reconcileWorkspaceOwnership(
-                session: session,
+              failureContext = 'repairing the stale Workspace registration';
+              final registrationService = WorkspaceRegistrationService(
+                dataDirectory: lifecycle.workspace.config.dataDirectory,
+                credentialStore: lifecycle.workspace.credentialStore,
+              );
+              effectiveRegistration = staleRegistration == null
+                  ? await registrationService.registerWithDesktopSession(
+                      cloudUrl: cloudUrl,
+                      desktopCredential: session.credential,
+                      expectedOwnerUserId: session.userId,
+                      expectedWorkspaceId: canonicalWorkspaceId,
+                      facts: SafeMachineFacts.collect(
+                        installationId: installationId,
+                        name: ownership.workspaceName ?? Platform.localHostname,
+                      ),
+                    )
+                  : await registrationService.recoverStaleRegistration(
+                      registration: staleRegistration,
+                      desktopCredential: session.credential,
+                      expectedOwnerUserId: session.userId,
+                      confirmedOwnerUserId: canonicalOwnerUserId!,
+                      canonicalWorkspaceId: canonicalWorkspaceId,
+                    );
+              registrationRepaired = true;
+              cloudOwnerUserId = session.userId;
+            }
+            if (existingRegistration != null && !registrationRepaired) {
+              await WorkspaceRegistrationStore(
+                lifecycle.workspace.config.dataDirectory,
+              ).write(WorkspaceRegistration(
+                workspaceRuntimeId: existingRegistration.workspaceRuntimeId,
+                workspaceId: existingRegistration.workspaceId,
+                cloudUrl: existingRegistration.cloudUrl,
+                name: existingRegistration.name,
+                hostname: existingRegistration.hostname,
+                ownerUserId: cloudOwnerUserId,
                 installationId: installationId,
-                workspaceId: staleRegistration.workspaceId,
-                runtimeId: staleRegistration.workspaceRuntimeId,
-              );
+              ));
             }
-            if (confirmedOwnership.ownerMatchesCurrentSession != true ||
-                confirmedOwnership.ownerUserId != session.userId) {
-              throw StateError(
-                'Cloud could not confirm this account as the owner of the canonical Workspace.',
-              );
-            }
-            staleOwnershipForRepair = confirmedOwnership;
-          case WorkspaceOwnershipState.installationConflict:
-            throw StateError(
-              'The local Workspace registration conflicts with its Cloud installation binding. Contact your administrator before continuing.',
-            );
-          case WorkspaceOwnershipState.corruptOrAmbiguous:
-            throw StateError(
-              'Cloud found ambiguous Workspace ownership records. Sign-in was stopped to protect the existing registration.',
-            );
-        }
-        if (previousSession != null &&
-            previousSession.userId != session.userId &&
-            !await _requireStepUp('Switch the Workspace account')) {
-          throw StateError(
-              'Local authentication is required to switch accounts.');
-        }
-        if (staleOwnershipForRepair != null) {
-          final staleRegistration = existingRegistration;
-          final ownership = staleOwnershipForRepair;
-          final canonicalWorkspaceId = ownership.workspaceId;
-          final canonicalOwnerUserId = ownership.ownerUserId;
-          if (canonicalWorkspaceId == null ||
-              canonicalOwnerUserId != session.userId) {
-            throw StateError(
-              'Cloud found a stale Workspace registration but could not provide its canonical Workspace and owner. Check Cloud ownership before retrying.',
-            );
           }
-          failureContext = 'repairing the stale Workspace registration';
-          final registrationService = WorkspaceRegistrationService(
-            dataDirectory: lifecycle.workspace.config.dataDirectory,
-            credentialStore: lifecycle.workspace.credentialStore,
-          );
-          effectiveRegistration = staleRegistration == null
-              ? await registrationService.registerWithDesktopSession(
-                  cloudUrl: cloudUrl,
-                  desktopCredential: session.credential,
-                  expectedOwnerUserId: session.userId,
-                  expectedWorkspaceId: canonicalWorkspaceId,
-                  facts: SafeMachineFacts.collect(
-                    installationId: installationId,
-                    name: ownership.workspaceName ?? Platform.localHostname,
-                  ),
-                )
-              : await registrationService.recoverStaleRegistration(
-                  registration: staleRegistration,
-                  desktopCredential: session.credential,
-                  expectedOwnerUserId: session.userId,
-                  confirmedOwnerUserId: canonicalOwnerUserId!,
-                  canonicalWorkspaceId: canonicalWorkspaceId,
-                );
-          registrationRepaired = true;
-          cloudOwnerUserId = session.userId;
-        }
-        if (existingRegistration != null && !registrationRepaired) {
-          await WorkspaceRegistrationStore(
-            lifecycle.workspace.config.dataDirectory,
-          ).write(WorkspaceRegistration(
-            workspaceRuntimeId: existingRegistration.workspaceRuntimeId,
-            workspaceId: existingRegistration.workspaceId,
-            cloudUrl: existingRegistration.cloudUrl,
-            name: existingRegistration.name,
-            hostname: existingRegistration.hostname,
-            ownerUserId: cloudOwnerUserId,
-            installationId: installationId,
-          ));
-        }
-      }
-      if (previousSession != null &&
-          previousSession.userId != session.userId &&
-          installationId == null &&
-          !await _requireStepUp('Switch the Workspace account')) {
-        throw StateError(
-            'Local authentication is required to switch accounts.');
-      }
-      // Ownership checks and any same-owner recovery above must finish before
-      // the new human session becomes the locally trusted session.
-      await lifecycle.workspace.credentialStore.write(
-        desktopHumanCredentialKey,
-        jsonEncode(session.toSecureJson()),
+          if (previousSession != null &&
+              previousSession.userId != session.userId &&
+              installationId == null &&
+              !await _requireStepUp('Switch the Workspace account')) {
+            throw StateError(
+                'Local authentication is required to switch accounts.');
+          }
+        },
       );
       sessionCommitted = true;
       if (previousSession != null &&

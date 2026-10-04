@@ -2,8 +2,23 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'secure_credentials.dart';
+
 const desktopHumanCredentialKey = 'desktop-human-session';
 const desktopAuthIntentContractVersion = '1.1';
+
+/// Runs all sign-in ownership checks before replacing the stored human session.
+Future<void> persistDesktopHumanSessionAfterPreflight({
+  required SecureCredentialStore credentialStore,
+  required DesktopHumanSession session,
+  required Future<void> Function() preflight,
+}) async {
+  await preflight();
+  await credentialStore.write(
+    desktopHumanCredentialKey,
+    jsonEncode(session.toSecureJson()),
+  );
+}
 
 class DesktopAuthIntent {
   const DesktopAuthIntent({

@@ -153,7 +153,9 @@ approved session passes validation, ownership preflight, and any same-owner
 registration recovery. When Cloud confirms current ownership but the local
 registration is absent, Workspace uses the canonical Workspace name and ID to
 obtain and store a fresh runtime credential before committing the new human
-session.
+session. If validation, ownership, step-up, or recovery fails, the previous
+local human-session record remains unchanged and the previous Cloud session is
+not revoked.
 
 `POST /api/workspace-runtime/release` is a separate advanced operation. It
 requires a desktop human session created within the last five minutes, the
