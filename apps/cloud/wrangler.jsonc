@@ -20,6 +20,8 @@
     },
   ],
   "vars": {
+    "CONCLAVE_PROFILE_LAB_OWNER_EMAIL": "vitalii@nohainc.com",
+    "CONCLAVE_PROFILE_RELEASE_MODE": "drafts-only",
     "CONCLAVE_ENVIRONMENT": "development",
   },
   "d1_databases": [

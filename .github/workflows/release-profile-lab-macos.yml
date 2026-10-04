@@ -10,7 +10,7 @@ on:
       channel:
         description: Release channel
         type: choice
-        options: [development, testing, stable]
+        options: [development, testing]
         default: testing
         required: true
       release_notes:
@@ -78,40 +78,15 @@ jobs:
         run: pnpm check
       - name: Run macOS Profile Lab tests
         run: bash scripts/test-profile-lab-macos.sh
-      - name: Configure Developer ID and notarization
+      - name: Build unsigned development Profile Lab
         env:
-          MACOS_CERTIFICATE_P12: ${{ secrets.CONCLAVE_MACOS_CERTIFICATE_P12 }}
-          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.CONCLAVE_MACOS_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.CONCLAVE_APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.CONCLAVE_APPLE_TEAM_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.CONCLAVE_APPLE_APP_SPECIFIC_PASSWORD }}
-        run: |
-          if [[ -n "$MACOS_CERTIFICATE_P12" && -n "$MACOS_CERTIFICATE_PASSWORD" ]]; then
-            KEYCHAIN_PATH="$RUNNER_TEMP/conclave-profile-lab.keychain-db"
-            KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
-            security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-            security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-            CERT_PATH="$RUNNER_TEMP/conclave-developer-id.p12"
-            echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$CERT_PATH"
-            security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-            security list-keychains -d user -s "$KEYCHAIN_PATH"
-            IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' '/Developer ID Application/ { print $2; exit }')"
-            if [[ -n "$IDENTITY" ]]; then
-              echo "CONCLAVE_MACOS_SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
-            fi
-            if [[ -n "$APPLE_ID" && -n "$APPLE_TEAM_ID" && -n "$APPLE_APP_SPECIFIC_PASSWORD" ]]; then
-              xcrun notarytool store-credentials conclave-notary --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --keychain "$KEYCHAIN_PATH"
-              echo 'CONCLAVE_MACOS_NOTARY_PROFILE=conclave-notary' >> "$GITHUB_ENV"
-            fi
-          fi
-      - name: Build, sign, and notarize Profile Lab
+          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
         run: |
           bash scripts/build-profile-lab-macos.sh \
             --release \
+            --unsigned \
             --version "${{ inputs.version }}"
-      - name: Verify notarized app archive
+      - name: Verify development app archive
         env:
           PROFILE_LAB_VERSION: ${{ inputs.version }}
         run: |
@@ -120,10 +95,6 @@ jobs:
           ditto -x -k "$ARCHIVE" "$RUNNER_TEMP/profile-lab-app-check"
           APP="$RUNNER_TEMP/profile-lab-app-check/Conclave Profile Lab.app"
           test -d "$APP"
-          if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
-            codesign --verify --deep --strict --verbose=2 "$APP"
-            spctl --assess --type execute --verbose "$APP"
-          fi
       - name: Upload internal immutable release artifact
         uses: actions/upload-artifact@v4
         with:

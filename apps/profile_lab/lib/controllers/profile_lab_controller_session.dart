@@ -4,6 +4,7 @@ mixin _ProfileLabSessionOperations on _ProfileLabControllerState {
   @override
   Future<void> loadSavedSession() async {
     currentSession = await _sessionStore.load(cloudOrigin: cloudUrl);
+    if (currentSession != null) await refreshLabAccess();
     notifyListeners();
   }
 
@@ -60,6 +61,7 @@ mixin _ProfileLabSessionOperations on _ProfileLabControllerState {
       await _sessionStore.save(session, cloudOrigin: cloudUrl);
       currentSession = session;
       sessionSaved = true;
+      await refreshLabAccess();
       unawaited(ensureTabData(selectedTab));
     } catch (e) {
       if (!_cancelSignInRequested) {

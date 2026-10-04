@@ -1,8 +1,6 @@
-import {
-  authorizeProfileAdmin as authorizeSecurityProfileAdmin,
-  type SecurityContext,
-} from "@conclave/security";
-
+import type { SecurityContext } from "@conclave/security";
+import { hasProfileLabPermission } from "./profile-lab-policy.js";
+import { toolProfileSigningPreflight } from "../tool-profile-registry.js";
 import type { SecurityEnv } from "./http-security.js";
 import { securityContext } from "./http-security.js";
 
@@ -30,17 +28,7 @@ export async function authorizeToolProfileAdmin(
   permission: "profiles:admin" | "profiles:release:manage" = "profiles:admin",
 ): Promise<SecurityContext> {
   const actor = await securityContext(request, env, ctx);
-  const configuredUsers =
-    permission === "profiles:release:manage"
-      ? env.CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS
-      : env.CONCLAVE_PROFILE_ADMIN_USER_IDS;
-  const adminUserIds = (configuredUsers ?? "")
-    .split(",")
-    .map((userId) => userId.trim())
-    .filter(Boolean);
-  try {
-    authorizeSecurityProfileAdmin(actor, adminUserIds, permission);
-  } catch {
+  if (!(await hasProfileLabPermission(env, actor, permission))) {
     throw new HttpError(403, `The ${permission} permission is required`);
   }
   return actor;
@@ -107,4 +95,44 @@ export function toolProfileReleaseVersion(value: string): number {
     throw new HttpError(400, "releaseVersion is invalid");
   }
   return version;
+}
+
+export async function handleProfileLabAccess(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const actor = await securityContext(request, env, ctx);
+  const profilesAdmin = await hasProfileLabPermission(env, actor);
+  const releaseManager = await hasProfileLabPermission(
+    env,
+    actor,
+    "profiles:release:manage",
+  );
+  const draftsOnly = env.CONCLAVE_PROFILE_RELEASE_MODE === "drafts-only";
+  const signer =
+    profilesAdmin && !draftsOnly
+      ? await toolProfileSigningPreflight(env)
+      : null;
+  return new Response(
+    JSON.stringify({
+      schemaVersion: 1,
+      authenticated: true,
+      audience: actor.audience ?? null,
+      permissions: { profilesAdmin, releaseManager },
+      releaseMode: draftsOnly ? "drafts-only" : "signed",
+      signer: {
+        ready: signer?.ready ?? false,
+        issues: draftsOnly
+          ? ["publication_disabled_for_development"]
+          : (signer?.issues ?? []),
+      },
+    }),
+    {
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      },
+    },
+  );
 }

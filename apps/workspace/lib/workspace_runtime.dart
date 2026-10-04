@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'development_tool_profiles.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -62,9 +64,27 @@ Future<Workspace> buildWorkspaceRuntime(
       await cliWorkerEngineSupervisor?.cancelWorker(workerId);
     },
   );
+  const developmentDraftRoot =
+      String.fromEnvironment('CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY');
+  DevelopmentToolProfiles? developmentProfiles;
+  if (developmentDraftRoot.isNotEmpty) {
+    final cloudUri = effectiveConfig.cloudUri;
+    if (cloudUri == null) {
+      throw StateError(
+          'Unsigned development Profiles require a loopback Cloud connection');
+    }
+    developmentProfiles = DevelopmentToolProfiles(
+      draftsRoot: Directory(developmentDraftRoot),
+      snapshotsRoot: Directory(
+          '${config.dataDirectory.absolute.path}/development_profiles'),
+      cloudUri: cloudUri,
+      releaseBuild: kReleaseMode,
+    );
+  }
   final toolProfileReleaseStore = ToolProfileReleaseStore(
     profilesRoot: WorkspacePaths(config.dataDirectory).profilesDirectory,
     trustPolicy: workerTrustPolicy,
+    developmentProfiles: developmentProfiles,
   );
   final bundledEngine = await loadBundledCliWorkerEngine(
     enginesDirectory: workspacePaths.enginesDirectory,
@@ -137,7 +157,9 @@ Future<Workspace> buildWorkspaceRuntime(
   final workerHandler = WorkerAssignmentHandler(
     resolveLogicalWorker: (workerId) async {
       final worker = await localWorkerRegistry.find(workerId);
-      if (worker == null) return null;
+      if (worker == null) {
+        return null;
+      }
       final catalogEntry = await workerCatalogCoordinator
           ?.ensureCatalogEntry(worker.workerTypeId);
       final catalogAvailable =
@@ -216,10 +238,8 @@ Future<Workspace> buildWorkspaceRuntime(
       }
       return supervisor.execute(
         release,
-        profileFile: toolProfileReleaseStore.profileFile(
-          release.profileDefinitionId,
-          release.releaseVersion,
-        ),
+        profileFile:
+            await toolProfileReleaseStore.executionProfileFile(release),
         stateDirectory: workspacePaths.workerStateDirectory(worker.id),
         workingDirectory: workingDirectory,
         workerId: worker.id,

@@ -1208,3 +1208,17 @@ AI-assisted Profile maintenance is limited to model-backed Draft proposals.
 The operator consents to sharing bounded Draft context, reviews the diff, and
 applies it explicitly. Qualification, publication, signing, promotion,
 rollback, and revocation remain separate human-controlled workflows.
+
+## Local development exception (2026-10-04)
+
+Production Workspaces continue to admit only signed Profiles. At the operator's
+explicit request, a non-release Workspace can opt into unsigned local drafts
+with `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY`, provided its Cloud origin is
+loopback. This bounded exception uses the same generic CLI Worker Engine,
+validates schema/catalog identity and compatibility, and pins each selected
+payload by digest in separate development storage. It does not manufacture
+signed admissions, signing keys, release rows, or channel pointers. Release
+builds and remote Cloud connections reject the development path. This exception
+supersedes blanket draft exclusions only for local development; other
+architecture exclusions and browser-based human authentication remain intact.
+See [Profile Lab development access and execution](../specifications/PROFILE_LAB.md#development-access-and-unsigned-execution).

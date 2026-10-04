@@ -11,7 +11,7 @@ export 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
         ToolProfileResolution,
         ToolProfileCompatibility;
 
-/// Resolves only verified, signed, locally cached official Profile releases.
+/// Resolves signed cached releases, or explicit loopback development drafts.
 /// Candidate order is active, Cloud-selected stable, then last-known-good.
 class ToolProfileResolver {
   const ToolProfileResolver(this.store);
@@ -20,13 +20,30 @@ class ToolProfileResolver {
 
   /// Applies the same channel, provider-version, and bootstrap fallback used
   /// by Workspace readiness before selecting a Profile for an assignment.
-  Future<ToolProfileResolution<ToolProfileReleaseAdmission>> resolveForWorker({
+  Future<ToolProfileResolution<ToolProfileCandidate>> resolveForWorker({
     required String logicalWorkerTypeId,
     required String profileDefinitionId,
     required String engineVersion,
     String? providerCliVersion,
     Future<void> Function()? ensureAvailable,
   }) async {
+    final draft = await store.developmentProfiles
+        ?.load(profileDefinitionId, logicalWorkerTypeId);
+    if (draft != null) {
+      final profile =
+          EngineProfile.parse(utf8.encode(canonicalJson(draft.profile)));
+      if (!_engineCompatible(profile, engineVersion)) {
+        return const ToolProfileResolution<ToolProfileCandidate>.unavailable(
+            ToolProfileUnavailableReason.incompatibleEngineVersion);
+      }
+      if (providerCliVersion != null &&
+          !_providerCompatible(profile, providerCliVersion)) {
+        return const ToolProfileResolution<ToolProfileCandidate>.unavailable(
+            ToolProfileUnavailableReason.unsupportedProviderVersion);
+      }
+      return ToolProfileResolution<ToolProfileCandidate>.selected(
+          source: ToolProfileResolutionSource.draft, release: draft);
+    }
     Future<ToolProfileResolution<ToolProfileReleaseAdmission>>
         resolveCurrent() async {
       final channel =

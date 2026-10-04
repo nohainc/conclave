@@ -194,3 +194,16 @@ List<T> _strictReadModelList<T>(
     (item) => parse(Map<String, dynamic>.from(item as Map)),
   ));
 }
+
+class ProfileLabAccessReadModel {
+  ProfileLabAccessReadModel.fromJson(Map<String, dynamic> json)
+      : profilesAdmin = (json['permissions'] as Map?)?['profilesAdmin'] == true,
+        releaseManager =
+            (json['permissions'] as Map?)?['releaseManager'] == true,
+        signerReady = (json['signer'] as Map?)?['ready'] == true,
+        draftsOnly = json['releaseMode'] == 'drafts-only';
+  final bool profilesAdmin;
+  final bool releaseManager;
+  final bool signerReady;
+  final bool draftsOnly;
+}

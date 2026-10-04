@@ -384,3 +384,17 @@ Autonomous AI agents are permitted to participate in Profile maintenance **only*
 - Model output must validate as a Tool Profile and preserve Worker, Profile, release version, and provider identity. Profile Lab presents a diff and requires an explicit human review-and-apply action; proposal provenance is kept in local Draft metadata.
 - AI proposals modify only local Draft state. Qualification, publication, signing, Stable promotion, rollback, and revocation remain separate human-controlled workflows with their existing Cloud authorization and step-up checks.
 - Uncontrolled AI release authority is strictly prohibited.
+
+## Local development exception (2026-10-04)
+
+Production Workspaces continue to admit only signed Profiles. At the operator's
+explicit request, a non-release Workspace can opt into unsigned local drafts
+with `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY`, provided its Cloud origin is
+loopback. This bounded exception uses the same generic CLI Worker Engine,
+validates schema/catalog identity and compatibility, and pins each selected
+payload by digest in separate development storage. It does not manufacture
+signed admissions, signing keys, release rows, or channel pointers. Release
+builds and remote Cloud connections reject the development path. This exception
+supersedes blanket draft exclusions only for local development; other
+architecture exclusions and browser-based human authentication remain intact.
+See [Profile Lab development access and execution](../specifications/PROFILE_LAB.md#development-access-and-unsigned-execution).

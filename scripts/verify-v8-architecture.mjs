@@ -175,6 +175,11 @@ for (const root of sourceRoots) {
     const source = readFileSync(path, "utf8");
     for (const [label, pattern] of forbiddenArchitecture) {
       if (
+        label === "Profile Lab draft class under Workspace" &&
+        path === "apps/workspace/lib/development_tool_profiles.dart"
+      )
+        continue;
+      if (
         (label === "Profile Lab import in Workspace or AX" ||
           label === "Profile Lab draft class under Workspace" ||
           label === "desktop application private key signing material") &&
@@ -448,7 +453,12 @@ const profileLabOrDraftPattern =
 for (const root of desktopAppLibRoots) {
   for (const path of sourceFiles(root)) {
     const source = readFileSync(path, "utf8");
-    if (profileLabOrDraftPattern.test(source)) {
+    const permittedDevelopmentAdapter =
+      path === "apps/workspace/lib/development_tool_profiles.dart";
+    const restrictedSource = permittedDevelopmentAdapter
+      ? source.replaceAll("LocalDraftProfileCandidate", "DevelopmentCandidate")
+      : source;
+    if (profileLabOrDraftPattern.test(restrictedSource)) {
       failures.push(
         `${path} improperly imports or references Profile Lab, admin APIs, or draft concepts.`,
       );
@@ -546,6 +556,23 @@ if (
   failures.push(
     "Signed Profile admission type must require isSigned => true, and draft candidates must specify isSigned => false.",
   );
+}
+
+const developmentProfiles = readRequired(
+  "apps/workspace/lib/development_tool_profiles.dart",
+);
+for (const required of [
+  "kReleaseMode || releaseBuild",
+  "'localhost', '127.0.0.1', '::1'",
+  "profile.logicalWorkerTypeId != workerTypeId",
+  "candidate.isSigned",
+  "snapshotsRoot",
+]) {
+  if (!developmentProfiles.replace(/\s+/g, " ").includes(required)) {
+    failures.push(
+      `Unsigned development Profile boundary is missing ${required}`,
+    );
+  }
 }
 
 if (failures.length > 0) {

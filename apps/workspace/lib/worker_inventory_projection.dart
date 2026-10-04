@@ -8,7 +8,7 @@ import 'tool_profile_release_verifier.dart';
 Map<String, Object?> projectWorkerInventory({
   required LocalWorker worker,
   required WorkerDescriptor descriptor,
-  required ToolProfileReleaseAdmission? eligibleProfile,
+  required ToolProfileCandidate? eligibleProfile,
   required String? engineVersion,
   required String lastSeenAt,
 }) {

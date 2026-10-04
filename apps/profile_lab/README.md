@@ -104,3 +104,17 @@ Cloud is the release signing authority. Its production signer and matching trust
 - [Tool Profile v1](../../docs/specifications/TOOL_PROFILE_V1.md)
 - [Architecture v8](../../docs/architecture/ARCHITECTURE_V8.md)
 - [ADR-019: Conclave Profile Lab](../../docs/decisions/ADR-019-conclave-profile-lab.md)
+
+## Unsigned development
+
+Run `bash scripts/run-profile-lab-development.sh` from the repository root for
+hot-reload development against loopback Cloud (default `http://localhost:8787`).
+Browser sign-in remains required; the verified `vitalii@nohainc.com` account is
+the configured Lab owner. Cloud currently allows draft authoring and local tests
+with publication disabled. Start `bash scripts/run-workspace-development.sh` to
+consume saved local drafts in a separate non-release Workspace. Release
+Workspaces still require signed Profiles.
+
+The macOS build script defaults to skipping Developer ID signing and notarization;
+use `--unsigned` explicitly when packaging development builds. See the
+[development contract](../../docs/specifications/PROFILE_LAB.md#development-access-and-unsigned-execution).

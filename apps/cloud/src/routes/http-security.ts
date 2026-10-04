@@ -1,3 +1,7 @@
+import {
+  hasProfileLabPermission,
+  isProfileLabOwner,
+} from "./profile-lab-policy.js";
 import { isTrustedOrigin } from "../observability.js";
 import {
   identityService,
@@ -14,7 +18,6 @@ import {
   authorizeProjectMembership,
   authorizeWorkspaceOwner,
   authorizeProjectOwner,
-  authorizeProfileAdmin as authorizeSecurityProfileAdmin,
   type Permission,
   type SecurityContext,
 } from "@conclave/security";
@@ -147,6 +150,8 @@ export class HttpError extends Error {
 export type SecurityEnv = Env & {
   /** Comma-separated user IDs permitted to administer catalog entries and drafts. */
   readonly CONCLAVE_PROFILE_ADMIN_USER_IDS?: string;
+  readonly CONCLAVE_PROFILE_LAB_OWNER_EMAIL?: string;
+  readonly CONCLAVE_PROFILE_RELEASE_MODE?: string;
   readonly CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS?: string;
   readonly CONCLAVE_RELEASE_TRUST_KEYS_JSON?: string;
   readonly CONCLAVE_RELEASE_PUBLISHER?: string;
@@ -251,6 +256,16 @@ export async function securityContext(
         "Desktop human session is invalid, expired, or revoked",
       );
     }
+    if (
+      session.audience === "conclave.profile-lab.management" &&
+      env.CONCLAVE_PROFILE_LAB_OWNER_EMAIL !== undefined &&
+      !(await isProfileLabOwner(env, session.userId))
+    ) {
+      throw new HttpError(
+        403,
+        "Profile Lab is restricted to its verified owner account",
+      );
+    }
     await env.CONCLAVE_DB.prepare(
       "UPDATE desktop_human_sessions SET last_used_at = ?1 WHERE id = ?2",
     )
@@ -313,17 +328,7 @@ export async function authorizeRequest(
     permission === "profiles:admin" ||
     permission === "profiles:release:manage"
   ) {
-    const configuredUsers =
-      permission === "profiles:release:manage"
-        ? env.CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS
-        : env.CONCLAVE_PROFILE_ADMIN_USER_IDS;
-    const adminUserIds = (configuredUsers ?? "")
-      .split(",")
-      .map((userId) => userId.trim())
-      .filter(Boolean);
-    try {
-      authorizeSecurityProfileAdmin(context, adminUserIds, permission);
-    } catch {
+    if (!(await hasProfileLabPermission(env, context, permission))) {
       throw new HttpError(
         403,
         "Profile administrator authorization is required",

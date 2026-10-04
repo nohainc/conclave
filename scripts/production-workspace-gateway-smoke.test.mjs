@@ -249,7 +249,7 @@ describe("production Workspace Gateway smoke schema gate", () => {
     expect(script).not.toMatch(/\b(?:ALTER|DROP|CREATE)\s+TABLE\b/i);
   });
 
-  it("runs both desktop audience lifecycles and checks mutual authorization boundaries", () => {
+  it("checks desktop audience boundaries and rejects non-owner Lab approval", () => {
     const script = readFileSync(
       new URL("./production-workspace-gateway-smoke.mjs", import.meta.url),
       "utf8",
@@ -259,6 +259,10 @@ describe("production Workspace Gateway smoke schema gate", () => {
       'audience: "conclave.desktop.management"',
       'audience: "conclave.profile-lab.management"',
       "verifyWorkspaceAuth",
+      "CONCLAVE_PROFILE_LAB_OWNER_EMAIL",
+      "Profile Lab is restricted to its verified owner account",
+      "deniedClaim.status !== 409",
+      "Rejected Profile Lab intent must remain unapproved and unclaimed",
       "/api/desktop-auth/intents/",
       "/approve",
       "/claim",

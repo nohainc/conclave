@@ -318,6 +318,67 @@ async function createSaveQualifyAndPublishV1(
 }
 
 describe("Tool Profile Cloud draft route acceptance", () => {
+  it("grants only the verified configured owner access and keeps signing disabled", async () => {
+    const db = new SqliteD1();
+    const env = Object.assign(makeEnv(db), {
+      CONCLAVE_PROFILE_LAB_OWNER_EMAIL: "vitalii@nohainc.com",
+      CONCLAVE_PROFILE_RELEASE_MODE: "drafts-only",
+    });
+    try {
+      // Existing ID allowlists must not override the exclusive owner policy.
+      const denied = await send(env, "GET", "/api/admin/workers/catalog");
+      expect(denied.response.status).toBe(403);
+      db.sqlite
+        .prepare("UPDATE users SET email = ?, email_verified = 0 WHERE id = ?")
+        .run("vitalii@nohainc.com", "profile-lab-operator");
+      expect(
+        (await send(env, "GET", "/api/admin/workers/catalog")).response.status,
+      ).toBe(403);
+      db.sqlite
+        .prepare("UPDATE users SET email_verified = 1 WHERE id = ?")
+        .run("profile-lab-operator");
+      const access = await assertOk(
+        env,
+        "GET",
+        "/api/admin/profile-lab/access",
+      );
+      expect(access.schemaVersion).toBe(1);
+      expect(access.permissions).toEqual({
+        profilesAdmin: true,
+        releaseManager: true,
+      });
+      expect(access.releaseMode).toBe("drafts-only");
+      expect(access.signer).toEqual({
+        ready: false,
+        issues: ["publication_disabled_for_development"],
+      });
+      await assertOk(env, "GET", "/api/admin/workers/catalog");
+      const preflight = await assertOk(
+        env,
+        "GET",
+        "/api/admin/tool-profiles/signing-preflight",
+      );
+      expect(preflight.ready).toBe(false);
+      const publish = await send(
+        env,
+        "POST",
+        "/api/admin/tool-profiles/chatgpt-codex/releases/1/publish",
+        { qualificationEvidenceId: "not-used" },
+      );
+      expect(publish.response.status).toBe(409);
+      expect(JSON.stringify(publish.json)).toContain(
+        "disabled during development",
+      );
+      expect(
+        db.sqlite
+          .prepare("SELECT COUNT(*) AS count FROM tool_profile_releases")
+          .get()?.count,
+      ).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+
   it("returns the fresh v8 bootstrap Workers through the administrative catalog", async () => {
     const db = new SqliteD1();
     try {

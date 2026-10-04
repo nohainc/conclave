@@ -217,3 +217,64 @@ Workspace requests remain delayed, duplicate request coalescing, catalog
 failure and unauthorized rendering, and the real admin catalog endpoint over
 the fresh v8 database. These fixture checks do not establish deployed-service
 or packaged desktop acceptance.
+
+## Development access and unsigned execution
+
+The checked-in Cloud configurations set
+`CONCLAVE_PROFILE_LAB_OWNER_EMAIL=vitalii@nohainc.com`. When this setting is
+present, only that active account with a verified email can approve, claim,
+or use a Profile Lab desktop session or administer Profiles. The email is
+resolved from Cloud's authenticated user record, never a client request field.
+This exclusive policy replaces the user-ID admin and release-manager allowlists;
+older allowlists cannot grant another account access. Browser authentication,
+audience separation, credential rotation, and revocation remain in effect.
+A blank configured owner denies everyone. Deployments without an owner setting
+continue to require explicitly configured ID allowlists.
+
+`GET /api/admin/profile-lab/access` requires authentication and returns the v1
+access read model (`schemaVersion: 1`): authenticated identity/audience,
+`permissions.profilesAdmin`, `permissions.releaseManager`, `releaseMode`, and
+`signer.ready`/`signer.issues`. The Lab locks its content until Cloud verifies
+administrative access. Its header shows Signed in until permission is verified,
+then Profile Admin; the status strip reports release permission and signer state.
+Check access retries the access read. Authentication alone never grants access.
+
+The checked-in configurations use
+`CONCLAVE_PROFILE_RELEASE_MODE=drafts-only`. Cloud publication returns 409 even
+if signing keys happen to be configured, and signer preflight reports
+`publication_disabled_for_development`. Draft creation, save, local qualification,
+and sandbox tests remain available. The Lab disables publication until the
+server reports both release permission and signer readiness. No signing identity
+is created for development and no release rows are bootstrapped.
+
+The unsigned exception also supports an explicitly opted-in local-development
+Workspace. It uses `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY` in a non-release build
+and requires a loopback Cloud origin. It reads `<definition>/draft.json` from the
+selected local directory (normally the Lab draft directory), validates Tool
+Profile schema and catalog identity, and applies Engine/provider compatibility.
+Each execution pins canonical bytes by digest in Workspace's separate
+`development_profiles` directory. Drafts never become `ToolProfileReleaseAdmission`
+and never enter the signed release store, channel pointers, or last-known-good
+state. Edits apply to later resolutions, not already selected runs. Release
+builds and remote Cloud connections reject this exception. The Workspace marks
+it Unsigned / Local development. This supersedes the blanket unsigned exclusion
+only for this bounded development path; production execution still uses signed
+Profiles through the generic CLI Worker Engine.
+
+For local development, start Cloud/AX with the existing local startup workflow,
+then run `bash scripts/run-profile-lab-development.sh` and
+`bash scripts/run-workspace-development.sh`. Both default to
+`http://localhost:8787`; set `CONCLAVE_DEVELOPMENT_CLOUD_URL` to the same loopback
+origin as your local Cloud. Sign in through the browser as the verified owner,
+save and test a draft in the Lab, and refresh Workspace. The Workspace launcher
+uses a separate DevelopmentState directory so existing production registration
+is not reused. `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY` overrides the source
+and `CONCLAVE_WORKSPACE_DEVELOPMENT_DATA_DIR` overrides development state.
+
+Profile Lab's macOS build script skips Developer ID signing and notarization by
+default, including when signing environment variables are inherited. `--unsigned`
+is explicit; signing requires `--sign IDENTITY`. The internal artifact workflow
+currently builds unsigned development/testing artifacts and supplies managed
+public trust roots when configured. Apple may still apply local ad-hoc signatures
+needed to execute a development binary; this is not Developer ID signing,
+notarization, or Tool Profile release signing.

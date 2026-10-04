@@ -51,6 +51,11 @@ void main() {
         apiClientOverride: api,
         sessionStore: ProfileLabSessionStore.inMemoryForTesting(
             ProfileLabPaths(homeDirectory: temp.path)))
+      ..labAccess = ProfileLabAccessReadModel.fromJson({
+        'permissions': {'profilesAdmin': true, 'releaseManager': true},
+        'signer': {'ready': false},
+        'releaseMode': 'drafts-only'
+      })
       ..currentSession = ProfileLabSession(
           credential: 'fixture',
           sessionId: 'fixture',

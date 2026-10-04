@@ -241,8 +241,10 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                   .withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(3),
                             ),
-                            child: const Text(
-                              'profile-admin',
+                            child: Text(
+                              c.labAccess?.profilesAdmin == true
+                                  ? 'Profile Admin'
+                                  : 'Signed in',
                               style: TextStyle(
                                   fontSize: 9,
                                   color: ProfileLabTheme.primaryAccent,
@@ -286,16 +288,43 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                 message: 'Profile Lab sign-in failed: ${c.authError}',
               ),
 
+            if (c.currentSession != null)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: Row(children: [
+                  Expanded(
+                      child: Text(c.labAccessError ??
+                          (c.labAccess == null
+                              ? 'Profile Lab permissions have not been verified.'
+                              : 'Profile administration: ${c.labAccess!.profilesAdmin ? "Authorized" : "Not authorized"} · Release management: ${c.labAccess!.releaseManager ? "Authorized" : "Not authorized"} · ${c.labAccess!.draftsOnly ? "Development: unsigned drafts and local tests; publication disabled" : c.labAccess!.signerReady ? "Cloud signer ready" : "Cloud signer not configured"}'))),
+                  TextButton(
+                      onPressed: c.isCheckingLabAccess
+                          ? null
+                          : () async {
+                              await c.refreshLabAccess();
+                              await c.ensureTabData(c.selectedTab);
+                            },
+                      child: const Text('Check access')),
+                ]),
+              ),
             // Tab view content
             Expanded(
-              child: switch (c.selectedTab) {
-                LabTab.workers => WorkersView(controller: c),
-                LabTab.profiles => ProfilesView(controller: c),
-                LabTab.tests => TestsView(controller: c),
-                LabTab.releases => ReleasesView(controller: c),
-                LabTab.workspaces => WorkspacesView(controller: c),
-                LabTab.audit => AuditView(controller: c),
-              },
+              child: c.currentSession == null ||
+                      c.labAccess == null ||
+                      c.labAccess?.profilesAdmin == false ||
+                      c.labAccessError != null
+                  ? const Center(
+                      child: Text(
+                          'Profile Lab access is unavailable. Check access or sign in with the authorized owner account.'))
+                  : switch (c.selectedTab) {
+                      LabTab.workers => WorkersView(controller: c),
+                      LabTab.profiles => ProfilesView(controller: c),
+                      LabTab.tests => TestsView(controller: c),
+                      LabTab.releases => ReleasesView(controller: c),
+                      LabTab.workspaces => WorkspacesView(controller: c),
+                      LabTab.audit => AuditView(controller: c),
+                    },
             ),
 
             // Bottom status bar

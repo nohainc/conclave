@@ -21,6 +21,7 @@ command -v ditto >/dev/null 2>&1 || {
 
 MODE="release"
 OPEN_APP="0"
+SIGN_APP="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,7 +37,12 @@ while [[ $# -gt 0 ]]; do
       CONCLAVE_PROFILE_LAB_VERSION="$2"
       shift 2
       ;;
+    --unsigned)
+      SIGN_APP="0"
+      shift
+      ;;
     --sign)
+      SIGN_APP="1"
       CONCLAVE_MACOS_SIGN_IDENTITY="$2"
       shift 2
       ;;
@@ -54,6 +60,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --release          Build in release mode (default)"
       echo "  --debug            Build in debug mode"
       echo "  --version, -v VER  Override Profile Lab version"
+      echo "  --unsigned         Skip Developer ID signing and notarization (default)"
       echo "  --sign IDENTITY    Developer ID signing identity"
       echo "  --open, -o         Open the built application bundle after build"
       echo "  --help, -h         Show this help message"
@@ -101,7 +108,7 @@ if [[ ! -d "$APP" ]]; then
   exit 1
 fi
 
-if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
+if [[ "$SIGN_APP" == "1" && -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
   echo "Signing with configured Developer ID identity"
   codesign --force --deep --options runtime --timestamp \
     --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" "$APP"
@@ -115,7 +122,7 @@ mkdir -p "$DIST_DIR"
 ZIP="$DIST_DIR/Conclave-Profile-Lab-$VERSION-macos.zip"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 
-if [[ -n "${CONCLAVE_MACOS_NOTARY_PROFILE:-}" ]]; then
+if [[ "$SIGN_APP" == "1" && -n "${CONCLAVE_MACOS_NOTARY_PROFILE:-}" ]]; then
   if [[ -z "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
     echo "Notarization requires CONCLAVE_MACOS_SIGN_IDENTITY." >&2
     exit 1

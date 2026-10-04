@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { once } from "node:events";
 import { connect as connectTls } from "node:tls";
 import { fileURLToPath } from "node:url";
@@ -598,6 +599,57 @@ async function verifyProfileLabAuth(workspaceCredential) {
     },
   );
   const approval = await approveResponse.json().catch(() => null);
+  if (
+    /"CONCLAVE_PROFILE_LAB_OWNER_EMAIL"\s*:\s*"[^"\s]+"/.test(
+      readFileSync(config, "utf8"),
+    )
+  ) {
+    if (
+      approveResponse.status !== 403 ||
+      approval?.error !==
+        "Profile Lab is restricted to its verified owner account"
+    ) {
+      throw new Error(
+        "Production Profile Lab must reject the disposable non-owner identity",
+      );
+    }
+    const deniedIntent = rowsFromD1(
+      executeD1(
+        `SELECT approved_user_id, claimed_at FROM desktop_auth_intents WHERE id = ${sqlString(intent.intentId)}`,
+      ),
+    )[0];
+    if (
+      deniedIntent?.approved_user_id !== null ||
+      deniedIntent?.claimed_at !== null
+    ) {
+      throw new Error(
+        "Rejected Profile Lab intent must remain unapproved and unclaimed",
+      );
+    }
+    const deniedClaim = await fetch(
+      `https://${hostname}/api/desktop-auth/intents/${encodeURIComponent(intent.intentId)}/claim`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pollToken: intent.pollToken }),
+      },
+    );
+    if (deniedClaim.status !== 409)
+      throw new Error("Rejected Profile Lab intent must remain unclaimable");
+    const deniedAdmin = await fetch(
+      `https://${hostname}/api/admin/tool-profiles/definitions`,
+      {
+        headers: { Authorization: `Bearer ${workspaceCredential}` },
+      },
+    );
+    if (deniedAdmin.status !== 403)
+      throw new Error("Workspace credentials must not administer Profile Lab");
+    console.log(
+      "PASS: Profile Lab rejects non-owner browser approval and Workspace credentials",
+    );
+    return;
+  }
+
   if (
     approveResponse.status !== 200 ||
     approval?.approved !== true ||

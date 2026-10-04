@@ -61,6 +61,12 @@ export async function routeWorkerRequest(
     ) {
       deps.requireSameOriginForCookieMutation(request);
     }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/admin/profile-lab/access"
+    ) {
+      return await handlers.handleProfileLabAccess!(request, env, ctx);
+    }
     if (desktopWorkspaceRegistration) {
       return await handlers.handleRegisterWorkspaceFromDesktop!(
         request,

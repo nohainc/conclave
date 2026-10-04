@@ -58,6 +58,7 @@ function applyCorsHeaders(
 }
 
 export const routeHandlers = {
+  handleProfileLabAccess: handlers.handleProfileLabAccess,
   handleSession: handlers.handleSession,
   handleSessionLogout: handlers.handleSessionLogout,
   handleCreateDesktopAuthIntent: handlers.handleCreateDesktopAuthIntent,

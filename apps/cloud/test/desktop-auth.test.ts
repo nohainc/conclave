@@ -136,6 +136,99 @@ describe("desktop human authentication", () => {
     return { db, env, sqlite };
   }
 
+  for (const [email, verified, allowed] of [
+    ["vitalii@nohainc.com", 1, true],
+    ["vitalii@nohainc.com", 0, false],
+    ["someone@example.test", 1, false],
+  ] as const) {
+    it(`Profile Lab browser approval requires the verified owner: ${email}, verified=${verified}`, async () => {
+      const { env: baseEnv, sqlite } = await setup();
+      const env = Object.assign(baseEnv, {
+        CONCLAVE_PROFILE_LAB_OWNER_EMAIL: "vitalii@nohainc.com",
+      });
+      vi.mocked(identityService.resolve).mockResolvedValue({
+        userId: "human-1",
+        email,
+        name: "Person",
+        sessionId: "browser-session-1",
+      });
+      sqlite
+        .prepare(
+          "INSERT INTO users (id, email, display_name, status, created_at, updated_at, email_verified) VALUES (?, ?, ?, 'active', ?, ?, ?)",
+        )
+        .run(
+          "human-1",
+          email,
+          "Person",
+          new Date().toISOString(),
+          new Date().toISOString(),
+          verified,
+        );
+      const response = await handleCreateDesktopAuthIntent(
+        new Request("https://app.conclave.test/api/desktop-auth/intents", {
+          method: "POST",
+          body: JSON.stringify({
+            clientName: "Conclave Profile Lab",
+            contractVersion: "1.1",
+            audience: "conclave.profile-lab.management",
+          }),
+        }),
+        env,
+      );
+      const intent = (await response.json()) as {
+        intentId: string;
+        pollToken: string;
+      };
+      const approve = () =>
+        handleApproveDesktopAuthIntent(
+          new Request("https://app.conclave.test/approve", { method: "POST" }),
+          env,
+          intent.intentId,
+        );
+      if (!allowed) {
+        await expect(approve()).rejects.toMatchObject({ status: 403 });
+        expect(
+          sqlite
+            .prepare(
+              "SELECT approved_at FROM desktop_auth_intents WHERE id = ?",
+            )
+            .get(intent.intentId)?.approved_at,
+        ).toBeNull();
+      } else {
+        expect((await approve()).status).toBe(200);
+        const claimRequest = () =>
+          new Request("https://app.conclave.test/claim", {
+            method: "POST",
+            body: JSON.stringify({ pollToken: intent.pollToken }),
+          });
+        const claimed = await handleClaimDesktopAuthIntent(
+          claimRequest(),
+          env,
+          intent.intentId,
+        );
+        expect(claimed.status).toBe(200);
+        const session = (await claimed.json()) as { credential: string };
+        const sessionRequest = () =>
+          new Request("https://app.conclave.test/api/desktop-auth/session", {
+            headers: { authorization: `Bearer ${session.credential}` },
+          });
+        expect(
+          (await handleGetDesktopHumanSession(sessionRequest(), env)).status,
+        ).toBe(200);
+        await authorizeToolProfileAdmin(sessionRequest(), env);
+        sqlite
+          .prepare("UPDATE users SET email_verified = 0 WHERE id = ?")
+          .run("human-1");
+        await expect(
+          handleGetDesktopHumanSession(sessionRequest(), env),
+        ).rejects.toMatchObject({ status: 403 });
+        await expect(
+          authorizeToolProfileAdmin(sessionRequest(), env),
+        ).rejects.toMatchObject({ status: 403 });
+      }
+    });
+  }
+
   it("exchanges a browser-approved 1.1 intent without a comparison code for an independently revocable desktop session", async () => {
     const { env, sqlite } = await setup();
     const create = await handleCreateDesktopAuthIntent(

@@ -74,8 +74,7 @@ class WorkerCatalogCoordinator extends ChangeNotifier {
   String? profileDefinitionForWorker(String workerTypeId) =>
       catalog.profileDefinitionForWorker(workerTypeId);
 
-  Future<ToolProfileResolution<ToolProfileReleaseAdmission>>
-      resolveProfileForWorker({
+  Future<ToolProfileResolution<ToolProfileCandidate>> resolveProfileForWorker({
     required String workerTypeId,
     required String engineVersion,
     String? providerCliVersion,
@@ -111,7 +110,7 @@ class WorkerCatalogCoordinator extends ChangeNotifier {
     final projected = await Future.wait(workers.map((worker) async {
       final descriptor = entryForWorker(worker.workerTypeId);
       if (descriptor == null) return null;
-      ToolProfileReleaseAdmission? eligibleProfile;
+      ToolProfileCandidate? eligibleProfile;
       if (engineAvailable) {
         try {
           eligibleProfile = (await resolveProfileForWorker(
@@ -435,28 +434,12 @@ class WorkerCatalogCoordinator extends ChangeNotifier {
     try {
       final resolver = ToolProfileResolver(releaseStore);
       final profileState = await releaseStore.releaseState(definitionId);
-      var resolution = worker?.toolVersion == null
-          ? await resolver.resolveBootstrapProfile(
-              logicalWorkerTypeId: entry.workerTypeId,
-              profileDefinitionId: definitionId,
-              engineVersion: cliWorkerEngineVersion,
-              channel: profileState.selectedChannel,
-            )
-          : await resolver.resolve(
-              logicalWorkerTypeId: entry.workerTypeId,
-              profileDefinitionId: definitionId,
-              engineVersion: cliWorkerEngineVersion,
-              providerCliVersion: worker!.toolVersion!,
-              channel: profileState.selectedChannel,
-            );
-      if (!resolution.isAvailable && worker?.toolVersion != null) {
-        resolution = await resolver.resolveBootstrapProfile(
-          logicalWorkerTypeId: entry.workerTypeId,
-          profileDefinitionId: definitionId,
-          engineVersion: cliWorkerEngineVersion,
-          channel: profileState.selectedChannel,
-        );
-      }
+      final resolution = await resolver.resolveForWorker(
+        logicalWorkerTypeId: entry.workerTypeId,
+        profileDefinitionId: definitionId,
+        engineVersion: cliWorkerEngineVersion,
+        providerCliVersion: worker?.toolVersion,
+      );
       if (!resolution.isAvailable) {
         final incompatible = resolution.reason ==
                 ToolProfileUnavailableReason.unsupportedProviderVersion ||
@@ -489,6 +472,7 @@ class WorkerCatalogCoordinator extends ChangeNotifier {
           details: {
             'definitionId': definitionId,
             'source': resolution.source.name,
+            'unsignedDevelopment': resolution.release?.isSigned == false,
             'activeVersion': profileState.activeVersion,
             'lastKnownGoodVersion': profileState.lastKnownGoodVersion,
             'channel': profileState.selectedChannel,

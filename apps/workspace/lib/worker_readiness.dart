@@ -415,7 +415,7 @@ class WorkerReadinessMonitor {
     final resolver = ToolProfileResolver(store);
     var profileChannel =
         (await store.releaseState(profileDefinitionId)).selectedChannel;
-    late ToolProfileResolution<ToolProfileReleaseAdmission> resolution;
+    late ToolProfileResolution<ToolProfileCandidate> resolution;
     try {
       resolution = await workerCatalogCoordinator!.resolveProfileForWorker(
         workerTypeId: worker.workerTypeId,
@@ -444,7 +444,49 @@ class WorkerReadinessMonitor {
         diagnosticDetails: 'The signed Tool Profile could not be resolved.',
       );
     }
-    var release = resolution.release;
+    final candidate = resolution.release;
+    if (candidate != null && !candidate.isSigned) {
+      final probe = await engine.probe(
+        candidate,
+        profileFile: await store.executionProfileFile(candidate),
+        stateDirectory: stateDirectory,
+        mode: mode == LocalWorkerProbeMode.live
+            ? WorkerProbeMode.live
+            : WorkerProbeMode.passive,
+        timeout: mode == LocalWorkerProbeMode.live
+            ? const Duration(
+                milliseconds: WorkerProtocolLimits.maxProbeTimeoutMs)
+            : const Duration(seconds: 20),
+      );
+      await _recordToolProfileDiagnostic(worker,
+          runId: runId,
+          mode: mode,
+          durationMs: timer.elapsedMilliseconds,
+          profileDefinitionId: profileDefinitionId,
+          profileReleaseVersion: candidate.releaseVersion,
+          profileResolutionSource: 'draft',
+          providerToolName: probe.providerToolName,
+          providerToolVersion: probe.providerToolVersion,
+          issueCode: probe.issueCode,
+          failureLayer: probe.issueCode == null
+              ? null
+              : _profileProbeFailureLayer(probe.issueCode!));
+      return WorkerReadinessAssessment(
+        probe.ready
+            ? WorkerReadinessState.ready
+            : probe.issueCode == 'provider_authentication_required'
+                ? WorkerReadinessState.signInRequired
+                : WorkerReadinessState.testFailed,
+        issueCode: probe.issueCode,
+        toolName: probe.providerToolName,
+        toolVersion: probe.providerToolVersion,
+        replaceToolName: true,
+        replaceToolVersion: true,
+        diagnosticDetails:
+            'Unsigned development Profile; local loopback execution only.',
+      );
+    }
+    var release = candidate as ToolProfileReleaseAdmission?;
     if (release == null) {
       final issueCode = switch (resolution.reason) {
         ToolProfileUnavailableReason.unsupportedProviderVersion =>

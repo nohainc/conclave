@@ -435,6 +435,12 @@ export async function handlePublishDraftToolProfileRelease(
     ctx,
     "profiles:release:manage",
   );
+  if (env.CONCLAVE_PROFILE_RELEASE_MODE === "drafts-only") {
+    throw new HttpError(
+      409,
+      "Profile publication is disabled during development; save and test unsigned drafts in Profile Lab",
+    );
+  }
   const body = await readToolProfileAdminBody(request, [
     "qualificationEvidenceId",
   ]);
@@ -489,6 +495,12 @@ export async function handleToolProfileSigningPreflight(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   await authorizeToolProfileAdmin(request, env, ctx, "profiles:release:manage");
+  if (env.CONCLAVE_PROFILE_RELEASE_MODE === "drafts-only") {
+    return json({
+      ready: false,
+      issues: ["publication_disabled_for_development"],
+    });
+  }
   return json(await toolProfileSigningPreflight(env));
 }
 

@@ -215,13 +215,17 @@ class _WorkersTabState extends State<_WorkersTab> {
       ...view.statusBadges(readinessLabelOverride: pending ? readiness : null),
       view.state.label,
       'Profile · ${view.profileState.label}',
+      if (profile?['unsignedDevelopment'] == true)
+        'Unsigned · Local development',
     };
     final providerToolName = worker?.toolName ?? entry.providerToolName;
     final providerToolVersion = switch (view.providerToolState) {
       WorkspaceProviderToolState.unknown =>
-        view.localState == WorkspaceLocalWorkerState.configured
-            ? 'Not detected'
-            : 'Unknown',
+        view.profileState != WorkspaceWorkerProfileState.ready
+            ? 'Waiting for Profile'
+            : view.localState == WorkspaceLocalWorkerState.configured
+                ? 'Not detected'
+                : 'Unknown',
       WorkspaceProviderToolState.missing => 'Not installed',
       WorkspaceProviderToolState.available =>
         worker?.toolVersion ?? 'Available',

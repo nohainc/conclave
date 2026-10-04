@@ -393,7 +393,8 @@ class _DraftsViewState extends State<DraftsView> {
                               ),
                               onPressed: c.jsonValidationError == null &&
                                       !c.isDirty &&
-                                      !c.isPublishing
+                                      !c.isPublishing &&
+                                      c.canPublish
                                   ? () async {
                                       try {
                                         await c.publishCurrentDraft();

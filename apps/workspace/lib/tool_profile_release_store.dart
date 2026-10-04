@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 
 import 'platform_runtime.dart';
+import 'development_tool_profiles.dart';
 
 export 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
     show canonicalJson;
@@ -29,6 +30,7 @@ class ToolProfileReleaseStore {
     required this.trustPolicy,
     PlatformRuntime? fileSystemPlatform,
     this.retentionLimit = 3,
+    this.developmentProfiles,
   }) : fileSystemPlatform = fileSystemPlatform ?? currentPlatformRuntime {
     if (retentionLimit < 2 || retentionLimit > 32) {
       throw ArgumentError.value(
@@ -43,6 +45,20 @@ class ToolProfileReleaseStore {
   static const maxTrustStateBytes = 2 * 1024 * 1024;
   static const maxDefinitions = 128;
   static const maxCachedReleases = 512;
+
+  final DevelopmentToolProfiles? developmentProfiles;
+
+  Future<File> executionProfileFile(ToolProfileCandidate candidate) async {
+    if (candidate.isSigned) {
+      return profileFile(
+          candidate.profileDefinitionId, candidate.releaseVersion);
+    }
+    final development = developmentProfiles;
+    if (development == null) {
+      throw StateError('Unsigned Profile execution is disabled');
+    }
+    return development.snapshot(candidate);
+  }
 
   final Directory profilesRoot;
   final WorkerTrustPolicy trustPolicy;
@@ -350,7 +366,9 @@ class ToolProfileReleaseStore {
     final definitionId = _safeDefinitionId(profileDefinitionId);
     final state = await _readState(definitionId);
     final version = state?[pointer];
-    if (version is! int) return null;
+    if (version is! int) {
+      return null;
+    }
     try {
       return await _verifyInstalled(definitionId, version);
     } on Object {
@@ -366,7 +384,9 @@ class ToolProfileReleaseStore {
     final definitionId = _safeDefinitionId(profileDefinitionId);
     final state = await _readState(definitionId);
     final version = state?['activeVersion'];
-    if (version is! int) return null;
+    if (version is! int) {
+      return null;
+    }
     try {
       return await _verifyInstalled(definitionId, version);
     } on Object {
@@ -520,7 +540,9 @@ class ToolProfileReleaseStore {
           FileSystemEntityType.file) {
         return null;
       }
-      if (await file.length() > maxReleaseMetadataBytes) return null;
+      if (await file.length() > maxReleaseMetadataBytes) {
+        return null;
+      }
       final decoded = jsonDecode(await file.readAsString());
       final workerTypeId = decoded is Map ? decoded['workerTypeId'] : null;
       return workerTypeId is String ? workerTypeId : null;
@@ -695,7 +717,9 @@ class ToolProfileReleaseStore {
     }
     final file = _releaseStateFile(definitionId);
     final fileType = FileSystemEntity.typeSync(file.path, followLinks: false);
-    if (fileType == FileSystemEntityType.notFound) return null;
+    if (fileType == FileSystemEntityType.notFound) {
+      return null;
+    }
     if (fileType != FileSystemEntityType.file) {
       throw const FormatException('Tool Profile release state path is unsafe');
     }

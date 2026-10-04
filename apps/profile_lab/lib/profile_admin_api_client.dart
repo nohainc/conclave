@@ -81,6 +81,17 @@ class ProfileAdminApiClient {
     return decoded;
   }
 
+  Future<ProfileLabAccessReadModel> fetchLabAccess() async {
+    final result = await _request('GET', _api('/api/admin/profile-lab/access'));
+    if (result is! Map<String, dynamic> ||
+        result['schemaVersion'] != 1 ||
+        result['permissions'] is! Map ||
+        result['signer'] is! Map) {
+      throw const FormatException('Invalid Profile Lab access response');
+    }
+    return ProfileLabAccessReadModel.fromJson(result);
+  }
+
   /// Lists all logical workers across all lifecycle states, stages, and visibility.
   Future<List<ProfileLabWorkerReadModel>> fetchWorkerCatalog() async {
     final result = await _request('GET', _api('/api/admin/workers/catalog'));

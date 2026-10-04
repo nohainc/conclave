@@ -1,3 +1,4 @@
+import { isProfileLabOwner } from "./profile-lab-policy.js";
 import {
   handleBetterAuthRequest,
   identityService,
@@ -369,6 +370,21 @@ export async function handleApproveDesktopAuthIntent(
   ) {
     throw new HttpError(400, "Desktop approval does not accept request fields");
   }
+  const intent = await env.CONCLAVE_DB.prepare(
+    "SELECT audience FROM desktop_auth_intents WHERE id = ?1",
+  )
+    .bind(intentId)
+    .first<{ audience: string }>();
+  if (
+    intent?.audience === DESKTOP_PROFILE_LAB_AUDIENCE &&
+    env.CONCLAVE_PROFILE_LAB_OWNER_EMAIL !== undefined &&
+    !(await isProfileLabOwner(env, identity.userId))
+  ) {
+    throw new HttpError(
+      403,
+      "Profile Lab is restricted to its verified owner account",
+    );
+  }
   const now = new Date().toISOString();
   const result = await env.CONCLAVE_DB.prepare(
     `UPDATE desktop_auth_intents
@@ -426,6 +442,16 @@ export async function handleClaimDesktopAuthIntent(
     .first<{ userId: string; email: string; displayName: string }>();
   if (!user) throw new HttpError(403, "Conclave account is unavailable");
 
+  if (
+    intent.audience === DESKTOP_PROFILE_LAB_AUDIENCE &&
+    env.CONCLAVE_PROFILE_LAB_OWNER_EMAIL !== undefined &&
+    !(await isProfileLabOwner(env, user.userId))
+  ) {
+    throw new HttpError(
+      403,
+      "Profile Lab is restricted to its verified owner account",
+    );
+  }
   const sessionId = crypto.randomUUID();
   const credential = randomSecret("conclave_dhs_");
   const tokenHash = await hashToken(credential);
@@ -527,6 +553,17 @@ export async function findDesktopHumanSession(
       401,
       "Desktop human session is invalid, expired, or revoked",
     );
+
+  if (
+    session.audience === DESKTOP_PROFILE_LAB_AUDIENCE &&
+    env.CONCLAVE_PROFILE_LAB_OWNER_EMAIL !== undefined &&
+    !(await isProfileLabOwner(env, session.userId))
+  ) {
+    throw new HttpError(
+      403,
+      "Profile Lab is restricted to its verified owner account",
+    );
+  }
 
   if (expectedAudience) {
     const allowed = Array.isArray(expectedAudience)

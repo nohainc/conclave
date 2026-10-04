@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:conclave_profile_lab/app.dart';
+import 'package:conclave_profile_lab/views/workspaces_view.dart';
 import 'package:conclave_profile_lab/controllers/profile_lab_controller.dart';
 import 'package:conclave_profile_lab/profile_lab_paths.dart';
 import 'package:conclave_profile_lab/profile_lab_session_store.dart';
@@ -60,7 +60,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ProfileLabApp(controller: controller),
+          body: WorkspacesView(controller: controller),
         ),
       ),
     );
@@ -90,7 +90,7 @@ void main() {
     controller.setTab(LabTab.workspaces);
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: ProfileLabApp(controller: controller)),
+        home: Scaffold(body: WorkspacesView(controller: controller)),
       ),
     );
     await tester.pumpAndSettle();

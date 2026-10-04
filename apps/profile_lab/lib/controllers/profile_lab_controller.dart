@@ -200,6 +200,28 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
     super.dispose();
   }
 
+  ProfileLabAccessReadModel? labAccess;
+  String? labAccessError;
+  bool get isCheckingLabAccess => _refreshes.containsKey('access');
+  bool get canPublish =>
+      labAccess?.releaseManager == true &&
+      labAccess?.signerReady == true &&
+      labAccess?.draftsOnly == false;
+
+  Future<void> refreshLabAccess() => _refresh('access', () async {
+        final generation = _cloudGeneration;
+        labAccessError = null;
+        try {
+          final result = await apiClient.fetchLabAccess();
+          if (generation != _cloudGeneration) return;
+          labAccess = result;
+        } catch (e) {
+          if (generation != _cloudGeneration) return;
+          labAccess = null;
+          labAccessError = 'Failed to verify Profile Lab access: $e';
+        }
+      });
+
   String? cloudError;
   bool auditFilterCurrentDefinition = false;
   // Controlled Workspace rollout channels state
@@ -230,7 +252,12 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   }
 
   Future<void> ensureTabData(LabTab tab) async {
-    if (currentSession == null || _disposed) return;
+    if (currentSession == null ||
+        _disposed ||
+        labAccess?.profilesAdmin != true ||
+        labAccessError != null) {
+      return;
+    }
     switch (tab) {
       case LabTab.workers:
         if (!hasLoadedWorkerCatalog) await fetchCloudCatalog();
@@ -343,6 +370,8 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
     _cloudGeneration++;
     _refreshes.clear();
     _loaded.clear();
+    labAccess = null;
+    labAccessError = null;
     isLoadingWorkspaces = false;
     releasesError = null;
     evidenceError = null;

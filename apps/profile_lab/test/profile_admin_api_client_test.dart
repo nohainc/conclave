@@ -43,7 +43,17 @@ void main() {
           lastBody = jsonDecode(bodyStr) as Map<String, dynamic>;
         }
 
-        if (req.uri.path == '/api/admin/workers/catalog' &&
+        if (req.uri.path == '/api/admin/profile-lab/access') {
+          req.response.headers.contentType = ContentType.json;
+          req.response.write(jsonEncode({
+            'schemaVersion': 1,
+            'authenticated': true,
+            'audience': 'conclave.profile-lab.management',
+            'permissions': {'profilesAdmin': true, 'releaseManager': true},
+            'releaseMode': 'drafts-only',
+            'signer': {'ready': false}
+          }));
+        } else if (req.uri.path == '/api/admin/workers/catalog' &&
             req.method == 'POST') {
           req.response.statusCode = 201;
           req.response.headers.contentType = ContentType.json;
@@ -429,6 +439,16 @@ void main() {
                 'Catalog permission denied')));
       });
     }
+
+    test(
+        'fetchLabAccess reads versioned server permissions without claiming signer readiness',
+        () async {
+      final access = await client.fetchLabAccess();
+      expect(lastPath, '/api/admin/profile-lab/access');
+      expect(access.profilesAdmin, isTrue);
+      expect(access.draftsOnly, isTrue);
+      expect(access.signerReady, isFalse);
+    });
 
     test('listWorkspaceChannels retrieves workspace rollout channel list',
         () async {

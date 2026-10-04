@@ -98,12 +98,13 @@ configured public trust root. It stops before deployment if a value is missing
 or the key pair does not match. The Cloud Profile signing preflight also checks
 the configured key against Cloud's revocation state.
 
-Profile Lab access is controlled by two separate comma-separated user ID
-allowlists: `CONCLAVE_PROFILE_ADMIN_USER_IDS` for catalog and draft work, and
-`CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS` for publication and release
-operations. Configure both as GitHub Actions variables used by the deployment
-workflow; the workflow syncs them to protected Cloud Worker secrets. A release manager does not receive
-catalog or draft administration unless their ID is also in the admin list.
+Profile Lab requires the active, verified browser account `vitalii@nohainc.com`.
+Both Wrangler configurations set `CONCLAVE_PROFILE_LAB_OWNER_EMAIL`; this exclusive
+owner policy replaces the legacy user-ID allowlists for this deployment. Browser
+approval, session claim, and subsequent Lab requests enforce the policy.
+`CONCLAVE_PROFILE_RELEASE_MODE=drafts-only` disables publication and reports that
+signing is unavailable intentionally. No release signing keys are needed for
+this development workflow. The access endpoint reports effective permissions.
 
 Profile Lab builds default to `https://app.conclaveax.com`. Development builds
 can select local Cloud with
@@ -150,16 +151,14 @@ only reads schema metadata; it never repairs table definitions.
 
 After deploying `app.conclaveax.com`, the same script runs as a production
 acceptance gate. It creates one disposable AX browser session and exercises the
-full desktop-auth lifecycle twice: create a Workspace intent, approve it in the
-browser session, claim it, and validate the resulting
-`conclave.desktop.management` session; then repeat for the Profile Lab audience
-and validate `conclave.profile-lab.management`. It verifies each audience in
-the stored intent/session rows and through the desktop session endpoint. The
-Profile Lab credential must be rejected by Workspace registration and runtime
-transport, and the Workspace credential must be rejected by the Profile Lab
-administration boundary. The Profile Lab session also reaches the Profile-admin
-authorization boundary and receives the expected permission denial for this
-non-admin disposable identity. The smoke uses the Workspace session to register
+Workspace desktop-auth lifecycle: create an intent, approve it in the browser
+session, claim it, and validate the resulting `conclave.desktop.management`
+session. For Profile Lab, it creates an intent and requires browser approval to
+reject the disposable non-owner identity. The rejected intent must remain
+unapproved and unclaimable; Workspace credentials must also be rejected by Lab
+administration. Positive owner authentication is covered by the Cloud acceptance
+tests and requires the real verified owner account for a live browser check.
+The smoke uses the Workspace session to register
 a uniquely named Workspace, performs an HTTP/1.1 WebSocket upgrade, sends
 `workspace.hello`, requires the matching `workspace.hello.ack`, requests
 synchronization and requires a correlated `workspace.sync.result`, verifies the
