@@ -24,6 +24,11 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
   void initState() {
     super.initState();
     widget.controller.addListener(_onStateChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.controller.ensureTabData(widget.controller.selectedTab);
+      }
+    });
   }
 
   @override

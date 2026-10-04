@@ -25,11 +25,6 @@ class _WorkersViewState extends State<WorkersView> {
         _filter = _searchController.text.trim().toLowerCase();
       });
     });
-    // Auto-fetch catalog if session is active and list is empty
-    if (widget.controller.cloudWorkers.isEmpty &&
-        widget.controller.currentSession != null) {
-      widget.controller.fetchCloudCatalog();
-    }
   }
 
   @override
@@ -319,7 +314,7 @@ class _WorkersViewState extends State<WorkersView> {
                           : null,
                     ),
                     IconButton(
-                      icon: c.isLoadingCloud
+                      icon: c.isLoadingWorkerCatalog
                           ? const SizedBox(
                               width: 16,
                               height: 16,
@@ -329,8 +324,9 @@ class _WorkersViewState extends State<WorkersView> {
                             )
                           : const Icon(Icons.refresh, size: 18),
                       tooltip: 'Refresh Cloud Catalog',
-                      onPressed:
-                          c.isLoadingCloud ? null : () => c.fetchCloudCatalog(),
+                      onPressed: c.isLoadingWorkerCatalog
+                          ? null
+                          : () => c.fetchCloudCatalog(),
                     ),
                   ],
                 ),
@@ -381,6 +377,17 @@ class _WorkersViewState extends State<WorkersView> {
                   ),
                 ),
 
+              if (c.workerCatalogError != null)
+                Column(children: [
+                  Text(c.workerCatalogUnauthorized
+                      ? 'Catalog access unauthorized'
+                      : 'Catalog refresh failed'),
+                  Text(c.workerCatalogError!),
+                  TextButton(
+                      onPressed:
+                          c.isLoadingWorkerCatalog ? null : c.fetchCloudCatalog,
+                      child: const Text('Retry')),
+                ]),
               // Workers list
               Expanded(
                 child: workers.isEmpty
@@ -388,9 +395,14 @@ class _WorkersViewState extends State<WorkersView> {
                         child: Text(
                           c.currentSession == null
                               ? 'Sign in to fetch catalog.'
-                              : c.isLoadingCloud
+                              : c.isLoadingWorkerCatalog
                                   ? 'Fetching catalog...'
-                                  : 'No logical workers found.',
+                                  : c.workerCatalogError ??
+                                      (c.hasLoadedWorkerCatalog
+                                          ? (_filter.isEmpty
+                                              ? 'No logical workers found.'
+                                              : 'No matching workers.')
+                                          : 'Catalog has not been loaded.'),
                           style: const TextStyle(
                               fontSize: 12, color: Color(0xFF94A3B8)),
                         ),
@@ -474,11 +486,16 @@ class _WorkersViewState extends State<WorkersView> {
                     style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
                   ),
                 )
-              : _WorkerDetailsPane(
-                  controller: c,
-                  worker: c.selectedCloudWorker!,
-                  definition: c.selectedCloudDefinition,
-                ),
+              : Column(children: [
+                  if (c.isLoadingDefinitions) const LinearProgressIndicator(),
+                  if (c.definitionsError != null) Text(c.definitionsError!),
+                  Expanded(
+                      child: _WorkerDetailsPane(
+                    controller: c,
+                    worker: c.selectedCloudWorker!,
+                    definition: c.selectedCloudDefinition,
+                  )),
+                ]),
         ),
       ],
     );

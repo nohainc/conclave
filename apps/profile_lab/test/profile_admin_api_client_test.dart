@@ -14,6 +14,8 @@ void main() {
     late Map<String, dynamic> lastBody;
     String? lastIfMatch;
     var requestCount = 0;
+    int catalogStatus = 200;
+    Object? catalogOverride;
 
     test('requires secure non-loopback Cloud API origins', () {
       expect(
@@ -28,6 +30,8 @@ void main() {
 
     setUp(() async {
       requestCount = 0;
+      catalogStatus = 200;
+      catalogOverride = null;
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((HttpRequest req) async {
         requestCount++;
@@ -50,19 +54,20 @@ void main() {
           }));
         } else if (req.uri.path == '/api/admin/workers/catalog' &&
             req.method == 'GET') {
-          req.response.statusCode = 200;
+          req.response.statusCode = catalogStatus;
           req.response.headers.contentType = ContentType.json;
-          req.response.write(jsonEncode({
-            'workers': [
+          req.response.write(jsonEncode(catalogOverride ??
               {
-                'workerTypeId': 'claude',
-                'displayName': 'Claude',
-                'providerToolName': 'claude',
-                'activeProfileDefinitionId': 'claude-code',
-                'releaseStage': 'draft',
-              }
-            ],
-          }));
+                'workers': [
+                  {
+                    'workerTypeId': 'claude',
+                    'displayName': 'Claude',
+                    'providerToolName': 'claude',
+                    'activeProfileDefinitionId': 'claude-code',
+                    'releaseStage': 'draft',
+                  }
+                ],
+              }));
         } else if (req.uri.path ==
                 '/api/admin/tool-profiles/claude-code/releases' &&
             req.method == 'POST') {
@@ -406,6 +411,24 @@ void main() {
       expect(list.first, isA<ProfileLabWorkerReadModel>());
       expect(list.first.workerTypeId, 'claude');
     });
+
+    test('malformed catalog response is a failure, not empty', () async {
+      catalogOverride = {'unexpected': []};
+      await expectLater(client.fetchWorkerCatalog(), throwsFormatException);
+    });
+
+    for (final status in [401, 403]) {
+      test('catalog HTTP $status preserves unauthorized error', () async {
+        catalogStatus = status;
+        catalogOverride = {'error': 'Catalog permission denied'};
+        await expectLater(
+            client.fetchWorkerCatalog(),
+            throwsA(isA<ProfileAdminUnauthorizedException>().having(
+                (error) => error.message,
+                'message',
+                'Catalog permission denied')));
+      });
+    }
 
     test('listWorkspaceChannels retrieves workspace rollout channel list',
         () async {

@@ -248,7 +248,16 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     }
   }
 
-  Future<void> saveCurrentDraftToCloud({
+  Future<void> saveCurrentDraftToCloud(
+          {bool force = false,
+          String author = 'developer',
+          String notes = ''}) =>
+      _refresh(
+          'save-draft',
+          () => _saveCurrentDraftToCloud(
+              force: force, author: author, notes: notes));
+
+  Future<void> _saveCurrentDraftToCloud({
     bool force = false,
     String author = 'developer',
     String notes = '',
@@ -444,7 +453,10 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
   }
 
   @override
-  Future<void> discoverInstalledProviders() async {
+  Future<void> discoverInstalledProviders() =>
+      _refresh('providers', _discoverInstalledProviders);
+
+  Future<void> _discoverInstalledProviders() async {
     const locator = CliExecutableLocator();
     final standardPathsByExecutable = <String, Set<String>>{};
 

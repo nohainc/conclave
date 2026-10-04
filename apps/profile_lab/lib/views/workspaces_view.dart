@@ -16,14 +16,6 @@ class WorkspacesView extends StatefulWidget {
 class _WorkspacesViewState extends State<WorkspacesView> {
   String _searchQuery = '';
 
-  @override
-  void initState() {
-    super.initState();
-    if (widget.controller.currentSession != null) {
-      widget.controller.fetchWorkspaceChannels();
-    }
-  }
-
   Color _channelColor(String channel) {
     switch (channel.toLowerCase()) {
       case 'testing':
@@ -376,15 +368,18 @@ class _WorkspacesViewState extends State<WorkspacesView> {
                                     DropdownMenuItem(
                                         value: 'stable', child: Text('STABLE')),
                                   ],
-                                  onChanged: (newChannel) {
-                                    if (newChannel != null &&
-                                        newChannel != channel) {
-                                      _updateWorkspaceChannel(
-                                        wsId,
-                                        newChannel,
-                                      );
-                                    }
-                                  },
+                                  onChanged:
+                                      c.updatingWorkspaceIds.contains(wsId)
+                                          ? null
+                                          : (newChannel) {
+                                              if (newChannel != null &&
+                                                  newChannel != channel) {
+                                                _updateWorkspaceChannel(
+                                                  wsId,
+                                                  newChannel,
+                                                );
+                                              }
+                                            },
                                 ),
                               ),
                             ],

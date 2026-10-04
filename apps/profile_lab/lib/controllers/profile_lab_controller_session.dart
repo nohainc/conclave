@@ -60,6 +60,7 @@ mixin _ProfileLabSessionOperations on _ProfileLabControllerState {
       await _sessionStore.save(session, cloudOrigin: cloudUrl);
       currentSession = session;
       sessionSaved = true;
+      unawaited(ensureTabData(selectedTab));
     } catch (e) {
       if (!_cancelSignInRequested) {
         authError = e.toString();
@@ -128,7 +129,7 @@ mixin _ProfileLabSessionOperations on _ProfileLabControllerState {
       } catch (_) {}
     }
     await _sessionStore.clear();
-    currentSession = null;
+    await _clearCloudOriginState();
     notifyListeners();
   }
 }

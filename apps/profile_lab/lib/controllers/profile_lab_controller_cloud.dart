@@ -5,15 +5,29 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
 
   /// Fetches dynamic Worker catalog from Cloud.
   @override
-  Future<void> fetchCloudCatalog() async {
-    isLoadingCloud = true;
+  Future<void> fetchCloudCatalog() => _refresh('catalog', _fetchCloudCatalog);
+
+  Future<void> _fetchCloudCatalog() async {
+    final generation = _cloudGeneration;
+    workerCatalogError = null;
+    workerCatalogUnauthorized = false;
     cloudError = null;
     notifyListeners();
 
     try {
       final workers = await apiClient.fetchWorkerCatalog();
+      if (generation != _cloudGeneration) {
+        return;
+      }
       cloudWorkers = workers.map((worker) => worker.toJson()).toList();
-      await discoverInstalledProviders();
+      if (cloudWorkers.isEmpty) {
+        selectedCloudWorker = null;
+        selectedCloudDefinition = null;
+        selectedDefinitionId = null;
+        cloudReleases = [];
+        selectedCloudRelease = null;
+        cloudEvidence = [];
+      }
       if (selectedCloudWorker != null) {
         final match = cloudWorkers.firstWhere(
           (w) => w['workerTypeId'] == selectedCloudWorker!['workerTypeId'],
@@ -22,30 +36,52 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
               : const <String, dynamic>{},
         );
         if (match.isNotEmpty) {
-          await selectWorker(match);
+          unawaited(selectWorker(match));
         }
       } else if (cloudWorkers.isNotEmpty) {
-        await selectWorker(cloudWorkers.first);
+        unawaited(selectWorker(cloudWorkers.first));
       }
     } catch (e) {
-      cloudError = 'Failed to load Cloud catalog: $e';
+      if (generation != _cloudGeneration) {
+        return;
+      }
+      workerCatalogError = 'Failed to load Cloud catalog: $e';
+      workerCatalogUnauthorized = e is ProfileAdminUnauthorizedException;
+      cloudError = workerCatalogError;
+      _loaded.remove('catalog');
     } finally {
-      isLoadingCloud = false;
       notifyListeners();
     }
   }
 
   /// Selects a Worker from the Cloud catalog and fetches its definition & releases.
   Future<void> selectWorker(Map<String, dynamic> worker) async {
+    final generation = _cloudGeneration;
     selectedCloudWorker = worker;
+    selectedDefinitionId = worker['profileDefinitionId'] as String?;
+    cloudReleases = [];
+    selectedCloudRelease = null;
+    cloudEvidence = [];
+    selectedCloudDefinition = null;
+    definitionsError = null;
+    notifyListeners();
     final defId = worker['profileDefinitionId'] as String?;
     if (defId != null && defId.isNotEmpty) {
       selectedDefinitionId = defId;
       try {
-        selectedCloudDefinition =
-            (await apiClient.fetchDefinition(defId)).toJson();
-      } catch (_) {
-        selectedCloudDefinition = null;
+        await _refresh('definition:$defId', () async {
+          final definition = await apiClient.fetchDefinition(defId);
+          if (generation == _cloudGeneration && selectedDefinitionId == defId) {
+            selectedCloudDefinition = definition.toJson();
+          }
+        });
+      } catch (e) {
+        if (generation == _cloudGeneration && selectedDefinitionId == defId) {
+          definitionsError = 'Failed to fetch definition: $e';
+        }
+      }
+      if (generation != _cloudGeneration || selectedDefinitionId != defId) {
+        return;
       }
 
       // Check if a local draft exists for this definition
@@ -58,6 +94,7 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
         await fetchCloudAudit(definitionOnly: true);
       }
     } else {
+      selectedDefinitionId = null;
       selectedCloudDefinition = null;
       cloudReleases = [];
       selectedCloudRelease = null;
@@ -67,7 +104,12 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
 
   /// Fetches releases for a profile definition.
   @override
-  Future<void> fetchCloudReleases([String? profileDefinitionId]) async {
+  Future<void> fetchCloudReleases([String? profileDefinitionId]) => _refresh(
+      'releases:${profileDefinitionId ?? selectedDefinitionId}',
+      () => _fetchCloudReleases(profileDefinitionId));
+
+  Future<void> _fetchCloudReleases(String? profileDefinitionId) async {
+    final generation = _cloudGeneration;
     final defId = profileDefinitionId ?? selectedDefinitionId;
     if (defId == null) {
       cloudReleases = [];
@@ -76,10 +118,13 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
       return;
     }
 
+    releasesError = null;
     try {
-      cloudReleases = (await apiClient.fetchReleases(defId))
-          .map((release) => release.toJson())
-          .toList();
+      final result = await apiClient.fetchReleases(defId);
+      if (generation != _cloudGeneration || selectedDefinitionId != defId) {
+        return;
+      }
+      cloudReleases = result.map((release) => release.toJson()).toList();
       if (cloudReleases.isNotEmpty) {
         selectedCloudRelease = cloudReleases.first;
         final version = selectedCloudRelease!['releaseVersion'] as int?;
@@ -92,7 +137,11 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
         cloudEvidence = [];
       }
     } catch (e) {
-      cloudError = 'Failed to fetch releases: $e';
+      if (generation != _cloudGeneration || selectedDefinitionId != defId) {
+        return;
+      }
+      releasesError = 'Failed to fetch releases: $e';
+      cloudError = releasesError;
     }
     await discoverInstalledProviders();
     notifyListeners();
@@ -112,7 +161,15 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
   /// Fetches Cloud acceptance evidence for a release.
   @override
   Future<void> fetchCloudEvidence(
+          {String? profileDefinitionId, int? version}) =>
+      _refresh(
+          'evidence:${profileDefinitionId ?? selectedDefinitionId}:${version ?? selectedCloudRelease?['releaseVersion']}',
+          () => _fetchCloudEvidence(
+              profileDefinitionId: profileDefinitionId, version: version));
+
+  Future<void> _fetchCloudEvidence(
       {String? profileDefinitionId, int? version}) async {
+    final generation = _cloudGeneration;
     final defId = profileDefinitionId ?? selectedDefinitionId;
     final ver = version ?? selectedCloudRelease?['releaseVersion'] as int?;
     if (defId == null || ver == null) {
@@ -121,12 +178,22 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
       return;
     }
 
+    evidenceError = null;
     try {
-      cloudEvidence = (await apiClient.fetchReleaseEvidence(defId, ver))
-          .map((evidence) => evidence.toJson())
-          .toList();
-    } catch (_) {
-      cloudEvidence = [];
+      final result = await apiClient.fetchReleaseEvidence(defId, ver);
+      if (generation != _cloudGeneration ||
+          selectedDefinitionId != defId ||
+          selectedCloudRelease?['releaseVersion'] != ver) {
+        return;
+      }
+      cloudEvidence = result.map((evidence) => evidence.toJson()).toList();
+    } catch (e) {
+      if (generation != _cloudGeneration ||
+          selectedDefinitionId != defId ||
+          selectedCloudRelease?['releaseVersion'] != ver) {
+        return;
+      }
+      evidenceError = 'Failed to fetch evidence: $e';
     }
     notifyListeners();
   }
@@ -193,24 +260,51 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
 
   /// Fetches audit events globally or scoped to the current definition.
   @override
-  Future<void> fetchCloudAudit({bool? definitionOnly}) async {
+  Future<void> fetchCloudAudit({bool? definitionOnly}) => _refresh(
+      'audit:${(definitionOnly ?? auditFilterCurrentDefinition) ? selectedDefinitionId : null}',
+      () => _fetchCloudAudit(definitionOnly: definitionOnly));
+
+  Future<void> _fetchCloudAudit({bool? definitionOnly}) async {
     if (definitionOnly != null) {
       auditFilterCurrentDefinition = definitionOnly;
     }
+    final generation = _cloudGeneration;
     final defId = auditFilterCurrentDefinition ? selectedDefinitionId : null;
+    auditError = null;
 
     try {
-      cloudAuditEvents = (await apiClient.fetchAudit(defId))
-          .map((event) => event.toJson())
-          .toList();
+      final result = await apiClient.fetchAudit(defId);
+      if (generation != _cloudGeneration ||
+          defId !=
+              (auditFilterCurrentDefinition ? selectedDefinitionId : null)) {
+        return;
+      }
+      cloudAuditEvents = result.map((event) => event.toJson()).toList();
     } catch (e) {
-      cloudError = 'Failed to fetch audit: $e';
+      if (generation != _cloudGeneration ||
+          defId !=
+              (auditFilterCurrentDefinition ? selectedDefinitionId : null)) {
+        return;
+      }
+      auditError = 'Failed to fetch audit: $e';
+      cloudError = auditError;
     }
     notifyListeners();
   }
 
   /// Executes channel pointer rollback.
-  Future<void> rollbackChannelPointer({
+  Future<void> rollbackChannelPointer(
+          {required String channel,
+          required int targetReleaseVersion,
+          String? reason}) =>
+      _refresh(
+          'rollback',
+          () => _rollbackChannelPointer(
+              channel: channel,
+              targetReleaseVersion: targetReleaseVersion,
+              reason: reason));
+
+  Future<void> _rollbackChannelPointer({
     required String channel,
     required int targetReleaseVersion,
     String? reason,
@@ -233,7 +327,18 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
 
   /// Promotes a release. Stable promotion requires a separately stored Cloud
   /// evidence record and sends only its immutable identifier.
-  Future<void> promoteCloudRelease({
+  Future<void> promoteCloudRelease(
+          {required int releaseVersion,
+          required String channel,
+          String? acceptanceEvidenceId}) =>
+      _refresh(
+          'promote',
+          () => _promoteCloudRelease(
+              releaseVersion: releaseVersion,
+              channel: channel,
+              acceptanceEvidenceId: acceptanceEvidenceId));
+
+  Future<void> _promoteCloudRelease({
     required int releaseVersion,
     required String channel,
     String? acceptanceEvidenceId,
@@ -262,7 +367,14 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
   }
 
   /// Revokes a release version permanently for security/safety reasons.
-  Future<void> revokeCloudRelease({
+  Future<void> revokeCloudRelease(
+          {required int releaseVersion, required String reason}) =>
+      _refresh(
+          'revoke',
+          () => _revokeCloudRelease(
+              releaseVersion: releaseVersion, reason: reason));
+
+  Future<void> _revokeCloudRelease({
     required int releaseVersion,
     required String reason,
   }) async {
@@ -285,7 +397,10 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
   /// Requests Cloud publication of the current draft.
   /// Signing occurs in the controlled Cloud signing service; Profile Lab does
   /// not hold or manage private keys.
-  Future<void> publishCurrentDraft() async {
+  Future<void> publishCurrentDraft() =>
+      _refresh('publish', _publishCurrentDraft);
+
+  Future<void> _publishCurrentDraft() async {
     if (selectedDefinitionId == null || currentDraft == null) return;
     try {
       final draft = currentDraft!;

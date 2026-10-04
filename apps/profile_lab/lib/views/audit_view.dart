@@ -16,14 +16,6 @@ class AuditView extends StatefulWidget {
 
 class _AuditViewState extends State<AuditView> {
   @override
-  void initState() {
-    super.initState();
-    if (widget.controller.currentSession != null) {
-      widget.controller.fetchCloudAudit();
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     final c = widget.controller;
     final events = c.cloudAuditEvents;
@@ -77,11 +69,14 @@ class _AuditViewState extends State<AuditView> {
               IconButton(
                 icon: const Icon(Icons.refresh, size: 18),
                 tooltip: 'Refresh Audit Trail',
-                onPressed: () => c.fetchCloudAudit(),
+                onPressed: c.isLoadingAudit ? null : () => c.fetchCloudAudit(),
               ),
             ],
           ),
         ),
+
+        if (c.isLoadingAudit) const LinearProgressIndicator(),
+        if (c.auditError != null) Text(c.auditError!),
 
         // Audit events list
         Expanded(

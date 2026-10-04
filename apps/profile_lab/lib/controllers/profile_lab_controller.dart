@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -132,7 +133,73 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   String? aiProposalError;
   Map<String, Object?>? pendingAiProvenance;
   ProfileLabTestSandbox? _activeAiSandbox;
-  bool isLoadingCloud = false;
+  final Map<String, Future<void>> _refreshes = {};
+  final Set<String> _loaded = {};
+  int _cloudGeneration = 0;
+  final Set<String> updatingWorkspaceIds = {};
+  bool get isPublishing => _refreshes.containsKey('publish');
+  bool get isSavingToCloud => _refreshes.containsKey('save-draft');
+  bool get isRollingBack => _refreshes.containsKey('rollback');
+  bool get isPromoting => _refreshes.containsKey('promote');
+  bool get isRevoking => _refreshes.containsKey('revoke');
+  bool get isScanningProviders => _refreshes.containsKey('providers');
+  String? releasesError;
+  String? evidenceError;
+  String? auditError;
+  String? definitionsError;
+  bool get isLoadingWorkerCatalog => _refreshes.containsKey('catalog');
+  bool get isLoadingDefinitions =>
+      _refreshes.keys.any((k) => k.startsWith('definition:'));
+  bool get isLoadingReleases =>
+      _refreshes.keys.any((k) => k.startsWith('releases:'));
+  bool get isLoadingEvidence =>
+      _refreshes.keys.any((k) => k.startsWith('evidence:'));
+  bool get isLoadingAudit => _refreshes.keys.any((k) => k.startsWith('audit:'));
+  String? workerCatalogError;
+  bool workerCatalogUnauthorized = false;
+  bool get hasLoadedWorkerCatalog => _loaded.contains('catalog');
+
+  Future<void> _refresh(String key, Future<void> Function() action) {
+    final pending = _refreshes[key];
+    if (pending != null) return pending;
+    final generation = _cloudGeneration;
+    final completer = Completer<void>();
+    _refreshes[key] = completer.future;
+    notifyListeners();
+    unawaited(() async {
+      try {
+        await action();
+        if (generation == _cloudGeneration &&
+            (key != 'catalog' || workerCatalogError == null) &&
+            (key != 'workspaces' || workspaceError == null) &&
+            (!key.startsWith('releases:') || releasesError == null)) {
+          _loaded.add(key);
+        }
+        completer.complete();
+      } catch (error, stack) {
+        completer.completeError(error, stack);
+      } finally {
+        if (identical(_refreshes[key], completer.future)) {
+          _refreshes.remove(key);
+        }
+        notifyListeners();
+      }
+    }());
+    return completer.future;
+  }
+
+  bool _disposed = false;
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   String? cloudError;
   bool auditFilterCurrentDefinition = false;
   // Controlled Workspace rollout channels state
@@ -158,44 +225,64 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
 
   void setTab(LabTab tab) {
     selectedTab = tab;
-    if (tab == LabTab.workspaces &&
-        workspaceChannels.isEmpty &&
-        currentSession != null) {
-      fetchWorkspaceChannels();
-    }
     notifyListeners();
+    unawaited(Future<void>.microtask(() => ensureTabData(tab)));
   }
 
-  Future<void> fetchWorkspaceChannels() async {
+  Future<void> ensureTabData(LabTab tab) async {
+    if (currentSession == null || _disposed) return;
+    switch (tab) {
+      case LabTab.workers:
+        if (!hasLoadedWorkerCatalog) await fetchCloudCatalog();
+      case LabTab.workspaces:
+        if (!_loaded.contains('workspaces')) await fetchWorkspaceChannels();
+      case LabTab.releases:
+        if (!_loaded.contains('releases:$selectedDefinitionId')) {
+          await fetchCloudReleases();
+        }
+      case LabTab.tests:
+        await fetchCloudEvidence();
+      case LabTab.audit:
+        await fetchCloudAudit();
+      case LabTab.profiles:
+        break;
+    }
+  }
+
+  Future<void> fetchWorkspaceChannels() =>
+      _refresh('workspaces', _fetchWorkspaceChannels);
+
+  Future<void> _fetchWorkspaceChannels() async {
+    final generation = _cloudGeneration;
     isLoadingWorkspaces = true;
     workspaceError = null;
     notifyListeners();
     try {
-      workspaceChannels = (await apiClient.listWorkspaceChannels())
-          .map((workspace) => workspace.toJson())
-          .toList();
+      final result = await apiClient.listWorkspaceChannels();
+      if (generation != _cloudGeneration) return;
+      workspaceChannels =
+          result.map((workspace) => workspace.toJson()).toList();
     } catch (e) {
-      workspaceError = e.toString();
+      if (generation == _cloudGeneration) workspaceError = e.toString();
     } finally {
-      isLoadingWorkspaces = false;
+      if (generation == _cloudGeneration) isLoadingWorkspaces = false;
       notifyListeners();
     }
   }
 
   Future<void> updateWorkspaceChannel(
       String workspaceId, String channel) async {
-    isLoadingWorkspaces = true;
+    if (!updatingWorkspaceIds.add(workspaceId)) return;
     workspaceError = null;
     notifyListeners();
     try {
       await apiClient.setWorkspaceChannel(
-        workspaceId: workspaceId,
-        channel: channel,
-      );
+          workspaceId: workspaceId, channel: channel);
       await fetchWorkspaceChannels();
     } catch (e) {
       workspaceError = e.toString();
-      isLoadingWorkspaces = false;
+    } finally {
+      updatingWorkspaceIds.remove(workspaceId);
       notifyListeners();
     }
   }
@@ -253,6 +340,16 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   Future<void> _clearCloudOriginState() async {
     await _sessionStore.clear();
     currentSession = null;
+    _cloudGeneration++;
+    _refreshes.clear();
+    _loaded.clear();
+    isLoadingWorkspaces = false;
+    releasesError = null;
+    evidenceError = null;
+    auditError = null;
+    definitionsError = null;
+    workerCatalogError = null;
+    workerCatalogUnauthorized = false;
     cloudWorkers = [];
     selectedCloudWorker = null;
     selectedCloudDefinition = null;

@@ -18,15 +18,6 @@ class ReleasesView extends StatefulWidget {
 }
 
 class _ReleasesViewState extends State<ReleasesView> {
-  @override
-  void initState() {
-    super.initState();
-    if (widget.controller.selectedDefinitionId != null &&
-        widget.controller.currentSession != null) {
-      widget.controller.fetchCloudReleases();
-    }
-  }
-
   void _showRollbackDialog() {
     final c = widget.controller;
     final defId = c.selectedDefinitionId ?? '';
@@ -409,7 +400,9 @@ class _ReleasesViewState extends State<ReleasesView> {
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                onPressed: releases.length > 1 && c.currentSession != null
+                onPressed: releases.length > 1 &&
+                        c.currentSession != null &&
+                        !c.isRollingBack
                     ? _showRollbackDialog
                     : null,
               ),
@@ -417,11 +410,15 @@ class _ReleasesViewState extends State<ReleasesView> {
               IconButton(
                 icon: const Icon(Icons.refresh, size: 18),
                 tooltip: 'Refresh Releases',
-                onPressed: () => c.fetchCloudReleases(),
+                onPressed:
+                    c.isLoadingReleases ? null : () => c.fetchCloudReleases(),
               ),
             ],
           ),
         ),
+
+        if (c.isLoadingReleases) const LinearProgressIndicator(),
+        if (c.releasesError != null) Text(c.releasesError!),
 
         // Split view: Left Releases Table, Right Release Inspector
         Card(
@@ -517,7 +514,9 @@ class _ReleasesViewState extends State<ReleasesView> {
                                     tooltip: state == 'testing'
                                         ? 'Promote to Beta'
                                         : 'Promote to Stable using Cloud evidence',
-                                    onPressed: () => _showPromoteDialog(rel),
+                                    onPressed: c.isPromoting
+                                        ? null
+                                        : () => _showPromoteDialog(rel),
                                   )
                                 : null,
                             onTap: () => c.selectCloudRelease(rel),
@@ -539,8 +538,12 @@ class _ReleasesViewState extends State<ReleasesView> {
                     : _ReleaseInspectorPane(
                         controller: c,
                         release: selectedRelease,
-                        onPromote: () => _showPromoteDialog(selectedRelease),
-                        onRevoke: () => _showRevokeDialog(selectedRelease),
+                        onPromote: c.isPromoting
+                            ? null
+                            : () => _showPromoteDialog(selectedRelease),
+                        onRevoke: c.isRevoking
+                            ? null
+                            : () => _showRevokeDialog(selectedRelease),
                       ),
               ),
             ],
@@ -561,8 +564,8 @@ class _ReleaseInspectorPane extends StatelessWidget {
 
   final ProfileLabController controller;
   final Map<String, dynamic> release;
-  final VoidCallback onPromote;
-  final VoidCallback onRevoke;
+  final VoidCallback? onPromote;
+  final VoidCallback? onRevoke;
 
   @override
   Widget build(BuildContext context) {

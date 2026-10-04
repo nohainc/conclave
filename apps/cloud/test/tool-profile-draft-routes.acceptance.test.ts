@@ -318,6 +318,36 @@ async function createSaveQualifyAndPublishV1(
 }
 
 describe("Tool Profile Cloud draft route acceptance", () => {
+  it("returns the fresh v8 bootstrap Workers through the administrative catalog", async () => {
+    const db = new SqliteD1();
+    try {
+      const rows = db.sqlite
+        .prepare(
+          "SELECT worker_type_id FROM worker_catalog ORDER BY sort_order",
+        )
+        .all();
+      expect(rows.map((row) => row.worker_type_id)).toEqual(
+        expect.arrayContaining(["chatgpt", "gemini"]),
+      );
+      const catalog = await assertOk(
+        makeEnv(db),
+        "GET",
+        "/api/admin/workers/catalog",
+      );
+      expect(
+        (catalog.workers as { workerTypeId: string }[]).map(
+          (worker) => worker.workerTypeId,
+        ),
+      ).toEqual(expect.arrayContaining(["chatgpt", "gemini"]));
+      expect(
+        db.sqlite
+          .prepare("SELECT COUNT(*) AS count FROM tool_profile_releases")
+          .get()?.count,
+      ).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
   it("creates a Worker, creates and saves draft v1, qualifies it, and publishes", async () => {
     const db = new SqliteD1();
     const env = makeEnv(db);

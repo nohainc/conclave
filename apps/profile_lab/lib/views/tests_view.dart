@@ -19,15 +19,6 @@ class _TestsViewState extends State<TestsView> {
   int _selectedScope = 0; // 0: Local Evidence, 1: Cloud Evidence
 
   @override
-  void initState() {
-    super.initState();
-    if (widget.controller.selectedDefinitionId != null &&
-        widget.controller.currentSession != null) {
-      widget.controller.fetchCloudEvidence();
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     final c = widget.controller;
     final draft = c.currentDraft;
@@ -188,12 +179,17 @@ class _TestsViewState extends State<TestsView> {
                 IconButton(
                   icon: const Icon(Icons.refresh, size: 16),
                   tooltip: 'Refresh Cloud Evidence',
-                  onPressed: () => c.fetchCloudEvidence(),
+                  onPressed:
+                      c.isLoadingEvidence ? null : () => c.fetchCloudEvidence(),
                 ),
             ],
           ),
           const SizedBox(height: 10),
 
+          if (_selectedScope == 1 && c.isLoadingEvidence)
+            const LinearProgressIndicator(),
+          if (_selectedScope == 1 && c.evidenceError != null)
+            Text(c.evidenceError!),
           // Records List
           Expanded(
             child: _selectedScope == 0

@@ -374,7 +374,8 @@ class _DraftsViewState extends State<DraftsView> {
                                     horizontal: 10, vertical: 4),
                                 minimumSize: Size.zero,
                               ),
-                              onPressed: c.jsonValidationError == null
+                              onPressed: c.jsonValidationError == null &&
+                                      !c.isSavingToCloud
                                   ? () => c.saveCurrentDraftToCloud()
                                   : null,
                             ),
@@ -390,32 +391,33 @@ class _DraftsViewState extends State<DraftsView> {
                                     horizontal: 10, vertical: 4),
                                 minimumSize: Size.zero,
                               ),
-                              onPressed:
-                                  c.jsonValidationError == null && !c.isDirty
-                                      ? () async {
-                                          try {
-                                            await c.publishCurrentDraft();
-                                            if (context.mounted) {
-                                              ScaffoldMessenger.of(context)
-                                                  .showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                      'Local qualification passed; draft published and signed by Cloud.'),
-                                                ),
-                                              );
-                                            }
-                                          } catch (e) {
-                                            if (context.mounted) {
-                                              ScaffoldMessenger.of(context)
-                                                  .showSnackBar(
-                                                SnackBar(
-                                                    content: Text(
-                                                        'Publication failed: $e')),
-                                              );
-                                            }
-                                          }
+                              onPressed: c.jsonValidationError == null &&
+                                      !c.isDirty &&
+                                      !c.isPublishing
+                                  ? () async {
+                                      try {
+                                        await c.publishCurrentDraft();
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                  'Local qualification passed; draft published and signed by Cloud.'),
+                                            ),
+                                          );
                                         }
-                                      : null,
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                                content: Text(
+                                                    'Publication failed: $e')),
+                                          );
+                                        }
+                                      }
+                                    }
+                                  : null,
                             ),
                           ],
                         ],

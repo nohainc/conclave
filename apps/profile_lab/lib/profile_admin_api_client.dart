@@ -72,6 +72,10 @@ class ProfileAdminApiClient {
       if (response.statusCode == HttpStatus.notFound) {
         throw ProfileAdminNotFoundException(errorMessage);
       }
+      if (response.statusCode == HttpStatus.unauthorized ||
+          response.statusCode == HttpStatus.forbidden) {
+        throw ProfileAdminUnauthorizedException(errorMessage);
+      }
       throw StateError(errorMessage);
     }
     return decoded;
@@ -87,7 +91,8 @@ class ProfileAdminApiClient {
         'workers',
       );
     }
-    return [];
+    throw const FormatException(
+        'Cloud Worker catalog response must contain a workers array.');
   }
 
   /// Atomically registers an approved logical Worker and its initial Profile definition.
@@ -483,4 +488,8 @@ List<T> _readModels<T extends ProfileAdminReadModel>(
     }
     return parse(Map<String, dynamic>.from(value));
   }));
+}
+
+class ProfileAdminUnauthorizedException extends StateError {
+  ProfileAdminUnauthorizedException(super.message);
 }

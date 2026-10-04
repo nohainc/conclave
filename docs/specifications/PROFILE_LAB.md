@@ -182,3 +182,38 @@ version probe can offer a narrow range beginning at the discovered version and
 ending at the next minor boundary. Applying the suggestion saves the local
 Draft; qualification must then be rerun. Cloud publication rejects missing or
 obvious near-universal placeholder ranges.
+
+## Tab activation and operation state
+
+Navigation changes the selected tab synchronously and remains available during
+Cloud refreshes, provider discovery, local tests, AI proposals, and release
+operations. The controller schedules lazy loading after navigation; tab views
+must not fetch data or notify the shared controller during construction.
+The application activates the initial tab after its first frame and activates
+the current tab after successful sign-in.
+
+Concurrent refreshes coalesce by domain and resource identity (catalog,
+Workspace channels, definition, definition releases, release evidence, and
+scoped audit). Catalog and Workspace data load lazily, including successful
+empty results; explicit Refresh retries or reloads them. Releases are keyed by
+Definition. Evidence and audit refresh on activation. Loading and errors are
+owned by their individual domains. Publication, Cloud save, promotion,
+rollback, revocation, and Workspace channel updates disable only their
+initiating actions. Operations continue when the operator changes tabs.
+Responses for a previous Cloud origin/session or a superseded Definition or
+release selection must not replace the current read model.
+
+Workers distinguish sign-in required, not yet loaded, loading, successful
+empty catalog, populated catalog, unauthorized access (HTTP 401/403), and
+failed refresh. Failures display the actual error and Retry, including when
+an older catalog remains visible. A malformed response is a failure, not an
+empty catalog. Search with no matches has its own message. No built-in Worker
+fallback exists: Cloud's `worker_catalog` and `tool_profile_definitions` remain
+the shared source for Profile Lab and Workspace. The fresh v8 bootstrap seeds
+ChatGPT and Gemini identities and Definitions, but no signed releases.
+
+Regression coverage includes authenticated tab switching while catalog and
+Workspace requests remain delayed, duplicate request coalescing, catalog
+failure and unauthorized rendering, and the real admin catalog endpoint over
+the fresh v8 database. These fixture checks do not establish deployed-service
+or packaged desktop acceptance.
