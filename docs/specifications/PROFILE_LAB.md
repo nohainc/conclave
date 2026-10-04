@@ -222,8 +222,9 @@ or packaged desktop acceptance.
 
 The checked-in Cloud configurations set
 `CONCLAVE_PROFILE_LAB_OWNER_EMAIL=vitalii@nohainc.com`. When this setting is
-present, only that active account with a verified email can approve, claim,
-or use a Profile Lab desktop session or administer Profiles. The email is
+present, only that active account can approve, claim,
+or use a Profile Lab desktop session or administer Profiles. Signed publication
+mode additionally requires email verification. The email is
 resolved from Cloud's authenticated user record, never a client request field.
 This exclusive policy replaces the user-ID admin and release-manager allowlists;
 older allowlists cannot grant another account access. Browser authentication,
@@ -265,7 +266,7 @@ For local development, start Cloud/AX with the existing local startup workflow,
 then run `bash scripts/run-profile-lab-development.sh` and
 `bash scripts/run-workspace-development.sh`. Both default to
 `http://localhost:8787`; set `CONCLAVE_DEVELOPMENT_CLOUD_URL` to the same loopback
-origin as your local Cloud. Sign in through the browser as the verified owner,
+origin as your local Cloud. Sign in through the browser as the owner,
 save and test a draft in the Lab, and refresh Workspace. The Workspace launcher
 uses a separate DevelopmentState directory so existing production registration
 is not reused. `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY` overrides the source
@@ -278,3 +279,8 @@ currently builds unsigned development/testing artifacts and supplies managed
 public trust roots when configured. Apple may still apply local ad-hoc signatures
 needed to execute a development binary; this is not Developer ID signing,
 notarization, or Tool Profile release signing.
+
+In `drafts-only` development mode, the active owner account can use its existing
+browser sign-in without separate email verification. Other emails remain denied.
+Signed publication mode requires the owner email to be verified; unspecified
+release modes also retain that requirement. No verification flags are rewritten.

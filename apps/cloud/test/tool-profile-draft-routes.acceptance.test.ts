@@ -318,7 +318,7 @@ async function createSaveQualifyAndPublishV1(
 }
 
 describe("Tool Profile Cloud draft route acceptance", () => {
-  it("grants only the verified configured owner access and keeps signing disabled", async () => {
+  it("grants only the configured owner development access without email verification and keeps signing disabled", async () => {
     const db = new SqliteD1();
     const env = Object.assign(makeEnv(db), {
       CONCLAVE_PROFILE_LAB_OWNER_EMAIL: "vitalii@nohainc.com",
@@ -331,12 +331,6 @@ describe("Tool Profile Cloud draft route acceptance", () => {
       db.sqlite
         .prepare("UPDATE users SET email = ?, email_verified = 0 WHERE id = ?")
         .run("vitalii@nohainc.com", "profile-lab-operator");
-      expect(
-        (await send(env, "GET", "/api/admin/workers/catalog")).response.status,
-      ).toBe(403);
-      db.sqlite
-        .prepare("UPDATE users SET email_verified = 1 WHERE id = ?")
-        .run("profile-lab-operator");
       const access = await assertOk(
         env,
         "GET",

@@ -136,15 +136,18 @@ describe("desktop human authentication", () => {
     return { db, env, sqlite };
   }
 
-  for (const [email, verified, allowed] of [
-    ["vitalii@nohainc.com", 1, true],
-    ["vitalii@nohainc.com", 0, false],
-    ["someone@example.test", 1, false],
+  for (const [email, verified, mode, allowed] of [
+    ["vitalii@nohainc.com", 1, "signed", true],
+    ["vitalii@nohainc.com", 0, "signed", false],
+    ["vitalii@nohainc.com", 0, "drafts-only", true],
+    ["someone@example.test", 1, "signed", false],
+    ["someone@example.test", 0, "drafts-only", false],
   ] as const) {
-    it(`Profile Lab browser approval requires the verified owner: ${email}, verified=${verified}`, async () => {
+    it(`Profile Lab browser approval requires the configured owner: ${email}, verified=${verified}, mode=${mode}`, async () => {
       const { env: baseEnv, sqlite } = await setup();
       const env = Object.assign(baseEnv, {
         CONCLAVE_PROFILE_LAB_OWNER_EMAIL: "vitalii@nohainc.com",
+        CONCLAVE_PROFILE_RELEASE_MODE: mode,
       });
       vi.mocked(identityService.resolve).mockResolvedValue({
         userId: "human-1",
@@ -217,7 +220,11 @@ describe("desktop human authentication", () => {
         ).toBe(200);
         await authorizeToolProfileAdmin(sessionRequest(), env);
         sqlite
-          .prepare("UPDATE users SET email_verified = 0 WHERE id = ?")
+          .prepare(
+            mode === "drafts-only"
+              ? "UPDATE users SET email = 'someone@example.test' WHERE id = ?"
+              : "UPDATE users SET email_verified = 0 WHERE id = ?",
+          )
           .run("human-1");
         await expect(
           handleGetDesktopHumanSession(sessionRequest(), env),

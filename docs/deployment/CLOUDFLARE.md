@@ -98,7 +98,7 @@ configured public trust root. It stops before deployment if a value is missing
 or the key pair does not match. The Cloud Profile signing preflight also checks
 the configured key against Cloud's revocation state.
 
-Profile Lab requires the active, verified browser account `vitalii@nohainc.com`.
+Profile Lab requires the active browser account `vitalii@nohainc.com`.
 Both Wrangler configurations set `CONCLAVE_PROFILE_LAB_OWNER_EMAIL`; this exclusive
 owner policy replaces the legacy user-ID allowlists for this deployment. Browser
 approval, session claim, and subsequent Lab requests enforce the policy.
@@ -157,7 +157,7 @@ session. For Profile Lab, it creates an intent and requires browser approval to
 reject the disposable non-owner identity. The rejected intent must remain
 unapproved and unclaimable; Workspace credentials must also be rejected by Lab
 administration. Positive owner authentication is covered by the Cloud acceptance
-tests and requires the real verified owner account for a live browser check.
+tests and requires the real owner account for a live browser check.
 The smoke uses the Workspace session to register
 a uniquely named Workspace, performs an HTTP/1.1 WebSocket upgrade, sends
 `workspace.hello`, requires the matching `workspace.hello.ack`, requests
@@ -282,3 +282,8 @@ At that point the preferred topology is either:
 - separated API: `api.conclaveax.com`, with explicit authenticated CORS and CSRF/session design.
 
 The same-origin option should be preferred for the first production release unless there is a concrete reason to separate the API hostname.
+
+In `drafts-only` development mode, the active owner account can use its existing
+browser sign-in without separate email verification. Other emails remain denied.
+Signed publication mode requires the owner email to be verified; unspecified
+release modes also retain that requirement. No verification flags are rewritten.

@@ -19,7 +19,8 @@ export async function isProfileLabOwner(
     .first<{ email: string; emailVerified: number; status: string }>();
   return (
     user?.status === "active" &&
-    user.emailVerified === 1 &&
+    (env.CONCLAVE_PROFILE_RELEASE_MODE === "drafts-only" ||
+      user.emailVerified === 1) &&
     user.email.trim().toLowerCase() === email
   );
 }
