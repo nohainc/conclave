@@ -397,15 +397,6 @@ class _WorkTimelineCard extends StatelessWidget {
           .firstOrNull ??
       request.workflowId;
 
-  String _stepName(String kind) => switch (kind) {
-        'implement' => 'Implement',
-        'research' => 'Research',
-        'plan' => 'Plan',
-        'test' => 'Test',
-        'verify' => 'Verify',
-        _ => kind,
-      };
-
   String _elapsed(int? milliseconds) {
     if (milliseconds == null) return '';
     final seconds = milliseconds ~/ 1000;
@@ -414,25 +405,13 @@ class _WorkTimelineCard extends StatelessWidget {
     return minutes > 0 ? '${minutes}m ${remainder}s' : '${remainder}s';
   }
 
-  IconData _statusIcon(String status) => switch (status) {
-        'completed' => Icons.check_circle,
-        'running' => Icons.circle,
-        'failed' => Icons.error,
-        'cancelled' => Icons.cancel,
-        _ => Icons.circle_outlined,
-      };
-
-  String _stepStatusLabel(String status) => switch (status) {
-        'completed' => 'done',
-        'running' => 'running',
-        'failed' => 'failed',
-        'cancelled' => 'cancelled',
-        _ => 'waiting',
-      };
-
-  String _workerName(AxWorkRequestStep step) =>
-      step.workerDisplayName ??
-      (step.workerId == null ? 'Worker pending' : 'Selected Worker');
+  String _totalElapsed() {
+    final elapsed = request.steps
+        .map((step) => step.elapsedMs)
+        .whereType<int>()
+        .fold<int>(0, (total, value) => total + value);
+    return elapsed == 0 ? '' : _elapsed(elapsed);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -448,12 +427,7 @@ class _WorkTimelineCard extends StatelessWidget {
         ? ''
         : '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} '
             '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
-    final cancelledSteps =
-        request.steps.where((step) => step.status == 'cancelled').toList();
-    final overall = request.status == 'cancelled'
-        ? 'Cancelled${cancelledSteps.isEmpty ? '' : ' during ${_stepName(cancelledSteps.first.kind)}'}'
-        : request.status[0].toUpperCase() + request.status.substring(1);
-
+    final elapsed = _totalElapsed();
     final requesterInitials = request.requestedByName.isNotEmpty
         ? request.requestedByName
             .trim()
@@ -611,230 +585,116 @@ class _WorkTimelineCard extends StatelessWidget {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '· $_workflowName · $overall${timeLabel.isEmpty ? '' : ' · $timeLabel'}',
+                          '· $_workflowName${elapsed.isEmpty ? '' : ' · $elapsed'}',
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(fontSize: 12, color: metaColor),
                         ),
                       ),
                     ],
                   ),
-                  if (request.steps.isEmpty &&
-                      (request.status == 'queued' ||
-                          request.status == 'running')) ...[
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Preparing Worker assignment…',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                  ],
-                  if (request.steps.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    ...request.steps.map((step) {
-                      final worker = _workerName(step);
-                      final details = [
-                        worker,
-                        if (step.engineVersion != null)
-                          'Engine ${step.engineVersion}',
-                        if (step.providerToolVersion != null)
-                          step.providerToolVersion!,
-                        if (_elapsed(step.elapsedMs).isNotEmpty)
-                          _elapsed(step.elapsedMs),
-                      ].join(' · ');
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 10),
+                  Builder(builder: (context) {
+                    final failedStep = request.steps
+                        .where((step) => step.status == 'failed')
+                        .firstOrNull;
+                    final response =
+                        request.finalText?.trim().isNotEmpty == true
+                            ? request.finalText!.trim()
+                            : request.steps
+                                .map((step) => step.resultText?.trim())
+                                .whereType<String>()
+                                .where((text) => text.isNotEmpty)
+                                .firstOrNull;
+                    final error = request.error?.trim().isNotEmpty == true
+                        ? request.error!.trim()
+                        : failedStep?.errorMessage?.trim();
+                    final message = response?.isNotEmpty == true
+                        ? response!
+                        : error?.isNotEmpty == true
+                            ? error!
+                            : request.status == 'cancelled'
+                                ? 'Run cancelled.'
+                                : 'Preparing Worker assignment…';
+                    final isError = error?.isNotEmpty == true;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SelectableText(
+                          message,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            height: 1.45,
+                            color: isError ? colors.error : textColor,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
                           children: [
-                            Row(children: [
-                              Icon(_statusIcon(step.status),
-                                  size: 17,
-                                  color: step.status == 'failed'
-                                      ? colors.error
-                                      : step.status == 'completed'
-                                          ? colors.primary
-                                          : colors.secondary),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _stepName(step.kind),
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
+                            if (timeLabel.isNotEmpty)
                               Text(
-                                _stepStatusLabel(step.status),
+                                timeLabel,
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: metaColor,
                                 ),
                               ),
-                            ]),
-                            if (step.status == 'running' ||
-                                step.status == 'completed' ||
-                                step.status == 'failed')
-                              Padding(
-                                padding:
-                                    const EdgeInsets.only(left: 25, top: 2),
-                                child: Text(
-                                  details,
-                                  style: Theme.of(context).textTheme.bodySmall,
+                            const Spacer(),
+                            if (response?.isNotEmpty == true ||
+                                error?.isNotEmpty == true)
+                              Tooltip(
+                                message:
+                                    isError ? 'Copy error' : 'Copy response',
+                                child: IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () {
+                                    Clipboard.setData(ClipboardData(
+                                      text: isError ? error! : response!,
+                                    ));
+                                  },
+                                  icon:
+                                      const Icon(Icons.copy_outlined, size: 17),
                                 ),
                               ),
-                            if (step.resultText?.isNotEmpty == true)
-                              Padding(
-                                padding:
-                                    const EdgeInsets.only(left: 25, top: 8),
-                                child: SelectableText(
-                                  step.resultText!,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: textColor,
-                                  ),
+                            if (onShowRunDetails != null)
+                              Tooltip(
+                                message: 'View run details',
+                                child: IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () =>
+                                      onShowRunDetails!(request.id),
+                                  icon:
+                                      const Icon(Icons.info_outline, size: 18),
                                 ),
                               ),
-                            if (step.status == 'failed') ...[
-                              Padding(
-                                padding:
-                                    const EdgeInsets.only(left: 25, top: 6),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: SelectableText(
-                                        step.errorMessage ??
-                                            'This Step could not be completed.',
-                                        style: TextStyle(
-                                          color: colors.error,
-                                          fontSize: 12.5,
-                                        ),
-                                      ),
-                                    ),
-                                    IconButton(
-                                      tooltip: 'Copy step error',
-                                      icon: const Icon(Icons.copy_outlined,
-                                          size: 18),
-                                      onPressed: () =>
-                                          Clipboard.setData(ClipboardData(
-                                        text:
-                                            '${_stepName(step.kind)} failed\n${step.errorMessage ?? 'This Step could not be completed.'}',
-                                      )),
-                                    ),
-                                  ],
+                            if (request.status == 'failed' &&
+                                failedStep != null &&
+                                onRetryStep != null)
+                              Tooltip(
+                                message: 'Retry failed Step',
+                                child: IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () =>
+                                      onRetryStep!(request.id, failedStep),
+                                  icon: const Icon(Icons.refresh, size: 18),
                                 ),
                               ),
-                              if (request.status == 'failed' &&
-                                  onRetryStep != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 16),
-                                  child: TextButton.icon(
-                                    onPressed: () =>
-                                        onRetryStep!(request.id, step),
-                                    icon: const Icon(Icons.refresh),
-                                    label: const Text('Retry step'),
-                                  ),
+                            if ((request.status == 'queued' ||
+                                    request.status == 'running') &&
+                                onCancelRun != null)
+                              Tooltip(
+                                message: 'Cancel run',
+                                child: IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () => onCancelRun!(request.id),
+                                  icon: const Icon(Icons.cancel_outlined,
+                                      size: 18),
                                 ),
-                            ],
+                              ),
                           ],
                         ),
-                      );
-                    }),
-                  ],
-                  if (request.testSummary != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Tests · ${request.testSummary}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                  if (request.finalText != null &&
-                      request.finalText!.isNotEmpty) ...[
-                    const Divider(height: 24),
-                    Text(
-                      'Conclave · $overall · $_workflowName',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 6),
-                    SelectableText(
-                      request.finalText!,
-                      style: TextStyle(fontSize: 13.5, color: textColor),
-                    ),
-                  ] else if (request.status == 'failed' &&
-                      request.error != null) ...[
-                    const Divider(height: 24),
-                    Text(
-                      'Conclave · Failed',
-                      style: TextStyle(
-                        color: colors.error,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    SelectableText(
-                      request.error!,
-                      style: TextStyle(color: colors.error, fontSize: 13),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  // Action buttons bar
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (request.finalText != null &&
-                          request.finalText!.isNotEmpty) ...[
-                        Tooltip(
-                          message: 'Copy output',
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(4),
-                            onTap: () {
-                              Clipboard.setData(
-                                  ClipboardData(text: request.finalText!));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Output copied to clipboard'),
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.all(4),
-                              child: Icon(
-                                Icons.copy_rounded,
-                                size: 15,
-                                color: metaColor,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
                       ],
-                      if ((request.status == 'queued' ||
-                              request.status == 'running' ||
-                              request.status == 'failed') &&
-                          onCancelRun != null) ...[
-                        Tooltip(
-                          message: 'Cancel run',
-                          child: IconButton(
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => onCancelRun!(request.id),
-                            icon: const Icon(Icons.cancel_outlined, size: 18),
-                          ),
-                        ),
-                      ],
-                      if (onShowRunDetails != null) ...[
-                        Tooltip(
-                          message: 'View run details',
-                          child: IconButton(
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => onShowRunDetails!(request.id),
-                            icon: const Icon(Icons.info_outline, size: 18),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                    );
+                  }),
                 ],
               ),
             ),

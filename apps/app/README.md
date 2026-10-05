@@ -6,8 +6,9 @@ account security. The Workstream Chat tab is the human discussion surface;
 Work remains the execution surface.
 
 Run failures include a **Copy Run error** icon that copies the full message.
-Worker replies appear directly beneath their Step in Work history. Failed
-Steps show a selectable diagnostic with a **Copy step error** icon.
+Worker replies appear as compact Conclave messages in Work history. Failed
+Step diagnostics and implementation details are available from the **Run
+details** info action, keeping the main timeline focused on the response.
 AX sends commands and reads history over HTTP, with WebSocket notifications
 triggering immediate history refresh. It subscribes to the active Workstream
 and resynchronizes after reconnecting. While Work is queued, running, or waiting,

@@ -507,6 +507,9 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
     expect(find.text('The requested change is complete.'), findsOneWidget);
+    expect(find.text('Implement'), findsNothing);
+    expect(find.text('Conclave'), findsOneWidget);
+    expect(find.byTooltip('View run details'), findsOneWidget);
 
     dataSource.requests = [
       _workRequest('request-1', 'History restored after reconnect'),
