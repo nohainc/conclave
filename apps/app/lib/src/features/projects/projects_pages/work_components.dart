@@ -686,8 +686,7 @@ class _WorkTimelineCard extends StatelessWidget {
                                 padding:
                                     const EdgeInsets.only(left: 25, top: 6),
                                 child: Row(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Expanded(
                                       child: SelectableText(
@@ -777,8 +776,8 @@ class _WorkTimelineCard extends StatelessWidget {
                           child: InkWell(
                             borderRadius: BorderRadius.circular(4),
                             onTap: () {
-                              Clipboard.setData(ClipboardData(
-                                  text: request.finalText!));
+                              Clipboard.setData(
+                                  ClipboardData(text: request.finalText!));
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text('Output copied to clipboard'),
