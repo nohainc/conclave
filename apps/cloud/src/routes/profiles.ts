@@ -655,9 +655,25 @@ export async function handleGetToolProfileDefinition(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   await authorizeToolProfileAdmin(request, env, ctx);
-  return json(
-    await getToolProfileDefinition(env.CONCLAVE_DB, profileDefinitionId),
+  const definition = await getToolProfileDefinition(
+    env.CONCLAVE_DB,
+    profileDefinitionId,
   );
+  const starter = await env.CONCLAVE_DB.prepare(
+    `SELECT schema_version, profile_json FROM tool_profile_starter_templates
+      WHERE profile_definition_id = ?1`,
+  )
+    .bind(profileDefinitionId)
+    .first<{ schema_version: number; profile_json: string }>();
+  return json({
+    ...definition,
+    starterTemplate: starter
+      ? {
+          schemaVersion: starter.schema_version,
+          profile: JSON.parse(starter.profile_json),
+        }
+      : null,
+  });
 }
 
 export async function handleGetToolProfileRelease(

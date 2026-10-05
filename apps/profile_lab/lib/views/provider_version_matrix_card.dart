@@ -28,20 +28,22 @@ class ProviderVersionMatrixCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 const Icon(Icons.grid_view_rounded,
                     size: 18, color: ProfileLabTheme.primaryAccent),
                 const SizedBox(width: 8),
                 const Text(
-                  'PROVIDER VERSION TEST MATRIX',
+                  'Provider version test matrix',
                   style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.8,
                       color: Color(0xFF94A3B8)),
                 ),
-                const Spacer(),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

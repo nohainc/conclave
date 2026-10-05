@@ -118,3 +118,9 @@ Workspaces still require signed Profiles.
 The macOS build script defaults to skipping Developer ID signing and notarization;
 use `--unsigned` explicitly when packaging development builds. See the
 [development contract](../../docs/specifications/PROFILE_LAB.md#development-access-and-unsigned-execution).
+
+## Operator workflow and acceptance
+
+Use **Workers → Overview / Draft & Test / Releases**, **Workspaces**, and **Activity**. Initial Draft creation uses a Cloud starter template or the selected Worker’s blank fallback; there is no separate Profiles/Tests page or Draft selector. Draft-only deployments end at Cloud Draft with publication explicitly disabled. See the current [creation runbook](../../docs/runbooks/OPERATOR_RUNBOOK_CREATE_NEW_WORKER.md) and [update runbook](../../docs/runbooks/OPERATOR_RUNBOOK_UPDATE_PROFILE.md).
+
+Run `flutter test test/worker_first_run_acceptance_test.dart` for the complete ChatGPT/Gemini first-run flows in both release modes and the no-template fallback. These widget tests use the real local store, controller, and bundled generic Engine with isolated temporary provider executables and controlled browser/Cloud boundaries. No vendor credentials or live-provider calls are required; live signing and Workspace rollout must still satisfy the v8 release gates. Existing local Draft/evidence formats are preserved.

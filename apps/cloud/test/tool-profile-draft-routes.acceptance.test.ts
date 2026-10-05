@@ -403,6 +403,49 @@ describe("Tool Profile Cloud draft route acceptance", () => {
       db.close();
     }
   });
+  it("returns optional Cloud starters matching the tested payloads without creating releases", async () => {
+    const db = new SqliteD1();
+    const env = makeEnv(db);
+    try {
+      for (const id of ["chatgpt-codex", "gemini-antigravity"]) {
+        const definition = await assertOk(
+          env,
+          "GET",
+          `/api/admin/tool-profiles/definitions/${id}`,
+        );
+        const expected = JSON.parse(
+          readFileSync(
+            fileURLToPath(
+              new URL(
+                `../../../packages/tool-profile/test/fixtures/${id}.v1.json`,
+                import.meta.url,
+              ),
+            ),
+            "utf8",
+          ),
+        );
+        expect(definition.starterTemplate).toEqual({
+          schemaVersion: 1,
+          profile: expected,
+        });
+      }
+      await createWorker(env, "future-worker", "future-profile");
+      const future = await assertOk(
+        env,
+        "GET",
+        "/api/admin/tool-profiles/definitions/future-profile",
+      );
+      expect(future.starterTemplate).toBeNull();
+      expect(
+        db.sqlite
+          .prepare("SELECT COUNT(*) AS count FROM tool_profile_releases")
+          .get()?.count,
+      ).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+
   it("creates a Worker, creates and saves draft v1, qualifies it, and publishes", async () => {
     const db = new SqliteD1();
     const env = makeEnv(db);

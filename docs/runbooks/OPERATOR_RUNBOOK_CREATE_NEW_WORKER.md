@@ -1,102 +1,43 @@
-# Operator Runbook: Creating a New Worker
+# Operator Runbook: Creating a Worker and Initial Profile
 
-**Role:** System Administrator / Engineering Maintainer  
 **Surface:** Conclave Profile Lab (`apps/profile_lab`)  
-**Scope:** Creating a new Logical Worker, Tool Profile Definition, testing initial Draft payload, publishing a signed release, and promoting through release channels.
-
-Before publication, complete the local Test Ladder for the exact draft. Profile Lab submits the resulting qualification to Cloud, and Cloud requires its returned ID to publish. Stable promotion separately requires post-publication Cloud acceptance evidence.
-
----
+**Scope:** Register a logical Worker, create its first local Draft, test through the generic CLI Worker Engine, and sync the Cloud Draft.
 
 ## Prerequisites
 
-1. **Profile Lab Access:** `profiles:admin` for catalog and draft work, plus `profiles:release:manage` for publication and rollout. Stable promotion, Stable channel assignment, rollback, and revocation also require a recent passkey step-up in the Profile Lab session.
-2. **Provider CLI Binary:** Target provider CLI binary installed on the maintainer's workstation (e.g. `claude`, `codex`, or `agy`).
-3. **Environment:** macOS environment with local provider CLI authenticated via vendor login flow (e.g., `claude login`).
+Sign in with an account authorized for `profiles:admin`. Install the intended provider CLI on the test machine and authenticate locally using the vendor’s supported flow. Profile Lab does not collect provider credentials. Publication additionally requires `profiles:release:manage`, enabled publishing mode, and a ready Cloud signer. Stable rollout, rollback, and revocation require recent passkey verification.
 
----
+## Register or select a Worker
 
-## Step 1: Create Logical Worker & Profile Definition
+Open **Workers** and select the Worker. ChatGPT and Gemini already have catalog identities; do not register them again.
 
-1. Open **Conclave Profile Lab**.
-2. Navigate to the **Workers Catalog** view.
-3. Click **Add New Worker**.
-4. Fill in the logical catalog fields:
-   - **Worker Type ID:** `claude` (lowercase, alphanumeric identifier)
-   - **Display Name:** `Claude`
-   - **Description:** `Anthropic Claude CLI Worker`
-   - **Engine Family:** `cli`
-   - **Sort Order:** `3`
-5. Click **Create Logical Worker**. Cloud creates the `worker_catalog` record.
-6. In the resulting details screen, click **Create Profile Definition**:
-   - **Profile Definition ID:** `claude-code`
-   - **Provider Tool Name:** `claude`
-   - **Supported CLI Versions:** `>=0.1.0 <2.0.0`
-7. Confirm creation. Cloud binds `claude-code` as the active Profile Definition for `chatgpt`.
+For a new approved Worker, use the catalog’s **Create Worker + Definition** control. The **Create Worker** dialog registers the Worker and its Profile definition together. Enter its Worker ID, Profile definition ID, display name, description, provider executable identity, catalog stage, capabilities, and sort order. Use documented CLI behavior to author the Profile; catalog stage describes catalog maturity and never establishes a Stable Profile release.
 
----
+## Create the initial Draft
 
-## Step 2: Author Initial Draft Profile
+Open the selected Worker’s **Draft & Test** view. With no local Draft or release, Profile Lab shows that the Worker does not have an implementation Profile yet.
 
-1. Navigate to the **Drafts** tab in Profile Lab.
-2. Select **Create Draft** for Profile Definition `claude-code`.
-3. Configure the initial JSON payload parameters:
-   - `schemaVersion`: `1`
-   - `providerTool`: Executable name `claude`, probe arguments `["--version"]`.
-   - `execution`: Argument template `["--non-interactive", "--prompt", "{{prompt}}"]`.
-   - `session`: Resume mechanics (`--session-id`, `{{sessionId}}`).
-   - `timeout`: Default execution deadline (e.g. 300s).
-   - `errors`: Exit code mapping rules (e.g. exit code 1 -> authentication required).
-4. Click **Save Draft**. Profile Lab saves the draft locally in `DraftProfileStore`.
+- Choose **Create Initial Draft** when Cloud supplies a starter template. The payload is cloned into the local Draft store with the Worker’s configured identity. ChatGPT uses `chatgpt-codex`/`codex`; Gemini uses `gemini-antigravity`/`agy`.
+- Choose **Create blank Profile** when no template exists. Profile Lab fills the known Worker, definition, and provider identities. Author the version range, probes, execution/event mapping, and applicable capabilities before testing. A blank Draft is not qualified or production ready.
 
----
+There is no second Draft selector or identity-entry dialog. Cloud-managed starter templates are authoring aids; Workspace never reads them.
 
-## Step 3: Local Sandbox Testing
+## Test, save, and sync
 
-1. In Profile Lab, select the newly saved Draft.
-2. Click **Run Passive Probe**:
-   - Profile Lab invokes `claude --version` out-of-process via `PlatformProcessSupervisor`.
-   - Verify that status returns `PASS` and provider CLI version is captured.
-3. Click **Run Live Probe**:
-   - Enter a test prompt (e.g., `"Respond with OK"`).
-   - Profile Lab executes the CLI in sandbox mode and validates event streaming and stdout parsing.
-4. Click **Run Session Diagnostic Test**:
-   - Verifies multi-turn session creation and resumption.
-5. Run the complete **Test Ladder**. Schema, Engine compatibility, discovery, version, passive/live probes, applicable model/write/session scenarios, cancellation, and timeout must pass; only capability-inapplicable scenarios may be marked not applicable.
+1. Review the schema-aware JSON editor and optional Inspector. Use **Save** (or `⌘S`) for local edits. Initial Draft creation already persists the first payload locally.
+2. Review Provider CLI, Version, and Authentication in the Test pane. Discovery is dynamic from the selected Worker/Profile. Version and authentication remain unchecked until observed by the test run.
+3. Choose **Run Full Test**. Review the progressive ladder and final passed/skipped counts, provider/version, duration, and qualification. Only capability-inapplicable scenarios may be skipped. Expand **Execution details** for logs and **Local acceptance evidence** for the recorded result.
+4. For a failure, use the offered Retry, version-range, or Repair Profile action. Save any changed payload and rerun. Proposals and repairs are Draft edits, never evidence.
+5. Choose **Sync to Cloud** after saving. Confirm the header reports **Synced to Cloud** for the exact version and digest. Sync creates a mutable Cloud Draft; it does not publish a signed release. Resolve conflicts explicitly using compare/reload controls.
 
----
+## Development and publishing modes
 
-## Step 4: Request Signed Release Publication
+In `drafts-only` mode, the lifecycle ends at **Cloud Draft** and states **Development mode — signed publishing is disabled**. Stop after successful local qualification and Cloud sync; no Publish or Promote control is offered.
 
-1. Review the Draft payload and matching local qualification, then click **Qualify, Publish & Sign**.
-2. Profile Lab submits the exact qualification contract to Cloud and receives an immutable `qualificationEvidenceId`.
-3. Cloud revalidates the stored qualification against the current draft and requires its ID on the publish request before signing and writing the immutable release row (e.g., `Version 1`).
+When Cloud enables publishing and reports a ready signer, the qualified saved Draft exposes **Qualify, Publish & Sign**. Cloud stores the exact local qualification, validates its ID against the Draft digest, and signs an immutable Testing release. Review **Releases** afterward. Do not confuse publication with assigning a Workspace rollout channel.
 
----
+For publication, Beta/Stable promotion, Workspace assignment, rollback, and revocation, follow [Updating an Existing Profile](OPERATOR_RUNBOOK_UPDATE_PROFILE.md).
 
-## Step 5: Promote Release to Testing Channel
+## Activity and verification
 
-1. Navigate to the **Releases & Channels** view in Profile Lab.
-2. Select `claude-code` Version 1.
-3. Click **Promote to Testing Channel**.
-4. Cloud updates `workspace_tool_profile_channels` for `testing` to point to Version 1.
-
----
-
-## Step 6: Verify Dynamic Discovery in Workspace & AX
-
-1. Launch a **Conclave Workspace** desktop app configured for the `testing` channel.
-2. Observe that `Claude` automatically appears in the Workspace Workers inventory without updating the Workspace application binary.
-3. Click **Configure Worker** -> verify CLI executable path and green readiness indicator.
-4. Open **Conclave AX** web app -> navigate to `/workspaces`.
-5. Verify `Claude` is visible in the Workspace Worker inventory and can be selected as a Worker binding in Workstreams.
-6. Dispatch a test Workstream step to `Claude` and confirm successful execution.
-
----
-
-## Step 7: Promote to Beta
-
-1. After successful operational verification in the `testing` channel:
-   - Return to Profile Lab -> **Releases & Channels**.
-   - Promote Version 1 to **Beta Channel**.
-2. Stable promotion requires a separate post-publication acceptance evidence record stored in Cloud. Profile Lab submits the qualifying evidence separately and promotes using only the returned evidence ID.
+Use **Activity** for all events, or filter to the current Worker. Expand an event for raw IDs, reasons, provenance, and details. Use `⌘R` to refresh the active resource. Before live rollout, retain real-provider and Workspace acceptance evidence as required by the [Profile lifecycle contract](../specifications/TOOL_PROFILE_LIFECYCLE.md); deterministic test fixtures do not replace it.

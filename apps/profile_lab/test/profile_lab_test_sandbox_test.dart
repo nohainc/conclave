@@ -313,13 +313,16 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
       final validCandidate = loadedDraft!;
 
       final stageUpdates = <String>[];
+      final streamedStages = <ProfileLabLadderStageResult>[];
       final ladderResult = await sandbox.executeTestLadder(
         candidate: validCandidate,
+        onStageResult: streamedStages.add,
         onStageUpdate: (stageId, status, diag) =>
             stageUpdates.add('$stageId:$status'),
       );
 
       expect(ladderResult.stages.length, 11);
+      expect(streamedStages, orderedEquals(ladderResult.stages));
       expect(ladderResult.stages[0].stageId, 'schema');
       expect(ladderResult.stages[0].status, 'passed');
       expect(ladderResult.stages[0].consumesQuota, isFalse);

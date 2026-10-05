@@ -55,6 +55,131 @@ void main() {
       await temp.delete(recursive: true);
     });
 
+    for (final entry in [
+      ('chatgpt', 'chatgpt-codex', 'codex'),
+      ('gemini', 'gemini-antigravity', 'agy'),
+    ]) {
+      test(
+          '${entry.$1} initial draft clones Cloud template locally and preserves it on retry',
+          () async {
+        final payload = jsonDecode(await File(
+                '../../packages/tool-profile/test/fixtures/${entry.$2}.v1.json')
+            .readAsString()) as Map<String, dynamic>;
+        controller.selectedCloudWorker = {
+          'workerTypeId': entry.$1,
+          'profileDefinitionId': entry.$2
+        };
+        controller.selectedDefinitionId = entry.$2;
+        controller.selectedCloudDefinition = {
+          'providerToolName': entry.$3,
+          'starterTemplate': {'schemaVersion': 1, 'profile': payload}
+        };
+        await controller.createInitialDraft();
+        expect(controller.currentDraft!.profile, payload);
+        expect(controller.currentDraft!.isSigned, isFalse);
+        expect(controller.currentEvidence, isEmpty);
+        final digest = controller.currentDraft!.payloadDigest;
+        await controller.createInitialDraft();
+        expect(controller.currentDraft!.payloadDigest, digest);
+        expect(controller.workerSubView, WorkerSubView.draftAndTest);
+      });
+    }
+
+    test('initial creation does not replace an existing Cloud release',
+        () async {
+      controller.selectedCloudWorker = {'workerTypeId': 'future-worker'};
+      controller.selectedDefinitionId = 'future-profile';
+      controller.selectedCloudDefinition = {'providerToolName': 'future-cli'};
+      controller.cloudReleases = [
+        {'releaseVersion': 1}
+      ];
+      await controller.createInitialDraft();
+      expect(await controller.store.loadDraft('future-profile'), isNull);
+    });
+
+    test(
+        'future Worker without template creates blank Profile with known identity',
+        () async {
+      controller.selectedCloudWorker = {
+        'workerTypeId': 'future-worker',
+        'profileDefinitionId': 'future-profile'
+      };
+      controller.selectedDefinitionId = 'future-profile';
+      controller.selectedCloudDefinition = {
+        'providerToolName': 'future-cli',
+        'starterTemplate': null
+      };
+      await controller.createInitialDraft();
+      expect(controller.currentDraft!.profileDefinitionId, 'future-profile');
+      expect(controller.currentDraft!.profile['logicalWorkerTypeId'],
+          'future-worker');
+      expect((controller.currentDraft!.profile['providerTool'] as Map)['name'],
+          'future-cli');
+    });
+
+    test('mismatched starter identity is rejected without saving a draft',
+        () async {
+      controller.selectedCloudWorker = {'workerTypeId': 'future-worker'};
+      controller.selectedDefinitionId = 'future-profile';
+      controller.selectedCloudDefinition = {
+        'providerToolName': 'future-cli',
+        'starterTemplate': {
+          'schemaVersion': 1,
+          'profile': {'profileDefinitionId': 'other'}
+        }
+      };
+      await expectLater(controller.createInitialDraft(), throwsStateError);
+      expect(await controller.store.loadDraft('future-profile'), isNull);
+    });
+
+    test('saving a changed Draft clears previous run and qualification display',
+        () async {
+      await controller.createNewDraft(
+          profileDefinitionId: 'bound-test',
+          workerTypeId: 'bound-worker',
+          providerToolName: 'missing-fixture-tool');
+      controller.testedDraftDigest = controller.currentDraft!.payloadDigest;
+      controller.testedProfileDefinitionId =
+          controller.currentDraft!.profileDefinitionId;
+      controller.lastTestResult = 'pass';
+      controller.testStatusMessage = '11/11 passed';
+      final changed =
+          Map<String, Object?>.from(controller.currentDraft!.profile);
+      changed['releaseVersion'] = 2;
+      controller.updateJsonText(jsonEncode(changed));
+      await controller.saveCurrentDraft();
+      expect(controller.lastTestResult, isNull);
+      expect(controller.activeLadderStages, isEmpty);
+      expect(controller.testedDraftDigest, isNull);
+      expect(controller.testStatusMessage, isNull);
+    });
+
+    test(
+        'controller streams real stages before completion and drops late events after Draft switch',
+        () async {
+      await controller.createNewDraft(
+          profileDefinitionId: 'bound-test',
+          workerTypeId: 'bound-worker',
+          providerToolName: 'missing-fixture-tool');
+      final observed = <int>[];
+      controller.addListener(() {
+        if (controller.isTesting && controller.activeLadderStages.isNotEmpty) {
+          observed.add(controller.activeLadderStages.length);
+          if (controller.activeLadderStages.length == 1) {
+            controller.currentDraft = null;
+            controller.resetDraftTestState();
+          }
+        }
+      });
+      controller.engineExecutable = File('${temp.path}/unused-engine');
+      await controller.runTestLadder();
+      expect(observed, [1]);
+      expect(controller.lastTestResult, isNull);
+      expect(controller.activeLadderStages, isEmpty);
+      expect(controller.testLogs, isEmpty);
+      expect(controller.isTesting, isFalse);
+    });
+
     test('creates new draft, validates JSON, and updates state', () async {
       expect(controller.draftDefinitionIds, isEmpty);
 
@@ -131,20 +256,20 @@ void main() {
       );
     });
 
-    test('switches tabs cleanly', () {
-      expect(controller.selectedTab, LabTab.workers);
+    test('switches primary areas cleanly', () {
+      expect(controller.selectedArea, LabArea.workers);
 
-      controller.setTab(LabTab.profiles);
-      expect(controller.selectedTab, LabTab.profiles);
+      controller.setArea(LabArea.workers);
+      expect(controller.selectedArea, LabArea.workers);
 
-      controller.setTab(LabTab.tests);
-      expect(controller.selectedTab, LabTab.tests);
+      controller.setArea(LabArea.workspaces);
+      expect(controller.selectedArea, LabArea.workspaces);
 
-      controller.setTab(LabTab.releases);
-      expect(controller.selectedTab, LabTab.releases);
+      controller.setArea(LabArea.audit);
+      expect(controller.selectedArea, LabArea.audit);
 
-      controller.setTab(LabTab.audit);
-      expect(controller.selectedTab, LabTab.audit);
+      controller.setArea(LabArea.audit);
+      expect(controller.selectedArea, LabArea.audit);
     });
 
     test('deletes draft and clears selection', () async {
@@ -323,7 +448,7 @@ void main() {
       expect(controller.selectedDefinitionId, 'published-worker-profile');
       expect(controller.currentDraft, isNotNull);
       expect(controller.currentDraft!.releaseVersion, 4);
-      expect(controller.selectedTab, LabTab.profiles);
+      expect(controller.selectedArea, LabArea.workers);
     });
 
     test(
@@ -519,6 +644,7 @@ void main() {
       expect(fakeApi.rollbackCallCount, 1);
       expect(fakeApi.lastRollbackChannel, 'stable');
       expect(fakeApi.lastRollbackTargetVersion, 18);
+      expect(controller.selectedCloudDefinition?['channels']['stable'], 18);
     });
 
     test('executes permanent release revocation with mandatory reason',
@@ -559,6 +685,14 @@ class FakeProfileAdminApiClient extends ProfileAdminApiClient {
   int revokeCallCount = 0;
   int? lastRevokedVersion;
   String? lastRevokedReason;
+
+  @override
+  Future<ProfileLabDefinitionReadModel> fetchDefinition(String id) async =>
+      ProfileLabDefinitionReadModel.fromJson({
+        'profileDefinitionId': id,
+        'displayName': id,
+        'channels': {'stable': lastRollbackTargetVersion}
+      });
 
   @override
   Future<Map<String, dynamic>> rollbackChannel({

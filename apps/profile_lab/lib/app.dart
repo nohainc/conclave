@@ -3,10 +3,9 @@ import 'package:flutter/services.dart';
 import 'controllers/profile_lab_controller.dart';
 import 'theme/profile_lab_theme.dart';
 import 'views/audit_view.dart';
+import 'widgets/lab_shortcuts.dart';
+import 'widgets/lab_components.dart';
 import 'views/cloud_settings_dialog.dart';
-import 'views/profiles_view.dart';
-import 'views/releases_view.dart';
-import 'views/tests_view.dart';
 import 'views/workers_view.dart';
 import 'views/workspaces_view.dart';
 
@@ -26,7 +25,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
     widget.controller.addListener(_onStateChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        widget.controller.ensureTabData(widget.controller.selectedTab);
+        widget.controller.ensureAreaData(widget.controller.selectedArea);
       }
     });
   }
@@ -49,321 +48,289 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
       title: 'Conclave Profile Lab',
       debugShowCheckedModeBanner: false,
       theme: ProfileLabTheme.darkTheme,
-      home: Scaffold(
-        body: Column(
-          children: [
-            // Top branding & navigation header
-            Container(
-              height: 52,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: const BoxDecoration(
-                color: ProfileLabTheme.darkSurface,
-                border: Border(bottom: BorderSide(color: Color(0xFF334155))),
-              ),
-              child: Row(
-                children: [
-                  Image.asset(
-                    'assets/branding/conclave_logo_32.png',
-                    width: 24,
-                    height: 24,
-                    errorBuilder: (ctx, err, stack) => const Icon(Icons.science,
-                        color: ProfileLabTheme.primaryAccent, size: 24),
-                  ),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'CONCLAVE',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                        letterSpacing: 1.2),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color:
-                          ProfileLabTheme.primaryAccent.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      'PROFILE LAB',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
-                        color: ProfileLabTheme.primaryAccent,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-
-                  // Navigation Tabs (Workers, Profiles, Tests, Releases, Workspaces, Audit)
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _NavTabButton(
-                            label: 'Workers',
-                            icon: Icons.engineering,
-                            selected: c.selectedTab == LabTab.workers,
-                            onTap: () => c.setTab(LabTab.workers),
-                          ),
-                          _NavTabButton(
-                            label: 'Profiles',
-                            icon: Icons.tune,
-                            selected: c.selectedTab == LabTab.profiles,
-                            onTap: () => c.setTab(LabTab.profiles),
-                          ),
-                          _NavTabButton(
-                            label: 'Tests',
-                            icon: Icons.fact_check_outlined,
-                            selected: c.selectedTab == LabTab.tests,
-                            onTap: () => c.setTab(LabTab.tests),
-                          ),
-                          _NavTabButton(
-                            label: 'Releases',
-                            icon: Icons.rocket_launch_outlined,
-                            selected: c.selectedTab == LabTab.releases,
-                            onTap: () => c.setTab(LabTab.releases),
-                          ),
-                          _NavTabButton(
-                            label: 'Workspaces',
-                            icon: Icons.devices,
-                            selected: c.selectedTab == LabTab.workspaces,
-                            onTap: () => c.setTab(LabTab.workspaces),
-                          ),
-                          _NavTabButton(
-                            label: 'Audit',
-                            icon: Icons.history_edu,
-                            selected: c.selectedTab == LabTab.audit,
-                            onTap: () => c.setTab(LabTab.audit),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-                  IconButton(
-                    icon: const Icon(Icons.cloud_outlined, size: 17),
-                    tooltip: 'Cloud connection: ${c.cloudUrl}',
-                    onPressed: () => CloudSettingsDialog.show(context, c),
-                  ),
-                  // Active Draft status chip
-                  if (c.selectedDefinitionId != null) ...[
+      home: Builder(
+          builder: (context) => Scaffold(
+                  body: LabShortcuts(
+                controller: c,
+                child: Column(
+                  children: [
+                    // Top branding & navigation header
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: ProfileLabTheme.darkBackground,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFF334155)),
+                      height: 52,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: const BoxDecoration(
+                        color: ProfileLabTheme.darkSurface,
+                        border: Border(
+                            bottom: BorderSide(color: Color(0xFF334155))),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.description,
-                              size: 14, color: Color(0xFF94A3B8)),
-                          const SizedBox(width: 6),
-                          Text(
-                            c.selectedDefinitionId!,
-                            style: const TextStyle(
-                                fontFamily: 'Menlo',
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600),
+                          Image.asset(
+                            'assets/branding/conclave_logo_32.png',
+                            width: 24,
+                            height: 24,
+                            errorBuilder: (ctx, err, stack) => const Icon(
+                                Icons.science,
+                                color: ProfileLabTheme.primaryAccent,
+                                size: 24),
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                  ],
-
-                  // Profile Lab Human Authentication Boundary
-                  if (c.isSigningIn)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: ProfileLabTheme.warnColor),
-                      ),
-                      child: Row(
-                        children: [
-                          const SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: ProfileLabTheme.warnColor),
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Approve in browser...',
-                            style: TextStyle(
-                                fontSize: 11, color: ProfileLabTheme.warnColor),
-                          ),
-                          const SizedBox(width: 8),
-                          InkWell(
-                            onTap: c.cancelSignIn,
-                            child: const Icon(Icons.close,
-                                size: 14, color: Color(0xFF94A3B8)),
-                          ),
-                        ],
-                      ),
-                    )
-                  else if (c.currentSession != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFF334155)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.person,
-                              size: 14, color: ProfileLabTheme.primaryAccent),
-                          const SizedBox(width: 6),
-                          Text(
-                            c.currentSession!.displayName,
-                            style: const TextStyle(
-                                fontSize: 11, fontWeight: FontWeight.w600),
-                          ),
+                          const SizedBox(width: 10),
+                          if (MediaQuery.sizeOf(context).width >= 1000)
+                            const Text(
+                              'CONCLAVE',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                  letterSpacing: 1.2),
+                            ),
                           const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 1),
+                                horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: ProfileLabTheme.primaryAccent
-                                  .withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(3),
+                                  .withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
                             ),
-                            child: Text(
-                              c.labAccess?.profilesAdmin == true
-                                  ? 'Profile Admin'
-                                  : 'Signed in',
+                            child: const Text(
+                              'Profile Lab',
                               style: TextStyle(
-                                  fontSize: 9,
-                                  color: ProfileLabTheme.primaryAccent,
-                                  fontWeight: FontWeight.bold),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                                color: ProfileLabTheme.primaryAccent,
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          InkWell(
-                            onTap: () => c.signOut(),
-                            child: const Tooltip(
-                              message: 'Sign Out',
-                              child: Icon(Icons.logout,
-                                  size: 14, color: Color(0xFF94A3B8)),
+                          const SizedBox(width: 12),
+
+                          // Primary areas (Workers, Workspaces, Activity)
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  _AreaButton(
+                                    label: 'Workers',
+                                    icon: Icons.engineering,
+                                    selected: c.selectedArea == LabArea.workers,
+                                    onTap: () => c.setArea(LabArea.workers),
+                                  ),
+                                  _AreaButton(
+                                    label: 'Workspaces',
+                                    icon: Icons.devices,
+                                    selected:
+                                        c.selectedArea == LabArea.workspaces,
+                                    onTap: () => c.setArea(LabArea.workspaces),
+                                  ),
+                                  _AreaButton(
+                                    label: 'Activity',
+                                    icon: Icons.history_edu,
+                                    selected: c.selectedArea == LabArea.audit,
+                                    onTap: () => c.setArea(LabArea.audit),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
+
+                          const SizedBox(width: 12),
+                          IconButton(
+                            icon: const Icon(Icons.cloud_outlined, size: 17),
+                            tooltip: 'Cloud connection: ${c.cloudUrl}',
+                            onPressed: () =>
+                                CloudSettingsDialog.show(context, c),
+                          ),
+                          // Active Draft status chip
+                          if (c.selectedDefinitionId != null &&
+                              MediaQuery.sizeOf(context).width >= 1100) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: ProfileLabTheme.darkBackground,
+                                borderRadius: BorderRadius.circular(6),
+                                border:
+                                    Border.all(color: const Color(0xFF334155)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.description,
+                                      size: 14, color: Color(0xFF94A3B8)),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    c.selectedDefinitionId!,
+                                    style: const TextStyle(
+                                        fontFamily: 'Menlo',
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                          ],
+
+                          // Profile Lab Human Authentication Boundary
+                          if (c.isSigningIn)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E293B),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                    color: ProfileLabTheme.warnColor),
+                              ),
+                              child: Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: ProfileLabTheme.warnColor),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Approve in browser...',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: ProfileLabTheme.warnColor),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    onTap: c.cancelSignIn,
+                                    child: const Icon(Icons.close,
+                                        size: 14, color: Color(0xFF94A3B8)),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else if (c.currentSession != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E293B),
+                                borderRadius: BorderRadius.circular(6),
+                                border:
+                                    Border.all(color: const Color(0xFF334155)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.person,
+                                      size: 14,
+                                      color: ProfileLabTheme.primaryAccent),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    c.currentSession!.displayName,
+                                    style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Tooltip(
+                                    message: c.labAccessError ??
+                                        (c.labAccess == null
+                                            ? 'Profile Lab permissions have not been verified.'
+                                            : 'Profile administration: ${c.labAccess!.profilesAdmin ? "Authorized" : "Not authorized"} · Release management: ${c.labAccess!.releaseManager ? "Authorized" : "Not authorized"} · ${c.labAccess!.draftsOnly ? "Development: unsigned drafts and local tests; publication disabled" : c.labAccess!.signerReady ? "Cloud signer ready" : "Cloud signer not configured"}'),
+                                    child: InkWell(
+                                      onTap: c.isCheckingLabAccess
+                                          ? null
+                                          : () async {
+                                              await c.refreshLabAccess();
+                                              await c.ensureAreaData(
+                                                  c.selectedArea);
+                                            },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: (c.labAccess?.profilesAdmin ==
+                                                      true
+                                                  ? ProfileLabTheme
+                                                      .primaryAccent
+                                                  : ProfileLabTheme.warnColor)
+                                              .withValues(alpha: 0.15),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          c.labAccess?.profilesAdmin == true
+                                              ? 'Profile Admin'
+                                              : 'Signed in',
+                                          style: TextStyle(
+                                              fontSize: 9,
+                                              color: c.labAccess
+                                                          ?.profilesAdmin ==
+                                                      true
+                                                  ? ProfileLabTheme
+                                                      .primaryAccent
+                                                  : ProfileLabTheme.warnColor,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  InkWell(
+                                    onTap: () => c.signOut(),
+                                    child: const Tooltip(
+                                      message: 'Sign Out',
+                                      child: Icon(Icons.logout,
+                                          size: 14, color: Color(0xFF94A3B8)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            ElevatedButton.icon(
+                              onPressed: () => c.signInWithBrowser(),
+                              icon: const Icon(Icons.login, size: 13),
+                              label: const Text('Sign In',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: ProfileLabTheme.primaryAccent,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
                         ],
                       ),
-                    )
-                  else
-                    ElevatedButton.icon(
-                      onPressed: () => c.signInWithBrowser(),
-                      icon: const Icon(Icons.login, size: 13),
-                      label: const Text('Sign In',
-                          style: TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.w600)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: ProfileLabTheme.primaryAccent,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+
+                    if (c.authError != null && c.currentSession == null)
+                      _ProfileLabSignInError(
+                        message: 'Profile Lab sign-in failed: ${c.authError}',
                       ),
-                    ),
-                ],
-              ),
-            ),
 
-            if (c.authError != null && c.currentSession == null)
-              _ProfileLabSignInError(
-                message: 'Profile Lab sign-in failed: ${c.authError}',
-              ),
-
-            if (c.currentSession != null)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                child: Row(children: [
-                  Expanded(
-                      child: Text(c.labAccessError ??
-                          (c.labAccess == null
-                              ? 'Profile Lab permissions have not been verified.'
-                              : 'Profile administration: ${c.labAccess!.profilesAdmin ? "Authorized" : "Not authorized"} · Release management: ${c.labAccess!.releaseManager ? "Authorized" : "Not authorized"} · ${c.labAccess!.draftsOnly ? "Development: unsigned drafts and local tests; publication disabled" : c.labAccess!.signerReady ? "Cloud signer ready" : "Cloud signer not configured"}'))),
-                  TextButton(
-                      onPressed: c.isCheckingLabAccess
-                          ? null
-                          : () async {
-                              await c.refreshLabAccess();
-                              await c.ensureTabData(c.selectedTab);
+                    // Tab view content
+                    Expanded(
+                      child: c.currentSession == null ||
+                              c.labAccess == null ||
+                              c.labAccess?.profilesAdmin == false ||
+                              c.labAccessError != null
+                          ? const EmptyState(
+                              title: 'Profile Lab access is unavailable',
+                              description:
+                                  'Check access or sign in with the authorized owner account.')
+                          : switch (c.selectedArea) {
+                              LabArea.workers => WorkersView(controller: c),
+                              LabArea.workspaces =>
+                                WorkspacesView(controller: c),
+                              LabArea.audit => AuditView(controller: c),
                             },
-                      child: const Text('Check access')),
-                ]),
-              ),
-            // Tab view content
-            Expanded(
-              child: c.currentSession == null ||
-                      c.labAccess == null ||
-                      c.labAccess?.profilesAdmin == false ||
-                      c.labAccessError != null
-                  ? const Center(
-                      child: Text(
-                          'Profile Lab access is unavailable. Check access or sign in with the authorized owner account.'))
-                  : switch (c.selectedTab) {
-                      LabTab.workers => WorkersView(controller: c),
-                      LabTab.profiles => ProfilesView(controller: c),
-                      LabTab.tests => TestsView(controller: c),
-                      LabTab.releases => ReleasesView(controller: c),
-                      LabTab.workspaces => WorkspacesView(controller: c),
-                      LabTab.audit => AuditView(controller: c),
-                    },
-            ),
-
-            // Bottom status bar
-            Container(
-              height: 28,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: const BoxDecoration(
-                color: ProfileLabTheme.darkSurface,
-                border: Border(top: BorderSide(color: Color(0xFF334155))),
-              ),
-              child: Row(
-                children: [
-                  const Text('Platform: macOS desktop (internal)',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
-                  const SizedBox(width: 16),
-                  Text(
-                    'Engine: ${c.engineExecutable != null ? "Ready" : "Missing"}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: c.engineExecutable != null
-                          ? ProfileLabTheme.passColor
-                          : ProfileLabTheme.failColor,
                     ),
-                  ),
-                  const Spacer(),
-                  if (c.currentDraft != null)
-                    Text(
-                      'Active Triplet: (${c.currentDraft!.profileDefinitionId}, v${c.currentDraft!.releaseVersion}, ${c.currentDraft!.payloadDigest.substring(0, 10)}...)',
-                      style: const TextStyle(
-                          fontFamily: 'Menlo',
-                          fontSize: 10,
-                          color: Color(0xFF94A3B8)),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+                  ],
+                ),
+              ))),
     );
   }
 }
@@ -406,8 +373,8 @@ class _ProfileLabSignInError extends StatelessWidget {
       );
 }
 
-class _NavTabButton extends StatelessWidget {
-  const _NavTabButton({
+class _AreaButton extends StatelessWidget {
+  const _AreaButton({
     required this.label,
     required this.icon,
     required this.selected,
@@ -422,43 +389,17 @@ class _NavTabButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: selected
-                ? ProfileLabTheme.primaryAccent.withValues(alpha: 0.15)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: selected
-                  ? ProfileLabTheme.primaryAccent.withValues(alpha: 0.5)
-                  : Colors.transparent,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 16,
-                color: selected ? Colors.white : const Color(0xFF94A3B8),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                  color: selected ? Colors.white : const Color(0xFF94A3B8),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+        padding: const EdgeInsets.only(right: 6),
+        child: Semantics(
+            selected: selected,
+            child: TextButton.icon(
+                style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: selected
+                        ? ProfileLabTheme.primaryAccent.withValues(alpha: 0.2)
+                        : null),
+                onPressed: onTap,
+                icon: Icon(icon, size: 18),
+                label: Text(label))));
   }
 }

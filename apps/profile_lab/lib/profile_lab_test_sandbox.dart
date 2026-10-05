@@ -328,6 +328,7 @@ class ProfileLabTestSandbox {
     void Function(String stageId, String status, String diagnostics)?
         onStageUpdate,
     void Function(String level, String message)? onLog,
+    void Function(ProfileLabLadderStageResult stage)? onStageResult,
   }) async {
     final logs = <String>[];
     void log(String level, String message) {
@@ -365,6 +366,7 @@ class ProfileLabTestSandbox {
         details: details,
       );
       stages.add(stage);
+      onStageResult?.call(stage);
       onStageUpdate?.call(stageId, status, redactedDiag);
       log(
         status == 'failed'
@@ -574,7 +576,9 @@ class ProfileLabTestSandbox {
           context: ProfileVersionProbe.buildContext(
             profile: profile,
             workingDirectory: workingDirectory,
-            homeDirectory: Platform.environment['HOME'] ?? workingDirectory,
+            homeDirectory: environmentOverrides['HOME'] ??
+                Platform.environment['HOME'] ??
+                workingDirectory,
             workerStateDirectory: sandboxRoot.absolute.path,
           ),
           deadline: const Duration(seconds: 30),
@@ -635,6 +639,7 @@ class ProfileLabTestSandbox {
                   : 'Provider CLI version $detectedProviderToolVersion is outside declared supported ranges.',
               consumesQuota: false,
               issueCode: 'provider_version_unsupported',
+              details: {'cliVersion': detectedProviderToolVersion},
             );
           }
         } else {

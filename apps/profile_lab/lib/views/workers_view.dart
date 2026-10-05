@@ -1,8 +1,11 @@
 import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:flutter/material.dart';
+import '../widgets/lab_components.dart';
 
 import '../controllers/profile_lab_controller.dart';
 import '../theme/profile_lab_theme.dart';
+import 'draft_test_workbench.dart';
+import 'releases_view.dart';
 
 class WorkersView extends StatefulWidget {
   const WorkersView({super.key, required this.controller});
@@ -20,6 +23,7 @@ class _WorkersViewState extends State<WorkersView> {
   @override
   void initState() {
     super.initState();
+    widget.controller.addListener(_onControllerChanged);
     _searchController.addListener(() {
       setState(() {
         _filter = _searchController.text.trim().toLowerCase();
@@ -27,8 +31,22 @@ class _WorkersViewState extends State<WorkersView> {
     });
   }
 
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(WorkersView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onControllerChanged);
+      widget.controller.addListener(_onControllerChanged);
+    }
+  }
+
   @override
   void dispose() {
+    widget.controller.removeListener(_onControllerChanged);
     _searchController.dispose();
     super.dispose();
   }
@@ -260,366 +278,374 @@ class _WorkersViewState extends State<WorkersView> {
           tool.contains(_filter);
     }).toList();
 
-    return Row(
-      children: [
-        // Left pane: Workers List
-        Container(
-          width: 320,
-          decoration: const BoxDecoration(
-            color: ProfileLabTheme.darkSurface,
-            border: Border(right: BorderSide(color: Color(0xFF334155))),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Search & refresh header
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        style: const TextStyle(fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'Filter workers...',
-                          hintStyle: const TextStyle(
-                              fontSize: 12, color: Color(0xFF64748B)),
-                          prefixIcon: const Icon(Icons.search,
-                              size: 16, color: Color(0xFF94A3B8)),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 8),
-                          filled: true,
-                          fillColor: ProfileLabTheme.darkBackground,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(6),
-                            borderSide:
-                                const BorderSide(color: Color(0xFF334155)),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(6),
-                            borderSide:
-                                const BorderSide(color: Color(0xFF334155)),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: const Icon(Icons.add, size: 18),
-                      tooltip: 'Create Worker + Definition',
-                      onPressed: c.currentSession != null
-                          ? _showCreateWorkerDialog
-                          : null,
-                    ),
-                    IconButton(
-                      icon: c.isLoadingWorkerCatalog
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: ProfileLabTheme.primaryAccent),
-                            )
-                          : const Icon(Icons.refresh, size: 18),
-                      tooltip: 'Refresh Cloud Catalog',
-                      onPressed: c.isLoadingWorkerCatalog
-                          ? null
-                          : () => c.fetchCloudCatalog(),
-                    ),
-                  ],
-                ),
-              ),
-
-              if (c.currentSession == null)
+    return LayoutBuilder(
+        builder: (context, constraints) => Flex(
+              direction:
+                  constraints.maxWidth < 1000 ? Axis.vertical : Axis.horizontal,
+              children: [
+                // Left pane: Workers List
                 Container(
-                  margin:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: const Color(0xFF334155)),
+                  width:
+                      constraints.maxWidth < 1000 ? constraints.maxWidth : 280,
+                  height: constraints.maxWidth < 1000 ? 240 : null,
+                  decoration: const BoxDecoration(
+                    color: ProfileLabTheme.darkSurface,
+                    border: Border(right: BorderSide(color: Color(0xFF334155))),
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
-                        'Cloud Catalog Unauthenticated',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            color: ProfileLabTheme.warnColor),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Sign in with Profile Lab credentials to query the dynamic Cloud catalog.',
-                        style:
-                            TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                      ),
-                      const SizedBox(height: 8),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.login, size: 14),
-                        label: const Text('Sign In to Cloud',
-                            style: TextStyle(fontSize: 11)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: ProfileLabTheme.primaryAccent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      // Search & refresh header
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                style: const TextStyle(fontSize: 12),
+                                decoration: InputDecoration(
+                                  hintText: 'Filter workers...',
+                                  hintStyle: const TextStyle(
+                                      fontSize: 12, color: Color(0xFF64748B)),
+                                  prefixIcon: const Icon(Icons.search,
+                                      size: 16, color: Color(0xFF94A3B8)),
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 8),
+                                  filled: true,
+                                  fillColor: ProfileLabTheme.darkBackground,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide: const BorderSide(
+                                        color: Color(0xFF334155)),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide: const BorderSide(
+                                        color: Color(0xFF334155)),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(Icons.add, size: 18),
+                              tooltip: 'Create Worker + Definition',
+                              onPressed: c.currentSession != null
+                                  ? _showCreateWorkerDialog
+                                  : null,
+                            ),
+                            IconButton(
+                              icon: c.isLoadingWorkerCatalog
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: ProfileLabTheme.primaryAccent),
+                                    )
+                                  : const Icon(Icons.refresh, size: 18),
+                              tooltip: 'Refresh Cloud Catalog (⌘R)',
+                              onPressed: c.isLoadingWorkerCatalog
+                                  ? null
+                                  : () => c.fetchCloudCatalog(),
+                            ),
+                          ],
                         ),
-                        onPressed: () => c.signInWithBrowser(),
+                      ),
+
+                      if (c.currentSession == null)
+                        Container(
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFF334155)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Cloud Catalog Unauthenticated',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                    color: ProfileLabTheme.warnColor),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Sign in with Profile Lab credentials to query the dynamic Cloud catalog.',
+                                style: TextStyle(
+                                    fontSize: 11, color: Color(0xFF94A3B8)),
+                              ),
+                              const SizedBox(height: 8),
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.login, size: 14),
+                                label: const Text('Sign In to Cloud',
+                                    style: TextStyle(fontSize: 11)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      ProfileLabTheme.primaryAccent,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: () => c.signInWithBrowser(),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      if (c.workerCatalogError != null)
+                        Column(children: [
+                          Text(c.workerCatalogUnauthorized
+                              ? 'Catalog access unauthorized'
+                              : 'Catalog refresh failed'),
+                          Text(c.workerCatalogError!),
+                          TextButton(
+                              onPressed: c.isLoadingWorkerCatalog
+                                  ? null
+                                  : c.fetchCloudCatalog,
+                              child: const Text('Retry')),
+                        ]),
+                      // Workers list
+                      Expanded(
+                        child: workers.isEmpty
+                            ? Center(
+                                child: Text(
+                                  c.currentSession == null
+                                      ? 'Sign in to fetch catalog.'
+                                      : c.isLoadingWorkerCatalog
+                                          ? 'Fetching catalog...'
+                                          : c.workerCatalogError ??
+                                              (c.hasLoadedWorkerCatalog
+                                                  ? (_filter.isEmpty
+                                                      ? 'No logical workers found.'
+                                                      : 'No matching workers.')
+                                                  : 'Catalog has not been loaded.'),
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Color(0xFF94A3B8)),
+                                ),
+                              )
+                            : ListView.builder(
+                                itemCount: workers.length,
+                                itemBuilder: (context, index) {
+                                  final worker = workers[index];
+                                  final workerTypeId =
+                                      worker['workerTypeId'] as String? ?? '';
+                                  final isSelected =
+                                      c.selectedCloudWorker?['workerTypeId'] ==
+                                          workerTypeId;
+                                  final stage =
+                                      worker['releaseStage'] as String? ??
+                                          'testing';
+                                  final toolName =
+                                      worker['providerToolName'] as String? ??
+                                          '';
+                                  final workerProfileDefId =
+                                      worker['profileDefinitionId'] as String?;
+
+                                  final String profileStatus;
+                                  if (isSelected) {
+                                    profileStatus = c.selectedWorkerState
+                                        .conciseProfileStatus;
+                                  } else if (workerProfileDefId == null ||
+                                      workerProfileDefId.isEmpty) {
+                                    profileStatus = 'No Profile';
+                                  } else {
+                                    profileStatus = 'Configured';
+                                  }
+
+                                  return WorkerSidebarItem(
+                                      name: worker['displayName'] as String? ??
+                                          workerTypeId,
+                                      identity: toolName.isEmpty
+                                          ? workerTypeId
+                                          : '$workerTypeId · CLI: $toolName',
+                                      profileStatus: profileStatus,
+                                      catalogStage: stage,
+                                      selected: isSelected,
+                                      onTap: () => c.selectWorker(worker));
+                                },
+                              ),
                       ),
                     ],
                   ),
                 ),
 
-              if (c.workerCatalogError != null)
-                Column(children: [
-                  Text(c.workerCatalogUnauthorized
-                      ? 'Catalog access unauthorized'
-                      : 'Catalog refresh failed'),
-                  Text(c.workerCatalogError!),
-                  TextButton(
-                      onPressed:
-                          c.isLoadingWorkerCatalog ? null : c.fetchCloudCatalog,
-                      child: const Text('Retry')),
-                ]),
-              // Workers list
-              Expanded(
-                child: workers.isEmpty
-                    ? Center(
-                        child: Text(
-                          c.currentSession == null
-                              ? 'Sign in to fetch catalog.'
-                              : c.isLoadingWorkerCatalog
-                                  ? 'Fetching catalog...'
-                                  : c.workerCatalogError ??
-                                      (c.hasLoadedWorkerCatalog
-                                          ? (_filter.isEmpty
-                                              ? 'No logical workers found.'
-                                              : 'No matching workers.')
-                                          : 'Catalog has not been loaded.'),
-                          style: const TextStyle(
-                              fontSize: 12, color: Color(0xFF94A3B8)),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: workers.length,
-                        itemBuilder: (context, index) {
-                          final worker = workers[index];
-                          final workerTypeId =
-                              worker['workerTypeId'] as String? ?? '';
-                          final isSelected =
-                              c.selectedCloudWorker?['workerTypeId'] ==
-                                  workerTypeId;
-                          final stage =
-                              worker['releaseStage'] as String? ?? 'testing';
-                          final toolName =
-                              worker['providerToolName'] as String? ?? '';
-
-                          return Material(
-                            color: ProfileLabTheme.darkSurface,
-                            child: ListTile(
-                              dense: true,
-                              selected: isSelected,
-                              selectedTileColor: ProfileLabTheme.primaryAccent
-                                  .withValues(alpha: 0.12),
-                              title: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      worker['displayName'] as String? ??
-                                          workerTypeId,
-                                      style: TextStyle(
-                                        fontWeight: isSelected
-                                            ? FontWeight.bold
-                                            : FontWeight.w600,
-                                        fontSize: 13,
-                                      ),
-                                    ),
+                // Right pane: Selected Worker Details and Subviews
+                Expanded(
+                  child: c.selectedCloudWorker == null
+                      ? const EmptyState(
+                          title: 'Select a Worker',
+                          description:
+                              'Choose a logical Worker from the Cloud catalog.')
+                      : Column(
+                          children: [
+                            if (c.isLoadingDefinitions)
+                              const OperationProgress(label: 'Loading Worker…'),
+                            if (c.definitionsError != null)
+                              Text(c.definitionsError!),
+                            _WorkerSubViewHeader(controller: c),
+                            Expanded(
+                              child: switch (c.workerSubView) {
+                                WorkerSubView.overview => _WorkerDetailsPane(
+                                    controller: c,
+                                    workerState: c.selectedWorkerState,
                                   ),
-                                  _StageBadge(stage: stage),
-                                ],
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    workerTypeId,
-                                    style: const TextStyle(
-                                        fontFamily: 'Menlo',
-                                        fontSize: 10,
-                                        color: Color(0xFF94A3B8)),
-                                  ),
-                                  if (toolName.isNotEmpty) ...[
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'CLI: $toolName',
-                                      style: const TextStyle(
-                                          fontSize: 10,
-                                          color: Color(0xFF64748B)),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              onTap: () => c.selectWorker(worker),
+                                WorkerSubView.draftAndTest =>
+                                  DraftTestWorkbench(controller: c),
+                                WorkerSubView.releases =>
+                                  ReleasesView(controller: c),
+                              },
                             ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
+                          ],
+                        ),
+                ),
+              ],
+            ));
+  }
+}
 
-        // Right pane: Selected Worker Details
-        Expanded(
-          child: c.selectedCloudWorker == null
-              ? const Center(
-                  child: Text(
-                    'Select a logical worker from the dynamic catalog.',
-                    style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
-                  ),
-                )
-              : Column(children: [
-                  if (c.isLoadingDefinitions) const LinearProgressIndicator(),
-                  if (c.definitionsError != null) Text(c.definitionsError!),
-                  Expanded(
-                      child: _WorkerDetailsPane(
-                    controller: c,
-                    worker: c.selectedCloudWorker!,
-                    definition: c.selectedCloudDefinition,
-                  )),
-                ]),
-        ),
-      ],
-    );
+class _WorkerSubViewHeader extends StatelessWidget {
+  const _WorkerSubViewHeader({required this.controller});
+
+  final ProfileLabController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final worker = controller.selectedCloudWorker;
+    final workerTypeId = worker?['workerTypeId'] as String? ?? '';
+    final displayName = worker?['displayName'] as String? ?? workerTypeId;
+    final toolName = worker?['providerToolName'] as String? ?? '';
+    final currentSubView = controller.workerSubView;
+    final workerState = controller.selectedWorkerState;
+    final defId = workerState.profileDefinitionId ?? 'No Profile Def';
+    final providerStatus = workerState.isProviderDetected
+        ? 'Detected on PATH'
+        : 'Not found on PATH';
+
+    return Padding(
+        padding: const EdgeInsets.all(LabSpace.medium),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          LabPageHeader(
+              title: displayName,
+              description:
+                  '($workerTypeId) · Def: $defId · CLI: ${toolName.isEmpty ? "none" : toolName} · $providerStatus',
+              actions: [StatusBadge(label: workerState.status.label)]),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SegmentedButton<WorkerSubView>(
+                  segments: const [
+                    ButtonSegment(
+                        value: WorkerSubView.overview,
+                        label: Text('Overview',
+                            key: ValueKey('subview-overview'))),
+                    ButtonSegment(
+                        value: WorkerSubView.draftAndTest,
+                        label: Text('Draft & Test',
+                            key: ValueKey('subview-draftAndTest'))),
+                    ButtonSegment(
+                        value: WorkerSubView.releases,
+                        label:
+                            Text('Releases', key: ValueKey('subview-releases')))
+                  ],
+                  selected: {
+                    currentSubView
+                  },
+                  onSelectionChanged: (selected) =>
+                      controller.setWorkerSubView(selected.first)))
+        ]));
   }
 }
 
 class _WorkerDetailsPane extends StatelessWidget {
   const _WorkerDetailsPane({
     required this.controller,
-    required this.worker,
-    required this.definition,
+    required this.workerState,
   });
 
   final ProfileLabController controller;
-  final Map<String, dynamic> worker;
-  final Map<String, dynamic>? definition;
+  final SelectedWorkerState workerState;
 
   @override
   Widget build(BuildContext context) {
-    final workerTypeId = worker['workerTypeId'] as String? ?? '';
-    final displayName = worker['displayName'] as String? ?? workerTypeId;
-    final description =
-        worker['description'] as String? ?? 'No description provided.';
-    final lifecycleState = worker['lifecycleState'] as String? ?? 'active';
-    final visibilityState = worker['visibilityState'] as String? ?? 'visible';
-    final releaseStage = worker['releaseStage'] as String? ?? 'stable';
-    final sortOrder = worker['sortOrder']?.toString() ?? '100';
-    final profileDefId =
-        worker['profileDefinitionId'] as String? ?? 'Not configured';
-    final providerTool = worker['providerToolName'] as String? ?? 'Unknown';
-
-    final channels =
-        (definition?['channels'] as Map?)?.cast<String, dynamic>() ?? {};
-    final stableVersion = channels['stable']?.toString() ?? 'None';
-    final betaVersion = channels['beta']?.toString() ?? 'None';
-    final testingVersion = channels['testing']?.toString() ?? 'None';
-
-    final capabilities =
-        (worker['capabilities'] as List?)?.cast<String>() ?? [];
+    final nextAction = workerState.nextAction;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(LabSpace.page),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header Card
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              displayName,
-                              style: const TextStyle(
-                                  fontSize: 20, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              workerTypeId,
-                              style: const TextStyle(
-                                  fontFamily: 'Menlo',
-                                  fontSize: 12,
-                                  color: Color(0xFF94A3B8)),
-                            ),
-                          ],
-                        ),
-                      ),
-                      _StatusBadge(
-                          label: lifecycleState.toUpperCase(),
-                          isPass: lifecycleState == 'active'),
-                      const SizedBox(width: 8),
-                      _StatusBadge(
-                          label: visibilityState.toUpperCase(),
-                          isPass: visibilityState == 'visible'),
-                      const SizedBox(width: 8),
-                      _StageBadge(stage: releaseStage),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    description,
-                    style:
-                        const TextStyle(fontSize: 13, color: Color(0xFFCBD5E1)),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: capabilities
-                        .map(
-                          (cap) => Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF334155),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              cap,
-                              style: const TextStyle(
-                                  fontFamily: 'Menlo',
-                                  fontSize: 11,
-                                  color: Color(0xFFE2E8F0)),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          PrimaryActionCard(
+              title: nextAction.title,
+              description: nextAction.description,
+              actionLabel: nextAction.actionLabel,
+              status: StatusBadge(label: workerState.status.label),
+              onPressed: () async {
+                if (controller.canCreateInitialDraft) {
+                  try {
+                    await controller.createInitialDraft();
+                  } catch (error) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text('Could not create draft: $error')));
+                    }
+                  }
+                } else if (nextAction.area != LabArea.workers) {
+                  controller.setArea(nextAction.area);
+                } else {
+                  controller.setWorkerSubView(nextAction.subView);
+                }
+              }),
+          const SizedBox(height: 16),
+          LifecycleStepper(steps: [
+            LabLifecycleStep('Configure',
+                isDone: controller.currentDraft != null,
+                isActive:
+                    workerState.status == WorkerLifecycleStatus.noProfile),
+            LabLifecycleStep('Test',
+                isDone: workerState.lastTestResult == 'pass',
+                isActive:
+                    workerState.status == WorkerLifecycleStatus.testRequired),
+            LabLifecycleStep(
+                controller.labAccess?.draftsOnly == true
+                    ? 'Cloud Draft'
+                    : 'Sync',
+                isDone: controller.currentDraft != null &&
+                    controller.cloudDigest ==
+                        controller.currentDraft!.payloadDigest &&
+                    controller.cloudDraftVersion ==
+                        controller.currentDraft!.releaseVersion &&
+                    !workerState.isDraftDirty),
+            if (controller.labAccess?.draftsOnly != true) ...[
+              LabLifecycleStep('Publish',
+                  isDone: controller.cloudReleases
+                      .any((r) => r['lifecycleState'] != 'draft'),
+                  isActive:
+                      workerState.status == WorkerLifecycleStatus.testsPassed),
+              LabLifecycleStep('Rollout',
+                  isDone: workerState.stableVersion != 'None')
+            ]
+          ]),
+          if (controller.labAccess?.draftsOnly == true)
+            const Padding(
+                padding: EdgeInsets.all(12),
+                child:
+                    Text('Development mode — signed publishing is disabled')),
           const SizedBox(height: 20),
 
-          // Channel Releases Matrix
+          // Active Channel Pointers
           const Text(
-            'ACTIVE CHANNEL POINTERS',
+            'Release channels',
             style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
@@ -629,77 +655,135 @@ class _WorkerDetailsPane extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: _ChannelPointerCard(
+                child: ReleaseChannelCard(
                   channel: 'Testing Channel',
-                  version: testingVersion,
-                  color: Colors.blueAccent,
-                  isTarget: testingVersion != 'None',
+                  version: workerState.testingVersion == 'None'
+                      ? null
+                      : 'v${workerState.testingVersion}',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: _ChannelPointerCard(
+                child: ReleaseChannelCard(
                   channel: 'Beta Channel',
-                  version: betaVersion,
-                  color: Colors.purpleAccent,
-                  isTarget: betaVersion != 'None',
+                  version: workerState.betaVersion == 'None'
+                      ? null
+                      : 'v${workerState.betaVersion}',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: _ChannelPointerCard(
+                child: ReleaseChannelCard(
                   channel: 'Stable Channel',
-                  version: stableVersion,
-                  color: ProfileLabTheme.passColor,
-                  isTarget: stableVersion != 'None',
+                  version: workerState.stableVersion == 'None'
+                      ? null
+                      : 'v${workerState.stableVersion}',
                 ),
               ),
             ],
           ),
           const SizedBox(height: 20),
 
-          // Active Profile Definition Details
-          const Text(
-            'ACTIVE TOOL PROFILE DEFINITION',
-            style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF94A3B8)),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _PropertyRow(
-                      label: 'Profile Definition ID',
-                      value: profileDefId,
-                      isMonospace: true),
-                  const Divider(color: Color(0xFF334155)),
-                  _PropertyRow(label: 'Provider CLI Name', value: providerTool),
-                  const Divider(color: Color(0xFF334155)),
-                  _PropertyRow(
-                      label: 'Engine Family',
-                      value: 'cli (generic worker engine)'),
-                  const Divider(color: Color(0xFF334155)),
-                  _PropertyRow(label: 'Schema Version', value: 'v1'),
-                  const Divider(color: Color(0xFF334155)),
-                  _PropertyRow(label: 'Sort Order', value: sortOrder),
-                ],
-              ),
-            ),
+          // Collapsible Technical details Panel
+          TechnicalInspector(
+            subtitle: Text(
+                '${workerState.workerTypeId} · ${workerState.profileDefinitionId ?? "No definition"} · Catalog stage: ${workerState.catalogReleaseStage}'),
+            children: [
+              _PropertyRow(
+                  label: 'Worker Type ID',
+                  value: workerState.workerTypeId,
+                  isMonospace: true),
+              const Divider(color: Color(0xFF334155)),
+              _PropertyRow(
+                  label: 'Profile Definition ID',
+                  value: workerState.profileDefinitionId ?? 'Not configured',
+                  isMonospace: true),
+              const Divider(color: Color(0xFF334155)),
+              _PropertyRow(
+                  label: 'Provider CLI Name',
+                  value: workerState.providerToolName.isNotEmpty
+                      ? workerState.providerToolName
+                      : 'Unknown'),
+              const Divider(color: Color(0xFF334155)),
+              _PropertyRow(
+                  label: 'Provider Detection',
+                  value: workerState.isProviderDetected
+                      ? 'Detected (${workerState.providerDetectedPath})'
+                      : 'Not detected on PATH'),
+              const Divider(color: Color(0xFF334155)),
+              _PropertyRow(
+                  label: 'Catalog Release Stage',
+                  value: 'Catalog stage: ${workerState.catalogReleaseStage}'),
+              const Divider(color: Color(0xFF334155)),
+              _PropertyRow(
+                  label: 'Worker Lifecycle State',
+                  value: workerState.lifecycleState.toUpperCase()),
+              const Divider(color: Color(0xFF334155)),
+              _PropertyRow(
+                  label: 'Visibility State',
+                  value: workerState.visibilityState.toUpperCase()),
+              const Divider(color: Color(0xFF334155)),
+              _PropertyRow(
+                  label: 'Engine Family', value: 'cli (generic worker engine)'),
+              const Divider(color: Color(0xFF334155)),
+              _PropertyRow(label: 'Schema Version', value: 'v1'),
+              const Divider(color: Color(0xFF334155)),
+              _PropertyRow(
+                  label: 'Sort Order', value: workerState.sortOrder.toString()),
+              if (workerState.capabilities.isNotEmpty) ...[
+                const Divider(color: Color(0xFF334155)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Capabilities',
+                          style: TextStyle(
+                              fontSize: 12, color: Color(0xFF94A3B8))),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Wrap(
+                          alignment: WrapAlignment.end,
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: workerState.capabilities
+                              .map(
+                                (cap) => Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF334155),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    cap,
+                                    style: const TextStyle(
+                                        fontFamily: 'Menlo',
+                                        fontSize: 10,
+                                        color: Color(0xFFE2E8F0)),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 24),
 
-          // Action buttons to jump to other surfaces
+          // Action buttons to jump to other subviews / activity
           Wrap(
             spacing: 12,
             runSpacing: 12,
             children: [
               ElevatedButton.icon(
                 icon: const Icon(Icons.edit, size: 16),
-                label: const Text('Edit / Test in Profiles'),
+                label: const Text('Edit / Test in Draft & Test'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: ProfileLabTheme.primaryAccent,
                   foregroundColor: Colors.white,
@@ -707,7 +791,7 @@ class _WorkerDetailsPane extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
                 onPressed: () {
-                  controller.setTab(LabTab.profiles);
+                  controller.setWorkerSubView(WorkerSubView.draftAndTest);
                 },
               ),
               OutlinedButton.icon(
@@ -720,12 +804,12 @@ class _WorkerDetailsPane extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
                 onPressed: () {
-                  controller.setTab(LabTab.releases);
+                  controller.setWorkerSubView(WorkerSubView.releases);
                 },
               ),
               OutlinedButton.icon(
-                icon: const Icon(Icons.policy_outlined, size: 16),
-                label: const Text('View Audit Trail'),
+                icon: const Icon(Icons.history_edu, size: 16),
+                label: const Text('View Activity Log'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
                   side: const BorderSide(color: Color(0xFF475569)),
@@ -733,133 +817,12 @@ class _WorkerDetailsPane extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
                 onPressed: () {
-                  controller.setTab(LabTab.audit);
+                  controller.setArea(LabArea.audit);
                 },
               ),
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ChannelPointerCard extends StatelessWidget {
-  const _ChannelPointerCard({
-    required this.channel,
-    required this.version,
-    required this.color,
-    required this.isTarget,
-  });
-
-  final String channel;
-  final String version;
-  final Color color;
-  final bool isTarget;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isTarget
-                ? color.withValues(alpha: 0.5)
-                : const Color(0xFF334155),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: isTarget ? color : const Color(0xFF64748B),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  channel,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: isTarget ? color : const Color(0xFF94A3B8),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              version == 'None' ? 'Unassigned' : 'Release v$version',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                fontFamily: version == 'None' ? null : 'Menlo',
-                color:
-                    version == 'None' ? const Color(0xFF64748B) : Colors.white,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StageBadge extends StatelessWidget {
-  const _StageBadge({required this.stage});
-
-  final String stage;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (stage) {
-      'stable' => ProfileLabTheme.passColor,
-      'beta' => Colors.purpleAccent,
-      _ => Colors.blueAccent,
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        stage.toUpperCase(),
-        style:
-            TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.label, required this.isPass});
-
-  final String label;
-  final bool isPass;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isPass ? ProfileLabTheme.passColor : const Color(0xFF94A3B8);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        label,
-        style:
-            TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
       ),
     );
   }

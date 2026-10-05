@@ -76,11 +76,80 @@ Profile Lab builds default to `https://app.conclaveax.com`. Development builds c
 
 ### Profile Lab application boundaries
 
-The `ProfileLabController` remains the UI-facing façade, with draft editing and sync, Engine testing, session handling, and Cloud administration implemented in separate controller components. `ProfileAdminApiClient` decodes Cloud reads into typed read models for Workers, definitions, releases, evidence, audit events, channel pointers, Workspace assignments, and signing preflight. The Tool Profile payload remains an open JSON object because its schema evolves independently. The controller currently converts Cloud read models to JSON-shaped presentation state so existing screens can migrate independently; new application logic should use typed read model fields directly.
+The `ProfileLabController` remains the UI-facing façade, with draft editing and sync, Engine testing, session handling, and Cloud administration implemented in separate controller components. `ProfileAdminApiClient` decodes Cloud reads into typed read models for Workers, definitions, releases, evidence, audit events, channel pointers, Workspace assignments, and signing preflight. The Tool Profile payload remains an open JSON object because its schema evolves independently. The controller converts Cloud read models to JSON-shaped presentation state for the Worker lifecycle views; no legacy navigation or compatibility pages are retained. New application logic should use typed read model fields directly.
 
 ---
 
 ## 4. Draft Authoring & Sandbox Testing
+
+### Draft & Test workbench
+
+The selected Worker defines the workbench context; there is no separate local
+Draft selector. A single header shows Draft version, local save status and Cloud
+sync status. **Save** persists unsaved edits locally, then **Sync to Cloud** is
+the primary action. Sync is reported only when the saved payload digest and
+version match the Cloud draft. Conflicts retain explicit compare/resolution controls.
+
+Wide workbenches default to a draggable Editor/Test split; narrower workbenches
+stack the panes with a draggable horizontal divider. Compact toolbar buttons
+collapse either pane (always leaving one visible) and toggle the **Inspector**,
+which contains the structured Profile summary. Collapsing panes preserves editor
+state. Tests require saved valid JSON and remain accessible in a scrolling pane.
+
+Format JSON, Compare, Duplicate as Next Release, Revert, AI Proposal and
+Experimental Repair are in the overflow menu. A failed test exposes a contextual
+Repair Profile action; it retains the existing consent and review workflow.
+A passing test exposes the separate authorized qualification/publication action.
+These layout controls do not change evidence, signing or release authority.
+
+### Draft testing and release evidence
+
+There is no separate Tests page or local/Cloud evidence scope selector. The
+active Draft’s Test pane starts with **Provider CLI**, **Version**, and
+**Authentication** preflight statuses followed by **Run Full Test**. CLI discovery
+uses Profile-declared executable candidates. Version and authentication show
+**Not checked** until the full test observes them. Persisted matching evidence
+is labeled as previously tested rather than a fresh check; authentication readiness
+reflects the Profile’s passive probe checks, not a Cloud identity or credential.
+No model-consuming preflight runs automatically.
+
+During a run, completed stages stream into the pane. Completion summarizes
+actual passed stages out of eleven, skipped stages separately, provider/version,
+elapsed duration, and readiness for Cloud qualification. Qualification readiness
+requires saved local acceptance evidence matching the exact Draft identity,
+version and digest. Changing the saved payload or Worker clears the displayed
+run; unsaved edits block testing and qualification. Late events from a previous
+Draft do not populate another Draft’s Test pane.
+
+Failed stages expose **Retry** (reruns the complete test), **Apply version range**
+when the version probe supplies a bounded recommendation, and **Repair Profile**
+using the existing experimental proposal/review workflow. Applying a range saves
+the changed Draft and requires a new full test. Raw streamed logs live in collapsed
+**Execution details**; digest-bound **Local acceptance evidence** stays with the
+result. Cloud acceptance records are inspected under the matching published
+release in **Releases**, with definition/version/digest filtering. Cloud still
+validates qualification and promotion independently.
+
+### Initial Profile creation
+
+Workers → Draft & Test shows a creation card when the selected Worker has no
+local draft or Cloud release. **Create Initial Draft** clones the optional
+`starterTemplate` returned by the existing authenticated admin definition GET
+into Profile Lab’s local Draft store. No identity dialog is required. Definitions
+without a template offer **Create blank Profile**, using the catalog/definition
+Worker and provider identities. Existing releases are edited through Releases;
+initial creation never replaces a local draft or an existing Cloud version.
+
+Cloud owns `tool_profile_starter_templates`, keyed by `profile_definition_id`,
+with schema version, v1 Profile JSON and update timestamp. The fresh v8 baseline
+and development seed include the tested `chatgpt-codex` and `gemini-antigravity`
+v1 fixture payloads. Templates are mutable authoring data, carry no qualification
+or signature, and are absent from Workspace APIs and storage. Normal local tests,
+Cloud sync, qualification, signing and rollout remain required. The definition
+response’s nullable `starterTemplate` contains `{schemaVersion: 1, profile: ...}`.
+The v8 baseline is updated in place; existing development databases must be
+rebuilt/reseeded or explicitly provisioned with the table and seed data.
+
 
 Profile Lab allows engineers to author and iteratively refine Draft Profiles before requesting a signed release:
 
@@ -199,7 +268,7 @@ empty results; explicit Refresh retries or reloads them. Releases are keyed by
 Definition. Evidence and audit refresh on activation. Loading and errors are
 owned by their individual domains. Publication, Cloud save, promotion,
 rollback, revocation, and Workspace channel updates disable only their
-initiating actions. Operations continue when the operator changes tabs.
+initiating actions. Operations continue when the operator changes primary areas.
 Responses for a previous Cloud origin/session or a superseded Definition or
 release selection must not replace the current read model.
 
@@ -237,7 +306,7 @@ access read model (`schemaVersion: 1`): authenticated identity/audience,
 `permissions.profilesAdmin`, `permissions.releaseManager`, `releaseMode`, and
 `signer.ready`/`signer.issues`. The Lab locks its content until Cloud verifies
 administrative access. Its header shows Signed in until permission is verified,
-then Profile Admin; the status strip reports release permission and signer state.
+then Profile Admin; the account/access control exposes release permission and signer state. There is no permanent access/status strip.
 Check access retries the access read. Authentication alone never grants access.
 
 The checked-in configurations use
@@ -284,3 +353,29 @@ In `drafts-only` development mode, the active owner account can use its existing
 browser sign-in without separate email verification. Other emails remain denied.
 Signed publication mode requires the owner email to be verified; unspecified
 release modes also retain that requirement. No verification flags are rewritten.
+
+### Release lifecycle presentation
+
+The selected Worker’s Releases view starts with Testing, Beta, and Stable cards populated from Cloud’s channel pointers, followed by published release history (Cloud drafts are excluded). Selecting a release shows status, publication time, provider version compatibility, release-scoped Cloud evidence, and implementation differences against the nearest earlier published version. Canonical payload and signing metadata are collapsed under Technical details. Promotion is contextual; Stable promotion continues to require qualifying Cloud evidence and the existing authorization gate. Rollback and revocation remain reason/confirmation protected and are accessed through release overflow. Refreshing releases also refreshes channel assignments and preserves the selected published version when available.
+
+With no published releases, the view offers Draft & Test. In `drafts-only` mode, Overview, the test workbench, and Releases state “Development mode — signed publishing is disabled”; Publish and Promote are hidden, and the Overview lifecycle ends at Cloud Draft. Existing release history and channel assignments remain inspectable. Starter templates and local testing remain independent of Workspace runtime state.
+
+### Workspace rollout and Activity presentation
+
+Workspaces shows a compact rollout heading, Testing/Beta/Stable counts, search, and a table with Workspace, Host, App version, Connection, and Channel. Connection reflects the latest `execution_workspaces.status` reported to Cloud; absent status is Unknown, not inferred from runtime registration. Rollout help is available through an info control. Selecting another channel opens a confirmation describing the old/new assignment and effect on subsequent Profile resolution. Cancel leaves the assignment unchanged; existing authorization and Stable passkey verification remain enforced. Running sessions retain their pinned release.
+
+Activity defaults to all events and offers an optional current-Worker filter. Event summaries lead with Worker name, version, lifecycle action, and actor name. Raw IDs, reasons, provenance, and full details remain expandable. Global and definition audit responses add nullable `actorDisplayName` and `workerDisplayName`, resolved through existing user/catalog records; these are current display labels, not historical snapshots. Missing identities are shown as System or an operator while retaining raw IDs in details. No schema migration is required.
+
+### Design system and desktop accessibility
+
+Profile Lab shares `LabPageHeader`, `StatusBadge`, `LifecycleStepper`, `EmptyState`, `ErrorState`, `WorkerSidebarItem`, `PrimaryActionCard`, `TechnicalInspector`, `ReleaseChannelCard`, and `OperationProgress` in `lib/widgets/lab_components.dart`. Spacing follows an 8/16/24 point scale; table rows are 48–64 points, action buttons are at least 40 points high, and technical identities/JSON retain monospace typography. Routine headings use sentence case. Indigo denotes interaction; green/amber/red denote semantic success/warning/error. Status and lifecycle indicators include readable labels and symbols, and operation/error announcements expose live regions. Shared semantic status text is checked for contrast.
+
+At compact desktop widths (below 1000 points), the Worker catalog stacks above the selected Worker; wide windows retain the sidebar. Lifecycle steps and headers wrap, tables scroll horizontally, and the workbench retains its responsive pane arrangement. Layout regression checks cover all primary views at 800×700 and 1440×1000.
+
+`⌘S` saves a valid modified local Draft when Draft & Test is active, including with editor focus. It never publishes or syncs automatically. `⌘R` refreshes the current resource: catalog on Overview, Cloud/evidence state on Draft & Test without replacing editor text, releases/channel pointers on Releases, Workspace assignments on Workspaces, and events on Activity. Both shortcuts are blocked behind dialogs and during conflicting operations; Save requires authorized Profile administration. Save and refresh tooltips advertise the shortcuts; the obsolete global telemetry strip is removed. Automated tests cover labels, contrast, focus, modal boundaries, and layouts; native VoiceOver verification remains a separate manual check.
+
+### First-run acceptance and UI migration
+
+Only Workers, Workspaces, and Activity are primary areas (`LabArea`). Workers owns Overview, Draft & Test, and Releases. The workbench is `DraftTestWorkbench`, with `ProfileDraftEditor` as its editor pane; obsolete Profiles/Tests/evidence pages, their navigation aliases, the duplicate Draft selector, and the global telemetry/status strip are removed without compatibility shims. Existing local Draft and evidence storage paths, identities, formats, and Cloud APIs remain unchanged by this UI cleanup. The starter-template table remains part of the fresh-start v8 Cloud baseline; existing development databases must provision/reseed the current baseline when adopting that earlier data-model change.
+
+`worker_first_run_acceptance_test.dart` covers sign-in, catalog selection, absent Profile, one-click initial Draft, dynamic `codex`/`agy` discovery, the actual eleven-stage ladder through the bundled Engine, persisted matching local evidence, local save, and Cloud Draft sync for both Workers in draft-only and publishing modes. Browser approval and Cloud persistence are controlled boundary fixtures. Provider executables use the existing v1 payload contracts with isolated home/PATH/environment; they do not call vendor services. The no-template path verifies a blank Draft inherits catalog identity and remains unqualified. A cold-start check reopens the same persisted Draft and matching evidence without recreating or translating them. Catalog Stable is always explicitly labeled as catalog stage and cannot establish a Stable release pointer. Signing/production rollout and real vendor acceptance remain separate release gates.

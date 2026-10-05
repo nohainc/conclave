@@ -2,16 +2,31 @@ part of 'profile_lab_controller.dart';
 
 mixin _ProfileLabTestOperations on _ProfileLabControllerState {
   Future<void> runTestLadder() async {
-    if (currentDraft == null || isTesting) return;
+    if (currentDraft == null ||
+        isTesting ||
+        isDirty ||
+        jsonValidationError != null ||
+        isPublishing ||
+        isSavingToCloud) {
+      return;
+    }
+    final candidate = currentDraft!;
+    bool isCurrent() =>
+        testResultMatchesDraft &&
+        testedDraftDigest == candidate.payloadDigest &&
+        testedProfileDefinitionId == candidate.profileDefinitionId;
+    testedDraftDigest = candidate.payloadDigest;
+    testedProfileDefinitionId = candidate.profileDefinitionId;
+    lastTestResult = null;
 
+    testStartedAt = DateTime.now().toUtc();
+    testCompletedAt = null;
     isTesting = true;
-    testStatusMessage = 'Executing Progressive 11-Stage Test Ladder...';
+    testStatusMessage = 'Running full test…';
     testLogs.clear();
     activeLadderStages = [];
     lastLadderResult = null;
     notifyListeners();
-
-    final candidate = currentDraft!;
 
     try {
       engineExecutable ??= await loadBundledCliWorkerEngine(
@@ -24,15 +39,21 @@ mixin _ProfileLabTestOperations on _ProfileLabControllerState {
         sandboxRoot: paths.sandboxDirectory,
         engineExecutable: engineExecutable!,
         processSupervisor: _processSupervisor,
+        environmentOverrides: sandboxEnvironmentOverrides,
       );
       _activeTestSandbox = sandbox;
 
       final result = await sandbox.executeTestLadder(
         candidate: candidate,
-        onStageUpdate: (stageId, status, diagnostics) {
+        onStageResult: (stage) {
+          if (!isCurrent()) return;
+          activeLadderStages = [...activeLadderStages, stage];
+          testStatusMessage =
+              '${activeLadderStages.length}/11 stages completed';
           notifyListeners();
         },
         onLog: (level, message) {
+          if (!isCurrent()) return;
           testLogs.add(TestExecutionLog(
             timestamp: DateTime.now(),
             level: level,
@@ -42,13 +63,14 @@ mixin _ProfileLabTestOperations on _ProfileLabControllerState {
         },
       );
 
-      lastLadderResult = result;
-      activeLadderStages = result.stages;
-      lastTestResult = result.overallResult;
-      final passedCount =
-          result.stages.where((s) => s.status == 'passed').length;
-      testStatusMessage =
-          'Test Ladder completed: ${result.overallResult.toUpperCase()} ($passedCount/${result.stages.length} stages passed)';
+      if (isCurrent()) {
+        lastLadderResult = result;
+        activeLadderStages = result.stages;
+        lastTestResult = result.overallResult;
+        final passedCount =
+            result.stages.where((s) => s.status == 'passed').length;
+        testStatusMessage = '$passedCount/${result.stages.length} passed';
+      }
 
       final acceptanceEvidence = result.acceptanceEvidence;
       if (acceptanceEvidence != null) {
@@ -60,8 +82,9 @@ mixin _ProfileLabTestOperations on _ProfileLabControllerState {
       }
       await refreshEvidence();
     } catch (e) {
+      if (!isCurrent()) return;
       lastTestResult = 'fail';
-      testStatusMessage = 'Ladder execution failed: $e';
+      testStatusMessage = 'Full test failed: $e';
       testLogs.add(TestExecutionLog(
         timestamp: DateTime.now(),
         level: 'error',
@@ -69,6 +92,7 @@ mixin _ProfileLabTestOperations on _ProfileLabControllerState {
       ));
     } finally {
       _activeTestSandbox = null;
+      if (isCurrent()) testCompletedAt = DateTime.now().toUtc();
       isTesting = false;
       notifyListeners();
     }
@@ -83,6 +107,4 @@ mixin _ProfileLabTestOperations on _ProfileLabControllerState {
       notifyListeners();
     }
   }
-
-  /// Loads any active, non-expired Profile Lab session from the dedicated credentials directory.
 }

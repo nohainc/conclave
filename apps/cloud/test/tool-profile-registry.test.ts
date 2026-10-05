@@ -958,6 +958,8 @@ describe("Phase 7 Profile Admin read models and operations", () => {
         profile_definition_id: "fixture-cli",
         release_version: 1,
         actor_user_id: "admin-1",
+        actor_display_name: "Vitalii",
+        worker_display_name: "ChatGPT",
         action: "draft_created",
         previous_release_version: null,
         channel: null,
@@ -979,6 +981,8 @@ describe("Phase 7 Profile Admin read models and operations", () => {
     const globalAudit = await listToolProfileAudit(db);
     expect(globalAudit.events).toHaveLength(1);
     expect(globalAudit.events![0]!.action).toBe("draft_created");
+    expect(globalAudit.events[0]!.actorDisplayName).toBe("Vitalii");
+    expect(globalAudit.events[0]!.workerDisplayName).toBe("ChatGPT");
 
     const defAudit = await listToolProfileAudit(db, "fixture-cli");
     expect(defAudit.events).toHaveLength(1);

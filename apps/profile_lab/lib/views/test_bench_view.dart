@@ -1,437 +1,377 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../widgets/lab_components.dart';
 
 import '../controllers/profile_lab_controller.dart';
 import '../profile_lab_test_sandbox.dart';
 import '../theme/profile_lab_theme.dart';
 import 'ai_repair_loop_dialog.dart';
-import 'provider_version_matrix_card.dart';
 
+/// Testing and local acceptance evidence belong to the active Draft.
 class TestBenchView extends StatelessWidget {
   const TestBenchView({super.key, required this.controller});
-
   final ProfileLabController controller;
+
+  Future<void> _perform(
+      BuildContext context, Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not complete action: $error')));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = controller;
     final draft = c.currentDraft;
-
     if (draft == null) {
       return const Center(
-        child: Text(
-            'No draft selected. Please select a draft in the Drafts tab first.'),
-      );
+          child: Text('Create an initial draft to start testing.'));
+    }
+    final tool = draft.profile['providerTool'] as Map;
+    final provider = tool['name'] as String;
+    final candidates =
+        (tool['executableCandidates'] as List).whereType<String>();
+    String? path;
+    for (final executable in candidates) {
+      path ??= c.detectedProviderPaths[executable];
+    }
+    final stages = c.testResultMatchesDraft
+        ? c.activeLadderStages
+        : <ProfileLabLadderStageResult>[];
+    ProfileLabLadderStageResult? stage(String id) {
+      for (final item in stages) {
+        if (item.stageId == id) return item;
+      }
+      return null;
     }
 
-    final providerTool = draft.profile['providerTool'] as Map<String, Object?>?;
-    final toolName = providerTool?['name'] as String? ?? 'unknown';
-    final detectedPath = c.detectedProviderPaths[toolName];
+    final discovery = stage('executable_discovery');
+    final versionStage = stage('cli_version');
+    final authentication = stage('passive_probe');
+    final version = versionStage?.details['cliVersion'] as String? ??
+        versionStage?.details['detectedProviderVersion'] as String?;
+    final running = c.isTesting && c.testResultMatchesDraft;
+    final completed =
+        !running && c.testResultMatchesDraft && c.lastTestResult != null;
+    final busy = c.isTesting || c.isPublishing || c.isSavingToCloud;
+    final canRun = !busy && !c.isDirty && c.jsonValidationError == null;
+    final passed = stages.where((s) => s.status == 'passed').length;
+    final skipped = stages.where((s) => s.status == 'skipped').length;
+    final failed = stages.where((s) => s.status == 'failed').toList();
+    Map<String, Object?>? evidence;
+    for (final item in c.currentEvidence) {
+      if (item['profileDefinitionId'] == draft.profileDefinitionId &&
+          item['releaseVersion'] == draft.releaseVersion &&
+          item['profileDigest'] == draft.payloadDigest &&
+          ToolProfileAcceptanceEvidence.hasCloudContractShape(item,
+              profile: draft.profile)) {
+        evidence = item;
+        break;
+      }
+    }
+    final qualified = evidence != null &&
+        !c.isDirty &&
+        !running &&
+        (!completed || c.lastTestResult == 'pass');
+    final elapsed = c.lastLadderResult != null && c.testResultMatchesDraft
+        ? c.lastLadderResult!.endedAt.difference(c.lastLadderResult!.startedAt)
+        : c.testCompletedAt != null && c.testStartedAt != null
+            ? c.testCompletedAt!.difference(c.testStartedAt!)
+            : null;
+    final savedAcceptance = evidence != null && !c.testResultMatchesDraft;
+    final resultVersion = version ??
+        (completed || running
+            ? null
+            : evidence?['providerToolVersion'] as String?) ??
+        'Version not observed';
 
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Target information card
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('Profile Tests',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+        const SizedBox(height: 12),
+        _PreflightRow(
+            label: 'Provider CLI',
+            value: discovery == null
+                ? (path == null ? 'Not found' : 'Found')
+                : discovery.status == 'passed'
+                    ? 'Found'
+                    : discovery.status == 'failed'
+                        ? 'Unavailable'
+                        : 'Not checked',
+            passed: discovery == null
+                ? (path != null ? true : null)
+                : _passed(discovery),
+            detail: provider),
+        _PreflightRow(
+            label: 'Version',
+            value: versionStage == null || versionStage.status == 'skipped'
+                ? (savedAcceptance
+                    ? '$resultVersion · Last tested'
+                    : 'Not checked')
+                : versionStage.status == 'passed'
+                    ? '$version · Supported'
+                    : '${version ?? "Probe failed"} · Needs attention',
+            passed: savedAcceptance ? true : _passed(versionStage),
+            detail: versionStage?.diagnostics),
+        _PreflightRow(
+            label: 'Authentication',
+            value: authentication == null || authentication.status == 'skipped'
+                ? (savedAcceptance
+                    ? 'Profile checks previously passed'
+                    : 'Not checked')
+                : authentication.status == 'passed'
+                    ? 'Ready · Profile checks passed'
+                    : 'Needs attention',
+            passed: savedAcceptance ? true : _passed(authentication),
+            detail: authentication?.diagnostics),
+        const SizedBox(height: 12),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          FilledButton.icon(
+              icon: const Icon(Icons.play_arrow, size: 18),
+              label: Text(running ? 'Running…' : 'Run Full Test'),
+              onPressed: canRun ? () => c.runTestLadder() : null),
+          if (c.isTesting)
+            OutlinedButton(
+                onPressed: c.cancelTest, child: const Text('Cancel')),
+        ]),
+        if (c.isTesting && !running)
+          const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                  'A test is running for another Draft. Cancel it or wait to start this Draft’s test.')),
+        if (c.isDirty || c.jsonValidationError != null)
+          const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text('Save a valid Draft before testing.')),
+        if (!running && !completed && evidence == null)
+          const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                  'Version and authentication are checked during the full test.')),
+        if (running) ...[
+          const SizedBox(height: 16),
+          OperationProgress(
+              label: 'Running Profile tests…', value: stages.length / 11),
+          const SizedBox(height: 8),
+          Text(c.testStatusMessage ?? 'Running full test…'),
+          const SizedBox(height: 8),
+          for (final item in stages) _StageResult(stage: item),
+        ],
+        if (completed || evidence != null && !running) ...[
+          const SizedBox(height: 16),
           Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
+              child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Text(
-                              draft.profileDefinitionId,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'v${draft.releaseVersion}',
-                              style: const TextStyle(
-                                  fontSize: 14, color: Color(0xFF94A3B8)),
-                            ),
-                          ],
-                        ),
+                        Text(
+                            completed
+                                ? '$passed/11 passed${skipped > 0 ? " · $skipped skipped" : ""}'
+                                : 'Saved local acceptance evidence',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 16)),
                         const SizedBox(height: 6),
+                        Text('$provider · $resultVersion'),
+                        if (completed)
+                          Text(
+                              'Duration: ${elapsed == null ? "Unavailable" : "${(elapsed.inMilliseconds / 1000).toStringAsFixed(1)} s"}'),
+                        const SizedBox(height: 8),
                         Text(
-                          'Provider CLI: $toolName (${detectedPath != null ? "found at $detectedPath" : "NOT found on PATH"})',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: detectedPath != null
-                                ? ProfileLabTheme.passColor
-                                : ProfileLabTheme.warnColor,
-                          ),
-                        ),
-                        Text(
-                          'Payload Digest: ${draft.payloadDigest}',
-                          style: const TextStyle(
-                              fontFamily: 'Menlo',
-                              fontSize: 11,
-                              color: Color(0xFF94A3B8)),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.swap_calls, size: 16),
-                        label: const Text('Run Test Ladder'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: ProfileLabTheme.primaryAccent,
-                          foregroundColor: Colors.white,
-                        ),
-                        onPressed: c.isTesting ? null : () => c.runTestLadder(),
-                      ),
-                      if (c.isTesting) ...[
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.cancel_outlined, size: 14),
-                          label: const Text('Cancel Engine Run'),
-                          onPressed: c.cancelTest,
-                        ),
-                      ],
-                      const SizedBox(width: 8),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.build_circle_outlined,
-                            size: 14, color: ProfileLabTheme.warnColor),
-                        label: const Text('Experimental Repair...',
+                            qualified
+                                ? 'Ready for Cloud qualification'
+                                : c.isDirty
+                                    ? 'Draft modified · Save and rerun to qualify'
+                                    : 'Not qualified · Full test required',
                             style: TextStyle(
-                                fontSize: 11,
-                                color: ProfileLabTheme.warnColor)),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(
-                              color: ProfileLabTheme.warnColor),
-                        ),
-                        onPressed: c.isTesting
-                            ? null
-                            : () => AiRepairLoopDialog.show(context, c),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Provider Version Test Matrix Card
-          ProviderVersionMatrixCard(
-            profile: draft.profile,
-            evidenceList: c.currentEvidence,
-          ),
-          const SizedBox(height: 16),
-
-          // Status & Result Bar
-          if (c.testStatusMessage != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: c.lastTestResult == 'pass'
-                    ? ProfileLabTheme.passColor.withValues(alpha: 0.15)
-                    : c.lastTestResult == 'fail'
-                        ? ProfileLabTheme.failColor.withValues(alpha: 0.15)
-                        : ProfileLabTheme.darkSurface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: c.lastTestResult == 'pass'
-                      ? ProfileLabTheme.passColor
-                      : c.lastTestResult == 'fail'
-                          ? ProfileLabTheme.failColor
-                          : const Color(0xFF334155),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    c.isTesting
-                        ? Icons.sync
-                        : c.lastTestResult == 'pass'
-                            ? Icons.check_circle_outline
-                            : Icons.error_outline,
-                    color: c.lastTestResult == 'pass'
-                        ? ProfileLabTheme.passColor
-                        : c.lastTestResult == 'fail'
-                            ? ProfileLabTheme.failColor
-                            : Colors.white,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      c.testStatusMessage!,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          const SizedBox(height: 16),
-
-          // Progressive Test Ladder Stages View
-          if (c.activeLadderStages.isNotEmpty) ...[
-            Row(
-              children: const [
-                Text(
-                  'PROGRESSIVE LOCAL TEST LADDER (11 STAGES)',
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF94A3B8)),
-                ),
-                Spacer(),
-                Text(
-                  'Schema → Compat → Discovery → Version → Passive → Live → Exec → Session → Model → Cancel → Timeout',
-                  style: TextStyle(fontSize: 10, color: Color(0xFF64748B)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Container(
-              constraints: const BoxConstraints(maxHeight: 220),
-              decoration: BoxDecoration(
-                color: ProfileLabTheme.darkSurface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF334155)),
-              ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: c.activeLadderStages.length,
-                separatorBuilder: (_, __) =>
-                    const Divider(height: 1, color: Color(0xFF1E293B)),
-                itemBuilder: (ctx, idx) {
-                  final stage = c.activeLadderStages[idx];
-                  return _StageRowTile(stage: stage, index: idx + 1);
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
+                                color: qualified
+                                    ? ProfileLabTheme.passColor
+                                    : ProfileLabTheme.warnColor)),
+                        if (completed &&
+                            c.lastTestResult == 'fail' &&
+                            failed.isEmpty)
+                          Text(c.testStatusMessage ?? 'Full test failed.'),
+                      ]))),
+          if (c.labAccess?.draftsOnly == true)
+            const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child:
+                    Text('Development mode — signed publishing is disabled')),
+          if (qualified && c.labAccess?.draftsOnly != true)
+            Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                    icon: const Icon(Icons.verified_outlined, size: 16),
+                    label: Text(c.isPublishing
+                        ? 'Publishing…'
+                        : 'Qualify, Publish & Sign'),
+                    onPressed: !c.canPublish || busy
+                        ? null
+                        : () => _perform(context, c.publishCurrentDraft))),
+          if (completed && c.lastTestResult == 'fail') ...[
+            for (final item in failed)
+              _StageResult(
+                  stage: item, actions: _failureActions(context, item, canRun)),
+            if (failed.isEmpty)
+              Wrap(
+                  spacing: 8, children: _failureActions(context, null, canRun)),
           ],
-
-          if (c.activeLadderStages.isNotEmpty)
-            for (final stage in c.activeLadderStages)
-              if (stage.stageId == 'cli_version' &&
-                  stage.details['suggestedMin'] is String &&
-                  stage.details['suggestedMaxExclusive'] is String) ...[
-                Card(
-                  color: ProfileLabTheme.darkSurface,
-                  child: ListTile(
-                    leading: const Icon(Icons.verified_outlined,
-                        color: ProfileLabTheme.primaryAccent),
-                    title: const Text('Provider version discovered'),
-                    subtitle: Text(
-                      'Suggested compatibility: ${stage.details['suggestedMin']} to ${stage.details['suggestedMaxExclusive']} (exclusive). Applying it saves the local Draft; rerun qualification afterward.',
-                    ),
-                    trailing: OutlinedButton(
-                      onPressed: c.isTesting
-                          ? null
-                          : () => c.applyRecommendedProviderCompatibilityRange(
-                                min: stage.details['suggestedMin'] as String,
-                                maxExclusive: stage
-                                    .details['suggestedMaxExclusive'] as String,
-                              ),
-                      child: const Text('Apply range'),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-          // Output console
-          const Text(
-            'EXECUTION OUTPUT & STREAMED EVENTS',
-            style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF94A3B8)),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: ProfileLabTheme.darkBackground,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF334155)),
-              ),
-              child: c.testLogs.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'Ready to test. Run Test Ladder to execute the 11 progressive stages.',
-                        style:
-                            TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: c.testLogs.length,
-                      itemBuilder: (ctx, idx) {
-                        final log = c.testLogs[idx];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${log.timestamp.toIso8601String().substring(11, 19)} ',
-                                style: const TextStyle(
-                                    fontFamily: 'Menlo',
-                                    fontSize: 11,
-                                    color: Color(0xFF64748B)),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 4, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: log.level == 'error'
-                                      ? ProfileLabTheme.failColor
-                                          .withValues(alpha: 0.2)
-                                      : ProfileLabTheme.primaryAccent
-                                          .withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                                child: Text(
-                                  log.level.toUpperCase(),
-                                  style: TextStyle(
-                                    fontFamily: 'Menlo',
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: log.level == 'error'
-                                        ? ProfileLabTheme.failColor
-                                        : ProfileLabTheme.primaryAccent,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  log.message,
-                                  style: TextStyle(
-                                    fontFamily: 'Menlo',
-                                    fontSize: 11,
-                                    color: log.level == 'error'
-                                        ? const Color(0xFFFCA5A5)
-                                        : const Color(0xFFE2E8F0),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ),
+          if (stages.isNotEmpty)
+            ExpansionTile(
+                key: ValueKey('test-stages-${draft.payloadDigest}'),
+                title: const Text('Test stages'),
+                children: [
+                  for (final item in stages) _StageResult(stage: item)
+                ]),
+          if (evidence != null)
+            ExpansionTile(
+                key: ValueKey('local-evidence-${draft.payloadDigest}'),
+                title: const Text('Local acceptance evidence'),
+                subtitle: const Text(
+                    'Saved for this exact Draft · Cloud validates on publication'),
+                children: [
+                  Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: SelectableText(
+                          const JsonEncoder.withIndent('  ').convert(evidence),
+                          style: ProfileLabTheme.monoStyle))
+                ]),
         ],
-      ),
+        const SizedBox(height: 12),
+        ExpansionTile(
+            key: ValueKey('execution-details-${draft.payloadDigest}'),
+            title: const Text('Execution details'),
+            subtitle: Text(
+                '${c.testResultMatchesDraft ? c.testLogs.length : 0} streamed events'),
+            children: [
+              SizedBox(
+                  height: 240,
+                  child: c.testLogs.isEmpty || !c.testResultMatchesDraft
+                      ? const Center(
+                          child: Text('Execution logs appear during a run.'))
+                      : ListView.builder(
+                          itemCount: c.testLogs.length,
+                          itemBuilder: (_, index) {
+                            final log = c.testLogs[index];
+                            return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 3),
+                                child: SelectableText(
+                                    '${log.timestamp.toIso8601String().substring(11, 19)} ${log.level.toUpperCase()} · ${log.message}',
+                                    style: ProfileLabTheme.monoStyle.copyWith(
+                                        color: log.level == 'error'
+                                            ? ProfileLabTheme.failColor
+                                            : null)));
+                          }))
+            ]),
+      ]),
     );
+  }
+
+  static bool? _passed(ProfileLabLadderStageResult? stage) =>
+      stage?.status == 'passed'
+          ? true
+          : stage?.status == 'failed'
+              ? false
+              : null;
+
+  List<Widget> _failureActions(
+      BuildContext context, ProfileLabLadderStageResult? stage, bool enabled) {
+    final c = controller;
+    final min = stage?.details['suggestedMin'];
+    final max = stage?.details['suggestedMaxExclusive'];
+    return [
+      OutlinedButton(
+          onPressed: enabled ? () => c.runTestLadder() : null,
+          child: const Text('Retry')),
+      if (stage?.stageId == 'cli_version' && min is String && max is String)
+        OutlinedButton(
+            onPressed: enabled
+                ? () => _perform(
+                    context,
+                    () => c.applyRecommendedProviderCompatibilityRange(
+                        min: min, maxExclusive: max))
+                : null,
+            child: const Text('Apply version range')),
+      OutlinedButton.icon(
+          icon: const Icon(Icons.auto_awesome, size: 16),
+          onPressed: enabled ? () => AiRepairLoopDialog.show(context, c) : null,
+          label: const Text('Repair Profile')),
+    ];
   }
 }
 
-class _StageRowTile extends StatelessWidget {
-  const _StageRowTile({required this.stage, required this.index});
-
-  final ProfileLabLadderStageResult stage;
-  final int index;
-
+class _PreflightRow extends StatelessWidget {
+  const _PreflightRow(
+      {required this.label, required this.value, this.passed, this.detail});
+  final String label;
+  final String value;
+  final bool? passed;
+  final String? detail;
   @override
-  Widget build(BuildContext context) {
-    final isPassed = stage.status == 'passed';
-    final isFailed = stage.status == 'failed';
+  Widget build(BuildContext context) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(
+            passed == true
+                ? Icons.check_circle_outline
+                : passed == false
+                    ? Icons.error_outline
+                    : Icons.radio_button_unchecked,
+            size: 18,
+            color: passed == true
+                ? ProfileLabTheme.passColor
+                : passed == false
+                    ? ProfileLabTheme.failColor
+                    : const Color(0xFF94A3B8)),
+        const SizedBox(width: 8),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Tooltip(
+              message: detail ?? value,
+              child: Text(value, style: const TextStyle(fontSize: 12))),
+        ])),
+      ]));
+}
 
-    final statusColor = isPassed
-        ? ProfileLabTheme.passColor
-        : isFailed
-            ? ProfileLabTheme.failColor
-            : const Color(0xFF94A3B8);
-
-    final icon = isPassed
-        ? Icons.check_circle
-        : isFailed
-            ? Icons.cancel
-            : Icons.do_not_disturb_on;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: statusColor, size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      '$index. ${stage.displayName}',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 12),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        stage.status.toUpperCase(),
-                        style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            color: statusColor),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: stage.consumesQuota
-                            ? const Color(0xFFEF4444).withValues(alpha: 0.15)
-                            : const Color(0xFF10B981).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: Text(
-                        stage.consumesQuota ? 'Quota' : 'No Quota',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
-                          color: stage.consumesQuota
-                              ? const Color(0xFFFCA5A5)
-                              : const Color(0xFF6EE7B7),
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '${stage.durationMs}ms',
-                      style: const TextStyle(
-                          fontFamily: 'Menlo',
-                          fontSize: 10,
-                          color: Color(0xFF64748B)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  stage.diagnostics,
-                  style:
-                      const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+class _StageResult extends StatelessWidget {
+  const _StageResult({required this.stage, this.actions = const []});
+  final ProfileLabLadderStageResult stage;
+  final List<Widget> actions;
+  @override
+  Widget build(BuildContext context) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(
+            stage.status == 'passed'
+                ? Icons.check_circle_outline
+                : stage.status == 'failed'
+                    ? Icons.error_outline
+                    : Icons.remove_circle_outline,
+            size: 18,
+            color: stage.status == 'failed'
+                ? ProfileLabTheme.failColor
+                : stage.status == 'passed'
+                    ? ProfileLabTheme.passColor
+                    : const Color(0xFF94A3B8)),
+        const SizedBox(width: 8),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${stage.displayName} · ${stage.status}',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(stage.diagnostics, style: const TextStyle(fontSize: 12)),
+          if (actions.isNotEmpty)
+            Wrap(spacing: 8, runSpacing: 4, children: actions),
+        ])),
+      ]));
 }

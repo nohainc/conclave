@@ -1,6 +1,9 @@
 import 'dart:convert';
+import '../utils/profile_domain_diff.dart';
 import 'package:flutter/material.dart';
+import '../widgets/lab_components.dart';
 import 'profile_release_diff_view.dart';
+import 'release_evidence_view.dart';
 import 'promotion_gate_dialog.dart';
 import 'profile_lab_step_up.dart';
 
@@ -23,7 +26,7 @@ class _ReleasesViewState extends State<ReleasesView> {
     final defId = c.selectedDefinitionId ?? '';
     final releases = c.cloudReleases.where((r) {
       final state = (r['lifecycleState'] as String? ?? '').toLowerCase();
-      return state != 'revoked' && state != 'retired';
+      return state != 'draft' && state != 'revoked' && state != 'retired';
     }).toList();
 
     String selectedChannel = 'stable';
@@ -346,438 +349,257 @@ class _ReleasesViewState extends State<ReleasesView> {
   @override
   Widget build(BuildContext context) {
     final c = widget.controller;
-    final releases = c.cloudReleases;
-    final selectedRelease = c.selectedCloudRelease;
-
+    final releases = c.cloudReleases
+        .where((r) => r['lifecycleState'] != 'draft')
+        .toList()
+      ..sort((a, b) =>
+          (b['releaseVersion'] as int).compareTo(a['releaseVersion'] as int));
+    final selected = c.selectedCloudRelease;
+    final channels = c.selectedCloudDefinition?['channels'] as Map? ?? {};
+    final development = c.labAccess?.draftsOnly == true;
+    final canManage =
+        c.currentSession != null && c.labAccess?.releaseManager == true;
     if (c.selectedDefinitionId == null) {
-      return const Center(
-        child: Text(
-            'No Profile Definition selected. Select a Worker or Profile first.',
-            style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8))),
-      );
+      return const Center(child: Text('Select a Worker to view its releases.'));
     }
-
-    return Column(
-      children: [
-        // Top Toolbar
-        Container(
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: const BoxDecoration(
-            color: ProfileLabTheme.darkSurface,
-            border: Border(bottom: BorderSide(color: Color(0xFF334155))),
-          ),
-          child: Row(
-            children: [
-              Text(
-                'RELEASES FOR ${c.selectedDefinitionId}',
-                style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF334155),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text('${releases.length} releases',
-                    style: const TextStyle(
-                        fontSize: 10, color: Color(0xFFE2E8F0))),
-              ),
-              const Spacer(),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.undo, size: 14),
-                label: const Text('Rollback Channel...',
-                    style: TextStyle(fontSize: 11)),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: ProfileLabTheme.warnColor,
-                  side: const BorderSide(color: ProfileLabTheme.warnColor),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: releases.length > 1 &&
-                        c.currentSession != null &&
-                        !c.isRollingBack
-                    ? _showRollbackDialog
-                    : null,
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 18),
-                tooltip: 'Refresh Releases',
-                onPressed:
-                    c.isLoadingReleases ? null : () => c.fetchCloudReleases(),
-              ),
-            ],
-          ),
-        ),
-
-        if (c.isLoadingReleases) const LinearProgressIndicator(),
-        if (c.releasesError != null) Text(c.releasesError!),
-
-        // Split view: Left Releases Table, Right Release Inspector
-        Card(
-          margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-          color: Colors.blue.withValues(alpha: 0.10),
-          child: const Padding(
-            padding: EdgeInsets.all(10),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.lightBlue, size: 18),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Stable promotion requires a qualifying evidence record stored by Cloud. Profile Lab submits evidence separately, then promotes by its Cloud evidence ID.',
-                    style: TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        Expanded(
-          child: Row(
-            children: [
-              // Releases list
-              Expanded(
-                flex: 5,
-                child: releases.isEmpty
-                    ? Center(
+    final inspector = selected == null || selected['lifecycleState'] == 'draft'
+        ? const Padding(
+            padding: EdgeInsets.all(LabSpace.page),
+            child: Text('Select a release to inspect it.'))
+        : _ReleaseInspectorPane(
+            controller: c,
+            release: selected,
+            releases: releases,
+            onPromote: !development && canManage && !c.isPromoting
+                ? () => _showPromoteDialog(selected)
+                : null,
+            onRevoke: canManage && !c.isRevoking
+                ? () => _showRevokeDialog(selected)
+                : null,
+            onRollback:
+                canManage && !c.isRollingBack ? _showRollbackDialog : null);
+    return LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+            padding: const EdgeInsets.all(LabSpace.medium),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  LabPageHeader(title: 'Release channels', actions: [
+                    IconButton(
+                        tooltip: 'Refresh Releases (⌘R)',
+                        icon: const Icon(Icons.refresh),
+                        onPressed: c.isLoadingReleases
+                            ? null
+                            : () => c.fetchCloudReleases())
+                  ]),
+                  if (development)
+                    const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
                         child: Text(
-                          c.currentSession == null
-                              ? 'Sign in to fetch releases from Cloud.'
-                              : 'No releases published yet for this definition.',
-                          style: const TextStyle(
-                              fontSize: 12, color: Color(0xFF94A3B8)),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: releases.length,
-                        itemBuilder: (ctx, i) {
-                          final rel = releases[i];
-                          final ver = rel['releaseVersion'] as int;
-                          final state =
-                              rel['lifecycleState'] as String? ?? 'draft';
-                          final isSelected =
-                              selectedRelease?['releaseVersion'] == ver;
-                          final publishedAt =
-                              rel['publishedAt'] as String? ?? 'Unpublished';
-                          final digest = rel['payloadDigest'] as String? ?? '';
-
-                          return ListTile(
-                            dense: true,
-                            selected: isSelected,
-                            selectedTileColor: ProfileLabTheme.primaryAccent
-                                .withValues(alpha: 0.12),
-                            leading: Container(
-                              width: 32,
-                              height: 32,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF334155),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text('v$ver',
-                                  style: const TextStyle(
-                                      fontFamily: 'Menlo',
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12)),
-                            ),
-                            title: Row(
-                              children: [
-                                _LifecycleBadge(state: state),
-                                const SizedBox(width: 8),
-                                if (rel['signature'] != null)
-                                  const Icon(Icons.verified,
-                                      size: 14,
-                                      color: ProfileLabTheme.passColor),
-                              ],
-                            ),
-                            subtitle: Text(
-                              'Published: $publishedAt\nDigest: ${digest.length > 12 ? "${digest.substring(0, 12)}..." : digest}',
-                              style: const TextStyle(
-                                  fontFamily: 'Menlo',
-                                  fontSize: 10,
-                                  color: Color(0xFF94A3B8)),
-                            ),
-                            isThreeLine: true,
-                            trailing: state == 'testing' || state == 'beta'
-                                ? IconButton(
-                                    icon: const Icon(Icons.upgrade,
-                                        size: 18,
-                                        color: ProfileLabTheme.primaryAccent),
-                                    tooltip: state == 'testing'
-                                        ? 'Promote to Beta'
-                                        : 'Promote to Stable using Cloud evidence',
-                                    onPressed: c.isPromoting
-                                        ? null
-                                        : () => _showPromoteDialog(rel),
-                                  )
-                                : null,
-                            onTap: () => c.selectCloudRelease(rel),
-                          );
-                        },
-                      ),
-              ),
-              const VerticalDivider(
-                  width: 1, thickness: 1, color: Color(0xFF334155)),
-
-              // Release details & payload inspector
-              Expanded(
-                flex: 5,
-                child: selectedRelease == null
-                    ? const Center(
-                        child: Text('Select a release to inspect payload.',
-                            style: TextStyle(
-                                fontSize: 12, color: Color(0xFF94A3B8))))
-                    : _ReleaseInspectorPane(
-                        controller: c,
-                        release: selectedRelease,
-                        onPromote: c.isPromoting
+                            'Development mode — signed publishing is disabled')),
+                  if (c.isLoadingReleases)
+                    const OperationProgress(label: 'Loading…'),
+                  if (c.releasesError != null)
+                    ErrorState(
+                        message: c.releasesError!,
+                        onRetry: c.isLoadingReleases
                             ? null
-                            : () => _showPromoteDialog(selectedRelease),
-                        onRevoke: c.isRevoking
-                            ? null
-                            : () => _showRevokeDialog(selectedRelease),
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
+                            : () => c.fetchCloudReleases()),
+                  if (c.definitionsError != null) Text(c.definitionsError!),
+                  Wrap(spacing: 12, runSpacing: 12, children: [
+                    for (final channel in ['Testing', 'Beta', 'Stable'])
+                      SizedBox(
+                          width: constraints.maxWidth < 550
+                              ? constraints.maxWidth - 32
+                              : (constraints.maxWidth - 56) / 3,
+                          child: ReleaseChannelCard(
+                              channel: channel,
+                              version: channels[channel.toLowerCase()] == null
+                                  ? null
+                                  : 'v${channels[channel.toLowerCase()]}'))
+                  ]),
+                  const SizedBox(height: 24),
+                  const Text('Release history',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  if (releases.isEmpty)
+                    EmptyState(
+                        title: 'No published Profile yet',
+                        action: FilledButton(
+                            onPressed: () =>
+                                c.setWorkerSubView(WorkerSubView.draftAndTest),
+                            child: const Text('Draft & Test')))
+                  else if (constraints.maxWidth >= 900)
+                    Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(width: 280, child: _history(c, releases)),
+                          const SizedBox(width: 20),
+                          Expanded(child: inspector)
+                        ])
+                  else ...[
+                    _history(c, releases),
+                    const SizedBox(height: 16),
+                    inspector
+                  ],
+                ])));
   }
+
+  Widget _history(
+          ProfileLabController c, List<Map<String, dynamic>> releases) =>
+      Card(
+          child: Column(children: [
+        for (final release in releases)
+          ListTile(
+              selected: c.selectedCloudRelease?['releaseVersion'] ==
+                  release['releaseVersion'],
+              title: Text('v${release['releaseVersion']}'),
+              subtitle: Text(
+                  '${release['lifecycleState']} · ${release['publishedAt'] ?? 'Published time unavailable'}'),
+              onTap: () => c.selectCloudRelease(release))
+      ]));
 }
 
 class _ReleaseInspectorPane extends StatelessWidget {
-  const _ReleaseInspectorPane({
-    required this.controller,
-    required this.release,
-    required this.onPromote,
-    required this.onRevoke,
-  });
-
+  const _ReleaseInspectorPane(
+      {required this.controller,
+      required this.release,
+      required this.releases,
+      this.onPromote,
+      this.onRevoke,
+      this.onRollback});
   final ProfileLabController controller;
   final Map<String, dynamic> release;
-  final VoidCallback? onPromote;
-  final VoidCallback? onRevoke;
+  final List<Map<String, dynamic>> releases;
+  final VoidCallback? onPromote, onRevoke, onRollback;
 
   @override
   Widget build(BuildContext context) {
-    final ver = release['releaseVersion'] as int;
-    final state = release['lifecycleState'] as String? ?? 'draft';
+    final version = release['releaseVersion'] as int;
+    final state = release['lifecycleState'] as String? ?? '';
     final profile = release['profile'] as Map<String, dynamic>? ?? {};
-    final publisher = release['publisher'] as String? ?? 'conclave';
-    final signingKey = release['signingKeyId'] as String? ?? 'unsigned';
-    final publishedAt =
-        release['publishedAt'] as String? ?? 'Draft (Not published)';
-    final digest = release['payloadDigest'] as String? ?? '';
-
-    const encoder = JsonEncoder.withIndent('  ');
-    final formattedJson = encoder.convert(profile);
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              Text('Release v$ver Details',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold)),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+    final previous = releases
+        .where((r) => (r['releaseVersion'] as int) < version)
+        .firstOrNull;
+    final changes = previous == null
+        ? <DomainDiffGroup>[]
+        : ProfileDomainDiffCalculator.computeDiff(
+                previous['profile'] as Map<String, dynamic>?, profile)
+            .where((g) => g.hasChanges)
+            .toList();
+    final provider = profile['providerTool'] as Map? ?? {};
+    final ranges = provider['supportedVersions'] as List? ?? [];
+    final compatibility =
+        '${provider['name'] ?? 'Unknown provider'} · ${ranges.map((r) => "${r['min']} ≤ version < ${r['maxExclusive']}").join(', ')}';
+    return Card(
+        child: Padding(
+            padding: const EdgeInsets.all(LabSpace.medium),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.compare_arrows, size: 14),
-                    label: const Text('Diff Domains...',
-                        style: TextStyle(fontSize: 11)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      minimumSize: Size.zero,
-                    ),
-                    onPressed: () {
-                      final defId =
-                          (profile['profileDefinitionId'] as String?) ??
-                              (release['profileDefinitionId'] as String?);
-                      Map<String, dynamic>? draftPayload;
-                      try {
-                        final decoded = jsonDecode(controller.currentJsonText);
-                        if (decoded is Map<String, dynamic>) {
-                          draftPayload = decoded;
-                        }
-                      } catch (_) {}
-
-                      ProfileReleaseDiffDialog.show(
-                        context,
-                        titleA: 'Release v$ver ($state)',
-                        payloadA: profile,
-                        titleB: 'Current Local Draft (${defId ?? "draft"})',
-                        payloadB: draftPayload,
-                      );
-                    },
-                  ),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.edit_note, size: 14),
-                    label: Text('Create Next Draft (v${ver + 1})',
-                        style: const TextStyle(fontSize: 11)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: ProfileLabTheme.primaryAccent,
-                      side: const BorderSide(
-                          color: ProfileLabTheme.primaryAccent),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      minimumSize: Size.zero,
-                    ),
-                    onPressed: () {
-                      final defId =
-                          (profile['profileDefinitionId'] as String?) ??
-                              (release['profileDefinitionId'] as String?);
-                      if (defId != null) {
-                        controller.createDraftFromRelease(
-                          profileDefinitionId: defId,
-                          releasePayload: profile,
-                        );
-                      }
-                    },
-                  ),
-                  if (state == 'testing') ...[
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.arrow_upward, size: 14),
-                      label: const Text('Promote to Beta',
-                          style: TextStyle(fontSize: 11)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: ProfileLabTheme.primaryAccent,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        minimumSize: Size.zero,
-                      ),
-                      onPressed: onPromote,
-                    ),
-                  ],
-                  if (state == 'beta') ...[
-                    const Tooltip(
-                      message:
-                          'Stable promotion requires qualifying Cloud evidence.',
-                      child: Chip(
-                        avatar: Icon(Icons.cloud_done_outlined, size: 14),
-                        label: Text('Requires Cloud evidence'),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                  ],
-                  if (state != 'revoked') ...[
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.block, size: 14),
-                      label: const Text('Revoke Release...',
-                          style: TextStyle(fontSize: 11)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: ProfileLabTheme.failColor,
-                        side:
-                            const BorderSide(color: ProfileLabTheme.failColor),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        minimumSize: Size.zero,
-                      ),
-                      onPressed: onRevoke,
-                    ),
-                  ],
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
+                  Row(children: [
+                    Expanded(
+                        child: Text('Release v$version',
+                            style: const TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold))),
+                    PopupMenuButton<String>(
+                        tooltip: 'Release actions',
+                        onSelected: (action) {
+                          if (action == 'rollback') onRollback?.call();
+                          if (action == 'revoke') onRevoke?.call();
+                          if (action == 'draft') {
+                            controller.createDraftFromRelease(
+                                profileDefinitionId:
+                                    controller.selectedDefinitionId!,
+                                releasePayload: profile);
+                          }
+                        },
+                        itemBuilder: (_) => [
+                              const PopupMenuItem(
+                                  value: 'draft',
+                                  child: Text('Create next Draft')),
+                              const PopupMenuDivider(),
+                              PopupMenuItem(
+                                  value: 'rollback',
+                                  enabled: onRollback != null,
+                                  child: const Text('Rollback channel…',
+                                      style: TextStyle(
+                                          color: ProfileLabTheme.warnColor))),
+                              if (state != 'revoked')
+                                PopupMenuItem(
+                                    value: 'revoke',
+                                    enabled: onRevoke != null,
+                                    child: const Text('Revoke release…',
+                                        style: TextStyle(
+                                            color: ProfileLabTheme.failColor)))
+                            ])
+                  ]),
+                  _PropertyRow(label: 'Status', value: state),
                   _PropertyRow(
-                      label: 'Lifecycle State', value: state.toUpperCase()),
+                      label: 'Published',
+                      value: '${release['publishedAt'] ?? 'Unavailable'}'),
+                  _PropertyRow(
+                      label: 'Provider compatibility', value: compatibility),
                   if (state == 'revoked')
                     _PropertyRow(
-                      label: 'Revocation Reason',
-                      value: (release['lifecycleReason'] as String?) ??
-                          'Security / Compliance Action',
-                    ),
-                  _PropertyRow(label: 'Publisher', value: publisher),
-                  _PropertyRow(label: 'Signing Key ID', value: signingKey),
-                  _PropertyRow(label: 'Published At', value: publishedAt),
-                  _PropertyRow(
-                      label: 'Payload Digest',
-                      value: digest,
-                      isMonospace: true),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text('CANONICAL IMMUTABLE PAYLOAD JSON',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF94A3B8))),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: ProfileLabTheme.darkBackground,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFF334155)),
-            ),
-            child: SelectableText(
-              formattedJson,
-              style: const TextStyle(
-                  fontFamily: 'Menlo', fontSize: 11, color: Color(0xFFCBD5E1)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LifecycleBadge extends StatelessWidget {
-  const _LifecycleBadge({required this.state});
-
-  final String state;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (state) {
-      'stable' => ProfileLabTheme.passColor,
-      'beta' => Colors.purpleAccent,
-      'testing' => Colors.blueAccent,
-      'retired' => Colors.orangeAccent,
-      'revoked' => ProfileLabTheme.failColor,
-      _ => const Color(0xFF94A3B8),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        state.toUpperCase(),
-        style:
-            TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
-      ),
-    );
+                        label: 'Revocation reason',
+                        value:
+                            '${release['lifecycleReason'] ?? 'Unavailable'}'),
+                  if (controller.labAccess?.draftsOnly != true &&
+                      (state == 'testing' || state == 'beta')) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                        alignment: Alignment.centerLeft,
+                        child: FilledButton.icon(
+                            icon: const Icon(Icons.arrow_upward, size: 16),
+                            onPressed: onPromote,
+                            label: Text(state == 'testing'
+                                ? 'Promote to Beta'
+                                : 'Promote to Stable')))
+                  ],
+                  const SizedBox(height: 16),
+                  ReleaseEvidenceView(controller: controller, release: release),
+                  const SizedBox(height: 16),
+                  const Text('Changes from previous version',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  if (previous == null)
+                    const Text('First published version — no previous release.')
+                  else ...[
+                    Text(changes.isEmpty
+                        ? 'No implementation changes.'
+                        : changes
+                            .map((g) =>
+                                '${g.domainName}: ${g.changeCount} changes')
+                            .join(' · ')),
+                    TextButton.icon(
+                        icon: const Icon(Icons.compare_arrows),
+                        label:
+                            Text('Compare with v${previous['releaseVersion']}'),
+                        onPressed: () => ProfileReleaseDiffDialog.show(context,
+                            titleA: 'Release v${previous['releaseVersion']}',
+                            payloadA:
+                                previous['profile'] as Map<String, dynamic>?,
+                            titleB: 'Release v$version',
+                            payloadB: profile)),
+                  ],
+                  TechnicalInspector(children: [
+                    _PropertyRow(
+                        label: 'Publisher',
+                        value: '${release['publisher'] ?? 'Unavailable'}'),
+                    _PropertyRow(
+                        label: 'Signing key',
+                        value: '${release['signingKeyId'] ?? 'Unavailable'}'),
+                    _PropertyRow(
+                        label: 'Payload digest',
+                        value: '${release['payloadDigest'] ?? ''}',
+                        isMonospace: true),
+                    SelectableText(
+                        const JsonEncoder.withIndent('  ').convert(profile),
+                        style:
+                            const TextStyle(fontFamily: 'Menlo', fontSize: 11))
+                  ]),
+                ])));
   }
 }
 

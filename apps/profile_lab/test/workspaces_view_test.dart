@@ -11,12 +11,14 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  late Directory tempDirectory;
   late ProfileLabPaths tempPaths;
   late ProfileLabController controller;
 
   setUp(() async {
     final tempDir =
         await Directory.systemTemp.createTemp('profile_lab_ws_test_');
+    tempDirectory = tempDir;
     tempPaths = ProfileLabPaths(homeDirectory: tempDir.path);
     await tempPaths.ensureDirectoriesExist();
 
@@ -52,10 +54,9 @@ void main() {
     ];
   });
 
-  testWidgets(
-      'renders WorkspacesView with operational rollout path and channel badges',
+  testWidgets('renders compact Workspace table and channel counts',
       (WidgetTester tester) async {
-    controller.setTab(LabTab.workspaces);
+    controller.setArea(LabArea.workspaces);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -66,11 +67,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Verify operational rollout banner
-    expect(find.text('CONTROLLED WORKSPACE ROLLOUT PATH'), findsOneWidget);
-    expect(find.text('2. Testing Workspace'), findsOneWidget);
-    expect(find.text('3. Beta Machines'), findsOneWidget);
-    expect(find.text('4. Stable Global'), findsOneWidget);
+    expect(find.text('Workspace rollout'), findsOneWidget);
+    for (final heading in [
+      'Workspace',
+      'Host',
+      'App version',
+      'Connection',
+      'Channel'
+    ]) {
+      expect(find.text(heading), findsOneWidget);
+    }
+    expect(find.text('CONTROLLED WORKSPACE ROLLOUT PATH'), findsNothing);
 
     // Verify workspace items rendered
     expect(find.text('MacBook Pro Test Lab'), findsOneWidget);
@@ -84,10 +91,36 @@ void main() {
     expect(find.text('Stable: 1'), findsOneWidget);
   });
 
+  tearDown(() async {
+    controller.dispose();
+    await tempDirectory.delete(recursive: true);
+  });
+
+  testWidgets(
+      'channel changes require confirmation and Cancel preserves assignment',
+      (tester) async {
+    final api = _StepUpRequiredApiClient();
+    controller.setApiClientForTesting(api);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: WorkspacesView(controller: controller))));
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('workspace-channel-ws-dev-1')));
+    await tester.tap(find.byKey(const ValueKey('workspace-channel-ws-dev-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Stable').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Change rollout channel?'), findsOneWidget);
+    expect(api.calls, 0);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(api.calls, 0);
+    expect(controller.workspaceChannels.first['channel'], 'testing');
+  });
+
   testWidgets('offers passkey step-up when Stable assignment requires it',
       (WidgetTester tester) async {
     controller.setApiClientForTesting(_StepUpRequiredApiClient());
-    controller.setTab(LabTab.workspaces);
+    controller.setArea(LabArea.workspaces);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(body: WorkspacesView(controller: controller)),
@@ -95,9 +128,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('workspace-channel-ws-dev-1')));
+    await tester.tap(find.byKey(const ValueKey('workspace-channel-ws-dev-1')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('STABLE').last);
+    await tester.tap(find.text('Stable').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Change rollout channel?'), findsOneWidget);
+    await tester.tap(find.text('Change channel'));
     await tester.pumpAndSettle();
 
     expect(
@@ -113,11 +152,13 @@ void main() {
 class _StepUpRequiredApiClient extends ProfileAdminApiClient {
   _StepUpRequiredApiClient() : super(baseUrl: 'http://127.0.0.1:8787');
 
+  int calls = 0;
   @override
   Future<Map<String, dynamic>> setWorkspaceChannel({
     required String workspaceId,
     required String channel,
   }) async {
+    calls++;
     throw StateError('Fresh strong authentication required');
   }
 }

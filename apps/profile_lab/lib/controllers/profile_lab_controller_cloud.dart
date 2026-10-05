@@ -57,6 +57,18 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
   /// Selects a Worker from the Cloud catalog and fetches its definition & releases.
   Future<void> selectWorker(Map<String, dynamic> worker) async {
     final generation = _cloudGeneration;
+    currentDraft = null;
+    currentMetadata = null;
+    currentJsonText = '';
+    currentEvidence = [];
+    isDirty = false;
+    jsonValidationError = null;
+    cloudDraftExists = null;
+    cloudDraftVersion = null;
+    cloudDigest = null;
+    baseCloudDigest = null;
+    cloudDraftPayload = null;
+    resetDraftTestState();
     selectedCloudWorker = worker;
     selectedDefinitionId = worker['profileDefinitionId'] as String?;
     cloudReleases = [];
@@ -125,8 +137,30 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
         return;
       }
       cloudReleases = result.map((release) => release.toJson()).toList();
+      try {
+        final definition = await apiClient.fetchDefinition(defId);
+        if (generation != _cloudGeneration || selectedDefinitionId != defId) {
+          return;
+        }
+        selectedCloudDefinition = definition.toJson();
+        definitionsError = null;
+      } catch (e) {
+        if (generation != _cloudGeneration || selectedDefinitionId != defId) {
+          return;
+        }
+        definitionsError = 'Failed to refresh channel assignments: $e';
+      }
       if (cloudReleases.isNotEmpty) {
-        selectedCloudRelease = cloudReleases.first;
+        final previousVersion = selectedCloudRelease?['releaseVersion'];
+        selectedCloudRelease = cloudReleases
+                .where((r) =>
+                    r['releaseVersion'] == previousVersion &&
+                    r['lifecycleState'] != 'draft')
+                .firstOrNull ??
+            cloudReleases
+                .where((r) => r['lifecycleState'] != 'draft')
+                .firstOrNull ??
+            cloudReleases.first;
         final version = selectedCloudRelease!['releaseVersion'] as int?;
         if (version != null) {
           await fetchCloudEvidence(
@@ -150,6 +184,7 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
   /// Selects a release and fetches its acceptance evidence.
   Future<void> selectCloudRelease(Map<String, dynamic> release) async {
     selectedCloudRelease = release;
+    cloudEvidence = [];
     final defId = selectedDefinitionId;
     final version = release['releaseVersion'] as int?;
     if (defId != null && version != null) {

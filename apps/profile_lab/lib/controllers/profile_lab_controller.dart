@@ -17,24 +17,32 @@ import '../profile_lab_test_sandbox.dart';
 import '../profile_lab_release_trust.dart';
 import '../utils/profile_lab_model_proposals.dart';
 
+import '../models/selected_worker_state.dart';
+
+export '../models/selected_worker_state.dart';
+
 part 'profile_lab_controller_drafts.dart';
 part 'profile_lab_controller_testing.dart';
 part 'profile_lab_controller_session.dart';
 part 'profile_lab_controller_cloud.dart';
 part 'profile_lab_controller_ai.dart';
 
-enum LabTab {
+enum LabArea {
   workers,
-  profiles,
-  tests,
-  releases,
   workspaces,
   audit;
+}
 
-  static const LabTab drafts = LabTab.profiles;
-  static const LabTab testBench = LabTab.profiles;
-  static const LabTab evidence = LabTab.tests;
-  static const LabTab diagnostics = LabTab.profiles;
+enum WorkerSubView {
+  overview,
+  draftAndTest,
+  releases;
+
+  String get label => switch (this) {
+        WorkerSubView.overview => 'Overview',
+        WorkerSubView.draftAndTest => 'Draft & Test',
+        WorkerSubView.releases => 'Releases',
+      };
 }
 
 enum DraftSyncState {
@@ -71,6 +79,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
     PlatformProcessSupervisor? processSupervisor,
     ProfileAdminApiClient? apiClientOverride,
     ProfileLabSessionStore? sessionStore,
+    this.sandboxEnvironmentOverrides = const {},
   })  : store = DraftProfileStore(draftsRoot: paths.draftsDirectory),
         _processSupervisor =
             processSupervisor ?? const StandardProcessSupervisor(),
@@ -82,11 +91,15 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   final ProfileLabPaths paths;
   final DraftProfileStore store;
   final PlatformProcessSupervisor _processSupervisor;
+
+  /// Isolates provider discovery/probes in controlled acceptance environments.
+  @visibleForTesting
+  final Map<String, String> sandboxEnvironmentOverrides;
   final ProfileLabSessionStore _sessionStore;
   final ProfileLabCloudSettingsStore _cloudSettingsStore;
   ProfileAdminApiClient? _apiClientOverride;
 
-  LabTab selectedTab = LabTab.workers;
+  LabArea selectedArea = LabArea.workers;
   List<String> draftDefinitionIds = [];
   String? selectedDefinitionId;
   LocalDraftProfileCandidate? currentDraft;
@@ -110,6 +123,28 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   String? lastTestResult;
   List<TestExecutionLog> testLogs = [];
   ProfileLabLadderResult? lastLadderResult;
+  DateTime? testStartedAt;
+  DateTime? testCompletedAt;
+  String? testedDraftDigest;
+  String? testedProfileDefinitionId;
+
+  bool get testResultMatchesDraft =>
+      currentDraft != null &&
+      testedDraftDigest == currentDraft!.payloadDigest &&
+      testedProfileDefinitionId == currentDraft!.profileDefinitionId;
+
+  void resetDraftTestState() {
+    testStartedAt = null;
+    testCompletedAt = null;
+    testedDraftDigest = null;
+    testedProfileDefinitionId = null;
+    lastTestResult = null;
+    lastLadderResult = null;
+    testStatusMessage = null;
+    activeLadderStages = [];
+    testLogs = [];
+  }
+
   List<ProfileLabLadderStageResult> activeLadderStages = [];
   List<String> configuredProviderExecutables = [];
   Map<String, String> detectedProviderPaths = {};
@@ -137,7 +172,21 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   final Set<String> _loaded = {};
   int _cloudGeneration = 0;
   final Set<String> updatingWorkspaceIds = {};
+  bool get isCreatingInitialDraft => _refreshes.containsKey('initial-draft');
+  bool get hasStarterTemplate =>
+      selectedCloudDefinition?['starterTemplate'] != null;
+  bool get canCreateInitialDraft =>
+      selectedCloudWorker != null &&
+      selectedCloudDefinition != null &&
+      currentDraft == null &&
+      cloudReleases.isEmpty &&
+      definitionsError == null &&
+      releasesError == null &&
+      !isLoadingDefinitions &&
+      !isLoadingReleases &&
+      !isCreatingInitialDraft;
   bool get isPublishing => _refreshes.containsKey('publish');
+  bool get isSavingLocally => _refreshes.containsKey('save-local-draft');
   bool get isSavingToCloud => _refreshes.containsKey('save-draft');
   bool get isRollingBack => _refreshes.containsKey('rollback');
   bool get isPromoting => _refreshes.containsKey('promote');
@@ -245,34 +294,37 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   ProfileLabAuthIntent? _activeAuthIntent;
   bool _cancelSignInRequested = false;
 
-  void setTab(LabTab tab) {
-    selectedTab = tab;
+  WorkerSubView workerSubView = WorkerSubView.overview;
+
+  /// Unified UX state model for the selected logical Worker and its Profile.
+  SelectedWorkerState get selectedWorkerState =>
+      SelectedWorkerState.fromController(this as ProfileLabController);
+
+  void setWorkerSubView(WorkerSubView view) {
+    workerSubView = view;
     notifyListeners();
-    unawaited(Future<void>.microtask(() => ensureTabData(tab)));
   }
 
-  Future<void> ensureTabData(LabTab tab) async {
+  void setArea(LabArea area) {
+    selectedArea = area;
+    notifyListeners();
+    unawaited(Future<void>.microtask(() => ensureAreaData(area)));
+  }
+
+  Future<void> ensureAreaData(LabArea area) async {
     if (currentSession == null ||
         _disposed ||
         labAccess?.profilesAdmin != true ||
         labAccessError != null) {
       return;
     }
-    switch (tab) {
-      case LabTab.workers:
+    switch (area) {
+      case LabArea.workers:
         if (!hasLoadedWorkerCatalog) await fetchCloudCatalog();
-      case LabTab.workspaces:
+      case LabArea.workspaces:
         if (!_loaded.contains('workspaces')) await fetchWorkspaceChannels();
-      case LabTab.releases:
-        if (!_loaded.contains('releases:$selectedDefinitionId')) {
-          await fetchCloudReleases();
-        }
-      case LabTab.tests:
-        await fetchCloudEvidence();
-      case LabTab.audit:
+      case LabArea.audit:
         await fetchCloudAudit();
-      case LabTab.profiles:
-        break;
     }
   }
 
@@ -419,6 +471,7 @@ class ProfileLabController extends _ProfileLabControllerState
     super.processSupervisor,
     super.apiClientOverride,
     super.sessionStore,
+    super.sandboxEnvironmentOverrides,
   });
 
   void applyAiDraftProposal({

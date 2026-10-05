@@ -62,7 +62,7 @@ mixin _ProfileLabSessionOperations on _ProfileLabControllerState {
       currentSession = session;
       sessionSaved = true;
       await refreshLabAccess();
-      unawaited(ensureTabData(selectedTab));
+      unawaited(ensureAreaData(selectedArea));
     } catch (e) {
       if (!_cancelSignInRequested) {
         authError = e.toString();

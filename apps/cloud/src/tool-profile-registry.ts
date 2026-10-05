@@ -1406,6 +1406,8 @@ export interface ToolProfileAuditEvent {
   profileDefinitionId: string;
   releaseVersion: number;
   actorUserId: string | null;
+  actorDisplayName?: string | null;
+  workerDisplayName?: string | null;
   action: string;
   previousReleaseVersion: number | null;
   channel: string | null;
@@ -2050,12 +2052,16 @@ export async function listToolProfileAudit(
   const safeLimit = Math.max(1, Math.min(limit, 500));
   const rows = await db
     .prepare(
-      `SELECT id, profile_definition_id, release_version, actor_user_id, action,
-              previous_release_version, channel, from_state, to_state, reason,
-              details_json, created_at
-         FROM tool_profile_release_audit
-        WHERE (?1 IS NULL OR profile_definition_id = ?1)
-        ORDER BY created_at DESC, id DESC LIMIT ?2`,
+      `SELECT audit.id, audit.profile_definition_id, audit.release_version, audit.actor_user_id, audit.action,
+              audit.previous_release_version, audit.channel, audit.from_state, audit.to_state, audit.reason,
+              audit.details_json, audit.created_at, actor.display_name AS actor_display_name,
+              worker.display_name AS worker_display_name
+         FROM tool_profile_release_audit audit
+         LEFT JOIN users actor ON actor.id = audit.actor_user_id
+         LEFT JOIN tool_profile_definitions definition ON definition.profile_definition_id = audit.profile_definition_id
+         LEFT JOIN worker_catalog worker ON worker.worker_type_id = definition.worker_type_id
+        WHERE (?1 IS NULL OR audit.profile_definition_id = ?1)
+        ORDER BY audit.created_at DESC, audit.id DESC LIMIT ?2`,
     )
     .bind(profileDefinitionId ?? null, safeLimit)
     .all<{
@@ -2063,6 +2069,8 @@ export async function listToolProfileAudit(
       profile_definition_id: string;
       release_version: number;
       actor_user_id: string | null;
+      actor_display_name: string | null;
+      worker_display_name: string | null;
       action: string;
       previous_release_version: number | null;
       channel: string | null;
@@ -2078,6 +2086,8 @@ export async function listToolProfileAudit(
       profileDefinitionId: row.profile_definition_id,
       releaseVersion: row.release_version,
       actorUserId: row.actor_user_id,
+      actorDisplayName: row.actor_display_name ?? null,
+      workerDisplayName: row.worker_display_name ?? null,
       action: row.action,
       previousReleaseVersion: row.previous_release_version,
       channel: row.channel,

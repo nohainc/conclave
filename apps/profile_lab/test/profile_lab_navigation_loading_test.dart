@@ -34,6 +34,11 @@ class DelayedApi extends ProfileAdminApiClient {
   }
 
   @override
+  Future<List<ProfileLabReleaseReadModel>> fetchReleases(
+          String profileDefinitionId) async =>
+      [];
+
+  @override
   Future<List<ProfileLabAuditEventReadModel>> fetchAudit(
           [String? definitionId]) async =>
       [];
@@ -79,16 +84,15 @@ void main() {
     await tester.pumpWidget(ProfileLabApp(controller: controller));
     await tester.pump();
     expect(api.catalogCalls, 1);
-    for (final name in [
-      'Workspaces',
-      'Workers',
-      'Profiles',
-      'Audit',
-      'Workspaces'
+    for (final tab in [
+      (label: 'Workspaces', tab: LabArea.workspaces),
+      (label: 'Workers', tab: LabArea.workers),
+      (label: 'Activity', tab: LabArea.audit),
+      (label: 'Workspaces', tab: LabArea.workspaces),
     ]) {
-      await tester.tap(find.text(name).first);
+      await tester.tap(find.text(tab.label).first);
       await tester.pump();
-      expect(controller.selectedTab.name, name.toLowerCase());
+      expect(controller.selectedArea, tab.tab);
       expect(tester.takeException(), isNull);
     }
     expect(api.workspaceCalls, 1);
@@ -113,7 +117,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No logical workers found.'), findsOneWidget);
     expect(controller.hasLoadedWorkerCatalog, isTrue);
-    await tester.tap(find.text('Profiles').first);
+    await tester.tap(find.text('Workspaces').first);
     await tester.pump();
     await tester.tap(find.text('Workers').first);
     await tester.pump();
@@ -168,4 +172,78 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets(
+      'Worker selection preserves definition across subviews and subview changes never trigger duplicate loading',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    api.definition.complete(ProfileLabDefinitionReadModel.fromJson({
+      'profileDefinitionId': 'chatgpt-codex',
+      'displayName': 'ChatGPT Codex Profile',
+      'channels': {'testing': 1},
+    }));
+    await tester.pumpWidget(ProfileLabApp(controller: controller));
+    api.catalog.complete([
+      ProfileLabWorkerReadModel.fromJson({
+        'workerTypeId': 'chatgpt',
+        'profileDefinitionId': 'chatgpt-codex',
+        'displayName': 'ChatGPT',
+        'description': 'Codex CLI worker',
+        'providerToolName': 'codex',
+        'releaseStage': 'testing',
+        'capabilities': ['text'],
+      }),
+      ProfileLabWorkerReadModel.fromJson({
+        'workerTypeId': 'gemini',
+        'profileDefinitionId': 'gemini-cli',
+        'displayName': 'Gemini',
+        'description': 'Gemini CLI worker',
+        'providerToolName': 'gemini-cli',
+        'releaseStage': 'stable',
+        'capabilities': ['text'],
+      }),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(controller.selectedCloudWorker?['workerTypeId'], 'chatgpt');
+    expect(controller.selectedDefinitionId, 'chatgpt-codex');
+    expect(controller.workerSubView, WorkerSubView.overview);
+
+    // Initial API counts
+    final catalogCallsBefore = api.catalogCalls;
+    final workspaceCallsBefore = api.workspaceCalls;
+
+    // Switch to Draft & Test subview
+    await tester.tap(find.byKey(const ValueKey('subview-draftAndTest')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(controller.workerSubView, WorkerSubView.draftAndTest);
+    expect(controller.selectedCloudWorker?['workerTypeId'], 'chatgpt');
+    expect(controller.selectedDefinitionId, 'chatgpt-codex');
+
+    // Switch to Releases subview
+    await tester.tap(find.byKey(const ValueKey('subview-releases')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(controller.workerSubView, WorkerSubView.releases);
+    expect(controller.selectedCloudWorker?['workerTypeId'], 'chatgpt');
+    expect(controller.selectedDefinitionId, 'chatgpt-codex');
+
+    // Switch back to Overview subview
+    await tester.tap(find.byKey(const ValueKey('subview-overview')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(controller.workerSubView, WorkerSubView.overview);
+    expect(controller.selectedCloudWorker?['workerTypeId'], 'chatgpt');
+    expect(controller.selectedDefinitionId, 'chatgpt-codex');
+
+    // Verify switching subviews never triggered unrelated catalog or workspace reloads
+    expect(api.catalogCalls, catalogCallsBefore);
+    expect(api.workspaceCalls, workspaceCallsBefore);
+    expect(tester.takeException(), isNull);
+  });
 }
