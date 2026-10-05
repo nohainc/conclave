@@ -10,6 +10,7 @@ import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
 import 'package:conclave_workspace/worker_catalog_coordinator.dart';
 import 'package:conclave_workspace/workspace_worker_view.dart';
+import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
 
 import 'support/ed25519_release_fixture.dart';
 
@@ -128,6 +129,60 @@ void main() {
     expect(controller.snapshot.refreshing, isFalse);
   });
 
+  test(
+      'startup readiness and catalog refresh complete when a Worker has no release',
+      () async {
+    final registry = LocalWorkerRegistry(
+        dataDirectory: Directory('${directory.path}/Registry'),
+        workspaceId: 'workspace-startup');
+    await registry.create(catalogEntry: WorkerDescriptor.fromJson(descriptor));
+    final syncEntered = Completer<void>();
+    final finishSync = Completer<void>();
+    final catalog = ToolProfileCatalogClient(
+      cloudUri: Uri.https('cloud.example', '/'),
+      store: store,
+      trustPolicy: signing.trustPolicy,
+      workerCatalogLoader: () async => [descriptor],
+      trustRefresher: () async {},
+      listLoader: (_, channel) async {
+        if (!syncEntered.isCompleted) syncEntered.complete();
+        await finishSync.future;
+        return ToolProfileCatalogResult(channel: channel, releases: const []);
+      },
+    );
+    await catalog.syncCatalog();
+    late WorkerReadinessMonitor monitor;
+    final coordinator = WorkerCatalogCoordinator(
+        catalog: catalog,
+        releaseStore: store,
+        registry: registry,
+        refreshReadiness: () => monitor.checkNow(rerunWhenActive: true));
+    monitor = WorkerReadinessMonitor(
+        registry: registry,
+        toolProfileReleaseStore: store,
+        workerCatalogCoordinator: coordinator,
+        cliWorkerEngineSupervisor:
+            CliWorkerEngineSupervisor(engineExecutable: '/unused-engine'),
+        workerStateDirectory: (id) =>
+            Directory('${directory.path}/Workers/$id/state'));
+    try {
+      final refresh = coordinator.refresh(force: true);
+      await syncEntered.future;
+      final readiness = monitor.checkNow();
+      await Future<void>.delayed(Duration.zero);
+      finishSync.complete();
+      await Future.wait([refresh, readiness])
+          .timeout(const Duration(seconds: 2));
+      expect((await registry.list()).single.readinessIssueCode,
+          'tool_profile_unavailable');
+      expect(coordinator.snapshot.refreshing, isFalse);
+    } finally {
+      await monitor.dispose();
+      coordinator.dispose();
+      catalog.close();
+    }
+  });
+
   test('keeps verified cached catalog and signed Profile when Cloud is offline',
       () async {
     final releaseProfile = jsonDecode(
@@ -194,6 +249,27 @@ void main() {
         WorkspaceWorkerProfileState.ready);
     expect((await registry.list()).single.workerTypeId, 'fixture-cli');
     offlineCatalog.close();
+    controller.dispose();
+  });
+
+  test('shows redacted download failure when no cached Profile exists',
+      () async {
+    final catalog = ToolProfileCatalogClient(
+      cloudUri: Uri.https('cloud.example', '/'),
+      store: store,
+      trustPolicy: signing.trustPolicy,
+      workerCatalogLoader: () async => [descriptor],
+      trustRefresher: () async =>
+          throw StateError('release trust refresh failed with HTTP 500'),
+    );
+    final controller =
+        WorkerCatalogCoordinator(catalog: catalog, releaseStore: store);
+    await controller.refresh(force: true);
+    expect(controller.snapshot.profiles['fixture-cli']?.state,
+        WorkspaceWorkerProfileState.error);
+    expect(controller.snapshot.profiles['fixture-cli']?.message,
+        contains('HTTP 500'));
+    catalog.close();
     controller.dispose();
   });
 

@@ -354,6 +354,7 @@ Future<Workspace> buildWorkspaceRuntime(
   readinessMonitor = WorkerReadinessMonitor(
     registry: localWorkerRegistry,
     toolProfileReleaseStore: toolProfileReleaseStore,
+    workerCatalogCoordinator: workerCatalogCoordinator,
     cliWorkerEngineSupervisor: cliWorkerEngineSupervisor,
     workerStateDirectory: workspacePaths.workerStateDirectory,
     profileDiagnosticStoreForWorker: (workerTypeId) => WorkerDiagnosticStore(

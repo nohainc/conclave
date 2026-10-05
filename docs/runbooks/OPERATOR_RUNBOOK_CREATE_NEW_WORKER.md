@@ -5,7 +5,7 @@
 
 ## Prerequisites
 
-Sign in with an account authorized for `profiles:admin`. Install the intended provider CLI on the test machine and authenticate locally using the vendor’s supported flow. Profile Lab does not collect provider credentials. Publication additionally requires `profiles:release:manage`, enabled publishing mode, and a ready Cloud signer. Stable rollout, rollback, and revocation require recent passkey verification.
+Sign in with an account authorized for `profiles:admin`. Install the intended provider CLI on the test machine and authenticate locally using the vendor’s supported flow. Profile Lab does not collect provider credentials. Publication additionally requires `profiles:release:manage` and a ready Cloud signer. Stable rollout, rollback, and revocation require recent passkey verification.
 
 ## Register or select a Worker
 
@@ -30,11 +30,11 @@ There is no second Draft selector or identity-entry dialog. Cloud-managed starte
 4. For a failure, use the offered Retry, version-range, or Repair Profile action. Save any changed payload and rerun. Proposals and repairs are Draft edits, never evidence.
 5. Choose **Sync to Cloud** after saving. Confirm the header reports **Synced to Cloud** for the exact version and digest. Sync creates a mutable Cloud Draft; it does not publish a signed release. Resolve conflicts explicitly using compare/reload controls.
 
-## Development and publishing modes
+## Publish and test in Workspace
 
-In `drafts-only` mode, the lifecycle ends at **Cloud Draft** and states **Development mode — signed publishing is disabled**. Stop after successful local qualification and Cloud sync; no Publish or Promote control is offered.
+After saving, qualifying, and syncing the exact Draft, choose **Publish to Testing** in Draft & Test. Cloud stores the local qualification, validates its ID against the Draft digest, and signs an immutable Testing release. Review **Releases**, assign a development Workspace to Testing through **Workspaces**, and run a real task. Promote to Beta and Stable after the required evidence gates pass.
 
-When Cloud enables publishing and reports a ready signer, the qualified saved Draft exposes **Qualify, Publish & Sign**. Cloud stores the exact local qualification, validates its ID against the Draft digest, and signs an immutable Testing release. Review **Releases** afterward. Do not confuse publication with assigning a Workspace rollout channel.
+Development and customer environments use the same lifecycle. Desktop app signing does not control these actions. Missing release permission or signer configuration is explained beside the publish action; development uses separate Profile signing keys and public trust roots. The retired `CONCLAVE_PROFILE_RELEASE_MODE` setting is no longer used.
 
 For publication, Beta/Stable promotion, Workspace assignment, rollback, and revocation, follow [Updating an Existing Profile](OPERATOR_RUNBOOK_UPDATE_PROFILE.md).
 

@@ -253,9 +253,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   String? labAccessError;
   bool get isCheckingLabAccess => _refreshes.containsKey('access');
   bool get canPublish =>
-      labAccess?.releaseManager == true &&
-      labAccess?.signerReady == true &&
-      labAccess?.draftsOnly == false;
+      labAccess?.releaseManager == true && labAccess?.signerReady == true;
 
   Future<void> refreshLabAccess() => _refresh('access', () async {
         final generation = _cloudGeneration;

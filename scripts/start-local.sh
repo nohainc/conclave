@@ -85,6 +85,7 @@ done
 
 API_URL="http://${API_HOST}:${PORT}"
 WEB_URL="http://localhost:${WEB_PORT}"
+node "$ROOT_DIR/scripts/setup-development-profile-signing.mjs"
 
 # 1. Runner Script for Backend API
 RUNNER_API="/tmp/conclave-api-dev-${PORT}.sh"

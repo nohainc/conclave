@@ -13,16 +13,11 @@ export async function isProfileLabOwner(
   const email = env.CONCLAVE_PROFILE_LAB_OWNER_EMAIL?.trim().toLowerCase();
   if (!email) return false;
   const user = await env.CONCLAVE_DB.prepare(
-    "SELECT email, email_verified AS emailVerified, status FROM users WHERE id = ?1",
+    "SELECT email, status FROM users WHERE id = ?1",
   )
     .bind(userId)
-    .first<{ email: string; emailVerified: number; status: string }>();
-  return (
-    user?.status === "active" &&
-    (env.CONCLAVE_PROFILE_RELEASE_MODE === "drafts-only" ||
-      user.emailVerified === 1) &&
-    user.email.trim().toLowerCase() === email
-  );
+    .first<{ email: string; status: string }>();
+  return user?.status === "active" && user.email.trim().toLowerCase() === email;
 }
 
 export async function hasProfileLabPermission(

@@ -1,5 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../utils/profile_lab_security.dart';
 import '../theme/profile_lab_theme.dart';
+
+class CopyMessageButton extends StatelessWidget {
+  const CopyMessageButton(
+      {super.key, required this.message, this.tooltip = 'Copy message'});
+  final String message, tooltip;
+  @override
+  Widget build(BuildContext context) => IconButton(
+        tooltip: tooltip,
+        icon: const Icon(Icons.copy_outlined, size: 18),
+        onPressed: () async {
+          await Clipboard.setData(
+              ClipboardData(text: ProfileLabSecurity.redactSecrets(message)));
+          if (context.mounted) {
+            ScaffoldMessenger.maybeOf(context)
+                ?.showSnackBar(const SnackBar(content: Text('Message copied')));
+          }
+        },
+      );
+}
+
+class CopyableMessage extends StatelessWidget {
+  const CopyableMessage(this.message, {super.key, this.style});
+  final String message;
+  final TextStyle? style;
+  @override
+  Widget build(BuildContext context) =>
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(child: SelectableText(message, style: style)),
+        CopyMessageButton(message: message),
+      ]);
+}
 
 /// Shared geometry and semantic states for the Profile Lab desktop UI.
 abstract final class LabSpace {
@@ -175,7 +208,7 @@ class ErrorState extends StatelessWidget {
                           const Icon(Icons.error_outline,
                               color: ProfileLabTheme.failColor),
                           const SizedBox(width: 8),
-                          Expanded(child: SelectableText(message))
+                          Expanded(child: CopyableMessage(message))
                         ]),
                     if (onRetry != null)
                       Align(

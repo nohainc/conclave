@@ -33,8 +33,8 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
       await action();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not complete action: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: CopyableMessage('Could not complete action: $error')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);

@@ -185,7 +185,7 @@ export async function routeWorkerRequest(
       return deps.json({ workflows: Object.values(BUILTIN_WORKFLOW_CATALOG) });
     }
     if (request.method === "GET" && url.pathname === "/api/release-trust") {
-      return await handlers.handleGetReleaseTrustState!(request, env, ctx);
+      return await handlers.handleGetReleaseTrustState!(env);
     }
     const releaseKeyRevocation = url.pathname.match(
       /^\/api\/admin\/release-trust\/keys\/([^/]+)\/revoke$/,

@@ -204,11 +204,19 @@ extension _ProjectWorkspaceTabs on _ProjectWorkspaceState {
                       }
                     },
                     trailing: isOwner
-                        ? IconButton(
-                            icon: const Icon(Icons.link_off, size: 18),
-                            tooltip: 'Revoke grant',
-                            onPressed: () => _revokeWorkspaceGrant(workspace),
-                          )
+                        ? Row(mainAxisSize: MainAxisSize.min, children: [
+                            IconButton(
+                              icon:
+                                  const Icon(Icons.security_outlined, size: 18),
+                              tooltip: 'Edit Workspace access',
+                              onPressed: () => _editWorkspaceAccess(workspace),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.link_off, size: 18),
+                              tooltip: 'Revoke grant',
+                              onPressed: () => _revokeWorkspaceGrant(workspace),
+                            ),
+                          ])
                         : null,
                   );
                 }).toList(),

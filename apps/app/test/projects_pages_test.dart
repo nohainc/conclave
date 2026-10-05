@@ -10,6 +10,59 @@ import 'package:conclave_app/src/ax/ax_models.dart';
 import 'ax_fixture_data.dart';
 
 void main() {
+  testWidgets('Run failure copies the complete message', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    String? copied;
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String;
+      }
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    const message =
+        'Cannot run Direct\n• The Project Workspace grant does not allow the access this Step needs.';
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+      child: WorkstreamPage(
+        project: const AxProject(
+            id: 'project-1',
+            name: 'Project',
+            branch: '',
+            lastActivity: '',
+            role: 'owner'),
+        workstream: const AxWorkstream(
+            id: 'workstream-1',
+            projectId: 'project-1',
+            name: 'Chat',
+            lead: 'Owner',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: '',
+            queueStatus: 'idle',
+            canExecuteWork: true),
+        dataSource: _WorkFormDataSource(),
+        onBackToProject: _noop,
+        onArchive: _noop,
+        onRunWork: (_, __, ___) async => throw const AxApiException(message),
+        initialTab: 1,
+      ),
+    ))));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byType(TextField).first, 'Implement the change');
+    await tester.ensureVisible(find.text('Run'));
+    await tester.tap(find.text('Run'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('Copy Run error'));
+    await tester.tap(find.byTooltip('Copy Run error'));
+    await tester.pumpAndSettle();
+    expect(copied, message);
+  });
   testWidgets(
       'Project page exposes editable header, Archive/Delete, and 3 tabs',
       (tester) async {
@@ -160,7 +213,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Discuss'), findsOneWidget);
-    expect(find.text('Work'), findsNWidgets(2));
+    expect(find.text('Work'), findsOneWidget);
     expect(find.text('Archive'), findsNothing);
     expect(find.text('What should Conclave do?'), findsOneWidget);
     expect(
@@ -265,7 +318,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    final selectors = find.byType(DropdownButtonFormField<String>);
+    final selectors = find.descendant(
+      of: find.byType(Dialog),
+      matching: find.byType(DropdownButtonFormField<String>),
+    );
     expect(selectors, findsNWidgets(7));
     await tester
         .tap(selectors.at(4)); // Workflow, then Direct/Research/Plan/Implement
@@ -394,7 +450,7 @@ void main() {
     final events = StreamController<Map<String, dynamic>>.broadcast();
     addTearDown(events.close);
     final dataSource = _WorkHistoryDataSource([
-      _workRequest('request-1', 'History before reconnect'),
+      _workRequest('request-1', 'History before reconnect', status: 'running'),
     ]);
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
@@ -428,6 +484,28 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('History before reconnect'), findsOneWidget);
+    dataSource.requests = [
+      const AxWorkRequest(
+        id: 'request-1',
+        requestedByName: 'Owner',
+        prompt: 'History before reconnect',
+        workflowId: 'direct',
+        workflowVersion: 1,
+        status: 'completed',
+        createdAt: '2026-10-01T10:00:00.000Z',
+        steps: [
+          AxWorkRequestStep(
+              kind: 'implement',
+              status: 'completed',
+              workerId: 'worker-1',
+              resultText: 'The requested change is complete.')
+        ],
+      )
+    ];
+    // A missing WebSocket notification must not leave the reply hidden.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('The requested change is complete.'), findsOneWidget);
 
     dataSource.requests = [
       _workRequest('request-1', 'History restored after reconnect'),
@@ -744,6 +822,17 @@ void main() {
 
     expect(openedWorkspaceId, 'ws-prod');
 
+    await tester.tap(find.byTooltip('Edit Workspace access'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Read repository files'));
+    await tester.tap(find.text('Change repository files'));
+    await tester.tap(find.text('Confirm access'));
+    await tester.pumpAndSettle();
+    expect(customDataSource.savedPermissions,
+        ['repository:read', 'repository:write']);
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+
     await tester.binding.setSurfaceSize(null);
   });
 
@@ -990,6 +1079,15 @@ void main() {
 }
 
 class _WorkspaceTestDataSource extends AxFixtureDataSource {
+  List<String>? savedPermissions;
+  @override
+  Future<void> updateWorkspaceProjectPermissions({
+    required String grantId,
+    required List<String> allowedPermissions,
+  }) async {
+    savedPermissions = allowedPermissions;
+  }
+
   @override
   Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
     required String projectId,
@@ -1076,6 +1174,7 @@ class _DuplicateTestDataSource extends AxFixtureDataSource {
   Future<void> requestProjectWorkspace({
     required String projectId,
     required String workspaceId,
+    List<String> allowedPermissions = const [],
   }) async {
     onRequestWorkspace?.call();
   }
@@ -1200,13 +1299,15 @@ class _RetiredWorkerConfigDataSource extends _GenericWorkerConfigDataSource {
       ];
 }
 
-AxWorkRequest _workRequest(String id, String prompt) => AxWorkRequest(
+AxWorkRequest _workRequest(String id, String prompt,
+        {String status = 'completed'}) =>
+    AxWorkRequest(
       id: id,
       requestedByName: 'Owner',
       prompt: prompt,
       workflowId: 'direct',
       workflowVersion: 1,
-      status: 'completed',
+      status: status,
       createdAt: '2026-10-01T10:00:00.000Z',
       steps: const [],
     );

@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
+    show SafeProviderDiagnostics;
 
 import 'cli_worker_engine_supervisor.dart';
 import 'local_worker_registry.dart';
@@ -402,8 +404,21 @@ class WorkerCatalogCoordinator extends ChangeNotifier {
     );
     try {
       await catalog.syncWorkerProfiles(worker.workerTypeId);
-    } on Object {
+    } on Object catch (error) {
       // A verified cached Profile can remain usable when Cloud is unavailable.
+      await _resolveAndSetProfile(worker, generation);
+      final cached = _snapshot.profiles[worker.workerTypeId];
+      if (cached?.state != WorkspaceWorkerProfileState.ready) {
+        _setProfile(
+            worker.workerTypeId,
+            WorkerProfileResolution(
+              state: WorkspaceWorkerProfileState.error,
+              message:
+                  'Profile download failed: ${SafeProviderDiagnostics.redact(error.toString())}',
+            ),
+            generation);
+      }
+      return;
     }
     await _resolveAndSetProfile(worker, generation);
   }

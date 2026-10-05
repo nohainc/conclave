@@ -5,6 +5,7 @@ import 'theme/profile_lab_theme.dart';
 import 'views/audit_view.dart';
 import 'widgets/lab_shortcuts.dart';
 import 'widgets/lab_components.dart';
+import 'utils/profile_lab_messages.dart';
 import 'views/cloud_settings_dialog.dart';
 import 'views/workers_view.dart';
 import 'views/workspaces_view.dart';
@@ -141,6 +142,10 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                             onPressed: () =>
                                 CloudSettingsDialog.show(context, c),
                           ),
+                          CopyMessageButton(
+                            tooltip: 'Copy all messages',
+                            message: profileLabMessageReport(c),
+                          ),
                           // Active Draft status chip
                           if (c.selectedDefinitionId != null &&
                               MediaQuery.sizeOf(context).width >= 1100) ...[
@@ -234,7 +239,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                     message: c.labAccessError ??
                                         (c.labAccess == null
                                             ? 'Profile Lab permissions have not been verified.'
-                                            : 'Profile administration: ${c.labAccess!.profilesAdmin ? "Authorized" : "Not authorized"} · Release management: ${c.labAccess!.releaseManager ? "Authorized" : "Not authorized"} · ${c.labAccess!.draftsOnly ? "Development: unsigned drafts and local tests; publication disabled" : c.labAccess!.signerReady ? "Cloud signer ready" : "Cloud signer not configured"}'),
+                                            : 'Profile administration: ${c.labAccess!.profilesAdmin ? "Authorized" : "Not authorized"} · Release management: ${c.labAccess!.releaseManager ? "Authorized" : "Not authorized"} · ${c.labAccess!.signerReady ? "Cloud signer ready" : "Cloud signer not configured"}'),
                                     child: InkWell(
                                       onTap: c.isCheckingLabAccess
                                           ? null

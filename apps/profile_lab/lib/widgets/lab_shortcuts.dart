@@ -1,3 +1,4 @@
+import '../widgets/lab_components.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../controllers/profile_lab_controller.dart';
@@ -25,8 +26,8 @@ class _LabShortcutsState extends State<LabShortcuts> {
       await action();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not complete action: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: CopyableMessage('Could not complete action: $error')));
       }
     } finally {
       if (mounted) setState(() => _running = false);

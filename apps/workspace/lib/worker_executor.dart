@@ -140,15 +140,18 @@ class WorkerAssignmentScope {
 }
 
 class WorkerAssignmentHandler {
-  const WorkerAssignmentHandler({
+  WorkerAssignmentHandler({
     required this.resolveLogicalWorker,
     this.executeWithToolProfile,
     this.defaultWorkingDirectory,
     this.workstreamDirectoryLifecycle,
-    this.workstreamMutationCoordinator,
+    WorkstreamMutationCoordinator? workstreamMutationCoordinator,
     this.onProgress,
     this.cancelToolProfileAssignment,
-  });
+  }) : workstreamMutationCoordinator = workstreamMutationCoordinator ??
+            (workstreamDirectoryLifecycle == null
+                ? null
+                : WorkstreamMutationCoordinator(workstreamDirectoryLifecycle));
 
   final AssignmentLogicalWorkerResolver resolveLogicalWorker;
   final ToolProfileAssignmentExecutor? executeWithToolProfile;

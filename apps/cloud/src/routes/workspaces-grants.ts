@@ -12,6 +12,7 @@ import {
   HttpError,
   createWorkspaceProjectGrant,
   grantExpiry,
+  grantExecutionPermissions,
   json,
   loadWorkspaceProjectGrant,
   recordAudit,
@@ -142,7 +143,7 @@ export async function handleUpdateWorkspaceProjectGrant(
   const body = rawBody as Record<string, unknown>;
   if (
     Object.keys(body).length === 0 ||
-    Object.keys(body).some((key) => key !== "status" && key !== "expiresAt")
+    Object.keys(body).some((key) => !["status", "expiresAt", "allowedPermissions"].includes(key))
   ) {
     throw new HttpError(400, "Workspace Grant update fields are invalid");
   }
@@ -161,6 +162,9 @@ export async function handleUpdateWorkspaceProjectGrant(
     }
   }
   const now = new Date().toISOString();
+  const permissions = body.allowedPermissions === undefined
+    ? String(existing.allowed_permissions_json)
+    : grantExecutionPermissions(body.allowedPermissions);
   const expiresAt = grantExpiry(
     body.expiresAt === undefined ? existing.expires_at : body.expiresAt,
     new Date(now),
@@ -170,10 +174,10 @@ export async function handleUpdateWorkspaceProjectGrant(
   }
   const updatedRow = await env.CONCLAVE_DB.prepare(
     `UPDATE workspace_project_grants SET
-       status = ?1, expires_at = ?2, updated_at = ?3
+       status = ?1, expires_at = ?2, updated_at = ?3, allowed_permissions_json = ?6
      WHERE id = ?4 AND status = ?5`,
   )
-    .bind(status, expiresAt, now, grantId, existingStatus)
+    .bind(status, expiresAt, now, grantId, existingStatus, permissions)
     .run();
   if (updatedRow.meta?.changes === 0) {
     throw new HttpError(409, "Workspace Grant changed concurrently");
@@ -184,7 +188,7 @@ export async function handleUpdateWorkspaceProjectGrant(
     "workspace.project_grant.updated",
     "workspace_project_grant",
     grantId,
-    { status },
+    { status, allowedPermissions: JSON.parse(permissions) },
   );
   const updated = await loadWorkspaceProjectGrant(env, grantId);
   return json({

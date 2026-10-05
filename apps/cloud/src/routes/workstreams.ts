@@ -41,14 +41,15 @@ export async function handleListProjectWorkstreams(
   const settings = parseJson(projectRow?.settingsJson);
 
   const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT id, project_id AS projectId, name, status,
-            access_policy_json AS accessPolicyJson,
+    `SELECT workstreams.id, workstreams.project_id AS projectId,
+            workstreams.name, workstreams.status,
+            workstreams.access_policy_json AS accessPolicyJson,
             usage.config_json AS workConfigJson,
-            lead_user_id AS leadUserId,
-            created_at AS createdAt, updated_at AS updatedAt
+            workstreams.lead_user_id AS leadUserId,
+            workstreams.created_at AS createdAt, workstreams.updated_at AS updatedAt
      FROM workstreams
      LEFT JOIN workstream_work_configs usage ON usage.workstream_id = workstreams.id
-     WHERE project_id = ?1 ORDER BY created_at ASC`,
+     WHERE workstreams.project_id = ?1 ORDER BY workstreams.created_at ASC`,
   )
     .bind(projectId)
     .all<Record<string, unknown>>();

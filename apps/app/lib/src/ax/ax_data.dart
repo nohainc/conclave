@@ -49,8 +49,17 @@ abstract class _AxApiClientCore implements AxDataSource {
   Future<Map<String, dynamic>> _getJson(Uri uri) async {
     final response = await client.get(uri, headers: _headers());
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final error = jsonDecode(response.body);
+        if (error is Map && error['error'] is String) {
+          detail = ': ${error['error']}';
+        }
+      } on FormatException {
+        // Non-JSON responses (such as proxy pages) are not diagnostic data.
+      }
       throw AxApiException(
-        'Read model failed for ${uri.path} (${response.statusCode})',
+        'Read model failed for ${uri.path} (${response.statusCode})$detail',
         statusCode: response.statusCode,
       );
     }

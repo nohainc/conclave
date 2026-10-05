@@ -213,14 +213,11 @@ void main() {
     controller.labAccess = ProfileLabAccessReadModel.fromJson({
       'permissions': {'profilesAdmin': true, 'releaseManager': true},
       'signer': {'ready': false},
-      'releaseMode': 'drafts-only'
     });
     controller.notifyListeners();
     await tester.pump();
-    expect(find.text('Cloud Draft'), findsOneWidget);
-    expect(find.text('Publish'), findsNothing);
-    expect(find.text('Rollout'), findsNothing);
-    expect(find.text('Development mode — signed publishing is disabled'),
-        findsOneWidget);
+    expect(find.text('Sync'), findsOneWidget);
+    expect(find.text('Publish'), findsOneWidget);
+    expect(find.text('Rollout'), findsOneWidget);
   });
 }

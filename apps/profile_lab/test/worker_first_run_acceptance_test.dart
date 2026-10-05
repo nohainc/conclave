@@ -53,13 +53,42 @@ class _Cloud extends ProfileAdminApiClient {
   final bool publishing;
   Map<String, dynamic>? draft;
   int creates = 0, updates = 0;
+  int publications = 0;
+  Map<String, Object?>? qualification;
+  @override
+  Future<ProfileLabSigningPreflightReadModel> checkSigningPreflight() async =>
+      ProfileLabSigningPreflightReadModel.fromJson(
+          {'ready': publishing, 'issues': []});
+  @override
+  Future<Map<String, dynamic>> submitLocalQualification(
+      {required String profileDefinitionId,
+      required int releaseVersion,
+      required Map<String, Object?> evidence}) async {
+    expect(evidence['profileDigest'], draft!['payloadDigest']);
+    qualification = evidence;
+    return {'qualificationEvidenceId': 'fixture-qualification'};
+  }
+
+  @override
+  Future<Map<String, dynamic>> publishRelease(
+      {required String profileDefinitionId,
+      required int releaseVersion,
+      required String qualificationEvidenceId}) async {
+    expect(qualificationEvidenceId, 'fixture-qualification');
+    expect(qualification, isNotNull);
+    publications++;
+    draft!['lifecycleState'] = 'testing';
+    draft!['publishedAt'] = DateTime.now().toUtc().toIso8601String();
+    definition['channels'] = {'testing': releaseVersion};
+    return {'status': 'testing'};
+  }
+
   @override
   Future<ProfileLabAccessReadModel> fetchLabAccess() async =>
       ProfileLabAccessReadModel.fromJson({
         'schemaVersion': 1,
         'permissions': {'profilesAdmin': true, 'releaseManager': true},
         'signer': {'ready': publishing},
-        'releaseMode': publishing ? 'signed' : 'drafts-only'
       });
   @override
   Future<List<ProfileLabWorkerReadModel>> fetchWorkerCatalog() async =>
@@ -272,7 +301,7 @@ fi
   ]) {
     for (final publishing in [false, true]) {
       testWidgets(
-          '${spec.$2} first run through real Engine, local save and Cloud sync (${publishing ? 'signed' : 'drafts-only'})',
+          '${spec.$2} first run through real Engine, local save and Cloud sync (${publishing ? 'signer ready' : 'signer missing'})',
           (t) async {
         await t.runAsync(() => prepare(spec.$1, spec.$2, spec.$3, spec.$4,
             publishing: publishing));
@@ -302,9 +331,10 @@ fi
         expect(c.currentEvidence, isNotEmpty);
         expect(c.currentEvidence.single['profileDigest'],
             c.currentDraft!.payloadDigest);
-        expect(find.text('Qualify, Publish & Sign'),
-            publishing ? findsOneWidget : findsNothing);
-        expect(find.text('Development mode — signed publishing is disabled'),
+        expect(find.text('Publish to Testing'), findsOneWidget);
+        expect(
+            find.text(
+                'Cloud Profile signing is not ready. Configure the signer and refresh access.'),
             publishing ? findsNothing : findsOneWidget);
         final editor = find.byType(TextField).last;
         await t.enterText(editor, '${c.currentJsonText}\n');
@@ -323,6 +353,21 @@ fi
         expect(c.selectedCloudDefinition?['channels'], isEmpty);
         expect(c.canPublish, publishing);
         expect(t.takeException(), isNull);
+        if (publishing) {
+          await tap(t, find.text('Publish to Testing'));
+          expect(cloud.publications, 1);
+          expect(cloud.qualification!['profileDigest'],
+              c.currentDraft!.payloadDigest);
+          expect(cloud.draft!['lifecycleState'], 'testing');
+          expect(c.selectedWorkerState.status,
+              WorkerLifecycleStatus.publishedTesting);
+          expect(find.text('Publish to Testing'), findsNothing);
+          await tap(t, find.text('View Releases'));
+          expect(find.text('No published Profile yet'), findsNothing);
+          expect(find.text('v1'), findsWidgets);
+          expect(c.selectedCloudDefinition!['channels']['testing'], 1);
+          expect(t.takeException(), isNull);
+        }
         if (spec.$1 == 'chatgpt' && !publishing) {
           final digest = c.currentDraft!.payloadDigest;
           final evidence = jsonEncode(c.currentEvidence);
@@ -350,6 +395,7 @@ fi
           await tap(t, find.byKey(const ValueKey('subview-draftAndTest')));
           expect(c.currentDraft!.payloadDigest, digest);
           expect(jsonEncode(c.currentEvidence), evidence);
+          expect(c.selectedWorkerState.lastTestResult, 'pass');
           expect(find.text('Create Initial Draft'), findsNothing);
           expect(find.textContaining('Synced to Cloud'), findsOneWidget);
           expect(cloud.creates, 1);

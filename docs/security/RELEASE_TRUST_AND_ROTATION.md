@@ -23,6 +23,16 @@ Production builds fail closed when no trusted public verification key is
 configured. Development fixture signing is separate and must never be promoted
 as a production key.
 
+Development runs the same complete Profile publication and channel lifecycle as
+customer environments, using independent development signing material. Desktop
+Developer ID signing/notarization does not gate Profile operations. Local setup
+stores private material only in ignored, permission-restricted Wrangler files;
+the Lab and Workspace receive only public roots. Hosted development setup uses
+another independent key, retained under ignored `.development/` files. Never
+inject either development root into customer builds or reuse it for app signing.
+The retired `CONCLAVE_PROFILE_RELEASE_MODE` switch no longer blocks publication;
+Cloud always enforces signer readiness, authorization, and exact qualification.
+
 ## Key material and configuration
 
 The release workflows use GitHub Environments and repository variables:

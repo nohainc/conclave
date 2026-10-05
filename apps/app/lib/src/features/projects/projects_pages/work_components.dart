@@ -36,6 +36,7 @@ class _WorkComposer extends StatelessWidget {
     required this.loadingWorkflows,
     required this.workflowCatalogError,
     required this.canExecute,
+    this.canConfigureWork = true,
     required this.workTimeline,
     required this.loadingTimeline,
     required this.timelineError,
@@ -50,6 +51,7 @@ class _WorkComposer extends StatelessWidget {
     required this.onRetryStep,
     required this.onCancelRun,
     required this.onWorkflowChanged,
+    this.onOpenSettings,
     required this.onRun,
   });
 
@@ -59,6 +61,7 @@ class _WorkComposer extends StatelessWidget {
   final bool loadingWorkflows;
   final String? workflowCatalogError;
   final bool canExecute;
+  final bool canConfigureWork;
   final List<AxWorkRequest> workTimeline;
   final bool loadingTimeline;
   final String? timelineError;
@@ -73,60 +76,154 @@ class _WorkComposer extends StatelessWidget {
   final Future<void> Function(String, AxWorkRequestStep)? onRetryStep;
   final Future<void> Function(String)? onCancelRun;
   final ValueChanged<String> onWorkflowChanged;
+  final VoidCallback? onOpenSettings;
   final Future<void> Function() onRun;
 
   @override
-  Widget build(BuildContext context) => _ProjectPanel(
-        title: 'Work',
-        subtitle:
-            'Ask AI to do something for the team. Nothing runs until you press Run.',
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (loadingTimeline && workTimeline.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: LinearProgressIndicator(),
+          )
+        else if (timelineError != null && workTimeline.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Text(
+              'Could not load Work history: $timelineError',
+              style: TextStyle(color: colors.error),
+            ),
+          )
+        else if (workTimeline.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
+            alignment: Alignment.center,
+            child: Column(
+              children: [
+                Icon(
+                  Icons.chat_bubble_outline_rounded,
+                  size: 42,
+                  color: isDark ? Colors.white24 : Colors.black26,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'No work requests yet',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Ask AI to do something for the team. Nothing runs until you press Run.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: workTimeline.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final request = workTimeline[index];
+              return _WorkTimelineCard(
+                key: ValueKey(request.id),
+                request: request,
+                workflowCatalog: workflowCatalog,
+                onShowRunDetails: onShowRunDetails,
+                onRetryStep: onRetryStep,
+                onCancelRun: onCancelRun,
+              );
+            },
+          ),
+        const SizedBox(height: 16),
+        _buildComposerInput(context, isDark, colors),
+      ],
+    );
+  }
+
+  Widget _buildComposerInput(
+    BuildContext context,
+    bool isDark,
+    ColorScheme colors,
+  ) {
+    final borderColor =
+        isDark ? const Color(0xff2d2b42) : const Color(0xffe5e3f0);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           TextField(
             controller: requestController,
-            minLines: 3,
+            minLines: 2,
             maxLines: 6,
             enabled: canExecute && !submitting,
-            decoration: const InputDecoration(
+            style: TextStyle(
+              fontSize: 13.5,
+              color: isDark ? Colors.white : const Color(0xff1f1d2b),
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              border: const OutlineInputBorder(),
               labelText: 'What should Conclave do?',
               hintText:
                   'Example: Investigate the login failure and propose a fix.',
-              border: OutlineInputBorder(),
+              hintStyle: TextStyle(
+                color: isDark ? Colors.white38 : Colors.black38,
+                fontSize: 13,
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              OutlinedButton.icon(
-                onPressed: canExecute && !submitting ? onAddFiles : null,
-                icon: const Icon(Icons.attach_file),
-                label: const Text('Add files'),
-              ),
-              OutlinedButton.icon(
-                onPressed: canExecute && !submitting ? onAddReference : null,
-                icon: const Icon(Icons.link),
-                label: const Text('Add link'),
-              ),
-              for (var i = 0; i < attachments.length; i++)
-                InputChip(
-                  avatar: Icon(attachments[i]['kind'] == 'url'
-                      ? Icons.link
-                      : Icons.insert_drive_file),
-                  label: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 220),
-                    child: Text(
-                      (attachments[i]['name'] ?? 'Attachment').toString(),
-                      overflow: TextOverflow.ellipsis,
+          if (attachments.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (var i = 0; i < attachments.length; i++)
+                  InputChip(
+                    avatar: Icon(
+                      attachments[i]['kind'] == 'url'
+                          ? Icons.link
+                          : Icons.insert_drive_file,
+                      size: 14,
                     ),
+                    label: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 220),
+                      child: Text(
+                        (attachments[i]['name'] ?? 'Attachment').toString(),
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    onDeleted: canExecute && !submitting
+                        ? () => onRemoveAttachment(i)
+                        : null,
                   ),
-                  onDeleted: canExecute && !submitting
-                      ? () => onRemoveAttachment(i)
-                      : null,
-                ),
-            ],
-          ),
-          if (attachments.isNotEmpty)
+              ],
+            ),
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
@@ -134,67 +231,103 @@ class _WorkComposer extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
+          ],
           const SizedBox(height: 12),
           if (loadingWorkflows)
-            const LinearProgressIndicator()
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 4),
+              child: LinearProgressIndicator(),
+            )
           else if (workflowCatalogError != null)
-            Text(workflowCatalogError!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error))
+            Text(workflowCatalogError!, style: TextStyle(color: colors.error))
           else ...[
-            DropdownButtonFormField<String>(
-              isExpanded: true,
-              itemHeight: null,
-              initialValue: workflow,
-              decoration: const InputDecoration(labelText: 'Workflow'),
-              selectedItemBuilder: (context) => workflowCatalog
-                  .map((definition) => Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          definition.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ))
-                  .toList(),
-              items: workflowCatalog
-                  .map((definition) => DropdownMenuItem(
-                        value: definition.reference,
-                        child: _workflowOption(context, definition),
-                      ))
-                  .toList(),
-              onChanged: canExecute
-                  ? (value) {
-                      if (value != null) onWorkflowChanged(value);
-                    }
-                  : null,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              workflowCatalog
-                      .where((definition) => definition.reference == workflow)
-                      .map((definition) =>
-                          '${definition.description}\n${definition.steps.map((step) => step.kind).join(' → ')}')
-                      .firstOrNull ??
-                  '',
-              style: Theme.of(context).textTheme.bodySmall,
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    itemHeight: null,
+                    initialValue: workflow.isEmpty ? null : workflow,
+                    decoration: const InputDecoration(
+                      labelText: 'Workflow',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    selectedItemBuilder: (context) => workflowCatalog
+                        .map((definition) => Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                definition.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ))
+                        .toList(),
+                    items: workflowCatalog
+                        .map((definition) => DropdownMenuItem(
+                              value: definition.reference,
+                              child: _workflowOption(context, definition),
+                            ))
+                        .toList(),
+                    onChanged: canExecute
+                        ? (value) {
+                            if (value != null) onWorkflowChanged(value);
+                          }
+                        : null,
+                  ),
+                ),
+                if (onOpenSettings != null) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Work settings',
+                    icon: const Icon(Icons.tune_rounded, size: 20),
+                    onPressed: onOpenSettings,
+                  ),
+                ],
+              ],
             ),
           ],
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: canExecute &&
-                    !submitting &&
-                    !loadingWorkflows &&
-                    workflowCatalogError == null
-                ? () => onRun()
-                : null,
-            icon: const Icon(Icons.play_arrow),
-            label: const Text('Run'),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: canExecute && !submitting ? onAddFiles : null,
+                icon: const Icon(Icons.attach_file, size: 16),
+                label: const Text('Add files'),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: canExecute && !submitting ? onAddReference : null,
+                icon: const Icon(Icons.link, size: 16),
+                label: const Text('Add link'),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Refresh Work history',
+                onPressed: () => onRefresh(),
+                icon: const Icon(Icons.refresh, size: 18),
+              ),
+              const SizedBox(width: 4),
+              FilledButton.icon(
+                onPressed: canExecute &&
+                        !submitting &&
+                        !loadingWorkflows &&
+                        workflowCatalogError == null
+                    ? () => onRun()
+                    : null,
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: const Text('Run'),
+              ),
+            ],
           ),
           if (!canExecute)
             const Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
-                  'Viewer access can read the workstream but cannot run Work.'),
+                'Viewer access can read the workstream but cannot run Work.',
+                style: TextStyle(fontSize: 12),
+              ),
             ),
           if (submitting) ...[
             const SizedBox(height: 10),
@@ -202,56 +335,41 @@ class _WorkComposer extends StatelessWidget {
             const SizedBox(height: 6),
             const Text(
               'Checking Engine, Profile, and Provider CLI before starting Work…',
+              style: TextStyle(fontSize: 12),
             ),
           ],
           if (submitError != null) ...[
             const SizedBox(height: 10),
-            Text(submitError!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          ],
-          const SizedBox(height: 22),
-          Row(
-            children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Expanded(
-                child: Text('Work history',
-                    style: Theme.of(context).textTheme.titleMedium),
+                child: SelectableText(
+                  submitError!,
+                  style: TextStyle(color: colors.error, fontSize: 12.5),
+                ),
               ),
               IconButton(
-                tooltip: 'Refresh Work history',
-                onPressed: () => onRefresh(),
-                icon: const Icon(Icons.refresh),
+                tooltip: 'Copy Run error',
+                icon: const Icon(Icons.copy_outlined, size: 16),
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: submitError!));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Run error copied')),
+                    );
+                  }
+                },
               ),
-            ],
-          ),
-          if (loadingTimeline && workTimeline.isEmpty)
-            const LinearProgressIndicator()
-          else if (timelineError != null && workTimeline.isEmpty)
-            Text('Could not load Work history: $timelineError',
-                style: TextStyle(color: Theme.of(context).colorScheme.error))
-          else if (workTimeline.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Text('Submitted Work requests will appear here.'),
-            )
-          else ...[
-            const SizedBox(height: 20),
-            ...workTimeline.map((request) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _WorkTimelineCard(
-                    request: request,
-                    workflowCatalog: workflowCatalog,
-                    onShowRunDetails: onShowRunDetails,
-                    onRetryStep: onRetryStep,
-                    onCancelRun: onCancelRun,
-                  ),
-                )),
+            ]),
           ],
-        ]),
-      );
+        ],
+      ),
+    );
+  }
 }
 
 class _WorkTimelineCard extends StatelessWidget {
   const _WorkTimelineCard({
+    super.key,
     required this.request,
     required this.workflowCatalog,
     required this.onShowRunDetails,
@@ -313,7 +431,13 @@ class _WorkTimelineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = Theme.of(context).colorScheme;
+    final textColor = isDark ? Colors.white : const Color(0xff1f1d2b);
+    final metaColor = isDark ? Colors.white38 : Colors.black45;
+    final borderColor =
+        isDark ? const Color(0xff2d2b42) : const Color(0xffe2e0ed);
+
     final timestamp = DateTime.tryParse(request.createdAt)?.toLocal();
     final timeLabel = timestamp == null
         ? ''
@@ -324,134 +448,382 @@ class _WorkTimelineCard extends StatelessWidget {
     final overall = request.status == 'cancelled'
         ? 'Cancelled${cancelledSteps.isEmpty ? '' : ' during ${_stepName(cancelledSteps.first.kind)}'}'
         : request.status[0].toUpperCase() + request.status.substring(1);
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Expanded(
-                child: Text(request.requestedByName,
-                    style: Theme.of(context).textTheme.titleSmall),
+
+    final requesterInitials = request.requestedByName.isNotEmpty
+        ? request.requestedByName
+            .trim()
+            .split(' ')
+            .where((s) => s.isNotEmpty)
+            .map((s) => s[0])
+            .take(2)
+            .join()
+            .toUpperCase()
+        : 'U';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // User prompt bubble
+        Align(
+          alignment: Alignment.centerRight,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: borderColor, width: 1),
               ),
-              Text(timeLabel, style: Theme.of(context).textTheme.bodySmall),
-            ]),
-            const SizedBox(height: 8),
-            SelectableText(request.prompt),
-            const SizedBox(height: 14),
-            Text('$_workflowName · $overall',
-                style: Theme.of(context).textTheme.titleSmall),
-            if (request.steps.isEmpty &&
-                (request.status == 'queued' ||
-                    request.status == 'running')) ...[
-              const SizedBox(height: 8),
-              const Text('Preparing Worker assignment…'),
-            ],
-            if (request.steps.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ...request.steps.map((step) {
-                final worker = _workerName(step);
-                final details = [
-                  worker,
-                  if (step.engineVersion != null)
-                    'Engine ${step.engineVersion}',
-                  if (step.providerToolVersion != null)
-                    step.providerToolVersion!,
-                  if (_elapsed(step.elapsedMs).isNotEmpty)
-                    _elapsed(step.elapsedMs),
-                ].join(' · ');
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Row(children: [
-                        Icon(_statusIcon(step.status),
-                            size: 17,
-                            color: step.status == 'failed'
-                                ? colors.error
-                                : step.status == 'completed'
-                                    ? colors.primary
-                                    : colors.secondary),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(_stepName(step.kind))),
-                        Text(_stepStatusLabel(step.status)),
-                      ]),
-                      if (step.status == 'running' ||
-                          step.status == 'completed' ||
-                          step.status == 'failed')
-                        Padding(
-                          padding: const EdgeInsets.only(left: 25, top: 2),
-                          child: Text(details,
-                              style: Theme.of(context).textTheme.bodySmall),
-                        ),
-                      if (step.status == 'failed') ...[
-                        Padding(
-                          padding: const EdgeInsets.only(left: 25, top: 6),
-                          child: Text(
-                            step.errorMessage ??
-                                'This Step could not be completed.',
-                            style: TextStyle(color: colors.error),
+                      CircleAvatar(
+                        radius: 11,
+                        backgroundColor: isDark
+                            ? const Color(0xff3f3b61)
+                            : const Color(0xffd8d2ff),
+                        child: Text(
+                          requesterInitials,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xff4238a0),
                           ),
                         ),
-                        if (request.status == 'failed' && onRetryStep != null)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: TextButton.icon(
-                              onPressed: () => onRetryStep!(request.id, step),
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Retry step'),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        request.requestedByName,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  SelectableText(
+                    request.prompt,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      height: 1.45,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (timeLabel.isNotEmpty) ...[
+                        Text(
+                          timeLabel,
+                          style: TextStyle(fontSize: 11, color: metaColor),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Tooltip(
+                        message: 'Copy prompt',
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(4),
+                          onTap: () {
+                            Clipboard.setData(
+                                ClipboardData(text: request.prompt));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Prompt copied to clipboard'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: Icon(
+                              Icons.copy_rounded,
+                              size: 14,
+                              color: metaColor,
                             ),
                           ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        // AI Execution & response bubble
+        Align(
+          alignment: Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: borderColor, width: 1),
+              ),
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 11,
+                        backgroundColor: isDark
+                            ? const Color(0xff2a2940)
+                            : const Color(0xffece9f8),
+                        child: const Icon(
+                          Icons.auto_awesome,
+                          size: 12,
+                          color: Color(0xff7c3aed),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Conclave',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '· $_workflowName · $overall',
+                        style: TextStyle(fontSize: 12, color: metaColor),
+                      ),
+                    ],
+                  ),
+                  if (request.steps.isEmpty &&
+                      (request.status == 'queued' ||
+                          request.status == 'running')) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Preparing Worker assignment…',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                  ],
+                  if (request.steps.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    ...request.steps.map((step) {
+                      final worker = _workerName(step);
+                      final details = [
+                        worker,
+                        if (step.engineVersion != null)
+                          'Engine ${step.engineVersion}',
+                        if (step.providerToolVersion != null)
+                          step.providerToolVersion!,
+                        if (_elapsed(step.elapsedMs).isNotEmpty)
+                          _elapsed(step.elapsedMs),
+                      ].join(' · ');
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(children: [
+                              Icon(_statusIcon(step.status),
+                                  size: 17,
+                                  color: step.status == 'failed'
+                                      ? colors.error
+                                      : step.status == 'completed'
+                                          ? colors.primary
+                                          : colors.secondary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _stepName(step.kind),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                _stepStatusLabel(step.status),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: metaColor,
+                                ),
+                              ),
+                            ]),
+                            if (step.status == 'running' ||
+                                step.status == 'completed' ||
+                                step.status == 'failed')
+                              Padding(
+                                padding:
+                                    const EdgeInsets.only(left: 25, top: 2),
+                                child: Text(
+                                  details,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                            if (step.resultText?.isNotEmpty == true)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.only(left: 25, top: 8),
+                                child: SelectableText(
+                                  step.resultText!,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: textColor,
+                                  ),
+                                ),
+                              ),
+                            if (step.status == 'failed') ...[
+                              Padding(
+                                padding:
+                                    const EdgeInsets.only(left: 25, top: 6),
+                                child: Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: SelectableText(
+                                        step.errorMessage ??
+                                            'This Step could not be completed.',
+                                        style: TextStyle(
+                                          color: colors.error,
+                                          fontSize: 12.5,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Copy step error',
+                                      icon: const Icon(Icons.copy_outlined,
+                                          size: 18),
+                                      onPressed: () =>
+                                          Clipboard.setData(ClipboardData(
+                                        text:
+                                            '${_stepName(step.kind)} failed\n${step.errorMessage ?? 'This Step could not be completed.'}',
+                                      )),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (request.status == 'failed' &&
+                                  onRetryStep != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 16),
+                                  child: TextButton.icon(
+                                    onPressed: () =>
+                                        onRetryStep!(request.id, step),
+                                    icon: const Icon(Icons.refresh),
+                                    label: const Text('Retry step'),
+                                  ),
+                                ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                  if (request.testSummary != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tests · ${request.testSummary}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                  if (request.finalText != null &&
+                      request.finalText!.isNotEmpty) ...[
+                    const Divider(height: 24),
+                    Text(
+                      'Conclave · $overall · $_workflowName',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    SelectableText(
+                      request.finalText!,
+                      style: TextStyle(fontSize: 13.5, color: textColor),
+                    ),
+                  ] else if (request.status == 'failed' &&
+                      request.error != null) ...[
+                    const Divider(height: 24),
+                    Text(
+                      'Conclave · Failed',
+                      style: TextStyle(
+                        color: colors.error,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    SelectableText(
+                      request.error!,
+                      style: TextStyle(color: colors.error, fontSize: 13),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  // Action buttons bar
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (request.finalText != null &&
+                          request.finalText!.isNotEmpty) ...[
+                        Tooltip(
+                          message: 'Copy output',
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(4),
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(
+                                  text: request.finalText!));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Output copied to clipboard'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.copy_rounded,
+                                size: 15,
+                                color: metaColor,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      if ((request.status == 'queued' ||
+                              request.status == 'running' ||
+                              request.status == 'failed') &&
+                          onCancelRun != null) ...[
+                        TextButton.icon(
+                          onPressed: () => onCancelRun!(request.id),
+                          icon: const Icon(Icons.cancel_outlined),
+                          label: const Text('Cancel run'),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      if (onShowRunDetails != null) ...[
+                        TextButton.icon(
+                          onPressed: () => onShowRunDetails!(request.id),
+                          icon: const Icon(Icons.subject),
+                          label: const Text('Run details'),
+                        ),
                       ],
                     ],
                   ),
-                );
-              }),
-            ],
-            if (request.testSummary != null) ...[
-              const SizedBox(height: 8),
-              Text('Tests · ${request.testSummary}',
-                  style: Theme.of(context).textTheme.bodySmall),
-            ],
-            if (request.finalText != null && request.finalText!.isNotEmpty) ...[
-              const Divider(height: 24),
-              Text('Conclave · $overall · $_workflowName',
-                  style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 6),
-              SelectableText(request.finalText!),
-            ] else if (request.status == 'failed' && request.error != null) ...[
-              const Divider(height: 24),
-              Text('Conclave · Failed',
-                  style: TextStyle(
-                      color: colors.error, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 6),
-              SelectableText(request.error!),
-            ],
-            if ((request.status == 'queued' ||
-                    request.status == 'running' ||
-                    request.status == 'failed') &&
-                onCancelRun != null) ...[
-              const SizedBox(height: 4),
-              TextButton.icon(
-                onPressed: () => onCancelRun!(request.id),
-                icon: const Icon(Icons.cancel_outlined),
-                label: const Text('Cancel run'),
+                ],
               ),
-            ],
-            if (onShowRunDetails != null) ...[
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: () => onShowRunDetails!(request.id),
-                icon: const Icon(Icons.subject),
-                label: const Text('Run details'),
-              ),
-            ],
-          ],
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }

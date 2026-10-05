@@ -300,6 +300,11 @@ abstract interface class AxDataSource {
   Future<void> requestProjectWorkspace({
     required String projectId,
     required String workspaceId,
+    List<String> allowedPermissions = const [],
+  });
+  Future<void> updateWorkspaceProjectPermissions({
+    required String grantId,
+    required List<String> allowedPermissions,
   });
   Future<void> revokeWorkspaceProjectGrant({
     required String grantId,

@@ -125,7 +125,6 @@ void main() {
       controller.labAccess = ProfileLabAccessReadModel.fromJson({
         'permissions': {'profilesAdmin': true, 'releaseManager': false},
         'signer': {'ready': false},
-        'releaseMode': 'drafts-only',
       });
 
       final state = controller.selectedWorkerState;
@@ -156,14 +155,13 @@ void main() {
       controller.labAccess = ProfileLabAccessReadModel.fromJson({
         'permissions': {'profilesAdmin': true, 'releaseManager': true},
         'signer': {'ready': true},
-        'releaseMode': 'standard',
       });
 
       final state = controller.selectedWorkerState;
       expect(state.status, WorkerLifecycleStatus.testsPassed);
       expect(state.canPublish, isTrue);
-      expect(state.nextAction.title, 'Publish & Sign Release');
-      expect(state.nextAction.actionLabel, 'Publish Release');
+      expect(state.nextAction.title, 'Publish to Testing');
+      expect(state.nextAction.actionLabel, 'Publish to Testing');
     });
 
     test('computes channel states: publishedTesting, beta, and stable', () {

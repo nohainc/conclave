@@ -1,3 +1,4 @@
+import '../widgets/lab_components.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 
@@ -450,7 +451,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                        content: Text(
+                        content: CopyableMessage(
                             'Reviewed model proposal applied to the local Draft.')),
                   );
                 },

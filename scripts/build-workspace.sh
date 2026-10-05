@@ -33,6 +33,7 @@ case "$OS" in
   *) echo "Unsupported desktop build machine: $OS" >&2; exit 1 ;;
 esac
 
+PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-profile-trust.mjs")"
 WORKSPACE_DIR="$ROOT/apps/workspace"
 command -v flutter >/dev/null 2>&1 || { echo "Flutter is required." >&2; exit 1; }
 cd "$WORKSPACE_DIR"
@@ -40,9 +41,9 @@ flutter pub get
 bash "$ROOT/scripts/build-cli-worker-engine.sh"
 if [[ "$MODE" == debug ]]; then
   flutter build "$target" --debug \
-    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}"
+    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="$PUBLIC_RELEASE_ROOTS"
 else
   flutter build "$target" --release \
-    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}"
+    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="$PUBLIC_RELEASE_ROOTS"
 fi
 echo "Workspace $MODE build finished for $target."

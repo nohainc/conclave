@@ -39,12 +39,14 @@ mixin _CatalogApi on _AxApiClientCore {
   Future<void> requestProjectWorkspace({
     required String projectId,
     required String workspaceId,
+    List<String> allowedPermissions = const [],
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/projects/$projectId/workspaces'),
       headers: _headers(contentType: 'application/json'),
       body: jsonEncode({
         'workspaceId': workspaceId,
+        'allowedPermissions': allowedPermissions,
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -53,6 +55,23 @@ mixin _CatalogApi on _AxApiClientCore {
         'Workspace grant failed (${response.statusCode})${detail.isEmpty ? '' : ': $detail'}',
         statusCode: response.statusCode,
       );
+    }
+  }
+
+  @override
+  Future<void> updateWorkspaceProjectPermissions({
+    required String grantId,
+    required List<String> allowedPermissions,
+  }) async {
+    final response = await client.patch(
+      Uri.parse('$baseUrl/workspace-project-grants/$grantId'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({'allowedPermissions': allowedPermissions}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException(
+          'Workspace access update failed (${response.statusCode}): ${response.body}',
+          statusCode: response.statusCode);
     }
   }
 

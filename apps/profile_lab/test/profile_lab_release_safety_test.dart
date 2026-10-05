@@ -156,11 +156,11 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('development mode explicitly hides promotion', (tester) async {
+    testWidgets('promotion remains available without a configured signer',
+        (tester) async {
       controller.labAccess = ProfileLabAccessReadModel.fromJson({
         'permissions': {'profilesAdmin': true, 'releaseManager': true},
         'signer': {'ready': false},
-        'releaseMode': 'drafts-only'
       });
       controller.cloudReleases = [
         {
@@ -172,9 +172,7 @@ void main() {
       controller.selectedCloudRelease = controller.cloudReleases.first;
       await tester.pumpWidget(MaterialApp(
           home: Scaffold(body: ReleasesView(controller: controller))));
-      expect(find.text('Development mode — signed publishing is disabled'),
-          findsOneWidget);
-      expect(find.text('Promote to Beta'), findsNothing);
+      expect(find.text('Promote to Beta'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

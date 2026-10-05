@@ -1,4 +1,5 @@
 import '../controllers/profile_lab_controller.dart';
+import '../profile_lab_test_sandbox.dart';
 
 /// Computed lifecycle state of the selected logical Worker and its Profile.
 enum WorkerLifecycleStatus {
@@ -23,7 +24,7 @@ enum WorkerLifecycleStatus {
   /// Full progressive test ladder passed locally; ready for cloud publication.
   testsPassed,
 
-  /// Operator cannot publish due to missing permissions, missing signer, or draft-only mode.
+  /// Operator cannot publish due to missing permissions or a missing signer.
   publicationUnavailable,
 
   /// A Profile release has been published and assigned to the Testing channel.
@@ -206,6 +207,12 @@ class SelectedWorkerState {
     final localDraftVersion = draft?.releaseVersion;
     final localDraftDigest = draft?.payloadDigest;
     final isDraftDirty = controller.isDirty;
+    final draftAlreadyPublished = draft != null &&
+        controller.cloudReleases.any((release) =>
+            release['releaseVersion'] == draft.releaseVersion &&
+            release['lifecycleState'] != 'draft' &&
+            release['lifecycleState'] != 'revoked' &&
+            release['payloadDigest'] == draft.payloadDigest);
     final syncState = controller.syncState;
 
     final cloudDraftExists = controller.cloudDraftExists ?? false;
@@ -221,16 +228,24 @@ class SelectedWorkerState {
     final isProviderDetected = detectedPath != null;
 
     final isTesting = controller.isTesting;
-    final lastTestResult = controller.lastTestResult;
+    final savedQualification = draft != null &&
+        controller.currentEvidence.any((evidence) =>
+            evidence['profileDefinitionId'] == draft.profileDefinitionId &&
+            evidence['releaseVersion'] == draft.releaseVersion &&
+            evidence['profileDigest'] == draft.payloadDigest &&
+            ToolProfileAcceptanceEvidence.hasCloudContractShape(evidence,
+                profile: draft.profile));
+    final lastTestResult = controller.testResultMatchesDraft
+        ? controller.lastTestResult
+        : savedQualification
+            ? 'pass'
+            : controller.lastTestResult;
     final testStatusMessage = controller.testStatusMessage;
 
     final canPublish = controller.canPublish;
     String? publicationBlockReason;
     if (!canPublish) {
-      if (controller.labAccess?.draftsOnly == true) {
-        publicationBlockReason =
-            'Development mode — signed publishing is disabled';
-      } else if (controller.labAccess?.releaseManager != true) {
+      if (controller.labAccess?.releaseManager != true) {
         publicationBlockReason = 'Release Manager role required to publish.';
       } else if (controller.labAccess?.signerReady != true) {
         publicationBlockReason = 'Cloud Profile Signer key is unavailable.';
@@ -274,7 +289,9 @@ class SelectedWorkerState {
         actionLabel: 'Review & Save Draft',
         subView: WorkerSubView.draftAndTest,
       );
-    } else if (hasLocalDraft && lastTestResult != 'pass') {
+    } else if (hasLocalDraft &&
+        !draftAlreadyPublished &&
+        lastTestResult != 'pass') {
       status = WorkerLifecycleStatus.testRequired;
       nextAction = const WorkerNextAction(
         title: 'Test the Local Profile',
@@ -283,26 +300,28 @@ class SelectedWorkerState {
         actionLabel: 'Run Profile Tests',
         subView: WorkerSubView.draftAndTest,
       );
-    } else if (hasLocalDraft && lastTestResult == 'pass' && !canPublish) {
+    } else if (hasLocalDraft &&
+        !draftAlreadyPublished &&
+        lastTestResult == 'pass' &&
+        !canPublish) {
       status = WorkerLifecycleStatus.publicationUnavailable;
       nextAction = WorkerNextAction(
         title: 'Publication Unavailable',
         description: publicationBlockReason ??
             'Draft passed local tests, but signing and publishing are unavailable in this session.',
-        actionLabel: controller.labAccess?.draftsOnly == true
-            ? 'Draft & Test'
-            : 'Inspect Permissions',
-        subView: controller.labAccess?.draftsOnly == true
-            ? WorkerSubView.draftAndTest
-            : WorkerSubView.overview,
+        actionLabel: 'Inspect Access',
+        subView: WorkerSubView.overview,
       );
-    } else if (hasLocalDraft && lastTestResult == 'pass' && canPublish) {
+    } else if (hasLocalDraft &&
+        !draftAlreadyPublished &&
+        lastTestResult == 'pass' &&
+        canPublish) {
       status = WorkerLifecycleStatus.testsPassed;
       nextAction = const WorkerNextAction(
-        title: 'Publish & Sign Release',
+        title: 'Publish to Testing',
         description:
             'Local qualification passed! Publish this release to Cloud and sign with the Tool Profile key.',
-        actionLabel: 'Publish Release',
+        actionLabel: 'Publish to Testing',
         subView: WorkerSubView.draftAndTest,
       );
     } else if (stableVersion != 'None') {

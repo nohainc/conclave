@@ -49,6 +49,44 @@ class _ApiResponseClient extends http.BaseClient {
 }
 
 void main() {
+  test(
+      'canonical inventory readiness determines availability without legacy status',
+      () {
+    final inventory = <String, dynamic>{
+      'workerId': 'worker-chatgpt',
+      'workerTypeId': 'chatgpt',
+      'workspaceId': 'workspace-test',
+      'displayName': 'ChatGPT',
+      'activationState': 'enabled',
+      'readinessState': 'ready'
+    };
+    final ready = AxWorker.fromJson(inventory);
+    expect(ready.isReady, isTrue);
+    expect(ready.status, 'ready');
+    expect(
+        AxWorker.fromJson({...inventory, 'activationState': 'disabled'})
+            .isReady,
+        isFalse);
+    expect(
+        AxWorker.fromJson({
+          ...inventory,
+          'readinessState': 'worker_runtime_unavailable',
+          'readinessIssueCode': 'tool_profile_unavailable'
+        }).isReady,
+        isFalse);
+  });
+  test('read errors preserve the server diagnostic and HTTP status', () async {
+    final api = AxApiClient(
+        baseUrl: 'https://cloud.test/api',
+        client: _JsonClient({'error': 'ambiguous column name: updated_at'},
+            statusCode: 400));
+    await expectLater(
+        api.loadProjectWorkstreams(projectId: 'project-test'),
+        throwsA(isA<AxApiException>()
+            .having((e) => e.statusCode, 'status', 400)
+            .having((e) => e.message, 'message',
+                contains('ambiguous column name: updated_at'))));
+  });
   test('reads canonical execution error details for Ax tasks', () {
     final task = AxTask.fromJson({
       'id': 'task-error',

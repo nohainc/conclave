@@ -4,6 +4,22 @@
 **Status:** Frozen
 **Scope:** Work composer and built-in Workflow semantics in Conclave AX
 
+Cloud encodes durable Work session identities as `work-session-` plus a SHA-256
+hex digest. Keys satisfy the Engine's opaque identifier contract
+(`[A-Za-z0-9_-]+`, at most 256 characters). Direct keeps the same identity across
+requests in a Workstream; other Steps remain request-scoped. Fresh retries get
+distinct keys. This changes no persisted schema; previously rejected colon-based
+keys never created usable Engine sessions.
+
+AX exposes explicit repository read, repository write, and shell execution
+choices when connecting a Workspace. Workspace owners can edit an active or
+suspended Project grant through `PATCH /api/workspace-project-grants/:id` with
+`allowedPermissions`; the existing permission validator, ownership check, and
+terminal-state restrictions apply. Omitted permissions remain unchanged.
+Direct requires `repository:read` and `repository:write`; Test also requires
+`shell:execute`. AX never widens permissions merely because a run was denied.
+Run admission errors are selectable and have a copy action for the full message.
+
 This is the single authoritative catalog and semantic definition for Work v1.
 Architecture v8 preserves Workspace ownership, Workstream isolation,
 Cloud/Workspace transport, AX-owned Worker usage policy, and the Workspace

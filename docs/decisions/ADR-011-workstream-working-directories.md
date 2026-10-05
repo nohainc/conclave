@@ -1,6 +1,13 @@
 # ADR-011: ID-Based Workstream Working Directories
 
 **Status:** Accepted
+
+Workspace assignment handlers create a mutation coordinator whenever a
+Workstream directory lifecycle is supplied, unless an explicit coordinator is
+provided. Desktop Direct execution therefore always enforces the local lock
+and lease fencing before invoking the Engine. A stale fencing token is rejected
+before provider execution; scoped stateful execution never falls back to an
+uncoordinated directory.
 **Date:** 2026-09-25  
 **Builds on:** ADR-008 and ADR-009
 

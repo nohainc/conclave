@@ -1,7 +1,43 @@
 part of '../projects_pages.dart';
 
 extension _WorkstreamConfiguration on _WorkstreamPageState {
-  Widget _workConfigView() {
+  void _openWorkSettings(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680, maxHeight: 800),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Work settings',
+                          style: Theme.of(context).textTheme.titleLarge),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _workConfigView(includeTitle: false),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _workConfigView({bool includeTitle = true}) {
     final bindings = _workConfig['bindings'] is Map
         ? Map<String, dynamic>.from(_workConfig['bindings'] as Map)
         : <String, dynamic>{};
@@ -11,8 +47,10 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Work settings', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 16),
+        if (includeTitle) ...[
+          Text('Work settings', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 16),
+        ],
         Text('Default workflow', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 6),
         if (_loadingWorkflows)

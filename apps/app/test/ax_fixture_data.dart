@@ -295,6 +295,13 @@ class AxFixtureDataSource implements AxDataSource {
   Future<void> requestProjectWorkspace({
     required String projectId,
     required String workspaceId,
+    List<String> allowedPermissions = const [],
+  }) async {}
+
+  @override
+  Future<void> updateWorkspaceProjectPermissions({
+    required String grantId,
+    required List<String> allowedPermissions,
   }) async {}
 
   @override

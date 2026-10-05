@@ -16,4 +16,3 @@ part 'projects_pages/workstream_page.dart';
 part 'projects_pages/workstream_config.dart';
 part 'projects_pages/workstream_actions.dart';
 part 'projects_pages/work_components.dart';
-part 'projects_pages/project_panel.dart';

@@ -88,7 +88,6 @@ void main() {
     c.labAccess = ProfileLabAccessReadModel.fromJson({
       'permissions': {'profilesAdmin': true, 'releaseManager': true},
       'signer': {'ready': false},
-      'releaseMode': 'drafts-only'
     });
     c.currentSession = ProfileLabSession(
         credential: 'test',

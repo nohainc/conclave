@@ -1,3 +1,4 @@
+import '../widgets/lab_components.dart';
 import 'dart:convert';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:flutter/material.dart';
@@ -426,7 +427,7 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                            content: Text(
+                            content: CopyableMessage(
                                 'Successfully promoted release v$ver to ${widget.targetChannel}')),
                       );
                     }

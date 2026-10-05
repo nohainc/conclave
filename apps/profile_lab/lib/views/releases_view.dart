@@ -160,7 +160,7 @@ class _ReleasesViewState extends State<ReleasesView> {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                                content: Text(
+                                content: CopyableMessage(
                                     'Successfully rolled back $selectedChannel to v$selectedTargetVersion')),
                           );
                         }
@@ -303,7 +303,7 @@ class _ReleasesViewState extends State<ReleasesView> {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                  content: Text(
+                                  content: CopyableMessage(
                                       'Permanently revoked release v$ver')),
                             );
                           }
@@ -356,7 +356,6 @@ class _ReleasesViewState extends State<ReleasesView> {
           (b['releaseVersion'] as int).compareTo(a['releaseVersion'] as int));
     final selected = c.selectedCloudRelease;
     final channels = c.selectedCloudDefinition?['channels'] as Map? ?? {};
-    final development = c.labAccess?.draftsOnly == true;
     final canManage =
         c.currentSession != null && c.labAccess?.releaseManager == true;
     if (c.selectedDefinitionId == null) {
@@ -370,7 +369,7 @@ class _ReleasesViewState extends State<ReleasesView> {
             controller: c,
             release: selected,
             releases: releases,
-            onPromote: !development && canManage && !c.isPromoting
+            onPromote: canManage && !c.isPromoting
                 ? () => _showPromoteDialog(selected)
                 : null,
             onRevoke: canManage && !c.isRevoking
@@ -392,11 +391,6 @@ class _ReleasesViewState extends State<ReleasesView> {
                             ? null
                             : () => c.fetchCloudReleases())
                   ]),
-                  if (development)
-                    const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text(
-                            'Development mode — signed publishing is disabled')),
                   if (c.isLoadingReleases)
                     const OperationProgress(label: 'Loading…'),
                   if (c.releasesError != null)
@@ -546,8 +540,7 @@ class _ReleaseInspectorPane extends StatelessWidget {
                         label: 'Revocation reason',
                         value:
                             '${release['lifecycleReason'] ?? 'Unavailable'}'),
-                  if (controller.labAccess?.draftsOnly != true &&
-                      (state == 'testing' || state == 'beta')) ...[
+                  if (state == 'testing' || state == 'beta') ...[
                     const SizedBox(height: 12),
                     Align(
                         alignment: Alignment.centerLeft,

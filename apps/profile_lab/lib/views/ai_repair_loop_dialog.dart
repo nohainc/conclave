@@ -1,3 +1,4 @@
+import '../widgets/lab_components.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 
@@ -166,7 +167,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-          content: Text(
+          content: CopyableMessage(
               'Repaired candidate proposal with provenance applied to local Draft.')),
     );
   }

@@ -292,8 +292,7 @@ or packaged desktop acceptance.
 The checked-in Cloud configurations set
 `CONCLAVE_PROFILE_LAB_OWNER_EMAIL=vitalii@nohainc.com`. When this setting is
 present, only that active account can approve, claim,
-or use a Profile Lab desktop session or administer Profiles. Signed publication
-mode additionally requires email verification. The email is
+or use a Profile Lab desktop session or administer Profiles. The email is
 resolved from Cloud's authenticated user record, never a client request field.
 This exclusive policy replaces the user-ID admin and release-manager allowlists;
 older allowlists cannot grant another account access. Browser authentication,
@@ -303,19 +302,19 @@ continue to require explicitly configured ID allowlists.
 
 `GET /api/admin/profile-lab/access` requires authentication and returns the v1
 access read model (`schemaVersion: 1`): authenticated identity/audience,
-`permissions.profilesAdmin`, `permissions.releaseManager`, `releaseMode`, and
+`permissions.profilesAdmin`, `permissions.releaseManager`, and
 `signer.ready`/`signer.issues`. The Lab locks its content until Cloud verifies
 administrative access. Its header shows Signed in until permission is verified,
 then Profile Admin; the account/access control exposes release permission and signer state. There is no permanent access/status strip.
 Check access retries the access read. Authentication alone never grants access.
 
-The checked-in configurations use
-`CONCLAVE_PROFILE_RELEASE_MODE=drafts-only`. Cloud publication returns 409 even
-if signing keys happen to be configured, and signer preflight reports
-`publication_disabled_for_development`. Draft creation, save, local qualification,
-and sandbox tests remain available. The Lab disables publication until the
-server reports both release permission and signer readiness. No signing identity
-is created for development and no release rows are bootstrapped.
+All environments expose the complete Draft → Test → Sync → Testing → Beta →
+Stable lifecycle. There is no Profile release mode switch. Publication requires
+release permission, a ready signer, and stored qualification for the exact saved
+and synced Draft. Missing signer/access is explained beside **Publish to Testing**;
+the action remains visible after qualification. After publication the workbench
+offers **View Releases** rather than publishing the same immutable version again.
+No release rows are bootstrapped, and macOS app signing does not control these actions.
 
 The unsigned exception also supports an explicitly opted-in local-development
 Workspace. It uses `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY` in a non-release build
@@ -336,10 +335,25 @@ then run `bash scripts/run-profile-lab-development.sh` and
 `bash scripts/run-workspace-development.sh`. Both default to
 `http://localhost:8787`; set `CONCLAVE_DEVELOPMENT_CLOUD_URL` to the same loopback
 origin as your local Cloud. Sign in through the browser as the owner,
-save and test a draft in the Lab, and refresh Workspace. The Workspace launcher
+save and test a draft in the Lab, sync it, and publish to Testing. Assign the
+development Workspace to Testing in the Lab and run a real task. The Workspace launcher
 uses a separate DevelopmentState directory so existing production registration
-is not reused. `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY` overrides the source
-and `CONCLAVE_WORKSPACE_DEVELOPMENT_DATA_DIR` overrides development state.
+is not reused. It now defaults to signed Cloud releases. Explicitly set
+`CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY` to opt into unsigned local Draft execution;
+that exception remains loopback-only. `CONCLAVE_WORKSPACE_DEVELOPMENT_DATA_DIR`
+overrides development state.
+
+`scripts/setup-development-profile-signing.mjs` generates and validates a local
+Ed25519 signer in ignored `apps/cloud/.dev.vars` (0600), preserving existing keys
+and unrelated settings. Public roots are written to ignored
+`.development/profile-trust.json` and injected by both development launchers.
+The local stack launcher prepares this configuration before starting Wrangler.
+`--hosted` prepares a separate development signer and public roots for the current
+hosted development deployment; upload its ignored secret JSON with Wrangler
+`secret bulk` only to the intended Worker. Launch both apps with
+`CONCLAVE_DEVELOPMENT_CLOUD_URL=https://app.conclaveax.com` to use the corresponding
+hosted public roots. Customer build scripts never automatically load development
+roots or private material; provision independent production keys before customer rollout.
 
 Profile Lab's macOS build script skips Developer ID signing and notarization by
 default, including when signing environment variables are inherited. `--unsigned`
@@ -349,16 +363,17 @@ public trust roots when configured. Apple may still apply local ad-hoc signature
 needed to execute a development binary; this is not Developer ID signing,
 notarization, or Tool Profile release signing.
 
-In `drafts-only` development mode, the active owner account can use its existing
-browser sign-in without separate email verification. Other emails remain denied.
-Signed publication mode requires the owner email to be verified; unspecified
-release modes also retain that requirement. No verification flags are rewritten.
+The explicitly configured internal Lab owner uses the existing authenticated
+browser sign-in without a separate email-verification gate. The active account
+must exactly match the configured owner email. Other emails remain denied, and
+audience/session checks are unchanged. This internal owner policy is independent
+of signing configuration; no verification flags are rewritten.
 
 ### Release lifecycle presentation
 
 The selected Worker’s Releases view starts with Testing, Beta, and Stable cards populated from Cloud’s channel pointers, followed by published release history (Cloud drafts are excluded). Selecting a release shows status, publication time, provider version compatibility, release-scoped Cloud evidence, and implementation differences against the nearest earlier published version. Canonical payload and signing metadata are collapsed under Technical details. Promotion is contextual; Stable promotion continues to require qualifying Cloud evidence and the existing authorization gate. Rollback and revocation remain reason/confirmation protected and are accessed through release overflow. Refreshing releases also refreshes channel assignments and preserves the selected published version when available.
 
-With no published releases, the view offers Draft & Test. In `drafts-only` mode, Overview, the test workbench, and Releases state “Development mode — signed publishing is disabled”; Publish and Promote are hidden, and the Overview lifecycle ends at Cloud Draft. Existing release history and channel assignments remain inspectable. Starter templates and local testing remain independent of Workspace runtime state.
+With no published releases, the view offers Draft & Test. Overview always shows Configure, Test, Sync, Publish, and Rollout. Promotion depends on release-management authorization and evidence gates, rather than desktop signing or current signer availability; existing immutable signatures do not change on promotion. Starter templates and local testing remain independent of Workspace runtime state.
 
 ### Workspace rollout and Activity presentation
 
@@ -376,6 +391,14 @@ At compact desktop widths (below 1000 points), the Worker catalog stacks above t
 
 ### First-run acceptance and UI migration
 
+For a deployed v8 database that predates starter templates, run
+`node scripts/provision-profile-starter-templates.mjs`, then apply its generated
+SQL file with Wrangler D1 to the intended database. It extracts only the current
+baseline table and `INSERT OR IGNORE` seeds; existing templates, Drafts, releases,
+and user data are preserved. Do not replay/reset the baseline on an existing database.
+
 Only Workers, Workspaces, and Activity are primary areas (`LabArea`). Workers owns Overview, Draft & Test, and Releases. The workbench is `DraftTestWorkbench`, with `ProfileDraftEditor` as its editor pane; obsolete Profiles/Tests/evidence pages, their navigation aliases, the duplicate Draft selector, and the global telemetry/status strip are removed without compatibility shims. Existing local Draft and evidence storage paths, identities, formats, and Cloud APIs remain unchanged by this UI cleanup. The starter-template table remains part of the fresh-start v8 Cloud baseline; existing development databases must provision/reseed the current baseline when adopting that earlier data-model change.
 
-`worker_first_run_acceptance_test.dart` covers sign-in, catalog selection, absent Profile, one-click initial Draft, dynamic `codex`/`agy` discovery, the actual eleven-stage ladder through the bundled Engine, persisted matching local evidence, local save, and Cloud Draft sync for both Workers in draft-only and publishing modes. Browser approval and Cloud persistence are controlled boundary fixtures. Provider executables use the existing v1 payload contracts with isolated home/PATH/environment; they do not call vendor services. The no-template path verifies a blank Draft inherits catalog identity and remains unqualified. A cold-start check reopens the same persisted Draft and matching evidence without recreating or translating them. Catalog Stable is always explicitly labeled as catalog stage and cannot establish a Stable release pointer. Signing/production rollout and real vendor acceptance remain separate release gates.
+`worker_first_run_acceptance_test.dart` covers sign-in, catalog selection, absent Profile, one-click initial Draft, dynamic `codex`/`agy` discovery, the actual eleven-stage ladder through the bundled Engine, persisted matching local evidence, local save, and Cloud Draft sync for both Workers with ready and missing signers. Ready-signer cases continue through qualification submission, Testing publication, and release history. Browser approval and Cloud persistence are controlled boundary fixtures. Provider executables use the existing v1 payload contracts with isolated home/PATH/environment; they do not call vendor services. The no-template path verifies a blank Draft inherits catalog identity and remains unqualified. A cold-start check reopens the same persisted Draft and matching evidence without recreating or translating them. Catalog Stable is always explicitly labeled as catalog stage and cannot establish a Stable release pointer. Signing/production rollout and real vendor acceptance remain separate release gates.
+
+Operational messages have a copy icon. Use **Copy all messages** in the title bar to share current resource errors and active Draft test logs, or **Copy execution details** for the full test log. Secret values are redacted from copied text.

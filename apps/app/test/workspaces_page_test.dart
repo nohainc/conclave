@@ -358,7 +358,6 @@ void main() {
         'workerTypeId': 'chatgpt',
         'displayName': 'ChatGPT',
         'description': 'ChatGPT coding assistant',
-        'status': 'ready',
         'readinessState': 'ready',
         'localConcurrencyLimit': 2,
         'capabilities': ['code'],
@@ -517,7 +516,7 @@ void main() {
         'displayName': 'ChatGPT',
         'description': 'ChatGPT coding assistant',
         'name': 'ChatGPT Personal',
-        'status': 'needs_attention',
+        'readinessState': 'sign_in_required',
         'attentionReasonCode': 'authentication_required',
         'authStrategy': 'browser_auth',
         'credentialStatus': 'needs_authentication',
@@ -543,7 +542,7 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Needs local attention'), findsOneWidget);
+      expect(find.text('Provider sign-in required'), findsOneWidget);
       await tester.tap(find.text('ChatGPT').first);
       await tester.pumpAndSettle();
       expect(

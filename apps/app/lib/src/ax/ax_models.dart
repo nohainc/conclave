@@ -427,6 +427,11 @@ class AxWorker {
   final String status;
   final String readinessState;
   final String activationState;
+  bool get isReady =>
+      activationState == 'enabled' &&
+      readinessState == 'ready' &&
+      catalogLifecycleState == 'active' &&
+      catalogVisibilityState == 'visible';
   final String? attentionReasonCode;
   final int localConcurrencyLimit;
   final String? engineVersion;
@@ -447,7 +452,11 @@ class AxWorker {
         catalogLifecycleState: _string(json, 'catalogLifecycleState', 'active'),
         catalogVisibilityState:
             _string(json, 'catalogVisibilityState', 'visible'),
-        status: _string(json, 'status', 'needs_attention'),
+        status: json['activationState'] == 'disabled'
+            ? 'disabled'
+            : json['readinessState'] == 'ready'
+                ? 'ready'
+                : 'needs_attention',
         readinessState: _string(json, 'readinessState', 'test_failed'),
         activationState: _string(json, 'activationState', 'enabled'),
         attentionReasonCode: json['readinessIssueCode']?.toString() ??

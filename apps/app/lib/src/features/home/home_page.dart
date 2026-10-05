@@ -228,7 +228,7 @@ class _EstablishedHome extends StatelessWidget {
           _MetricCard('Workspaces', '${workspaces.length}', onOpenWorkspaces),
           _MetricCard(
             'Ready Workers',
-            '${workers.where((worker) => worker.status.toLowerCase() == 'ready').length}',
+            '${workers.where((worker) => worker.isReady).length}',
             onOpenWorkspaces,
           ),
         ];

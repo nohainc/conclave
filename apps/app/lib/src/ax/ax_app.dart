@@ -83,17 +83,31 @@ class _RecoveryPanel extends StatelessWidget {
               const SizedBox(height: 10),
               _RecoveryLine(label: 'What can I do?', value: nextStep),
               const SizedBox(height: 22),
-              FilledButton.icon(
-                onPressed: retrying ? null : onRetry,
-                icon: retrying
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.refresh),
-                label: Text(retrying ? 'Retrying…' : 'Try again'),
-              ),
+              Wrap(spacing: 12, runSpacing: 8, children: [
+                FilledButton.icon(
+                  onPressed: retrying ? null : onRetry,
+                  icon: retrying
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh),
+                  label: Text(retrying ? 'Retrying…' : 'Try again'),
+                ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.copy_outlined),
+                  label: const Text('Copy error'),
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(
+                        text: '$title\n$happened\n$safe\n$nextStep'));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Error copied')));
+                    }
+                  },
+                )
+              ]),
               const SizedBox(height: 8),
               Text(
                 retrying
@@ -126,7 +140,7 @@ class _RecoveryLine extends StatelessWidget {
                   .labelLarge
                   ?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 2),
-          Text(value),
+          SelectableText(value),
         ],
       ),
     );

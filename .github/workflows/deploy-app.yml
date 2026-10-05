@@ -66,10 +66,6 @@ jobs:
           CONCLAVE_RELEASE_SIGNING_KEY_ID: ${{ vars.CONCLAVE_RELEASE_SIGNING_KEY_ID }}
           CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
         run: |
-          if node -e 'const fs=require("node:fs"); process.exit(/"CONCLAVE_PROFILE_RELEASE_MODE"\s*:\s*"drafts-only"/.test(fs.readFileSync(process.argv[1], "utf8")) ? 0 : 1)' infra/cloudflare/app.wrangler.jsonc; then
-            echo "Drafts-only development: skipping signer preflight."
-            exit 0
-          fi
           if [ -z "${CONCLAVE_RELEASE_PRIVATE_KEY:-}" ]; then
             echo "CONCLAVE_RELEASE_PRIVATE_KEY is not configured; skipping production Tool Profile signer preflight (development phase)."
           else
@@ -110,10 +106,6 @@ jobs:
           CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
         run: |
           set -euo pipefail
-          if node -e 'const fs=require("node:fs"); process.exit(/"CONCLAVE_PROFILE_RELEASE_MODE"\s*:\s*"drafts-only"/.test(fs.readFileSync(process.argv[1], "utf8")) ? 0 : 1)' ../../infra/cloudflare/app.wrangler.jsonc; then
-            echo "Drafts-only development: skipping signing configuration sync."
-            exit 0
-          fi
           if [ -z "${CONCLAVE_RELEASE_PRIVATE_KEY:-}" ]; then
             echo "CONCLAVE_RELEASE_PRIVATE_KEY is not configured; skipping Tool Profile signing sync (development phase)."
             exit 0

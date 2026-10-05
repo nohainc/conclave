@@ -50,7 +50,6 @@ void main() {
             'authenticated': true,
             'audience': 'conclave.profile-lab.management',
             'permissions': {'profilesAdmin': true, 'releaseManager': true},
-            'releaseMode': 'drafts-only',
             'signer': {'ready': false}
           }));
         } else if (req.uri.path == '/api/admin/workers/catalog' &&
@@ -446,7 +445,7 @@ void main() {
       final access = await client.fetchLabAccess();
       expect(lastPath, '/api/admin/profile-lab/access');
       expect(access.profilesAdmin, isTrue);
-      expect(access.draftsOnly, isTrue);
+      expect(access.releaseManager, isTrue);
       expect(access.signerReady, isFalse);
     });
 

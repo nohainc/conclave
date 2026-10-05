@@ -24,6 +24,8 @@ import {
   type AssignmentDispatcherEnv,
 } from "./assignment-dispatcher.js";
 import type { WorkstreamBindingId } from "@conclave/core";
+import { workStepSessionKey } from "./work-session-key.js";
+import { assignmentDeliveryExpired } from "./assignment-delivery.js";
 
 export interface ConclaveWorkflowParams {
   readonly runId: string;
@@ -66,25 +68,6 @@ interface AssignmentRow {
   permissionSnapshotJson: string | null;
   assignmentId: string;
   startedAt: string;
-}
-
-function workStepSessionKey(params: {
-  readonly workBindingId?: WorkstreamBindingId;
-  readonly workstreamId: string;
-  readonly workRequestId: string;
-  readonly stepKind: string;
-  readonly retryStepKind?: unknown;
-  readonly retrySessionStrategy?: unknown;
-  readonly retryNumber?: unknown;
-}): string {
-  const baseSessionKey =
-    params.workBindingId === "direct"
-      ? `workstream:${params.workstreamId}:direct:work-conversation`
-      : `work-request:${params.workRequestId}:${params.stepKind}`;
-  return params.retryStepKind === params.stepKind &&
-    params.retrySessionStrategy === "fresh"
-    ? `${baseSessionKey}:retry-fresh-${Number(params.retryNumber) || 1}`
-    : baseSessionKey;
 }
 
 function parseJsonRecord(value: unknown): Record<string, unknown> {
@@ -734,6 +717,15 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             ["completed", "failed", "cancelled"].includes(terminal.status)
           )
             break;
+          if (terminal && assignmentDeliveryExpired(terminal.status, terminal.startedAt)) {
+            await workflowStep.do(`workflow:${task.step.kind}:delivery-timeout:${attempt}`, stepConfig, async () => {
+              await db.prepare(`UPDATE worker_assignments SET status = 'failed', error_json = ?1, updated_at = ?2
+                WHERE id = ?3 AND status IN ('created', 'dispatched')`)
+                .bind(JSON.stringify({ error: { code: "provider_unavailable", message: "Workspace did not acknowledge the assignment. Check its connection and retry.", retryable: true } }),
+                  new Date().toISOString(), assignment.assignmentId).run();
+            });
+            continue;
+          }
           await workflowStep.sleep(
             `workflow:${task.step.kind}:assignment-wait:${attempt}:${poll}`,
             "2 seconds",

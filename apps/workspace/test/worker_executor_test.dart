@@ -10,6 +10,50 @@ import 'package:test/test.dart';
 import 'support/assignment_worker_fixture.dart';
 
 void main() {
+  test('desktop lifecycle wiring executes Direct with fencing enabled',
+      () async {
+    final root = await Directory.systemTemp.createTemp('direct-runtime-');
+    addTearDown(() => root.delete(recursive: true));
+    var executions = 0;
+    final handler = WorkerAssignmentHandler(
+      workstreamDirectoryLifecycle: WorkstreamDirectoryLifecycle(
+          pathResolver: WorkstreamPathResolver(root)),
+      resolveLogicalWorker: (id) => assignmentWorker(id),
+      executeWithToolProfile: (worker, directory, context, payload,
+          {onProgress}) async {
+        executions++;
+        expect(directory.path, contains('workstream-1'));
+        return WorkerResult(
+            requestId: 'result-1',
+            assignmentId: context.assignmentId,
+            output: 'Direct completed');
+      },
+    );
+    WorkspaceAssignmentContext context(int fence) => WorkspaceAssignmentContext(
+          workspaceId: 'workspace-1',
+          workspaceRuntimeId: 'runtime-1',
+          workerId: 'worker-1',
+          runId: 'run-1',
+          taskId: 'task-1',
+          attemptId: 'attempt-1',
+          assignmentId: 'assignment-1',
+          idempotencyKey: 'idem-1',
+          payload: {
+            'workerId': 'worker-1',
+            'workerTypeId': 'test-worker',
+            'projectId': 'project-1',
+            'workstreamId': 'workstream-1',
+            'executionClass': 'stateful_workstream',
+            'leaseId': 'lease-1',
+            'fencingToken': fence,
+          },
+        );
+    expect(
+        (await handler.call(context(2))).output?['text'], 'Direct completed');
+    await expectLater(
+        handler.call(context(1)), throwsA(isA<WorkstreamMutationViolation>()));
+    expect(executions, 1);
+  });
   test('assignment execution uses the Tool Profile Engine runner', () async {
     final directory =
         await Directory.systemTemp.createTemp('profile-assignment-');

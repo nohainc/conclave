@@ -102,9 +102,10 @@ Profile Lab requires the active browser account `vitalii@nohainc.com`.
 Both Wrangler configurations set `CONCLAVE_PROFILE_LAB_OWNER_EMAIL`; this exclusive
 owner policy replaces the legacy user-ID allowlists for this deployment. Browser
 approval, session claim, and subsequent Lab requests enforce the policy.
-`CONCLAVE_PROFILE_RELEASE_MODE=drafts-only` disables publication and reports that
-signing is unavailable intentionally. No release signing keys are needed for
-this development workflow. The access endpoint reports effective permissions.
+All environments support Profile publication and rollout; there is no release
+mode switch. The access endpoint reports effective permissions and signer readiness.
+Development uses independent Profile keys and desktop public trust roots; macOS
+Developer ID signing does not gate the internal lifecycle.
 
 Profile Lab builds default to `https://app.conclaveax.com`. Development builds
 can select local Cloud with
@@ -283,7 +284,41 @@ At that point the preferred topology is either:
 
 The same-origin option should be preferred for the first production release unless there is a concrete reason to separate the API hostname.
 
-In `drafts-only` development mode, the active owner account can use its existing
-browser sign-in without separate email verification. Other emails remain denied.
-Signed publication mode requires the owner email to be verified; unspecified
-release modes also retain that requirement. No verification flags are rewritten.
+The explicitly configured internal Lab owner uses its existing authenticated
+browser sign-in without a separate email-verification gate. Other emails remain
+denied, and no verification flags are rewritten. Profile publishing always requires
+matching qualification and a ready signer, regardless of desktop signing.
+
+For an existing v8 development database missing `tool_profile_local_qualification_evidence`, run `node scripts/provision-profile-qualification-evidence.mjs` and apply `.development/provision-profile-qualification.sql` to the selected D1 database. This adopts the current baseline table, index, and immutable evidence triggers without resetting Drafts or releases. Fresh databases already include these objects.
+
+Older development databases may retain the obsolete required
+`workspace_project_grants.scope` column, causing current grant creation to fail.
+The fresh v8 baseline intentionally has no grant scope or repository/path mapping
+contract. Inspect the hosted schema and dependencies, export the grant table to a
+protected local backup, then run `node scripts/align-workspace-grant-schema.mjs`
+and apply `.development/align-workspace-grant-schema.sql` once if `scope` exists
+and has no external dependencies. This removes only that obsolete column;
+grant IDs, status, permissions, assignments, indexes, and triggers remain.
+Fresh baseline databases need no alignment. Do not replay the baseline or revive
+revoked grants to fix this error.
+
+An older **empty** `worker_assignments` table may still require `worker_id`
+instead of v8 `worker_type_id`, breaking both dispatch and Work history reads.
+Export its schema with `wrangler d1 export --table worker_assignments --no-data`,
+verify the table is empty and no index or trigger depends on obsolete columns,
+then run `node scripts/align-worker-assignment-schema.mjs` and apply the generated
+`.development/align-worker-assignment-schema.sql` once. It adds the current
+required logical Worker catalog reference and removes `worker_id`, `account_id`,
+`checkout_id`, and `execution_lease_id`. It preserves the table identity, inbound
+references, and unrelated indexes. Do not use this empty-table repair on populated
+tables or rewrite failed Work Requests; operators can retry their failed Step.
+Fresh v8 baseline databases require no repair or compatibility migration.
+
+If an older hosted `realtime_events` table lacks `workspace_runtime_id`, live
+event publication fails before WebSocket delivery. Run
+`node scripts/align-realtime-event-schema.mjs` and apply the generated SQL once
+after confirming the column is missing. This adds the current nullable field
+and preserves all events and indexes; new baseline databases already include it.
+Workspace HTTP delivery persists queued messages before reporting dispatch
+success. Unacknowledged assignments fail after 30 seconds; acknowledged provider
+execution retains its Step deadline.

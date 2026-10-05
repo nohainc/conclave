@@ -837,7 +837,7 @@ export class WorkspaceGateway implements DurableObject {
             )
             .run();
         }
-        this.send({
+        await this.send({
           protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
           protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
           messageId: `message-${crypto.randomUUID()}`,
@@ -876,7 +876,7 @@ export class WorkspaceGateway implements DurableObject {
             },
           );
         }
-        this.send({
+        await this.send({
           protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
           protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
           messageId: `message-${crypto.randomUUID()}`,
@@ -1018,7 +1018,7 @@ export class WorkspaceGateway implements DurableObject {
     )
       .bind(workspaceId)
       .all<Record<string, unknown>>();
-    this.send({
+    await this.send({
       protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
       protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
       messageId: `message-${crypto.randomUUID()}`,
@@ -1096,7 +1096,7 @@ export class WorkspaceGateway implements DurableObject {
         { status: 400 },
       );
     }
-    this.send({ ...assignmentMessage });
+    await this.send({ ...assignmentMessage });
     return Response.json({ delivered: true });
   }
 
@@ -1124,7 +1124,7 @@ export class WorkspaceGateway implements DurableObject {
         this.pendingCancelAcks.set(assignmentId, { resolve, timer });
       },
     );
-    this.send({
+    await this.send({
       protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
       protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
       messageId: `message-${crypto.randomUUID()}`,
@@ -1154,7 +1154,7 @@ export class WorkspaceGateway implements DurableObject {
     }
   }
 
-  private send(message: Record<string, unknown>): void {
+  private async send(message: Record<string, unknown>): Promise<void> {
     const serialized = serializeWorkspaceRuntimeMessage(message as never);
     if (this.socket) {
       this.socket.send(serialized);
@@ -1173,7 +1173,7 @@ export class WorkspaceGateway implements DurableObject {
         message: JSON.parse(serialized),
       },
     });
-    void this.persistHttpRuntime();
+    await this.persistHttpRuntime();
     this.httpWaiter?.();
     this.httpWaiter = null;
   }

@@ -151,7 +151,6 @@ export type SecurityEnv = Env & {
   /** Comma-separated user IDs permitted to administer catalog entries and drafts. */
   readonly CONCLAVE_PROFILE_ADMIN_USER_IDS?: string;
   readonly CONCLAVE_PROFILE_LAB_OWNER_EMAIL?: string;
-  readonly CONCLAVE_PROFILE_RELEASE_MODE?: string;
   readonly CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS?: string;
   readonly CONCLAVE_RELEASE_TRUST_KEYS_JSON?: string;
   readonly CONCLAVE_RELEASE_PUBLISHER?: string;

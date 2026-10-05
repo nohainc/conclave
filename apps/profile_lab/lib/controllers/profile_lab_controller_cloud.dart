@@ -439,6 +439,17 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     if (selectedDefinitionId == null || currentDraft == null) return;
     try {
       final draft = currentDraft!;
+      if (!canPublish) {
+        throw StateError(
+            'Release Manager access and a ready Cloud signer are required.');
+      }
+      if (isDirty ||
+          cloudDraftExists != true ||
+          cloudDraftVersion != draft.releaseVersion ||
+          cloudDigest != draft.payloadDigest) {
+        throw StateError(
+            'Save and sync this exact Draft to Cloud before publishing.');
+      }
       Map<String, Object?>? localQualification;
       for (final item in currentEvidence) {
         if (ToolProfileAcceptanceEvidence.hasCloudContractShape(

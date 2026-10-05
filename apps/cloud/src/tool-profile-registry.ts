@@ -1158,26 +1158,33 @@ export async function resolveToolProfileChannels(
       published_at: string;
     }>();
   return {
-    profiles: (rows.results ?? []).map((row) => ({
-      profileDefinitionId: row.profile_definition_id,
-      workerTypeId: row.worker_type_id,
-      displayName: row.display_name,
-      providerToolName: row.provider_tool_name,
-      channel: row.channel,
-      releaseVersion: row.release_version,
-      profile: JSON.parse(row.payload_json),
-      payloadDigest: row.payload_digest,
-      signature: row.signature,
-      signingKeyId: row.signing_key_id,
-      publisher: row.publisher,
-      schemaVersion: row.schema_version,
-      engineFamily: row.engine_family,
-      engineCompatibility: {
-        min: row.engine_compatibility_min,
-        maxExclusive: row.engine_compatibility_max_exclusive,
-      },
-      publishedAt: row.published_at,
-    })),
+    profiles: (rows.results ?? []).map((row) => {
+      const profile = JSON.parse(row.payload_json);
+      const { profile: validatedProfile } = parseProfile(profile, {
+        profileDefinitionId: row.profile_definition_id,
+        releaseVersion: row.release_version,
+      });
+      return {
+        profileDefinitionId: row.profile_definition_id,
+        workerTypeId: row.worker_type_id,
+        displayName: row.display_name,
+        providerToolName: validatedProfile.providerTool.name,
+        channel: row.channel,
+        releaseVersion: row.release_version,
+        profile,
+        payloadDigest: row.payload_digest,
+        signature: row.signature,
+        signingKeyId: row.signing_key_id,
+        publisher: row.publisher,
+        schemaVersion: row.schema_version,
+        engineFamily: row.engine_family,
+        engineCompatibility: {
+          min: row.engine_compatibility_min,
+          maxExclusive: row.engine_compatibility_max_exclusive,
+        },
+        publishedAt: row.published_at,
+      };
+    }),
   };
 }
 

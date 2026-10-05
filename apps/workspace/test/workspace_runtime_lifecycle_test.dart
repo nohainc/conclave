@@ -11,6 +11,7 @@ import 'package:conclave_workspace/workspace_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_workspace/main.dart';
+import 'package:conclave_workspace/workspace_runtime.dart';
 
 class _SilentWorkspaceSocket implements WorkspaceTransport {
   final _messages = StreamController<Object?>.broadcast();
@@ -26,6 +27,28 @@ class _SilentWorkspaceSocket implements WorkspaceTransport {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  test('runtime readiness uses the same catalog as Profile downloads',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('runtime-readiness-wiring-');
+    final runtime = await buildWorkspaceRuntime(WorkspaceConfig(
+      dataDirectory: directory,
+      cloudUri: Uri.parse('https://cloud.example.test'),
+      workspaceRuntimeId: 'runtime-test',
+      workspaceId: 'workspace-test',
+      authToken: 'test-only-credential',
+      workRootPath: '${directory.path}/Work',
+    ));
+    try {
+      expect(runtime.workerCatalogCoordinator, isNotNull);
+      expect(runtime.workerReadinessMonitor?.workerCatalogCoordinator,
+          same(runtime.workerCatalogCoordinator));
+    } finally {
+      await runtime.stop();
+      await directory.delete(recursive: true);
+    }
+  });
   test(
       'intentional disconnect keeps registration but suppresses runtime config',
       () async {

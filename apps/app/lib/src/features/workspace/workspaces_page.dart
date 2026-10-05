@@ -307,14 +307,27 @@ class _WorkerRowState extends State<_WorkerRow> {
   @override
   Widget build(BuildContext context) {
     final worker = widget.worker;
-    final readiness = _readinessLabel(worker.status);
+    final readiness = worker.activationState == 'disabled'
+        ? 'Disabled locally'
+        : switch (worker.readinessState) {
+            'ready' => 'Ready locally',
+            'not_probed' => 'Not checked yet',
+            'sign_in_required' => 'Provider sign-in required',
+            'worker_runtime_unavailable' =>
+              worker.attentionReasonCode == 'tool_profile_unavailable'
+                  ? 'Profile unavailable'
+                  : 'Runtime unavailable',
+            'setup_required' => 'Setup required',
+            'test_failed' => 'Provider test failed',
+            _ => _readinessLabel(worker.status),
+          };
     return Column(
       children: [
         ListTile(
           key: Key('workspace-worker-row-${worker.id}'),
           contentPadding: EdgeInsets.zero,
           onTap: () => setState(() => _showDiagnostics = !_showDiagnostics),
-          leading: Icon(worker.status == 'ready'
+          leading: Icon(worker.isReady
               ? Icons.check_circle_outline
               : Icons.warning_amber),
           title: Text(worker.displayName),

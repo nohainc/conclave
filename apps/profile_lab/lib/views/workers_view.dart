@@ -217,14 +217,16 @@ class _WorkersViewState extends State<WorkersView> {
                     pTool.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                        content: Text('Please fill out all required fields.')),
+                        content: CopyableMessage(
+                            'Please fill out all required fields.')),
                   );
                   return;
                 }
                 if (caps.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                        content: Text('Select at least one capability.')),
+                        content:
+                            CopyableMessage('Select at least one capability.')),
                   );
                   return;
                 }
@@ -251,7 +253,9 @@ class _WorkersViewState extends State<WorkersView> {
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to create Worker: $e')),
+                      SnackBar(
+                          content:
+                              CopyableMessage('Failed to create Worker: $e')),
                     );
                   }
                 }
@@ -597,7 +601,8 @@ class _WorkerDetailsPane extends StatelessWidget {
                   } catch (error) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text('Could not create draft: $error')));
+                          content: CopyableMessage(
+                              'Could not create draft: $error')));
                     }
                   }
                 } else if (nextAction.area != LabArea.workers) {
@@ -616,31 +621,21 @@ class _WorkerDetailsPane extends StatelessWidget {
                 isDone: workerState.lastTestResult == 'pass',
                 isActive:
                     workerState.status == WorkerLifecycleStatus.testRequired),
-            LabLifecycleStep(
-                controller.labAccess?.draftsOnly == true
-                    ? 'Cloud Draft'
-                    : 'Sync',
+            LabLifecycleStep('Sync',
                 isDone: controller.currentDraft != null &&
                     controller.cloudDigest ==
                         controller.currentDraft!.payloadDigest &&
                     controller.cloudDraftVersion ==
                         controller.currentDraft!.releaseVersion &&
                     !workerState.isDraftDirty),
-            if (controller.labAccess?.draftsOnly != true) ...[
-              LabLifecycleStep('Publish',
-                  isDone: controller.cloudReleases
-                      .any((r) => r['lifecycleState'] != 'draft'),
-                  isActive:
-                      workerState.status == WorkerLifecycleStatus.testsPassed),
-              LabLifecycleStep('Rollout',
-                  isDone: workerState.stableVersion != 'None')
-            ]
+            LabLifecycleStep('Publish',
+                isDone: controller.cloudReleases
+                    .any((r) => r['lifecycleState'] != 'draft'),
+                isActive:
+                    workerState.status == WorkerLifecycleStatus.testsPassed),
+            LabLifecycleStep('Rollout',
+                isDone: workerState.stableVersion != 'None')
           ]),
-          if (controller.labAccess?.draftsOnly == true)
-            const Padding(
-                padding: EdgeInsets.all(12),
-                child:
-                    Text('Development mode — signed publishing is disabled')),
           const SizedBox(height: 20),
 
           // Active Channel Pointers

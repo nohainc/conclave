@@ -246,6 +246,14 @@ extension _WorkstreamActions on _WorkstreamPageState {
       }
     } finally {
       _refreshingWorkTimeline = false;
+      _workRefreshTimer?.cancel();
+      if (mounted &&
+          _workTimeline.any((request) => const {'queued', 'running', 'waiting'}
+              .contains(request.status))) {
+        _workRefreshTimer = Timer(const Duration(seconds: 5), () {
+          if (mounted) unawaited(_refreshWorkTimeline(activeOnly: true));
+        });
+      }
       if (_workTimelineRefreshPending && mounted) {
         _workTimelineRefreshPending = false;
         unawaited(_refreshWorkTimeline(activeOnly: activeOnly));

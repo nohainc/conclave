@@ -3,11 +3,12 @@
   "private": true,
   "packageManager": "pnpm@11.19.0",
   "scripts": {
+    "test:assignment-schema": "vitest run scripts/align-worker-assignment-schema.test.mjs",
     "build": "tsc -p packages/protocol/tsconfig.json && tsc -p packages/workspace-runtime-protocol/tsconfig.json && tsc -p packages/security/tsconfig.json && tsc -p packages/core/tsconfig.json && tsc -p packages/tool-profile/tsconfig.json && tsc -p apps/cloud/tsconfig.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "test": "vitest run packages/protocol/test packages/workspace-runtime-protocol/test packages/security/test packages/core/test packages/tool-profile/test apps/cloud/test scripts/verify-v8-architecture.test.mjs scripts/production-workspace-gateway-smoke.test.mjs",
+    "test": "vitest run packages/protocol/test packages/workspace-runtime-protocol/test packages/security/test packages/core/test packages/tool-profile/test apps/cloud/test scripts/verify-v8-architecture.test.mjs scripts/production-workspace-gateway-smoke.test.mjs scripts/setup-development-profile-signing.test.mjs scripts/provision-profile-starter-templates.test.mjs scripts/provision-profile-qualification-evidence.test.mjs scripts/resolve-build-profile-trust.test.mjs scripts/align-workspace-grant-schema.test.mjs",
     "workspace:build": "bash scripts/build-workspace.sh",
     "workspace:build:macos": "bash scripts/build-workspace-macos.sh",
     "workspace:test:macos": "bash scripts/test-workspace-macos.sh",

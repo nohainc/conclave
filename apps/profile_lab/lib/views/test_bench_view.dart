@@ -18,8 +18,8 @@ class TestBenchView extends StatelessWidget {
       await action();
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not complete action: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: CopyableMessage('Could not complete action: $error')));
       }
     }
   }
@@ -199,22 +199,42 @@ class TestBenchView extends StatelessWidget {
                             failed.isEmpty)
                           Text(c.testStatusMessage ?? 'Full test failed.'),
                       ]))),
-          if (c.labAccess?.draftsOnly == true)
-            const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child:
-                    Text('Development mode — signed publishing is disabled')),
-          if (qualified && c.labAccess?.draftsOnly != true)
+          if (qualified && !c.canPublish)
+            Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(c.labAccess?.releaseManager != true
+                    ? 'Release Manager access is required to publish.'
+                    : 'Cloud Profile signing is not ready. Configure the signer and refresh access.')),
+          if (qualified &&
+              c.cloudReleaseLifecycleState != null &&
+              c.cloudReleaseLifecycleState != 'draft')
+            Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                    icon: const Icon(Icons.arrow_forward, size: 16),
+                    label: const Text('View Releases'),
+                    onPressed: () =>
+                        c.setWorkerSubView(WorkerSubView.releases))),
+          if (qualified &&
+              (c.cloudReleaseLifecycleState == null ||
+                  c.cloudReleaseLifecycleState == 'draft'))
             Align(
                 alignment: Alignment.centerLeft,
                 child: OutlinedButton.icon(
                     icon: const Icon(Icons.verified_outlined, size: 16),
-                    label: Text(c.isPublishing
-                        ? 'Publishing…'
-                        : 'Qualify, Publish & Sign'),
-                    onPressed: !c.canPublish || busy
+                    label: Text(
+                        c.isPublishing ? 'Publishing…' : 'Publish to Testing'),
+                    onPressed: !c.canPublish ||
+                            busy ||
+                            c.cloudDraftExists != true ||
+                            c.cloudDigest != draft.payloadDigest ||
+                            c.isDirty
                         ? null
                         : () => _perform(context, c.publishCurrentDraft))),
+          if (qualified && c.canPublish && c.cloudReleaseLifecycleState == null)
+            const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('Sync this Draft to Cloud before publishing.')),
           if (completed && c.lastTestResult == 'fail') ...[
             for (final item in failed)
               _StageResult(
@@ -247,7 +267,16 @@ class TestBenchView extends StatelessWidget {
         const SizedBox(height: 12),
         ExpansionTile(
             key: ValueKey('execution-details-${draft.payloadDigest}'),
-            title: const Text('Execution details'),
+            title: Row(children: [
+              const Expanded(child: Text('Execution details')),
+              if (c.testResultMatchesDraft && c.testLogs.isNotEmpty)
+                CopyMessageButton(
+                    tooltip: 'Copy execution details',
+                    message: c.testLogs
+                        .map((log) =>
+                            '${log.timestamp.toIso8601String()} ${log.level.toUpperCase()} · ${log.message}')
+                        .join('\n'))
+            ]),
             subtitle: Text(
                 '${c.testResultMatchesDraft ? c.testLogs.length : 0} streamed events'),
             children: [
@@ -263,7 +292,7 @@ class TestBenchView extends StatelessWidget {
                             return Padding(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 12, vertical: 3),
-                                child: SelectableText(
+                                child: CopyableMessage(
                                     '${log.timestamp.toIso8601String().substring(11, 19)} ${log.level.toUpperCase()} · ${log.message}',
                                     style: ProfileLabTheme.monoStyle.copyWith(
                                         color: log.level == 'error'
@@ -369,7 +398,9 @@ class _StageResult extends StatelessWidget {
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('${stage.displayName} · ${stage.status}',
               style: const TextStyle(fontWeight: FontWeight.w600)),
-          Text(stage.diagnostics, style: const TextStyle(fontSize: 12)),
+          CopyableMessage(
+              '${stage.displayName} · ${stage.status}\n${stage.diagnostics}',
+              style: const TextStyle(fontSize: 12)),
           if (actions.isNotEmpty)
             Wrap(spacing: 8, runSpacing: 4, children: actions),
         ])),

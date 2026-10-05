@@ -585,6 +585,9 @@ describe("Workspace runtime Gateway", () => {
       }),
     );
     await helloAck;
+    // Message handling awaits durable outbound delivery before logging the ack.
+    await Promise.resolve();
+    await Promise.resolve();
     const records = logs.map(
       (record) =>
         JSON.parse(record) as {

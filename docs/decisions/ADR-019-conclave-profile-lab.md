@@ -1,5 +1,13 @@
 # ADR-019: Conclave Profile Lab Architecture Contract
 
+**Development lifecycle update (2026-10-05):** All environments expose the complete
+Profile release lifecycle. Desktop app signing is independent of Profile signing.
+The development-only publication mode gate is removed; development uses separate
+Profile keys and public roots while retaining qualification and signature checks.
+An explicitly configured internal Lab owner uses its existing authenticated browser
+identity without a separate email-verification requirement. Owner exclusivity,
+audience separation, credential rotation, and revocation remain enforced.
+
 **Status:** Accepted for implementation  
 **Date:** 2026-10-03  
 **Decision:** Dedicated internal macOS engineering application (`apps/profile_lab`) for the authoring, inspection, testing, validation, release, promotion, rollback, and revocation of Conclave Worker Tool Profiles.  

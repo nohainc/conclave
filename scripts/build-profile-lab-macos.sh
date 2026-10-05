@@ -85,6 +85,7 @@ if [[ -z "$VERSION" ]]; then
   exit 1
 fi
 
+PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-profile-trust.mjs")"
 echo "Building Conclave Profile Lab $VERSION for macOS (mode: $MODE)"
 cd "$PROFILE_LAB_DIR"
 flutter clean
@@ -94,12 +95,12 @@ bash "$ROOT/scripts/build-cli-worker-engine.sh"
 if [[ "$MODE" == "debug" ]]; then
   flutter build macos --debug \
     --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION" \
-    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}"
+    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="$PUBLIC_RELEASE_ROOTS"
   APP="$PROFILE_LAB_DIR/build/macos/Build/Products/Debug/Conclave Profile Lab.app"
 else
   flutter build macos --release \
     --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION" \
-    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="${CONCLAVE_RELEASE_TRUST_KEYS_JSON:-{}}"
+    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="$PUBLIC_RELEASE_ROOTS"
   APP="$PROFILE_LAB_DIR/build/macos/Build/Products/Release/Conclave Profile Lab.app"
 fi
 

@@ -573,6 +573,7 @@ extension _AxAppController on _AxAppStateMixin {
     }
     unawaited(realtimeClient.setScopes(
       projectId: selectedProjectId,
+      workstreamId: navigation.workstreamId,
       runId: navigation.runId,
       executionWorkspaceId: workspaceId,
     ));
@@ -762,6 +763,7 @@ extension _AxAppController on _AxAppStateMixin {
     }
     unawaited(realtimeClient.setScopes(
       projectId: next.projectId ?? selectedProjectId,
+      workstreamId: next.workstreamId,
       runId: next.runId,
       executionWorkspaceId: executionWorkspaceId,
     ));
@@ -815,21 +817,41 @@ extension _AxAppController on _AxAppStateMixin {
       return;
     }
     String? selectedProjectId = snapshot.projects.first.id;
+    final permissions = <String>{};
     final projectId = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Grant Workspace to Project'),
-          content: DropdownButtonFormField<String>(
-            initialValue: selectedProjectId,
-            decoration: const InputDecoration(labelText: 'Project'),
-            items: snapshot.projects
-                .map((project) => DropdownMenuItem(
-                    value: project.id, child: Text(project.name)))
-                .toList(),
-            onChanged: (value) =>
-                setDialogState(() => selectedProjectId = value),
-          ),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            DropdownButtonFormField<String>(
+              initialValue: selectedProjectId,
+              decoration: const InputDecoration(labelText: 'Project'),
+              items: snapshot.projects
+                  .map((project) => DropdownMenuItem(
+                      value: project.id, child: Text(project.name)))
+                  .toList(),
+              onChanged: (value) =>
+                  setDialogState(() => selectedProjectId = value),
+            ),
+            const Text(
+                'Direct needs repository read and write access. Test steps also need command execution.'),
+            for (final entry in const {
+              'repository:read': 'Read repository files',
+              'repository:write': 'Change repository files',
+              'shell:execute': 'Execute commands and tests',
+            }.entries)
+              CheckboxListTile(
+                  title: Text(entry.value),
+                  value: permissions.contains(entry.key),
+                  onChanged: (value) => setDialogState(() {
+                        if (value == true) {
+                          permissions.add(entry.key);
+                        } else {
+                          permissions.remove(entry.key);
+                        }
+                      })),
+          ]),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
@@ -850,6 +872,7 @@ extension _AxAppController on _AxAppStateMixin {
       await widget.dataSource.requestProjectWorkspace(
         projectId: projectId,
         workspaceId: workspace.id,
+        allowedPermissions: permissions.toList(),
       );
       await _refreshWorkspaceProjectGrantCounts();
       if (mounted) _showSnackBar('Workspace access request sent.');

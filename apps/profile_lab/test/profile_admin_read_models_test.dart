@@ -6,13 +6,15 @@ void main() {
     test('access diagnostics separate permission from signer readiness', () {
       final access = ProfileLabAccessReadModel.fromJson({
         'permissions': {'profilesAdmin': true, 'releaseManager': true},
-        'releaseMode': 'drafts-only',
-        'signer': {'ready': false}
+        'signer': {
+          'ready': false,
+          'issues': ['private_key_missing']
+        }
       });
       expect(access.profilesAdmin, isTrue);
       expect(access.releaseManager, isTrue);
       expect(access.signerReady, isFalse);
-      expect(access.draftsOnly, isTrue);
+      expect(access.signerIssues, ['private_key_missing']);
       expect(ProfileLabAccessReadModel.fromJson({}).profilesAdmin, isFalse);
     });
     test('release exposes lifecycle identity and preserves open Profile data',

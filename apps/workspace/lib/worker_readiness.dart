@@ -421,6 +421,9 @@ class WorkerReadinessMonitor {
         workerTypeId: worker.workerTypeId,
         engineVersion: cliWorkerEngineVersion,
         providerCliVersion: worker.toolVersion,
+        // Catalog refresh invokes readiness after downloading Profiles. Never
+        // wait on that refresh from a readiness check: it may be waiting on us.
+        synchronizeIfUnavailable: false,
       );
       profileChannel =
           (await store.releaseState(profileDefinitionId)).selectedChannel;
@@ -551,6 +554,7 @@ class WorkerReadinessMonitor {
               profileDefinitionId: profileDefinitionId,
               engineVersion: cliWorkerEngineVersion,
               providerCliVersion: passiveCandidate.providerToolVersion,
+              channel: profileChannel,
             )) {
           probe = passiveCandidate;
           passivePreflightFailed = true;

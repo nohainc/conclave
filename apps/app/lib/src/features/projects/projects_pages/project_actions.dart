@@ -119,15 +119,78 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
       ),
     );
     if (accepted != true) return;
+    final permissions = await _chooseWorkspaceAccess(const []);
+    if (permissions == null) return;
     try {
       await widget.dataSource.requestProjectWorkspace(
         projectId: widget.project.id,
         workspaceId: selectedId,
+        allowedPermissions: permissions,
       );
       await _loadExecution();
       _message('Workspace connected to this Project.');
     } catch (error) {
       _message(error.toString());
+    }
+  }
+
+  Future<List<String>?> _chooseWorkspaceAccess(List<String> current) async {
+    final selected = current.toSet();
+    return showDialog<List<String>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+          builder: (context, update) => AlertDialog(
+                title: const Text('Workspace access'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Text(
+                      'Choose what Workers may do in this Project. Direct needs repository read and write access. Test steps also need command execution.'),
+                  for (final entry in const {
+                    'repository:read': 'Read repository files',
+                    'repository:write': 'Change repository files',
+                    'shell:execute': 'Execute commands and tests',
+                  }.entries)
+                    CheckboxListTile(
+                      title: Text(entry.value),
+                      value: selected.contains(entry.key),
+                      onChanged: (value) => update(() {
+                        if (value == true) {
+                          selected.add(entry.key);
+                        } else {
+                          selected.remove(entry.key);
+                        }
+                      }),
+                    ),
+                ]),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: const Text('Cancel')),
+                  FilledButton(
+                      onPressed: () =>
+                          Navigator.pop(dialogContext, selected.toList()),
+                      child: const Text('Confirm access')),
+                ],
+              )),
+    );
+  }
+
+  Future<void> _editWorkspaceAccess(Map<String, dynamic> workspace) async {
+    final permissions = await _chooseWorkspaceAccess(
+        (workspace['allowedPermissions'] as List? ?? const [])
+            .whereType<String>()
+            .toList());
+    if (permissions == null) return;
+    try {
+      await widget.dataSource.updateWorkspaceProjectPermissions(
+        grantId: (workspace['id'] ?? workspace['grantId']).toString(),
+        allowedPermissions: permissions,
+      );
+      await _loadExecution();
+      if (mounted) {
+        _message('Workspace access updated. Return to the chat and run again.');
+      }
+    } catch (error) {
+      if (mounted) _message(error.toString());
     }
   }
 

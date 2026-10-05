@@ -1,5 +1,14 @@
 # Conclave Workspace
 
+Development launchers now exercise signed Cloud Profile releases by default,
+with public roots matching the independent development signer. Start
+`bash scripts/run-workspace-development.sh` for localhost, or set
+`CONCLAVE_DEVELOPMENT_CLOUD_URL=https://app.conclaveax.com` for the provisioned
+hosted development deployment. Assign the Workspace to Testing in Profile Lab
+after publishing the qualified Draft. Desktop signing does not change this flow.
+The unsigned Draft shortcut remains an explicit, non-release, loopback-only opt-in
+through `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY`; it does not test Cloud rollout.
+
 Conclave Workspace is the machine-side execution and security runtime.
 
 It maintains the Cloud connection, owns the local Work Root, creates/resolves
@@ -59,8 +68,10 @@ Optional environment:
 - `CONCLAVE_MACOS_SIGN_IDENTITY` — Developer ID Application identity;
 - `CONCLAVE_MACOS_NOTARY_PROFILE` — `notarytool` keychain profile;
 - `CONCLAVE_WORKSPACE_VERSION` — override build version.
-- `CONCLAVE_RELEASE_TRUST_KEYS_JSON` — public Ed25519 roots; an empty value
-  intentionally trusts no release signer.
+- `CONCLAVE_RELEASE_TRUST_KEYS_JSON` — explicit public Ed25519 roots. Unsigned
+  builds otherwise reuse `.development/hosted-profile-trust.json`. Missing,
+  empty, or invalid roots fail the build; Developer ID signed builds require
+  explicit roots and never automatically adopt development keys.
 
 The output ZIP is written under `dist/conclave-workspace/macos`.
 

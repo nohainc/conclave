@@ -201,9 +201,11 @@ class ProfileLabAccessReadModel {
         releaseManager =
             (json['permissions'] as Map?)?['releaseManager'] == true,
         signerReady = (json['signer'] as Map?)?['ready'] == true,
-        draftsOnly = json['releaseMode'] == 'drafts-only';
+        signerIssues = List<String>.unmodifiable(
+            ((json['signer'] as Map?)?['issues'] as List? ?? const [])
+                .whereType<String>());
   final bool profilesAdmin;
   final bool releaseManager;
   final bool signerReady;
-  final bool draftsOnly;
+  final List<String> signerIssues;
 }

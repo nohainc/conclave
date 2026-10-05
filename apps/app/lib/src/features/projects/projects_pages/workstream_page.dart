@@ -49,6 +49,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   String? _workTimelineError;
   String? _workSubmitError;
   StreamSubscription<Map<String, dynamic>>? _workEventSubscription;
+  Timer? _workRefreshTimer;
   bool _submittingWork = false;
   List<Map<String, dynamic>> _workAttachments = [];
   List<AxWorker> _projectWorkers = const [];
@@ -61,10 +62,17 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 3,
-      initialIndex: widget.initialTab.clamp(0, 2),
+      length: 2,
+      initialIndex: widget.initialTab == 2 ? 1 : widget.initialTab.clamp(0, 1),
       vsync: this,
     );
+    if (widget.initialTab == 2) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _openWorkSettings(context);
+        }
+      });
+    }
     _workConfig = Map<String, dynamic>.from(widget.workstream.workConfig);
     _workstreamInstructionsController = TextEditingController(
       text: _workConfig['workstreamInstructions']?.toString() ?? '',
@@ -188,7 +196,16 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   void didUpdateWidget(WorkstreamPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialTab != widget.initialTab) {
-      _tabController.animateTo(widget.initialTab.clamp(0, 2));
+      final targetIndex =
+          widget.initialTab == 2 ? 1 : widget.initialTab.clamp(0, 1);
+      _tabController.animateTo(targetIndex);
+      if (widget.initialTab == 2) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _openWorkSettings(context);
+          }
+        });
+      }
     }
     if (oldWidget.workstream.workConfig != widget.workstream.workConfig) {
       _workConfig = Map<String, dynamic>.from(widget.workstream.workConfig);
@@ -207,6 +224,10 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   void _subscribeToWorkEvents() {
     _workEventSubscription = widget.realtimeEvents?.listen((event) {
       final type = event['type'];
+      if (type == 'realtime.connection' && event['status'] == 'connected') {
+        unawaited(_refreshWorkTimeline());
+        return;
+      }
       if (type == 'reconnect.required') {
         unawaited(_refreshWorkTimeline());
         return;
@@ -230,6 +251,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
 
   @override
   void dispose() {
+    _workRefreshTimer?.cancel();
     _workEventSubscription?.cancel();
     _tabController.dispose();
     _requestController.dispose();
@@ -254,7 +276,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                 tabs: const [
                   Tab(text: 'Discuss'),
                   Tab(text: 'Work'),
-                  Tab(text: 'Work settings'),
                 ],
               ),
             ),
@@ -263,7 +284,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
               _discuss(context)
             else if (_tabController.index == 1)
               _work(context),
-            if (_tabController.index == 2) _workConfigView(),
           ],
         ),
       );
@@ -346,6 +366,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         loadingWorkflows: _loadingWorkflows,
         workflowCatalogError: _workflowCatalogError,
         canExecute: _canExecute,
+        canConfigureWork: _canConfigureWork,
         workTimeline: _workTimeline,
         loadingTimeline: _loadingWorkTimeline,
         timelineError: _workTimelineError,
@@ -363,6 +384,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         onCancelRun:
             widget.dataSource == null ? null : _cancelFailedWorkRequest,
         onWorkflowChanged: (value) => setState(() => _workflow = value),
+        onOpenSettings: () => _openWorkSettings(context),
         onRun: _runWork,
       );
 }

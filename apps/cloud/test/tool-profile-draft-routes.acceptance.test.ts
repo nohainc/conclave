@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { DESKTOP_PROFILE_LAB_AUDIENCE } from "@conclave/security";
 import { routeHandlers } from "../src/index.js";
 import { generateEd25519ReleaseKeyPair } from "../src/release-trust.js";
+import { resolveToolProfileChannels } from "../src/tool-profile-registry.js";
 import {
   errorMessage,
   HttpError,
@@ -318,11 +319,10 @@ async function createSaveQualifyAndPublishV1(
 }
 
 describe("Tool Profile Cloud draft route acceptance", () => {
-  it("grants only the configured owner development access without email verification and keeps signing disabled", async () => {
+  it("grants only the configured owner access and supports the full development signing lifecycle", async () => {
     const db = new SqliteD1();
     const env = Object.assign(makeEnv(db), {
       CONCLAVE_PROFILE_LAB_OWNER_EMAIL: "vitalii@nohainc.com",
-      CONCLAVE_PROFILE_RELEASE_MODE: "drafts-only",
     });
     try {
       // Existing ID allowlists must not override the exclusive owner policy.
@@ -341,10 +341,10 @@ describe("Tool Profile Cloud draft route acceptance", () => {
         profilesAdmin: true,
         releaseManager: true,
       });
-      expect(access.releaseMode).toBe("drafts-only");
+      expect(access).not.toHaveProperty("releaseMode");
       expect(access.signer).toEqual({
-        ready: false,
-        issues: ["publication_disabled_for_development"],
+        ready: true,
+        issues: [],
       });
       await assertOk(env, "GET", "/api/admin/workers/catalog");
       const preflight = await assertOk(
@@ -352,22 +352,18 @@ describe("Tool Profile Cloud draft route acceptance", () => {
         "GET",
         "/api/admin/tool-profiles/signing-preflight",
       );
-      expect(preflight.ready).toBe(false);
-      const publish = await send(
+      expect(preflight.ready).toBe(true);
+      await createWorker(env, "development-worker", "development-profile");
+      await createSaveQualifyAndPublishV1(
         env,
-        "POST",
-        "/api/admin/tool-profiles/chatgpt-codex/releases/1/publish",
-        { qualificationEvidenceId: "not-used" },
-      );
-      expect(publish.response.status).toBe(409);
-      expect(JSON.stringify(publish.json)).toContain(
-        "disabled during development",
+        "development-profile",
+        "development-worker",
       );
       expect(
         db.sqlite
           .prepare("SELECT COUNT(*) AS count FROM tool_profile_releases")
           .get()?.count,
-      ).toBe(0);
+      ).toBe(1);
     } finally {
       db.close();
     }
@@ -463,6 +459,23 @@ describe("Tool Profile Cloud draft route acceptance", () => {
       );
       expect(release.lifecycleState).toBe("testing");
       expect(release.signature).toEqual(expect.any(String));
+      db.sqlite
+        .prepare(
+          `INSERT INTO tool_profile_channel_pointers
+        (profile_definition_id, channel, release_version, modified_by_user_id, updated_at)
+        VALUES ('route-fixture-profile', 'testing', 1, 'profile-lab-operator', ?)`,
+        )
+        .run(new Date().toISOString());
+      const resolved = await resolveToolProfileChannels(
+        db as unknown as D1Database,
+        "route-fixture-worker",
+        "testing",
+      );
+      expect(resolved.profiles).toHaveLength(1);
+      const downloaded = resolved.profiles[0]!;
+      const payload = downloaded.profile as { providerTool: { name: string } };
+      expect(downloaded.providerToolName).toBe(payload.providerTool.name);
+      expect(downloaded.providerToolName).toBe("Fixture CLI");
     } finally {
       db.close();
     }

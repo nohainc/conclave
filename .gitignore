@@ -1,10 +1,12 @@
 node_modules/
+.DS_Store
 .pnpm-store/
 dist/
 coverage/
 *.cpuprofile
 .wrangler/
 .dev.vars
+.development/
 .env
 .env.*
 !.env.example

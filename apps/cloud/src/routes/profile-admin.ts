@@ -109,23 +109,16 @@ export async function handleProfileLabAccess(
     actor,
     "profiles:release:manage",
   );
-  const draftsOnly = env.CONCLAVE_PROFILE_RELEASE_MODE === "drafts-only";
-  const signer =
-    profilesAdmin && !draftsOnly
-      ? await toolProfileSigningPreflight(env)
-      : null;
+  const signer = profilesAdmin ? await toolProfileSigningPreflight(env) : null;
   return new Response(
     JSON.stringify({
       schemaVersion: 1,
       authenticated: true,
       audience: actor.audience ?? null,
       permissions: { profilesAdmin, releaseManager },
-      releaseMode: draftsOnly ? "drafts-only" : "signed",
       signer: {
         ready: signer?.ready ?? false,
-        issues: draftsOnly
-          ? ["publication_disabled_for_development"]
-          : (signer?.issues ?? []),
+        issues: signer?.issues ?? [],
       },
     }),
     {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
+import { handleGetReleaseTrustState } from "../src/routes/releases.js";
 import {
   routeWorkerRequest,
   type WorkerRouteDependencies,
@@ -147,6 +148,26 @@ describe("Worker API routes", () => {
     );
     expect(trust.status).toBe(200);
     expect(handlers.handleGetReleaseTrustState).toHaveBeenCalledOnce();
+  });
+
+  it("passes database environment to the actual release trust handler", async () => {
+    const prepare = vi.fn(() => ({ all: async () => ({ results: [] }) }));
+    const response = await routeWorkerRequest(
+      request("/api/release-trust"),
+      { CONCLAVE_DB: { prepare } } as unknown as Parameters<
+        typeof routeWorkerRequest
+      >[1],
+      undefined,
+      { handleGetReleaseTrustState } as unknown as WorkerRouteHandlers,
+      dependencies,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      revokedKeyIds: [],
+      revokedWorkspaceReleases: [],
+      revokedToolProfiles: [],
+    });
+    expect(prepare).toHaveBeenCalledTimes(3);
   });
 
   it("routes the Profile signing preflight", async () => {

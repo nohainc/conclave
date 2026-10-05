@@ -27,11 +27,9 @@ Choose **Sync to Cloud** once local edits are saved. Confirm **Synced to Cloud**
 
 ## Publish and promote
 
-In `drafts-only` mode, **Development mode — signed publishing is disabled** is explicit. The lifecycle ends at Cloud Draft. Stop here; local tests and sync remain available.
+Development follows the same complete lifecycle as customer environments. Desktop signing does not restrict publication; use a separate development Profile signer and build Workspace with its matching public roots.
 
-In publishing mode:
-
-1. Choose **Qualify, Publish & Sign** for the saved, qualified Draft. Profile Lab submits the exact local qualification; Cloud stores it and requires its immutable ID to sign the matching payload. Publication produces a Testing release.
+1. Choose **Publish to Testing** for the saved, qualified, synced Draft. Profile Lab submits the exact local qualification; Cloud stores it and requires its immutable ID to sign the matching payload. Publication produces a Testing release.
 2. Open **Releases**. Testing, Beta, and Stable cards show Cloud’s channel assignments; published history appears below. Inspect status, publication time, provider compatibility, release-scoped Cloud evidence, and differences from the previous published version. Signing metadata and canonical JSON remain in **Technical details**.
 3. Validate the signed release in Testing Workspaces and retain live runtime acceptance evidence. Use **Promote to Beta** for the selected Testing release.
 4. For **Promote to Stable**, submit qualifying post-publication acceptance evidence in the promotion dialog and reference its immutable Cloud evidence ID. Cloud rechecks qualification and passkey authorization. Local sandbox evidence alone cannot authorize Stable promotion.
@@ -54,3 +52,15 @@ Open the selected Worker’s **Releases** and use **Release actions**:
 **Activity** defaults to all events; optionally filter to the current Worker. Read the human-readable event summary and expand raw details for operational evidence. Actor and Worker names are current display labels, while immutable IDs remain in the record. `⌘R` refreshes the active resource, including release/channel assignments or Activity’s selected filter.
 
 Retain the required evidence from the [Profile lifecycle specification](../specifications/TOOL_PROFILE_LIFECYCLE.md) and [Profile update operator contract](../specifications/PROFILE_LAB.md). Fixture acceptance tests establish the UI/Engine workflow but do not certify live provider behavior, Cloud signing infrastructure, or production rollout.
+
+Operational messages have a copy icon. Use **Copy all messages** in the title bar to share current resource errors and active Draft test logs, or **Copy execution details** for the full test log. Secret values are redacted from copied text.
+
+For a published Beta release, assign the test Workspace to Beta in **Workspaces**, then refresh **Workers** in Workspace. Profile download requires the public `/api/release-trust` endpoint to return valid revocation data and the Workspace build to trust the release signing key. Workspace Worker diagnostics show download failures when no verified cached Profile is available. A verified cached Profile remains usable during a temporary Cloud failure. Start a new AX Work session to use the newly resolved release; existing sessions keep their pinned Profile.
+
+The downloaded release's provider name comes from its signed Profile payload. Catalog executable labels such as `codex` may differ from Profile display names such as `Codex CLI`; the catalog label must not overwrite signed release metadata. Workspace continues to reject any disagreement between the release envelope and payload.
+
+Workspace readiness must use the same Worker catalog coordinator as Profile downloads. A downloaded Profile without provider version information does not establish that the CLI is missing; inspect the readiness issue first. Refresh runs a passive Engine probe, while **Test** also exercises live provider execution.
+
+Readiness checks resolve the currently downloaded Profiles without waiting for an in-progress catalog refresh. Catalog refresh downloads each Worker's Profile and then reruns readiness. A Worker with no release in the selected channel must not block another Worker's readiness or leave the refresh stuck on “Checking…”.
+
+Unsigned desktop builds reuse the saved hosted development public trust in `.development/hosted-profile-trust.json` when no explicit trust configuration is provided. Build scripts reject missing, empty, or invalid trust instead of producing an app unable to verify Profiles. Explicit public trust overrides this default; Developer ID signed builds always require explicit trust and never automatically adopt development keys. Profile signatures remain required regardless of desktop application signing.
