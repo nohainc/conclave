@@ -717,13 +717,34 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             ["completed", "failed", "cancelled"].includes(terminal.status)
           )
             break;
-          if (terminal && assignmentDeliveryExpired(terminal.status, terminal.startedAt)) {
-            await workflowStep.do(`workflow:${task.step.kind}:delivery-timeout:${attempt}`, stepConfig, async () => {
-              await db.prepare(`UPDATE worker_assignments SET status = 'failed', error_json = ?1, updated_at = ?2
-                WHERE id = ?3 AND status IN ('created', 'dispatched')`)
-                .bind(JSON.stringify({ error: { code: "provider_unavailable", message: "Workspace did not acknowledge the assignment. Check its connection and retry.", retryable: true } }),
-                  new Date().toISOString(), assignment.assignmentId).run();
-            });
+          if (
+            terminal &&
+            assignmentDeliveryExpired(terminal.status, terminal.startedAt)
+          ) {
+            await workflowStep.do(
+              `workflow:${task.step.kind}:delivery-timeout:${attempt}`,
+              stepConfig,
+              async () => {
+                await db
+                  .prepare(
+                    `UPDATE worker_assignments SET status = 'failed', error_json = ?1, updated_at = ?2
+                WHERE id = ?3 AND status IN ('created', 'dispatched')`,
+                  )
+                  .bind(
+                    JSON.stringify({
+                      error: {
+                        code: "provider_unavailable",
+                        message:
+                          "Workspace did not acknowledge the assignment. Check its connection and retry.",
+                        retryable: true,
+                      },
+                    }),
+                    new Date().toISOString(),
+                    assignment.assignmentId,
+                  )
+                  .run();
+              },
+            );
             continue;
           }
           await workflowStep.sleep(

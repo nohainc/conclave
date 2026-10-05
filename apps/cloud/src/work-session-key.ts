@@ -10,10 +10,14 @@ export function workStepSessionKey(params: {
   readonly retrySessionStrategy?: unknown;
   readonly retryNumber?: unknown;
 }): string {
-  const base = params.workBindingId === "direct"
-    ? `workstream:${params.workstreamId}:direct:work-conversation`
-    : `work-request:${params.workRequestId}:${params.stepKind}`;
-  const identity = params.retryStepKind === params.stepKind && params.retrySessionStrategy === "fresh"
-    ? `${base}:retry-fresh-${Number(params.retryNumber) || 1}` : base;
+  const base =
+    params.workBindingId === "direct"
+      ? `workstream:${params.workstreamId}:direct:work-conversation`
+      : `work-request:${params.workRequestId}:${params.stepKind}`;
+  const identity =
+    params.retryStepKind === params.stepKind &&
+    params.retrySessionStrategy === "fresh"
+      ? `${base}:retry-fresh-${Number(params.retryNumber) || 1}`
+      : base;
   return `work-session-${createHash("sha256").update(identity).digest("hex")}`;
 }

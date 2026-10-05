@@ -143,7 +143,9 @@ export async function handleUpdateWorkspaceProjectGrant(
   const body = rawBody as Record<string, unknown>;
   if (
     Object.keys(body).length === 0 ||
-    Object.keys(body).some((key) => !["status", "expiresAt", "allowedPermissions"].includes(key))
+    Object.keys(body).some(
+      (key) => !["status", "expiresAt", "allowedPermissions"].includes(key),
+    )
   ) {
     throw new HttpError(400, "Workspace Grant update fields are invalid");
   }
@@ -162,9 +164,10 @@ export async function handleUpdateWorkspaceProjectGrant(
     }
   }
   const now = new Date().toISOString();
-  const permissions = body.allowedPermissions === undefined
-    ? String(existing.allowed_permissions_json)
-    : grantExecutionPermissions(body.allowedPermissions);
+  const permissions =
+    body.allowedPermissions === undefined
+      ? String(existing.allowed_permissions_json)
+      : grantExecutionPermissions(body.allowedPermissions);
   const expiresAt = grantExpiry(
     body.expiresAt === undefined ? existing.expires_at : body.expiresAt,
     new Date(now),

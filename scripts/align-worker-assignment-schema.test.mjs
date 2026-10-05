@@ -5,7 +5,13 @@ import { workerAssignmentAlignmentSql } from "./align-worker-assignment-schema.m
 
 it("aligns the empty historical table and preserves inbound references and indexes", () => {
   const db = new DatabaseSync(":memory:");
-  const baseline = readFileSync(new URL("../apps/cloud/migrations-v8/0001_conclave_v8.sql", import.meta.url), "utf8");
+  const baseline = readFileSync(
+    new URL(
+      "../apps/cloud/migrations-v8/0001_conclave_v8.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   try {
     db.exec(`PRAGMA foreign_keys=ON;
       CREATE TABLE worker_catalog(worker_type_id TEXT PRIMARY KEY);
@@ -15,12 +21,34 @@ it("aligns the empty historical table and preserves inbound references and index
       CREATE TABLE results(assignment_id TEXT REFERENCES worker_assignments(id));
       CREATE INDEX assignments_status ON worker_assignments(status);
       INSERT INTO worker_catalog VALUES('chatgpt');`);
-    expect(() => db.exec("INSERT INTO worker_assignments(id,worker_type_id,status) VALUES('a','chatgpt','created')")).toThrow();
+    expect(() =>
+      db.exec(
+        "INSERT INTO worker_assignments(id,worker_type_id,status) VALUES('a','chatgpt','created')",
+      ),
+    ).toThrow();
     db.exec(workerAssignmentAlignmentSql(baseline));
-    db.exec("INSERT INTO worker_assignments(id,worker_type_id,status) VALUES('a','chatgpt','created'); INSERT INTO results VALUES('a');");
+    db.exec(
+      "INSERT INTO worker_assignments(id,worker_type_id,status) VALUES('a','chatgpt','created'); INSERT INTO results VALUES('a');",
+    );
     expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
-    expect(() => db.exec("INSERT INTO worker_assignments(id,status) VALUES('b','created')")).toThrow();
-    expect(() => db.exec("INSERT INTO worker_assignments(id,worker_type_id,status) VALUES('b','unknown','created')")).toThrow();
-    expect(db.prepare("SELECT name FROM sqlite_master WHERE name='assignments_status'").get()).toBeTruthy();
-  } finally { db.close(); }
+    expect(() =>
+      db.exec(
+        "INSERT INTO worker_assignments(id,status) VALUES('b','created')",
+      ),
+    ).toThrow();
+    expect(() =>
+      db.exec(
+        "INSERT INTO worker_assignments(id,worker_type_id,status) VALUES('b','unknown','created')",
+      ),
+    ).toThrow();
+    expect(
+      db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE name='assignments_status'",
+        )
+        .get(),
+    ).toBeTruthy();
+  } finally {
+    db.close();
+  }
 });
