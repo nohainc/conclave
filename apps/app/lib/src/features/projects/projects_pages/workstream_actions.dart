@@ -394,8 +394,8 @@ extension _WorkstreamActions on _WorkstreamPageState {
   }
 
   Future<void> _sendDiscussion() async {
-    final text = _discussionController.text.trim();
-    if (text.isEmpty) return;
+    final text = _discussionController.text;
+    if (text.trim().isEmpty) return;
     _discussionController.clear();
     final now = DateTime.now();
     final hour = now.hour.toString().padLeft(2, '0');

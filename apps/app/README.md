@@ -5,6 +5,48 @@ Workstreams, Chat, Work, Workspace access, Worker catalog visibility, and
 account security. The Workstream Chat tab is the human discussion surface;
 Work remains the execution surface.
 
+AX's shared `ConclaveMarkdownBody` renders authored content as explicit GitHub
+Flavored Markdown with selectable text and soft line breaks. Its theme-derived
+style sheet covers headings, emphasis, code, quotes, lists, read-only task lists,
+tables, links and rules. HTML is not rendered. Source stays an ordinary Markdown
+string through storage and Worker execution; diagnostics stay plain text.
+The canonical [Workstream authored-content contract](../../docs/specifications/WORK_V1_CONTRACT.md#workstream-authored-content-contract)
+keeps Chat `body`, Work `originalRequest`, Worker `finalText` and Step
+`resultText` as source strings. Existing plain text remains valid Markdown.
+No generated HTML, AST, renderer data or `contentFormat` field is persisted.
+Links are validated as absolute HTTP/HTTPS URLs without embedded credentials
+and opened outside AX using `url_launcher`. Other schemes and malformed URLs
+are rejected. Markdown images display an indicator and alt text without loading
+their source; controlled images belong to the attachment system.
+Chat messages, Work prompts and Worker responses use this renderer, as do
+original requests and Step results in Run Details. Errors, eligibility failures
+and stable diagnostic codes remain plain selectable text. Copy and edit actions
+continue to use the original source. Entire authored messages use **Copy
+Markdown**, preserving formatting markers, links and whitespace. **Copy code**
+copies only the code body; rendered text selection remains available for plain
+text. Diagnostics retain their specific error-copy labels.
+
+Chat input uses the reusable `MarkdownComposer`: Write edits raw multiline
+source, and Preview uses the shared renderer. Its toolbar formats selections
+as emphasis, headings, code, quotes, links and lists. Cmd/Ctrl+B, I and E apply
+bold, italic and inline code. Enter inserts a newline; Cmd/Ctrl+Enter or the
+Send button submits the source. The footer shows the platform's send shortcut.
+Existing Chat messages open the same composer in compact mode with their
+original raw source, including formatting markers. Cmd/Ctrl+Enter saves edits;
+Save and Cancel remain available. Link insertion selects the `url` placeholder
+for replacement.
+
+Work prompts use the same Write/Preview composer with multiline editing.
+Attachments, Workflow selection and Run stay below it. Work has no send
+shortcut: only Run starts execution, and it submits the original Markdown
+source unchanged, including whitespace and fenced code.
+
+Fenced code uses a distinct themed block with its language label, horizontal
+scrolling, selectable content and Copy code. Syntax coloring supports Dart,
+TypeScript/JavaScript, JSON, YAML, SQL, Bash, Python, HTML and CSS, including
+common short language aliases. Unknown tags and blocks over 50,000 characters
+remain plain monospace code. Copy preserves code whitespace and trailing lines.
+
 Run failures include a **Copy Run error** icon that copies the full message.
 Worker replies appear as compact Conclave messages in Work history. Failed
 Step diagnostics and implementation details are available from the **Run
@@ -36,6 +78,14 @@ cards distinguish unchecked, sign-in, Profile/runtime, setup, and test failures
 instead of treating a missing legacy status field as “Needs attention”.
 
 ## Getting Started
+
+Markdown regression coverage includes toolbar selection transformations,
+quote/unquote, GFM rendering in both themes, unsafe links, blocked network
+images, malformed content, keyboard submission, and lossless Chat create/edit
+and message copying. Cloud contract tests exercise SQLite-backed Chat storage
+and Work history/details with Markdown delimiters and fenced code. Work
+execution regression tests also forward the original Markdown prompt unchanged.
+Chat validates nonblank content without trimming its stored source.
 
 This project is a starting point for a Flutter application.
 

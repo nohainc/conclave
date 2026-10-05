@@ -4,6 +4,33 @@
 **Status:** Frozen
 **Scope:** Work composer and built-in Workflow semantics in Conclave AX
 
+## Workstream authored-content contract
+
+Workstream authored content is **GitHub-Flavored Markdown (GFM) source**.
+AX edits and previews that source and renders it for reading. Existing ordinary
+plain-text records remain valid Markdown; no content-format database migration
+or record conversion is required in v1.
+
+The canonical values remain strings:
+
+- Chat: `discussion_messages.body`.
+- Human Work prompt: Work Request `originalRequest`.
+- Worker response: `finalText`.
+- Individual Step response: `resultText`.
+
+Cloud stores the original source and passes the original human text through the
+Work Request snapshot to Workers. Markdown must not be converted to HTML or
+visible plain text before submission or execution. Generated HTML, parsed ASTs,
+and renderer-specific data are not persisted. Rendering is an AX concern;
+Cloud remains provider-neutral. Diagnostics and stable error codes are plain
+text, not authored Markdown.
+
+There is no `contentFormat` field in this change. Introduce an explicit versioned
+format contract only if multiple formats (such as diagrams, structured blocks,
+or HTML documents) become a concrete product requirement.
+
+## Runtime and admission
+
 Cloud encodes durable Work session identities as `work-session-` plus a SHA-256
 hex digest. Keys satisfy the Engine's opaque identifier contract
 (`[A-Za-z0-9_-]+`, at most 256 characters). Direct keeps the same identity across

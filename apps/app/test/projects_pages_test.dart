@@ -8,8 +8,136 @@ import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 
 import 'ax_fixture_data.dart';
+import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
 
 void main() {
+  testWidgets('Chat create edit and copy preserve raw Markdown',
+      (tester) async {
+    final ds = _MarkdownDiscussionDataSource();
+    String? copied;
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String;
+      }
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    await tester.binding.setSurfaceSize(const Size(1000, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: WorkstreamPage(
+      project: const AxProject(
+          id: 'project-1',
+          name: 'Project',
+          branch: '',
+          lastActivity: '',
+          role: 'owner'),
+      workstream: const AxWorkstream(
+          id: 'stream-1',
+          projectId: 'project-1',
+          name: 'Chat',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      dataSource: ds,
+      currentUserId: 'user-owner',
+      onBackToProject: _noop,
+      onArchive: _noop,
+    )))));
+    await tester.pumpAndSettle();
+    const source = '  **raw**\n\n```dart\nfinal x = 1;\n```\n';
+    await tester.enterText(find.byType(TextField).last, source);
+    await tester.tap(find.byTooltip('Send message'));
+    await tester.pumpAndSettle();
+    expect(ds.createdSource, source);
+    await tester.tap(find.byTooltip('Edit message'));
+    await tester.pumpAndSettle();
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        source);
+    const edited = '\n> **edited**\n- [ ] task\n  ';
+    await tester.enterText(find.byType(TextField).first, edited);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(ds.editedSource, edited);
+    await tester.tap(find.byTooltip('Copy Markdown'));
+    await tester.pump();
+    expect(copied, edited);
+  });
+  testWidgets('Work copies exact Markdown for prompt and fallback response',
+      (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String;
+      }
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    const prompt = '  **Prompt** [link](https://example.com)\n';
+    const response = '\n**Response**\n\n```json\n{"ready":true}\n```\n  ';
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+      child: WorkstreamPage(
+        project: const AxProject(
+            id: 'project-1',
+            name: 'Project',
+            branch: '',
+            lastActivity: '',
+            role: 'owner'),
+        workstream: const AxWorkstream(
+            id: 'workstream-1',
+            projectId: 'project-1',
+            name: 'Work',
+            lead: '',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: '',
+            queueStatus: ''),
+        dataSource: _WorkHistoryDataSource([
+          const AxWorkRequest(
+              id: 'request-1',
+              requestedByName: 'You',
+              prompt: prompt,
+              workflowId: 'direct',
+              workflowVersion: 1,
+              status: 'completed',
+              createdAt: '2026-10-01T10:00:00Z',
+              steps: [
+                AxWorkRequestStep(
+                    kind: 'implement',
+                    status: 'completed',
+                    workerId: null,
+                    resultText: response),
+              ]),
+        ]),
+        initialTab: 1,
+        onBackToProject: _noop,
+        onArchive: _noop,
+      ),
+    ))));
+    await tester.pumpAndSettle();
+    final copies = find.byTooltip('Copy Markdown');
+    expect(copies, findsNWidgets(2));
+    await tester.ensureVisible(copies.first);
+    await tester.tap(copies.first);
+    await tester.pump();
+    expect(copied, prompt);
+    await tester.ensureVisible(copies.last);
+    await tester.tap(copies.last);
+    await tester.pump();
+    expect(copied, response);
+  });
+
   testWidgets('Run failure copies the complete message', (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -271,13 +399,17 @@ void main() {
 
     expect(find.text('What should Conclave do?'), findsOneWidget);
     expect(find.text('Workflow'), findsOneWidget);
-    await tester.enterText(
-        find.byType(TextField).first, 'Add the missing tests');
+    const markdownPrompt =
+        '  ## Implementation\n\n- **Add tests**\n\n```dart\nfinal ready = true;\n```\n';
+    await tester.enterText(find.byType(TextField).first, markdownPrompt);
+    await tester.tap(find.text('Preview'));
+    await tester.pumpAndSettle();
+    expect(submittedWork, isNull);
     await tester.ensureVisible(find.text('Run'));
     await tester.tap(find.text('Run'));
     await tester.pumpAndSettle();
 
-    expect(submittedWork, 'Add the missing tests');
+    expect(submittedWork, markdownPrompt);
     await tester.binding.setSurfaceSize(null);
   });
 
@@ -510,6 +642,12 @@ void main() {
     expect(find.text('Implement'), findsNothing);
     expect(find.text('Conclave'), findsOneWidget);
     expect(find.byTooltip('View run details'), findsOneWidget);
+    expect(
+      tester
+          .widgetList<ConclaveMarkdownBody>(find.byType(ConclaveMarkdownBody))
+          .map((body) => body.data),
+      contains('The requested change is complete.'),
+    );
 
     dataSource.requests = [
       _workRequest('request-1', 'History restored after reconnect'),
@@ -570,8 +708,8 @@ void main() {
     expect(find.text('You'), findsNothing);
 
     // Verify copy message button exists and triggers
-    expect(find.byTooltip('Copy message'), findsOneWidget);
-    await tester.tap(find.byTooltip('Copy message'));
+    expect(find.byTooltip('Copy Markdown'), findsOneWidget);
+    await tester.tap(find.byTooltip('Copy Markdown'));
     await tester.pumpAndSettle();
     expect(find.text('Message copied to clipboard'), findsOneWidget);
 
@@ -593,10 +731,10 @@ void main() {
             'The login failure reproduces on a fresh checkout. (Updated)'),
         findsOneWidget);
 
-    // Test sending another message via Enter key (appears at the bottom)
+    // Multiline Markdown source is submitted through the Send action.
     await tester.enterText(
         find.byType(TextField).last, 'Line 1\nLine 2 details');
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.tap(find.byTooltip('Send message'));
     await tester.pumpAndSettle();
     expect(find.text('Line 1\nLine 2 details'), findsOneWidget);
 
@@ -1265,6 +1403,39 @@ class _DiscussionDataSource extends AxFixtureDataSource {
           isMe: true,
         ),
       ];
+}
+
+class _MarkdownDiscussionDataSource extends AxFixtureDataSource {
+  String? createdSource;
+  String? editedSource;
+
+  @override
+  Future<AxDiscussionMessage> sendDiscussionMessage(
+      {required String workstreamId,
+      required String text,
+      List<String> references = const []}) async {
+    createdSource = text;
+    return AxDiscussionMessage(
+        id: 'saved-message',
+        workstreamId: workstreamId,
+        authorUserId: 'user-owner',
+        body: text,
+        createdAt: '2026-10-06T00:00:00Z');
+  }
+
+  @override
+  Future<AxDiscussionMessage> editDiscussionMessage(
+      {required String messageId,
+      required String text,
+      List<String> references = const []}) async {
+    editedSource = text;
+    return AxDiscussionMessage(
+        id: messageId,
+        workstreamId: 'stream-1',
+        authorUserId: 'user-owner',
+        body: text,
+        createdAt: '2026-10-06T00:00:00Z');
+  }
 }
 
 class _WorkFormDataSource extends AxFixtureDataSource {

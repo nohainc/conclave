@@ -181,26 +181,14 @@ class _WorkComposer extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
+          MarkdownComposer(
             controller: requestController,
             minLines: 2,
             maxLines: 6,
             enabled: canExecute && !submitting,
-            style: TextStyle(
-              fontSize: 13.5,
-              color: isDark ? Colors.white : const Color(0xff1f1d2b),
-            ),
-            decoration: InputDecoration(
-              isDense: true,
-              border: const OutlineInputBorder(),
-              labelText: 'What should Conclave do?',
-              hintText:
-                  'Example: Investigate the login failure and propose a fix.',
-              hintStyle: TextStyle(
-                color: isDark ? Colors.white38 : Colors.black38,
-                fontSize: 13,
-              ),
-            ),
+            labelText: 'What should Conclave do?',
+            hintText:
+                'Example: Investigate the login failure and propose a fix.',
           ),
           if (attachments.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -422,7 +410,6 @@ class _WorkTimelineCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = Theme.of(context).colorScheme;
-    final textColor = isDark ? Colors.white : const Color(0xff1f1d2b);
     final metaColor = isDark ? Colors.white38 : Colors.black45;
     final borderColor =
         isDark ? const Color(0xff2d2b42) : const Color(0xffe2e0ed);
@@ -507,14 +494,7 @@ class _WorkTimelineCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                   ],
-                  SelectableText(
-                    request.prompt,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      height: 1.45,
-                      color: textColor,
-                    ),
-                  ),
+                  ConclaveMarkdownBody(data: request.prompt),
                   const SizedBox(height: 6),
                   Row(
                     mainAxisSize: MainAxisSize.min,
@@ -527,7 +507,7 @@ class _WorkTimelineCard extends StatelessWidget {
                         const SizedBox(width: 8),
                       ],
                       Tooltip(
-                        message: 'Copy prompt',
+                        message: 'Copy Markdown',
                         child: InkWell(
                           borderRadius: BorderRadius.circular(4),
                           onTap: () {
@@ -612,19 +592,19 @@ class _WorkTimelineCard extends StatelessWidget {
                         .firstOrNull;
                     final response =
                         request.finalText?.trim().isNotEmpty == true
-                            ? request.finalText!.trim()
+                            ? request.finalText!
                             : request.steps
-                                .map((step) => step.resultText?.trim())
+                                .map((step) => step.resultText)
                                 .whereType<String>()
-                                .where((text) => text.isNotEmpty)
+                                .where((text) => text.trim().isNotEmpty)
                                 .firstOrNull;
                     final error = request.error?.trim().isNotEmpty == true
-                        ? request.error!.trim()
-                        : failedStep?.errorMessage?.trim();
-                    final message = response?.isNotEmpty == true
-                        ? response!
-                        : error?.isNotEmpty == true
-                            ? error!
+                        ? request.error!
+                        : failedStep?.errorMessage;
+                    final message = error?.isNotEmpty == true
+                        ? error!
+                        : response?.isNotEmpty == true
+                            ? response!
                             : request.status == 'cancelled'
                                 ? 'Run cancelled.'
                                 : 'Preparing Worker assignment…';
@@ -652,14 +632,17 @@ class _WorkTimelineCard extends StatelessWidget {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        SelectableText(
-                          message,
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            height: 1.45,
-                            color: isError ? colors.error : textColor,
-                          ),
-                        ),
+                        if (isError)
+                          SelectableText(
+                            message,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              height: 1.45,
+                              color: colors.error,
+                            ),
+                          )
+                        else
+                          ConclaveMarkdownBody(data: message),
                         const SizedBox(height: 8),
                         Row(
                           children: [
@@ -667,7 +650,7 @@ class _WorkTimelineCard extends StatelessWidget {
                                 error?.isNotEmpty == true)
                               compactAction(
                                 tooltip:
-                                    isError ? 'Copy error' : 'Copy response',
+                                    isError ? 'Copy error' : 'Copy Markdown',
                                 icon: Icons.copy_outlined,
                                 onPressed: () {
                                   Clipboard.setData(ClipboardData(
@@ -803,9 +786,10 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                 Text('Original request',
                     style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: 6),
-                SelectableText(details.originalRequest?.isNotEmpty == true
-                    ? details.originalRequest!
-                    : 'No request text was recorded.'),
+                ConclaveMarkdownBody(
+                    data: details.originalRequest?.isNotEmpty == true
+                        ? details.originalRequest!
+                        : 'No request text was recorded.'),
                 const SizedBox(height: 20),
                 for (final step in details.steps) ...[
                   Card(
@@ -856,10 +840,10 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                             Text('Result',
                                 style: Theme.of(context).textTheme.titleSmall),
                             const SizedBox(height: 6),
-                            SelectableText(step.resultText!),
+                            ConclaveMarkdownBody(data: step.resultText!),
                           ] else if (step.status == 'failed') ...[
                             const Divider(height: 24),
-                            Text(
+                            SelectableText(
                               step.errorMessage ??
                                   'This Step did not produce a result.',
                               style: TextStyle(color: colors.error),
@@ -922,7 +906,7 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                 ],
                 if (details.errorCode != null &&
                     details.steps.every((step) => step.errorCode == null))
-                  Text('Run error code: ${details.errorCode}'),
+                  SelectableText('Run error code: ${details.errorCode}'),
                 if (details.status == 'failed' ||
                     details.status == 'queued' ||
                     details.status == 'running') ...[
@@ -1011,8 +995,8 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
   }
 
   void _saveEdit() {
-    final text = _editController.text.trim();
-    if (text.isNotEmpty) {
+    final text = _editController.text;
+    if (text.trim().isNotEmpty) {
       widget.onEdit(text);
     }
     setState(() => _isEditing = false);
@@ -1034,7 +1018,6 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
             .toUpperCase()
         : 'U';
 
-    final textColor = isDark ? Colors.white : const Color(0xff1f1d2b);
     final metaColor = isDark ? Colors.white38 : Colors.black45;
     final borderColor =
         isDark ? const Color(0xff2d2b42) : const Color(0xffe2e0ed);
@@ -1091,16 +1074,12 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                 const SizedBox(height: 6),
               ],
               if (_isEditing) ...[
-                TextField(
+                MarkdownComposer(
                   controller: _editController,
-                  minLines: 1,
+                  compact: true,
                   maxLines: 6,
                   autofocus: true,
-                  style: TextStyle(fontSize: 13.5, color: textColor),
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 4),
-                  ),
+                  onSubmit: _saveEdit,
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -1121,14 +1100,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                   ],
                 ),
               ] else ...[
-                SelectableText(
-                  widget.item.text,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    height: 1.45,
-                    color: textColor,
-                  ),
-                ),
+                ConclaveMarkdownBody(data: widget.item.text),
                 const SizedBox(height: 8),
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1144,7 +1116,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                       const SizedBox(width: 8),
                     ],
                     Tooltip(
-                      message: 'Copy message',
+                      message: 'Copy Markdown',
                       child: InkWell(
                         borderRadius: BorderRadius.circular(4),
                         onTap: widget.onCopy,
@@ -1181,72 +1153,6 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                 ),
               ],
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DiscussionInputBox extends StatelessWidget {
-  const _DiscussionInputBox({
-    required this.controller,
-    required this.onSend,
-  });
-
-  final TextEditingController controller;
-  final VoidCallback onSend;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Focus(
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.enter) {
-          if (HardwareKeyboard.instance.isShiftPressed) {
-            return KeyEventResult.ignored;
-          } else {
-            onSend();
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: TextField(
-        controller: controller,
-        minLines: 1,
-        maxLines: 8,
-        keyboardType: TextInputType.multiline,
-        textCapitalization: TextCapitalization.sentences,
-        decoration: InputDecoration(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(
-              color: isDark ? const Color(0xff2d2b42) : const Color(0xffe5e3f0),
-            ),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(
-              color: isDark ? const Color(0xff2d2b42) : const Color(0xffe5e3f0),
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(
-              color: Color(0xff7c3aed),
-              width: 1.5,
-            ),
-          ),
-          isDense: true,
-          contentPadding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-          suffixIcon: IconButton(
-            onPressed: onSend,
-            icon: const Icon(Icons.send_rounded, size: 18),
-            tooltip: 'Send message',
-            color: const Color(0xff7c3aed),
           ),
         ),
       ),

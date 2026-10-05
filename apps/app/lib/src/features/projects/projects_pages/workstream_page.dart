@@ -354,7 +354,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
             },
           ),
         const SizedBox(height: 16),
-        _DiscussionInputBox(
+        MarkdownComposer(
           controller: _discussionController,
           onSend: _sendDiscussion,
         ),

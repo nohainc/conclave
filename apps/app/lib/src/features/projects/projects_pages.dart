@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 
 import '../../ax/ax_data.dart';
 import '../../ax/ax_models.dart';
+import '../common/markdown_composer.dart';
+import '../common/conclave_markdown_body.dart';
 import '../../ax/work_request_file_picker_stub.dart'
     if (dart.library.html) '../../ax/work_request_file_picker_web.dart'
     as work_request_files;

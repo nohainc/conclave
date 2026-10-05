@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_app/src/brand.dart';
-import 'package:conclave_app/src/features/common/code_block_view.dart';
+import 'package:conclave_app/src/features/common/conclave_code_block.dart';
 import 'package:conclave_app/src/features/common/command_palette.dart';
 import 'package:conclave_app/src/features/common/toast_overlay.dart';
 import 'package:conclave_app/src/features/execution/task_pipeline_dag.dart';
@@ -13,13 +13,23 @@ import 'ax_fixture_snapshot.dart';
 
 void main() {
   group('UI & UX Feature Components', () {
-    testWidgets('renders CodeBlockView with language tag and copy button',
+    testWidgets('renders ConclaveCodeBlock with language tag and copy button',
         (WidgetTester tester) async {
+      String? copied;
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
       await tester.pumpWidget(
         MaterialApp(
           theme: ConclaveBrand.lightTheme(),
           home: const Scaffold(
-            body: CodeBlockView(
+            body: ConclaveCodeBlock(
               code: 'function hello() {\n  return "world";\n}',
               language: 'typescript',
             ),
@@ -28,13 +38,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('TYPESCRIPT'), findsOneWidget);
-      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('typescript'), findsOneWidget);
+      expect(find.byTooltip('Copy code'), findsOneWidget);
       expect(find.textContaining('return "world"'), findsOneWidget);
 
-      await tester.tap(find.byType(InkWell));
-      await tester.pump();
-      expect(find.text('Copied'), findsOneWidget);
+      await tester.tap(find.byTooltip('Copy code'));
+      await tester.pumpAndSettle();
+      expect(copied, 'function hello() {\n  return "world";\n}');
     });
 
     testWidgets('renders ToastOverlay and triggers dismiss and copy',

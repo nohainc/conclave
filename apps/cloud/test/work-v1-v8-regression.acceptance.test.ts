@@ -41,7 +41,8 @@ vi.mock("../src/scheduler.js", () => ({
 import { recordAssignmentResult } from "../src/assignment-dispatcher.js";
 import { ConclaveRunWorkflow } from "../src/workflow.js";
 
-const requestText = "Improve the sample Workstream behavior";
+const requestText =
+  "  ## Improve Workstream\n\n**Keep source** [docs](https://example.com)\n\n```ts\nconst ready = true;\n```\n  ";
 const workerBindings = {
   direct: { workerId: "worker-direct", model: "fixture-model" },
   research: { workerId: "worker-research" },
