@@ -7,6 +7,7 @@ class WorkstreamPage extends StatefulWidget {
     required this.workstream,
     this.dataSource,
     this.currentUserId,
+    this.currentUserName,
     required this.onBackToProject,
     required this.onArchive,
     this.onRename,
@@ -19,6 +20,7 @@ class WorkstreamPage extends StatefulWidget {
   final AxWorkstream workstream;
   final AxDataSource? dataSource;
   final String? currentUserId;
+  final String? currentUserName;
   final VoidCallback onBackToProject;
   final VoidCallback onArchive;
   final Future<void> Function(String name)? onRename;
@@ -363,6 +365,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   Widget _work(BuildContext context) => _WorkComposer(
         requestController: _requestController,
         currentUserId: widget.currentUserId,
+        currentUserName: widget.currentUserName,
         workflow: _workflow,
         workflowCatalog: _workflowCatalog,
         loadingWorkflows: _loadingWorkflows,

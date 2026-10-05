@@ -148,6 +148,8 @@ extension _AxAppViews on _AxAppStateMixin {
       dataSource: widget.dataSource,
       realtimeEvents: realtimeClient.events,
       currentUserId: store.auth.viewer?.id ?? snapshot.viewer?.id,
+      currentUserName:
+          store.auth.viewer?.displayName ?? snapshot.viewer?.displayName,
       onBackToProject: () => _navigateTo(AxNavigation.project(project.id)),
       onArchive: () async {
         try {

@@ -32,6 +32,7 @@ class _WorkComposer extends StatelessWidget {
   const _WorkComposer({
     required this.requestController,
     required this.currentUserId,
+    required this.currentUserName,
     required this.workflow,
     required this.workflowCatalog,
     required this.loadingWorkflows,
@@ -58,6 +59,7 @@ class _WorkComposer extends StatelessWidget {
 
   final TextEditingController requestController;
   final String? currentUserId;
+  final String? currentUserName;
   final String workflow;
   final List<AxBuiltinWorkflow> workflowCatalog;
   final bool loadingWorkflows;
@@ -147,6 +149,7 @@ class _WorkComposer extends StatelessWidget {
                 key: ValueKey(request.id),
                 request: request,
                 currentUserId: currentUserId,
+                currentUserName: currentUserName,
                 workflowCatalog: workflowCatalog,
                 onShowRunDetails: onShowRunDetails,
                 onRetryStep: onRetryStep,
@@ -375,6 +378,7 @@ class _WorkTimelineCard extends StatelessWidget {
     super.key,
     required this.request,
     required this.currentUserId,
+    required this.currentUserName,
     required this.workflowCatalog,
     required this.onShowRunDetails,
     required this.onRetryStep,
@@ -383,6 +387,7 @@ class _WorkTimelineCard extends StatelessWidget {
 
   final AxWorkRequest request;
   final String? currentUserId;
+  final String? currentUserName;
   final List<AxBuiltinWorkflow> workflowCatalog;
   final ValueChanged<String>? onShowRunDetails;
   final Future<void> Function(String, AxWorkRequestStep)? onRetryStep;
@@ -438,9 +443,17 @@ class _WorkTimelineCard extends StatelessWidget {
             .join()
             .toUpperCase()
         : 'U';
-    final isOwnRequest = currentUserId != null &&
-        currentUserId!.isNotEmpty &&
-        request.requestedByUserId == currentUserId;
+    final normalizedRequesterName =
+        request.requestedByName.trim().toLowerCase();
+    final normalizedCurrentName = currentUserName?.trim().toLowerCase();
+    final isOwnRequest = (currentUserId != null &&
+            currentUserId!.isNotEmpty &&
+            request.requestedByUserId == currentUserId) ||
+        (normalizedCurrentName != null &&
+            normalizedCurrentName.isNotEmpty &&
+            normalizedRequesterName == normalizedCurrentName);
+    final showRequesterIdentity =
+        !isOwnRequest && request.requestedByUserId?.trim().isNotEmpty == true;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -461,7 +474,7 @@ class _WorkTimelineCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (!isOwnRequest) ...[
+                  if (showRequesterIdentity) ...[
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -616,6 +629,26 @@ class _WorkTimelineCard extends StatelessWidget {
                                 ? 'Run cancelled.'
                                 : 'Preparing Worker assignment…';
                     final isError = error?.isNotEmpty == true;
+                    Widget compactAction({
+                      required String tooltip,
+                      required IconData icon,
+                      required VoidCallback onPressed,
+                    }) =>
+                        Tooltip(
+                          message: tooltip,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(4),
+                            onTap: onPressed,
+                            child: Padding(
+                              padding: const EdgeInsets.all(3),
+                              child: Icon(
+                                icon,
+                                size: 15,
+                                color: metaColor,
+                              ),
+                            ),
+                          ),
+                        );
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -630,64 +663,48 @@ class _WorkTimelineCard extends StatelessWidget {
                         const SizedBox(height: 8),
                         Row(
                           children: [
+                            if (response?.isNotEmpty == true ||
+                                error?.isNotEmpty == true)
+                              compactAction(
+                                tooltip:
+                                    isError ? 'Copy error' : 'Copy response',
+                                icon: Icons.copy_outlined,
+                                onPressed: () {
+                                  Clipboard.setData(ClipboardData(
+                                    text: isError ? error! : response!,
+                                  ));
+                                },
+                              ),
+                            if (onShowRunDetails != null)
+                              compactAction(
+                                tooltip: 'View run details',
+                                icon: Icons.info_outline,
+                                onPressed: () => onShowRunDetails!(request.id),
+                              ),
+                            if (request.status == 'failed' &&
+                                failedStep != null &&
+                                onRetryStep != null)
+                              compactAction(
+                                tooltip: 'Retry failed Step',
+                                icon: Icons.refresh,
+                                onPressed: () =>
+                                    onRetryStep!(request.id, failedStep),
+                              ),
+                            if ((request.status == 'queued' ||
+                                    request.status == 'running') &&
+                                onCancelRun != null)
+                              compactAction(
+                                tooltip: 'Cancel run',
+                                icon: Icons.cancel_outlined,
+                                onPressed: () => onCancelRun!(request.id),
+                              ),
+                            const Spacer(),
                             if (timeLabel.isNotEmpty)
                               Text(
                                 timeLabel,
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: metaColor,
-                                ),
-                              ),
-                            const Spacer(),
-                            if (response?.isNotEmpty == true ||
-                                error?.isNotEmpty == true)
-                              Tooltip(
-                                message:
-                                    isError ? 'Copy error' : 'Copy response',
-                                child: IconButton(
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () {
-                                    Clipboard.setData(ClipboardData(
-                                      text: isError ? error! : response!,
-                                    ));
-                                  },
-                                  icon:
-                                      const Icon(Icons.copy_outlined, size: 17),
-                                ),
-                              ),
-                            if (onShowRunDetails != null)
-                              Tooltip(
-                                message: 'View run details',
-                                child: IconButton(
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () =>
-                                      onShowRunDetails!(request.id),
-                                  icon:
-                                      const Icon(Icons.info_outline, size: 18),
-                                ),
-                              ),
-                            if (request.status == 'failed' &&
-                                failedStep != null &&
-                                onRetryStep != null)
-                              Tooltip(
-                                message: 'Retry failed Step',
-                                child: IconButton(
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () =>
-                                      onRetryStep!(request.id, failedStep),
-                                  icon: const Icon(Icons.refresh, size: 18),
-                                ),
-                              ),
-                            if ((request.status == 'queued' ||
-                                    request.status == 'running') &&
-                                onCancelRun != null)
-                              Tooltip(
-                                message: 'Cancel run',
-                                child: IconButton(
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () => onCancelRun!(request.id),
-                                  icon: const Icon(Icons.cancel_outlined,
-                                      size: 18),
                                 ),
                               ),
                           ],
