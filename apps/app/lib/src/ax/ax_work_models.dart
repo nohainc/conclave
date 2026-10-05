@@ -112,6 +112,7 @@ class AxWorkRequest {
   const AxWorkRequest({
     required this.id,
     required this.requestedByName,
+    this.requestedByUserId,
     required this.prompt,
     required this.workflowId,
     required this.workflowVersion,
@@ -124,6 +125,7 @@ class AxWorkRequest {
 
   final String id;
   final String requestedByName;
+  final String? requestedByUserId;
   final String prompt;
   final String workflowId;
   final int workflowVersion;
@@ -152,6 +154,9 @@ class AxWorkRequest {
     return AxWorkRequest(
       id: json['id']?.toString() ?? '',
       requestedByName: json['requestedByName']?.toString() ?? 'Team member',
+      requestedByUserId:
+          (json['requestedByUserId'] ?? json['requested_by_user_id'])
+              ?.toString(),
       prompt: json['prompt']?.toString() ?? '',
       workflowId: json['workflowId']?.toString() ?? 'direct',
       workflowVersion: json['workflowVersion'] as int? ?? 1,

@@ -72,9 +72,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Discuss'), findsOneWidget);
+    expect(find.text('Chat'), findsOneWidget);
     expect(find.text('Work'), findsOneWidget);
-    expect(find.text('No discussion messages yet'), findsOneWidget);
+    expect(find.text('No chat messages yet'), findsOneWidget);
     await tester.tap(find.text('Work'));
     await tester.pumpAndSettle();
     expect(find.text('What should Conclave do?'), findsOneWidget);

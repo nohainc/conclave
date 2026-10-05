@@ -173,7 +173,8 @@ class _WorkstreamPageState extends State<WorkstreamPage>
           ..addAll(messages.map((m) {
             final dt = DateTime.tryParse(m.createdAt)?.toLocal();
             final timeStr = dt != null
-                ? '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
+                ? '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} · '
+                    '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
                 : null;
             final isMe = widget.currentUserId != null &&
                 widget.currentUserId!.isNotEmpty &&
@@ -274,7 +275,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                 isScrollable: true,
                 tabAlignment: TabAlignment.center,
                 tabs: const [
-                  Tab(text: 'Discuss'),
+                  Tab(text: 'Chat'),
                   Tab(text: 'Work'),
                 ],
               ),
@@ -308,7 +309,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'No discussion messages yet',
+                  'No chat messages yet',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
@@ -361,6 +362,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
 
   Widget _work(BuildContext context) => _WorkComposer(
         requestController: _requestController,
+        currentUserId: widget.currentUserId,
         workflow: _workflow,
         workflowCatalog: _workflowCatalog,
         loadingWorkflows: _loadingWorkflows,

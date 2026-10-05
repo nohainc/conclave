@@ -1,8 +1,9 @@
 # Conclave AX
 
 Conclave AX is the Flutter application for human authentication, Projects,
-Workstreams, Discuss, Work, Workspace access, Worker catalog visibility, and
-account security.
+Workstreams, Chat, Work, Workspace access, Worker catalog visibility, and
+account security. The Workstream Chat tab is the human discussion surface;
+Work remains the execution surface.
 
 Run failures include a **Copy Run error** icon that copies the full message.
 Worker replies appear directly beneath their Step in Work history. Failed

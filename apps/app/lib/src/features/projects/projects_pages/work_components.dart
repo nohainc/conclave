@@ -31,6 +31,7 @@ Widget _workflowOption(
 class _WorkComposer extends StatelessWidget {
   const _WorkComposer({
     required this.requestController,
+    required this.currentUserId,
     required this.workflow,
     required this.workflowCatalog,
     required this.loadingWorkflows,
@@ -56,6 +57,7 @@ class _WorkComposer extends StatelessWidget {
   });
 
   final TextEditingController requestController;
+  final String? currentUserId;
   final String workflow;
   final List<AxBuiltinWorkflow> workflowCatalog;
   final bool loadingWorkflows;
@@ -144,6 +146,7 @@ class _WorkComposer extends StatelessWidget {
               return _WorkTimelineCard(
                 key: ValueKey(request.id),
                 request: request,
+                currentUserId: currentUserId,
                 workflowCatalog: workflowCatalog,
                 onShowRunDetails: onShowRunDetails,
                 onRetryStep: onRetryStep,
@@ -371,6 +374,7 @@ class _WorkTimelineCard extends StatelessWidget {
   const _WorkTimelineCard({
     super.key,
     required this.request,
+    required this.currentUserId,
     required this.workflowCatalog,
     required this.onShowRunDetails,
     required this.onRetryStep,
@@ -378,6 +382,7 @@ class _WorkTimelineCard extends StatelessWidget {
   });
 
   final AxWorkRequest request;
+  final String? currentUserId;
   final List<AxBuiltinWorkflow> workflowCatalog;
   final ValueChanged<String>? onShowRunDetails;
   final Future<void> Function(String, AxWorkRequestStep)? onRetryStep;
@@ -459,6 +464,9 @@ class _WorkTimelineCard extends StatelessWidget {
             .join()
             .toUpperCase()
         : 'U';
+    final isOwnRequest = currentUserId != null &&
+        currentUserId!.isNotEmpty &&
+        request.requestedByUserId == currentUserId;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -479,37 +487,39 @@ class _WorkTimelineCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircleAvatar(
-                        radius: 11,
-                        backgroundColor: isDark
-                            ? const Color(0xff3f3b61)
-                            : const Color(0xffd8d2ff),
-                        child: Text(
-                          requesterInitials,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            color: isDark
-                                ? Colors.white70
-                                : const Color(0xff4238a0),
+                  if (!isOwnRequest) ...[
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircleAvatar(
+                          radius: 11,
+                          backgroundColor: isDark
+                              ? const Color(0xff3f3b61)
+                              : const Color(0xffd8d2ff),
+                          child: Text(
+                            requesterInitials,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? Colors.white70
+                                  : const Color(0xff4238a0),
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        request.requestedByName,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : Colors.black87,
+                        const SizedBox(width: 6),
+                        Text(
+                          request.requestedByName,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                  ],
                   SelectableText(
                     request.prompt,
                     style: TextStyle(
@@ -599,9 +609,12 @@ class _WorkTimelineCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        '· $_workflowName · $overall',
-                        style: TextStyle(fontSize: 12, color: metaColor),
+                      Expanded(
+                        child: Text(
+                          '· $_workflowName · $overall${timeLabel.isEmpty ? '' : ' · $timeLabel'}',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: metaColor),
+                        ),
                       ),
                     ],
                   ),
@@ -801,18 +814,23 @@ class _WorkTimelineCard extends StatelessWidget {
                               request.status == 'running' ||
                               request.status == 'failed') &&
                           onCancelRun != null) ...[
-                        TextButton.icon(
-                          onPressed: () => onCancelRun!(request.id),
-                          icon: const Icon(Icons.cancel_outlined),
-                          label: const Text('Cancel run'),
+                        Tooltip(
+                          message: 'Cancel run',
+                          child: IconButton(
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => onCancelRun!(request.id),
+                            icon: const Icon(Icons.cancel_outlined, size: 18),
+                          ),
                         ),
-                        const SizedBox(width: 4),
                       ],
                       if (onShowRunDetails != null) ...[
-                        TextButton.icon(
-                          onPressed: () => onShowRunDetails!(request.id),
-                          icon: const Icon(Icons.subject),
-                          label: const Text('Run details'),
+                        Tooltip(
+                          message: 'View run details',
+                          child: IconButton(
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => onShowRunDetails!(request.id),
+                            icon: const Icon(Icons.info_outline, size: 18),
+                          ),
                         ),
                       ],
                     ],

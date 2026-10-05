@@ -181,7 +181,7 @@ void main() {
   });
 
   testWidgets(
-      'Workstream shell exposes Discuss and Work with viewer-safe controls',
+      'Workstream shell exposes Chat and Work with viewer-safe controls',
       (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
@@ -212,7 +212,7 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Discuss'), findsOneWidget);
+    expect(find.text('Chat'), findsOneWidget);
     expect(find.text('Work'), findsOneWidget);
     expect(find.text('Archive'), findsNothing);
     expect(find.text('What should Conclave do?'), findsOneWidget);
@@ -474,6 +474,7 @@ void main() {
               queueStatus: 'Idle',
             ),
             dataSource: dataSource,
+            currentUserId: 'user-owner',
             realtimeEvents: events.stream,
             onBackToProject: _noop,
             onArchive: _noop,
@@ -520,9 +521,10 @@ void main() {
     expect(find.text('History restored after reconnect'), findsOneWidget);
     expect(
         find.text('Run submitted while the browser was away'), findsOneWidget);
+    expect(find.text('Owner'), findsNothing);
   });
 
-  testWidgets('Discuss messages can be sent and copied to clipboard',
+  testWidgets('Chat messages can be sent and copied to clipboard',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     await tester.pumpWidget(const MaterialApp(
@@ -598,6 +600,45 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
+  testWidgets('Chat messages show their calendar date', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: WorkstreamPage(
+          project: const AxProject(
+            id: 'project-1',
+            name: 'Project One',
+            branch: '',
+            lastActivity: 'today',
+            role: 'collaborator',
+          ),
+          workstream: const AxWorkstream(
+            id: 'workstream-1',
+            projectId: 'project-1',
+            name: 'Research',
+            lead: 'Owner',
+            status: 'active',
+            brief: 'Understand the problem.',
+            primaryWorkspace: 'Workspace One',
+            queueStatus: 'Idle',
+          ),
+          dataSource: _DiscussionDataSource(),
+          currentUserId: 'user-owner',
+          onBackToProject: _noop,
+          onArchive: _noop,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Text && widget.data?.startsWith('2026-10-05 ·') == true,
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets(
       'WorkstreamPage loads and persists discussions via dataSource and updates when switching workstreams',
       (tester) async {
@@ -651,7 +692,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify initial empty state for ws1
-    expect(find.text('No discussion messages yet'), findsOneWidget);
+    expect(find.text('No chat messages yet'), findsOneWidget);
 
     // Send a message on ws1
     await tester.enterText(find.byType(TextField).last, 'Message for Alpha');
@@ -682,7 +723,7 @@ void main() {
 
     // Verify ws2 does not have ws1's message and shows empty state
     expect(find.text('Message for Alpha'), findsNothing);
-    expect(find.text('No discussion messages yet'), findsOneWidget);
+    expect(find.text('No chat messages yet'), findsOneWidget);
 
     await tester.binding.setSurfaceSize(null);
   });
@@ -1205,6 +1246,24 @@ class _WorkHistoryDataSource extends AxFixtureDataSource {
   }
 }
 
+class _DiscussionDataSource extends AxFixtureDataSource {
+  @override
+  Future<List<AxDiscussionMessage>> loadDiscussionMessages({
+    required String workstreamId,
+  }) async =>
+      [
+        const AxDiscussionMessage(
+          id: 'message-1',
+          workstreamId: 'workstream-1',
+          authorUserId: 'user-owner',
+          authorName: 'Vitalii',
+          body: 'A dated message',
+          createdAt: '2026-10-05T19:18:00.000Z',
+          isMe: true,
+        ),
+      ];
+}
+
 class _WorkFormDataSource extends AxFixtureDataSource {
   @override
   Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async => [
@@ -1304,6 +1363,7 @@ AxWorkRequest _workRequest(String id, String prompt,
     AxWorkRequest(
       id: id,
       requestedByName: 'Owner',
+      requestedByUserId: 'user-owner',
       prompt: prompt,
       workflowId: 'direct',
       workflowVersion: 1,

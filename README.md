@@ -30,8 +30,8 @@ are implementation details shown only in Advanced Diagnostics.
 
 ## Applications
 
-- **Conclave AX** — Flutter Web application for Projects, Workstreams, Discuss
-  and Work.
+- **Conclave AX** — Flutter Web application for Projects, Workstreams, Chat
+  (discussion) and Work.
 - **Conclave Cloud** — TypeScript/Cloudflare collaboration, scheduling,
   Workspace Gateway, Worker catalog and Profile release control plane.
 - **Conclave Workspace** — native Flutter/Dart desktop execution/security
