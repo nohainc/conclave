@@ -7,7 +7,7 @@ export function workerAssignmentAlignmentSql(baseline) {
     /CREATE TABLE worker_assignments \([\s\S]*?\n\);/,
   );
   const column = table?.[0]
-    .match(/^  worker_type_id .*,$/m)?.[0]
+    .match(/^ {2}worker_type_id .*,$/m)?.[0]
     .trim()
     .slice(0, -1);
   if (!column || /\bworker_id TEXT/.test(table[0])) {

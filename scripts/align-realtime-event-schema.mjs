@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 export function realtimeEventAlignmentSql(baseline) {
   const table = baseline.match(/CREATE TABLE realtime_events \([\s\S]*?\n\);/);
   const column = table?.[0]
-    .match(/^  workspace_runtime_id .*,$/m)?.[0]
+    .match(/^ {2}workspace_runtime_id .*,$/m)?.[0]
     .trim()
     .slice(0, -1);
   if (!column) throw new Error("Expected current v8 realtime event schema");
