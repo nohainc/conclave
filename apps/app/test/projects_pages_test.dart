@@ -2084,16 +2084,16 @@ void main() {
     await tester.tapAt(Offset.zero);
     await tester.pumpAndSettle();
 
-    // 2. Verify model selector shows 'gpt-4o'
-    expect(find.text('gpt-4o'), findsOneWidget);
+    // 2. Verify model selector shows display name 'GPT-4o'
+    expect(find.text('GPT-4o'), findsOneWidget);
     await tester.tap(find.byTooltip('Choose model'));
     await tester.pumpAndSettle();
 
     // Verify chatgpt models are present
     expect(find.text('Default model'), findsOneWidget);
-    expect(find.text('o3'), findsOneWidget);
+    expect(find.text('o3'), findsWidgets);
     expect(find.text('o3-mini'), findsOneWidget);
-    expect(find.text('gpt-4.5-preview'), findsOneWidget);
+    expect(find.text('GPT-4.5'), findsOneWidget);
 
     // Select 'o3'
     final o3Option = find.descendant(
@@ -2108,7 +2108,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('o3'), findsOneWidget);
+    expect(find.text('o3'), findsWidgets);
     expect(
         dataSource.savedWorkConfig?['bindings']?['implement']?['model'], 'o3');
 

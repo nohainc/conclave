@@ -28,40 +28,246 @@ Widget _workflowOption(
       ),
     );
 
-List<String> _modelsForWorker(AxWorker worker) {
+class AxModelOption {
+  const AxModelOption({
+    required this.id,
+    required this.name,
+    required this.badge,
+    required this.description,
+    this.minCliVersion,
+  });
+
+  final String id;
+  final String name;
+  final String badge;
+  final String description;
+  final String? minCliVersion;
+}
+
+List<AxModelOption> _modelsForWorker(AxWorker worker) {
   final workerType = worker.workerTypeId.toLowerCase();
   final profileId = (worker.profileDefinitionId ?? '').toLowerCase();
   if (workerType == 'chatgpt' ||
       profileId.contains('chatgpt') ||
       profileId.contains('codex')) {
     return const [
-      'o3',
-      'o3-mini',
-      'o1',
-      'o1-mini',
-      'o1-preview',
-      'gpt-4.5-preview',
-      'gpt-4o',
-      'gpt-4o-mini',
-      'chatgpt-4o-latest',
-      'gpt-4-turbo',
-      'gpt-4',
-      'codex-mini',
+      AxModelOption(
+        id: 'o3',
+        name: 'o3',
+        badge: 'Reasoning',
+        description:
+            'Most powerful reasoning model for coding, science, and math',
+      ),
+      AxModelOption(
+        id: 'o3-mini',
+        name: 'o3-mini',
+        badge: 'Fast Reasoning',
+        description:
+            'High-speed reasoning specialized for STEM and programming',
+      ),
+      AxModelOption(
+        id: 'o1',
+        name: 'o1',
+        badge: 'Reasoning',
+        description:
+            'Advanced full-scale reasoning model for deep logic problems',
+      ),
+      AxModelOption(
+        id: 'o1-mini',
+        name: 'o1-mini',
+        badge: 'Fast Reasoning',
+        description: 'Efficient reasoning model for fast coding tasks',
+      ),
+      AxModelOption(
+        id: 'o1-preview',
+        name: 'o1-preview',
+        badge: 'Reasoning Preview',
+        description: 'Preview reasoning model for multi-step reasoning',
+      ),
+      AxModelOption(
+        id: 'gpt-4.5-preview',
+        name: 'GPT-4.5',
+        badge: 'Massive Knowledge',
+        description:
+            'Largest flagship model with broad world knowledge and deep nuance',
+      ),
+      AxModelOption(
+        id: 'gpt-4o',
+        name: 'GPT-4o',
+        badge: 'Flagship',
+        description:
+            'High-intelligence flagship model for complex text, code, and reasoning',
+      ),
+      AxModelOption(
+        id: 'gpt-4o-mini',
+        name: 'GPT-4o mini',
+        badge: 'Fast & Affordable',
+        description: 'Lightweight and fast for everyday coding and tasks',
+      ),
+      AxModelOption(
+        id: 'chatgpt-4o-latest',
+        name: 'ChatGPT-4o',
+        badge: 'Dynamic',
+        description: 'Continuously updated ChatGPT-4o release',
+      ),
+      AxModelOption(
+        id: 'codex-mini',
+        name: 'Codex Mini',
+        badge: 'Code Specialist',
+        description: 'Fast low-latency code generation and refactoring',
+      ),
+      AxModelOption(
+        id: 'gpt-4-turbo',
+        name: 'GPT-4 Turbo',
+        badge: 'Legacy',
+        description: 'High-capacity GPT-4 model with 128k context',
+      ),
+      AxModelOption(
+        id: 'gpt-4',
+        name: 'GPT-4',
+        badge: 'Legacy',
+        description: 'Original GPT-4 instruction following model',
+      ),
     ];
   } else if (workerType == 'gemini' ||
       profileId.contains('gemini') ||
       profileId.contains('antigravity')) {
     return const [
-      'gemini-2.5-pro',
-      'gemini-2.5-flash',
-      'gemini-2.0-flash',
-      'gemini-1.5-pro',
-      'gemini-1.5-flash',
-      'gemini-pro',
-      'gemini-flash',
+      AxModelOption(
+        id: 'gemini-2.5-pro',
+        name: 'Gemini 2.5 Pro',
+        badge: 'Flagship Thinking',
+        description: 'Deep thinking, complex reasoning, and 1M+ token context',
+      ),
+      AxModelOption(
+        id: 'gemini-2.5-flash',
+        name: 'Gemini 2.5 Flash',
+        badge: 'Fast & Smart',
+        description:
+            'Next-generation lightweight model with high speed and low latency',
+      ),
+      AxModelOption(
+        id: 'gemini-2.0-flash',
+        name: 'Gemini 2.0 Flash',
+        badge: 'Multimodal',
+        description: 'Fast multimodal performance for quick turnarounds',
+      ),
+      AxModelOption(
+        id: 'gemini-1.5-pro',
+        name: 'Gemini 1.5 Pro',
+        badge: 'Long Context',
+        description: '2M context window for massive codebase analysis',
+      ),
+      AxModelOption(
+        id: 'gemini-1.5-flash',
+        name: 'Gemini 1.5 Flash',
+        badge: 'Fast',
+        description: 'Lightweight and fast for general coding',
+      ),
     ];
   }
   return const [];
+}
+
+String _modelDisplayName(String? modelId, {AxWorker? worker}) {
+  if (modelId == null || modelId.trim().isEmpty) return '';
+  final list =
+      worker != null ? _modelsForWorker(worker) : const <AxModelOption>[];
+  final found = list.where((m) => m.id == modelId).firstOrNull;
+  if (found != null) return found.name;
+  for (final option in [
+    ..._modelsForWorker(const AxWorker(
+      id: '',
+      workspaceId: '',
+      workspaceName: '',
+      workerTypeId: 'chatgpt',
+      displayName: '',
+      status: '',
+      readinessState: '',
+      localConcurrencyLimit: 1,
+      capabilities: [],
+    )),
+    ..._modelsForWorker(const AxWorker(
+      id: '',
+      workspaceId: '',
+      workspaceName: '',
+      workerTypeId: 'gemini',
+      displayName: '',
+      status: '',
+      readinessState: '',
+      localConcurrencyLimit: 1,
+      capabilities: [],
+    )),
+  ]) {
+    if (option.id == modelId) return option.name;
+  }
+  return modelId;
+}
+
+Widget _buildModelBadge(BuildContext context, String badge) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  Color bg;
+  Color fg;
+  if (badge.contains('Reasoning') || badge.contains('Thinking')) {
+    bg = isDark ? const Color(0xff2d234a) : const Color(0xffeedeff);
+    fg = isDark ? const Color(0xffcfb2ff) : const Color(0xff6e3ab8);
+  } else if (badge.contains('Flagship') || badge.contains('Knowledge')) {
+    bg = isDark ? const Color(0xff182c44) : const Color(0xffdbeafe);
+    fg = isDark ? const Color(0xff93c5fd) : const Color(0xff1e40af);
+  } else if (badge.contains('Fast') || badge.contains('Smart')) {
+    bg = isDark ? const Color(0xff143528) : const Color(0xffdcfce7);
+    fg = isDark ? const Color(0xff86efac) : const Color(0xff166534);
+  } else if (badge.contains('Code')) {
+    bg = isDark ? const Color(0xff133238) : const Color(0xffccfbf1);
+    fg = isDark ? const Color(0xff5eead4) : const Color(0xff115e59);
+  } else {
+    bg = isDark ? const Color(0xff2d2d2d) : const Color(0xfff3f4f6);
+    fg = isDark ? const Color(0xff9ca3af) : const Color(0xff4b5563);
+  }
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: Text(
+      badge,
+      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: fg),
+    ),
+  );
+}
+
+Future<T?> _showAnchoredMenu<T>({
+  required BuildContext buttonContext,
+  required GlobalKey inputKey,
+  required List<PopupMenuEntry<T>> items,
+  required double itemHeight,
+  int dividerCount = 0,
+}) async {
+  final box = buttonContext.findRenderObject()! as RenderBox;
+  final overlay =
+      Overlay.of(buttonContext).context.findRenderObject()! as RenderBox;
+  final rect = box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
+  final inputBox = inputKey.currentContext?.findRenderObject() as RenderBox?;
+  final anchorBottom = inputBox == null
+      ? rect.top
+      : inputBox.localToGlobal(Offset.zero, ancestor: overlay).dy +
+          inputBox.size.height;
+  final availableHeight = (anchorBottom - 8).clamp(0.0, overlay.size.height);
+  final itemCount = items.length - dividerCount;
+  final exactHeight = (itemCount * itemHeight) + (dividerCount * 16.0) + 16.0;
+  final menuHeight = exactHeight.clamp(0.0, availableHeight);
+  return showMenu<T>(
+    context: buttonContext,
+    popUpAnimationStyle: AnimationStyle.noAnimation,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    constraints: BoxConstraints(maxHeight: menuHeight),
+    position: RelativeRect.fromRect(
+      Rect.fromLTWH(rect.left, anchorBottom - menuHeight, rect.width, 0),
+      Offset.zero & overlay.size,
+    ),
+    items: items,
+  );
 }
 
 class _WorkComposer extends StatelessWidget {
@@ -277,8 +483,9 @@ class _WorkComposer extends StatelessWidget {
     final isWorkerAssigned = assignedWorker != null &&
         eligibleWorkers.any((w) => w.id == assignedWorker.id);
     final selectedModel = binding['model']?.toString().trim() ?? '';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final availableModels =
-        assignedWorker != null ? _modelsForWorker(assignedWorker) : const <String>[];
+        assignedWorker != null ? _modelsForWorker(assignedWorker) : const <AxModelOption>[];
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -290,34 +497,10 @@ class _WorkComposer extends StatelessWidget {
               tooltip: 'Add attachments',
               icon: const Icon(Icons.add, size: 18),
               onPressed: () async {
-                final box = buttonContext.findRenderObject()! as RenderBox;
-                final overlay = Overlay.of(buttonContext)
-                    .context
-                    .findRenderObject()! as RenderBox;
-                final rect =
-                    box.localToGlobal(Offset.zero, ancestor: overlay) &
-                        box.size;
-                final inputBox =
-                    inputKey.currentContext?.findRenderObject() as RenderBox?;
-                final anchorBottom = inputBox == null
-                    ? rect.top
-                    : inputBox
-                            .localToGlobal(Offset.zero, ancestor: overlay)
-                            .dy +
-                        inputBox.size.height;
-                final availableHeight =
-                    (anchorBottom - 8).clamp(0.0, overlay.size.height);
-                final menuHeight = (2 * 48.0 + 32).clamp(0.0, availableHeight);
-                final value = await showMenu<String>(
-                  context: buttonContext,
-                  popUpAnimationStyle: AnimationStyle.noAnimation,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  constraints: BoxConstraints(maxHeight: menuHeight),
-                  position: RelativeRect.fromRect(
-                      Rect.fromLTWH(rect.left, anchorBottom - menuHeight,
-                          rect.width, 0),
-                      Offset.zero & overlay.size),
+                final value = await _showAnchoredMenu<String>(
+                  buttonContext: buttonContext,
+                  inputKey: inputKey,
+                  itemHeight: 48.0,
                   items: [
                     PopupMenuItem(
                       value: 'files',
@@ -367,39 +550,12 @@ class _WorkComposer extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 onTap: canExecute && !submitting && workflowCatalog.isNotEmpty
                     ? () async {
-                        final box =
-                            workflowBtnContext.findRenderObject()! as RenderBox;
-                        final overlay = Overlay.of(workflowBtnContext)
-                            .context
-                            .findRenderObject()! as RenderBox;
-                        final rect =
-                            box.localToGlobal(Offset.zero, ancestor: overlay) &
-                                box.size;
-                        final inputBox = inputKey.currentContext
-                            ?.findRenderObject() as RenderBox?;
-                        final anchorBottom = inputBox == null
-                            ? rect.top
-                            : inputBox
-                                    .localToGlobal(Offset.zero,
-                                        ancestor: overlay)
-                                    .dy +
-                                inputBox.size.height;
-                        final availableHeight =
-                            (anchorBottom - 8).clamp(0.0, overlay.size.height);
                         final versions =
                             _currentWorkflowVersions(workflowCatalog);
-                        final menuHeight = (versions.length * 48.0 + 32)
-                            .clamp(0.0, availableHeight);
-                        final value = await showMenu<String>(
-                          context: workflowBtnContext,
-                          popUpAnimationStyle: AnimationStyle.noAnimation,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                          constraints: BoxConstraints(maxHeight: menuHeight),
-                          position: RelativeRect.fromRect(
-                              Rect.fromLTWH(rect.left,
-                                  anchorBottom - menuHeight, rect.width, 0),
-                              Offset.zero & overlay.size),
+                        final value = await _showAnchoredMenu<String>(
+                          buttonContext: workflowBtnContext,
+                          inputKey: inputKey,
+                          itemHeight: 48.0,
                           items: [
                             for (final item in versions)
                               CheckedPopupMenuItem(
@@ -473,53 +629,94 @@ class _WorkComposer extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                   onTap: canExecute && !submitting && onModelChanged != null
                       ? () async {
-                          final box =
-                              modelBtnContext.findRenderObject()! as RenderBox;
-                          final overlay = Overlay.of(modelBtnContext)
-                              .context
-                              .findRenderObject()! as RenderBox;
-                          final rect = box.localToGlobal(Offset.zero,
-                                  ancestor: overlay) &
-                              box.size;
-                          final inputBox = inputKey.currentContext
-                              ?.findRenderObject() as RenderBox?;
-                          final anchorBottom = inputBox == null
-                              ? rect.top
-                              : inputBox
-                                      .localToGlobal(Offset.zero,
-                                          ancestor: overlay)
-                                      .dy +
-                                  inputBox.size.height;
-                          final availableHeight = (anchorBottom - 8)
-                              .clamp(0.0, overlay.size.height);
                           final menuItems = <PopupMenuEntry<String>>[
                             CheckedPopupMenuItem<String>(
                               value: '',
                               checked: selectedModel.isEmpty,
-                              child: const Text('Default model'),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
+                              child: SizedBox(
+                                height: 46,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Text(
+                                      'Default model',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Uses the worker’s configured model',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isDark
+                                            ? Colors.white60
+                                            : Colors.black54,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                             if (availableModels.isNotEmpty)
                               const PopupMenuDivider(),
                             for (final model in availableModels)
                               CheckedPopupMenuItem<String>(
-                                value: model,
-                                checked: selectedModel == model,
-                                child: Text(model),
+                                value: model.id,
+                                checked: selectedModel == model.id,
+                                padding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
+                                child: SizedBox(
+                                  height: 46,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            model.name,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          _buildModelBadge(
+                                              context, model.badge),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        model.description,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isDark
+                                              ? Colors.white60
+                                              : Colors.black54,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                           ];
-                          final menuHeight = ((menuItems.length) * 48.0 + 32)
-                              .clamp(0.0, availableHeight);
-                          final value = await showMenu<String>(
-                            context: modelBtnContext,
-                            popUpAnimationStyle: AnimationStyle.noAnimation,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                            constraints: BoxConstraints(maxHeight: menuHeight),
-                            position: RelativeRect.fromRect(
-                                Rect.fromLTWH(rect.left,
-                                    anchorBottom - menuHeight, rect.width, 0),
-                                Offset.zero & overlay.size),
+                          final value = await _showAnchoredMenu<String>(
+                            buttonContext: modelBtnContext,
+                            inputKey: inputKey,
                             items: menuItems,
+                            itemHeight: 52.0,
+                            dividerCount:
+                                availableModels.isNotEmpty ? 1 : 0,
                           );
                           if (!modelBtnContext.mounted || value == null) return;
                           onModelChanged?.call(stepKind, value);
@@ -534,20 +731,21 @@ class _WorkComposer extends StatelessWidget {
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 130),
                           child: Text(
-                            selectedModel.isEmpty
+                            _modelDisplayName(selectedModel,
+                                    worker: assignedWorker)
+                                .isEmpty
                                 ? 'Default model'
-                                : selectedModel,
+                                : _modelDisplayName(selectedModel,
+                                    worker: assignedWorker),
                             overflow: TextOverflow.ellipsis,
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: colors.primary,
-                                      fontWeight: FontWeight.w500,
+                                      fontWeight: FontWeight.w600,
                                     ),
                           ),
                         ),
                         const SizedBox(width: 2),
-                        Icon(Icons.keyboard_arrow_down,
-                            size: 14, color: colors.primary),
+                        const Icon(Icons.keyboard_arrow_down, size: 14),
                       ],
                     ),
                   ),

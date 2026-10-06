@@ -357,6 +357,17 @@ const errorMapping = z
   })
   .strict();
 
+const modelCatalogEntry = z
+  .object({
+    id: shortString,
+    name: shortString,
+    badge: shortString.optional(),
+    description: shortString.optional(),
+    minProviderVersion: semver.optional(),
+    maxProviderVersion: semver.optional(),
+  })
+  .strict();
+
 const profileSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -501,6 +512,7 @@ const profileSchema = z
         arguments: z.array(templatedString).max(TOOL_PROFILE_LIMITS.arguments),
         unknownModelPolicy: z.enum(["pass_through", "profile_allowlist"]),
         allowlist: z.array(shortString).max(128).optional(),
+        catalog: z.array(modelCatalogEntry).max(128).optional(),
       })
       .strict(),
     timeout: z
