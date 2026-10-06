@@ -26,6 +26,7 @@ export interface TaskToDispatch {
   readonly projectId?: string;
   readonly requestedByUserId?: string;
   readonly model?: string;
+  readonly reasoningEffort?: string;
   readonly requiresIndependentVerification?: boolean;
   readonly workstreamId?: string;
   readonly workRequestId?: string;
@@ -253,6 +254,7 @@ async function dispatchWorkspaceWorkerAssignment(
       providerToolName: target.providerToolName,
       providerToolVersion: target.providerToolVersion,
       model: target.model,
+      reasoningEffort: target.reasoningEffort ?? task.reasoningEffort ?? null,
       config: assignmentInput,
       permissions: target.effectivePermissions,
       permissionSnapshot: snapshot,

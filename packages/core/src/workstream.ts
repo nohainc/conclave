@@ -122,6 +122,7 @@ export interface StepResult {
   readonly profileReleaseVersion: number | null;
   readonly providerToolVersion: string | null;
   readonly model: string | null;
+  readonly reasoningEffort?: string | null;
   readonly artifacts?: readonly string[];
   readonly changedFiles?: readonly string[];
   readonly testStatus?: "passed" | "failed" | "blocked" | "not_run";
@@ -149,6 +150,7 @@ export interface WorkstreamStepBinding {
   /** Presentation snapshot used when the bound Worker is no longer available. */
   readonly workerLabel?: WorkstreamWorkerLabel;
   readonly model?: string;
+  readonly reasoningEffort?: string;
   readonly fallbackWorkerId?: string;
   /** Presentation snapshot used when the fallback Worker is unavailable. */
   readonly fallbackWorkerLabel?: WorkstreamWorkerLabel;

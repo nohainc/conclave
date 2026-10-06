@@ -210,6 +210,8 @@ Future<Workspace> buildWorkspaceRuntime(
       final input = payload['input'];
       final modelValue =
           payload['model'] ?? (input is Map ? input['model'] : null);
+      final reasoningEffortValue = payload['reasoningEffort'] ??
+          (input is Map ? input['reasoningEffort'] : null);
       final sessionPolicyValue = payload['sessionPolicy'] ??
           (input is Map ? input['sessionPolicy'] : null) ??
           'stateless';
@@ -264,6 +266,10 @@ Future<Workspace> buildWorkspaceRuntime(
         sessionKey: sessionKeyValue as String?,
         model: modelValue is String && modelValue.trim().isNotEmpty
             ? modelValue.trim()
+            : null,
+        reasoningEffort: reasoningEffortValue is String &&
+                reasoningEffortValue.trim().isNotEmpty
+            ? reasoningEffortValue.trim()
             : null,
         executionPolicy: assignmentExecutionPolicy(context.payload),
         onProgress: onProgress,

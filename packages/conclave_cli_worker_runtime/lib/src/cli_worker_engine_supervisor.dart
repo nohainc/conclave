@@ -163,6 +163,7 @@ final class CliWorkerEngineSupervisor {
     WorkerSessionPolicy sessionPolicy = WorkerSessionPolicy.stateless,
     String? sessionKey,
     String? model,
+    String? reasoningEffort,
     WorkerExecutionPolicy executionPolicy = WorkerExecutionPolicy.restricted,
     Duration? engineExecutionTimeout,
     void Function()? onExecutionStarted,
@@ -259,6 +260,7 @@ final class CliWorkerEngineSupervisor {
           sessionPolicy: sessionPolicy,
           sessionKey: sessionKey,
           model: model,
+          reasoningEffort: reasoningEffort,
           executionPolicy: executionPolicy,
         ),
 

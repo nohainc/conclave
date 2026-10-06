@@ -771,6 +771,27 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     }
   }
 
+  void _onReasoningEffortChanged(String stepKind, String reasoningEffort) {
+    final bindings = _workConfig['bindings'] is Map
+        ? Map<String, dynamic>.from(_workConfig['bindings'] as Map)
+        : <String, dynamic>{};
+    final rawBinding = bindings[stepKind];
+    final binding = rawBinding is Map
+        ? Map<String, dynamic>.from(rawBinding)
+        : <String, dynamic>{};
+    final updated = Map<String, dynamic>.from(binding);
+    if (reasoningEffort.trim().isEmpty) {
+      updated.remove('reasoningEffort');
+      updated.remove('reasoning_effort');
+    } else {
+      updated['reasoningEffort'] = reasoningEffort.trim();
+    }
+    _setStepBinding(stepKind, updated);
+    if (_canConfigureWork) {
+      unawaited(_saveWorkConfig(_workConfig));
+    }
+  }
+
   _WorkComposer _workComposer() => _WorkComposer(
         composerKey: _workComposerKey,
         requestController: _requestController,
@@ -811,6 +832,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         onWorkflowChanged: (value) =>
             _updateWorkSettings(() => _workflow = value),
         onModelChanged: _onModelChanged,
+        onReasoningEffortChanged: _onReasoningEffortChanged,
         onOpenSettings: () => _openWorkSettings(context),
         onRun: _runWork,
       );

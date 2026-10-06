@@ -35,6 +35,8 @@ class AxModelOption {
     required this.badge,
     required this.description,
     this.minCliVersion,
+    this.defaultReasoningEffort,
+    this.supportedReasoningEfforts = const [],
   });
 
   final String id;
@@ -42,6 +44,8 @@ class AxModelOption {
   final String badge;
   final String description;
   final String? minCliVersion;
+  final String? defaultReasoningEffort;
+  final List<String> supportedReasoningEfforts;
 }
 
 List<AxModelOption> _modelsForWorker(AxWorker worker) {
@@ -60,48 +64,64 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         name: 'GPT-6.1 Sol',
         badge: 'Workhorse',
         description: 'Latest workhorse model for coding and everyday work',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
       ),
       AxModelOption(
         id: 'gpt-6-astra',
         name: 'GPT-6 Astra',
         badge: 'Frontier Reasoning',
         description: 'Frontier intelligence for the most demanding work',
+        defaultReasoningEffort: 'high',
+        supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
       ),
       AxModelOption(
         id: 'gpt-6-sol',
         name: 'GPT-6 Sol',
         badge: 'Workhorse',
         description: 'Previous generation workhorse model',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh'],
       ),
       AxModelOption(
         id: 'gpt-6-luna',
         name: 'GPT-6 Luna',
         badge: 'Fast & Affordable',
         description: 'Fast and affordable model for easier tasks',
+        defaultReasoningEffort: 'low',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'gpt-5.6-sol',
         name: 'GPT-5.6 Sol',
         badge: 'Workhorse',
         description: 'Older generation workhorse model',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'gpt-5.6-terra',
         name: 'GPT-5.6 Terra',
         badge: 'Balanced',
         description: 'Older balanced model for straightforward work',
+        defaultReasoningEffort: 'low',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'gpt-5.6-luna',
         name: 'GPT-5.6 Luna',
         badge: 'Fast',
         description: 'Older fast and efficient model',
+        defaultReasoningEffort: 'low',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'gpt-reserve',
         name: 'GPT Reserve',
         badge: 'Agentic',
         description: 'Fast and affordable agentic coding model',
+        defaultReasoningEffort: 'low',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'o3',
@@ -109,6 +129,8 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         badge: 'Reasoning',
         description:
             'Most powerful reasoning model for coding, science, and math',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high', 'max'],
       ),
       AxModelOption(
         id: 'o3-mini',
@@ -116,6 +138,8 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         badge: 'Fast Reasoning',
         description:
             'High-speed reasoning specialized for STEM and programming',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'o1',
@@ -123,18 +147,24 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         badge: 'Reasoning',
         description:
             'Advanced full-scale reasoning model for deep logic problems',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'o1-mini',
         name: 'o1-mini',
         badge: 'Fast Reasoning',
         description: 'Efficient reasoning model for fast coding tasks',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'o1-preview',
         name: 'o1-preview',
         badge: 'Reasoning Preview',
         description: 'Preview reasoning model for multi-step reasoning',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'gpt-4.5-preview',
@@ -190,6 +220,8 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         name: 'Claude 3.7 Sonnet',
         badge: 'Hybrid Reasoning',
         description: 'Claude 3.7 with hybrid standard and extended thinking',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high', 'max'],
       ),
       AxModelOption(
         id: 'claude-3.5-sonnet',
@@ -208,12 +240,16 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         name: 'o3-mini',
         badge: 'Fast Reasoning',
         description: 'High-speed reasoning specialized for STEM and coding',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'o1',
         name: 'o1',
         badge: 'Reasoning',
         description: 'Advanced reasoning for deep architectural tasks',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
     ];
   } else if (workerType == 'grok' ||
@@ -227,12 +263,16 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         badge: 'Flagship Reasoning',
         description:
             'Frontier reasoning model with state-of-the-art coding and math',
+        defaultReasoningEffort: 'high',
+        supportedReasoningEfforts: ['low', 'medium', 'high', 'max'],
       ),
       AxModelOption(
         id: 'grok-3-mini',
         name: 'Grok 3 mini',
         badge: 'Fast Reasoning',
         description: 'High-throughput lightweight reasoning model',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'grok-2',
@@ -264,6 +304,8 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         badge: 'Hybrid Reasoning',
         description:
             'Hybrid standard and extended thinking for high-level engineering',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high', 'max'],
       ),
       AxModelOption(
         id: 'claude-3-5-sonnet',
@@ -283,6 +325,8 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         name: 'Claude 3 Opus',
         badge: 'Deep Reasoning',
         description: 'Top-level reasoning for complex open-ended analysis',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
     ];
   } else if (workerType == 'gemini' ||
@@ -295,6 +339,8 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         name: 'Gemini 2.5 Pro',
         badge: 'Flagship Thinking',
         description: 'Deep thinking, complex reasoning, and 1M+ token context',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'gemini-2.5-flash',
@@ -302,6 +348,8 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         badge: 'Fast & Smart',
         description:
             'Next-generation lightweight model with high speed and low latency',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'gemini-2.0-flash',
@@ -331,6 +379,8 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         name: 'DeepSeek-R1',
         badge: 'Reasoning R1',
         description: 'Open reasoning model with chain-of-thought verification',
+        defaultReasoningEffort: 'high',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'deepseek-chat',
@@ -360,6 +410,8 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         name: 'DeepSeek-R1 Local',
         badge: 'Reasoning Local',
         description: 'Distilled local reasoning model for logic and code',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
       ),
       AxModelOption(
         id: 'phi4',
@@ -409,6 +461,30 @@ String _modelDisplayName(String? modelId, {AxWorker? worker}) {
   }
   return modelId;
 }
+
+String _reasoningEffortDisplayName(String? effort) {
+  if (effort == null || effort.trim().isEmpty) return '';
+  return switch (effort.trim().toLowerCase()) {
+    'low' => 'Low',
+    'medium' => 'Medium',
+    'high' => 'High',
+    'xhigh' || 'extra-high' => 'Extra High',
+    'max' => 'Max',
+    'ultra' => 'Ultra',
+    _ => effort,
+  };
+}
+
+String _reasoningEffortDescription(String effort) =>
+    switch (effort.trim().toLowerCase()) {
+      'low' => 'Fast turnarounds and concise logic',
+      'medium' => 'Balanced depth and speed',
+      'high' => 'Deep analysis and thorough verification',
+      'xhigh' || 'extra-high' => 'Extensive exploration of edge cases',
+      'max' => 'Exhaustive reasoning effort',
+      'ultra' => 'Unbounded reasoning limit',
+      _ => 'Custom reasoning level',
+    };
 
 Widget _buildModelBadge(BuildContext context, String badge) {
   final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -515,6 +591,7 @@ class _WorkComposer extends StatelessWidget {
     required this.onCancelRun,
     required this.onWorkflowChanged,
     this.onModelChanged,
+    this.onReasoningEffortChanged,
     this.onOpenSettings,
     required this.onRun,
   });
@@ -553,6 +630,8 @@ class _WorkComposer extends StatelessWidget {
   final Future<void> Function(String)? onCancelRun;
   final ValueChanged<String> onWorkflowChanged;
   final void Function(String stepKind, String model)? onModelChanged;
+  final void Function(String stepKind, String reasoningEffort)?
+      onReasoningEffortChanged;
   final VoidCallback? onOpenSettings;
   final Future<void> Function() onRun;
 
@@ -714,9 +793,24 @@ class _WorkComposer extends StatelessWidget {
     final assignedWorker = _assignedWorker;
     final isWorkerAssigned = _isWorkerAssigned;
     final selectedModel = binding['model']?.toString().trim() ?? '';
+    final selectedReasoningEffort =
+        (binding['reasoningEffort'] ?? binding['reasoning_effort'])
+                ?.toString()
+                .trim() ??
+            '';
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final availableModels =
-        assignedWorker != null ? _modelsForWorker(assignedWorker) : const <AxModelOption>[];
+    final availableModels = assignedWorker != null
+        ? _modelsForWorker(assignedWorker)
+        : const <AxModelOption>[];
+    final currentModelOption =
+        availableModels.where((m) => m.id == selectedModel).firstOrNull;
+    final supportedEfforts = currentModelOption != null
+        ? currentModelOption.supportedReasoningEfforts
+        : (availableModels.isNotEmpty &&
+                availableModels
+                    .any((m) => m.supportedReasoningEfforts.isNotEmpty)
+            ? const ['low', 'medium', 'high', 'xhigh', 'max']
+            : const <String>[]);
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -860,7 +954,7 @@ class _WorkComposer extends StatelessWidget {
                 ),
               ),
             )
-          else
+          else ...[
             Builder(
               builder: (modelBtnContext) => Tooltip(
                 message: 'Choose model',
@@ -991,6 +1085,145 @@ class _WorkComposer extends StatelessWidget {
                 ),
               ),
             ),
+            if (supportedEfforts.isNotEmpty) ...[
+              const SizedBox(width: 4),
+              Builder(
+                builder: (reasoningBtnContext) => Tooltip(
+                  message: 'Choose reasoning effort',
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: canExecute &&
+                            !submitting &&
+                            onReasoningEffortChanged != null
+                        ? () async {
+                            final menuItems = <PopupMenuEntry<String>>[
+                              CheckedPopupMenuItem<String>(
+                                value: '',
+                                checked: selectedReasoningEffort.isEmpty,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                child: SizedBox(
+                                  height: 46,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Text(
+                                        'Default effort',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Uses the model’s default reasoning effort',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isDark
+                                              ? Colors.white60
+                                              : Colors.black54,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                              for (final effort in supportedEfforts)
+                                CheckedPopupMenuItem<String>(
+                                  value: effort,
+                                  checked: selectedReasoningEffort == effort,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12),
+                                  child: SizedBox(
+                                    height: 46,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              _reasoningEffortDisplayName(
+                                                  effort),
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            _buildModelBadge(
+                                                context, 'Reasoning'),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          _reasoningEffortDescription(effort),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isDark
+                                                ? Colors.white60
+                                                : Colors.black54,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ];
+                            final value = await _showAnchoredMenu<String>(
+                              buttonContext: reasoningBtnContext,
+                              inputKey: inputKey,
+                              items: menuItems,
+                              itemHeight: 52.0,
+                              dividerCount: 1,
+                            );
+                            if (!reasoningBtnContext.mounted || value == null) {
+                              return;
+                            }
+                            onReasoningEffortChanged?.call(stepKind, value);
+                          }
+                        : null,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 110),
+                            child: Text(
+                              selectedReasoningEffort.isEmpty
+                                  ? 'Default effort'
+                                  : '${_reasoningEffortDisplayName(selectedReasoningEffort)} effort',
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          const Icon(Icons.keyboard_arrow_down, size: 14),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
         ],
       ),
     );
@@ -1191,6 +1424,7 @@ class _WorkTimelineCard extends StatelessWidget {
     final stepForContext =
         lastCompletedStep ?? activeStep ?? request.steps.firstOrNull;
     final selectedModel = stepForContext?.model?.trim();
+    final selectedReasoningEffort = stepForContext?.reasoningEffort?.trim();
 
     final response = request.finalText?.trim().isNotEmpty == true
         ? request.finalText!
@@ -1211,9 +1445,26 @@ class _WorkTimelineCard extends StatelessWidget {
         workerDisplayName?.isNotEmpty == true;
     final senderName = isWorkerResponse ? workerDisplayName! : 'Conclave';
 
+    String? formattedModelInfo;
+    if (selectedModel != null && selectedModel.isNotEmpty) {
+      final modelName = _modelDisplayName(selectedModel);
+      if (selectedReasoningEffort != null &&
+          selectedReasoningEffort.isNotEmpty) {
+        formattedModelInfo =
+            '$modelName (${_reasoningEffortDisplayName(selectedReasoningEffort).toLowerCase()})';
+      } else {
+        formattedModelInfo = modelName;
+      }
+    } else if (selectedReasoningEffort != null &&
+        selectedReasoningEffort.isNotEmpty) {
+      formattedModelInfo =
+          'Reasoning: ${_reasoningEffortDisplayName(selectedReasoningEffort).toLowerCase()}';
+    }
+
     final metadataSegments = [
       if (_workflowName.isNotEmpty) _workflowName,
-      if (selectedModel != null && selectedModel.isNotEmpty) selectedModel,
+      if (formattedModelInfo != null && formattedModelInfo.isNotEmpty)
+        formattedModelInfo,
       if (elapsed.isNotEmpty) elapsed,
     ];
     final metadataString =
@@ -1618,6 +1869,12 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                           Text(
                             [
                               _workerName(step),
+                              if (step.model?.isNotEmpty == true)
+                                step.reasoningEffort?.isNotEmpty == true
+                                    ? '${_modelDisplayName(step.model)} (${_reasoningEffortDisplayName(step.reasoningEffort).toLowerCase()})'
+                                    : _modelDisplayName(step.model)
+                              else if (step.reasoningEffort?.isNotEmpty == true)
+                                'Reasoning: ${_reasoningEffortDisplayName(step.reasoningEffort).toLowerCase()}',
                               if (step.engineVersion != null)
                                 'Engine ${step.engineVersion}',
                               if (step.providerToolName != null &&

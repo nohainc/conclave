@@ -370,6 +370,7 @@ export async function handleCreateWorkRequest(
     {
       workerId?: string;
       model?: string;
+      reasoningEffort?: string;
       fallbackWorkerId?: string;
       additionalInstructions?: string;
     }
@@ -388,6 +389,7 @@ export async function handleCreateWorkRequest(
     const resolvedBinding: {
       workerId?: string;
       model?: string;
+      reasoningEffort?: string;
       fallbackWorkerId?: string;
       additionalInstructions?: string;
     } = {};
@@ -396,6 +398,9 @@ export async function handleCreateWorkRequest(
     }
     if (typeof configuredBinding.model === "string") {
       resolvedBinding.model = configuredBinding.model;
+    }
+    if (typeof configuredBinding.reasoningEffort === "string") {
+      resolvedBinding.reasoningEffort = configuredBinding.reasoningEffort;
     }
     if (typeof configuredBinding.fallbackWorkerId === "string") {
       resolvedBinding.fallbackWorkerId = configuredBinding.fallbackWorkerId;

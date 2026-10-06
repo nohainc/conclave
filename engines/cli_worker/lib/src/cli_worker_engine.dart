@@ -770,6 +770,8 @@ class CliWorkerEngine {
     'timeoutSeconds':
         '${((request.timeoutMs - _int(_profile.timeout['providerReserveMs'])).clamp(1, request.timeoutMs) / 1000).ceil()}',
     if (request.model != null) 'model': request.model!,
+    if (request.reasoningEffort != null)
+      'reasoningEffort': request.reasoningEffort!,
     if (sessionId != null) 'sessionId': sessionId,
     'executionPolicy': request.executionPolicy.wireValue,
     'sessionPolicy': request.sessionPolicy == WorkerSessionPolicy.durableSession
@@ -831,6 +833,8 @@ class CliWorkerEngine {
           );
         } else if (marker['ifPresent'] == 'model' &&
                 context.containsKey('model') ||
+            marker['ifPresent'] == 'reasoningEffort' &&
+                context.containsKey('reasoningEffort') ||
             marker['ifPresent'] == 'sessionId' &&
                 context.containsKey('sessionId')) {
           output.addAll(

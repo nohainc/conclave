@@ -30,6 +30,7 @@ export interface ProfileExecutionContext {
   executionPolicy: ExecutionPolicy;
   sessionPolicy: SessionPolicy;
   model?: string;
+  reasoningEffort?: string;
   sessionId?: string;
 }
 
@@ -157,6 +158,14 @@ function validateContext(
         "model_not_supported",
       );
     }
+  }
+  if (context.reasoningEffort !== undefined) {
+    requireContextText("reasoningEffort", context.reasoningEffort);
+    if (context.reasoningEffort.length > TOOL_PROFILE_LIMITS.shortStringLength)
+      throw new ProfileInterpreterError(
+        "Reasoning effort exceeds the Engine limit",
+        "model_not_supported",
+      );
   }
   if (context.sessionId !== undefined) {
     requireContextText("sessionId", context.sessionId);
@@ -388,6 +397,7 @@ function expandTemplate(
   const substitutions: Record<string, string | undefined> = {
     prompt: context.prompt,
     model: context.model,
+    reasoningEffort: context.reasoningEffort,
     sessionId: context.sessionId,
     timeoutMs: timeout.timeoutMs,
     timeoutSeconds: timeout.timeoutSeconds,
@@ -459,7 +469,9 @@ export function expandExecutionArguments(
       const present =
         part.ifPresent === "model"
           ? context.model !== undefined
-          : context.sessionId !== undefined;
+          : part.ifPresent === "sessionId"
+            ? context.sessionId !== undefined
+            : context.reasoningEffort !== undefined;
       if (present)
         output.push(
           ...part.values.map((value) =>

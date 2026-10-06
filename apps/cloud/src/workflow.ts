@@ -664,6 +664,10 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
                     typeof stepBinding.model === "string"
                       ? stepBinding.model
                       : undefined,
+                  reasoningEffort:
+                    typeof stepBinding.reasoningEffort === "string"
+                      ? stepBinding.reasoningEffort
+                      : undefined,
                 },
               },
             );
@@ -813,6 +817,12 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
               ? evidence.providerToolVersion
               : null,
           model: terminal.model,
+          reasoningEffort:
+            typeof evidence.reasoningEffort === "string"
+              ? evidence.reasoningEffort
+              : typeof stepBinding.reasoningEffort === "string"
+                ? stepBinding.reasoningEffort
+                : null,
         };
         return { task, status: "completed", output: stepResult, stepResult };
       } catch (error) {

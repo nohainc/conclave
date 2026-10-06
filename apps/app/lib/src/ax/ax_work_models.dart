@@ -70,6 +70,7 @@ class AxWorkRequestStep {
     this.providerToolName,
     this.providerToolVersion,
     this.model,
+    this.reasoningEffort,
     this.testSummary,
     this.startedAt,
     this.updatedAt,
@@ -94,6 +95,7 @@ class AxWorkRequestStep {
   final String? providerToolName;
   final String? providerToolVersion;
   final String? model;
+  final String? reasoningEffort;
   final String? testSummary;
   final String? startedAt;
   final String? updatedAt;
@@ -118,6 +120,7 @@ class AxWorkRequestStep {
       providerToolName: providerToolName,
       providerToolVersion: providerToolVersion,
       model: model,
+      reasoningEffort: reasoningEffort,
       testSummary: testSummary,
       startedAt: startedAt,
       updatedAt: updatedAt,
@@ -143,6 +146,7 @@ class AxWorkRequestStep {
         providerToolName: json['providerToolName']?.toString(),
         providerToolVersion: json['providerToolVersion']?.toString(),
         model: json['model']?.toString(),
+        reasoningEffort: json['reasoningEffort']?.toString(),
         testSummary: json['testSummary']?.toString(),
         startedAt: json['startedAt']?.toString(),
         updatedAt: json['updatedAt']?.toString(),

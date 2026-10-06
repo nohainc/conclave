@@ -532,4 +532,19 @@ describe("Tool Profile v1 pure interpreter", () => {
     expect(selectProfileValue(root, "$.absent")).toBeUndefined();
     expect(() => selectProfileValue(root, "$.constructor")).toThrow();
   });
+
+  it("expands reasoningEffort when configured", () => {
+    const profile = loadProfile("chatgpt-codex.v1");
+    const args = expandExecutionArguments(
+      profile,
+      context({
+        model: "gpt-6.1-sol",
+        reasoningEffort: "xhigh",
+      }),
+    );
+    expect(args).toContain("--model");
+    expect(args).toContain("gpt-6.1-sol");
+    expect(args).toContain("-c");
+    expect(args).toContain('model_reasoning_effort="xhigh"');
+  });
 });

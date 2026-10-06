@@ -91,6 +91,7 @@ const approvedEnvName = envName.refine(
 const placeholderNames = [
   "prompt",
   "model",
+  "reasoningEffort",
   "sessionId",
   "timeoutMs",
   "timeoutSeconds",
@@ -212,7 +213,7 @@ const argument = z.union([
   templatedString,
   z
     .object({
-      ifPresent: z.enum(["model", "sessionId"]),
+      ifPresent: z.enum(["model", "sessionId", "reasoningEffort"]),
       values: argumentValues,
     })
     .strict(),
@@ -363,6 +364,8 @@ const modelCatalogEntry = z
     name: shortString,
     badge: shortString.optional(),
     description: shortString.optional(),
+    defaultReasoningEffort: shortString.optional(),
+    supportedReasoningEfforts: z.array(shortString).max(16).optional(),
     minProviderVersion: semver.optional(),
     maxProviderVersion: semver.optional(),
   })
@@ -513,6 +516,8 @@ const profileSchema = z
         unknownModelPolicy: z.enum(["pass_through", "profile_allowlist"]),
         allowlist: z.array(shortString).max(128).optional(),
         catalog: z.array(modelCatalogEntry).max(128).optional(),
+        defaultReasoningEffort: shortString.optional(),
+        supportedReasoningEfforts: z.array(shortString).max(16).optional(),
       })
       .strict(),
     timeout: z

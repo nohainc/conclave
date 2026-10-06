@@ -20,6 +20,7 @@ export interface ProjectExecutionSelectionRequest {
   readonly workerId?: string;
   readonly excludeIndependenceKeys?: readonly string[];
   readonly model?: string;
+  readonly reasoningEffort?: string;
   readonly executionClass?: "stateless_read" | "stateful_workstream";
   /** Read-only capability policy independent of Workstream lease ownership. */
   readonly readOnly?: boolean;
@@ -43,6 +44,7 @@ export interface ExecutionTarget {
   readonly providerToolName: string | null;
   readonly providerToolVersion: string | null;
   readonly model: string | null;
+  readonly reasoningEffort?: string | null;
   readonly effectivePermissions: readonly string[];
   readonly permissionSnapshot: Record<string, unknown>;
   readonly selectionExplanation: Record<string, unknown>;
@@ -361,6 +363,15 @@ export async function selectProjectExecutionTarget(
         ? binding.model
         : (request.model ??
           (typeof binding.model === "string" ? binding.model : undefined));
+    const selectedReasoningEffort =
+      request.workstreamId &&
+      typeof binding.reasoningEffort === "string" &&
+      binding.reasoningEffort.trim().length > 0
+        ? binding.reasoningEffort
+        : (request.reasoningEffort ??
+          (typeof binding.reasoningEffort === "string"
+            ? binding.reasoningEffort
+            : undefined));
     const independenceKey = workerTypeId;
     const grantWorkerIds = parsedGrantJson(
       row.allowed_worker_ids_json,
@@ -581,6 +592,7 @@ export async function selectProjectExecutionTarget(
       profileDefinitionId: String(row.profile_definition_id),
       profileReleaseVersion: Number(row.profile_release_version),
       model: selectedModel ?? null,
+      reasoningEffort: selectedReasoningEffort ?? null,
       providerToolName:
         typeof row.provider_tool_name === "string"
           ? row.provider_tool_name
@@ -618,6 +630,7 @@ export async function selectProjectExecutionTarget(
           ? row.provider_tool_version
           : null,
       model: selectedModel ?? null,
+      reasoningEffort: selectedReasoningEffort ?? null,
       effectivePermissions: permissions,
       permissionSnapshot,
       selectionExplanation: {

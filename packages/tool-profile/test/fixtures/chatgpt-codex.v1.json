@@ -68,6 +68,10 @@
       "--cd",
       "{{workingDirectory}}",
       { "modelArguments": true },
+      {
+        "ifPresent": "reasoningEffort",
+        "values": ["-c", "model_reasoning_effort=\"{{reasoningEffort}}\""]
+      },
       { "sessionResumeArguments": true },
       {
         "ifAbsent": "sessionId",
@@ -133,6 +137,15 @@
     "supported": true,
     "arguments": ["--model", "{{model}}"],
     "unknownModelPolicy": "profile_allowlist",
+    "defaultReasoningEffort": "low",
+    "supportedReasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra"
+    ],
     "allowlist": [
       "gpt-6.1-sol",
       "gpt-6-astra",
@@ -161,79 +174,161 @@
         "id": "gpt-6.1-sol",
         "name": "GPT-6.1 Sol",
         "badge": "Workhorse",
-        "description": "Latest workhorse model for coding and everyday work"
+        "description": "Latest workhorse model for coding and everyday work",
+        "defaultReasoningEffort": "low",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
       },
       {
         "id": "gpt-6-astra",
         "name": "GPT-6 Astra",
         "badge": "Frontier Reasoning",
-        "description": "Frontier intelligence for the most demanding work"
+        "description": "Frontier intelligence for the most demanding work",
+        "defaultReasoningEffort": "medium",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
       },
       {
         "id": "gpt-6-sol",
         "name": "GPT-6 Sol",
         "badge": "Workhorse",
-        "description": "Previous generation workhorse model"
+        "description": "Previous generation workhorse model",
+        "defaultReasoningEffort": "low",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
       },
       {
         "id": "gpt-6-luna",
         "name": "GPT-6 Luna",
         "badge": "Fast & Affordable",
-        "description": "Fast and affordable model for easier tasks"
+        "description": "Fast and affordable model for easier tasks",
+        "defaultReasoningEffort": "low",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
       },
       {
         "id": "gpt-5.6-sol",
         "name": "GPT-5.6 Sol",
         "badge": "Workhorse",
-        "description": "Older generation workhorse model"
+        "description": "Older generation workhorse model",
+        "defaultReasoningEffort": "low",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
       },
       {
         "id": "gpt-5.6-terra",
         "name": "GPT-5.6 Terra",
         "badge": "Balanced",
-        "description": "Older balanced model for straightforward work"
+        "description": "Older balanced model for straightforward work",
+        "defaultReasoningEffort": "low",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
       },
       {
         "id": "gpt-5.6-luna",
         "name": "GPT-5.6 Luna",
         "badge": "Fast",
-        "description": "Older fast and efficient model"
+        "description": "Older fast and efficient model",
+        "defaultReasoningEffort": "low",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
       },
       {
         "id": "gpt-reserve",
         "name": "GPT Reserve",
         "badge": "Agentic",
-        "description": "Fast and affordable agentic coding model"
+        "description": "Fast and affordable agentic coding model",
+        "defaultReasoningEffort": "low",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ]
       },
       {
         "id": "o3",
         "name": "o3",
         "badge": "Reasoning",
-        "description": "Most powerful reasoning model for coding, science, and math"
+        "description": "Most powerful reasoning model for coding, science, and math",
+        "defaultReasoningEffort": "medium",
+        "supportedReasoningEfforts": ["low", "medium", "high"]
       },
       {
         "id": "o3-mini",
         "name": "o3-mini",
         "badge": "Fast Reasoning",
-        "description": "High-speed reasoning specialized for STEM and programming"
+        "description": "High-speed reasoning specialized for STEM and programming",
+        "defaultReasoningEffort": "medium",
+        "supportedReasoningEfforts": ["low", "medium", "high"]
       },
       {
         "id": "o1",
         "name": "o1",
         "badge": "Reasoning",
-        "description": "Advanced full-scale reasoning model for deep logic problems"
+        "description": "Advanced full-scale reasoning model for deep logic problems",
+        "defaultReasoningEffort": "medium",
+        "supportedReasoningEfforts": ["low", "medium", "high"]
       },
       {
         "id": "o1-mini",
         "name": "o1-mini",
         "badge": "Fast Reasoning",
-        "description": "Efficient reasoning model for fast coding tasks"
+        "description": "Efficient reasoning model for fast coding tasks",
+        "defaultReasoningEffort": "medium",
+        "supportedReasoningEfforts": ["low", "medium", "high"]
       },
       {
         "id": "o1-preview",
         "name": "o1-preview",
         "badge": "Reasoning Preview",
-        "description": "Preview reasoning model for multi-step reasoning"
+        "description": "Preview reasoning model for multi-step reasoning",
+        "defaultReasoningEffort": "medium",
+        "supportedReasoningEfforts": ["low", "medium", "high"]
       },
       {
         "id": "gpt-4.5-preview",
@@ -368,6 +463,10 @@
         "exec",
         { "sandboxPolicyMapping": true },
         { "modelArguments": true },
+        {
+          "ifPresent": "reasoningEffort",
+          "values": ["-c", "model_reasoning_effort=\"{{reasoningEffort}}\""]
+        },
         { "sessionResumeArguments": true },
         { "providerTimeoutArguments": true },
         "--json",

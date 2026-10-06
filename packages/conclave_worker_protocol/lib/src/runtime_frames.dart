@@ -315,6 +315,7 @@ final class ExecuteRequest extends WorkerFrame {
     required this.sessionPolicy,
     this.executionPolicy = WorkerExecutionPolicy.restricted,
     this.model,
+    this.reasoningEffort,
     this.sessionKey,
     this.protocolVersion = localWorkerProtocolVersion,
   }) {
@@ -338,8 +339,16 @@ final class ExecuteRequest extends WorkerFrame {
     if (timeoutMs < 1 || timeoutMs > WorkerProtocolLimits.maxTimeoutMs) {
       throw const FormatException('timeoutMs is outside the allowed range');
     }
-    if (model != null)
+    if (model != null) {
       _validateToken(model!, 'model', WorkerProtocolLimits.maxModelLength);
+    }
+    if (reasoningEffort != null) {
+      _validateToken(
+        reasoningEffort!,
+        'reasoningEffort',
+        WorkerProtocolLimits.maxModelLength,
+      );
+    }
     if (sessionPolicy == WorkerSessionPolicy.durableSession) {
       if (sessionKey == null)
         throw const FormatException('durable sessions require sessionKey');
@@ -364,6 +373,7 @@ final class ExecuteRequest extends WorkerFrame {
   final String assignmentId;
   final String prompt;
   final String? model;
+  final String? reasoningEffort;
   final int timeoutMs;
   final WorkerSessionPolicy sessionPolicy;
   final WorkerExecutionPolicy executionPolicy;
@@ -380,6 +390,7 @@ final class ExecuteRequest extends WorkerFrame {
         'assignmentId': assignmentId,
         'prompt': prompt,
         'model': model,
+        if (reasoningEffort != null) 'reasoningEffort': reasoningEffort,
         'timeoutMs': timeoutMs,
         'sessionPolicy': sessionPolicy == WorkerSessionPolicy.durableSession
             ? 'durable_session'
@@ -396,6 +407,7 @@ final class ExecuteRequest extends WorkerFrame {
       'assignmentId',
       'prompt',
       'model',
+      'reasoningEffort',
       'timeoutMs',
       'sessionPolicy',
       'executionPolicy',
@@ -405,6 +417,10 @@ final class ExecuteRequest extends WorkerFrame {
     final model = json['model'];
     if (model != null && model is! String)
       throw const FormatException('model must be a string or null');
+    final reasoningEffort = json['reasoningEffort'];
+    if (reasoningEffort != null && reasoningEffort is! String) {
+      throw const FormatException('reasoningEffort must be a string or null');
+    }
     final timeout = json['timeoutMs'];
     if (timeout is! int)
       throw const FormatException('timeoutMs must be an integer');
@@ -435,6 +451,7 @@ final class ExecuteRequest extends WorkerFrame {
       ),
       prompt: _requiredString(json, 'prompt'),
       model: model as String?,
+      reasoningEffort: reasoningEffort as String?,
       timeoutMs: timeout,
       sessionPolicy: parsedPolicy,
       executionPolicy: parsedExecutionPolicy,
