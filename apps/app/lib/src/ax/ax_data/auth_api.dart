@@ -18,13 +18,14 @@ mixin _AuthApi on _AxApiClientCore {
 
   @override
   Future<void> logout() async {
-    sessionToken = null;
     final response = await client.post(Uri.parse('$baseUrl/auth/sign-out'),
-        headers: _headers());
+        headers: _headers(contentType: 'application/json'),
+        body: jsonEncode(const <String, dynamic>{}));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AxApiException('Logout failed (${response.statusCode})',
           statusCode: response.statusCode);
     }
+    sessionToken = null;
   }
 
   Future<void> _postAuth(String path, Map<String, dynamic> body) async {

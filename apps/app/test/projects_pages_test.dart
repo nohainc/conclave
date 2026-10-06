@@ -11,6 +11,53 @@ import 'ax_fixture_data.dart';
 import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
 
 void main() {
+  testWidgets('Chat and Work controls stay fixed while history scrolls',
+      (tester) async {
+    for (final tab in [0, 1]) {
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: WorkstreamPage(
+        key: ValueKey(tab),
+        project: const AxProject(
+            id: 'project-1',
+            name: 'Project',
+            branch: '',
+            lastActivity: '',
+            role: 'owner'),
+        workstream: const AxWorkstream(
+            id: 'workstream-1',
+            projectId: 'project-1',
+            name: 'Stream',
+            lead: '',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: '',
+            queueStatus: ''),
+        dataSource: _PinnedHistoryDataSource(),
+        initialTab: tab,
+        onBackToProject: _noop,
+        onArchive: _noop,
+      ))));
+      await tester.pumpAndSettle();
+      final history = find.byKey(
+          ValueKey(tab == 0 ? 'chat-history-scroll' : 'work-history-scroll'));
+      final field = find.byType(TextField).last;
+      final before = tester.getRect(field);
+      final scrollable =
+          find.descendant(of: history, matching: find.byType(Scrollable)).first;
+      final position = tester.state<ScrollableState>(scrollable).position;
+      expect(position.maxScrollExtent, greaterThan(0));
+      await tester.drag(history, const Offset(0, -250));
+      await tester.pumpAndSettle();
+      expect(position.pixels, greaterThan(0));
+      expect(tester.getRect(field), before);
+      expect(find.ancestor(of: field, matching: history), findsNothing);
+      if (tab == 1) {
+        expect(find.byTooltip('Run Work').hitTestable(), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+    }
+  });
   testWidgets('Chat create edit and copy preserve raw Markdown',
       (tester) async {
     final ds = _MarkdownDiscussionDataSource();
@@ -28,34 +75,42 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-            body: SingleChildScrollView(
+            body: SizedBox(
+                height: 600,
                 child: WorkstreamPage(
-      project: const AxProject(
-          id: 'project-1',
-          name: 'Project',
-          branch: '',
-          lastActivity: '',
-          role: 'owner'),
-      workstream: const AxWorkstream(
-          id: 'stream-1',
-          projectId: 'project-1',
-          name: 'Chat',
-          lead: '',
-          status: 'active',
-          brief: '',
-          primaryWorkspace: '',
-          queueStatus: ''),
-      dataSource: ds,
-      currentUserId: 'user-owner',
-      onBackToProject: _noop,
-      onArchive: _noop,
-    )))));
+                  project: const AxProject(
+                      id: 'project-1',
+                      name: 'Project',
+                      branch: '',
+                      lastActivity: '',
+                      role: 'owner'),
+                  workstream: const AxWorkstream(
+                      id: 'stream-1',
+                      projectId: 'project-1',
+                      name: 'Chat',
+                      lead: '',
+                      status: 'active',
+                      brief: '',
+                      primaryWorkspace: '',
+                      queueStatus: ''),
+                  dataSource: ds,
+                  currentUserId: 'user-owner',
+                  onBackToProject: _noop,
+                  onArchive: _noop,
+                )))));
     await tester.pumpAndSettle();
     const source = '  **raw**\n\n```dart\nfinal x = 1;\n```\n';
     await tester.enterText(find.byType(TextField).last, source);
     await tester.tap(find.byTooltip('Send message'));
     await tester.pumpAndSettle();
     expect(ds.createdSource, source);
+    final timestamp = find.byWidgetPredicate((widget) =>
+        widget is Text && widget.data?.startsWith('2026-10-06 ·') == true);
+    expect(timestamp, findsOneWidget);
+    expect(tester.getTopLeft(timestamp).dx,
+        lessThan(tester.getTopLeft(find.byTooltip('Edit message')).dx));
+    expect(tester.getTopLeft(find.byTooltip('Edit message')).dx,
+        lessThan(tester.getTopLeft(find.byTooltip('Copy Markdown')).dx));
     await tester.tap(find.byTooltip('Edit message'));
     await tester.pumpAndSettle();
     expect(
@@ -86,7 +141,8 @@ void main() {
     const response = '\n**Response**\n\n```json\n{"ready":true}\n```\n  ';
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-            body: SingleChildScrollView(
+            body: SizedBox(
+      height: 600,
       child: WorkstreamPage(
         project: const AxProject(
             id: 'project-1',
@@ -136,6 +192,12 @@ void main() {
     await tester.tap(copies.last);
     await tester.pump();
     expect(copied, response);
+    final timestamps = find.byWidgetPredicate((widget) =>
+        widget is Text && widget.data?.startsWith('2026-10-01 ·') == true);
+    expect(timestamps, findsNWidgets(2));
+    final info = find.byTooltip('View run details');
+    expect(tester.getTopLeft(timestamps.last).dx,
+        closeTo(tester.getTopRight(info).dx + 8, 1));
   });
 
   testWidgets('Run failure copies the complete message', (tester) async {
@@ -155,7 +217,8 @@ void main() {
         'Cannot run Direct\n• The Project Workspace grant does not allow the access this Step needs.';
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-            body: SingleChildScrollView(
+            body: SizedBox(
+      height: 600,
       child: WorkstreamPage(
         project: const AxProject(
             id: 'project-1',
@@ -183,13 +246,20 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(
         find.byType(TextField).first, 'Implement the change');
-    await tester.ensureVisible(find.text('Run'));
-    await tester.tap(find.text('Run'));
+    await tester.ensureVisible(find.byTooltip('Run Work'));
+    await tester.tap(find.byTooltip('Run Work'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byTooltip('Copy Run error'));
     await tester.tap(find.byTooltip('Copy Run error'));
     await tester.pumpAndSettle();
     expect(copied, message);
+    final diagnostic = tester.widget<SelectableText>(find.byWidgetPredicate(
+        (widget) => widget is SelectableText && widget.data == message));
+    final body = ConclaveMessageTypography.fromTheme(
+        Theme.of(tester.element(find.byType(WorkstreamPage))));
+    expect(diagnostic.style?.fontFamily, body.fontFamily);
+    expect(diagnostic.style?.fontSize, body.fontSize);
+    expect(diagnostic.style?.height, body.height);
   });
   testWidgets(
       'Project page exposes editable header, Archive/Delete, and 3 tabs',
@@ -313,7 +383,8 @@ void main() {
       (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
-        body: SingleChildScrollView(
+        body: SizedBox(
+          height: 600,
           child: WorkstreamPage(
             project: AxProject(
               id: 'project-1',
@@ -343,10 +414,10 @@ void main() {
     expect(find.text('Chat'), findsOneWidget);
     expect(find.text('Work'), findsOneWidget);
     expect(find.text('Archive'), findsNothing);
-    expect(find.text('What should Conclave do?'), findsOneWidget);
+    expect(find.text('What should Conclave do?'), findsNothing);
     expect(
         find.text(
-            'Ask AI to do something for the team. Nothing runs until you press Run.'),
+            'Ask AI to do something for the team. Nothing runs until you send the request.'),
         findsOneWidget);
     expect(find.textContaining('lease'), findsNothing);
     expect(find.textContaining('fencing'), findsNothing);
@@ -355,7 +426,7 @@ void main() {
     expect(
         find.text('Viewer access can read the workstream but cannot run Work.'),
         findsOneWidget);
-    expect(find.text('Run'), findsOneWidget);
+    expect(find.byTooltip('Run Work'), findsOneWidget);
   });
 
   testWidgets('collaborator can explicitly run Work', (tester) async {
@@ -363,7 +434,8 @@ void main() {
     String? submittedWork;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: SingleChildScrollView(
+        body: SizedBox(
+          height: 600,
           child: WorkstreamPage(
             project: const AxProject(
               id: 'project-1',
@@ -397,16 +469,67 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('What should Conclave do?'), findsOneWidget);
-    expect(find.text('Workflow'), findsOneWidget);
+    expect(find.text('What should Conclave do?'), findsNothing);
+    expect(
+        find.byTooltip('Add attachments or choose workflow'), findsOneWidget);
+    await tester.tap(find.byTooltip('Add attachments or choose workflow'));
+    await tester.pumpAndSettle();
+    expect(find.text('Add files'), findsOneWidget);
+    expect(find.text('Add link'), findsOneWidget);
+    expect(
+        tester.getBottomLeft(find.text('Add files')).dy,
+        lessThan(tester
+            .getTopLeft(find.byTooltip('Add attachments or choose workflow'))
+            .dy));
+    expect(find.text('Direct'), findsWidgets);
+    final menu = find
+        .ancestor(of: find.text('Add files'), matching: find.byType(Material))
+        .first;
+    expect(
+        tester.getBottomLeft(menu).dy,
+        lessThan(tester
+            .getTopLeft(find.byTooltip('Add attachments or choose workflow'))
+            .dy));
+    expect(
+        (tester.widget<Material>(menu).shape as RoundedRectangleBorder)
+            .borderRadius,
+        BorderRadius.circular(10));
+    final directOption = find.descendant(
+        of: find.byType(CheckedPopupMenuItem<String>),
+        matching: find.text('Direct'));
+    await tester.ensureVisible(directOption);
+    await tester.pumpAndSettle();
+    await tester.tap(find.ancestor(
+        of: directOption, matching: find.byType(CheckedPopupMenuItem<String>)));
+    await tester.pumpAndSettle();
     const markdownPrompt =
         '  ## Implementation\n\n- **Add tests**\n\n```dart\nfinal ready = true;\n```\n';
+    expect(find.byTooltip('Bold'), findsNothing);
+    expect(
+        tester
+            .widget<TextField>(find.byType(TextField).first)
+            .decoration
+            ?.hintText,
+        isNull);
     await tester.enterText(find.byType(TextField).first, markdownPrompt);
+    await tester.tap(find.byTooltip('Show Markdown controls'));
+    await tester.pump();
+    expect(
+        tester.getCenter(find.byTooltip('Bold')).dy,
+        closeTo(
+            tester
+                .getCenter(find.byTooltip('Add attachments or choose workflow'))
+                .dy,
+            1));
+    expect(
+        tester.getTopLeft(find.byTooltip('Bold')).dy,
+        greaterThanOrEqualTo(
+            tester.getBottomLeft(find.byType(TextField).first).dy));
     await tester.tap(find.text('Preview'));
     await tester.pumpAndSettle();
     expect(submittedWork, isNull);
-    await tester.ensureVisible(find.text('Run'));
-    await tester.tap(find.text('Run'));
+    await tester.ensureVisible(find.byTooltip('Run Work'));
+    await tester.tap(find.byTooltip('Run Work'));
     await tester.pumpAndSettle();
 
     expect(submittedWork, markdownPrompt);
@@ -420,7 +543,8 @@ void main() {
     final dataSource = _GenericWorkerConfigDataSource();
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: SingleChildScrollView(
+        body: SizedBox(
+          height: 600,
           child: WorkstreamPage(
             project: const AxProject(
               id: 'project-1',
@@ -499,7 +623,8 @@ void main() {
     };
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: SingleChildScrollView(
+        body: SizedBox(
+          height: 600,
           child: WorkstreamPage(
             project: const AxProject(
               id: 'project-1',
@@ -586,7 +711,8 @@ void main() {
     ]);
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: SingleChildScrollView(
+        body: SizedBox(
+          height: 600,
           child: WorkstreamPage(
             project: const AxProject(
               id: 'project-1',
@@ -670,7 +796,8 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
-        body: SingleChildScrollView(
+        body: SizedBox(
+          height: 600,
           child: WorkstreamPage(
             project: AxProject(
               id: 'project-1',
@@ -742,42 +869,63 @@ void main() {
   });
 
   testWidgets('Chat messages show their calendar date', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: WorkstreamPage(
-          project: const AxProject(
-            id: 'project-1',
-            name: 'Project One',
-            branch: '',
-            lastActivity: 'today',
-            role: 'collaborator',
+    for (final own in [true, false]) {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: WorkstreamPage(
+            key: ValueKey(own),
+            project: const AxProject(
+              id: 'project-1',
+              name: 'Project One',
+              branch: '',
+              lastActivity: 'today',
+              role: 'collaborator',
+            ),
+            workstream: const AxWorkstream(
+              id: 'workstream-1',
+              projectId: 'project-1',
+              name: 'Research',
+              lead: 'Owner',
+              status: 'active',
+              brief: 'Understand the problem.',
+              primaryWorkspace: 'Workspace One',
+              queueStatus: 'Idle',
+            ),
+            dataSource: _DiscussionDataSource(),
+            currentUserId: own ? 'user-owner' : 'another-user',
+            onBackToProject: _noop,
+            onArchive: _noop,
           ),
-          workstream: const AxWorkstream(
-            id: 'workstream-1',
-            projectId: 'project-1',
-            name: 'Research',
-            lead: 'Owner',
-            status: 'active',
-            brief: 'Understand the problem.',
-            primaryWorkspace: 'Workspace One',
-            queueStatus: 'Idle',
-          ),
-          dataSource: _DiscussionDataSource(),
-          currentUserId: 'user-owner',
-          onBackToProject: _noop,
-          onArchive: _noop,
         ),
-      ),
-    ));
-    await tester.pumpAndSettle();
+      ));
+      await tester.pumpAndSettle();
 
-    expect(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is Text && widget.data?.startsWith('2026-10-05 ·') == true,
-      ),
-      findsOneWidget,
-    );
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Text && widget.data?.startsWith('2026-10-05 ·') == true,
+        ),
+        findsOneWidget,
+      );
+      final date = find.byWidgetPredicate((widget) =>
+          widget is Text && widget.data?.startsWith('2026-10-05 ·') == true);
+      final copyX = tester.getTopLeft(find.byTooltip('Copy Markdown')).dx;
+      final editX = tester.getTopLeft(find.byTooltip('Edit message')).dx;
+      final dateX = tester.getTopLeft(date).dx;
+      final bubble = tester.widget<Container>(
+          find.ancestor(of: date, matching: find.byType(Container)).first);
+      final decoration = bubble.decoration as BoxDecoration;
+      expect(decoration.border, isNull);
+      expect(
+          decoration.color, own ? const Color(0xffdedcf4) : Colors.transparent);
+      if (own) {
+        expect(dateX, lessThan(editX));
+        expect(editX, lessThan(copyX));
+      } else {
+        expect(copyX, lessThan(editX));
+        expect(editX, lessThan(dateX));
+      }
+    }
   });
 
   testWidgets(
@@ -1547,3 +1695,32 @@ AxWorkRequest _workRequest(String id, String prompt,
     );
 
 void _noop() {}
+
+class _PinnedHistoryDataSource extends _WorkHistoryDataSource {
+  _PinnedHistoryDataSource()
+      : super(List.generate(
+            20,
+            (i) => AxWorkRequest(
+                  id: 'request-$i',
+                  requestedByName: 'You',
+                  prompt: 'Work prompt $i',
+                  workflowId: 'direct',
+                  workflowVersion: 1,
+                  status: 'completed',
+                  createdAt: '2026-10-06T10:00:00Z',
+                  steps: const [],
+                )));
+
+  @override
+  Future<List<AxDiscussionMessage>> loadDiscussionMessages(
+          {required String workstreamId}) async =>
+      List.generate(
+          20,
+          (i) => AxDiscussionMessage(
+                id: 'message-$i',
+                workstreamId: workstreamId,
+                authorUserId: 'user-owner',
+                body: 'Chat message $i',
+                createdAt: '2026-10-06T10:00:00Z',
+              ));
+}

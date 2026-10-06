@@ -5,6 +5,62 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+      'Chat restores compact send controls and hides formatting by default',
+      (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: MarkdownComposer(
+                controller: controller,
+                chatStyle: true,
+                onSend: controller.clear))));
+    expect(find.byTooltip('Bold'), findsNothing);
+    expect(find.text('Preview'), findsNothing);
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.decoration?.hintText, isNull);
+    expect(field.minLines, 1);
+    expect(
+        find.descendant(
+            of: find.byType(TextField),
+            matching: find.byTooltip('Send message')),
+        findsOneWidget);
+    await tester.tap(find.byTooltip('Show Markdown controls'));
+    await tester.pump();
+    expect(find.byTooltip('Bold'), findsOneWidget);
+    expect(tester.getTopLeft(find.byTooltip('Bold')).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(find.byType(TextField)).dy));
+    expect(find.text('Preview'), findsOneWidget);
+    expect(find.text('Write'), findsNothing);
+    expect(tester.getTopLeft(find.text('Preview')).dx,
+        greaterThan(tester.getTopLeft(find.byTooltip('Task list')).dx));
+    controller.text = 'Ready to send';
+    await tester.tap(find.text('Preview'));
+    await tester.pump();
+    expect(find.text('Preview'), findsNothing);
+    expect(find.text('Write'), findsOneWidget);
+    expect(tester.getCenter(find.text('Write')).dy,
+        closeTo(tester.getCenter(find.byTooltip('Task list')).dy, 1));
+    expect(find.byIcon(Icons.send_rounded), findsNothing);
+    expect(find.text('Send'), findsOneWidget);
+    expect(tester.getCenter(find.text('Send')).dy,
+        closeTo(tester.getCenter(find.text('Write')).dy, 1));
+    expect(tester.getTopLeft(find.text('Send')).dx,
+        greaterThan(tester.getTopLeft(find.text('Write')).dx));
+    controller.text = 'Ready to send';
+    await tester.pump();
+    await tester.tap(find.text('Send'));
+    await tester.pump();
+    expect(controller.text, isEmpty);
+    expect(find.text('Preview'), findsOneWidget);
+    expect(find.text('Write'), findsNothing);
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.tap(find.byTooltip('Hide Markdown controls'));
+    await tester.pump();
+    expect(find.byTooltip('Bold'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   test('empty selections, multiline prefixes and quote toggle', () {
     for (final format in MarkdownFormat.values) {
       final controller = TextEditingController();

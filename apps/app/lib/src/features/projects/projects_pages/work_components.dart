@@ -91,76 +91,174 @@ class _WorkComposer extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (loadingTimeline && workTimeline.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: LinearProgressIndicator(),
-          )
-        else if (timelineError != null && workTimeline.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Text(
-              'Could not load Work history: $timelineError',
-              style: TextStyle(color: colors.error),
-            ),
-          )
-        else if (workTimeline.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
-            alignment: Alignment.center,
-            child: Column(
-              children: [
-                Icon(
-                  Icons.chat_bubble_outline_rounded,
-                  size: 42,
-                  color: isDark ? Colors.white24 : Colors.black26,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'No work requests yet',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.white60 : Colors.black54,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Ask AI to do something for the team. Nothing runs until you press Run.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? Colors.white38 : Colors.black38,
-                  ),
-                ),
-              ],
-            ),
-          )
-        else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: workTimeline.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final request = workTimeline[index];
-              return _WorkTimelineCard(
-                key: ValueKey(request.id),
-                request: request,
-                currentUserId: currentUserId,
-                currentUserName: currentUserName,
-                workflowCatalog: workflowCatalog,
-                onShowRunDetails: onShowRunDetails,
-                onRetryStep: onRetryStep,
-                onCancelRun: onCancelRun,
-              );
-            },
-          ),
+        Expanded(
+            child: SingleChildScrollView(
+                key: const ValueKey('work-history-scroll'),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (loadingTimeline && workTimeline.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: LinearProgressIndicator(),
+                        )
+                      else if (timelineError != null && workTimeline.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Text(
+                            'Could not load Work history: $timelineError',
+                            style: TextStyle(color: colors.error),
+                          ),
+                        )
+                      else if (workTimeline.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 40, horizontal: 16),
+                          alignment: Alignment.center,
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.chat_bubble_outline_rounded,
+                                size: 42,
+                                color: isDark ? Colors.white24 : Colors.black26,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No work requests yet',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                      isDark ? Colors.white60 : Colors.black54,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Ask AI to do something for the team. Nothing runs until you send the request.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color:
+                                      isDark ? Colors.white38 : Colors.black38,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: workTimeline.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final request = workTimeline[index];
+                            return _WorkTimelineCard(
+                              key: ValueKey(request.id),
+                              request: request,
+                              currentUserId: currentUserId,
+                              currentUserName: currentUserName,
+                              workflowCatalog: workflowCatalog,
+                              onShowRunDetails: onShowRunDetails,
+                              onRetryStep: onRetryStep,
+                              onCancelRun: onCancelRun,
+                            );
+                          },
+                        ),
+                    ]))),
         const SizedBox(height: 16),
         _buildComposerInput(context, isDark, colors),
       ],
     );
+  }
+
+  Widget _additionalControls(BuildContext context, Widget? formattingToolbar) {
+    final selected =
+        workflowCatalog.where((item) => item.reference == workflow).firstOrNull;
+    return Row(children: [
+      Builder(
+          builder: (buttonContext) => IconButton(
+                tooltip: 'Add attachments or choose workflow',
+                icon: const Icon(Icons.add, size: 18),
+                onPressed: () async {
+                  final box = buttonContext.findRenderObject()! as RenderBox;
+                  final overlay = Overlay.of(buttonContext)
+                      .context
+                      .findRenderObject()! as RenderBox;
+                  final rect =
+                      box.localToGlobal(Offset.zero, ancestor: overlay) &
+                          box.size;
+                  final availableHeight =
+                      (rect.top - 16).clamp(0.0, overlay.size.height);
+                  final menuHeight = ((workflowCatalog.length + 2) * 48.0 + 32)
+                      .clamp(0.0, availableHeight);
+                  final value = await showMenu<String>(
+                    context: buttonContext,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    constraints: BoxConstraints(maxHeight: menuHeight),
+                    position: RelativeRect.fromRect(
+                        Rect.fromLTWH(rect.left, rect.top - menuHeight - 8,
+                            rect.width, 0),
+                        Offset.zero & overlay.size),
+                    items: [
+                      PopupMenuItem(
+                          value: 'files',
+                          enabled: canExecute && !submitting,
+                          child: const ListTile(
+                              dense: true,
+                              leading: Icon(Icons.attach_file, size: 18),
+                              title: Text('Add files'))),
+                      PopupMenuItem(
+                          value: 'link',
+                          enabled: canExecute && !submitting,
+                          child: const ListTile(
+                              dense: true,
+                              leading: Icon(Icons.link, size: 18),
+                              title: Text('Add link'))),
+                      const PopupMenuDivider(),
+                      for (final item in workflowCatalog)
+                        CheckedPopupMenuItem(
+                            value: item.reference,
+                            checked: item.reference == workflow,
+                            enabled: canExecute && !submitting,
+                            child: Tooltip(
+                                message: item.description,
+                                child: Text(item.name))),
+                    ],
+                  );
+                  if (!buttonContext.mounted || value == null) return;
+                  if (value == 'files') {
+                    onAddFiles();
+                  } else if (value == 'link') {
+                    onAddReference();
+                  } else {
+                    onWorkflowChanged(value);
+                  }
+                },
+              )),
+      IconButton(
+          tooltip: 'Refresh Work history',
+          onPressed: () => onRefresh(),
+          icon: const Icon(Icons.refresh, size: 18)),
+      if (onOpenSettings != null)
+        IconButton(
+            tooltip: 'Work settings',
+            onPressed: onOpenSettings,
+            icon: const Icon(Icons.tune_rounded, size: 18)),
+      if (formattingToolbar != null)
+        Expanded(
+            child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal, child: formattingToolbar)),
+      const SizedBox(width: 6),
+      ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 120),
+          child: Text(selected?.name ?? 'Choose workflow',
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall)),
+    ]);
   }
 
   Widget _buildComposerInput(
@@ -168,27 +266,25 @@ class _WorkComposer extends StatelessWidget {
     bool isDark,
     ColorScheme colors,
   ) {
-    final borderColor =
-        isDark ? const Color(0xff2d2b42) : const Color(0xffe5e3f0);
-
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderColor, width: 1),
-      ),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           MarkdownComposer(
             controller: requestController,
+            chatStyle: true,
             minLines: 2,
             maxLines: 6,
             enabled: canExecute && !submitting,
-            labelText: 'What should Conclave do?',
-            hintText:
-                'Example: Investigate the login failure and propose a fix.',
+            onSend: () => onRun(),
+            sendTooltip: 'Run Work',
+            sendEnabled: canExecute &&
+                !submitting &&
+                !loadingWorkflows &&
+                workflowCatalogError == null,
+            additionalControlsBuilder: (toolbar) =>
+                _additionalControls(context, toolbar),
           ),
           if (attachments.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -226,95 +322,9 @@ class _WorkComposer extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 12),
-          if (loadingWorkflows)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 4),
-              child: LinearProgressIndicator(),
-            )
-          else if (workflowCatalogError != null)
-            Text(workflowCatalogError!, style: TextStyle(color: colors.error))
-          else ...[
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    itemHeight: null,
-                    initialValue: workflow.isEmpty ? null : workflow,
-                    decoration: const InputDecoration(
-                      labelText: 'Workflow',
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                    ),
-                    selectedItemBuilder: (context) => workflowCatalog
-                        .map((definition) => Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                definition.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                            ))
-                        .toList(),
-                    items: workflowCatalog
-                        .map((definition) => DropdownMenuItem(
-                              value: definition.reference,
-                              child: _workflowOption(context, definition),
-                            ))
-                        .toList(),
-                    onChanged: canExecute
-                        ? (value) {
-                            if (value != null) onWorkflowChanged(value);
-                          }
-                        : null,
-                  ),
-                ),
-                if (onOpenSettings != null) ...[
-                  const SizedBox(width: 8),
-                  IconButton(
-                    tooltip: 'Work settings',
-                    icon: const Icon(Icons.tune_rounded, size: 20),
-                    onPressed: onOpenSettings,
-                  ),
-                ],
-              ],
-            ),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: canExecute && !submitting ? onAddFiles : null,
-                icon: const Icon(Icons.attach_file, size: 16),
-                label: const Text('Add files'),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: canExecute && !submitting ? onAddReference : null,
-                icon: const Icon(Icons.link, size: 16),
-                label: const Text('Add link'),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Refresh Work history',
-                onPressed: () => onRefresh(),
-                icon: const Icon(Icons.refresh, size: 18),
-              ),
-              const SizedBox(width: 4),
-              FilledButton.icon(
-                onPressed: canExecute &&
-                        !submitting &&
-                        !loadingWorkflows &&
-                        workflowCatalogError == null
-                    ? () => onRun()
-                    : null,
-                icon: const Icon(Icons.play_arrow, size: 18),
-                label: const Text('Run'),
-              ),
-            ],
-          ),
+          if (loadingWorkflows) const LinearProgressIndicator(),
+          if (workflowCatalogError != null)
+            Text(workflowCatalogError!, style: TextStyle(color: colors.error)),
           if (!canExecute)
             const Padding(
               padding: EdgeInsets.only(top: 8),
@@ -338,7 +348,8 @@ class _WorkComposer extends StatelessWidget {
               Expanded(
                 child: SelectableText(
                   submitError!,
-                  style: TextStyle(color: colors.error, fontSize: 12.5),
+                  style: ConclaveMessageTypography.fromTheme(Theme.of(context))
+                      .copyWith(color: colors.error),
                 ),
               ),
               IconButton(
@@ -411,14 +422,9 @@ class _WorkTimelineCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = Theme.of(context).colorScheme;
     final metaColor = isDark ? Colors.white38 : Colors.black45;
-    final borderColor =
-        isDark ? const Color(0xff2d2b42) : const Color(0xffe2e0ed);
 
     final timestamp = DateTime.tryParse(request.createdAt)?.toLocal();
-    final timeLabel = timestamp == null
-        ? ''
-        : '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} '
-            '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
+    final timeLabel = timestamp == null ? '' : _chatTimestamp(timestamp);
     final elapsed = _totalElapsed();
     final requesterInitials = request.requestedByName.isNotEmpty
         ? request.requestedByName
@@ -447,18 +453,24 @@ class _WorkTimelineCard extends StatelessWidget {
       children: [
         // User prompt bubble
         Align(
-          alignment: Alignment.centerRight,
+          alignment:
+              isOwnRequest ? Alignment.centerRight : Alignment.centerLeft,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 640),
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.transparent,
+                color: isOwnRequest
+                    ? (isDark
+                        ? ConclaveBrand.navigationSelection
+                        : ConclaveBrand.accentWash)
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: borderColor, width: 1),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment: isOwnRequest
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (showRequesterIdentity) ...[
@@ -530,7 +542,7 @@ class _WorkTimelineCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                    ],
+                    ].orderedForMessage(isOwnRequest),
                   ),
                 ],
               ),
@@ -547,7 +559,6 @@ class _WorkTimelineCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: borderColor, width: 1),
               ),
               padding: const EdgeInsets.all(14),
               child: Column(
@@ -635,16 +646,15 @@ class _WorkTimelineCard extends StatelessWidget {
                         if (isError)
                           SelectableText(
                             message,
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              height: 1.45,
-                              color: colors.error,
-                            ),
+                            style: ConclaveMessageTypography.fromTheme(
+                                    Theme.of(context))
+                                .copyWith(color: colors.error),
                           )
                         else
                           ConclaveMarkdownBody(data: message),
                         const SizedBox(height: 8),
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             if (response?.isNotEmpty == true ||
                                 error?.isNotEmpty == true)
@@ -681,7 +691,7 @@ class _WorkTimelineCard extends StatelessWidget {
                                 icon: Icons.cancel_outlined,
                                 onPressed: () => onCancelRun!(request.id),
                               ),
-                            const Spacer(),
+                            const SizedBox(width: 8),
                             if (timeLabel.isNotEmpty)
                               Text(
                                 timeLabel,
@@ -846,7 +856,9 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                             SelectableText(
                               step.errorMessage ??
                                   'This Step did not produce a result.',
-                              style: TextStyle(color: colors.error),
+                              style: ConclaveMessageTypography.fromTheme(
+                                      Theme.of(context))
+                                  .copyWith(color: colors.error),
                             ),
                             if (details.status == 'failed') ...[
                               const SizedBox(height: 12),
@@ -1019,21 +1031,18 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
         : 'U';
 
     final metaColor = isDark ? Colors.white38 : Colors.black45;
-    final borderColor =
-        isDark ? const Color(0xff2d2b42) : const Color(0xffe2e0ed);
-
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640),
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.transparent,
+            color: isMe
+                ? (isDark
+                    ? ConclaveBrand.navigationSelection
+                    : ConclaveBrand.accentWash)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: borderColor,
-              width: 1,
-            ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Column(
@@ -1079,6 +1088,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                   compact: true,
                   maxLines: 6,
                   autofocus: true,
+                  chatStyle: true,
                   onSubmit: _saveEdit,
                 ),
                 const SizedBox(height: 8),
@@ -1116,22 +1126,6 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                       const SizedBox(width: 8),
                     ],
                     Tooltip(
-                      message: 'Copy Markdown',
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(4),
-                        onTap: widget.onCopy,
-                        child: Padding(
-                          padding: const EdgeInsets.all(2),
-                          child: Icon(
-                            Icons.copy_rounded,
-                            size: 14,
-                            color: metaColor,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Tooltip(
                       message: 'Edit message',
                       child: InkWell(
                         borderRadius: BorderRadius.circular(4),
@@ -1149,7 +1143,23 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                         ),
                       ),
                     ),
-                  ],
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: 'Copy Markdown',
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(4),
+                        onTap: widget.onCopy,
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(
+                            Icons.copy_rounded,
+                            size: 14,
+                            color: metaColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ].orderedForMessage(isMe),
                 ),
               ],
             ],
@@ -1158,4 +1168,9 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
       ),
     );
   }
+}
+
+// Own-message metadata follows reading order toward the right edge.
+extension _MessageFooterOrder on List<Widget> {
+  List<Widget> orderedForMessage(bool own) => own ? this : reversed.toList();
 }

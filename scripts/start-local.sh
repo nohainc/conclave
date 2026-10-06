@@ -26,12 +26,13 @@ IP="${IP:-127.0.0.1}"
 API_HOST="${API_HOST:-localhost}"
 DEVICE="${DEVICE:-chrome}"
 WEB_PORT="${WEB_PORT:-3000}"
+ISOLATED=false
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 usage() {
-  echo "Usage: pnpm start:local [-p port] [-d device] [-i ip] [--web-port port] [--api-host host]"
+  echo "Usage: pnpm start:local [--isolated] [-p port] [-d device] [-i ip] [--web-port port] [--api-host host]"
 }
 
 option_value() {
@@ -46,6 +47,10 @@ option_value() {
 # Parse optional arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --isolated)
+      ISOLATED=true
+      shift
+      ;;
     -d|--device)
       option_value "$@"
       DEVICE="$2"
@@ -85,7 +90,15 @@ done
 
 API_URL="http://${API_HOST}:${PORT}"
 WEB_URL="http://localhost:${WEB_PORT}"
-node "$ROOT_DIR/scripts/setup-development-profile-signing.mjs"
+if [[ "$ISOLATED" == true ]]; then
+  node "$ROOT_DIR/scripts/setup-development-auth.mjs"
+  node "$ROOT_DIR/scripts/setup-development-profile-signing.mjs"
+  API_CONFIG="$ROOT_DIR/apps/cloud/wrangler.jsonc"
+  API_MODE="isolated local v8 D1"
+else
+  API_CONFIG="$ROOT_DIR/scripts/local-cloud-proxy.wrangler.jsonc"
+  API_MODE="production Cloud gateway — live accounts and data"
+fi
 
 # 1. Runner Script for Backend API
 RUNNER_API="/tmp/conclave-api-dev-${PORT}.sh"
@@ -93,9 +106,9 @@ cat << EOF > "${RUNNER_API}"
 #!/usr/bin/env bash
 set -euo pipefail
 cd "${ROOT_DIR}"
-echo -e "\033[1m\033[0;34m[Conclave AX API Backend Logs]\033[0m Target DB: local conclave-development | Base: ${API_URL}\n"
+echo -e "\033[1m\033[0;34m[Conclave AX API Backend Logs]\033[0m ${API_MODE} | Base: ${API_URL}\n"
 exec pnpm exec wrangler dev \\
-  --config "${ROOT_DIR}/apps/cloud/wrangler.jsonc" \\
+  --config "${API_CONFIG}" \\
   --port "${PORT}" \\
   --ip "${IP}" \\
   --var "BETTER_AUTH_URL:${API_URL}" \\
@@ -142,4 +155,4 @@ spawn_terminal "${RUNNER_FLUTTER}" "Conclave AX - Web App"
 
 # Print exactly 2 concise lines and exit immediately
 echo -e "${GREEN}✓ Conclave AX started in 2 new terminals (Backend & Frontend in parallel).${RESET}"
-echo -e "${CYAN}• Web App:${RESET} ${BOLD}${WEB_URL}${RESET} | ${CYAN}API:${RESET} ${BOLD}${API_URL}${RESET} (local v8 D1)"
+echo -e "${CYAN}• Web App:${RESET} ${BOLD}${WEB_URL}${RESET} | ${CYAN}API:${RESET} ${BOLD}${API_URL}${RESET} (${API_MODE})"

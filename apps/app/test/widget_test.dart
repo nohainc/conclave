@@ -60,7 +60,8 @@ void main() {
   testWidgets('Workstream UI uses product vocabulary', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: SingleChildScrollView(
+        body: SizedBox(
+          height: 600,
           child: WorkstreamPage(
             project: project,
             workstream: workstream,
@@ -77,7 +78,7 @@ void main() {
     expect(find.text('No chat messages yet'), findsOneWidget);
     await tester.tap(find.text('Work'));
     await tester.pumpAndSettle();
-    expect(find.text('What should Conclave do?'), findsOneWidget);
+    expect(find.text('What should Conclave do?'), findsNothing);
     expect(find.text('lease'), findsNothing);
     expect(find.text('fencing token'), findsNothing);
     expect(find.text('Durable Object'), findsNothing);

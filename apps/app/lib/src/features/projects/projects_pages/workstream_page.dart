@@ -174,10 +174,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
           ..clear()
           ..addAll(messages.map((m) {
             final dt = DateTime.tryParse(m.createdAt)?.toLocal();
-            final timeStr = dt != null
-                ? '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} · '
-                    '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
-                : null;
+            final timeStr = dt != null ? _chatTimestamp(dt) : null;
             final isMe = widget.currentUserId != null &&
                 widget.currentUserId!.isNotEmpty &&
                 m.authorUserId == widget.currentUserId;
@@ -283,10 +280,10 @@ class _WorkstreamPageState extends State<WorkstreamPage>
               ),
             ),
             const SizedBox(height: 16),
-            if (_tabController.index == 0)
-              _discuss(context)
-            else if (_tabController.index == 1)
-              _work(context),
+            Expanded(
+                child: _tabController.index == 0
+                    ? _discuss(context)
+                    : _work(context)),
           ],
         ),
       );
@@ -297,65 +294,80 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_discussion.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
-            alignment: Alignment.center,
-            child: Column(
-              children: [
-                Icon(
-                  Icons.chat_bubble_outline_rounded,
-                  size: 42,
-                  color: isDark ? Colors.white24 : Colors.black26,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'No chat messages yet',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.white60 : Colors.black54,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Share context, decisions, or questions with your team below.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? Colors.white38 : Colors.black38,
-                  ),
-                ),
-              ],
-            ),
-          )
-        else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _discussion.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final message = _discussion[index];
-              return _DiscussionMessageBubble(
-                key: ValueKey(message.id),
-                item: message,
-                onCopy: () {
-                  Clipboard.setData(ClipboardData(text: message.text));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Message copied to clipboard'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                },
-                onEdit: (newText) => _editDiscussion(message.id, newText),
-              );
-            },
-          ),
+        Expanded(
+            child: SingleChildScrollView(
+                key: const ValueKey('chat-history-scroll'),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_discussion.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 40, horizontal: 16),
+                          alignment: Alignment.center,
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.chat_bubble_outline_rounded,
+                                size: 42,
+                                color: isDark ? Colors.white24 : Colors.black26,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No chat messages yet',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                      isDark ? Colors.white60 : Colors.black54,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Share context, decisions, or questions with your team below.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color:
+                                      isDark ? Colors.white38 : Colors.black38,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _discussion.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final message = _discussion[index];
+                            return _DiscussionMessageBubble(
+                              key: ValueKey(message.id),
+                              item: message,
+                              onCopy: () {
+                                Clipboard.setData(
+                                    ClipboardData(text: message.text));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content:
+                                        Text('Message copied to clipboard'),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                              onEdit: (newText) =>
+                                  _editDiscussion(message.id, newText),
+                            );
+                          },
+                        ),
+                    ]))),
         const SizedBox(height: 16),
         MarkdownComposer(
           controller: _discussionController,
+          chatStyle: true,
           onSend: _sendDiscussion,
         ),
       ],

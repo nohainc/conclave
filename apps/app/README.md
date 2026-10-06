@@ -4,6 +4,8 @@ Conclave AX is the Flutter application for human authentication, Projects,
 Workstreams, Chat, Work, Workspace access, Worker catalog visibility, and
 account security. The Workstream Chat tab is the human discussion surface;
 Work remains the execution surface.
+Logout sends an authenticated JSON request and clears the local session token
+after Cloud confirms success. Failed logout retains the session for retry.
 
 AX's shared `ConclaveMarkdownBody` renders authored content as explicit GitHub
 Flavored Markdown with selectable text and soft line breaks. Its theme-derived
@@ -30,16 +32,43 @@ Chat input uses the reusable `MarkdownComposer`: Write edits raw multiline
 source, and Preview uses the shared renderer. Its toolbar formats selections
 as emphasis, headings, code, quotes, links and lists. Cmd/Ctrl+B, I and E apply
 bold, italic and inline code. Enter inserts a newline; Cmd/Ctrl+Enter or the
-Send button submits the source. The footer shows the platform's send shortcut.
+Send button submits the source. Chat uses a compact bordered input with its Send
+button inline. Markdown controls are hidden by default; the formatting toggle
+reveals a row below the input with Write/Preview and formatting actions. Chat
+places Preview after the formatting icons, replacing it with Write in the same
+row during preview, with a Send button beside Write and no send icon below the
+preview. Authored messages and the Chat input use regular 16px system sans-serif
+text with 1.6 line height and theme-appropriate near-white/dark text. Chat
+inputs and message editors have no placeholder hint.
+Sending from Preview returns the composer to Write mode. Chat timestamps always
+include the local date and time, including newly sent messages before refresh.
+Own-message footers align right in date/time, edit, copy order; other-message
+footers align left in copy, edit, date/time order.
+Conclave response timestamps follow the action icons directly in the left-aligned
+footer. Work errors use the same message font, size and line height as Chat,
+with red as their semantic color.
+Own Chat bubbles use the active navigation background (a light accent wash in
+light mode). Other bubbles stay transparent; both have no outline border.
+Chat and Work keep their composers and action controls fixed at the bottom of
+the Workstream page. Only message history scrolls. Long Markdown previews scroll
+inside a bounded preview area so they cannot displace the controls.
 Existing Chat messages open the same composer in compact mode with their
 original raw source, including formatting markers. Cmd/Ctrl+Enter saves edits;
 Save and Cancel remain available. Link insertion selects the `url` placeholder
 for replacement.
 
-Work prompts use the same Write/Preview composer with multiline editing.
-Attachments, Workflow selection and Run stay below it. Work has no send
-shortcut: only Run starts execution, and it submits the original Markdown
-source unchanged, including whitespace and fenced code.
+Work prompts use the same compact composer with multiline editing and no hint.
+Markdown icons are hidden by default behind the formatting toggle and appear
+below the input; Preview switches to Write in that row. Work messages use the
+same borderless bubbles, own-prompt background and alignment as Chat.
+Work uses the same send icon beside the formatting toggle to start execution;
+Cmd/Ctrl+Enter also sends the request. A second row contains a plus menu for
+files, links and workflow choices, followed by refresh/settings icons and the
+selected workflow name. Revealed Markdown tools share that second row, with
+horizontal scrolling when needed. The plus menu opens above its icon with the
+same 10px corner radius as the input.
+The original Markdown source is submitted unchanged, including whitespace and
+fenced code. Viewer access and submission readiness still gate execution.
 
 Fenced code uses a distinct themed block with its language label, horizontal
 scrolling, selectable content and Copy code. Syntax coloring supports Dart,

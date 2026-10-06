@@ -7,6 +7,7 @@ abstract final class ConclaveBrand {
   static const accentDark = Color(0xff4937bd);
   static const accentWash = Color(0xffdedcf4);
   static const accentWashDark = Color(0xff231d47);
+  static const navigationSelection = Color(0xff302d4b);
 
   // Light Palette
   static const lightInk = Color(0xff20202a);

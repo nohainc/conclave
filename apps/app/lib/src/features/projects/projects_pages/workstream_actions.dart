@@ -398,8 +398,6 @@ extension _WorkstreamActions on _WorkstreamPageState {
     if (text.trim().isEmpty) return;
     _discussionController.clear();
     final now = DateTime.now();
-    final hour = now.hour.toString().padLeft(2, '0');
-    final minute = now.minute.toString().padLeft(2, '0');
     final tempId = 'temp-${DateTime.now().microsecondsSinceEpoch}';
     _updateState(() {
       _discussion.add(
@@ -407,7 +405,7 @@ extension _WorkstreamActions on _WorkstreamPageState {
           id: tempId,
           author: 'You',
           text: text,
-          sentAt: '$hour:$minute',
+          sentAt: _chatTimestamp(now),
           isMe: true,
         ),
       );
@@ -425,9 +423,7 @@ extension _WorkstreamActions on _WorkstreamPageState {
           final idx = _discussion.indexWhere((item) => item.id == tempId);
           if (idx != -1) {
             final dt = DateTime.tryParse(saved.createdAt)?.toLocal();
-            final timeStr = dt != null
-                ? '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
-                : '$hour:$minute';
+            final timeStr = _chatTimestamp(dt ?? now);
             _discussion[idx] = _DiscussionItem(
               id: saved.id,
               author: 'You',

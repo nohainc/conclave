@@ -320,14 +320,14 @@ class AppSidebar extends StatelessWidget {
                       },
                       borderRadius: BorderRadius.circular(8),
                       hoverColor: const Color(0xff29283c),
-                      focusColor: const Color(0xff302d4b),
+                      focusColor: ConclaveBrand.navigationSelection,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 6),
                         decoration: BoxDecoration(
                           color: shellContext.isNavActive(
                                   const AxNavigation.profileSecurity())
-                              ? const Color(0xff302d4b)
+                              ? ConclaveBrand.navigationSelection
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -415,7 +415,8 @@ class AppSidebar extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 2),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
         decoration: BoxDecoration(
-          color: active ? const Color(0xff302d4b) : Colors.transparent,
+          color:
+              active ? ConclaveBrand.navigationSelection : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(

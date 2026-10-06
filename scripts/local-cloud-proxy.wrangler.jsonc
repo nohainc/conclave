@@ -1,0 +1,6 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "conclave-local-cloud-gateway",
+  "main": "local-cloud-proxy.mjs",
+  "compatibility_date": "2026-09-20",
+}

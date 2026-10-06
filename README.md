@@ -51,8 +51,24 @@ lint and builds, Cloud tests, Dart formatting and analysis across all Dart
 packages, Workspace and AX Flutter tests, and fixture acceptance flows. The
 command requires Node.js, pnpm, Dart, and Flutter.
 
-`pnpm start:local` starts Wrangler with the local v8 D1 database and the AX web
-app. Production D1 migrations and deployments remain explicit workflow actions.
+`./scripts/start-local.sh` starts the AX frontend on `http://localhost:3000`
+and a local API gateway on `http://localhost:8787`. By default the gateway
+forwards HTTP and WebSocket requests to production Cloud, using existing
+accounts, remote data and Workspace connections. Actions affect live data.
+Authentication cookies are adapted to localhost while retaining HttpOnly;
+production authentication secrets stay on Cloud. This mode tests local AX UI
+changes against deployed Cloud behavior, rather than executing local backend changes.
+Stop previous frontend/backend processes before restarting the launcher.
+
+Use `./scripts/start-local.sh --isolated` to test local backend changes with
+the local v8 D1 database and separate accounts. In this mode the launcher
+generates a persistent local authentication secret in the ignored
+`apps/cloud/.dev.vars` file, preserving existing settings and limiting file access
+to its owner. Local email sign-in uses the local account database, so create a
+local account first if needed; hosted accounts are separate. If an already
+running backend reports “Authentication is not configured”, run
+`node scripts/setup-development-auth.mjs` and restart the local backend.
+Neither mode runs migrations or deploys production code.
 
 ## Work v1
 

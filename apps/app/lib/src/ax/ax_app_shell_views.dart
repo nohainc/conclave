@@ -541,11 +541,17 @@ extension _AxAppShellViews on _AxAppStateMixin {
           child: const SizedBox(width: 1, height: 1),
         ),
       Expanded(
-        child: SingleChildScrollView(
-          padding:
-              EdgeInsets.fromLTRB(compact ? 18 : 34, 26, compact ? 18 : 34, 40),
-          child: showRunDetails ? _runDetailsView(compact) : _homeView(),
-        ),
+        child: navigation.kind == AxRouteKind.workstream
+            ? Padding(
+                padding: EdgeInsets.fromLTRB(
+                    compact ? 18 : 34, 26, compact ? 18 : 34, 16),
+                child: _workstreamView(),
+              )
+            : SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                    compact ? 18 : 34, 26, compact ? 18 : 34, 40),
+                child: showRunDetails ? _runDetailsView(compact) : _homeView(),
+              ),
       ),
     ]);
   }

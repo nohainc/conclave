@@ -183,9 +183,24 @@ void main() {
     expect(session.viewer?.email, 'user@example.test');
     expect(client.lastRequest?.url.path, '/api/session');
 
+    api.sessionToken = 'fixture-session';
     await api.logout();
     expect(client.lastRequest?.method, 'POST');
     expect(client.lastRequest?.url.path, '/api/auth/sign-out');
+    expect(client.lastRequest?.headers['content-type'], 'application/json');
+    expect(
+        client.lastRequest?.headers['authorization'], 'Bearer fixture-session');
+    expect(jsonDecode(client.lastBody!), isEmpty);
+    expect(api.sessionToken, isNull);
+  });
+
+  test('failed logout preserves the session for retry', () async {
+    final api = AxApiClient(
+        baseUrl: 'https://conclave.test/api',
+        client: _JsonClient({}, statusCode: 503));
+    api.sessionToken = 'fixture-session';
+    await expectLater(api.logout(), throwsA(isA<AxApiException>()));
+    expect(api.sessionToken, 'fixture-session');
   });
 
   test('populates focused stores from the Cloud read model', () async {

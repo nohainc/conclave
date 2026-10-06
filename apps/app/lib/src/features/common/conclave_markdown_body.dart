@@ -97,13 +97,28 @@ class ConclaveMarkdownBody extends StatelessWidget {
 }
 
 /// One light/dark theme-derived style sheet for every AX Markdown surface.
+abstract final class ConclaveMessageTypography {
+  static TextStyle fromTheme(ThemeData theme) => TextStyle(
+        fontFamily: '-apple-system',
+        fontFamilyFallback: const [
+          'BlinkMacSystemFont',
+          'Segoe UI',
+          'Arial',
+          'sans-serif'
+        ],
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
+        height: 1.6,
+        color: theme.brightness == Brightness.dark
+            ? const Color(0xfff3f3f3)
+            : const Color(0xff202020),
+      );
+}
+
 abstract final class ConclaveMarkdownStyleSheet {
   static MarkdownStyleSheet fromTheme(ThemeData theme) {
     final colors = theme.colorScheme;
-    final body = theme.textTheme.bodyMedium!.copyWith(
-      color: colors.onSurface,
-      height: 1.5,
-    );
+    final body = ConclaveMessageTypography.fromTheme(theme);
     TextStyle heading(double size) => body.copyWith(
           fontSize: size,
           fontWeight: FontWeight.w600,
