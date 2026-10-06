@@ -10,8 +10,78 @@ import 'package:conclave_app/src/app_shell.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 
 import 'ax_fixture_data.dart';
+import 'ax_fixture_snapshot.dart';
 
 void main() {
+  testWidgets('clicking another project loads and reveals its Workstreams',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final data = _ProjectScopedFixture();
+    await tester.pumpWidget(MaterialApp(
+        home: ConclaveAppShell(
+      services: const DefaultPlatformServices(),
+      dataSource: data,
+    )));
+    await tester.pumpAndSettle();
+    final tree = find.byType(ProjectTree);
+    final target = find.descendant(of: tree, matching: find.text('Atlas API'));
+    expect(find.descendant(of: tree, matching: find.text('Atlas conversation')),
+        findsNothing);
+    await tester.tap(target);
+    await tester.pumpAndSettle();
+    expect(data.selectedProjects, contains('atlas'));
+    expect(find.descendant(of: tree, matching: find.text('Atlas conversation')),
+        findsOneWidget);
+    await tester.tap(target);
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: tree, matching: find.text('Atlas conversation')),
+        findsNothing);
+    await tester.tap(target);
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: tree, matching: find.text('Atlas conversation')),
+        findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+      'project collapse survives background refresh and can expand again',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      theme: ConclaveBrand.darkTheme(),
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: const AxFixtureDataSource(),
+        initialUri:
+            Uri.parse('/projects/project-auth/workstreams/workstream-auth'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final tree = find.byType(ProjectTree);
+    final project =
+        find.descendant(of: tree, matching: find.text('Authentication'));
+    final stream = find.descendant(
+        of: tree, matching: find.text('Authentication hardening'));
+    expect(stream, findsOneWidget);
+    // Keep the active Workstream route while collapsing its sidebar parent.
+    tester.widget<ProjectTree>(tree).onToggleProjectExpanded('project-auth');
+    await tester.pumpAndSettle();
+    expect(stream, findsNothing);
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    expect(stream, findsNothing);
+    await tester.tap(project);
+    await tester.pumpAndSettle();
+    expect(stream, findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   group('AxShellContext and isNavActive', () {
     test('isNavActive correctly isolates Home from projects and workstreams',
         () {
@@ -2070,3 +2140,29 @@ void _dummyNav(AxNavigation _) {}
 void _dummyToggle(String _) {}
 void _dummyAction() {}
 void _dummyExternal(Uri _) {}
+
+class _ProjectScopedFixture extends AxFixtureDataSource {
+  final selectedProjects = <String?>[];
+  @override
+  Future<AxSnapshot> loadReadModels(
+      {String? projectId, String? workspaceId}) async {
+    selectedProjects.add(projectId);
+    final snapshot = axFixtureSnapshot();
+    return snapshot.copyWith(
+        projects: snapshot.projects.map((project) {
+      if (project.id != 'atlas' || projectId != 'atlas') return project;
+      return project.copyWith(workstreams: const [
+        AxWorkstream(
+          id: 'atlas-chat',
+          projectId: 'atlas',
+          name: 'Atlas conversation',
+          lead: 'Test',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: 'Idle',
+        )
+      ]);
+    }).toList());
+  }
+}

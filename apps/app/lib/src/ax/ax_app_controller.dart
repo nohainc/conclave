@@ -733,10 +733,6 @@ extension _AxAppController on _AxAppStateMixin {
         loaded.projects.any((project) => project.id == routeProject)) {
       selectedProjectId = routeProject;
     }
-    if (navigation.kind == AxRouteKind.workstream &&
-        navigation.projectId != null) {
-      expandedProjectIds.add(navigation.projectId!);
-    }
   }
 
   void _onBrowserNavigation(Uri uri) {
@@ -774,6 +770,8 @@ extension _AxAppController on _AxAppStateMixin {
       mapEquals(actual.queryParameters, canonical.queryParameters);
 
   void _navigateTo(AxNavigation next, {bool replace = false}) {
+    final projectChanged =
+        next.projectId != null && next.projectId != selectedProjectId;
     if (next.kind != AxRouteKind.search &&
         _searchQueryController.text.isNotEmpty) {
       _searchQueryController.removeListener(_onSearchQueryChanged);
@@ -794,6 +792,16 @@ extension _AxAppController on _AxAppStateMixin {
     } else {
       browserNavigation.push(next.toUri());
     }
+    // The browser callback skips our already-applied route; load its context here.
+    if (projectChanged) {
+      unawaited(_loadSnapshot(projectId: next.projectId, showSpinner: false));
+    }
+    unawaited(realtimeClient.setScopes(
+      projectId: next.projectId ?? selectedProjectId,
+      workstreamId: next.workstreamId,
+      runId: next.runId,
+      executionWorkspaceId: executionWorkspaceId,
+    ));
   }
 
   void _scheduleRefresh(AxSnapshot loaded) {

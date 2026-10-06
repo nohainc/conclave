@@ -60,8 +60,15 @@ Work submissions while applying the migrations. `0006_chat_workflow_admission.sq
 must run as one atomic migration, never statement by statement: D1 defers foreign
 key checks but still performs cascading deletes. The migration saves and restores
 affected dependencies and verifies row preservation and foreign-key integrity.
-If its schema assertion fails, inspect the actual schema and revise the alignment
-to preserve the additional fields/objects before retrying. Do not bypass the guard.
+Use the production migration runner below rather than applying the canonical SQL
+file directly to a historical deployment. It reads schema metadata and prepares
+an atomic instance of pending migration 0006 in a private temporary directory.
+The instance preserves deployed columns (including historical `checkout_id`),
+indexes, triggers, and every transitive foreign-key dependency. It checks the
+schema again before rebuilding and verifies every restored row. Applied migration
+files and immutable `direct:v1` snapshots remain unchanged. Cyclic dependencies
+and AUTOINCREMENT sequences fail preparation for explicit review. A failed schema
+guard must never be bypassed; rerun preparation after inspecting the difference.
 Resume submissions only after migration success and the schema smoke check.
 
 1. Confirm the production app Worker preflight passes:
@@ -73,8 +80,7 @@ Resume submissions only after migration success and the schema smoke check.
 2. Apply D1 migrations remotely:
 
    ```sh
-   wrangler d1 migrations apply conclave-v8-production \
-     --remote --config infra/cloudflare/app.wrangler.jsonc
+   CONFIRM_PRODUCTION_MIGRATION=YES ./scripts/migrate-production-d1.sh
    ```
 
 3. Deploy the app Worker. It runs Cloud Workflows and dispatches assignments

@@ -201,6 +201,11 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     browserNavigation = createAxBrowserNavigation();
     final initialUri = widget.initialUri ?? browserNavigation.current;
     navigation = AxNavigation.fromUri(initialUri);
+    // Expand deep links once; data refreshes must preserve manual collapse.
+    if (navigation.kind == AxRouteKind.workstream &&
+        navigation.projectId != null) {
+      expandedProjectIds.add(navigation.projectId!);
+    }
     _desktopAuthIntentId = _intentIdFromNavigation(navigation);
     if (!_isCanonicalWorkspaceUri(initialUri, navigation.toUri())) {
       browserNavigation.replace(navigation.toUri());

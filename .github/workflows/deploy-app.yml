@@ -175,7 +175,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm exec wrangler d1 migrations apply conclave-v8-production --remote --config ../../infra/cloudflare/app.wrangler.jsonc
+        run: CONFIRM_PRODUCTION_MIGRATION=YES ../../scripts/migrate-production-d1.sh
       - name: Verify production D1 schema before Worker deploy
         working-directory: .
         env:

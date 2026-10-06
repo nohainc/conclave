@@ -2,6 +2,8 @@
 
 AI Chat is selected in the Workstream **Work** composer. The **Chat** discussion
 tab stores human/team messages separately. Both surfaces preserve Markdown source.
+Selecting a different Project loads its Workstreams into the sidebar. Manual
+expansion/collapse is preserved during background refreshes.
 
 1. Open Work settings and bind a Ready Worker/model to **Chat** and **Work**.
    These bindings are independent and may use different registered Workers.
@@ -29,9 +31,15 @@ Chat has only its read-only stateless Step and never enters that coordination.
 Chat and Work never share a provider session, even with the same Worker/model.
 
 Deploy ordered migrations through `0008_codex_compatibility_approval_policy.sql`
-using the [production provisioning runbook](PRODUCTION_PROVISIONING.md). Older
-signed Profiles without qualified `workstream_read` capability fail closed for
-Chat; publish a qualified successor rather than editing a signed release.
+using the [production provisioning runbook](PRODUCTION_PROVISIONING.md).
+
+Cloud serves the authoritative Workflow catalog. If both the default selector
+and composer menu still show Direct and omit Chat, the connected Cloud is running
+the older catalog; deploy the updated Cloud after migrations, then reopen the
+Workstream. The default local launcher proxies this same hosted catalog.
+
+Older signed Profiles without qualified `workstream_read` capability fail closed
+for Chat; publish a qualified successor rather than editing a signed release.
 Antigravity's current starter cannot enforce read-only Workstream access and is
 not eligible for Chat. It may still run Work. Release qualification and live
 provider acceptance remain required; see [regression coverage](../acceptance/CHAT_WORKFLOW.md).

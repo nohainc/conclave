@@ -18,8 +18,12 @@ migration flow. The desktop auth audience correction is recorded in
 [`0006_chat_workflow_admission.sql`](../../apps/cloud/migrations-v8/0006_chat_workflow_admission.sql)
 extends Workflow/Step constraints for Chat. It preserves historical immutable
 snapshots and related records during an atomic rebuild with foreign keys enabled.
-Its schema assertions abort on unrecognized column, index or foreign-key
-additions; review and align those additions before retrying, never delete them.
+The production runner prepares pending 0006 from deployed schema metadata,
+preserving historical additions and the complete foreign-key dependency closure.
+Its assertions reject schema changes between preparation and application. The
+checked-in canonical migration remains unchanged; already-applied migrations are
+never regenerated or replayed. See the
+[production runbook](../operations/PRODUCTION_PROVISIONING.md).
 [`0007_chat_profile_starter_attestation.sql`](../../apps/cloud/migrations-v8/0007_chat_profile_starter_attestation.sql)
 updates only the unchanged official Codex development starter. It preserves
 operator-edited templates, Drafts and published releases.

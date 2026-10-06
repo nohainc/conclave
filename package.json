@@ -8,7 +8,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "test": "vitest run packages/protocol/test packages/workspace-runtime-protocol/test packages/security/test packages/core/test packages/tool-profile/test apps/cloud/test scripts/verify-v8-architecture.test.mjs scripts/production-workspace-gateway-smoke.test.mjs scripts/setup-development-profile-signing.test.mjs scripts/setup-development-auth.test.mjs scripts/provision-profile-starter-templates.test.mjs scripts/provision-profile-qualification-evidence.test.mjs scripts/resolve-build-profile-trust.test.mjs scripts/align-workspace-grant-schema.test.mjs scripts/local-cloud-proxy.test.mjs",
+    "test": "vitest run packages/protocol/test packages/workspace-runtime-protocol/test packages/security/test packages/core/test packages/tool-profile/test apps/cloud/test scripts/verify-v8-architecture.test.mjs scripts/production-workspace-gateway-smoke.test.mjs scripts/setup-development-profile-signing.test.mjs scripts/setup-development-auth.test.mjs scripts/provision-profile-starter-templates.test.mjs scripts/provision-profile-qualification-evidence.test.mjs scripts/resolve-build-profile-trust.test.mjs scripts/align-workspace-grant-schema.test.mjs scripts/local-cloud-proxy.test.mjs scripts/prepare-chat-workflow-migration.test.mjs",
     "workspace:build": "bash scripts/build-workspace.sh",
     "workspace:build:macos": "bash scripts/build-workspace-macos.sh",
     "workspace:test:macos": "bash scripts/test-workspace-macos.sh",
