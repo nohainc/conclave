@@ -1,32 +1,20 @@
-# Conclave AX brand mark
+# Conclave AX brand assets
 
-The canonical Conclave AX mark is `assets/branding/conclave_logo.svg`.
+The canonical vector mark is `assets/branding/conclave_logo.svg`.
 
-## Design
+All committed raster assets are reviewed exports. They are **not generated during build or by a repository script**. This avoids renderer-specific blank/transparent output and makes the exact shipped artwork reviewable in Git.
 
-The mark uses four identical elements with four-fold rotational symmetry. Their convergence creates a four-point sparkle as **negative space**; the sparkle is not a painted fifth element. This represents independent AI workers coordinating into an emergent result.
+## Required surfaces
 
-The canonical mark has a transparent background and must remain readable at 16–24 px.
+- Conclave AX: Flutter branding asset, browser favicon, PWA icons and maskable icons.
+- Workspace: Flutter branding asset and complete macOS AppIcon set.
+- Profile Lab: Flutter branding asset and complete macOS AppIcon set.
+- Site: SVG favicon / navigation mark and PNG fallback.
 
-## Source of truth
+## Rules
 
-Do not hand-edit generated PNGs. Update the canonical SVG, then run:
-
-```bash
-scripts/brand/generate-assets.sh
-```
-
-The generator refreshes:
-
-- Conclave AX web-app branding PNGs and PWA icons
-- Workspace branding PNGs and macOS AppIcon set
-- Profile Lab branding PNGs and macOS AppIcon set
-- landing-site PNG/favicons
-
-ImageMagick 7 is required for raster export.
-
-## Usage
-
-Prefer the transparent standalone mark. Do not add a hexagonal container, painted center sparkle, letter, or glow to the canonical mark. Product surfaces may place the mark on their own dark/light container.
-
-Keep clear space around the mark and avoid shrinking below 16 px.
+- Use the transparent logo for in-product branding.
+- Use the opaque rounded-square application icon for OS launchers and maskable PWA surfaces.
+- Keep the central opening transparent in the standalone mark.
+- Do not regenerate or rewrite these files as part of a build.
+- Any future brand update must replace the committed files deliberately and visually verify 16, 32, 64, 128, 192, 256, 512 and 1024 px outputs.
