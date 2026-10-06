@@ -129,13 +129,24 @@ class WebSocketWorkspaceTransport implements WorkspaceTransport {
 
   @override
   Future<void> close() async {
-    await socket.close(WebSocketStatus.normalClosure);
+    try {
+      await socket.close(WebSocketStatus.normalClosure).timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {
+          // Normal closure handshake timed out (e.g. network dead / wake from sleep);
+          // do not block connection cleanup.
+        },
+      );
+    } catch (_) {
+      // Ignore errors on close to ensure teardown always finishes.
+    }
   }
 }
 
 Future<WorkspaceTransport> connectWebSocketWorkspaceTransport(
   Uri uri, {
   String? authToken,
+  Duration connectTimeout = const Duration(seconds: 15),
 }) async {
   final socketUri =
       uri.hasPort ? uri : uri.replace(port: uri.scheme == 'wss' ? 443 : 80);
@@ -144,7 +155,13 @@ Future<WorkspaceTransport> connectWebSocketWorkspaceTransport(
     headers: authToken == null
         ? null
         : <String, String>{'Authorization': 'Bearer $authToken'},
+  ).timeout(
+    connectTimeout,
+    onTimeout: () => throw const SocketException(
+      'WebSocket connection timed out during transport setup',
+    ),
   );
+  socket.pingInterval = const Duration(seconds: 10);
   return WebSocketWorkspaceTransport(socket);
 }
 
@@ -449,6 +466,43 @@ class WorkspaceCloudConnection {
     await _open();
   }
 
+  /// Fully tears down any existing timers, subscriptions, and socket objects
+  /// with a timeout guarantee so reconnects can never hang on dead resources.
+  Future<void> _cleanCurrentTransport() async {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    _heartbeatTimeoutTimer?.cancel();
+    _heartbeatTimeoutTimer = null;
+    _protocolHandshakeTimer?.cancel();
+    _protocolHandshakeTimer = null;
+    _syncTimer?.cancel();
+    _syncTimer = null;
+    _webSocketProbeTimer?.cancel();
+    _webSocketProbeTimer = null;
+    final sub = _subscription;
+    _subscription = null;
+    if (sub != null) {
+      await sub.cancel().catchError((_) {});
+    }
+    final transport = _transport;
+    _transport = null;
+    activeTransportMode = null;
+    _pendingTransportMode = null;
+    sessionId = null;
+    if (transport != null) {
+      try {
+        await transport.close().timeout(
+          const Duration(seconds: 3),
+          onTimeout: () {
+            // Transport closure timed out; proceed with teardown.
+          },
+        );
+      } catch (_) {
+        // Ignore errors on transport close
+      }
+    }
+  }
+
   /// Requests an immediate transport retry without recreating local Workers
   /// or interrupting their assignment processes.
   Future<void> retryNow() async {
@@ -459,23 +513,12 @@ class WorkspaceCloudConnection {
       if (wakeup != null && !wakeup.isCompleted) wakeup.complete();
       return;
     }
-
-    _heartbeatTimer?.cancel();
-    _heartbeatTimeoutTimer?.cancel();
-    _protocolHandshakeTimer?.cancel();
-    _syncTimer?.cancel();
-    _webSocketProbeTimer?.cancel();
-    await _subscription?.cancel();
-    _subscription = null;
-    final oldSocket = _transport;
-    _transport = null;
-    activeTransportMode = null;
-    sessionId = null;
-    await oldSocket?.close();
+    await _cleanCurrentTransport();
     await _open();
   }
 
   Future<void> _open({bool forceWebSocket = false}) async {
+    await _cleanCurrentTransport();
     lastConnectionAttemptAt = DateTime.now().toUtc();
     connectionStage = WorkspaceConnectionStage.connecting;
     lastHelloSentAt = null;
@@ -501,13 +544,28 @@ class WorkspaceCloudConnection {
         fragment: null,
       );
       if (forceWebSocket) {
-        socket = await factory(uri);
+        socket = await factory(uri).timeout(
+          protocolHandshakeTimeout,
+          onTimeout: () => throw const SocketException(
+            'WebSocket connection timed out during transport open',
+          ),
+        );
         selectedWebSocket = true;
       } else if (_preferFallbackTransport && fallback != null) {
         try {
-          socket = await fallback(httpUri);
+          socket = await fallback(httpUri).timeout(
+            protocolHandshakeTimeout,
+            onTimeout: () => throw const SocketException(
+              'HTTP fallback connection timed out',
+            ),
+          );
         } on Object {
-          socket = await factory(uri);
+          socket = await factory(uri).timeout(
+            protocolHandshakeTimeout,
+            onTimeout: () => throw const SocketException(
+              'WebSocket connection timed out',
+            ),
+          );
           selectedWebSocket = true;
         }
       } else {
@@ -517,7 +575,12 @@ class WorkspaceCloudConnection {
             fallback == null ? 1 : webSocketFailureLimit.clamp(1, 5);
         for (var attempt = 0; attempt < attempts; attempt++) {
           try {
-            socket = await factory(uri);
+            socket = await factory(uri).timeout(
+              protocolHandshakeTimeout,
+              onTimeout: () => throw const SocketException(
+                'WebSocket connection timed out',
+              ),
+            );
             selectedWebSocket = true;
             connected = true;
             break;
@@ -540,7 +603,12 @@ class WorkspaceCloudConnection {
             throw lastWebSocketError ??
                 StateError('WebSocket connection failed');
           }
-          socket = await fallback(httpUri);
+          socket = await fallback(httpUri).timeout(
+            protocolHandshakeTimeout,
+            onTimeout: () => throw const SocketException(
+              'HTTP fallback connection timed out',
+            ),
+          );
           selectedWebSocket = false;
         }
       }
@@ -615,7 +683,7 @@ class WorkspaceCloudConnection {
         lastWebSocketFailureAt = DateTime.now().toUtc();
       }
       connectionStage = WorkspaceConnectionStage.reconnecting;
-      unawaited(_transport?.close());
+      _handleTransportEnd();
     });
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(heartbeat, (_) {
@@ -623,7 +691,13 @@ class WorkspaceCloudConnection {
       if (currentSessionId == null) return;
       _heartbeatTimeoutTimer ??= Timer(heartbeat * 2, () {
         _heartbeatTimeoutTimer = null;
-        unawaited(_transport?.close());
+        lastConnectionError = 'Cloud heartbeat acknowledgement timed out.';
+        if (_pendingTransportMode == 'websocket') {
+          lastWebSocketFailure = lastConnectionError;
+          lastWebSocketFailureAt = DateTime.now().toUtc();
+        }
+        connectionStage = WorkspaceConnectionStage.reconnecting;
+        _handleTransportEnd();
       });
       socket.send(jsonEncode({
         ..._envelope('workspace.heartbeat', {
@@ -686,7 +760,7 @@ class WorkspaceCloudConnection {
           lastWebSocketFailureAt = DateTime.now().toUtc();
         }
         connectionStage = WorkspaceConnectionStage.reconnecting;
-        unawaited(_transport?.close());
+        _handleTransportEnd();
         return;
       }
       if (payload is Map<String, dynamic> &&
@@ -719,7 +793,7 @@ class WorkspaceCloudConnection {
             lastWebSocketFailureAt = DateTime.now().toUtc();
           }
           connectionStage = WorkspaceConnectionStage.reconnecting;
-          unawaited(_transport?.close());
+          _handleTransportEnd();
         });
         authorizedWorkspaceIds
           ..clear()
@@ -738,7 +812,7 @@ class WorkspaceCloudConnection {
           lastWebSocketFailureAt = DateTime.now().toUtc();
         }
         connectionStage = WorkspaceConnectionStage.reconnecting;
-        unawaited(_transport?.close());
+        _handleTransportEnd();
         return;
       }
       final payload = decoded['payload'];
@@ -827,7 +901,7 @@ class WorkspaceCloudConnection {
       lastConnectionError =
           'Workspace sync reconciliation failed (${error.runtimeType}).';
       connectionStage = WorkspaceConnectionStage.reconnecting;
-      unawaited(_transport?.close());
+      _handleTransportEnd();
     }
   }
 
@@ -854,16 +928,8 @@ class WorkspaceCloudConnection {
     }
     _probingWebSocket = true;
     connectionStage = WorkspaceConnectionStage.switchingToWebSocket;
-    _webSocketProbeTimer?.cancel();
-    await _subscription?.cancel();
-    _subscription = null;
-    final fallback = _transport;
-    _transport = null;
-    activeTransportMode = null;
-    _pendingTransportMode = null;
-    sessionId = null;
+    await _cleanCurrentTransport();
     try {
-      await fallback?.close();
       _preferFallbackTransport = false;
       await _open(forceWebSocket: true);
     } on Object catch (error) {
@@ -893,6 +959,12 @@ class WorkspaceCloudConnection {
     }
     if (error is WebSocketException) {
       return 'WebSocket upgrade failed.';
+    }
+    if (error is TimeoutException) {
+      return 'Connection timed out (${error.message ?? 'timeout'}).';
+    }
+    if (error is SocketException) {
+      return 'Socket connection failed (${error.message}).';
     }
     return 'WebSocket connection failed (${error.runtimeType}).';
   }
@@ -1044,10 +1116,7 @@ class WorkspaceCloudConnection {
     _reconnecting = true;
     sessionId = null;
     connectionStage = WorkspaceConnectionStage.reconnecting;
-    _protocolHandshakeTimer?.cancel();
-    _protocolHandshakeTimer = null;
-    _syncTimer?.cancel();
-    _syncTimer = null;
+    await _cleanCurrentTransport();
     try {
       while (!_closing) {
         reconnectCount += 1;
@@ -1083,7 +1152,12 @@ class WorkspaceCloudConnection {
         fallbackFactory != null) {
       fallbackHealthStatus = 'unavailable';
     }
-    unawaited(_reconnect());
+    final wakeup = _reconnectWakeup;
+    if (_reconnecting && wakeup != null && !wakeup.isCompleted) {
+      wakeup.complete();
+    } else {
+      unawaited(_reconnect());
+    }
   }
 
   bool _isTerminalWebSocketFailure(Object? error) {
@@ -1108,15 +1182,7 @@ class WorkspaceCloudConnection {
         }
       }
     }
-    _heartbeatTimer?.cancel();
-    _heartbeatTimeoutTimer?.cancel();
-    _protocolHandshakeTimer?.cancel();
-    _syncTimer?.cancel();
-    await _subscription?.cancel();
-    await _transport?.close();
-    _transport = null;
-    activeTransportMode = null;
-    sessionId = null;
+    await _cleanCurrentTransport();
     lastHelloSentAt = null;
     connectionStage = WorkspaceConnectionStage.offline;
   }

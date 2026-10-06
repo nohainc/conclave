@@ -115,7 +115,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      unawaited(widget.lifecycle.checkWorkerReadiness());
+      unawaited(widget.lifecycle.handleSystemResume());
     }
   }
 

@@ -1573,4 +1573,64 @@ void main() {
         const WorkspaceAssignmentResult(summary: 'cancelled by test'));
     await connection.close();
   });
+
+  test('retryNow tears down dead transport and reconnects cleanly', () async {
+    final first = FakeSocket();
+    final second = FakeSocket();
+    final sockets = <FakeSocket>[first, second];
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://gateway.conclave.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
+      workspaceRuntimeId: 'runtime-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => sockets.removeAt(0),
+    );
+    await connection.connect();
+    await completeHandshake(connection, first, sessionId: 'session-1');
+    expect(connection.isConnected, isTrue);
+
+    // Simulate dead connection / sleep wake-up where retryNow is triggered
+    await connection.retryNow();
+    expect(connection.isConnected, isFalse);
+    await completeHandshake(connection, second, sessionId: 'session-2');
+    expect(connection.isConnected, isTrue);
+    expect(connection.sessionId, 'session-2');
+    await connection.close();
+  });
+
+  test('recovers when factory throws TimeoutException', () async {
+    final recovered = FakeSocket();
+    var attempts = 0;
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://gateway.conclave.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
+      workspaceRuntimeId: 'runtime-1',
+      workspaceId: 'workspace-1',
+      reconnectBaseDelay: const Duration(milliseconds: 1),
+      reconnectMaxDelay: const Duration(milliseconds: 5),
+      factory: (_) async {
+        attempts++;
+        if (attempts == 1) {
+          throw TimeoutException('Simulated connect timeout on wake');
+        }
+        return recovered;
+      },
+    );
+    try {
+      await connection.connect();
+    } on Object catch (error) {
+      expect(error, isA<TimeoutException>());
+    }
+    expect(connection.connectionStage, WorkspaceConnectionStage.offline);
+    expect(connection.lastConnectionError, contains('Connection timed out'));
+
+    await connection.retryNow();
+    await waitFor(() => recovered.sent.any((message) {
+          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
+          return decoded['type'] == 'workspace.hello';
+        }));
+    await completeHandshake(connection, recovered, sessionId: 'recovered');
+    expect(connection.isConnected, isTrue);
+    await connection.close();
+  });
 }

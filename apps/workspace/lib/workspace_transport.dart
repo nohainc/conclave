@@ -201,7 +201,7 @@ class HttpLongPollWorkspaceTransport implements WorkspaceTransport {
             '/api/workspace-runtime/sessions/${Uri.encodeComponent(sessionId)}/close',
             {
               'sessionId': sessionId,
-            });
+            }).timeout(const Duration(seconds: 2), onTimeout: () => {});
       } on Object {
         // Closing the local poll loop must not depend on Cloud availability.
       }

@@ -122,6 +122,17 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Handles system wake from sleep / app resume by checking worker readiness
+  /// and actively reconnecting if the cloud connection dropped.
+  Future<void> handleSystemResume() async {
+    await checkWorkerReadiness();
+    final connection = workspace.cloudConnection;
+    if (connection != null && !connection.isConnected) {
+      unawaited(connection.retryNow().catchError((_) {}));
+    }
+    notifyListeners();
+  }
+
   Future<void> handleDesktopAction(String action) async {
     switch (action) {
       case 'openWorkspace':
