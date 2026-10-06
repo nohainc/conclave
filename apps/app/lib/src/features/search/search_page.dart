@@ -198,17 +198,14 @@ class SearchPage extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xff29273c)
-                              : const Color(0xffede9fe),
-                          borderRadius: BorderRadius.circular(8),
+                          color: ConclaveColors.primarySoftColor(isDark),
+                          borderRadius:
+                              BorderRadius.circular(ConclaveRadius.sm),
                         ),
                         child: Icon(
                           Icons.search_rounded,
                           size: 22,
-                          color: isDark
-                              ? const Color(0xffa78bfa)
-                              : ConclaveBrand.accent,
+                          color: ConclaveColors.primaryForeground(isDark),
                         ),
                       ),
                       const SizedBox(width: 12),

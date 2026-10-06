@@ -1,30 +1,30 @@
 :root {
   color-scheme: dark;
-  --color-canvas: #09090e;
-  --color-paper: #09090e;
-  --color-surface: #12121a;
-  --color-surface-raised: #181824;
-  --color-surface-hover: #222230;
-  --color-surface-glass: rgba(18, 18, 26, 0.75);
+  --color-canvas: #121217;
+  --color-paper: #121217;
+  --color-surface: #1a1a22;
+  --color-surface-raised: #20202a;
+  --color-surface-hover: #24242f;
+  --color-surface-glass: rgba(26, 26, 34, 0.75);
   --color-surface-highlight: rgba(255, 255, 255, 0.04);
 
-  --color-ink: #f4f4f8;
+  --color-ink: #f4f4f6;
   --color-ink-soft: #c8c8d8;
-  --color-muted: #8e8e9f;
+  --color-muted: #9e9eaf;
 
-  --color-line: rgba(255, 255, 255, 0.08);
+  --color-line: #2e2e3a;
   --color-line-strong: rgba(255, 255, 255, 0.16);
-  --color-line-glow: rgba(165, 180, 252, 0.3);
+  --color-line-glow: rgba(184, 169, 254, 0.3);
 
-  --color-accent: #6366f1;
-  --color-accent-light: #818cf8;
-  --color-accent-dark: #4f46e5;
-  --color-accent-wash: rgba(99, 102, 241, 0.12);
-  --color-accent-glow: rgba(99, 102, 241, 0.28);
-  --color-focus: #818cf8;
+  --color-accent: #5e4bd8;
+  --color-accent-light: #b8a9fe;
+  --color-accent-dark: #4937bd;
+  --color-accent-wash: rgba(94, 75, 216, 0.16);
+  --color-accent-glow: rgba(94, 75, 216, 0.28);
+  --color-focus: #b8a9fe;
 
-  --color-success: #10b981;
-  --color-success-wash: rgba(16, 185, 129, 0.12);
+  --color-success: #22c55e;
+  --color-success-wash: rgba(34, 197, 94, 0.12);
   --color-warning: #f59e0b;
   --color-warning-wash: rgba(245, 158, 11, 0.12);
 

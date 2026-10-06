@@ -131,9 +131,7 @@ class ToastOverlay extends StatelessWidget {
                     padding: EdgeInsets.zero,
                     constraints:
                         const BoxConstraints(minWidth: 24, minHeight: 24),
-                    splashRadius: 14,
-                    color:
-                        isDark ? const Color(0xffb8a9fe) : ConclaveBrand.accent,
+                    color: ConclaveColors.primaryForeground(isDark),
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: toast.message));
                     },

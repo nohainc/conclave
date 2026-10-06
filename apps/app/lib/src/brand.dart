@@ -378,7 +378,9 @@ abstract final class ConclaveBrand {
       ),
       textTheme: _textTheme(ConclaveColors.textPrimaryLight),
       filledButtonTheme: _filledButtonTheme(),
-      outlinedButtonTheme: _outlinedButtonTheme(ConclaveColors.borderLight),
+      outlinedButtonTheme: _outlinedButtonTheme(
+          ConclaveColors.borderLight, ConclaveColors.primaryForegroundLight),
+      textButtonTheme: _textButtonTheme(ConclaveColors.primaryForegroundLight),
       chipTheme: _chipTheme(
           ConclaveColors.surfaceHoverLight, ConclaveColors.textPrimaryLight),
       snackBarTheme: SnackBarThemeData(
@@ -454,7 +456,9 @@ abstract final class ConclaveBrand {
       ),
       textTheme: _textTheme(ConclaveColors.textPrimaryDark),
       filledButtonTheme: _filledButtonTheme(),
-      outlinedButtonTheme: _outlinedButtonTheme(ConclaveColors.borderDark),
+      outlinedButtonTheme: _outlinedButtonTheme(
+          ConclaveColors.borderDark, ConclaveColors.primaryForegroundDark),
+      textButtonTheme: _textButtonTheme(ConclaveColors.primaryForegroundDark),
       chipTheme: _chipTheme(
           ConclaveColors.surfaceHoverDark, ConclaveColors.textPrimaryDark),
       snackBarTheme: SnackBarThemeData(
@@ -490,13 +494,23 @@ abstract final class ConclaveBrand {
         ),
       );
 
-  static OutlinedButtonThemeData _outlinedButtonTheme(Color border) =>
+  static OutlinedButtonThemeData _outlinedButtonTheme(Color border,
+          [Color? foreground]) =>
       OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: ConclaveColors.primary,
+          foregroundColor: foreground ?? ConclaveColors.primary,
           side: BorderSide(color: border),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(ConclaveRadius.md)),
+        ),
+      );
+
+  static TextButtonThemeData _textButtonTheme([Color? foreground]) =>
+      TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: foreground ?? ConclaveColors.primary,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(ConclaveRadius.sm)),
         ),
       );
 
