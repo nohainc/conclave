@@ -13,7 +13,9 @@ export function workStepSessionKey(params: {
   const base =
     params.workBindingId === "direct"
       ? `workstream:${params.workstreamId}:direct:work-conversation`
-      : `work-request:${params.workRequestId}:${params.stepKind}`;
+      : params.workBindingId === "chat"
+        ? `workstream:${params.workstreamId}:chat:conversation`
+        : `work-request:${params.workRequestId}:${params.stepKind}`;
   const identity =
     params.retryStepKind === params.stepKind &&
     params.retrySessionStrategy === "fresh"

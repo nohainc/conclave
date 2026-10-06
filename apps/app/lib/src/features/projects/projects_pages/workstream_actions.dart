@@ -19,7 +19,7 @@ extension _WorkstreamActions on _WorkstreamPageState {
         _savingWorkConfig = false;
       });
       final defaultId = _workConfig['defaultWorkflowId']?.toString();
-      final selectedDefault = _workflowCatalog
+      final selectedDefault = _currentWorkflows
           .where((workflow) => workflow.id == defaultId)
           .map((workflow) => workflow.reference)
           .firstOrNull;
@@ -51,6 +51,7 @@ extension _WorkstreamActions on _WorkstreamPageState {
         : text;
     final attachments = List<Map<String, dynamic>>.from(_workAttachments);
     final workflowId = _workflow.split(':').first;
+    final workflowVersion = int.tryParse(_workflow.split(':v').last) ?? 1;
     final workstreamId = widget.workstream.id;
     final createdAt = DateTime.now().toUtc().toIso8601String();
     var localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
@@ -61,7 +62,7 @@ extension _WorkstreamActions on _WorkstreamPageState {
           requestedByUserId: widget.currentUserId,
           prompt: requestText,
           workflowId: workflowId,
-          workflowVersion: 1,
+          workflowVersion: workflowVersion,
           status: status,
           createdAt: createdAt,
           steps: const [],
@@ -106,7 +107,7 @@ extension _WorkstreamActions on _WorkstreamPageState {
             attachments: attachments);
         if (!mounted || widget.workstream.id != workstreamId) return;
         if (issues.isNotEmpty) {
-          final workflowName = _workflowCatalog
+          final workflowName = _currentWorkflows
                   .where((definition) => definition.id == workflowId)
                   .map((definition) => definition.name)
                   .firstOrNull ??

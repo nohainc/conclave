@@ -28,7 +28,7 @@ are normative and checked by `scripts/verify-v8-architecture.mjs`.
 
 ## Work v1
 
-Conclave owns the built-in Steps and Workflows defined by the [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md). Workstreams bind logical Workers to Direct and individual Steps. A Work Request snapshots its Workflow, bindings, models, instructions, attachment references, and prompt-profile versions.
+Conclave owns the built-in Steps and Workflows defined by the [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md). Workstreams bind logical Workers to Work (`direct:v2`) and individual Steps. Historical `direct:v1` snapshots retain the name Direct. A Work Request snapshots its Workflow, bindings, models, instructions, attachment references, and prompt-profile versions.
 
 The runtime implementation stays below the logical Worker boundary:
 

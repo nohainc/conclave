@@ -21,6 +21,17 @@ part 'projects_pages/workstream_config.dart';
 part 'projects_pages/workstream_actions.dart';
 part 'projects_pages/work_components.dart';
 
+List<AxBuiltinWorkflow> _currentWorkflowVersions(
+    List<AxBuiltinWorkflow> catalog) {
+  final current = <String, AxBuiltinWorkflow>{};
+  for (final workflow in catalog) {
+    if (workflow.version > (current[workflow.id]?.version ?? 0)) {
+      current[workflow.id] = workflow;
+    }
+  }
+  return current.values.toList();
+}
+
 String _chatTimestamp(DateTime value) {
   final dt = value.toLocal();
   return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} · '

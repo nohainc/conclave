@@ -835,7 +835,7 @@ extension _AxAppController on _AxAppStateMixin {
                   setDialogState(() => selectedProjectId = value),
             ),
             const Text(
-                'Direct needs repository read and write access. Test steps also need command execution.'),
+                'Work needs repository read and write access. Test steps also need command execution.'),
             for (final entry in const {
               'repository:read': 'Read repository files',
               'repository:write': 'Change repository files',

@@ -20,6 +20,83 @@ const stepResult = (text: string) => ({
 });
 
 describe("Work v1 prompt profiles", () => {
+  it("gives Chat bounded contextual inputs and references without implementation authority", () => {
+    const workflow = BUILTIN_WORKFLOWS.chat;
+    const prompt = renderWorkStepPrompt(workflow, workflow.steps[0]!, {
+      originalRequest: "Please implement **this change**.",
+      workRequestId: "request-chat",
+      projectInstructions: "Prefer established patterns.",
+      workstreamInstructions: "Explain the current architecture.",
+      stepInstructions: {
+        chat: "Discuss the tradeoffs.",
+        implement: "Must not be inherited.",
+      },
+      attachments: [
+        {
+          kind: "file",
+          name: "notes.md",
+          mediaType: "text/markdown",
+          content: "Not inlined.",
+        },
+        { kind: "url", name: "Reference", url: "https://example.com/docs" },
+      ],
+      stepResults: { implement: stepResult("Must not be inherited.") },
+    });
+    expect(prompt).toContain(
+      "CHAT\nAnswer the user's request conversationally",
+    );
+    expect(prompt).toContain(
+      "Project instructions:\nPrefer established patterns.",
+    );
+    expect(prompt).toContain(
+      "Workstream instructions:\nExplain the current architecture.",
+    );
+    expect(prompt).toContain(
+      "Additional Chat instructions:\nDiscuss the tradeoffs.",
+    );
+    expect(prompt).toContain(
+      "Run-specific user request:\nPlease implement **this change**.",
+    );
+    expect(prompt).toContain(
+      "notes.md (text/markdown): .conclave/inputs/request-chat/file-001",
+    );
+    expect(prompt).toContain("Reference: https://example.com/docs");
+    expect(prompt).not.toContain("Not inlined.");
+    expect(prompt).not.toContain("Must not be inherited.");
+    for (const restriction of [
+      "create files",
+      "modify files",
+      "delete or rename files",
+      "change Git state",
+      "install or update dependencies",
+      "perform implementation work",
+    ]) {
+      expect(prompt).toContain(`Do not ${restriction}.`);
+    }
+    expect(prompt).toContain("use Work mode");
+    expect(prompt).toContain("Markdown where useful");
+  });
+
+  it("bounds oversized Chat inputs while retaining the read-only profile", () => {
+    const workflow = BUILTIN_WORKFLOWS.chat;
+    const oversized = "x".repeat(200000) + "UNBOUNDED_TAIL";
+    const prompt = renderWorkStepPrompt(workflow, workflow.steps[0]!, {
+      originalRequest: oversized,
+      projectInstructions: oversized,
+      workstreamInstructions: oversized,
+      stepInstructions: { chat: oversized },
+      attachments: Array.from({ length: 20 }, () => ({
+        kind: "url" as const,
+        name: oversized,
+        url: oversized,
+      })),
+    });
+    expect(prompt.length).toBeLessThanOrEqual(96000);
+    expect(prompt).toContain("Content truncated by Conclave prompt limits.");
+    expect(prompt).not.toContain("UNBOUNDED_TAIL");
+    expect(prompt).toContain("Do not change Git state.");
+    expect(prompt).toContain("use Work mode");
+  });
   it("gives Research request text and attachment contents only", () => {
     const workflow = BUILTIN_WORKFLOWS.full_cycle;
     const prompt = renderWorkStepPrompt(workflow, workflow.steps[0]!, {
@@ -178,6 +255,7 @@ describe("Work v1 prompt profiles", () => {
 
   it("uses the catalog profile for each StepKind", () => {
     const profileByKind: Record<StepKind, string> = {
+      chat: "chat:v1",
       research: "research:v1",
       plan: "plan:v1",
       implement: "implement:v1",

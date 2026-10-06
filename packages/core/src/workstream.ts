@@ -97,6 +97,7 @@ export interface WorkRequestSnapshot {
 }
 
 export const STEP_KINDS = [
+  "chat",
   "research",
   "plan",
   "implement",
@@ -127,6 +128,7 @@ export interface StepResult {
 }
 
 export const WORKFLOW_IDS = [
+  "chat",
   "direct",
   "research",
   "plan_implement",
@@ -178,6 +180,7 @@ export const WORKFLOW_CAPABILITIES = [
 export type WorkflowCapability = (typeof WORKFLOW_CAPABILITIES)[number];
 export type WorkflowReadWritePolicy = "read_only" | "write_workstream";
 export type WorkflowResultSemantics =
+  | "conversation_response"
   | "evidence_summary"
   | "implementation_plan"
   | "workstream_changes"
@@ -217,13 +220,15 @@ const builtinStep = (
   kind,
   order,
   executionMode:
-    kind === "research" || kind === "plan"
+    kind === "chat" || kind === "research" || kind === "plan"
       ? "stateless_read"
       : "stateful_workstream",
   executionClass:
-    kind === "research" || kind === "plan" ? "analysis" : "workspace_action",
+    kind === "chat" || kind === "research" || kind === "plan"
+      ? "analysis"
+      : "workspace_action",
   requiredCapabilities:
-    kind === "research"
+    kind === "chat" || kind === "research"
       ? ["authorized_context_read"]
       : kind === "plan"
         ? ["authorized_context_read"]
@@ -239,6 +244,7 @@ const builtinStep = (
   inputsFrom,
   resultSemantics: (
     {
+      chat: "conversation_response",
       research: "evidence_summary",
       plan: "implementation_plan",
       implement: "workstream_changes",
@@ -253,15 +259,17 @@ const builtin = (
   name: string,
   description: string,
   kinds: readonly StepKind[],
+  version = 1,
 ): BuiltinWorkflowDefinition => ({
   id,
-  version: 1,
+  version,
   name,
   description,
   steps: kinds.map((kind, order) => {
     const preceding = kinds.slice(0, order);
     const inputsFrom = preceding.filter((prior) => {
       switch (kind) {
+        case "chat":
         case "research":
           return false;
         case "plan":
@@ -283,13 +291,27 @@ const builtin = (
   }),
 });
 
+const DIRECT_V1 = builtin("direct", "Direct", "Implement the requested work.", [
+  "implement",
+]);
+
 /** Current version for each built-in ID; immutable history is below. */
 export const BUILTIN_WORKFLOWS: Readonly<
   Record<WorkflowId, BuiltinWorkflowDefinition>
 > = {
-  direct: builtin("direct", "Direct", "Implement the requested work.", [
-    "implement",
-  ]),
+  chat: builtin(
+    "chat",
+    "Chat",
+    "Discuss the request using read-only Workstream context.",
+    ["chat"],
+  ),
+  direct: builtin(
+    "direct",
+    "Work",
+    "Implement the requested work.",
+    ["implement"],
+    2,
+  ),
   research: builtin(
     "research",
     "Research",
@@ -324,7 +346,9 @@ export const BUILTIN_WORKFLOWS: Readonly<
 export const BUILTIN_WORKFLOW_CATALOG: Readonly<
   Record<string, BuiltinWorkflowDefinition>
 > = {
-  "direct:v1": BUILTIN_WORKFLOWS.direct,
+  "chat:v1": BUILTIN_WORKFLOWS.chat,
+  "direct:v1": DIRECT_V1,
+  "direct:v2": BUILTIN_WORKFLOWS.direct,
   "research:v1": BUILTIN_WORKFLOWS.research,
   "plan_implement:v1": BUILTIN_WORKFLOWS.plan_implement,
   "implement_verify:v1": BUILTIN_WORKFLOWS.implement_verify,

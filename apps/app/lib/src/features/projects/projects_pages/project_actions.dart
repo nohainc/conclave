@@ -143,7 +143,7 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
                 title: const Text('Workspace access'),
                 content: Column(mainAxisSize: MainAxisSize.min, children: [
                   const Text(
-                      'Choose what Workers may do in this Project. Direct needs repository read and write access. Test steps also need command execution.'),
+                      'Choose what Workers may do in this Project. Work needs repository read and write access. Test steps also need command execution.'),
                   for (final entry in const {
                     'repository:read': 'Read repository files',
                     'repository:write': 'Change repository files',

@@ -9,6 +9,9 @@ import {
   type BuiltinWorkflowDefinition,
   BUILTIN_WORKFLOWS,
   BUILTIN_WORKFLOW_CATALOG,
+  STEP_KINDS,
+  WORKFLOW_IDS,
+  WORKSTREAM_BINDING_IDS,
   deserializeEntity,
   serializeEntity,
   validateBuiltinWorkflowDefinition,
@@ -73,6 +76,43 @@ const statefulPolicy: WorkstreamExecutionPolicy = {
 };
 
 describe("Workstream domain", () => {
+  it("defines Chat as a distinct read-only conversation workflow", () => {
+    expect(STEP_KINDS).toContain("chat");
+    expect(WORKFLOW_IDS).toContain("chat");
+    expect(WORKSTREAM_BINDING_IDS.filter((id) => id === "chat")).toEqual([
+      "chat",
+    ]);
+    expect(BUILTIN_WORKFLOW_CATALOG["chat:v1"]).toBe(BUILTIN_WORKFLOWS.chat);
+    expect(BUILTIN_WORKFLOWS.chat.steps).toEqual([
+      {
+        kind: "chat",
+        order: 0,
+        executionMode: "stateless_read",
+        executionClass: "analysis",
+        requiredCapabilities: ["authorized_context_read"],
+        readWritePolicy: "read_only",
+        timeoutMs: 900000,
+        promptProfileVersion: "chat:v1",
+        dependsOn: [],
+        inputsFrom: [],
+        resultSemantics: "conversation_response",
+      },
+    ]);
+    for (const id of [
+      "direct",
+      "research",
+      "plan_implement",
+      "implement_verify",
+      "full_cycle",
+    ] as const) {
+      expect(
+        BUILTIN_WORKFLOWS[id].steps.map((step) => step.kind),
+      ).not.toContain("chat");
+    }
+    expect(BUILTIN_WORKFLOWS.full_cycle.steps.map((step) => step.kind)).toEqual(
+      ["research", "plan", "implement", "test", "verify"],
+    );
+  });
   it("requires a Project owner or collaborator as the lead", () => {
     expect(() => validateWorkstream(workstream, memberships)).not.toThrow();
     expect(() =>
@@ -149,7 +189,7 @@ describe("Workstream domain", () => {
       requestedByUserId: "collaborator-1",
       mode: "stateful",
       workflowId: "direct",
-      workflowVersion: 1,
+      workflowVersion: 2,
       workflowSnapshot: BUILTIN_WORKFLOWS.direct,
       status: "queued",
       primaryWorkspaceId: "workspace-1",
@@ -205,10 +245,31 @@ describe("Workstream domain", () => {
   });
 
   it("admits only canonical built-in Workflows and fixed step semantics", () => {
-    expect(Object.values(BUILTIN_WORKFLOWS)).toEqual(
-      Object.values(BUILTIN_WORKFLOW_CATALOG),
+    expect(BUILTIN_WORKFLOW_CATALOG["direct:v1"]).toMatchObject({
+      id: "direct",
+      version: 1,
+      name: "Direct",
+      description: "Implement the requested work.",
+    });
+    expect(BUILTIN_WORKFLOWS.direct).toMatchObject({
+      id: "direct",
+      version: 2,
+      name: "Work",
+      description: "Implement the requested work.",
+    });
+    expect(BUILTIN_WORKFLOW_CATALOG["direct:v2"]).toBe(
+      BUILTIN_WORKFLOWS.direct,
     );
-    for (const definition of Object.values(BUILTIN_WORKFLOWS)) {
+    expect(BUILTIN_WORKFLOWS.direct.steps).toEqual(
+      BUILTIN_WORKFLOW_CATALOG["direct:v1"]!.steps,
+    );
+    expect(() =>
+      validateBuiltinWorkflowDefinition({
+        ...BUILTIN_WORKFLOW_CATALOG["direct:v1"]!,
+        name: "Work",
+      }),
+    ).toThrow(/canonical version/);
+    for (const definition of Object.values(BUILTIN_WORKFLOW_CATALOG)) {
       expect(() => validateBuiltinWorkflowDefinition(definition)).not.toThrow();
       for (const step of definition.steps) {
         expect(step).toMatchObject({
@@ -270,7 +331,7 @@ describe("Workstream domain", () => {
       requestedByUserId: "collaborator-1",
       mode: "stateful",
       workflowId: "direct",
-      workflowVersion: 1,
+      workflowVersion: 2,
       workflowSnapshot: BUILTIN_WORKFLOWS.direct,
       status: "queued",
       primaryWorkspaceId: "workspace-1",
@@ -279,5 +340,13 @@ describe("Workstream domain", () => {
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
     expect(() => validateWorkRequest(request, statefulPolicy)).not.toThrow();
+    const historical: WorkRequest = {
+      ...request,
+      workflowVersion: 1,
+      workflowSnapshot: BUILTIN_WORKFLOW_CATALOG["direct:v1"]!,
+    };
+    const stored = deserializeEntity<WorkRequest>(serializeEntity(historical));
+    expect(stored.workflowSnapshot.name).toBe("Direct");
+    expect(() => validateWorkRequest(stored, statefulPolicy)).not.toThrow();
   });
 });

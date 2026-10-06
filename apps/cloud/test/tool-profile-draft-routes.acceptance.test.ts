@@ -65,6 +65,17 @@ class SqliteD1 {
   constructor() {
     this.sqlite = new DatabaseSync(":memory:");
     this.sqlite.exec(migration);
+    for (const name of [
+      "0006_chat_workflow_admission.sql",
+      "0007_chat_profile_starter_attestation.sql",
+    ]) {
+      this.sqlite.exec(
+        readFileSync(
+          new URL(`../migrations-v8/${name}`, import.meta.url),
+          "utf8",
+        ),
+      );
+    }
     this.sqlite
       .prepare(
         `INSERT INTO users (id, email, display_name, status, created_at, updated_at)

@@ -68,6 +68,38 @@ The same source exports a JSON Schema representation. Its engine-owned bounds
 are published as `TOOL_PROFILE_LIMITS`; the validator rejects payloads over
 256 KiB and rejects unknown fields at every Profile-defined object.
 
+The ChatGPT development starter is maintained in
+[`chatgpt-codex.v1.json`](../../packages/tool-profile/test/fixtures/chatgpt-codex.v1.json).
+The Cloud starter after ordered migrations must contain the same payload; the
+provisioning test checks equality and the acceptance manifest's canonical
+reference. The immutable baseline retains its original seed;
+`0007_chat_profile_starter_attestation.sql` updates only that unchanged template.
+Profile Lab clones the optional Cloud starter rather than maintaining another
+provider payload. Published releases and historical acceptance evidence remain
+immutable when a development starter changes.
+
+Chat's generic `provider_default` policy expands to `--sandbox read-only`;
+Work's `restricted` policy expands to `--sandbox workspace-write`. Argument
+expansion tests cover the default and all compatibility override layouts, both
+fresh and resumed conversations, and preserve the existing full-access mapping.
+
+For read-only assignments, Workspace additionally requires the admitted Profile
+to declare the existing `workstream_read` capability before launching the Engine.
+This capability attests that `provider_default` enforces read-only Workstream
+access; a sandbox flag or planning prompt alone is insufficient. Capability
+claims must be reviewed during official Profile qualification, not inferred from
+provider identity or CLI flag names. Writable assignments retain their existing
+policy. Older releases without this attestation fail closed for read-only tasks;
+publish a qualified successor rather than editing an immutable release.
+
+The Antigravity v1 starter deliberately does not declare `workstream_read`.
+Its `--sandbox` mapping allows project writes, while `--mode plan` supplies
+planning instructions rather than a filesystem write prohibition. It remains
+available for Work but cannot execute Chat or other read-only assignments until
+a genuinely enforceable mapping is qualified. See the official
+[sandbox contract](https://www.agy.dev/docs/sandbox/) and
+[execution modes](https://www.agy.dev/docs/cli/modes/).
+
 ### 3.1 Schema evolution gate
 
 Profile v1 is closed. Do not add optional escape hatches, expressions, scripts,

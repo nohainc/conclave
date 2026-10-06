@@ -194,14 +194,13 @@ export async function handleCreateWorkRequest(
   ) as WorkflowId;
   const canonicalWorkflow = BUILTIN_WORKFLOWS[workflowId];
   if (!canonicalWorkflow) throw new HttpError(400, "Unsupported workflowId");
-  const mode =
-    workflowId === "direct"
-      ? "stateful"
-      : canonicalWorkflow.steps.some(
-            (step) => step.executionMode === "stateful_workstream",
-          )
-        ? "stateful"
-        : "stateless";
+  // Mutation coordination follows the authoritative Steps, independently of
+  // durable provider conversation/session state.
+  const mode = canonicalWorkflow.steps.some(
+    (step) => step.executionMode === "stateful_workstream",
+  )
+    ? "stateful"
+    : "stateless";
   if (requestedMode && requestedMode !== mode) {
     throw new HttpError(
       400,
@@ -465,7 +464,7 @@ export async function handleCreateWorkRequest(
     .bind(workstreamId)
     .first<WorkstreamExecutionPolicy>();
   const policy: WorkstreamExecutionPolicy =
-    workflowId === "direct" || workflowId === "research"
+    canonicalWorkflow.steps.length === 1
       ? {
           mode,
           primaryWorkspaceId:

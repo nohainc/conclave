@@ -11,6 +11,158 @@ import 'ax_fixture_data.dart';
 import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
 
 void main() {
+  testWidgets('Chat and Work independently save dynamic Workers and models',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final data = _IndependentBindingsDataSource();
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SizedBox(
+                height: 600,
+                child: WorkstreamPage(
+                  initialTab: 2,
+                  project: const AxProject(
+                      id: 'project-1',
+                      name: 'Project',
+                      branch: '',
+                      lastActivity: '',
+                      role: 'owner'),
+                  workstream: const AxWorkstream(
+                      id: 'stream-1',
+                      projectId: 'project-1',
+                      name: 'Stream',
+                      lead: '',
+                      status: 'active',
+                      brief: '',
+                      primaryWorkspace: '',
+                      queueStatus: ''),
+                  dataSource: data,
+                  onBackToProject: _noop,
+                  onArchive: _noop,
+                )))));
+    await tester.pumpAndSettle();
+    expect(find.text('Direct'), findsNothing);
+    for (final id in [
+      'chat',
+      'direct',
+      'research',
+      'plan',
+      'implement',
+      'test',
+      'verify'
+    ]) {
+      expect(find.byKey(ValueKey('worker-binding-$id')), findsOneWidget);
+    }
+    for (final choice in [
+      ['chat', 'Dynamic Test Worker · Vitalii’s MacBook Pro'],
+      ['direct', 'Other Dynamic Worker · Vitalii’s MacBook Pro'],
+    ]) {
+      final selector = find.byKey(ValueKey('worker-binding-${choice[0]}'));
+      await tester.ensureVisible(selector);
+      await tester.tap(selector);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(choice[1]).last);
+      await tester.pumpAndSettle();
+    }
+    await tester.ensureVisible(find.text('Advanced'));
+    await tester.tap(find.text('Advanced'));
+    await tester.pumpAndSettle();
+    for (final id in ['chat', 'direct']) {
+      final configure = find.byKey(ValueKey('configure-binding-$id'));
+      await tester.ensureVisible(configure);
+      await tester.tap(configure);
+      await tester.pumpAndSettle();
+      expect(find.text(id == 'chat' ? 'Chat settings' : 'Work settings'),
+          findsWidgets);
+      final fields = find.descendant(
+          of: find.byType(AlertDialog), matching: find.byType(TextField));
+      await tester.enterText(fields.first, '$id-model');
+      await tester.enterText(fields.last, '$id instructions');
+      await tester.tap(find.text('Save').last);
+      await tester.pumpAndSettle();
+    }
+    await tester.ensureVisible(find.text('Save Work settings'));
+    await tester.tap(find.text('Save Work settings'));
+    await tester.pumpAndSettle();
+    expect(data.savedWorkConfig?['bindings']['chat'],
+        containsPair('workerId', 'local-worker-dynamic-test'));
+    expect(data.savedWorkConfig?['bindings']['chat'],
+        containsPair('model', 'chat-model'));
+    expect(data.savedWorkConfig?['bindings']['direct'],
+        containsPair('workerId', 'local-worker-other'));
+    expect(data.savedWorkConfig?['bindings']['direct'],
+        containsPair('model', 'direct-model'));
+    expect(data.savedWorkConfig?['bindings']['chat'],
+        containsPair('additionalInstructions', 'chat instructions'));
+    expect(data.savedWorkConfig?['bindings']['direct'],
+        containsPair('additionalInstructions', 'direct instructions'));
+  });
+
+  testWidgets('current Work selection preserves historical Direct labels',
+      (tester) async {
+    final submission = Completer<String>();
+    String? sentWorkflow;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: WorkstreamPage(
+      initialTab: 1,
+      project: const AxProject(
+          id: 'project-1',
+          name: 'Project',
+          branch: '',
+          lastActivity: '',
+          role: 'owner'),
+      workstream: const AxWorkstream(
+          id: 'stream-1',
+          projectId: 'project-1',
+          name: 'Stream',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      dataSource: _VersionedWorkflowDataSource(),
+      onBackToProject: _noop,
+      onArchive: _noop,
+      onRunWork: (_, workflow, ___) {
+        sentWorkflow = workflow;
+        return submission.future;
+      },
+    ))));
+    await tester.pumpAndSettle();
+    expect(find.text('· Direct'), findsOneWidget);
+    await tester.tap(find.byTooltip('Add attachments or choose workflow'));
+    await tester.pumpAndSettle();
+    final options = tester
+        .widgetList<CheckedPopupMenuItem<String>>(
+            find.byType(CheckedPopupMenuItem<String>))
+        .toList();
+    expect(options, hasLength(1));
+    expect(options.single.value, 'direct:v2');
+    expect(options.single.checked, isTrue);
+    await tester.ensureVisible(find.byType(CheckedPopupMenuItem<String>));
+    await tester.tap(find.byType(CheckedPopupMenuItem<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Work settings'));
+    await tester.pumpAndSettle();
+    final dropdown = tester.widget<DropdownButton<String>>(
+        find.byType(DropdownButton<String>).first);
+    expect(
+        dropdown.items!.where((item) => item.value == 'direct'), hasLength(1));
+    await tester.tap(find.byIcon(Icons.close).last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'New work');
+    await tester.tap(find.byTooltip('Run Work'));
+    await tester.pumpAndSettle();
+    expect(sentWorkflow, 'direct');
+    expect(find.text('· Work'), findsOneWidget);
+    expect(find.text('· Direct'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    submission.complete('saved-new');
+    await tester.pump();
+  });
+
   testWidgets(
       'Workstream uses bounded tabs or two panes at the width breakpoint',
       (tester) async {
@@ -821,9 +973,9 @@ void main() {
       of: find.byType(Dialog),
       matching: find.byType(DropdownButtonFormField<String>),
     );
-    expect(selectors, findsNWidgets(7));
-    await tester
-        .tap(selectors.at(4)); // Workflow, then Direct/Research/Plan/Implement
+    expect(selectors, findsNWidgets(8));
+    await tester.tap(
+        selectors.at(5)); // Workflow, then Chat/Work/Research/Plan/Implement
     await tester.pumpAndSettle();
     expect(find.text('Dynamic Test Worker · Vitalii’s MacBook Pro'),
         findsOneWidget);
@@ -924,7 +1076,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Step settings'));
     final configureButtons = find.widgetWithText(TextButton, 'Configure');
-    await tester.tap(configureButtons.at(3));
+    await tester.tap(configureButtons.at(4));
     await tester.pumpAndSettle();
     expect(
       find.text(
@@ -933,7 +1085,7 @@ void main() {
     );
     await tester.tap(find.text('Save').last);
     await tester.pumpAndSettle();
-    await tester.tap(configureButtons.at(3));
+    await tester.tap(configureButtons.at(4));
     await tester.pumpAndSettle();
     expect(
       find.text(
@@ -1981,4 +2133,46 @@ class _SlowSubmissionDataSource extends _WorkFormDataSource {
   Future<List<AxWorkRequest>> loadWorkstreamWorkRequests(
           {required String workstreamId, bool activeOnly = false}) async =>
       requests;
+}
+
+class _VersionedWorkflowDataSource extends _WorkFormDataSource {
+  @override
+  Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async => [
+        for (final version in [1, 2])
+          AxBuiltinWorkflow.fromJson({
+            'id': 'direct',
+            'version': version,
+            'name': version == 1 ? 'Direct' : 'Work',
+            'description': 'Implement the requested work.',
+            'steps': [
+              {'kind': 'implement', 'order': 0}
+            ],
+          }),
+      ];
+  @override
+  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests(
+          {required String workstreamId, bool activeOnly = false}) async =>
+      [
+        _workRequest('old-direct', 'Historical request'),
+      ];
+}
+
+class _IndependentBindingsDataSource extends _GenericWorkerConfigDataSource {
+  @override
+  Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() =>
+      _VersionedWorkflowDataSource().loadBuiltinWorkflowCatalog();
+  @override
+  Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => [
+        ...await super.loadWorkspaceWorkerInventory(),
+        const AxWorker(
+            id: 'local-worker-other',
+            workspaceId: 'workspace-1',
+            workspaceName: 'Vitalii’s MacBook Pro',
+            workerTypeId: 'another-dynamic-worker',
+            displayName: 'Other Dynamic Worker',
+            status: 'ready',
+            readinessState: 'ready',
+            localConcurrencyLimit: 1,
+            capabilities: []),
+      ];
 }

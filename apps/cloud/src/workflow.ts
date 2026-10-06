@@ -822,7 +822,13 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         ) {
           return { task, status: "cancelled", error: error.message };
         }
-        if (definition.id === "direct" || attempt >= 3) {
+        // Conversational turns require explicit retry to avoid replaying a turn
+        // into a durable provider conversation after an ambiguous failure.
+        if (
+          definition.id === "direct" ||
+          definition.id === "chat" ||
+          attempt >= 3
+        ) {
           return {
             task,
             status: "failed",

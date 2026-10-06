@@ -31,6 +31,7 @@ const MAX_ATTACHMENT_CHARS = 12_000;
 const MAX_PROMPT_CHARS = 96_000;
 const TRUNCATION_MARKER = "\n[Content truncated by Conclave prompt limits.]";
 const stepLabels: Readonly<Record<StepKind, string>> = {
+  chat: "Chat",
   research: "Research",
   plan: "Plan",
   implement: "Implementation",
@@ -41,6 +42,22 @@ const stepLabels: Readonly<Record<StepKind, string>> = {
 const profileInstructions: Readonly<
   Record<StepKind, { version: string; instructions: string }>
 > = {
+  chat: {
+    version: "chat:v1",
+    instructions: [
+      "Answer the user's request conversationally using the authorized Workstream context.",
+      "You may inspect files and existing repository state in the current Workstream directory when useful, and run provider-supported read-only commands.",
+      "This is a read-only interaction:",
+      "- Do not create files.",
+      "- Do not modify files.",
+      "- Do not delete or rename files.",
+      "- Do not change Git state.",
+      "- Do not install or update dependencies.",
+      "- Do not perform implementation work.",
+      "If the user or supplied instructions ask you to modify or implement something, explain what should be changed but do not perform the change. Tell them to use Work mode if they want Conclave to perform the implementation.",
+      "Return a clear natural-language response using Markdown where useful.",
+    ].join("\n"),
+  },
   research: {
     version: "research:v1",
     instructions:
@@ -156,7 +173,9 @@ export function renderWorkStepPrompt(
       "Run-specific user request",
       boundedText(inputs.originalRequest, 20_000),
     ),
-    step.kind === "research" || step.kind === "implement"
+    step.kind === "chat" ||
+    step.kind === "research" ||
+    step.kind === "implement"
       ? attachmentReferences(inputs)
       : "",
   ];

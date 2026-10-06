@@ -248,7 +248,8 @@ class _WorkComposer extends StatelessWidget {
                               leading: Icon(Icons.link, size: 18),
                               title: Text('Add link'))),
                       const PopupMenuDivider(),
-                      for (final item in workflowCatalog)
+                      for (final item
+                          in _currentWorkflowVersions(workflowCatalog))
                         CheckedPopupMenuItem(
                             value: item.reference,
                             checked: item.reference == workflow,

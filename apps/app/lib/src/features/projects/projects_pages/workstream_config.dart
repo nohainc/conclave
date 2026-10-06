@@ -1,5 +1,15 @@
 part of '../projects_pages.dart';
 
+const _workstreamBindingLabels = {
+  'chat': 'Chat',
+  'direct': 'Work',
+  'research': 'Research',
+  'plan': 'Plan',
+  'implement': 'Implement',
+  'test': 'Test',
+  'verify': 'Verify',
+};
+
 extension _WorkstreamConfiguration on _WorkstreamPageState {
   void _openWorkSettings(BuildContext context) {
     showDialog<void>(
@@ -27,7 +37,10 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _workConfigView(includeTitle: false),
+                  AnimatedBuilder(
+                    animation: _workSettingsChanges,
+                    builder: (_, __) => _workConfigView(includeTitle: false),
+                  ),
                 ],
               ),
             ),
@@ -60,7 +73,7 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
             itemHeight: null,
             initialValue: defaultWorkflowId,
             decoration: const InputDecoration(labelText: 'Default Workflow'),
-            items: _workflowCatalog
+            items: _currentWorkflows
                 .map((workflow) => DropdownMenuItem(
                       value: workflow.id,
                       child: _workflowOption(context, workflow),
@@ -97,14 +110,7 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
                 'No logical Workers are Ready yet. Check Profile readiness in Workspace.',
               ),
             ),
-          ...const [
-            'direct',
-            'research',
-            'plan',
-            'implement',
-            'test',
-            'verify',
-          ].map((bindingId) {
+          ..._workstreamBindingLabels.keys.map((bindingId) {
             final raw = bindings[bindingId];
             final binding = raw is Map
                 ? Map<String, dynamic>.from(raw)
@@ -153,6 +159,7 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
                               ),
                               Text('Previously: $previousLabel'),
                               DropdownButtonFormField<String>(
+                                key: ValueKey('worker-binding-$bindingId'),
                                 isExpanded: true,
                                 initialValue: '',
                                 decoration: const InputDecoration(
@@ -194,6 +201,7 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
                             ],
                           )
                         : DropdownButtonFormField<String>(
+                            key: ValueKey('worker-binding-$bindingId'),
                             isExpanded: true,
                             initialValue: selectedId,
                             decoration: const InputDecoration(
@@ -310,14 +318,7 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
               child: Text('Step settings',
                   style: Theme.of(context).textTheme.titleSmall),
             ),
-            ...const [
-              'direct',
-              'research',
-              'plan',
-              'implement',
-              'test',
-              'verify',
-            ].map((bindingId) {
+            ..._workstreamBindingLabels.keys.map((bindingId) {
               final raw = bindings[bindingId];
               final binding = raw is Map
                   ? Map<String, dynamic>.from(raw)
@@ -327,6 +328,7 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
                 title: Text(_stepDisplayName(bindingId)),
                 subtitle: Text(_stepAdvancedSummary(binding)),
                 trailing: TextButton(
+                  key: ValueKey('configure-binding-$bindingId'),
                   onPressed: !_canConfigureWork || _savingWorkConfig
                       ? null
                       : () => _editStepBinding(bindingId, binding),
@@ -364,14 +366,8 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
     );
   }
 
-  String _stepDisplayName(String bindingId) => switch (bindingId) {
-        'direct' => 'Direct',
-        'research' => 'Research',
-        'plan' => 'Plan',
-        'implement' => 'Implement',
-        'test' => 'Test',
-        _ => 'Verify',
-      };
+  String _stepDisplayName(String bindingId) =>
+      _workstreamBindingLabels[bindingId] ?? bindingId;
 
   String _workerReadinessLabel(AxWorker worker) {
     if (worker.activationState != 'enabled') return 'Disabled';
@@ -437,6 +433,7 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
       bindings[bindingId] = cleaned;
     }
     _updateState(() => _workConfig = {..._workConfig, 'bindings': bindings});
+    _workSettingsChanges.value++;
   }
 
   Future<void> _editStepBinding(
@@ -466,107 +463,111 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
           .firstOrNull,
       originalFallbackWorker,
     );
+    ModalRoute<dynamic>? settingsRoute;
     final saved = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('${_stepDisplayName(bindingId)} settings'),
-          content: SizedBox(
-            width: 460,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 12),
-                  if (selectedWorker.isNotEmpty &&
-                      !eligibleWorkerIds.contains(selectedWorker)) ...[
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Worker unavailable. Previously: ${_bindingWorkerLabel(current, 'workerLabel', _projectWorkers.where((worker) => worker.id == selectedWorker).firstOrNull, selectedWorker)}',
+      builder: (dialogContext) {
+        settingsRoute = ModalRoute.of(dialogContext);
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: Text('${_stepDisplayName(bindingId)} settings'),
+            content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 12),
+                    if (selectedWorker.isNotEmpty &&
+                        !eligibleWorkerIds.contains(selectedWorker)) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Worker unavailable. Previously: ${_bindingWorkerLabel(current, 'workerLabel', _projectWorkers.where((worker) => worker.id == selectedWorker).firstOrNull, selectedWorker)}',
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  if (fallbackUnavailable) ...[
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Fallback Worker unavailable. Previously: $previousFallbackLabel',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: fallbackUnavailable
-                        ? ''
-                        : fallbackWorker.isEmpty
-                            ? clearFallbackValue
-                            : fallbackWorker,
-                    decoration: InputDecoration(
-                        labelText: fallbackUnavailable
-                            ? 'Select Worker'
-                            : 'Fallback Worker (optional)'),
-                    items: [
-                      const DropdownMenuItem(
-                        value: '',
-                        child: Text('Select Worker'),
-                      ),
-                      const DropdownMenuItem(
-                        value: clearFallbackValue,
-                        child: Text('No fallback'),
-                      ),
-                      ..._eligibleWorkers
-                          .where((worker) => worker.id != selectedWorker)
-                          .map((worker) => DropdownMenuItem(
-                                value: worker.id,
-                                child: Text(
-                                  '${worker.displayName} · ${worker.workspaceName}',
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              )),
+                      const SizedBox(height: 8),
                     ],
-                    onChanged: (value) => setDialogState(() {
-                      fallbackWasChanged = true;
-                      fallbackWorker =
-                          value == clearFallbackValue ? '' : value ?? '';
-                    }),
-                  ),
-                  TextField(
-                    controller: modelController,
-                    decoration:
-                        const InputDecoration(labelText: 'Model (optional)'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: instructionsController,
-                    minLines: 2,
-                    maxLines: 5,
-                    maxLength: 4000,
-                    decoration: const InputDecoration(
-                      labelText: 'Step instructions (optional)',
-                      helperText:
-                          'Added to this Step. Conclave manages its built-in guidance.',
+                    if (fallbackUnavailable) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Fallback Worker unavailable. Previously: $previousFallbackLabel',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: fallbackUnavailable
+                          ? ''
+                          : fallbackWorker.isEmpty
+                              ? clearFallbackValue
+                              : fallbackWorker,
+                      decoration: InputDecoration(
+                          labelText: fallbackUnavailable
+                              ? 'Select Worker'
+                              : 'Fallback Worker (optional)'),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '',
+                          child: Text('Select Worker'),
+                        ),
+                        const DropdownMenuItem(
+                          value: clearFallbackValue,
+                          child: Text('No fallback'),
+                        ),
+                        ..._eligibleWorkers
+                            .where((worker) => worker.id != selectedWorker)
+                            .map((worker) => DropdownMenuItem(
+                                  value: worker.id,
+                                  child: Text(
+                                    '${worker.displayName} · ${worker.workspaceName}',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                )),
+                      ],
+                      onChanged: (value) => setDialogState(() {
+                        fallbackWasChanged = true;
+                        fallbackWorker =
+                            value == clearFallbackValue ? '' : value ?? '';
+                      }),
                     ),
-                  ),
-                ],
+                    TextField(
+                      controller: modelController,
+                      decoration:
+                          const InputDecoration(labelText: 'Model (optional)'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: instructionsController,
+                      minLines: 2,
+                      maxLines: 5,
+                      maxLength: 4000,
+                      decoration: const InputDecoration(
+                        labelText: 'Step instructions (optional)',
+                        helperText:
+                            'Added to this Step. Conclave manages its built-in guidance.',
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext, true);
+                },
+                child: const Text('Save'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
+        );
+      },
     );
     if (saved == true && mounted) {
       final binding = Map<String, dynamic>.from(current);
@@ -594,6 +595,7 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
       }
       _setStepBinding(bindingId, binding);
     }
+    await settingsRoute?.completed;
     modelController.dispose();
     instructionsController.dispose();
   }

@@ -242,6 +242,14 @@ SQLite database by applying the ordered SQL migrations in
 production Gateway connection, heartbeat, and disconnect statements. The clean
 schema must support every SQL statement used by current Cloud runtime code.
 
+Chat requires the ordered `0006_chat_workflow_admission.sql` migration, which
+preserves historical Work Requests, tasks, leases and linked records while
+extending the Workflow and Step CHECK constraints. The populated migration test
+runs with foreign keys enabled and verifies snapshots, indexes and triggers.
+`0007_chat_profile_starter_attestation.sql` updates only an unchanged official
+development template; published releases are immutable. Follow the
+[production provisioning order](../operations/PRODUCTION_PROVISIONING.md).
+
 The Workspace Gateway Durable Object is authoritative for live connection
 state. Workspace online/offline fields and session history are persisted
 projections: their writes are queued and logged on failure, but cannot reject

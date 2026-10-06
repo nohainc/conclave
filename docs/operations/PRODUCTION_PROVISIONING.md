@@ -54,6 +54,16 @@ and indexes with the v8 canonical contract while preserving all existing rows.
 
 ## Required deployment order
 
+Before deploying Chat, apply ordered migrations through
+`0007_chat_profile_starter_attestation.sql`. Back up the database and pause new
+Work submissions while applying the migrations. `0006_chat_workflow_admission.sql`
+must run as one atomic migration, never statement by statement: D1 defers foreign
+key checks but still performs cascading deletes. The migration saves and restores
+affected dependencies and verifies row preservation and foreign-key integrity.
+If its schema assertion fails, inspect the actual schema and revise the alignment
+to preserve the additional fields/objects before retrying. Do not bypass the guard.
+Resume submissions only after migration success and the schema smoke check.
+
 1. Confirm the production app Worker preflight passes:
 
    ```sh

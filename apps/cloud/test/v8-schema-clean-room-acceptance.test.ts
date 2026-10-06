@@ -13,13 +13,39 @@ const migration = readFileSync(
 function apply(sql: string): unknown[] {
   return JSON.parse(
     execFileSync("sqlite3", ["-json", ":memory:"], {
-      input: `${migration}\n${sql}`,
+      input: `${migration}\n${readFileSync(new URL("../migrations-v8/0006_chat_workflow_admission.sql", import.meta.url), "utf8")}\n${sql}`,
       encoding: "utf8",
     }),
   ) as unknown[];
 }
 
 describe("v8 clean D1 schema acceptance", () => {
+  it("stores Chat alongside historical Direct requests without rewriting snapshots", () => {
+    expect(
+      apply(`
+      PRAGMA foreign_keys = OFF;
+      INSERT INTO work_requests (id, workstream_id, requested_by_user_id, mode,
+        workflow_id, workflow_version, workflow_snapshot_json, status, created_at, updated_at)
+      VALUES ('old', 'stream', 'user', 'stateful', 'direct', 1, '{"name":"Direct"}', 'completed', 'now', 'now'),
+        ('chat', 'stream', 'user', 'stateless', 'chat', 1, '{"name":"Chat"}', 'queued', 'now', 'now');
+      INSERT INTO workflow_tasks (id, work_request_id, step_kind, execution_mode,
+        timeout_ms, prompt_profile_version, status, created_at, updated_at)
+      VALUES ('chat-step', 'chat', 'chat', 'stateless_read', 900000, 'chat:v1', 'queued', 'now', 'now');
+      SELECT workflow_id, workflow_version, workflow_snapshot_json FROM work_requests ORDER BY id;
+    `),
+    ).toEqual([
+      {
+        workflow_id: "chat",
+        workflow_version: 1,
+        workflow_snapshot_json: '{"name":"Chat"}',
+      },
+      {
+        workflow_id: "direct",
+        workflow_version: 1,
+        workflow_snapshot_json: '{"name":"Direct"}',
+      },
+    ]);
+  });
   it("applies as one migration and includes current Workspace, Work, and Profile tables", () => {
     const tables = apply(
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;",

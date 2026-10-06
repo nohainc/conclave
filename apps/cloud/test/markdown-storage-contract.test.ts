@@ -25,11 +25,16 @@ import {
   handleGetWorkRequest,
   handleListWorkRequests,
 } from "../src/routes/work-lifecycle.js";
-import { BUILTIN_WORKFLOWS } from "@conclave/core";
+import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
 
-it("Work history returns stored prompt, finalText and resultText without conversion", async () => {
-  const sqlite = new DatabaseSync(":memory:");
-  sqlite.exec(`
+it.each([
+  BUILTIN_WORKFLOW_CATALOG["direct:v1"]!,
+  BUILTIN_WORKFLOW_CATALOG["direct:v2"]!,
+])(
+  "$name v$version history preserves the snapshot name and raw Markdown",
+  async (definition) => {
+    const sqlite = new DatabaseSync(":memory:");
+    sqlite.exec(`
     CREATE TABLE users(id TEXT, display_name TEXT);
     CREATE TABLE work_requests(id TEXT, requested_by_user_id TEXT, workstream_id TEXT,
       workflow_id TEXT, workflow_version INTEGER, workflow_snapshot_json TEXT, snapshot_json TEXT,
@@ -42,99 +47,106 @@ it("Work history returns stored prompt, finalText and resultText without convers
       provider_tool_name TEXT, provider_tool_version TEXT);
     INSERT INTO users VALUES('user-owner', 'Owner');
   `);
-  sqlite.exec(`ALTER TABLE workflow_tasks ADD COLUMN attempt INTEGER;
+    sqlite.exec(`ALTER TABLE workflow_tasks ADD COLUMN attempt INTEGER;
     ALTER TABLE worker_assignments ADD COLUMN session_policy TEXT;
     ALTER TABLE worker_assignments ADD COLUMN updated_at TEXT;
     CREATE TABLE runs(id TEXT, work_request_id TEXT, created_at TEXT, policy_snapshot_json TEXT);
     CREATE TABLE worker_catalog(worker_type_id TEXT, display_name TEXT);`);
-  const source = '\n**Original**\n```bash\nprintf "hello"\n```\n  ';
-  const result = '  ## Result\n\n```json\n{"ok":true}\n```\n';
-  sqlite
-    .prepare(
-      "INSERT INTO work_requests VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .run(
-      "request-test",
-      "user-owner",
-      "stream-test",
-      "direct",
-      1,
-      JSON.stringify(BUILTIN_WORKFLOWS.direct),
-      "{}",
-      JSON.stringify({ originalRequest: source }),
-      "completed",
-      "2026-10-06T00:00:00Z",
-      "2026-10-06T00:00:01Z",
-    );
-  sqlite
-    .prepare(
-      "INSERT INTO workflow_tasks(id, work_request_id, step_kind, status, output_json, error, started_at, created_at, finished_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .run(
-      "task-test",
-      "request-test",
-      "implement",
-      "completed",
-      JSON.stringify({ text: result }),
-      null,
-      null,
-      "2026-10-06T00:00:00Z",
-      "2026-10-06T00:00:01Z",
-      "2026-10-06T00:00:01Z",
-    );
-  const db = {
-    prepare(sql: string) {
-      let values: (string | number | null)[] = [];
-      return {
-        bind(...args: (string | number | null)[]) {
-          values = args;
-          return this;
-        },
-        async first() {
-          return sqlite.prepare(sql).get(...values) ?? null;
-        },
-        async all() {
-          return { results: sqlite.prepare(sql).all(...values) };
-        },
+    const source = '\n**Original**\n```bash\nprintf "hello"\n```\n  ';
+    const result = '  ## Result\n\n```json\n{"ok":true}\n```\n';
+    sqlite
+      .prepare(
+        "INSERT INTO work_requests VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "request-test",
+        "user-owner",
+        "stream-test",
+        "direct",
+        definition.version,
+        JSON.stringify(definition),
+        "{}",
+        JSON.stringify({ originalRequest: source }),
+        "completed",
+        "2026-10-06T00:00:00Z",
+        "2026-10-06T00:00:01Z",
+      );
+    sqlite
+      .prepare(
+        "INSERT INTO workflow_tasks(id, work_request_id, step_kind, status, output_json, error, started_at, created_at, finished_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "task-test",
+        "request-test",
+        "implement",
+        "completed",
+        JSON.stringify({ text: result }),
+        null,
+        null,
+        "2026-10-06T00:00:00Z",
+        "2026-10-06T00:00:01Z",
+        "2026-10-06T00:00:01Z",
+      );
+    const db = {
+      prepare(sql: string) {
+        let values: (string | number | null)[] = [];
+        return {
+          bind(...args: (string | number | null)[]) {
+            values = args;
+            return this;
+          },
+          async first() {
+            return sqlite.prepare(sql).get(...values) ?? null;
+          },
+          async all() {
+            return { results: sqlite.prepare(sql).all(...values) };
+          },
+        };
+      },
+    };
+    try {
+      const response = await handleListWorkRequests(
+        new Request(
+          "https://conclave.test/api/workstreams/stream-test/work-requests",
+        ),
+        { CONCLAVE_DB: db } as unknown as Parameters<
+          typeof handleListWorkRequests
+        >[1],
+        "stream-test",
+      );
+      const body = (await response.json()) as {
+        workRequests: {
+          prompt: string;
+          finalText: string;
+          steps: { resultText: string }[];
+        }[];
       };
-    },
-  };
-  try {
-    const response = await handleListWorkRequests(
-      new Request(
-        "https://conclave.test/api/workstreams/stream-test/work-requests",
-      ),
-      { CONCLAVE_DB: db } as unknown as Parameters<
-        typeof handleListWorkRequests
-      >[1],
-      "stream-test",
-    );
-    const body = (await response.json()) as {
-      workRequests: {
-        prompt: string;
-        finalText: string;
+      expect(body.workRequests[0]?.prompt).toBe(source);
+      expect(body.workRequests[0]?.finalText).toBe(result);
+      const detail = await handleGetWorkRequest(
+        new Request("https://conclave.test/api/work-requests/request-test"),
+        { CONCLAVE_DB: db } as unknown as Parameters<
+          typeof handleGetWorkRequest
+        >[1],
+        "request-test",
+      );
+      const detailBody = (await detail.json()) as {
+        workRequest: {
+          originalRequest: string;
+          workflowName: string;
+          workflowVersion: number;
+        };
         steps: { resultText: string }[];
-      }[];
-    };
-    expect(body.workRequests[0]?.prompt).toBe(source);
-    expect(body.workRequests[0]?.finalText).toBe(result);
-    const detail = await handleGetWorkRequest(
-      new Request("https://conclave.test/api/work-requests/request-test"),
-      { CONCLAVE_DB: db } as unknown as Parameters<
-        typeof handleGetWorkRequest
-      >[1],
-      "request-test",
-    );
-    const detailBody = (await detail.json()) as {
-      workRequest: { originalRequest: string };
-      steps: { resultText: string }[];
-    };
-    expect(detailBody.workRequest.originalRequest).toBe(source);
-    expect(detailBody.steps[0]?.resultText).toBe(result);
-  } finally {
-    sqlite.close();
-  }
-});
+      };
+      expect(detailBody.workRequest.originalRequest).toBe(source);
+      expect(detailBody.workRequest.workflowName).toBe(definition.name);
+      expect(detailBody.workRequest.workflowVersion).toBe(definition.version);
+      expect(detailBody.steps[0]?.resultText).toBe(result);
+    } finally {
+      sqlite.close();
+    }
+  },
+);
 
 it("persists and returns exact Markdown through Chat create, edit and list", async () => {
   const sqlite = new DatabaseSync(":memory:");

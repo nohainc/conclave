@@ -14,6 +14,15 @@ be edited to repair production. All schema changes use new, ordered forward
 migrations (for example, `0002_<purpose>.sql`) and the normal production
 migration flow. The desktop auth audience correction is recorded in
 [`0002_desktop_auth_multi_audience.sql`](../../apps/cloud/migrations-v8/0002_desktop_auth_multi_audience.sql).
+
+[`0006_chat_workflow_admission.sql`](../../apps/cloud/migrations-v8/0006_chat_workflow_admission.sql)
+extends Workflow/Step constraints for Chat. It preserves historical immutable
+snapshots and related records during an atomic rebuild with foreign keys enabled.
+Its schema assertions abort on unrecognized column, index or foreign-key
+additions; review and align those additions before retrying, never delete them.
+[`0007_chat_profile_starter_attestation.sql`](../../apps/cloud/migrations-v8/0007_chat_profile_starter_attestation.sql)
+updates only the unchanged official Codex development starter. It preserves
+operator-edited templates, Drafts and published releases.
 [`0003_workspace_installations.sql`](../../apps/cloud/migrations-v8/0003_workspace_installations.sql)
 introduces stable installation ownership independently from runtime
 credentials. It seeds ownership from runtime identity history and release audit

@@ -52,7 +52,8 @@ or HTML documents) become a concrete product requirement.
 Cloud encodes durable Work session identities as `work-session-` plus a SHA-256
 hex digest. Keys satisfy the Engine's opaque identifier contract
 (`[A-Za-z0-9_-]+`, at most 256 characters). Direct keeps the same identity across
-requests in a Workstream; other Steps remain request-scoped. Fresh retries get
+requests in a Workstream; Chat has a separate Workstream-scoped identity and
+other Steps remain request-scoped. Fresh retries get
 distinct keys. This changes no persisted schema; previously rejected colon-based
 keys never created usable Engine sessions.
 
@@ -61,7 +62,7 @@ choices when connecting a Workspace. Workspace owners can edit an active or
 suspended Project grant through `PATCH /api/workspace-project-grants/:id` with
 `allowedPermissions`; the existing permission validator, ownership check, and
 terminal-state restrictions apply. Omitted permissions remain unchanged.
-Direct requires `repository:read` and `repository:write`; Test also requires
+Work (`direct`) requires `repository:read` and `repository:write`; Test also requires
 `shell:execute`. AX never widens permissions merely because a run was denied.
 Run admission errors are selectable and have a copy action for the full message.
 
@@ -105,6 +106,7 @@ tests.
 
 | `StepKind` | Meaning |
 | --- | --- |
+| `chat` | Respond conversationally using authorized Workstream context. Inspect files and use provider-supported read-only commands; do not modify files, dependencies, or repository state. Return natural Markdown. |
 | `research` | Gather and summarize relevant evidence from the request and authorized context, including findings, available sources/references, constraints, uncertainties, and recommended next actions. Do not make requested changes. |
 | `plan` | Turn the request and available evidence into an ordered implementation plan and clear completion criteria. Do not make requested changes. |
 | `implement` | Make the requested changes in the Workstream execution context. |
@@ -119,6 +121,7 @@ by `verify`. Step kinds are semantic labels, not provider roles or Worker IDs.
 `WorkflowId` is the closed set of stable identifiers:
 
 ```text
+chat
 direct
 research
 plan_implement
@@ -131,11 +134,20 @@ Each definition has an immutable version. The v1 reference is written
 are not persisted identity keys. An existing version's ordered steps and
 semantics never change; a future contract change requires a new version.
 
+The current `direct` definition is `direct:v2`, displayed as **Work**, with
+description "Implement the requested work." and the same single `implement`
+Step as v1. `direct:v1` remains immutable with the canonical name **Direct**.
+New requests using the stable `direct` ID default to v2. Saved requests retain
+and validate their original Workflow snapshot and version; they are not rewritten.
+AX offers the latest version of each ID for new requests while using the full
+catalog to display historical versions. The API catalog includes both versions.
+
 The core domain uses `BuiltinWorkflowDefinition` and `BuiltinWorkflowStep`:
 
 ```ts
-type StepKind = "research" | "plan" | "implement" | "test" | "verify";
+type StepKind = "chat" | "research" | "plan" | "implement" | "test" | "verify";
 type WorkflowId =
+  | "chat"
   | "direct"
   | "research"
   | "plan_implement"
@@ -167,7 +179,7 @@ interface BuiltinWorkflowStep {
 
 `WorkflowCapability` is a closed, provider-neutral set: `authorized_context_read`,
 `workstream_write`, `test_execution`, and `independent_verification`.
-`WorkflowResultSemantics` is likewise closed: `evidence_summary`,
+`WorkflowResultSemantics` is likewise closed: `conversation_response`, `evidence_summary`,
 `implementation_plan`, `workstream_changes`, `test_report`, and
 `verification_report`. Step definitions set their required capabilities,
 read/write policy, execution class, timeout, internal prompt profile, fixed
@@ -193,11 +205,16 @@ The v1 step policy is:
 
 | Step | Execution class | Required capabilities | Read/write policy | Result |
 | --- | --- | --- | --- | --- |
+| `chat` | `analysis` | `authorized_context_read` | `read_only` | `conversation_response` |
 | `research` | `analysis` | `authorized_context_read` | `read_only` | `evidence_summary` |
 | `plan` | `analysis` | `authorized_context_read` | `read_only` | `implementation_plan` |
 | `implement` | `workspace_action` | `workstream_write` | `write_workstream` | `workstream_changes` |
 | `test` | `workspace_action` | `authorized_context_read`, `test_execution` | `read_only` | `test_report` |
 | `verify` | `workspace_action` | `authorized_context_read`, `independent_verification` | `read_only` | `verification_report` |
+
+Chat has a single `chat` Step with `executionMode: stateless_read`, prompt profile
+`chat:v1`, and no dependencies or upstream inputs. It has its own `chat` binding;
+it is not part of Full Cycle or any implementation Workflow.
 
 Each step currently has a 15 minute default timeout. `inputsFrom` names the
 exact fixed upstream results supplied to the step; it is intentionally
@@ -206,6 +223,28 @@ provider-neutral capability names describe what the step needs from an
 execution environment without selecting a Worker or tool.
 
 ## Internal Step Prompt Profiles
+
+`chat:v1` answers conversationally with bounded user request, Project and
+Workstream instructions, Chat-specific additional instructions, and attachment
+or reference metadata. Files are referenced through the existing assignment
+input paths. Chat may inspect the current Workstream directory and repository
+state using provider-supported read-only commands. It must not create, modify,
+delete or rename files, change Git state, install or update dependencies, or
+perform implementation work. Modification requests receive an explanation and
+guidance to use Work mode. Responses use natural language and Markdown.
+The assignment's `readOnly` policy enforces the existing generic Workspace and
+Tool Profile sandbox path; the prompt does not grant writable access.
+
+Cloud derives `TaskToDispatch.readOnly` from the snapshotted Step's
+`readWritePolicy`; the step definition is authoritative. Workspace maps
+`readOnly: true` or `executionClass: stateless_read` to
+`WorkerExecutionPolicy.providerDefault`, and writable stateful assignments to
+`WorkerExecutionPolicy.restricted`. Workflow names, UI mode labels and provider
+identities never select these permissions. Tool Profiles translate the generic
+policy to provider arguments. The current ChatGPT Profile expands
+`provider_default` to `--ask-for-approval never --sandbox read-only` and
+`restricted` to `--ask-for-approval never --sandbox workspace-write`, including
+when resuming a conversation. No additional provider-specific flag is used.
 
 Cloud renders prompts through the single Work v1 prompt renderer. Its fixed
 profiles are `research:v1`, `plan:v1`, `implement:v1`, `test:v1`, and
@@ -259,7 +298,19 @@ Worker messages or conversational sessions.
 
 Direct uses one durable logical session scope per Workstream's Direct binding:
 `workstream:<workstreamId>:direct:work-conversation`. This lets later Direct
-requests continue the same Work conversation. Multi-step Workflows use a
+requests continue the same Work conversation. Chat uses its own durable base,
+`workstream:<workstreamId>:chat:conversation`, across requests in that Workstream.
+Chat and Work never share a session key, even when their Worker/model match.
+Both bases are encoded using the existing Engine-safe SHA-256 key format.
+Chat requests use `mode = stateless` and never enqueue with the Workstream
+mutation coordinator or acquire its lease. This does not change their durable
+provider session or read-only filesystem policy. Work/direct remains stateful,
+durable, and writable within its authorized scope. Request mode follows the
+canonical Workflow Steps, not the selected provider or UI label. Chat and Work
+turns require an explicit retry after failure to avoid automatically replaying
+an ambiguous turn into a durable conversation.
+The existing fresh-retry suffix applies to Chat as well as Work.
+Multi-step Workflows use a
 separate durable scope for each Work Request and Step:
 `work-request:<workRequestId>:<stepKind>`. Retries resume only their own
 Step's session; Verify never resumes Implement's session, even when both use
@@ -382,13 +433,15 @@ the same Worker performed Implement.
 
 ## Built-in catalog
 
-This table is the only authoritative v1 built-in Workflow set. Steps run in the
+This table is the authoritative built-in Workflow set for the Work v1 contract. Steps run in the
 listed order; each step depends on the immediately preceding step. `direct`
 means one direct implementation step, not a separate `StepKind`.
 
 | Workflow reference | Display name | Fixed steps |
 | --- | --- | --- |
-| `direct:v1` | Direct | `implement` |
+| `chat:v1` | Chat | `chat` |
+| `direct:v1` | Direct (historical) | `implement` |
+| `direct:v2` | Work (current) | `implement` |
 | `research:v1` | Research | `research` |
 | `plan_implement:v1` | Plan & Implement | `plan` → `implement` |
 | `implement_verify:v1` | Implement & Verify | `implement` → `verify` |
@@ -399,8 +452,17 @@ Canonical definition shape:
 ```yaml
 contract: work:v1
 workflows:
+  - id: chat
+    version: 1
+    name: Chat
+    steps: [chat]
   - id: direct
     version: 1
+    name: Direct
+    steps: [implement]
+  - id: direct
+    version: 2
+    name: Work
     steps: [implement]
   - id: research
     version: 1
@@ -558,8 +620,12 @@ interface WorkstreamWorkConfig {
 }
 ```
 
-The binding IDs are fixed to `direct`, `research`, `plan`, `implement`, `test`,
-and `verify`. `direct` configures the one-step Direct Workflow; the remaining
+The binding IDs are fixed to `chat`, `direct`, `research`, `plan`, `implement`,
+`test`, and `verify`. AX displays them in that order as **Chat**, **Work**,
+**Research**, **Plan**, **Implement**, **Test**, and **Verify**. `chat` configures
+Chat independently; `direct` remains the stable internal binding for Work
+(and historical Direct). Each may select its own dynamic Worker, model,
+additional instructions, and fallback; neither restricts the provider. Other
 IDs configure the corresponding canonical Step across built-in Workflows. A
 missing binding fails closed when that Step is scheduled. Cloud considers the
 selected logical Worker and, if present, its one fallback Worker. Model and
@@ -610,3 +676,13 @@ must not maintain a duplicate Workflow list.
 ## Architecture v8 runtime note
 
 Work v1 continues to resolve `chatgpt`, `gemini`, and future logical Worker IDs only. Workspace resolves the selected logical Worker to an admitted generic CLI Worker Engine plus official compatible Tool Profile locally. Workflow definitions and Step prompt semantics never depend on Profile IDs or provider CLI command formats.
+
+
+## Chat catalog schema admission
+
+Migration `0006_chat_workflow_admission.sql` admits `chat` in
+`work_requests.workflow_id` and `workflow_tasks.step_kind`. Apply the ordered
+migrations before deploying Chat execution. It rebuilds both tables atomically,
+preserving snapshots, cancellation fields, task dependencies, leases and linked
+runtime records with foreign keys enabled. Unrecognized schema additions abort
+the migration for review. Never reset or rewrite historical Work Requests.

@@ -1,0 +1,139 @@
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../src/routes/handlers.js", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  authorizeWorkstreamAccess: async () => ({
+    context: { userId: "owner" },
+    projectId: "project",
+  }),
+  validateWorkflowWorkerEligibility: async () => ({
+    issues: [],
+    primaryWorkspaceId: "workspace",
+  }),
+  resolveWorkflowInstanceId: async (_env: unknown, id: string) => id,
+}));
+vi.mock("../src/event-publisher.js", () => ({
+  createEventPublisher: () => ({ publish: async () => {} }),
+}));
+import { handleCreateWorkRequest } from "../src/routes/work-creation.js";
+
+function fixture(coordinatorAvailable = true) {
+  const writes: { sql: string; values: unknown[] }[] = [];
+  const enqueue = vi.fn(async () => new Response("{}"));
+  const create = vi.fn(async () => ({ status: async () => "queued" }));
+  const env = {
+    CONCLAVE_DB: {
+      prepare(sql: string) {
+        const statement = {
+          values: [] as unknown[],
+          bind(...values: unknown[]) {
+            this.values = values;
+            return this;
+          },
+          async first() {
+            if (sql.includes("project_memberships")) return { role: "owner" };
+            if (sql.includes("config_json"))
+              return { configJson: JSON.stringify({ bindings: {} }) };
+            if (sql.includes("workstream_execution_policies"))
+              return {
+                mode: "stateful",
+                primaryWorkspaceId: "different-workspace",
+              };
+            return null;
+          },
+          async run() {
+            writes.push({ sql, values: this.values });
+            return {};
+          },
+        };
+        return statement;
+      },
+      async batch(statements: { run(): Promise<unknown> }[]) {
+        return Promise.all(statements.map((s) => s.run()));
+      },
+    },
+    CONCLAVE_RUN_WORKFLOW: { create },
+    ...(coordinatorAvailable
+      ? {
+          CONCLAVE_WORKSTREAM_COORDINATOR: {
+            getByName: () => ({ fetch: enqueue }),
+          },
+        }
+      : {}),
+  };
+  return { env, enqueue, create, writes };
+}
+
+describe("Work Request mutation coordination", () => {
+  it.each([true, false])(
+    "creates Chat without a mutation lease (coordinator available: %s)",
+    async (available) => {
+      const { env, enqueue, create, writes } = fixture(available);
+      const response = await handleCreateWorkRequest(
+        new Request("https://conclave.test/work", {
+          method: "POST",
+          body: JSON.stringify({
+            workflowId: "chat",
+            input: { originalRequest: "Explain this code" },
+          }),
+        }),
+        env as never,
+        "stream",
+      );
+      expect(response.status).toBe(202);
+      const body = (await response.json()) as {
+        workRequest: { mode: string; workflowId: string };
+      };
+      expect(body.workRequest).toMatchObject({
+        mode: "stateless",
+        workflowId: "chat",
+      });
+      expect(enqueue).not.toHaveBeenCalled();
+      expect(create).toHaveBeenCalledOnce();
+      expect(
+        writes.find((w) => w.sql.includes("INSERT INTO work_requests"))
+          ?.values[3],
+      ).toBe("stateless");
+      expect(
+        writes.some((w) => w.sql.includes("workstream_runtime_leases")),
+      ).toBe(false);
+    },
+  );
+
+  it("keeps Work stateful and enqueues it for coordination", async () => {
+    const { env, enqueue } = fixture();
+    const response = await handleCreateWorkRequest(
+      new Request("https://conclave.test/work", {
+        method: "POST",
+        body: JSON.stringify({
+          workflowId: "direct",
+          input: { originalRequest: "Implement this" },
+        }),
+      }),
+      env as never,
+      "stream",
+    );
+    expect(response.status).toBe(202);
+    expect(
+      ((await response.json()) as { workRequest: { mode: string } }).workRequest
+        .mode,
+    ).toBe("stateful");
+    expect(enqueue).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a caller attempting to make Chat stateful", async () => {
+    const { env, enqueue, create } = fixture();
+    await expect(
+      handleCreateWorkRequest(
+        new Request("https://conclave.test/work", {
+          method: "POST",
+          body: JSON.stringify({ workflowId: "chat", mode: "stateful" }),
+        }),
+        env as never,
+        "stream",
+      ),
+    ).rejects.toThrow("requires stateless mode");
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+});

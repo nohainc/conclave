@@ -18,8 +18,40 @@ it("provisions only the missing baseline starter table and preserves Drafts and 
         ),
         "utf8",
       ),
+      readFileSync(
+        new URL(
+          "../apps/cloud/migrations-v8/0007_chat_profile_starter_attestation.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
     );
     db.exec(sql);
+    const canonical = JSON.parse(
+      readFileSync(
+        new URL(
+          "../packages/tool-profile/test/fixtures/chatgpt-codex.v1.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    const starter = JSON.parse(
+      db
+        .prepare(
+          "SELECT profile_json FROM tool_profile_starter_templates WHERE profile_definition_id = ?",
+        )
+        .get("chatgpt-codex").profile_json,
+    );
+    expect(starter).toEqual(canonical);
+    const manifestUrl = new URL(
+      "../packages/tool-profile/test/fixtures/profiles/chatgpt-codex/manifest.json",
+      import.meta.url,
+    );
+    const manifest = JSON.parse(readFileSync(manifestUrl, "utf8"));
+    expect(
+      JSON.parse(readFileSync(new URL(manifest.profile, manifestUrl), "utf8")),
+    ).toEqual(canonical);
     expect(
       db
         .prepare("SELECT COUNT(*) AS count FROM tool_profile_starter_templates")

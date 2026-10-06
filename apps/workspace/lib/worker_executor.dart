@@ -9,6 +9,19 @@ import 'cloud_connection.dart';
 import 'runtime_capabilities.dart';
 import 'workstream_directory.dart';
 
+/// Translate Cloud assignment permissions without consulting names or providers.
+WorkerExecutionPolicy assignmentExecutionPolicy(Map<String, Object?> payload) =>
+    payload['readOnly'] == true || payload['executionClass'] == 'stateless_read'
+        ? WorkerExecutionPolicy.providerDefault
+        : WorkerExecutionPolicy.restricted;
+
+/// Admission requires an official Profile to attest enforceable read-only scope.
+bool profileAllowsAssignment(
+        Map<String, Object?> payload, Iterable<String> capabilities) =>
+    assignmentExecutionPolicy(payload) !=
+        WorkerExecutionPolicy.providerDefault ||
+    capabilities.contains('workstream_read');
+
 Future<void> _materializeWorkRequestInputs({
   required Directory workstreamDirectory,
   required Map<String, Object?> payload,

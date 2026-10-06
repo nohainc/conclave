@@ -236,10 +236,21 @@ Future<Workspace> buildWorkspaceRuntime(
           message: executionErrorMessage('execution_failed'),
         );
       }
+      final profileFile =
+          await toolProfileReleaseStore.executionProfileFile(release);
+      final profilePayload =
+          jsonDecode(await profileFile.readAsString()) as Map;
+      if (!profileAllowsAssignment(
+          payload, (profilePayload['capabilities'] as List).cast<String>())) {
+        throw AssignmentExecutionFailure(
+          code: 'worker_not_ready',
+          message:
+              'This Profile has no verified read-only execution policy. Select a compatible Worker for Chat.',
+        );
+      }
       return supervisor.execute(
         release,
-        profileFile:
-            await toolProfileReleaseStore.executionProfileFile(release),
+        profileFile: profileFile,
         stateDirectory: workspacePaths.workerStateDirectory(worker.id),
         workingDirectory: workingDirectory,
         workerId: worker.id,
@@ -254,10 +265,7 @@ Future<Workspace> buildWorkspaceRuntime(
         model: modelValue is String && modelValue.trim().isNotEmpty
             ? modelValue.trim()
             : null,
-        executionPolicy: context.payload['readOnly'] == true ||
-                context.payload['executionClass'] == 'stateless_read'
-            ? WorkerExecutionPolicy.providerDefault
-            : WorkerExecutionPolicy.restricted,
+        executionPolicy: assignmentExecutionPolicy(context.payload),
         onProgress: onProgress,
       );
     },

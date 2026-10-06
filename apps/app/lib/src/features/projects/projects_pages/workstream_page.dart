@@ -84,6 +84,8 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   late final TextEditingController _workstreamInstructionsController;
   String _workflow = '';
   List<AxBuiltinWorkflow> _workflowCatalog = const [];
+  List<AxBuiltinWorkflow> get _currentWorkflows =>
+      _currentWorkflowVersions(_workflowCatalog);
   bool _loadingWorkflows = true;
   String? _workflowCatalogError;
   final List<_DiscussionItem> _discussion = [];
@@ -103,6 +105,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   late Map<String, dynamic> _workConfig;
   bool _loadingWorkChoices = true;
   bool _savingWorkConfig = false;
+  final _workSettingsChanges = ValueNotifier<int>(0);
 
   @override
   void initState() {
@@ -174,11 +177,12 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   String _workstreamDefaultReference(List<AxBuiltinWorkflow> workflows) {
     if (workflows.isEmpty) return '';
     final defaultId = _workConfig['defaultWorkflowId']?.toString();
-    return workflows
+    final current = _currentWorkflowVersions(workflows);
+    return current
             .where((workflow) => workflow.id == defaultId)
             .map((workflow) => workflow.reference)
             .firstOrNull ??
-        workflows.first.reference;
+        current.first.reference;
   }
 
   Future<void> _loadWorkChoices() async {
@@ -320,6 +324,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     _chatHistoryController.dispose();
     _discussionController.dispose();
     _workstreamInstructionsController.dispose();
+    _workSettingsChanges.dispose();
     super.dispose();
   }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   BUILTIN_WORKFLOWS,
+  BUILTIN_WORKFLOW_CATALOG,
   type BuiltinWorkflowDefinition,
 } from "@conclave/core";
 
@@ -44,7 +45,8 @@ import { ConclaveRunWorkflow } from "../src/workflow.js";
 const requestText =
   "  ## Improve Workstream\n\n**Keep source** [docs](https://example.com)\n\n```ts\nconst ready = true;\n```\n  ";
 const workerBindings = {
-  direct: { workerId: "worker-direct", model: "fixture-model" },
+  chat: { workerId: "worker-chat", model: "chat-model" },
+  direct: { workerId: "worker-direct", model: "work-model" },
   research: { workerId: "worker-research" },
   plan: { workerId: "worker-plan" },
   implement: { workerId: "worker-implement" },
@@ -232,7 +234,7 @@ function createAcceptanceRun(
   return { instance, step, taskWrites, gatewayCalls };
 }
 
-const workflowCases = Object.values(BUILTIN_WORKFLOWS);
+const workflowCases = Object.values(BUILTIN_WORKFLOW_CATALOG);
 
 describe("Work v1 acceptance through the shared assignment dispatcher", () => {
   it.each(workflowCases)(
@@ -257,6 +259,12 @@ describe("Work v1 acceptance through the shared assignment dispatcher", () => {
       expect(result.status).toBe("completed");
       expect(selectionCalls).toHaveLength(definition.steps.length);
       expect(gatewayCalls).toHaveLength(definition.steps.length);
+      expect(selectionCalls.map((call) => call.readOnly)).toEqual(
+        definition.steps.map((step) => step.readWritePolicy === "read_only"),
+      );
+      expect(selectionCalls.map((call) => call.executionClass)).toEqual(
+        definition.steps.map((step) => step.executionMode),
+      );
       expect(selectionCalls.map((call) => call.workBindingId)).toEqual(
         definition.steps.map((item) =>
           definition.id === "direct" ? "direct" : item.kind,
@@ -272,6 +280,14 @@ describe("Work v1 acceptance through the shared assignment dispatcher", () => {
             ].workerId,
         ),
       );
+      if (definition.id === "chat" || definition.id === "direct") {
+        const binding = workerBindings[definition.id];
+        expect(selectionCalls[0]).toMatchObject({
+          workBindingId: definition.id,
+          workerId: binding.workerId,
+          model: binding.model,
+        });
+      }
       for (const [index, envelope] of gatewayCalls.entries()) {
         const payload = envelope.payload as {
           snapshot: Record<string, unknown>;
@@ -283,6 +299,7 @@ describe("Work v1 acceptance through the shared assignment dispatcher", () => {
           projectId: "project-fixture",
           workRequestId: "request-v8-acceptance",
           sessionPolicy: "durable_session",
+          readOnly: definition.steps[index]!.readWritePolicy === "read_only",
         });
         const prompt = String(assignment.objective);
         for (const inputKind of definition.steps[index]!.inputsFrom) {

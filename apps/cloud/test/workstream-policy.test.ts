@@ -58,6 +58,24 @@ describe("catalog-backed Worker validation messages", () => {
 });
 
 describe("Workstream Worker label snapshots", () => {
+  it("admits an independent Chat default and binding", () => {
+    const normalized = normalizeWorkstreamWorkConfig({
+      defaultWorkflowId: "chat",
+      bindings: {
+        chat: { workerId: "dynamic-chat-worker", model: "chat-model" },
+        direct: { workerId: "dynamic-work-worker", model: "work-model" },
+      },
+    });
+    expect(normalized.config.defaultWorkflowId).toBe("chat");
+    expect(normalized.config.bindings).toMatchObject({
+      chat: { workerId: "dynamic-chat-worker", model: "chat-model" },
+      direct: { workerId: "dynamic-work-worker", model: "work-model" },
+    });
+    expect(normalized.workerIds).toEqual([
+      "dynamic-chat-worker",
+      "dynamic-work-worker",
+    ]);
+  });
   it("preserves bounded primary and fallback labels without changing identities", () => {
     const normalized = normalizeWorkstreamWorkConfig({
       defaultWorkflowId: "full_cycle",

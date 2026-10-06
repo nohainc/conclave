@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 
 // Adopt the authoring-only addition from the fresh v8 baseline without replaying
 // that baseline, overwriting templates, or touching existing Draft/release rows.
-export function starterTemplateProvisioningSql(baseline) {
+export function starterTemplateProvisioningSql(
+  baseline,
+  starterAlignment = "",
+) {
   const table = baseline.match(
     /CREATE TABLE tool_profile_starter_templates \([\s\S]*?\n\);/,
   );
@@ -17,7 +20,7 @@ export function starterTemplateProvisioningSql(baseline) {
     throw new Error(
       "Current baseline starter-template definition/seeds were not found.",
     );
-  return `${table[0].replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ")}\n${seeds.join("\n")}\n`;
+  return `${table[0].replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ")}\n${seeds.join("\n")}\n${starterAlignment}`;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
@@ -31,7 +34,19 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     "utf8",
   );
   mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
-  writeFileSync(file, starterTemplateProvisioningSql(baseline));
+  writeFileSync(
+    file,
+    starterTemplateProvisioningSql(
+      baseline,
+      readFileSync(
+        join(
+          root,
+          "apps/cloud/migrations-v8/0007_chat_profile_starter_attestation.sql",
+        ),
+        "utf8",
+      ),
+    ),
+  );
   console.log(
     "Prepared .development/provision-profile-starter-templates.sql from the v8 baseline; existing templates, Drafts, and releases are preserved.",
   );

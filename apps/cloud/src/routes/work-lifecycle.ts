@@ -2,7 +2,11 @@ import {
   cancelTaskAssignment,
   type AssignmentDispatcherEnv,
 } from "../assignment-dispatcher.js";
-import { type BuiltinWorkflowDefinition, type StepKind } from "@conclave/core";
+import {
+  STEP_KINDS,
+  type BuiltinWorkflowDefinition,
+  type StepKind,
+} from "@conclave/core";
 import {
   canonicalExecutionErrorCode,
   executionErrorMessage,
@@ -70,7 +74,7 @@ export async function handleRetryWorkRequest(
   const stepKind = body.stepKind;
   if (
     typeof stepKind !== "string" ||
-    !["research", "plan", "implement", "test", "verify"].includes(stepKind)
+    !STEP_KINDS.includes(stepKind as StepKind)
   )
     throw new HttpError(400, "A valid failed Step is required");
   const workflow = parseJson<BuiltinWorkflowDefinition>(

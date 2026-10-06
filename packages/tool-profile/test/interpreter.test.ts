@@ -34,6 +34,88 @@ function context(
 }
 
 describe("Tool Profile v1 pure interpreter", () => {
+  it("preserves sandbox policy in every Codex compatibility argument layout", () => {
+    const profile = loadProfile("chatgpt-codex.v1");
+    const layouts = [
+      profile.execution.arguments,
+      ...profile.compatibilityOverrides.flatMap((override) =>
+        override.executionArguments ? [override.executionArguments] : [],
+      ),
+    ];
+    for (const layout of layouts) {
+      for (const sessionId of [undefined, "conversation-existing"]) {
+        for (const [executionPolicy, sandbox] of [
+          ["provider_default", "read-only"],
+          ["restricted", "workspace-write"],
+        ] as const) {
+          const args = expandExecutionArguments(
+            profile,
+            context({
+              executionPolicy,
+              sessionPolicy: "durable",
+              sessionId,
+            }),
+            layout,
+          );
+          const index = args.indexOf("--sandbox");
+          expect(index).toBeGreaterThanOrEqual(0);
+          expect(args[index + 1]).toBe(sandbox);
+          expect(args.filter((arg) => arg === "--sandbox")).toHaveLength(1);
+          expect(args).not.toContain(
+            sandbox === "read-only" ? "workspace-write" : "read-only",
+          );
+          expect(args).not.toContain(
+            "--dangerously-bypass-approvals-and-sandbox",
+          );
+        }
+        const fullAccess = expandExecutionArguments(
+          profile,
+          context({
+            executionPolicy: "full_access",
+            sessionPolicy: "durable",
+            sessionId,
+          }),
+          layout,
+        );
+        expect(fullAccess).toContain(
+          "--dangerously-bypass-approvals-and-sandbox",
+        );
+        expect(fullAccess).not.toContain("--sandbox");
+      }
+    }
+  });
+  it.each([
+    ["provider_default", "read-only"],
+    ["restricted", "workspace-write"],
+  ] as const)(
+    "Codex maps %s to %s for fresh and resumed conversations",
+    (executionPolicy, sandbox) => {
+      const profile = loadProfile("chatgpt-codex.v1");
+      for (const sessionId of [undefined, "conversation-existing"]) {
+        const args = expandExecutionArguments(
+          profile,
+          context({
+            executionPolicy,
+            sessionPolicy: "durable",
+            sessionId,
+          }),
+        );
+        expect(args.slice(0, 4)).toEqual([
+          "--ask-for-approval",
+          "never",
+          "--sandbox",
+          sandbox,
+        ]);
+        expect(args.filter((arg) => arg === "--sandbox")).toHaveLength(1);
+        expect(args).not.toContain(
+          "--dangerously-bypass-approvals-and-sandbox",
+        );
+        expect(args).not.toContain(
+          sandbox === "read-only" ? "workspace-write" : "read-only",
+        );
+      }
+    },
+  );
   it("expands Codex arguments into discrete argv without shell parsing", () => {
     const profile = loadProfile("chatgpt-codex.v1");
     const result = expandExecutionArguments(
@@ -96,8 +178,9 @@ describe("Tool Profile v1 pure interpreter", () => {
     ]);
   });
 
-  it("keeps Gemini read-only assignments in plan mode", () => {
+  it("does not attest Gemini sandbox as enforceable read-only execution", () => {
     const profile = loadProfile("gemini-antigravity.v1");
+    expect(profile.capabilities).not.toContain("workstream_read");
     expect(
       expandExecutionArguments(
         profile,
