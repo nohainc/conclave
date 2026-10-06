@@ -47,9 +47,13 @@ class AxModelOption {
 List<AxModelOption> _modelsForWorker(AxWorker worker) {
   final workerType = worker.workerTypeId.toLowerCase();
   final profileId = (worker.profileDefinitionId ?? '').toLowerCase();
+  final displayName = worker.displayName.toLowerCase();
+
   if (workerType == 'chatgpt' ||
       profileId.contains('chatgpt') ||
-      profileId.contains('codex')) {
+      profileId.contains('codex') ||
+      displayName.contains('chatgpt') ||
+      displayName.contains('openai')) {
     return const [
       AxModelOption(
         id: 'o3',
@@ -129,9 +133,114 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         description: 'Original GPT-4 instruction following model',
       ),
     ];
+  } else if (workerType == 'copilot' ||
+      profileId.contains('copilot') ||
+      displayName.contains('copilot')) {
+    return const [
+      AxModelOption(
+        id: 'claude-3.7-sonnet',
+        name: 'Claude 3.7 Sonnet',
+        badge: 'Hybrid Reasoning',
+        description: 'Claude 3.7 with hybrid standard and extended thinking',
+      ),
+      AxModelOption(
+        id: 'claude-3.5-sonnet',
+        name: 'Claude 3.5 Sonnet',
+        badge: 'Flagship Coding',
+        description: 'Frontier code generation and multi-file editing',
+      ),
+      AxModelOption(
+        id: 'gpt-4o',
+        name: 'GPT-4o',
+        badge: 'Flagship',
+        description: 'High-speed intelligence for complex coding tasks',
+      ),
+      AxModelOption(
+        id: 'o3-mini',
+        name: 'o3-mini',
+        badge: 'Fast Reasoning',
+        description: 'High-speed reasoning specialized for STEM and coding',
+      ),
+      AxModelOption(
+        id: 'o1',
+        name: 'o1',
+        badge: 'Reasoning',
+        description: 'Advanced reasoning for deep architectural tasks',
+      ),
+    ];
+  } else if (workerType == 'grok' ||
+      profileId.contains('grok') ||
+      profileId.contains('xai') ||
+      displayName.contains('grok')) {
+    return const [
+      AxModelOption(
+        id: 'grok-3',
+        name: 'Grok 3',
+        badge: 'Flagship Reasoning',
+        description:
+            'Frontier reasoning model with state-of-the-art coding and math',
+      ),
+      AxModelOption(
+        id: 'grok-3-mini',
+        name: 'Grok 3 mini',
+        badge: 'Fast Reasoning',
+        description: 'High-throughput lightweight reasoning model',
+      ),
+      AxModelOption(
+        id: 'grok-2',
+        name: 'Grok 2',
+        badge: 'Flagship',
+        description: 'State-of-the-art language and code generation',
+      ),
+      AxModelOption(
+        id: 'grok-2-vision',
+        name: 'Grok 2 Vision',
+        badge: 'Multimodal',
+        description: 'Visual reasoning and multimodal code synthesis',
+      ),
+      AxModelOption(
+        id: 'grok-beta',
+        name: 'Grok Beta',
+        badge: 'Dynamic',
+        description: 'Latest experimental release of Grok',
+      ),
+    ];
+  } else if (workerType == 'claude' ||
+      profileId.contains('claude') ||
+      profileId.contains('anthropic') ||
+      displayName.contains('claude')) {
+    return const [
+      AxModelOption(
+        id: 'claude-3-7-sonnet',
+        name: 'Claude 3.7 Sonnet',
+        badge: 'Hybrid Reasoning',
+        description:
+            'Hybrid standard and extended thinking for high-level engineering',
+      ),
+      AxModelOption(
+        id: 'claude-3-5-sonnet',
+        name: 'Claude 3.5 Sonnet',
+        badge: 'Flagship Coding',
+        description:
+            'Industry-standard model for code generation and refactoring',
+      ),
+      AxModelOption(
+        id: 'claude-3-5-haiku',
+        name: 'Claude 3.5 Haiku',
+        badge: 'Ultra Fast',
+        description: 'Near-instant responsiveness with high coding capability',
+      ),
+      AxModelOption(
+        id: 'claude-3-opus',
+        name: 'Claude 3 Opus',
+        badge: 'Deep Reasoning',
+        description: 'Top-level reasoning for complex open-ended analysis',
+      ),
+    ];
   } else if (workerType == 'gemini' ||
       profileId.contains('gemini') ||
-      profileId.contains('antigravity')) {
+      profileId.contains('antigravity') ||
+      displayName.contains('gemini')) {
     return const [
       AxModelOption(
         id: 'gemini-2.5-pro',
@@ -165,6 +274,58 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         description: 'Lightweight and fast for general coding',
       ),
     ];
+  } else if (workerType == 'deepseek' ||
+      profileId.contains('deepseek') ||
+      displayName.contains('deepseek')) {
+    return const [
+      AxModelOption(
+        id: 'deepseek-reasoner',
+        name: 'DeepSeek-R1',
+        badge: 'Reasoning R1',
+        description: 'Open reasoning model with chain-of-thought verification',
+      ),
+      AxModelOption(
+        id: 'deepseek-chat',
+        name: 'DeepSeek-V3',
+        badge: 'Flagship V3',
+        description: 'Fast 671B MoE model for general software engineering',
+      ),
+    ];
+  } else if (workerType == 'ollama' ||
+      profileId.contains('ollama') ||
+      displayName.contains('ollama')) {
+    return const [
+      AxModelOption(
+        id: 'llama3.3',
+        name: 'Llama 3.3 70B',
+        badge: 'Flagship Local',
+        description: 'Meta Llama 3.3 70B versatile open model',
+      ),
+      AxModelOption(
+        id: 'qwen2.5-coder',
+        name: 'Qwen 2.5 Coder',
+        badge: 'Code Specialist',
+        description: 'Specialized code generation and fill-in-the-middle model',
+      ),
+      AxModelOption(
+        id: 'deepseek-r1',
+        name: 'DeepSeek-R1 Local',
+        badge: 'Reasoning Local',
+        description: 'Distilled local reasoning model for logic and code',
+      ),
+      AxModelOption(
+        id: 'phi4',
+        name: 'Phi-4',
+        badge: 'Compact & Smart',
+        description: 'Microsoft 14B state-of-the-art small language model',
+      ),
+      AxModelOption(
+        id: 'mistral',
+        name: 'Mistral 7B',
+        badge: 'Fast Local',
+        description: 'Fast lightweight open model for quick completions',
+      ),
+    ];
   }
   return const [];
 }
@@ -175,31 +336,28 @@ String _modelDisplayName(String? modelId, {AxWorker? worker}) {
       worker != null ? _modelsForWorker(worker) : const <AxModelOption>[];
   final found = list.where((m) => m.id == modelId).firstOrNull;
   if (found != null) return found.name;
-  for (final option in [
-    ..._modelsForWorker(const AxWorker(
-      id: '',
-      workspaceId: '',
-      workspaceName: '',
-      workerTypeId: 'chatgpt',
-      displayName: '',
-      status: '',
-      readinessState: '',
-      localConcurrencyLimit: 1,
-      capabilities: [],
-    )),
-    ..._modelsForWorker(const AxWorker(
-      id: '',
-      workspaceId: '',
-      workspaceName: '',
-      workerTypeId: 'gemini',
-      displayName: '',
-      status: '',
-      readinessState: '',
-      localConcurrencyLimit: 1,
-      capabilities: [],
-    )),
+  for (final typeId in [
+    'chatgpt',
+    'copilot',
+    'grok',
+    'claude',
+    'gemini',
+    'deepseek',
+    'ollama',
   ]) {
-    if (option.id == modelId) return option.name;
+    for (final option in _modelsForWorker(AxWorker(
+      id: '',
+      workspaceId: '',
+      workspaceName: '',
+      workerTypeId: typeId,
+      displayName: '',
+      status: '',
+      readinessState: '',
+      localConcurrencyLimit: 1,
+      capabilities: const [],
+    ))) {
+      if (option.id == modelId) return option.name;
+    }
   }
   return modelId;
 }
@@ -220,6 +378,9 @@ Widget _buildModelBadge(BuildContext context, String badge) {
   } else if (badge.contains('Code')) {
     bg = isDark ? const Color(0xff133238) : const Color(0xffccfbf1);
     fg = isDark ? const Color(0xff5eead4) : const Color(0xff115e59);
+  } else if (badge.contains('Multimodal')) {
+    bg = isDark ? const Color(0xff3d2e14) : const Color(0xfffef3c7);
+    fg = isDark ? const Color(0xfffcd34d) : const Color(0xffb45309);
   } else {
     bg = isDark ? const Color(0xff2d2d2d) : const Color(0xfff3f4f6);
     fg = isDark ? const Color(0xff9ca3af) : const Color(0xff4b5563);
@@ -449,6 +610,35 @@ class _WorkComposer extends StatelessWidget {
         ]));
   }
 
+  AxWorker? get _assignedWorker {
+    final selectedWorkflow = workflowCatalog
+            .where((item) => item.reference == workflow)
+            .firstOrNull ??
+        workflowCatalog
+            .where((item) => item.id == workflow.split(':').first)
+            .firstOrNull;
+    final bindings = workConfig['bindings'] is Map
+        ? Map<String, dynamic>.from(workConfig['bindings'] as Map)
+        : <String, dynamic>{};
+    final stepKind = selectedWorkflow?.steps.firstOrNull?.kind ??
+        (selectedWorkflow?.id == 'chat' ? 'chat' : 'implement');
+    final rawBinding = bindings[stepKind] ??
+        (selectedWorkflow != null ? bindings[selectedWorkflow.id] : null);
+    final binding = rawBinding is Map
+        ? Map<String, dynamic>.from(rawBinding)
+        : <String, dynamic>{};
+    final workerId =
+        (binding['workerId'] ?? binding['worker_id'])?.toString() ?? '';
+    if (workerId.isEmpty) return null;
+    return eligibleWorkers.where((w) => w.id == workerId).firstOrNull ??
+        projectWorkers.where((w) => w.id == workerId).firstOrNull;
+  }
+
+  bool get _isWorkerAssigned {
+    final worker = _assignedWorker;
+    return worker != null && eligibleWorkers.any((w) => w.id == worker.id);
+  }
+
   Widget controls(BuildContext context) => _buildComposerInput(
       context,
       Theme.of(context).brightness == Brightness.dark,
@@ -469,19 +659,12 @@ class _WorkComposer extends StatelessWidget {
     final stepKind = selectedWorkflow?.steps.firstOrNull?.kind ??
         (selectedWorkflow?.id == 'chat' ? 'chat' : 'implement');
     final rawBinding = bindings[stepKind] ??
-        (selectedWorkflow != null ? bindings[selectedWorkflow.id] : null) ??
-        bindings['direct'];
+        (selectedWorkflow != null ? bindings[selectedWorkflow.id] : null);
     final binding = rawBinding is Map
         ? Map<String, dynamic>.from(rawBinding)
         : <String, dynamic>{};
-    final workerId =
-        (binding['workerId'] ?? binding['worker_id'])?.toString() ?? '';
-    final assignedWorker = workerId.isEmpty
-        ? null
-        : (eligibleWorkers.where((w) => w.id == workerId).firstOrNull ??
-            projectWorkers.where((w) => w.id == workerId).firstOrNull);
-    final isWorkerAssigned = assignedWorker != null &&
-        eligibleWorkers.any((w) => w.id == assignedWorker.id);
+    final assignedWorker = _assignedWorker;
+    final isWorkerAssigned = _isWorkerAssigned;
     final selectedModel = binding['model']?.toString().trim() ?? '';
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final availableModels =
@@ -610,13 +793,21 @@ class _WorkComposer extends StatelessWidget {
                 child: Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  child: Text(
-                    'No worker assigned',
-                    style: TextStyle(
-                      color: colors.error,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.error_outline_rounded,
+                          size: 14, color: colors.error),
+                      const SizedBox(width: 4),
+                      Text(
+                        'No worker assigned',
+                        style: TextStyle(
+                          color: colors.error,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -671,7 +862,7 @@ class _WorkComposer extends StatelessWidget {
                                 value: model.id,
                                 checked: selectedModel == model.id,
                                 padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
+                                    const EdgeInsets.symmetric(horizontal: 12),
                                 child: SizedBox(
                                   height: 46,
                                   child: Column(
