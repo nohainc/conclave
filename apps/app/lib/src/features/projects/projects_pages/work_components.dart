@@ -482,6 +482,73 @@ class _WorkTimelineCard extends StatelessWidget {
     final showRequesterIdentity =
         !isOwnRequest && request.requestedByUserId?.trim().isNotEmpty == true;
 
+    final failedStep =
+        request.steps.where((step) => step.status == 'failed').firstOrNull;
+    final lastCompletedStep = request.steps
+        .where((step) =>
+            step.status == 'completed' &&
+            step.resultText?.trim().isNotEmpty == true)
+        .lastOrNull;
+    final activeStep = request.steps
+        .where((step) => step.status == 'running' || step.status == 'waiting')
+        .firstOrNull;
+    final stepForContext =
+        lastCompletedStep ?? activeStep ?? request.steps.firstOrNull;
+    final selectedModel = stepForContext?.model?.trim();
+
+    final response = request.finalText?.trim().isNotEmpty == true
+        ? request.finalText!
+        : request.steps
+            .map((step) => step.resultText)
+            .whereType<String>()
+            .where((text) => text.trim().isNotEmpty)
+            .firstOrNull;
+    final error = request.error?.trim().isNotEmpty == true
+        ? request.error!
+        : failedStep?.errorMessage;
+    final isError = error?.isNotEmpty == true;
+
+    final workerDisplayName = lastCompletedStep?.workerDisplayName?.trim() ??
+        stepForContext?.workerDisplayName?.trim();
+    final isWorkerResponse = !isError &&
+        response?.isNotEmpty == true &&
+        workerDisplayName?.isNotEmpty == true;
+    final senderName = isWorkerResponse ? workerDisplayName! : 'Conclave';
+
+    final metadataSegments = [
+      if (_workflowName.isNotEmpty) _workflowName,
+      if (selectedModel != null &&
+          selectedModel.isNotEmpty &&
+          (!isWorkerResponse || selectedModel != workerDisplayName))
+        selectedModel,
+      if (elapsed.isNotEmpty) elapsed,
+    ];
+    final metadataString =
+        metadataSegments.isEmpty ? '' : '· ${metadataSegments.join(' · ')}';
+
+    final Widget senderAvatar = isWorkerResponse
+        ? CircleAvatar(
+            radius: 11,
+            backgroundColor:
+                isDark ? const Color(0xff2a2940) : const Color(0xffece9f8),
+            child: const Icon(
+              Icons.smart_toy_outlined,
+              size: 13,
+              color: Color(0xff7c3aed),
+            ),
+          )
+        : Image.asset(
+            'assets/branding/conclave_logo_32.png',
+            width: 20,
+            height: 20,
+            fit: BoxFit.contain,
+            errorBuilder: (ctx, err, stack) => const Icon(
+              Icons.auto_awesome,
+              size: 14,
+              color: Color(0xff7c3aed),
+            ),
+          );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -600,34 +667,26 @@ class _WorkTimelineCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      CircleAvatar(
-                        radius: 11,
-                        backgroundColor: isDark
-                            ? const Color(0xff2a2940)
-                            : const Color(0xffece9f8),
-                        child: const Icon(
-                          Icons.auto_awesome,
-                          size: 12,
-                          color: Color(0xff7c3aed),
-                        ),
-                      ),
+                      senderAvatar,
                       const SizedBox(width: 6),
                       Text(
-                        'Conclave',
+                        senderName,
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: isDark ? Colors.white : Colors.black87,
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          '· $_workflowName${elapsed.isEmpty ? '' : ' · $elapsed'}',
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12, color: metaColor),
+                      if (metadataString.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            metadataString,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: metaColor),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 10),

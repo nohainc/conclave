@@ -592,17 +592,64 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                                 ? 'Loading older messages…'
                                 : 'Load older messages')),
                       if (state.error != null)
-                        TextButton(
-                            onPressed: () => _discussionCache
-                                .synchronize(widget.workstream.id)
-                                .then<void>((_) {},
-                                    onError: (Object _, StackTrace __) {}),
-                            child: const Text('Retry Chat sync')),
+                        Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            child: Text.rich(TextSpan(
+                                style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                    fontSize: 13),
+                                children: [
+                                  TextSpan(
+                                      text:
+                                          'Chat could not synchronize: ${state.error}  '),
+                                  WidgetSpan(
+                                      alignment: PlaceholderAlignment.middle,
+                                      child: Semantics(
+                                          link: true,
+                                          child: InkWell(
+                                              onTap: () => _discussionCache
+                                                  .synchronize(
+                                                      widget.workstream.id)
+                                                  .then<void>((_) {},
+                                                      onError: (Object _,
+                                                          StackTrace __) {}),
+                                              child: Text('Retry Chat sync',
+                                                  style: TextStyle(
+                                                      fontSize: 13,
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .error,
+                                                      decoration: TextDecoration
+                                                          .underline,
+                                                      decorationColor: Theme.of(context)
+                                                          .colorScheme
+                                                          .error))))),
+                                  const TextSpan(text: ' '),
+                                  WidgetSpan(
+                                      alignment: PlaceholderAlignment.middle,
+                                      child: IconButton(
+                                          tooltip: 'Copy Chat error',
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(
+                                              minWidth: 24, minHeight: 24),
+                                          visualDensity: VisualDensity.compact,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                          icon: const Icon(Icons.copy_rounded,
+                                              size: 14),
+                                          onPressed: () => Clipboard.setData(
+                                              ClipboardData(
+                                                  text:
+                                                      'Chat could not synchronize: ${state.error}')))),
+                                ]))),
                       if (!state.hasData && state.isFetching)
                         const Padding(
                             padding: EdgeInsets.all(24),
                             child: Text('Loading Chat…')),
                       if (messages.isEmpty &&
+                          state.error == null &&
                           (!state.isFetching || state.hasData))
                         Container(
                           width: double.infinity,

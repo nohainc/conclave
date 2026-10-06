@@ -1937,6 +1937,97 @@ void main() {
 
     await tester.binding.setSurfaceSize(null);
   });
+
+  testWidgets(
+      'Work tab dynamically displays Conclave system events with current logo and Worker responses with official icon',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1000));
+    final dataSource = _WorkHistoryDataSource([
+      const AxWorkRequest(
+        id: 'req-system',
+        requestedByName: 'Vitalii',
+        prompt: 'Preparing system run',
+        workflowId: 'direct',
+        workflowVersion: 1,
+        workflowName: 'Direct Execution',
+        status: 'running',
+        createdAt: '2026-10-06T10:00:00Z',
+        steps: [
+          AxWorkRequestStep(
+            kind: 'implement',
+            status: 'running',
+            workerId: 'w-1',
+            model: 'gpt-4o',
+            elapsedMs: 5000,
+          )
+        ],
+      ),
+      const AxWorkRequest(
+        id: 'req-worker',
+        requestedByName: 'Vitalii',
+        prompt: 'Build feature',
+        workflowId: 'direct',
+        workflowVersion: 1,
+        workflowName: 'Direct Execution',
+        status: 'completed',
+        createdAt: '2026-10-06T10:01:00Z',
+        finalText: 'Feature implementation complete.',
+        steps: [
+          AxWorkRequestStep(
+            kind: 'implement',
+            status: 'completed',
+            workerId: 'w-1',
+            workerDisplayName: 'Claude 3.7 Sonnet',
+            model: 'claude-3-7-sonnet',
+            elapsedMs: 12000,
+            resultText: 'Feature implementation complete.',
+          )
+        ],
+      ),
+    ]);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: WorkstreamPage(
+          initialTab: 1,
+          project: const AxProject(
+            id: 'project-1',
+            name: 'Project',
+            branch: '',
+            lastActivity: '',
+            role: 'owner',
+          ),
+          workstream: const AxWorkstream(
+            id: 'stream-1',
+            projectId: 'project-1',
+            name: 'Implementation',
+            lead: 'Vitalii',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: 'Workspace',
+            queueStatus: 'idle',
+          ),
+          onBackToProject: _noop,
+          onArchive: _noop,
+          dataSource: dataSource,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Verify Conclave system event has Conclave identity, workflow, model, and elapsed time
+    expect(find.text('Conclave'), findsOneWidget);
+    expect(
+        find.textContaining('Direct Execution · gpt-4o · 5s'), findsOneWidget);
+
+    // Verify Worker completed response has Worker name, official worker icon, workflow, and model
+    expect(find.text('Claude 3.7 Sonnet'), findsOneWidget);
+    expect(find.textContaining('Direct Execution · claude-3-7-sonnet · 12s'),
+        findsOneWidget);
+    expect(find.byIcon(Icons.smart_toy_outlined), findsOneWidget);
+
+    await tester.binding.setSurfaceSize(null);
+  });
 }
 
 class _WorkspaceTestDataSource extends AxFixtureDataSource {

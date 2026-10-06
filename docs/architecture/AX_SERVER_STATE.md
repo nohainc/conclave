@@ -829,3 +829,11 @@ These are cache/consumer acceptance measurements; they do not claim production
 network latency or a hardware-specific frame-time benchmark. Browser execution
 also exercises native IndexedDB and lifecycle recovery alongside these tests.
 No runtime, schema or public API changes are required for this test phase.
+
+### Chat read failure presentation
+
+A failed Discussion synchronization displays the request error with a Copy Chat
+error icon and an inline Retry Chat sync link. Malformed envelopes identify the invalid fields
+without including message bodies. It never labels a failed read as “No chat messages yet”; that empty state
+is reserved for a successful empty result. Cached messages remain visible on
+failure and retry clears the error after a successful response.

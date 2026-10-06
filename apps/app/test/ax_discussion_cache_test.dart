@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:conclave_app/src/ax/sync/ax_discussion_cache.dart';
@@ -467,6 +468,41 @@ void main() {
     expect(find.text('cached'), findsOneWidget);
     expect(find.text('new'), findsOneWidget);
   });
+  testWidgets(
+      'failed initial Chat read shows the cause, not an empty conversation, and retries',
+      (tester) async {
+    await size(tester);
+    final initial = Completer<AxDiscussionPage>();
+    source.queuedPages.add(initial);
+    await tester.pumpWidget(page('w'));
+    initial.completeError(StateError('Discussion endpoint unavailable'));
+    await tester.pumpAndSettle();
+    expect(
+        find.textContaining('Discussion endpoint unavailable'), findsOneWidget);
+    expect(find.text('Retry Chat sync'), findsOneWidget);
+    expect(find.text('No chat messages yet'), findsNothing);
+    String? copied;
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String;
+      }
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    await tester.tap(find.byTooltip('Copy Chat error'));
+    await tester.pump();
+    expect(copied,
+        'Chat could not synchronize: Bad state: Discussion endpoint unavailable');
+    source.server = [message('recovered', 'Recovered Chat')];
+    await tester.tap(find.text('Retry Chat sync'));
+    await tester.pumpAndSettle();
+    expect(find.text('Recovered Chat'), findsOneWidget);
+    expect(find.text('Retry Chat sync'), findsNothing);
+    expect(find.textContaining('Chat could not synchronize:'), findsNothing);
+  });
+
   testWidgets(
       'scrolling to the beginning loads older messages once and retains viewport',
       (tester) async {

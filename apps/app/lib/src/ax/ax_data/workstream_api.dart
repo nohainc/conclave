@@ -354,7 +354,17 @@ mixin _WorkstreamApi on _AxApiClientCore {
         body['messages'] is! List ||
         (body['nextCursor'] != null && body['nextCursor'] is! String) ||
         (body['newestCursor'] != null && body['newestCursor'] is! String)) {
-      throw const AxApiException('Discussion page response is malformed');
+      final invalid = <String>[
+        if (body['schemaVersion'] != 1)
+          'expected schemaVersion 1, received ${body['schemaVersion'] ?? "missing"}',
+        if (body['messages'] is! List) 'messages must be a list',
+        if (body['nextCursor'] != null && body['nextCursor'] is! String)
+          'nextCursor must be a string or null',
+        if (body['newestCursor'] != null && body['newestCursor'] is! String)
+          'newestCursor must be a string or null',
+      ];
+      throw AxApiException(
+          'Discussion page response is malformed: ${invalid.join("; ")}');
     }
     final messages = (body['messages'] as List).map((item) {
       if (item is! Map) {

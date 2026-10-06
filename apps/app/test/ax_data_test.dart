@@ -184,6 +184,24 @@ void main() {
         api.loadDiscussionPage(workstreamId: 'w', before: 'a', after: 'b'),
         throwsArgumentError);
   });
+  test(
+      'Discussion envelope error identifies incompatible schema without message content',
+      () async {
+    final api = AxApiClient(
+        baseUrl: 'https://conclave.test/api',
+        client: _JsonClient({
+          'messages': [
+            {'body': 'Private Chat'}
+          ]
+        }, statusCode: 200));
+    await expectLater(
+        api.loadDiscussionPage(workstreamId: 'w'),
+        throwsA(isA<AxApiException>().having(
+            (error) => error.message,
+            'message',
+            allOf(contains('expected schemaVersion 1, received missing'),
+                isNot(contains('Private Chat'))))));
+  });
   for (final response in [
     <String, dynamic>{'messages': []},
     {'schemaVersion': 1, 'messages': [], 'nextCursor': 4},
