@@ -572,7 +572,7 @@ class AppIconRail extends StatelessWidget {
     }
 
     return Container(
-      width: 64,
+      width: 50,
       color: ConclaveBrand.navigation,
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
       child: Column(
@@ -714,7 +714,10 @@ class AppIconRail extends StatelessWidget {
                       ),
                     ),
                   ),
-                  for (final workstream in project.workstreams)
+                  for (final workstream
+                      in (shellContext.projectWorkstreams?.peek(project.id) ??
+                          shellContext.workstreamsByProject[project.id] ??
+                          const <AxWorkstream>[]))
                     MenuItemButton(
                       style: itemStyle(),
                       onPressed: () => onNavigateTo(

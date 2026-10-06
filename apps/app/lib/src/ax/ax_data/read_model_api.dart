@@ -12,25 +12,10 @@ mixin _ReadModelApi on _AxApiClientCore {
     final projects = results[0] as List<AxProject>;
     final workspaces = results[1] as List<AxWorkspace>;
     final session = results[2] as AxSession;
-    final selected = projectId ?? projects.firstOrNull?.id;
-    var mergedProjects = projects;
-    if (selected != null) {
-      final response = await _getJson(Uri.parse('$baseUrl/projects/$selected'));
-      final projectValue = response['project'];
-      if (projectValue is! Map) {
-        throw const AxApiException('Project response is malformed');
-      }
-      final workstreams = await loadProjectWorkstreams(projectId: selected);
-      final detail = AxProject.fromJson(Map<String, dynamic>.from(projectValue))
-          .copyWith(workstreams: workstreams);
-      mergedProjects = projects
-          .map((project) => project.id == selected ? detail : project)
-          .toList(growable: false);
-    }
     return AxSnapshot(
       workspaceId: workspaceId,
       viewer: session.viewer,
-      projects: mergedProjects,
+      projects: projects,
       workspaces: workspaces,
       tasks: const [],
       findings: const [],

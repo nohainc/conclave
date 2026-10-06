@@ -8,6 +8,7 @@ import 'dart:math' as math;
 import 'package:conclave_protocol/conclave_protocol.dart';
 
 import 'realtime_client_stub.dart';
+import 'realtime_health.dart';
 
 class _BrowserRealtimeClient implements RealtimeClient {
   final _events = StreamController<Map<String, dynamic>>.broadcast();
@@ -19,6 +20,14 @@ class _BrowserRealtimeClient implements RealtimeClient {
   String? _runId;
   String? _executionWorkspaceId;
   Timer? _reconnectTimer;
+  late final _health = RealtimeHealthMonitor(
+      ping: () => _send({'type': 'ping'}),
+      onStale: () {
+        if (_closed) return;
+        _events.add({'type': 'realtime.connection', 'status': 'stale'});
+        _socket?.close();
+        _scheduleReconnect();
+      });
   int _attempt = 0;
   final _lastDurableSequences = <String, int>{};
   bool _closed = false;
@@ -69,6 +78,7 @@ class _BrowserRealtimeClient implements RealtimeClient {
     final socket = html.WebSocket(endpoint.toString());
     _socket = socket;
     socket.onOpen.listen((_) {
+      if (_closed || !identical(_socket, socket)) return;
       _attempt = 0;
       _events.add({'type': 'realtime.connection', 'status': 'connected'});
       _send({
@@ -81,15 +91,21 @@ class _BrowserRealtimeClient implements RealtimeClient {
         'scope': {'kind': 'user'}
       });
       _subscribeCurrentScopes();
+      _health.start();
     });
     socket.onMessage.listen((event) {
+      if (_closed || !identical(_socket, socket)) return;
       final data = event.data;
       if (data is! String) return;
       try {
         final decoded = jsonDecode(data);
         if (decoded is! Map) return;
         final message = Map<String, dynamic>.from(decoded);
-        if (message['type'] == 'event' && message['event'] is Map) {
+        if (message['type'] == 'realtime.pong') {
+          _health.acknowledge();
+        } else if (message['type'] == 'realtime.ready') {
+          _events.add(message);
+        } else if (message['type'] == 'event' && message['event'] is Map) {
           final eventValue = Map<String, dynamic>.from(message['event'] as Map);
           final sequence = eventValue['sequence'];
           final type = eventValue['type'];
@@ -115,8 +131,12 @@ class _BrowserRealtimeClient implements RealtimeClient {
         // Ignore malformed server frames; reconnect handling remains intact.
       }
     });
-    socket.onClose.listen((_) => _scheduleReconnect());
-    socket.onError.listen((_) => _scheduleReconnect());
+    socket.onClose.listen((_) {
+      if (identical(_socket, socket)) _scheduleReconnect();
+    });
+    socket.onError.listen((_) {
+      if (identical(_socket, socket)) _scheduleReconnect();
+    });
   }
 
   void _subscribeCurrentScopes() {
@@ -139,6 +159,7 @@ class _BrowserRealtimeClient implements RealtimeClient {
 
   void _scheduleReconnect() {
     if (_closed || _reconnectTimer?.isActive == true) return;
+    _health.stop();
     _events.add({'type': 'realtime.connection', 'status': 'reconnecting'});
     final cappedAttempt = math.min(_attempt++, 8);
     final jitter = 0.75 + math.Random().nextDouble() * 0.5;
@@ -157,6 +178,7 @@ class _BrowserRealtimeClient implements RealtimeClient {
   @override
   Future<void> close() async {
     _closed = true;
+    _health.stop();
     _reconnectTimer?.cancel();
     _socket?.close();
     await _events.close();

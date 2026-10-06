@@ -53,6 +53,9 @@ class _WorkComposer extends StatelessWidget {
     required this.onAddReference,
     required this.onRemoveAttachment,
     required this.onRefresh,
+    required this.hasOlder,
+    required this.loadingOlder,
+    required this.onLoadOlder,
     required this.onShowRunDetails,
     required this.onRetryStep,
     required this.onCancelRun,
@@ -84,6 +87,9 @@ class _WorkComposer extends StatelessWidget {
   final Future<void> Function() onAddReference;
   final ValueChanged<int> onRemoveAttachment;
   final Future<void> Function() onRefresh;
+  final bool hasOlder;
+  final bool loadingOlder;
+  final Future<void> Function() onLoadOlder;
   final ValueChanged<String>? onShowRunDetails;
   final Future<void> Function(String, AxWorkRequestStep)? onRetryStep;
   final Future<void> Function(String)? onCancelRun;
@@ -106,6 +112,16 @@ class _WorkComposer extends StatelessWidget {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (hasOlder)
+                        TextButton(
+                            onPressed: loadingOlder ? null : onLoadOlder,
+                            child: Text(loadingOlder
+                                ? 'Loading older Work history…'
+                                : 'Load older Work history')),
+                      if (timelineError != null && workTimeline.isNotEmpty)
+                        TextButton(
+                            onPressed: onRefresh,
+                            child: const Text('Retry Work sync')),
                       if (loadingTimeline && workTimeline.isEmpty)
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 24),
@@ -1157,24 +1173,25 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                       ),
                       const SizedBox(width: 8),
                     ],
-                    Tooltip(
-                      message: 'Edit message',
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(4),
-                        onTap: () => setState(() {
-                          _editController.text = widget.item.text;
-                          _isEditing = true;
-                        }),
-                        child: Padding(
-                          padding: const EdgeInsets.all(2),
-                          child: Icon(
-                            Icons.edit_outlined,
-                            size: 14,
-                            color: metaColor,
+                    if (!widget.item.id.startsWith('temp-'))
+                      Tooltip(
+                        message: 'Edit message',
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(4),
+                          onTap: () => setState(() {
+                            _editController.text = widget.item.text;
+                            _isEditing = true;
+                          }),
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: Icon(
+                              Icons.edit_outlined,
+                              size: 14,
+                              color: metaColor,
+                            ),
                           ),
                         ),
                       ),
-                    ),
                     const SizedBox(width: 6),
                     Tooltip(
                       message: 'Copy Markdown',

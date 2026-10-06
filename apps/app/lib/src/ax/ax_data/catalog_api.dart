@@ -9,7 +9,8 @@ mixin _CatalogApi on _AxApiClientCore {
     final body = await _getJson(uri);
     return (body['projects'] as List? ?? const [])
         .whereType<Map>()
-        .map((item) => AxProject.fromJson(Map<String, dynamic>.from(item)))
+        .map((item) => AxProject.fromJson(Map<String, dynamic>.from(item))
+            .copyWith(workstreams: const []))
         .toList();
   }
 

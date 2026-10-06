@@ -78,6 +78,8 @@ extension _AxAppController on _AxAppStateMixin {
   Future<void> _logout() async {
     try {
       await store.auth.logout();
+      store.clearServerState();
+      expandedProjectIds.clear();
       if (!mounted) return;
       _updateState(() {
         snapshot = AxSnapshot.empty();
@@ -681,6 +683,7 @@ extension _AxAppController on _AxAppStateMixin {
           // The API is the source of truth; no local pause state is maintained.
         }
       });
+      _ensureNavigationResources(navigation);
       _scheduleRefresh(loaded);
     } catch (error) {
       if (!mounted) return;
@@ -702,6 +705,8 @@ extension _AxAppController on _AxAppStateMixin {
       final session = await store.auth.load();
       if (!mounted) return;
       if (!session.authenticated && !authRequired) {
+        store.clearServerState();
+        expandedProjectIds.clear();
         _updateState(() => authRequired = true);
         browserNavigation.replaceWithLogin(navigation.toUri());
         return;
@@ -735,6 +740,18 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
+  /// Navigation is applied synchronously before independent resource requests.
+  void _ensureNavigationResources(AxNavigation target) {
+    final projectId = target.projectId;
+    if (projectId == null || store.auth.session?.authenticated != true) return;
+    unawaited(store.projectDetails
+        .ensure(projectId)
+        .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    unawaited(store.projectWorkstreams
+        .ensure(projectId)
+        .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+  }
+
   void _onBrowserNavigation(Uri uri) {
     final next = AxNavigation.fromUri(uri);
     final canonicalUri = next.toUri();
@@ -742,8 +759,6 @@ extension _AxAppController on _AxAppStateMixin {
       browserNavigation.replace(canonicalUri);
     }
     if (next == navigation) return;
-    final projectChanged =
-        next.projectId != null && next.projectId != selectedProjectId;
     _updateState(() {
       navigation = next;
       selectedProjectId = next.projectId ?? selectedProjectId;
@@ -754,9 +769,7 @@ extension _AxAppController on _AxAppStateMixin {
     if (next.kind == AxRouteKind.profileSecurity) {
       unawaited(_loadAccountSecurity());
     }
-    if (projectChanged) {
-      unawaited(_loadSnapshot(projectId: next.projectId));
-    }
+    _ensureNavigationResources(next);
     unawaited(realtimeClient.setScopes(
       projectId: next.projectId ?? selectedProjectId,
       workstreamId: next.workstreamId,
@@ -770,8 +783,6 @@ extension _AxAppController on _AxAppStateMixin {
       mapEquals(actual.queryParameters, canonical.queryParameters);
 
   void _navigateTo(AxNavigation next, {bool replace = false}) {
-    final projectChanged =
-        next.projectId != null && next.projectId != selectedProjectId;
     if (next.kind != AxRouteKind.search &&
         _searchQueryController.text.isNotEmpty) {
       _searchQueryController.removeListener(_onSearchQueryChanged);
@@ -792,10 +803,7 @@ extension _AxAppController on _AxAppStateMixin {
     } else {
       browserNavigation.push(next.toUri());
     }
-    // The browser callback skips our already-applied route; load its context here.
-    if (projectChanged) {
-      unawaited(_loadSnapshot(projectId: next.projectId, showSpinner: false));
-    }
+    _ensureNavigationResources(next);
     unawaited(realtimeClient.setScopes(
       projectId: next.projectId ?? selectedProjectId,
       workstreamId: next.workstreamId,

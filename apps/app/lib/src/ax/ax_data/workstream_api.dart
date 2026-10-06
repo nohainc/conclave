@@ -214,7 +214,12 @@ mixin _WorkstreamApi on _AxApiClientCore {
               Map<String, dynamic>.from(item),
             ))
         .toList(growable: false);
+    if (requestMap['id'] != workRequestId || requestMap['status'] is! String) {
+      throw const AxApiException('Malformed Work Request detail');
+    }
     return AxWorkRequestStatus(
+      id: requestMap['id'] as String,
+      workstreamId: requestMap['workstreamId'] as String?,
       status: requestMap['status']?.toString() ?? 'unknown',
       text: resultMap['text']?.toString(),
       errorCode: body['errorCode']?.toString(),
@@ -271,56 +276,106 @@ mixin _WorkstreamApi on _AxApiClientCore {
   }
 
   @override
-  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests({
-    required String workstreamId,
-    bool activeOnly = false,
-  }) async {
-    const pageSize = 100;
-    final records = <AxWorkRequest>[];
-    String? beforeCreatedAt;
-    String? beforeId;
-    while (true) {
-      final uri = Uri.parse('$baseUrl/workstreams/$workstreamId/work-requests')
-          .replace(queryParameters: {
-        'limit': '$pageSize',
-        if (activeOnly) 'activeOnly': 'true',
-        if (beforeCreatedAt != null) 'beforeCreatedAt': beforeCreatedAt,
-        if (beforeId != null) 'beforeId': beforeId,
-      });
-      final body = await _getJson(uri);
-      final page = (body['workRequests'] as List? ?? const [])
-          .whereType<Map>()
-          .map((item) => AxWorkRequest.fromJson(
-                Map<String, dynamic>.from(item),
-              ))
-          .toList();
-      records.addAll(page);
-      final cursor = body['nextCursor'];
-      if (cursor is! Map ||
-          cursor['createdAt'] is! String ||
-          cursor['id'] is! String) {
-        break;
-      }
-      beforeCreatedAt = cursor['createdAt'] as String;
-      beforeId = cursor['id'] as String;
+  Future<AxWorkRequestPage> loadWorkstreamWorkRequestPage(
+      {required String workstreamId,
+      int limit = 50,
+      String? beforeCreatedAt,
+      String? beforeId,
+      bool activeOnly = false}) async {
+    if (limit < 1 ||
+        limit > 100 ||
+        (beforeCreatedAt == null) != (beforeId == null) ||
+        beforeCreatedAt == '' ||
+        beforeId == '') {
+      throw ArgumentError('Invalid Work history page parameters');
     }
-    return records.reversed.toList();
+    final uri = Uri.parse('$baseUrl/workstreams/$workstreamId/work-requests')
+        .replace(queryParameters: {
+      'limit': '$limit',
+      if (activeOnly) 'activeOnly': 'true',
+      if (beforeCreatedAt != null) 'beforeCreatedAt': beforeCreatedAt,
+      if (beforeId != null) 'beforeId': beforeId,
+    });
+    final body = await _getJson(uri);
+    final raw = body['workRequests'];
+    final cursor = body['nextCursor'];
+    if (raw is! List ||
+        raw.any((v) => v is! Map) ||
+        (cursor != null &&
+            (cursor is! Map ||
+                cursor['createdAt'] is! String ||
+                cursor['id'] is! String ||
+                cursor['createdAt'] == '' ||
+                cursor['id'] == ''))) {
+      throw const AxApiException('Malformed Work history page');
+    }
+    final records = raw
+        .map((v) => AxWorkRequest.fromJson(Map<String, dynamic>.from(v as Map)))
+        .toList();
+    if (records.any((v) => v.id.isEmpty || v.createdAt.isEmpty)) {
+      throw const AxApiException('Malformed Work Request');
+    }
+    return AxWorkRequestPage(
+        requests: records.reversed,
+        nextCursor: cursor == null
+            ? null
+            : AxWorkRequestCursor(
+                createdAt: cursor['createdAt'] as String,
+                id: cursor['id'] as String));
   }
 
   @override
-  Future<List<AxDiscussionMessage>> loadDiscussionMessages({
-    required String workstreamId,
-  }) async {
-    final body = await _getJson(
-      Uri.parse('$baseUrl/workstreams/$workstreamId/discussion-messages'),
-    );
-    return (body['messages'] as List? ?? const [])
-        .whereType<Map>()
-        .map((item) => AxDiscussionMessage.fromJson(
-              Map<String, dynamic>.from(item),
-            ))
-        .toList();
+  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests(
+          {required String workstreamId, bool activeOnly = false}) async =>
+      (await loadWorkstreamWorkRequestPage(
+              workstreamId: workstreamId, activeOnly: activeOnly))
+          .requests;
+
+  @override
+  Future<AxDiscussionPage> loadDiscussionPage(
+      {required String workstreamId,
+      int limit = 50,
+      String? before,
+      String? after}) async {
+    if (limit < 1 || limit > 100 || (before != null && after != null)) {
+      throw ArgumentError('Invalid Discussion page parameters');
+    }
+    final uri =
+        Uri.parse('$baseUrl/workstreams/$workstreamId/discussion-messages')
+            .replace(queryParameters: {
+      'limit': '$limit',
+      if (before != null) 'before': before,
+      if (after != null) 'after': after
+    });
+    final body = await _getJson(uri);
+    if (body['schemaVersion'] != 1 ||
+        body['messages'] is! List ||
+        (body['nextCursor'] != null && body['nextCursor'] is! String) ||
+        (body['newestCursor'] != null && body['newestCursor'] is! String)) {
+      throw const AxApiException('Discussion page response is malformed');
+    }
+    final messages = (body['messages'] as List).map((item) {
+      if (item is! Map) {
+        throw const AxApiException('Discussion message is malformed');
+      }
+      final message =
+          AxDiscussionMessage.fromJson(Map<String, dynamic>.from(item));
+      if (message.id.isEmpty || message.workstreamId != workstreamId) {
+        throw const AxApiException(
+            'Discussion message identity does not match');
+      }
+      return message;
+    });
+    return AxDiscussionPage(
+        messages: messages,
+        nextCursor: body['nextCursor'] as String?,
+        newestCursor: body['newestCursor'] as String?);
   }
+
+  @override
+  Future<List<AxDiscussionMessage>> loadDiscussionMessages(
+          {required String workstreamId}) async =>
+      (await loadDiscussionPage(workstreamId: workstreamId)).messages;
 
   @override
   Future<AxDiscussionMessage> sendDiscussionMessage({

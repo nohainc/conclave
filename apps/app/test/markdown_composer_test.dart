@@ -91,7 +91,8 @@ void main() {
     expect(controller.text, '```\none\ntwo\n```');
     controller.dispose();
   });
-  testWidgets('Enter authors a newline while Cmd/Ctrl Enter submits source',
+  testWidgets(
+      'Enter sends, Shift Enter authors a newline, and Cmd/Ctrl Enter sends',
       (tester) async {
     final controller = TextEditingController(text: '**raw**');
     addTearDown(controller.dispose);
@@ -104,7 +105,11 @@ void main() {
     ))));
     await tester.tap(find.byType(TextField));
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    expect(sends, 0);
+    expect(sends, 1);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    expect(sends, 1);
     final field = tester.widget<TextField>(find.byType(TextField));
     expect(field.textInputAction, TextInputAction.newline);
     // The platform text-input service delivers the newline to the controller.
@@ -117,10 +122,10 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.sendKeyUpEvent(modifier);
     }
-    expect(sends, 2);
+    expect(sends, 3);
     expect(controller.text, '**raw**\n');
     await tester.tap(find.byTooltip('Send message'));
-    expect(sends, 3);
+    expect(sends, 4);
   });
 
   test('inline and fenced edits preserve selected content', () {

@@ -290,6 +290,7 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
       );
       if (!mounted) return;
       _updateState(() => workstreams = [...workstreams, workstream]);
+      widget.onProjectUpdated?.call(widget.project);
       widget.onOpenWorkstream(workstream.id);
     } catch (error) {
       _message(error.toString());
@@ -485,7 +486,9 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
         widget.dataSource.loadProjectMembers(projectId: widget.project.id),
         widget.dataSource.loadProjectInvitations(projectId: widget.project.id),
         widget.dataSource.loadProjectAudit(projectId: widget.project.id),
-        widget.dataSource.loadProjectWorkstreams(projectId: widget.project.id),
+        widget.projectWorkstreams?.ensure(widget.project.id) ??
+            widget.dataSource
+                .loadProjectWorkstreams(projectId: widget.project.id),
       ]);
       if (!mounted) return;
       final fetchedWorkstreams = loaded[3] as List<AxWorkstream>;
@@ -493,9 +496,11 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
         members = loaded[0] as List<AxProjectMember>;
         invitations = loaded[1] as List<AxProjectInvitation>;
         audit = loaded[2] as List<AxAuditEntry>;
-        workstreams = fetchedWorkstreams.isNotEmpty
-            ? fetchedWorkstreams
-            : widget.project.workstreams;
+        if (widget.projectWorkstreams == null) {
+          workstreams = fetchedWorkstreams.isNotEmpty
+              ? fetchedWorkstreams
+              : widget.project.workstreams;
+        }
         loading = false;
       });
     } catch (_) {

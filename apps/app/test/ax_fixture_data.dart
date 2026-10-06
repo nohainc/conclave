@@ -33,6 +33,17 @@ class AxFixtureDataSource implements AxDataSource {
       throw UnimplementedError('Work Request fixture is not configured');
 
   @override
+  Future<AxWorkRequestPage> loadWorkstreamWorkRequestPage(
+          {required String workstreamId,
+          int limit = 50,
+          String? beforeCreatedAt,
+          String? beforeId,
+          bool activeOnly = false}) async =>
+      AxWorkRequestPage(
+          requests: await loadWorkstreamWorkRequests(
+              workstreamId: workstreamId, activeOnly: activeOnly));
+
+  @override
   Future<List<AxWorkRequest>> loadWorkstreamWorkRequests({
     required String workstreamId,
     bool activeOnly = false,
@@ -120,6 +131,14 @@ class AxFixtureDataSource implements AxDataSource {
   Future<void> deleteProject({required String projectId}) async {}
 
   @override
+  Future<AxDiscussionPage> loadDiscussionPage(
+          {required String workstreamId,
+          int limit = 50,
+          String? before,
+          String? after}) async =>
+      AxDiscussionPage(
+          messages: await loadDiscussionMessages(workstreamId: workstreamId));
+
   @override
   Future<List<AxDiscussionMessage>> loadDiscussionMessages({
     required String workstreamId,
@@ -284,6 +303,16 @@ class AxFixtureDataSource implements AxDataSource {
   @override
   Future<List<AxProject>> loadProjects({bool includeArchived = false}) async =>
       axFixtureSnapshot().projects;
+
+  @override
+  Future<AxProject> loadProject({required String projectId}) async {
+    final project =
+        (await loadProjects()).where((p) => p.id == projectId).firstOrNull;
+    if (project == null) {
+      throw const AxApiException('Project not found', statusCode: 404);
+    }
+    return project.copyWith(workstreams: const []);
+  }
 
   @override
   Future<List<Map<String, dynamic>>> loadProjectWorkspaces({

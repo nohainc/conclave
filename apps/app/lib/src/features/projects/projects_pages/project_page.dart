@@ -11,6 +11,7 @@ class ProjectPage extends StatelessWidget {
     required this.onArchive,
     required this.onDelete,
     this.onProjectUpdated,
+    this.projectWorkstreams,
   });
 
   final AxProject project;
@@ -21,6 +22,7 @@ class ProjectPage extends StatelessWidget {
   final VoidCallback onArchive;
   final VoidCallback onDelete;
   final ValueChanged<AxProject>? onProjectUpdated;
+  final AxProjectWorkstreams? projectWorkstreams;
 
   @override
   Widget build(BuildContext context) => _ProjectWorkspace(
@@ -33,6 +35,7 @@ class ProjectPage extends StatelessWidget {
         onArchive: onArchive,
         onDelete: onDelete,
         onProjectUpdated: onProjectUpdated,
+        projectWorkstreams: projectWorkstreams,
       );
 }
 
@@ -47,6 +50,7 @@ class _ProjectWorkspace extends StatefulWidget {
     required this.onArchive,
     required this.onDelete,
     this.onProjectUpdated,
+    this.projectWorkstreams,
   });
 
   final AxProject project;
@@ -57,6 +61,7 @@ class _ProjectWorkspace extends StatefulWidget {
   final VoidCallback onArchive;
   final VoidCallback onDelete;
   final ValueChanged<AxProject>? onProjectUpdated;
+  final AxProjectWorkstreams? projectWorkstreams;
 
   @override
   State<_ProjectWorkspace> createState() => _ProjectWorkspaceState();
@@ -114,6 +119,8 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
     if (oldWidget.project.id != widget.project.id ||
         oldWidget.project.workstreams != widget.project.workstreams) {
       workstreams = [...widget.project.workstreams];
+    }
+    if (oldWidget.project.id != widget.project.id) {
       loading = true;
       executionLoading = true;
       _loadCollaboration();
