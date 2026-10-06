@@ -13,9 +13,37 @@ The mark uses four identical elements with **four-fold rotational symmetry** (`0
 
 ---
 
-## 2. Canonical Vector Variants
+## 2. Canonical Vector Variants & Marketing Artwork
 
-All variants are located in `assets/branding/` and synchronized across all client applications:
+All official product variants are located in `assets/branding/` and synchronized across all client applications. Optional decorative artwork is isolated in `assets/branding/marketing/`:
+
+```
+assets/branding/
+    conclave_mark.svg              ← official product mark (primary light)
+    conclave_mark_dark.svg         ← official product mark (dark mode)
+    conclave_mark_monochrome.svg   ← official product mark (monochrome)
+    conclave_mark_twotone.svg      ← official product mark (two-tone)
+    conclave_logo.svg              ← official product vector master
+
+    marketing/
+        conclave_mark_3d.png       ← optional decorative marketing artwork
+```
+
+### Official Product Mark vs. Marketing Artwork Separation
+
+The flat vector mark is the sole official product identity for Conclave AX.
+
+**Prohibited Usage for 3D Marketing Artwork:**
+The 3D decorative artwork (`conclave_mark_3d.png`) must **NEVER** be used for:
+- Application sidebar
+- Favicons (`favicon.ico`, `favicon.png`, `favicon.svg`)
+- macOS AppIcon interior mark (`AppIcon.appiconset`)
+- Profile Lab header
+- Workspace header
+- Small UI badges & bot indicators
+- Web PWA manifest icons
+
+All runtime surfaces, headers, favicons, and application icons exclusively render the engineered flat vector mark.
 
 | Asset | Variant | Fill Color | Purpose |
 |---|---|---|---|
@@ -24,12 +52,13 @@ All variants are located in `assets/branding/` and synchronized across all clien
 | `conclave_mark_monochrome.svg` | Monochrome | `currentColor` | Adapts dynamically to parent container text color |
 | `conclave_mark_twotone.svg` | Two-Tone | `#5E4BD8` / `#4937BD` | Alternating brand purple tones for hero showcases |
 | `conclave_logo.svg` | Canonical Vector Master | `#5E4BD8` | Drop-in vector replacement across web and apps |
+| `marketing/conclave_mark_3d.png` | 3D Decorative Artwork | Rendered 3D | Optional marketing illustration only |
 
 ---
 
 ## 3. Source of Truth & Asset Pipeline
 
-Do not hand-edit raster PNG files. The vector master SVG is the single source of truth.
+Do not hand-edit raster PNG files. The vector master SVG is the single source of truth for all product assets.
 
 To regenerate all derivative raster PNGs, macOS app icons, and web PWA icons, run:
 
@@ -48,7 +77,8 @@ The asset generator automatically creates:
 
 ## 4. Usage & Brand Governance
 
-1. **Standalone Mark:** Prefer the transparent standalone mark.
+1. **Official Product Identity:** The flat vector mark is the exclusive product identity.
 2. **Forbidden Alterations:** Do not enclose the mark inside an arbitrary hexagonal or polygon container, do not paint a center star, do not apply outer glows or drop shadows, and do not overlay letters on the vector mark.
 3. **Clear Space:** Maintain generous clear space around the mark (minimum 10% margin).
 4. **Minimum Scale:** Do not render smaller than 16×16 px.
+
