@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 96" width="100%" height="100%">
+  <defs>
+    <g id="conclave-petal-wm-dark">
+      <path d="M 0 -228.00 C 84.00 -228.00, 182.00 -177.00, 182.00 -132.00 C 182.00 -97.00, 156.00 -170.00, 138.00 -152.00 L 34.00 -48.00 C 16.32 -45.60, 2.72 -81.60, 0 -102.00 C -2.72 -81.60, -16.32 -45.60, -34.00 -48.00 L -138.00 -152.00 C -156.00 -170.00, -182.00 -97.00, -182.00 -132.00 C -182.00 -177.00, -84.00 -228.00, 0 -228.00 Z" />
+    </g>
+  </defs>
+  <g fill="#B8A9FE" transform="translate(48, 48) scale(0.16)">
+    <use href="#conclave-petal-wm-dark" />
+    <use href="#conclave-petal-wm-dark" transform="rotate(90)" />
+    <use href="#conclave-petal-wm-dark" transform="rotate(180)" />
+    <use href="#conclave-petal-wm-dark" transform="rotate(270)" />
+  </g>
+  <text x="106" y="62" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="40" font-weight="800" letter-spacing="0.06em" fill="#F4F4F6">CONCLAVE</text>
+</svg>

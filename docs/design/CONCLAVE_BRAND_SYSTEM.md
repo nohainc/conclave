@@ -164,41 +164,49 @@ Icons must strictly align with the typographic scale and optical sizing:
         ▼ Bottom Petal
  ```
  
- ### 8.2 Product Mark vs. Marketing Artwork Isolation
- 
- Conclave AX strictly separates the **official flat vector product identity** from **secondary marketing artwork**:
- 
- ```
- assets/branding/
-     conclave_mark.svg              ← official product mark
-     conclave_mark_dark.svg         ← official product mark (dark mode)
-     conclave_mark_monochrome.svg   ← official product mark (monochrome)
-     conclave_mark_twotone.svg      ← official product mark (two-tone)
-     conclave_logo.svg              ← canonical master vector
- 
-     marketing/
-         conclave_mark_3d.png       ← optional decorative marketing illustration
- ```
- 
- **Prohibited Usage for 3D Marketing Artwork:**
- The 3D artwork (`conclave_mark_3d.png`) must **NEVER** be used for:
- - Application sidebar
- - Favicon (`favicon.png`, `favicon.svg`)
- - macOS icon interior mark (`AppIcon.appiconset`)
- - Profile Lab header
- - Workspace header
- - Small UI badges & bot indicators
- - Web PWA icons
- 
- The engineered flat vector mark is the sole official product identity across all apps, desktop windows, headers, and UI surfaces.
- 
- ### 8.3 Strict Mark Constraints
- 1. **Negative Space Preservation:** The central sparkle must NEVER be drawn or painted as a distinct fifth colored element.
- 2. **No Hexagonal Container:** Do not enclose the mark inside an arbitrary hexagonal or faceted polygon.
- 3. **No Added Glows / Shadows:** The mark must not have exterior drop shadows, neon glows, or 3D extrusions applied in product surfaces.
- 4. **No Letter Overlays on Vector Mark:** Do not superimpose the letter "C" or any typography onto the official logo mark. (The letter "C" is reserved only as an extreme low-level offline fallback when asset loading is completely unavailable).
- 5. **Minimum Size:** The standalone mark must not be rendered smaller than **16×16 px** to prevent optical distortion of the central negative space.
- 6. **Asset Generation:** Do not manually edit generated PNG files in `assets/`. Updates to the master mark must be executed via `scripts/brand/generate-assets.sh`.
+### 8.2 Product Mark vs. Marketing Artwork Isolation
+
+Conclave AX strictly separates the **official flat vector product identity** from **secondary marketing artwork**:
+
+```
+assets/branding/
+    conclave_mark.svg              ← official product mark
+    conclave_mark_dark.svg         ← official product mark (dark mode)
+    conclave_mark_monochrome.svg   ← official product mark (monochrome)
+    conclave_mark_twotone.svg      ← official product mark (two-tone)
+    conclave_wordmark.svg          ← official horizontal wordmark (light)
+    conclave_wordmark_dark.svg     ← official horizontal wordmark (dark)
+    conclave_logo.svg              ← canonical master vector
+
+    marketing/
+        conclave_mark_3d.png       ← optional decorative marketing illustration
+```
+
+**Prohibited Usage for 3D Marketing Artwork:**
+The 3D artwork (`conclave_mark_3d.png`) must **NEVER** be used for:
+- Application sidebar
+- Favicon (`favicon.png`, `favicon.svg`)
+- macOS icon interior mark (`AppIcon.appiconset`)
+- Profile Lab header
+- Workspace header
+- Small UI badges & bot indicators
+- Web PWA icons
+
+The engineered flat vector mark is the sole official product identity across all apps, desktop windows, headers, and UI surfaces.
+
+### 8.3 Single Canonical Source & Synchronization
+1. **Canonical Root:** `assets/branding/` is the single source of truth for all marks, wordmarks, and raster assets across the entire repository.
+2. **No Independent Editing:** Never hand-edit or independently redraw derivative copies located in `apps/`.
+3. **Deterministic Sync Pipeline:** All derivative assets across Flutter apps, web apps, landing site, and macOS runner bundles are deterministically rendered and synchronized via `scripts/brand/generate-assets.sh`.
+4. **Drift Verification:** `scripts/brand/generate-assets.sh --check` verifies 100% compliance in CI.
+
+### 8.4 Strict Mark Constraints
+1. **Negative Space Preservation:** The central sparkle must NEVER be drawn or painted as a distinct fifth colored element.
+2. **No Hexagonal Container:** Do not enclose the mark inside an arbitrary hexagonal or faceted polygon.
+3. **No Added Glows / Shadows:** The mark must not have exterior drop shadows, neon glows, or 3D extrusions applied in product surfaces.
+4. **No Letter Overlays on Vector Mark:** Do not superimpose the letter "C" or any typography onto the official logo mark. (The letter "C" is reserved only as an extreme low-level offline fallback when asset loading is completely unavailable).
+5. **Minimum Size:** The standalone mark must not be rendered smaller than **16×16 px** to prevent optical distortion of the central negative space.
+6. **Asset Generation:** Do not manually edit generated PNG files in `assets/`. Updates to the master mark must be executed via `scripts/brand/generate-assets.sh`.
 
 ---
 
