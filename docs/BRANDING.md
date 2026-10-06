@@ -60,28 +60,32 @@ All runtime surfaces, headers, favicons, and application icons exclusively rende
 
 ---
 
-## 3. Single Canonical Source & Asset Pipeline
+## 3. Single Canonical Source & Deterministic Asset Pipeline
 
 `assets/branding/` is the **single canonical source** for all branding assets in the repository. Do not independently edit or redraw copies in `apps/`.
 
-To regenerate and synchronize all derivative raster PNGs, macOS app icons, and web PWA icons from `assets/branding/`, run:
+To build, validate, and synchronize all derivative raster PNGs, macOS app icons, and web PWA icons from `assets/branding/`, run:
 
 ```bash
-scripts/brand/generate-assets.sh
+scripts/branding/build-brand-assets.sh
 ```
 
-To verify in CI that all derivative copies in `apps/` are perfectly in sync with `assets/branding/` (no drift):
+To verify vector purity (no base64 rasters or `<image>` elements), alpha transparency, and asset synchronization in CI:
 
 ```bash
-scripts/brand/generate-assets.sh --check
+scripts/branding/build-brand-assets.sh --check
 ```
 
-The asset generator automatically synchronizes and renders:
-- **Canonical raster sizes:** `32.png`, `64.png`, `128.png`, `192.png`, `512.png`, `1024.png`
-- **Web App (`apps/app`):** vector marks, raster bundles, `web/favicon.png`, `web/conclave_logo.svg`, and PWA `Icon-*.png`
-- **Workspace (`apps/workspace`):** vector marks, raster bundles, and macOS `AppIcon.appiconset` (16–1024px)
-- **Profile Lab (`apps/profile_lab`):** vector marks, raster bundles, and macOS `AppIcon.appiconset` (16–1024px)
-- **Landing Site (`apps/site`):** vector marks, wordmarks, `favicon.svg`, `favicon.png`, and social preview assets
+### Deterministic Pipeline Guarantees
+1. **Vector Purity Verification:** Confirms all master SVGs consist of 100% pure mathematical vector paths with zero embedded rasters (`data:image/*`, `<image>`).
+2. **Transparency Verification:** Tests master renders to guarantee 100% transparent backgrounds with 0 alpha in edge/corner pixels.
+3. **Automated Multi-Scale Rasterization:** Generates pixel-crisp PNGs at standard sizes: `32px`, `64px`, `128px`, `192px`, `512px`, `1024px`.
+4. **App Synchronization:** Distributes vector masters and raster iconsets across:
+   - **Web App (`apps/app`):** vector marks, raster bundles, `web/favicon.png`, `web/conclave_logo.svg`, and PWA `Icon-*.png`
+   - **Workspace (`apps/workspace`):** vector marks, raster bundles, and macOS `AppIcon.appiconset` (16–1024px)
+   - **Profile Lab (`apps/profile_lab`):** vector marks, raster bundles, and macOS `AppIcon.appiconset` (16–1024px)
+   - **Landing Site (`apps/site`):** vector marks, wordmarks, `favicon.svg`, `favicon.png`, and social preview assets
+
 
 ---
 

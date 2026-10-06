@@ -197,8 +197,8 @@ The engineered flat vector mark is the sole official product identity across all
 ### 8.3 Single Canonical Source & Synchronization
 1. **Canonical Root:** `assets/branding/` is the single source of truth for all marks, wordmarks, and raster assets across the entire repository.
 2. **No Independent Editing:** Never hand-edit or independently redraw derivative copies located in `apps/`.
-3. **Deterministic Sync Pipeline:** All derivative assets across Flutter apps, web apps, landing site, and macOS runner bundles are deterministically rendered and synchronized via `scripts/brand/generate-assets.sh`.
-4. **Drift Verification:** `scripts/brand/generate-assets.sh --check` verifies 100% compliance in CI.
+3. **Deterministic Sync Pipeline:** All derivative assets across Flutter apps, web apps, landing site, and macOS runner bundles are deterministically rendered and synchronized via `scripts/branding/build-brand-assets.sh`.
+4. **Drift & Vector Purity Verification:** `scripts/branding/build-brand-assets.sh --check` verifies vector purity (no base64 rasters or `<image>` tags), background transparency, and 100% file synchronization.
 
 ### 8.4 Strict Mark Constraints
 1. **Negative Space Preservation:** The central sparkle must NEVER be drawn or painted as a distinct fifth colored element.
@@ -206,7 +206,7 @@ The engineered flat vector mark is the sole official product identity across all
 3. **No Added Glows / Shadows:** The mark must not have exterior drop shadows, neon glows, or 3D extrusions applied in product surfaces.
 4. **No Letter Overlays on Vector Mark:** Do not superimpose the letter "C" or any typography onto the official logo mark. (The letter "C" is reserved only as an extreme low-level offline fallback when asset loading is completely unavailable).
 5. **Minimum Size:** The standalone mark must not be rendered smaller than **16×16 px** to prevent optical distortion of the central negative space.
-6. **Asset Generation:** Do not manually edit generated PNG files in `assets/`. Updates to the master mark must be executed via `scripts/brand/generate-assets.sh`.
+6. **Asset Generation:** Do not manually edit generated PNG files in `assets/`. Updates to the master mark must be executed via `scripts/branding/build-brand-assets.sh`.
 
 ---
 
