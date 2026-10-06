@@ -491,29 +491,29 @@ Widget _buildModelBadge(BuildContext context, String badge) {
   Color bg;
   Color fg;
   if (badge.contains('Reasoning') || badge.contains('Thinking')) {
-    bg = isDark ? const Color(0xff2d234a) : const Color(0xffeedeff);
-    fg = isDark ? const Color(0xffcfb2ff) : const Color(0xff6e3ab8);
+    bg = ConclaveColors.primarySoftColor(isDark);
+    fg = ConclaveColors.primaryForeground(isDark);
   } else if (badge.contains('Flagship') || badge.contains('Knowledge')) {
-    bg = isDark ? const Color(0xff182c44) : const Color(0xffdbeafe);
-    fg = isDark ? const Color(0xff93c5fd) : const Color(0xff1e40af);
+    bg = ConclaveColors.infoSoft(isDark);
+    fg = ConclaveColors.info;
   } else if (badge.contains('Fast') || badge.contains('Smart')) {
-    bg = isDark ? const Color(0xff143528) : const Color(0xffdcfce7);
-    fg = isDark ? const Color(0xff86efac) : const Color(0xff166534);
+    bg = ConclaveColors.successSoft(isDark);
+    fg = ConclaveColors.success;
   } else if (badge.contains('Code')) {
     bg = isDark ? const Color(0xff133238) : const Color(0xffccfbf1);
     fg = isDark ? const Color(0xff5eead4) : const Color(0xff115e59);
   } else if (badge.contains('Multimodal')) {
-    bg = isDark ? const Color(0xff3d2e14) : const Color(0xfffef3c7);
-    fg = isDark ? const Color(0xfffcd34d) : const Color(0xffb45309);
+    bg = ConclaveColors.warningSoft(isDark);
+    fg = ConclaveColors.warning;
   } else {
-    bg = isDark ? const Color(0xff2d2d2d) : const Color(0xfff3f4f6);
-    fg = isDark ? const Color(0xff9ca3af) : const Color(0xff4b5563);
+    bg = ConclaveColors.surfaceHover(isDark);
+    fg = ConclaveColors.textSecondary(isDark);
   }
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
     decoration: BoxDecoration(
       color: bg,
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: BorderRadius.circular(ConclaveRadius.xs),
     ),
     child: Text(
       badge,
@@ -1473,23 +1473,22 @@ class _WorkTimelineCard extends StatelessWidget {
     final Widget senderAvatar = isWorkerResponse
         ? CircleAvatar(
             radius: 11,
-            backgroundColor:
-                isDark ? const Color(0xff2a2940) : const Color(0xffece9f8),
-            child: const Icon(
+            backgroundColor: ConclaveColors.primarySoftColor(isDark),
+            child: Icon(
               Icons.smart_toy_outlined,
               size: 13,
-              color: Color(0xff7c3aed),
+              color: ConclaveColors.primaryForeground(isDark),
             ),
           )
         : Image.asset(
-            'assets/branding/conclave_logo_32.png',
+            ConclaveBrandAssets.logoPng32,
             width: 20,
             height: 20,
             fit: BoxFit.contain,
-            errorBuilder: (ctx, err, stack) => const Icon(
+            errorBuilder: (ctx, err, stack) => Icon(
               Icons.auto_awesome,
               size: 14,
-              color: Color(0xff7c3aed),
+              color: ConclaveColors.primaryForeground(isDark),
             ),
           );
 

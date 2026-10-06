@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../brand.dart';
 import '../../navigation/ax_navigation.dart';
 import '../../ax/ax_models.dart';
 import 'ax_shell_context.dart';
@@ -88,8 +89,9 @@ class ProjectTree extends StatelessWidget {
         Container(
           margin: const EdgeInsets.only(bottom: 2),
           decoration: BoxDecoration(
-            color:
-                isProjectFocused ? const Color(0xff29283c) : Colors.transparent,
+            color: isProjectFocused
+                ? ConclaveColors.navigationSelected
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: InkWell(
@@ -167,7 +169,7 @@ class ProjectTree extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(34, 6, 10, 6),
                   decoration: BoxDecoration(
                     color: isWorkstreamSelected
-                        ? const Color(0xff302d4b)
+                        ? ConclaveColors.navigationSelected
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(6),
                   ),
@@ -210,12 +212,12 @@ class ProjectTree extends StatelessWidget {
         return Container(
           width: 6.5,
           height: 6.5,
-          decoration: const BoxDecoration(
-            color: Color(0xffa78bfa),
+          decoration: BoxDecoration(
+            color: ConclaveColors.primaryForegroundDark,
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: Color(0x66a78bfa),
+                color: ConclaveColors.primaryForegroundDark.withValues(alpha: 0.4),
                 blurRadius: 4,
                 spreadRadius: 1,
               ),
@@ -231,7 +233,7 @@ class ProjectTree extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
-              color: const Color(0xff94a3b8),
+              color: ConclaveColors.textSecondaryLight,
               width: 1.2,
             ),
           ),
@@ -244,7 +246,7 @@ class ProjectTree extends StatelessWidget {
           width: 6.5,
           height: 6.5,
           decoration: const BoxDecoration(
-            color: Color(0xfff59e0b),
+            color: ConclaveColors.warning,
             shape: BoxShape.circle,
           ),
         );

@@ -76,8 +76,8 @@ class AppSidebar extends StatelessWidget {
                           Scaffold.maybeOf(sidebarContext)?.closeDrawer();
                         }
                       },
-                      borderRadius: BorderRadius.circular(8),
-                      hoverColor: const Color(0xff29283c),
+                      borderRadius: BorderRadius.circular(ConclaveRadius.sm),
+                      hoverColor: ConclaveColors.navigationHoverDark,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 6),
@@ -125,9 +125,9 @@ class AppSidebar extends StatelessWidget {
                     constraints:
                         const BoxConstraints(minWidth: 32, minHeight: 32),
                     style: IconButton.styleFrom(
-                      hoverColor: const Color(0xff29283c),
+                      hoverColor: ConclaveColors.navigationHoverDark,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(ConclaveRadius.sm),
                       ),
                     ),
                   ),
@@ -147,9 +147,10 @@ class AppSidebar extends StatelessWidget {
                       child: Container(
                         height: 32,
                         decoration: BoxDecoration(
-                          color: ConclaveBrand.navigation,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xff2d2b40)),
+                          color: ConclaveColors.navigationBackgroundDark,
+                          borderRadius:
+                              BorderRadius.circular(ConclaveRadius.sm),
+                          border: Border.all(color: ConclaveColors.borderDark),
                         ),
                         child: ListenableBuilder(
                           listenable:
@@ -246,9 +247,10 @@ class AppSidebar extends StatelessWidget {
                       constraints:
                           const BoxConstraints(minWidth: 32, minHeight: 32),
                       style: IconButton.styleFrom(
-                        hoverColor: const Color(0xff29283c),
+                        hoverColor: ConclaveColors.navigationHoverDark,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius:
+                              BorderRadius.circular(ConclaveRadius.sm),
                         ),
                       ),
                     ),
@@ -268,9 +270,10 @@ class AppSidebar extends StatelessWidget {
                       constraints:
                           const BoxConstraints(minWidth: 32, minHeight: 32),
                       style: IconButton.styleFrom(
-                        hoverColor: const Color(0xff29283c),
+                        hoverColor: ConclaveColors.navigationHoverDark,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius:
+                              BorderRadius.circular(ConclaveRadius.sm),
                         ),
                       ),
                     ),
@@ -318,29 +321,31 @@ class AppSidebar extends StatelessWidget {
                           Scaffold.maybeOf(sidebarContext)?.closeDrawer();
                         }
                       },
-                      borderRadius: BorderRadius.circular(8),
-                      hoverColor: const Color(0xff29283c),
-                      focusColor: ConclaveBrand.navigationSelection,
+                      borderRadius:
+                          BorderRadius.circular(ConclaveRadius.sm),
+                      hoverColor: ConclaveColors.navigationHoverDark,
+                      focusColor: ConclaveColors.navigationSelected,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 6),
                         decoration: BoxDecoration(
                           color: shellContext.isNavActive(
                                   const AxNavigation.profileSecurity())
-                              ? ConclaveBrand.navigationSelection
+                              ? ConclaveColors.navigationSelected
                               : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius:
+                              BorderRadius.circular(ConclaveRadius.sm),
                         ),
                         child: Row(
                           children: [
                             CircleAvatar(
                               radius: 13,
-                              backgroundColor: const Color(0xffd8d2ff),
+                              backgroundColor: ConclaveColors.primarySoft,
                               child: Text(
                                 shellContext.viewerInitials,
                                 style: const TextStyle(
                                   fontSize: 9,
-                                  color: Color(0xff4238a0),
+                                  color: ConclaveColors.primaryPressed,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -410,21 +415,23 @@ class AppSidebar extends StatelessWidget {
           Scaffold.maybeOf(context)?.closeDrawer();
         }
       },
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(ConclaveRadius.sm),
       child: Container(
         margin: const EdgeInsets.only(bottom: 2),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
         decoration: BoxDecoration(
           color:
-              active ? ConclaveBrand.navigationSelection : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
+              active ? ConclaveColors.navigationSelected : Colors.transparent,
+          borderRadius: BorderRadius.circular(ConclaveRadius.sm),
         ),
         child: Row(
           children: [
             Icon(
               icon,
               size: 17,
-              color: active ? const Color(0xffbcb3ff) : Colors.white54,
+              color: active
+                  ? ConclaveColors.primaryForegroundDark
+                  : ConclaveColors.navigationTextMutedDark,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -443,7 +450,7 @@ class AppSidebar extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                 decoration: BoxDecoration(
-                  color: const Color(0xff6254d9),
+                  color: ConclaveColors.primary,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -516,9 +523,9 @@ class AppIconRail extends StatelessWidget {
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
         style: IconButton.styleFrom(
-          hoverColor: const Color(0xff29283c),
+          hoverColor: ConclaveColors.navigationHoverDark,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(ConclaveRadius.sm),
           ),
         ),
       ),
@@ -531,7 +538,7 @@ class AppIconRail extends StatelessWidget {
 
     final menuStyle = MenuStyle(
       backgroundColor: WidgetStatePropertyAll(
-        isDark ? const Color(0xff181726) : Colors.white,
+        ConclaveColors.surface(isDark),
       ),
       surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
       elevation: const WidgetStatePropertyAll(12),
@@ -540,9 +547,9 @@ class AppIconRail extends StatelessWidget {
       ),
       shape: WidgetStatePropertyAll(
         RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(ConclaveRadius.lg),
           side: BorderSide(
-            color: isDark ? const Color(0xff2d2b42) : const Color(0xffe5e3f0),
+            color: ConclaveColors.border(isDark),
             width: 1,
           ),
         ),
@@ -559,12 +566,13 @@ class AppIconRail extends StatelessWidget {
         ),
         minimumSize: const WidgetStatePropertyAll(Size(200, 36)),
         shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(ConclaveRadius.sm)),
         ),
         overlayColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.hovered) ||
               states.contains(WidgetState.focused)) {
-            return isDark ? const Color(0xff2a2840) : const Color(0xfff0effa);
+            return ConclaveColors.surfaceHover(isDark);
           }
           return null;
         }),
@@ -573,7 +581,7 @@ class AppIconRail extends StatelessWidget {
 
     return Container(
       width: 50,
-      color: ConclaveBrand.navigation,
+      color: ConclaveColors.navigationBackgroundDark,
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
       child: Column(
         children: [
@@ -582,8 +590,8 @@ class AppIconRail extends StatelessWidget {
             message: 'Conclave AX — Home',
             child: InkWell(
               onTap: () => onNavigateTo(const AxNavigation.home()),
-              borderRadius: BorderRadius.circular(8),
-              hoverColor: const Color(0xff29283c),
+              borderRadius: BorderRadius.circular(ConclaveRadius.sm),
+              hoverColor: ConclaveColors.navigationHoverDark,
               child: Padding(
                 padding: const EdgeInsets.all(4),
                 child: ConclaveBrand.logoMark(size: 32),
@@ -695,7 +703,7 @@ class AppIconRail extends StatelessWidget {
                           size: 16,
                           color: shellContext
                                   .isNavActive(AxNavigation.project(project.id))
-                              ? const Color(0xffbcb3ff)
+                              ? ConclaveColors.primaryForegroundDark
                               : (isDark ? Colors.white70 : Colors.black87),
                         ),
                         onPressed: () =>
@@ -710,7 +718,7 @@ class AppIconRail extends StatelessWidget {
                                 : FontWeight.w600,
                             color: shellContext.isNavActive(
                                     AxNavigation.project(project.id))
-                                ? const Color(0xffbcb3ff)
+                                ? ConclaveColors.primaryForegroundDark
                                 : (isDark ? Colors.white : Colors.black87),
                           ),
                         ),
@@ -737,7 +745,7 @@ class AppIconRail extends StatelessWidget {
                                 color: shellContext.isNavActive(
                                         AxNavigation.workstream(
                                             project.id, workstream.id))
-                                    ? const Color(0xffbcb3ff)
+                                    ? ConclaveColors.primaryForegroundDark
                                     : (isDark
                                         ? Colors.white70
                                         : Colors.black87),
@@ -777,17 +785,19 @@ class AppIconRail extends StatelessWidget {
                   shape: BoxShape.circle,
                   border: shellContext
                           .isNavActive(const AxNavigation.profileSecurity())
-                      ? Border.all(color: const Color(0xffbcb3ff), width: 2)
+                      ? Border.all(
+                          color: ConclaveColors.primaryForegroundDark,
+                          width: 2)
                       : null,
                 ),
                 child: CircleAvatar(
                   radius: 14,
-                  backgroundColor: const Color(0xffd8d2ff),
+                  backgroundColor: ConclaveColors.primarySoft,
                   child: Text(
                     shellContext.viewerInitials,
                     style: const TextStyle(
                       fontSize: 9,
-                      color: Color(0xff4238a0),
+                      color: ConclaveColors.primaryPressed,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -895,9 +905,9 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             style: IconButton.styleFrom(
-              hoverColor: const Color(0xff29283c),
+              hoverColor: ConclaveColors.navigationHoverDark,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(ConclaveRadius.sm),
               ),
             ),
           ),
@@ -913,14 +923,10 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
               Container(
                 height: 36,
                 decoration: BoxDecoration(
-                  color: widget.isDark
-                      ? const Color(0xff181724)
-                      : const Color(0xfff5f4fa),
-                  borderRadius: BorderRadius.circular(8),
+                  color: ConclaveColors.canvas(widget.isDark),
+                  borderRadius: BorderRadius.circular(ConclaveRadius.sm),
                   border: Border.all(
-                    color: widget.isDark
-                        ? const Color(0xff2d2b40)
-                        : const Color(0xffdedbe8),
+                    color: ConclaveColors.border(widget.isDark),
                   ),
                 ),
                 child: ListenableBuilder(
