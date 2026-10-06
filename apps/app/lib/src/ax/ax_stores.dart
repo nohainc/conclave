@@ -1,5 +1,11 @@
 import 'ax_data.dart';
 import 'ax_models.dart';
+import 'sync/ax_project_workstreams.dart';
+import 'sync/ax_project_details.dart';
+import 'sync/ax_sync_engine.dart';
+import 'sync/ax_discussion_cache.dart';
+import 'sync/ax_work_history.dart';
+import 'sync/ax_work_realtime_sync.dart';
 
 /// Focused Cloud-backed stores. The API remains the source of truth.
 class AxStore {
@@ -10,14 +16,40 @@ class AxStore {
         runs = RunStore(dataSource);
 
   final AxDataSource dataSource;
+  final AxSyncEngine syncEngine = AxSyncEngine();
+  late final AxProjectWorkstreams projectWorkstreams =
+      AxProjectWorkstreams(dataSource, engine: syncEngine);
+  late final AxProjectDetails projectDetails =
+      AxProjectDetails(dataSource, engine: syncEngine);
+  late final AxDiscussionCache discussion =
+      AxDiscussionCache(dataSource, engine: syncEngine);
+
+  late final AxWorkHistoryCache workHistory =
+      AxWorkHistoryCache(dataSource, engine: syncEngine);
+
+  late final AxWorkRealtimeSync workRealtime =
+      AxWorkRealtimeSync.forCache(workHistory);
+
+  void clearServerState() {
+    workRealtime.reset();
+    workHistory.clear();
+    discussion.clear();
+    syncEngine.clear();
+  }
+
   final AuthStore auth;
   final WorkspaceStore workspaces;
   final ProjectStore projects;
   final RunStore runs;
 
+  /// Bootstrap/recovery only; navigation uses focused queries.
   Future<AxSnapshot> reload({String? projectId, String? workspaceId}) async {
-    final snapshot = await dataSource.loadReadModels(
+    final loaded = await dataSource.loadReadModels(
         projectId: projectId, workspaceId: workspaceId);
+    final snapshot = loaded.copyWith(
+        projects: loaded.projects
+            .map((project) => project.copyWith(workstreams: const []))
+            .toList());
     auth.replace(snapshot.viewer);
     workspaces.replace(snapshot.workspaces);
     projects.replace(snapshot.projects);
@@ -31,7 +63,8 @@ class ProjectStore {
   final AxDataSource source;
   List<AxProject> items = const [];
 
-  void replace(List<AxProject> value) => items = List.unmodifiable(value);
+  void replace(List<AxProject> value) => items = List.unmodifiable(
+      value.map((project) => project.copyWith(workstreams: const [])));
 
   Future<List<AxProject>> refresh() async {
     final value = await source.loadProjects();

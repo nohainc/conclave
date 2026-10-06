@@ -2,6 +2,20 @@ part of '../ax_data.dart';
 
 mixin _ProjectApi on _AxApiClientCore {
   @override
+  Future<AxProject> loadProject({required String projectId}) async {
+    final response = await _getJson(Uri.parse('$baseUrl/projects/$projectId'));
+    final value = response['project'];
+    if (value is! Map) {
+      throw const AxApiException('Project response is malformed');
+    }
+    final project = AxProject.fromJson(Map<String, dynamic>.from(value));
+    if (project.id != projectId) {
+      throw const AxApiException('Project response identity does not match');
+    }
+    return project.copyWith(workstreams: const []);
+  }
+
+  @override
   Future<AxProject> createProject({
     required String name,
     String? description,

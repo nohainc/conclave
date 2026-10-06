@@ -202,3 +202,6 @@ Protocol binding generation covers the product envelope, Cloud Workspace
 message metadata, and realtime event metadata. It does not generate Local
 Worker Protocol bindings: `packages/conclave_worker_protocol` is the single
 source for Worker Protocol 4.0 models and validation.
+
+Discussion reads use the [versioned paging contract](../specifications/DISCUSSION_PAGING.md). AX retains shared cached history across page disposal,
+synchronizes on reopening, and reconciles optimistic sends and edits per message.

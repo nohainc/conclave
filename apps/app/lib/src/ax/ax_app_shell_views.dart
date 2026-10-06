@@ -516,43 +516,76 @@ extension _AxAppShellViews on _AxAppStateMixin {
           ),
         ),
       );
+  Widget _workstreamContextBuilder(Widget Function() build) {
+    final projectId = navigation.projectId;
+    if (projectId == null) return build();
+    return AxQueryBuilder<List<AxWorkstream>>(
+      engine: store.projectWorkstreams.engine,
+      query: store.projectWorkstreams.query(projectId),
+      builder: (context, state) => build(),
+    );
+  }
+
+  Widget _projectContextBuilder(Widget Function() build) {
+    final projectId = navigation.projectId;
+    if (projectId == null) return build();
+    return AxQueryBuilder<AxProject>(
+      key: ValueKey('project-context-$projectId'),
+      engine: store.syncEngine,
+      query: store.projectDetails.query(projectId),
+      builder: (context, state) {
+        if (selectedProject != null) return build();
+        return Center(
+            child: state.error != null
+                ? TextButton(
+                    onPressed: () => store.projectDetails
+                        .ensure(projectId)
+                        .then<void>((_) {},
+                            onError: (Object _, StackTrace __) {}),
+                    child: const Text('Retry Project'))
+                : const Text('Loading Project…'));
+      },
+    );
+  }
+
   Widget _content({required bool compact, required bool showTopHud}) {
-    return Column(children: [
-      if (showTopHud)
-        AxTopBar(
-          shellContext: _shellContext,
-          onNavigateTo: _navigateTo,
-          onOpenCommandPalette: _openCommandPalette,
-          onOpenNotifications: _showNotifications,
-          searchController: _searchQueryController,
-          searchFocusNode: _searchFocusNode,
-          onClearSearch: _clearSearch,
-          onToggleTheme: _toggleTheme,
-          onOpenAbout: () => unawaited(_showAboutConclave()),
-          onLogout: () => unawaited(_logout()),
-          onOpenExternal: (uri) => browserNavigation.openExternal(uri),
-          compact: compact,
-        ),
-      if (realtimeStale) _realtimeStatusBanner(),
-      if (realtimeNotice != null)
-        Semantics(
-          liveRegion: true,
-          label: realtimeNotice!,
-          child: const SizedBox(width: 1, height: 1),
-        ),
-      Expanded(
-        child: navigation.kind == AxRouteKind.workstream
-            ? Padding(
-                padding: EdgeInsets.zero,
-                child: _workstreamView(),
-              )
-            : SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                    compact ? 18 : 34, 26, compact ? 18 : 34, 40),
-                child: showRunDetails ? _runDetailsView(compact) : _homeView(),
-              ),
-      ),
-    ]);
+    return _projectContextBuilder(() => Column(children: [
+          if (showTopHud)
+            _workstreamContextBuilder(() => AxTopBar(
+                  shellContext: _shellContext,
+                  onNavigateTo: _navigateTo,
+                  onOpenCommandPalette: _openCommandPalette,
+                  onOpenNotifications: _showNotifications,
+                  searchController: _searchQueryController,
+                  searchFocusNode: _searchFocusNode,
+                  onClearSearch: _clearSearch,
+                  onToggleTheme: _toggleTheme,
+                  onOpenAbout: () => unawaited(_showAboutConclave()),
+                  onLogout: () => unawaited(_logout()),
+                  onOpenExternal: (uri) => browserNavigation.openExternal(uri),
+                  compact: compact,
+                )),
+          if (realtimeStale) _realtimeStatusBanner(),
+          if (realtimeNotice != null)
+            Semantics(
+              liveRegion: true,
+              label: realtimeNotice!,
+              child: const SizedBox(width: 1, height: 1),
+            ),
+          Expanded(
+            child: navigation.kind == AxRouteKind.workstream
+                ? Padding(
+                    padding: EdgeInsets.zero,
+                    child: _workstreamView(),
+                  )
+                : SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                        compact ? 18 : 34, 26, compact ? 18 : 34, 40),
+                    child:
+                        showRunDetails ? _runDetailsView(compact) : _homeView(),
+                  ),
+          ),
+        ]));
   }
 
   Widget _realtimeStatusBanner() => Semantics(

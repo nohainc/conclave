@@ -49,6 +49,190 @@ class _ApiResponseClient extends http.BaseClient {
 }
 
 void main() {
+  test('single Work Request details retain identity and authored result',
+      () async {
+    final client = _JsonClient({
+      'workRequest': {
+        'id': 'r',
+        'status': 'completed',
+        'originalRequest': '# Prompt',
+        'workflowId': 'direct',
+        'workflowVersion': 2,
+        'createdAt': '2026-10-06T00:00:00Z'
+      },
+      'result': {'text': '# Result'},
+      'steps': []
+    });
+    final api = AxApiClient(baseUrl: 'https://example.test', client: client);
+    final result = await api.loadWorkRequest(workRequestId: 'r');
+    expect(client.lastRequest!.url.path, '/work-requests/r');
+    expect(result.id, 'r');
+    expect(result.text, '# Result');
+    expect(result.originalRequest, '# Prompt');
+    await expectLater(api.loadWorkRequest(workRequestId: 'other'),
+        throwsA(isA<AxApiException>()));
+  });
+
+  test('Work history HTTP loads only one bounded page with typed cursors',
+      () async {
+    final client = _JsonClient({
+      'workRequests': [
+        {
+          'id': 'b',
+          'createdAt': '2026-10-06T02:00:00Z',
+          'prompt': '# Exact Markdown'
+        },
+        {'id': 'a', 'createdAt': '2026-10-06T01:00:00Z'}
+      ],
+      'nextCursor': {'createdAt': '2026-10-06T01:00:00Z', 'id': 'a'}
+    });
+    final api = AxApiClient(baseUrl: 'https://example.test', client: client);
+    final page = await api.loadWorkstreamWorkRequestPage(
+        workstreamId: 'w',
+        limit: 40,
+        beforeCreatedAt: '2026-10-07T00:00:00Z',
+        beforeId: 'id+/=',
+        activeOnly: true);
+    expect(client.lastRequest!.url.queryParameters, {
+      'limit': '40',
+      'beforeCreatedAt': '2026-10-07T00:00:00Z',
+      'beforeId': 'id+/=',
+      'activeOnly': 'true'
+    });
+    expect(page.requests.map((r) => r.id), ['a', 'b']);
+    expect(page.requests.last.prompt, '# Exact Markdown');
+    expect(page.nextCursor!.id, 'a');
+    expect(() => page.requests.clear(), throwsUnsupportedError);
+    await expectLater(
+        api.loadWorkstreamWorkRequestPage(workstreamId: 'w', beforeId: 'a'),
+        throwsArgumentError);
+    await expectLater(
+        api.loadWorkstreamWorkRequestPage(workstreamId: 'w', limit: 101),
+        throwsArgumentError);
+  });
+  for (final body in [
+    <String, dynamic>{
+      'workRequests': [],
+      'nextCursor': {'id': 'x'}
+    },
+    <String, dynamic>{
+      'workRequests': [null]
+    },
+    <String, dynamic>{
+      'workRequests': [
+        {'id': 'x'}
+      ]
+    },
+  ]) {
+    test('Work history rejects malformed page $body', () async {
+      final api = AxApiClient(
+          baseUrl: 'https://example.test', client: _JsonClient(body));
+      await expectLater(api.loadWorkstreamWorkRequestPage(workstreamId: 'w'),
+          throwsA(isA<AxApiException>()));
+    });
+  }
+
+  test(
+      'Discussion paging uses bounded query parameters and exposes server cursors',
+      () async {
+    final client = _JsonClient({
+      'schemaVersion': 1,
+      'messages': [
+        {
+          'id': 'm1',
+          'workstreamId': 'w',
+          'authorUserId': 'u',
+          'body': '  **source**\n',
+          'createdAt': '2026-10-06T00:00:00.000Z'
+        }
+      ],
+      'nextCursor': 'older',
+      'newestCursor': 'newest'
+    }, statusCode: 200);
+    final api =
+        AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+    final page = await api.loadDiscussionPage(
+        workstreamId: 'w', limit: 30, before: 'cursor+/=');
+    expect(
+        client.lastRequest!.url.path, '/api/workstreams/w/discussion-messages');
+    expect(client.lastRequest!.url.queryParameters,
+        {'limit': '30', 'before': 'cursor+/='});
+    expect(page.messages.single.body, '  **source**\n');
+    expect(page.nextCursor, 'older');
+    expect(page.newestCursor, 'newest');
+    expect(() => page.messages.clear(), throwsUnsupportedError);
+    await expectLater(api.loadDiscussionPage(workstreamId: 'w', limit: 0),
+        throwsArgumentError);
+    await expectLater(
+        api.loadDiscussionPage(workstreamId: 'w', before: 'a', after: 'b'),
+        throwsArgumentError);
+  });
+  for (final response in [
+    <String, dynamic>{'messages': []},
+    {'schemaVersion': 1, 'messages': [], 'nextCursor': 4},
+    {
+      'schemaVersion': 1,
+      'messages': ['invalid']
+    },
+    {
+      'schemaVersion': 1,
+      'messages': [
+        {'id': 'm1', 'workstreamId': 'different'}
+      ]
+    }
+  ]) {
+    test(
+        'Discussion paging rejects malformed or cross-Workstream data $response',
+        () async {
+      final api = AxApiClient(
+          baseUrl: 'https://conclave.test/api',
+          client: _JsonClient(response, statusCode: 200));
+      await expectLater(api.loadDiscussionPage(workstreamId: 'w'),
+          throwsA(isA<AxApiException>()));
+    });
+  }
+
+  test(
+      'focused Project loader uses the detail endpoint without bootstrap reads',
+      () async {
+    final client = _ApiResponseClient({
+      '/api/projects/p1': {
+        'project': {
+          'id': 'p1',
+          'name': 'Details',
+          'settings': {'instructions': 'Detailed instructions'},
+          'workstreams': [
+            {'id': 'w1', 'projectId': 'p1'}
+          ]
+        }
+      }
+    });
+    final api =
+        AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+    final project = await api.loadProject(projectId: 'p1');
+    expect(project.instructions, 'Detailed instructions');
+    expect(project.workstreams, isEmpty);
+    expect(client.requests, ['/api/projects/p1']);
+  });
+
+  for (final response in [
+    <String, dynamic>{},
+    {'project': []},
+    {
+      'project': {'id': 'different', 'name': 'Wrong Project'}
+    }
+  ]) {
+    test(
+        'focused Project loader rejects malformed/mismatched response $response',
+        () async {
+      final client = _ApiResponseClient({'/api/projects/p1': response});
+      final api =
+          AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+      await expectLater(
+          api.loadProject(projectId: 'p1'), throwsA(isA<AxApiException>()));
+    });
+  }
+
   test(
       'canonical inventory readiness determines availability without legacy status',
       () {
@@ -328,10 +512,11 @@ void main() {
     final state = await api.loadReadModels(workspaceId: 'workspace-1');
 
     expect(state.viewer?.id, 'user-1');
-    expect(state.projects.single.workstreams.single.id, 'workstream-1');
+    expect(state.projects.single.workstreams, isEmpty);
     expect(client.requests, contains('/api/projects'));
-    expect(client.requests, contains('/api/projects/project-1'));
-    expect(client.requests, contains('/api/projects/project-1/workstreams'));
+    expect(client.requests, isNot(contains('/api/projects/project-1')));
+    expect(client.requests,
+        isNot(contains('/api/projects/project-1/workstreams')));
     expect(client.requests, contains('/api/workspaces'));
     expect(client.requests, contains('/api/session'));
   });

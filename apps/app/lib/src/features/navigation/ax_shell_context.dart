@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../brand.dart';
 import '../../navigation/ax_navigation.dart';
 import '../../ax/ax_models.dart';
+import '../../ax/sync/ax_project_workstreams.dart';
 
 enum ExecutionStatusTone {
   usable,
@@ -31,6 +32,8 @@ class AxShellContext {
   const AxShellContext({
     required this.navigation,
     required this.projects,
+    this.projectWorkstreams,
+    this.workstreamsByProject = const {},
     this.selectedProject,
     this.selectedWorkstream,
     this.selectedRun,
@@ -47,6 +50,8 @@ class AxShellContext {
 
   final AxNavigation navigation;
   final List<AxProject> projects;
+  final AxProjectWorkstreams? projectWorkstreams;
+  final Map<String, List<AxWorkstream>> workstreamsByProject;
   final AxProject? selectedProject;
   final AxWorkstream? selectedWorkstream;
   final AxRun? selectedRun;

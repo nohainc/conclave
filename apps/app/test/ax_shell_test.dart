@@ -10,7 +10,6 @@ import 'package:conclave_app/src/app_shell.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 
 import 'ax_fixture_data.dart';
-import 'ax_fixture_snapshot.dart';
 
 void main() {
   testWidgets('clicking another project loads and reveals its Workstreams',
@@ -197,12 +196,13 @@ void main() {
       String? toggledProjectId;
       var createProjectCalled = false;
 
-      const shellContext = AxShellContext(
-        navigation: AxNavigation.home(),
+      final shellContext = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: [testProject],
+        workstreamsByProject: {testProject.id: testProject.workstreams},
         selectedProject: testProject,
         workspaces: [
-          AxWorkspace(
+          const AxWorkspace(
             id: 'worker-1',
             name: 'MacBook Pro',
             hostname: 'vitalii-mac',
@@ -270,11 +270,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(createProjectCalled, isTrue);
 
-      // Tap Project row to navigate to /projects/:projectId and toggle expansion
+      // Selecting an expanded Project from Home preserves its expansion.
       await tester.tap(find.text('Conclave AX').last);
       expect(navigatedTo?.kind, AxRouteKind.project);
       expect(navigatedTo?.projectId, 'project-1');
-      expect(toggledProjectId, 'project-1');
+      expect(toggledProjectId, isNull);
 
       // Tap workstream row
       await tester.tap(find.text('Authentication redesign'));
@@ -316,9 +316,10 @@ void main() {
         (tester) async {
       AxNavigation? navigatedTo;
 
-      const shellContext = AxShellContext(
-        navigation: AxNavigation.home(),
+      final shellContext = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: [testProject],
+        workstreamsByProject: {testProject.id: testProject.workstreams},
         viewerDisplayName: 'Vitalii Noha',
         viewerEmail: 'vitalii@example.com',
       );
@@ -380,9 +381,10 @@ void main() {
       var aboutTriggered = false;
       Uri? openedExternalUri;
 
-      const shellContext = AxShellContext(
-        navigation: AxNavigation.home(),
+      final shellContext = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: [testProject],
+        workstreamsByProject: {testProject.id: testProject.workstreams},
         themeMode: ThemeMode.system,
         viewerDisplayName: 'Vitalii Noha',
       );
@@ -459,9 +461,10 @@ void main() {
       var aboutTriggered = false;
       Uri? openedExternalUri;
 
-      const shellContext = AxShellContext(
-        navigation: AxNavigation.home(),
+      final shellContext = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: [testProject],
+        workstreamsByProject: {testProject.id: testProject.workstreams},
         themeMode: ThemeMode.light,
         viewerDisplayName: 'Vitalii Noha',
       );
@@ -567,9 +570,12 @@ void main() {
         ],
       );
 
-      const shellContext = AxShellContext(
-        navigation: AxNavigation.home(),
+      final shellContext = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: [projectWithArchived],
+        workstreamsByProject: {
+          projectWithArchived.id: projectWithArchived.workstreams
+        },
         expandedProjectIds: {'project-2'},
       );
 
@@ -705,9 +711,10 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
 
-      const shellContext = AxShellContext(
-        navigation: AxNavigation.home(),
+      final shellContext = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: [testProject],
+        workstreamsByProject: {testProject.id: testProject.workstreams},
         viewerDisplayName: 'Vitalii Noha',
         viewerEmail: 'vitalii@example.com',
         isDarkTheme: true,
@@ -753,9 +760,10 @@ void main() {
       String? searchedText;
       var clearCalled = false;
 
-      const shellContext = AxShellContext(
-        navigation: AxNavigation.home(),
+      final shellContext = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: [testProject],
+        workstreamsByProject: {testProject.id: testProject.workstreams},
         viewerDisplayName: 'Vitalii Noha',
         viewerEmail: 'vitalii@example.com',
         isDarkTheme: true,
@@ -973,16 +981,17 @@ void main() {
     });
 
     testWidgets(
-        'AxIconRail has 64px width and renders navigation icons and controls',
+        'AxIconRail has 50px width and renders navigation icons and controls',
         (tester) async {
       AxNavigation? navigatedTo;
       var notificationsOpened = false;
       var createProjectOpened = false;
       var collapseToggled = false;
 
-      const shellContext = AxShellContext(
-        navigation: AxNavigation.home(),
+      final shellContext = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: [testProject],
+        workstreamsByProject: {testProject.id: testProject.workstreams},
         viewerDisplayName: 'Vitalii Noha',
         viewerEmail: 'vitalii@example.com',
         unreadNotificationCount: 2,
@@ -993,7 +1002,7 @@ void main() {
           theme: ConclaveBrand.darkTheme(),
           home: Scaffold(
             body: SizedBox(
-              width: 64,
+              width: 50,
               child: AxIconRail(
                 shellContext: shellContext,
                 onNavigateTo: (nav) => navigatedTo = nav,
@@ -1013,6 +1022,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(tester.getSize(find.byType(AxIconRail)).width, 50);
+      expect(tester.takeException(), isNull);
       expect(find.byTooltip('Conclave AX — Home'), findsOneWidget);
       expect(find.byTooltip('Expand sidebar'), findsOneWidget);
       expect(find.byTooltip('Search...'), findsOneWidget);
@@ -1353,9 +1364,10 @@ void main() {
       String? toggledProjectId;
 
       // 1. Initially on Home (not active project)
-      const homeContext = AxShellContext(
-        navigation: AxNavigation.home(),
+      final homeContext = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: [projectA],
+        workstreamsByProject: {projectA.id: projectA.workstreams},
         expandedProjectIds: {},
       );
 
@@ -1397,9 +1409,10 @@ void main() {
       toggledProjectId = null;
 
       // 2. When expanded
-      const expandedProjectContext = AxShellContext(
-        navigation: AxNavigation.project('p-1'),
+      final expandedProjectContext = AxShellContext(
+        navigation: const AxNavigation.project('p-1'),
         projects: [projectA],
+        workstreamsByProject: {projectA.id: projectA.workstreams},
         selectedProject: projectA,
         expandedProjectIds: {'p-1'},
       );
@@ -1438,9 +1451,10 @@ void main() {
 
     testWidgets('Workstream status dot indicators render for each status',
         (tester) async {
-      const expandedContext = AxShellContext(
-        navigation: AxNavigation.home(),
+      final expandedContext = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: [projectA],
+        workstreamsByProject: {projectA.id: projectA.workstreams},
         expandedProjectIds: {'p-1'},
       );
 
@@ -1480,9 +1494,10 @@ void main() {
       AxNavigation? navigatedTo;
 
       // Test 1: Project route -> "Projects / Conclave Core"
-      const projectContext = AxShellContext(
-        navigation: AxNavigation.project('p-1'),
+      final projectContext = AxShellContext(
+        navigation: const AxNavigation.project('p-1'),
         projects: [projectA],
+        workstreamsByProject: {projectA.id: projectA.workstreams},
         selectedProject: projectA,
       );
 
@@ -1544,9 +1559,10 @@ void main() {
         workerCount: 0,
         activeTaskCount: 0,
       );
-      const workspaceContext = AxShellContext(
-        navigation: AxNavigation.workspace('ws-mac'),
+      final workspaceContext = AxShellContext(
+        navigation: const AxNavigation.workspace('ws-mac'),
         projects: [projectA],
+        workstreamsByProject: {projectA.id: projectA.workstreams},
         workspaces: [testWs],
       );
 
@@ -1705,9 +1721,10 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
 
-      const shellContext = AxShellContext(
-        navigation: AxNavigation.home(),
+      final shellContext = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: [projectA],
+        workstreamsByProject: {projectA.id: projectA.workstreams},
         selectedProject: projectA,
         expandedProjectIds: {'p-1'},
         viewerDisplayName: 'Vitalii Noha',
@@ -1808,9 +1825,10 @@ void main() {
         ],
       );
 
-      const shellContext = AxShellContext(
-        navigation: AxNavigation.home(),
+      final shellContext = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: [project],
+        workstreamsByProject: {project.id: project.workstreams},
         selectedProject: project,
         expandedProjectIds: {'p-1'},
       );
@@ -1871,27 +1889,30 @@ void main() {
       );
 
       // 1. On Home route (/)
-      const homeCtx = AxShellContext(
-        navigation: AxNavigation.home(),
+      final homeCtx = AxShellContext(
+        navigation: const AxNavigation.home(),
         projects: [project],
+        workstreamsByProject: {project.id: project.workstreams},
         expandedProjectIds: {'p-1'},
       );
       expect(homeCtx.isNavActive(const AxNavigation.home()), isTrue);
       expect(homeCtx.isNavActive(const AxNavigation.projects()), isFalse);
 
       // 2. On Projects list (/projects)
-      const projectsCtx = AxShellContext(
-        navigation: AxNavigation.projects(),
+      final projectsCtx = AxShellContext(
+        navigation: const AxNavigation.projects(),
         projects: [project],
+        workstreamsByProject: {project.id: project.workstreams},
         expandedProjectIds: {'p-1'},
       );
       expect(projectsCtx.isNavActive(const AxNavigation.home()), isFalse);
       expect(projectsCtx.isNavActive(const AxNavigation.projects()), isTrue);
 
       // 3. On Project detail (/projects/p-1)
-      const projectDetailCtx = AxShellContext(
-        navigation: AxNavigation.project('p-1'),
+      final projectDetailCtx = AxShellContext(
+        navigation: const AxNavigation.project('p-1'),
         projects: [project],
+        workstreamsByProject: {project.id: project.workstreams},
         selectedProject: project,
         expandedProjectIds: {'p-1'},
       );
@@ -1900,9 +1921,10 @@ void main() {
           projectDetailCtx.isNavActive(const AxNavigation.projects()), isTrue);
 
       // 4. On Workstream detail (/projects/p-1/workstreams/ws-1)
-      const workstreamCtx = AxShellContext(
-        navigation: AxNavigation.workstream('p-1', 'ws-1'),
+      final workstreamCtx = AxShellContext(
+        navigation: const AxNavigation.workstream('p-1', 'ws-1'),
         projects: [project],
+        workstreamsByProject: {project.id: project.workstreams},
         selectedProject: project,
         selectedWorkstream: ws1,
         expandedProjectIds: {'p-1'},
@@ -1911,9 +1933,10 @@ void main() {
       expect(workstreamCtx.isNavActive(const AxNavigation.projects()), isTrue);
 
       // 5. On Run detail (/projects/p-1/workstreams/ws-1/runs/r-1)
-      const runCtx = AxShellContext(
-        navigation: AxNavigation.run('p-1', 'r-1', workstreamId: 'ws-1'),
+      final runCtx = AxShellContext(
+        navigation: const AxNavigation.run('p-1', 'r-1', workstreamId: 'ws-1'),
         projects: [project],
+        workstreamsByProject: {project.id: project.workstreams},
         selectedProject: project,
         selectedWorkstream: ws1,
         expandedProjectIds: {'p-1'},
@@ -1966,9 +1989,10 @@ void main() {
         workstreams: [ws],
       );
 
-      const shellContext = AxShellContext(
-        navigation: AxNavigation.workstream('p-1', 'ws-1'),
+      final shellContext = AxShellContext(
+        navigation: const AxNavigation.workstream('p-1', 'ws-1'),
         projects: [project],
+        workstreamsByProject: {project.id: project.workstreams},
         selectedProject: project,
         selectedWorkstream: ws,
         expandedProjectIds: {'p-1'},
@@ -2005,7 +2029,7 @@ void main() {
                 body: Row(
                   children: [
                     if (isDesktop)
-                      const SizedBox(
+                      SizedBox(
                         width: 248,
                         child: AxSidebar(
                           shellContext: shellContext,
@@ -2023,7 +2047,7 @@ void main() {
                       child: Column(
                         children: [
                           if (!isDesktop)
-                            const AxTopBar(
+                            AxTopBar(
                               shellContext: shellContext,
                               onNavigateTo: _dummyNav,
                               onOpenCommandPalette: _dummyAction,
@@ -2142,17 +2166,16 @@ void _dummyAction() {}
 void _dummyExternal(Uri _) {}
 
 class _ProjectScopedFixture extends AxFixtureDataSource {
-  final selectedProjects = <String?>[];
+  final selectedProjects = <String>[];
   @override
-  Future<AxSnapshot> loadReadModels(
-      {String? projectId, String? workspaceId}) async {
+  Future<List<AxWorkstream>> loadProjectWorkstreams(
+      {required String projectId}) async {
     selectedProjects.add(projectId);
-    final snapshot = axFixtureSnapshot();
-    return snapshot.copyWith(
-        projects: snapshot.projects.map((project) {
-      if (project.id != 'atlas' || projectId != 'atlas') return project;
-      return project.copyWith(workstreams: const [
-        AxWorkstream(
+    if (projectId != 'atlas') {
+      return super.loadProjectWorkstreams(projectId: projectId);
+    }
+    return const [
+      AxWorkstream(
           id: 'atlas-chat',
           projectId: 'atlas',
           name: 'Atlas conversation',
@@ -2160,9 +2183,7 @@ class _ProjectScopedFixture extends AxFixtureDataSource {
           status: 'active',
           brief: '',
           primaryWorkspace: '',
-          queueStatus: 'Idle',
-        )
-      ]);
-    }).toList());
+          queueStatus: 'Idle')
+    ];
   }
 }

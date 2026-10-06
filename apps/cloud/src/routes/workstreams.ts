@@ -456,21 +456,86 @@ export async function handleListDiscussionMessages(
     "view",
     accessContext,
   );
-  const rows = await env.CONCLAVE_DB.prepare(
+  const url = new URL(request.url);
+  const rawLimit = url.searchParams.get("limit") ?? "50";
+  if (
+    !/^\d+$/.test(rawLimit) ||
+    Number(rawLimit) < 1 ||
+    Number(rawLimit) > 100
+  ) {
+    throw new HttpError(400, "Discussion limit must be between 1 and 100");
+  }
+  const limit = Number(rawLimit);
+  const before = url.searchParams.get("before");
+  const after = url.searchParams.get("after");
+  if (before !== null && after !== null) {
+    throw new HttpError(400, "Choose before or after, not both");
+  }
+  const rawCursor = before ?? after;
+  let cursor: { createdAt: string; id: string } | null = null;
+  if (rawCursor !== null) {
+    try {
+      if (rawCursor.length > 2048) throw new Error("Oversized cursor");
+      const value = JSON.parse(decodeURIComponent(atob(rawCursor))) as Record<
+        string,
+        unknown
+      >;
+      if (
+        value.version !== 1 ||
+        value.workstreamId !== workstreamId ||
+        typeof value.createdAt !== "string" ||
+        !value.createdAt ||
+        typeof value.id !== "string" ||
+        !value.id
+      )
+        throw new Error("Invalid cursor");
+      cursor = { createdAt: value.createdAt, id: value.id };
+    } catch {
+      throw new HttpError(400, "Invalid Discussion cursor");
+    }
+  }
+  const forward = after !== null;
+  const comparison = forward ? ">" : "<";
+  const order = forward ? "ASC" : "DESC";
+  const statement = env.CONCLAVE_DB.prepare(
     `SELECT id, workstream_id AS workstreamId, author_user_id AS authorUserId,
             body, references_json AS referencesJson, edited_at AS editedAt, created_at AS createdAt
-     FROM discussion_messages WHERE workstream_id = ?1 ORDER BY created_at ASC`,
-  )
-    .bind(workstreamId)
-    .all();
-  return json({
-    messages: (rows.results ?? []).map((row) => ({
-      ...row,
-      references: parseJson(
-        (row as Record<string, unknown>).referencesJson,
-        [],
+     FROM discussion_messages WHERE workstream_id = ?1
+       ${cursor ? `AND (created_at ${comparison} ?2 OR (created_at = ?2 AND id ${comparison} ?3))` : ""}
+     ORDER BY created_at ${order}, id ${order} LIMIT ${cursor ? "?4" : "?2"}`,
+  );
+  const rows = await (
+    cursor
+      ? statement.bind(workstreamId, cursor.createdAt, cursor.id, limit + 1)
+      : statement.bind(workstreamId, limit + 1)
+  ).all<Record<string, unknown>>();
+  const results = rows.results ?? [];
+  const more = results.length > limit;
+  const selected = results.slice(0, limit);
+  const encode = (row: Record<string, unknown>) =>
+    btoa(
+      encodeURIComponent(
+        JSON.stringify({
+          version: 1,
+          workstreamId,
+          createdAt: row.createdAt,
+          id: row.id,
+        }),
       ),
+    );
+  const nextCursor =
+    more && selected.length ? encode(selected[selected.length - 1]!) : null;
+  const messages = forward ? selected : selected.reverse();
+  return json({
+    schemaVersion: 1,
+    messages: messages.map((row) => ({
+      ...row,
+      references: parseJson(row.referencesJson, []),
     })),
+    nextCursor,
+    newestCursor: messages.length
+      ? encode(messages[messages.length - 1]!)
+      : rawCursor,
   });
 }
 

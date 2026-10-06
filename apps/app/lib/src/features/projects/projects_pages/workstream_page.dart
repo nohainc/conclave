@@ -6,6 +6,8 @@ class WorkstreamPage extends StatefulWidget {
     required this.project,
     required this.workstream,
     this.dataSource,
+    this.discussionCache,
+    this.workHistoryCache,
     this.currentUserId,
     this.currentUserName,
     required this.onBackToProject,
@@ -19,6 +21,8 @@ class WorkstreamPage extends StatefulWidget {
   final AxProject project;
   final AxWorkstream workstream;
   final AxDataSource? dataSource;
+  final AxDiscussionCache? discussionCache;
+  final AxWorkHistoryCache? workHistoryCache;
   final String? currentUserId;
   final String? currentUserName;
   final VoidCallback onBackToProject;
@@ -41,6 +45,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   final _chatHistoryController = ScrollController();
   bool _followWork = true;
   bool _followChat = true;
+  bool _loadingOlderChat = false;
   final _chatComposerKey = GlobalKey();
   final _workComposerKey = GlobalKey();
   double _chatComposerSpace = 48;
@@ -88,16 +93,39 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       _currentWorkflowVersions(_workflowCatalog);
   bool _loadingWorkflows = true;
   String? _workflowCatalogError;
-  final List<_DiscussionItem> _discussion = [];
-  List<AxWorkRequest> _workTimeline = const [];
+  late AxDiscussionCache _fallbackDiscussionCache;
+  AxDiscussionCache get _discussionCache =>
+      widget.discussionCache ?? _fallbackDiscussionCache;
+  late AxWorkHistoryCache _fallbackWorkHistoryCache;
+  AxWorkHistoryCache get _workHistoryCache =>
+      widget.workHistoryCache ?? _fallbackWorkHistoryCache;
+  void Function()? _cancelWorkHistory;
+  bool _loadingOlderWork = false;
+  List<AxWorkRequest> get _workTimeline =>
+      _workHistoryCache.peek(widget.workstream.id).requests;
+  set _workTimeline(List<AxWorkRequest> value) =>
+      _workHistoryCache.replace(widget.workstream.id, value);
+  void _subscribeWorkHistory() {
+    _cancelWorkHistory?.call();
+    _cancelWorkHistory = _workHistoryCache.watch(widget.workstream.id, () {
+      if (!mounted) return;
+      setState(() {
+        final confirmed =
+            _workHistoryCache.peek(widget.workstream.id).confirmedIds;
+        _localWorkProgress.removeWhere((id, _) => confirmed.contains(id));
+      });
+    });
+  }
+
   final Map<String, String> _localWorkProgress = {};
-  bool _loadingWorkTimeline = true;
-  bool _refreshingWorkTimeline = false;
-  bool _workTimelineRefreshPending = false;
-  String? _workTimelineError;
+  bool get _loadingWorkTimeline =>
+      !_workHistoryCache.peek(widget.workstream.id).initialLoaded &&
+      _workHistoryCache.loading(widget.workstream.id);
+  String? get _workTimelineError =>
+      _workHistoryCache.error(widget.workstream.id)?.toString();
   String? _workSubmitError;
   StreamSubscription<Map<String, dynamic>>? _workEventSubscription;
-  Timer? _workRefreshTimer;
+  void Function()? _cancelWorkRealtime;
   bool _submittingWork = false;
   List<Map<String, dynamic>> _workAttachments = [];
   List<AxWorker> _projectWorkers = const [];
@@ -110,16 +138,39 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   @override
   void initState() {
     super.initState();
+    _fallbackDiscussionCache = widget.discussionCache ??
+        AxDiscussionCache.forSource(widget.dataSource);
+    _fallbackWorkHistoryCache = widget.workHistoryCache ??
+        AxWorkHistoryCache.forSource(widget.dataSource);
+    _subscribeWorkHistory();
     _workHistoryController.addListener(() {
       if (_workHistoryController.position.userScrollDirection !=
           ScrollDirection.idle) {
         _followWork = _workHistoryController.position.extentAfter <= 24;
+        if (_workHistoryController.position.userScrollDirection ==
+                ScrollDirection.forward &&
+            _workHistoryController.position.extentBefore <= 24 &&
+            _workHistoryCache.peek(widget.workstream.id).olderCursor != null &&
+            !_workHistoryCache.loadingOlder(widget.workstream.id) &&
+            _workHistoryCache.error(widget.workstream.id) == null) {
+          unawaited(_loadOlderWorkHistory());
+        }
       }
     });
     _chatHistoryController.addListener(() {
       if (_chatHistoryController.position.userScrollDirection !=
           ScrollDirection.idle) {
         _followChat = _chatHistoryController.position.extentAfter <= 24;
+        if (_chatHistoryController.position.userScrollDirection ==
+                ScrollDirection.forward &&
+            _chatHistoryController.position.extentBefore <= 24) {
+          final state = _discussionCache.peek(widget.workstream.id);
+          if (state.olderCursor != null &&
+              !state.loadingOlder &&
+              state.error == null) {
+            unawaited(_loadOlderDiscussion());
+          }
+        }
       }
     });
     _tabController = TabController(
@@ -138,7 +189,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     _workstreamInstructionsController = TextEditingController(
       text: _workConfig['workstreamInstructions']?.toString() ?? '',
     );
-    _loadDiscussion();
     _refreshWorkTimeline();
     _subscribeToWorkEvents();
     _loadWorkChoices();
@@ -222,40 +272,27 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     }
   }
 
-  Future<void> _loadDiscussion() async {
-    final ds = widget.dataSource;
-    if (ds == null) return;
-    try {
-      final messages =
-          await ds.loadDiscussionMessages(workstreamId: widget.workstream.id);
-      if (!mounted) return;
-      setState(() {
-        _discussion
-          ..clear()
-          ..addAll(messages.map((m) {
-            final dt = DateTime.tryParse(m.createdAt)?.toLocal();
-            final timeStr = dt != null ? _chatTimestamp(dt) : null;
-            final isMe = widget.currentUserId != null &&
-                widget.currentUserId!.isNotEmpty &&
-                m.authorUserId == widget.currentUserId;
-            return _DiscussionItem(
-              id: m.id,
-              author: isMe ? 'You' : (m.authorName ?? 'Member'),
-              text: m.body,
-              sentAt: timeStr,
-              isMe: isMe,
-            );
-          }));
-      });
-    } catch (_) {
-      // Ignore network errors on initial load
-    }
-  }
-
   @override
   void didUpdateWidget(WorkstreamPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.dataSource != widget.dataSource ||
+        oldWidget.discussionCache != widget.discussionCache) {
+      _fallbackDiscussionCache = widget.discussionCache ??
+          AxDiscussionCache.forSource(widget.dataSource);
+    }
+    if (oldWidget.workHistoryCache != widget.workHistoryCache ||
+        oldWidget.dataSource != widget.dataSource ||
+        oldWidget.workstream.id != widget.workstream.id) {
+      _cancelWorkRealtime?.call();
+      _fallbackWorkHistoryCache = widget.workHistoryCache ??
+          AxWorkHistoryCache.forSource(widget.dataSource);
+      _cancelWorkRealtime = AxWorkRealtimeSync.forCache(_workHistoryCache)
+          .listen(widget.realtimeEvents, workstreamId: widget.workstream.id);
+      _subscribeWorkHistory();
+      unawaited(_refreshWorkTimeline());
+    }
     if (oldWidget.workstream.id != widget.workstream.id) {
+      _discussionController.clear();
       _localWorkProgress.clear();
       _submittingWork = false;
       _followWork = _followChat = true;
@@ -287,25 +324,25 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   }
 
   void _subscribeToWorkEvents() {
+    _cancelWorkRealtime?.call();
+    _cancelWorkRealtime = AxWorkRealtimeSync.forCache(_workHistoryCache)
+        .listen(widget.realtimeEvents, workstreamId: widget.workstream.id);
     _workEventSubscription = widget.realtimeEvents?.listen((event) {
       final type = event['type'];
-      if (type == 'realtime.connection' && event['status'] == 'connected') {
-        unawaited(_refreshWorkTimeline());
-        return;
-      }
-      if (type == 'reconnect.required') {
-        unawaited(_refreshWorkTimeline());
-        return;
-      }
-      if (type is! String ||
-          !(type.startsWith('work_request.') || type.startsWith('step.'))) {
-        return;
-      }
       final payload = event['payload'];
-      if (payload is! Map || payload['workstreamId'] != widget.workstream.id) {
-        return;
+      if ((type is String &&
+              type.startsWith('workstream.discussion.') &&
+              ((payload is Map &&
+                      payload['workstreamId'] == widget.workstream.id) ||
+                  event['workstreamId'] == widget.workstream.id)) ||
+          type == 'reconnect.required' ||
+          (type == 'realtime.connection' && event['status'] == 'connected')) {
+        unawaited(_discussionCache
+            .synchronize(widget.workstream.id,
+                reconcileNewest:
+                    type is String && type.startsWith('workstream.discussion.'))
+            .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
       }
-      unawaited(_refreshWorkTimeline(activeOnly: true));
     });
   }
 
@@ -316,7 +353,8 @@ class _WorkstreamPageState extends State<WorkstreamPage>
 
   @override
   void dispose() {
-    _workRefreshTimer?.cancel();
+    _cancelWorkHistory?.call();
+    _cancelWorkRealtime?.call();
     _workEventSubscription?.cancel();
     _tabController.dispose();
     _requestController.dispose();
@@ -403,7 +441,28 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         }),
       );
 
-  Widget _discuss(BuildContext context, {bool alignWithWork = false}) {
+  Widget _discuss(BuildContext context, {bool alignWithWork = false}) =>
+      AxDiscussionBuilder(
+          cache: _discussionCache,
+          workstreamId: widget.workstream.id,
+          builder: (context, state) =>
+              _discussionBody(context, state, alignWithWork: alignWithWork));
+
+  Widget _discussionBody(BuildContext context, AxDiscussionState state,
+      {bool alignWithWork = false}) {
+    final messages = state.messages.map((message) {
+      final isMe =
+          widget.currentUserId != null && widget.currentUserId!.isNotEmpty
+              ? message.authorUserId == widget.currentUserId
+              : message.isMe;
+      final date = DateTime.tryParse(message.createdAt)?.toLocal();
+      return _DiscussionItem(
+          id: message.id,
+          author: isMe ? 'You' : message.authorName ?? 'Member',
+          text: message.body,
+          sentAt: date == null ? null : _chatTimestamp(date),
+          isMe: isMe);
+    }).toList();
     _followLatest(_chatHistoryController, _followChat);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -417,7 +476,27 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (_discussion.isEmpty)
+                      if (state.olderCursor != null)
+                        TextButton(
+                            onPressed: state.loadingOlder
+                                ? null
+                                : _loadOlderDiscussion,
+                            child: Text(state.loadingOlder
+                                ? 'Loading older messages…'
+                                : 'Load older messages')),
+                      if (state.error != null)
+                        TextButton(
+                            onPressed: () => _discussionCache
+                                .synchronize(widget.workstream.id)
+                                .then<void>((_) {},
+                                    onError: (Object _, StackTrace __) {}),
+                            child: const Text('Retry Chat sync')),
+                      if (!state.hasData && state.isFetching)
+                        const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text('Loading Chat…')),
+                      if (messages.isEmpty &&
+                          (!state.isFetching || state.hasData))
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(
@@ -457,11 +536,11 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                           padding: EdgeInsets.zero,
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _discussion.length,
+                          itemCount: messages.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 12),
                           itemBuilder: (context, index) {
-                            final message = _discussion[index];
+                            final message = messages[index];
                             return _DiscussionMessageBubble(
                               key: ValueKey(message.id),
                               item: message,
@@ -523,7 +602,11 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       onRemoveAttachment: (index) => setState(() {
         _workAttachments.removeAt(index);
       }),
-      onRefresh: _refreshWorkTimeline,
+      onRefresh: _retryWorkSync,
+      hasOlder:
+          _workHistoryCache.peek(widget.workstream.id).olderCursor != null,
+      loadingOlder: _workHistoryCache.loadingOlder(widget.workstream.id),
+      onLoadOlder: _loadOlderWorkHistory,
       onShowRunDetails: widget.dataSource == null ? null : _showRunDetails,
       onRetryStep: widget.dataSource == null ? null : _retryWorkRequestStep,
       onCancelRun: widget.dataSource == null ? null : _cancelFailedWorkRequest,

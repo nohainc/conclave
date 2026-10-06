@@ -139,6 +139,14 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
     }
   }
 
+  void _submit() {
+    final value = widget.controller.value;
+    if (value.composing.isValid && !value.composing.isCollapsed) return;
+    if (widget.enabled && widget.sendEnabled) {
+      (widget.onSubmit ?? widget.onSend)?.call();
+    }
+  }
+
   void _sourceChanged() {
     if (widget.chatStyle && _preview && widget.controller.text.isEmpty) {
       setState(() => _preview = false);
@@ -244,6 +252,8 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
             CallbackShortcuts(
                 key: _inputKey,
                 bindings: {
+                  if (widget.onSend != null && widget.onSubmit == null)
+                    const SingleActivator(LogicalKeyboardKey.enter): _submit,
                   for (final modifier in [true, false]) ...{
                     SingleActivator(LogicalKeyboardKey.keyB,
                         meta: modifier,
@@ -256,15 +266,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                         () => _format(MarkdownFormat.inlineCode),
                     if (widget.onSend != null || widget.onSubmit != null)
                       SingleActivator(LogicalKeyboardKey.enter,
-                          meta: modifier, control: !modifier): () {
-                        if (widget.controller.value.composing.isValid &&
-                            !widget.controller.value.composing.isCollapsed) {
-                          return;
-                        }
-                        if (widget.enabled && widget.sendEnabled) {
-                          (widget.onSubmit ?? widget.onSend)!();
-                        }
-                      },
+                          meta: modifier, control: !modifier): _submit,
                   },
                 },
                 child: TextField(
@@ -337,7 +339,9 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
               (widget.onSend != null || widget.onSubmit != null))
             Row(children: [
               Text(
-                '${Theme.of(context).platform == TargetPlatform.macOS || Theme.of(context).platform == TargetPlatform.iOS ? '⌘' : 'Ctrl+'} Enter to ${widget.onSend != null ? 'send' : 'save'}',
+                widget.onSend != null && widget.onSubmit == null
+                    ? 'Enter to send · Shift+Enter for a new line'
+                    : '${Theme.of(context).platform == TargetPlatform.macOS || Theme.of(context).platform == TargetPlatform.iOS ? '⌘' : 'Ctrl+'} Enter to save',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),

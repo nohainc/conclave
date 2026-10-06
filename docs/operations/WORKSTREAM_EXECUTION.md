@@ -2,6 +2,9 @@
 
 AI Chat is selected in the Workstream **Work** composer. The **Chat** discussion
 tab stores human/team messages separately. Both surfaces preserve Markdown source.
+In both composers, Enter sends and Shift+Enter inserts a new line. Ctrl/Cmd+Enter
+also sends. Editing an existing discussion retains Enter for a new line and
+Ctrl/Cmd+Enter to save.
 Selecting a different Project loads its Workstreams into the sidebar. Manual
 expansion/collapse is preserved during background refreshes.
 

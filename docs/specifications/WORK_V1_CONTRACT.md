@@ -703,3 +703,21 @@ migrations before deploying Chat execution. It rebuilds both tables atomically,
 preserving snapshots, cancellation fields, task dependencies, leases and linked
 runtime records with foreign keys enabled. Unrecognized schema additions abort
 the migration for review. Never reset or rewrite historical Work Requests.
+
+Discussion reads use the [versioned paging contract](DISCUSSION_PAGING.md). AX retains shared cached history across page disposal,
+synchronizes on reopening, and reconciles optimistic sends and edits per message.
+
+
+Work history initially loads the latest 50 Work Requests. Older requests load
+on demand while scrolling upward or choosing Load older Work history, with the
+viewport preserved. Shared in-memory history survives page disposal. Recent and
+active refreshes merge status updates without reloading immutable older pages;
+see [AX server-state ownership](../architecture/AX_SERVER_STATE.md).
+
+
+Work lifecycle and Step events reconcile individual cached Work Requests.
+Sufficient event state patches the cache; missing results or details use the
+single-request endpoint. Healthy realtime performs no Work polling. During
+outages, visible Workstreams use a fifteen-second active-entity fallback; restored
+connections discover a bounded recent page and resynchronize known active IDs.
+Immutable older history remains cached.

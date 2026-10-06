@@ -53,13 +53,15 @@ extension _WorkstreamActions on _WorkstreamPageState {
     final workflowId = _workflow.split(':').first;
     final workflowVersion = int.tryParse(_workflow.split(':v').last) ?? 1;
     final workstreamId = widget.workstream.id;
+    final workCache = _workHistoryCache;
+    final requesterId = widget.currentUserId;
     final createdAt = DateTime.now().toUtc().toIso8601String();
     var localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
     AxWorkRequest localRequest({String status = 'queued', String? error}) =>
         AxWorkRequest(
           id: localId,
           requestedByName: 'You',
-          requestedByUserId: widget.currentUserId,
+          requestedByUserId: requesterId,
           prompt: requestText,
           workflowId: workflowId,
           workflowVersion: workflowVersion,
@@ -75,14 +77,16 @@ extension _WorkstreamActions on _WorkstreamPageState {
     }
 
     void fail(String message) {
+      final history = workCache.peek(workstreamId).requests;
+      if (!history.any((r) => r.id == localId)) return;
+      workCache.replace(workstreamId, [
+        for (final request in history)
+          request.id == localId
+              ? localRequest(status: 'failed', error: message)
+              : request
+      ]);
       if (!mounted || widget.workstream.id != workstreamId) return;
       _updateState(() {
-        _workTimeline = [
-          for (final request in _workTimeline)
-            request.id == localId
-                ? localRequest(status: 'failed', error: message)
-                : request
-        ];
         _localWorkProgress[localId] = message;
         // Preserve authored input for correction/retry after a rejected send.
         if (_requestController.text.isEmpty) _requestController.text = text;
@@ -105,7 +109,12 @@ extension _WorkstreamActions on _WorkstreamPageState {
             workstreamId: workstreamId,
             workflowId: workflowId,
             attachments: attachments);
-        if (!mounted || widget.workstream.id != workstreamId) return;
+        if (!workCache
+            .peek(workstreamId)
+            .requests
+            .any((r) => r.id == localId)) {
+          return;
+        }
         if (issues.isNotEmpty) {
           final workflowName = _currentWorkflows
                   .where((definition) => definition.id == workflowId)
@@ -119,21 +128,31 @@ extension _WorkstreamActions on _WorkstreamPageState {
       }
       progress('Sending your request…');
       final workRequestId = await submit(requestText, workflowId, attachments);
-      if (!mounted || widget.workstream.id != workstreamId) {
-        return;
-      }
+      final history = workCache.peek(workstreamId).requests;
+      if (!history.any((r) => r.id == localId)) return;
       final previousId = localId;
       localId = workRequestId;
-      _updateState(() {
-        _localWorkProgress.remove(previousId);
-        _localWorkProgress[localId] = 'Request received. Waiting to start…';
-        _workTimeline = [
-          for (final request in _workTimeline)
-            if (request.id != workRequestId)
-              request.id == previousId ? localRequest() : request
-        ];
-      });
-      if (dataSource != null) await _refreshWorkTimeline();
+      workCache.replace(workstreamId, [
+        for (final request in history)
+          if (request.id != previousId) request,
+        if (!history.any((request) => request.id == workRequestId))
+          localRequest()
+      ]);
+      if (mounted && widget.workstream.id == workstreamId) {
+        _updateState(() {
+          _localWorkProgress.remove(previousId);
+          if (!workCache.peek(workstreamId).confirmedIds.contains(localId)) {
+            _localWorkProgress[localId] = 'Request received. Waiting to start…';
+          }
+        });
+      }
+      if (dataSource != null) {
+        // A detail-read failure cannot turn an accepted submission into a
+        // failed send. Retain it for targeted retry/realtime reconciliation.
+        await workCache
+            .refreshRequest(workstreamId, workRequestId)
+            .catchError((Object _) {});
+      }
     } catch (error) {
       fail(error is AxApiException && error.message.startsWith('Cannot run ')
           ? error.message
@@ -237,69 +256,72 @@ extension _WorkstreamActions on _WorkstreamPageState {
     }
   }
 
-  Future<void> _refreshWorkTimeline({bool activeOnly = false}) async {
-    final dataSource = widget.dataSource;
-    if (dataSource == null) {
-      if (_loadingWorkTimeline) {
-        _updateState(() => _loadingWorkTimeline = false);
-      }
+  Future<void> _retryWorkSync() async {
+    final cache = _workHistoryCache;
+    final id = widget.workstream.id;
+    final dirty = cache.dirtyIds(id);
+    if (dirty.isEmpty) {
+      await _refreshWorkTimeline();
       return;
     }
-    if (_refreshingWorkTimeline) {
-      _workTimelineRefreshPending = true;
-      return;
-    }
-    _refreshingWorkTimeline = true;
     try {
-      final requests = await dataSource.loadWorkstreamWorkRequests(
-        workstreamId: widget.workstream.id,
-        activeOnly: activeOnly,
-      );
-      if (!mounted) return;
-      _updateState(() {
-        for (final request in requests) {
-          _localWorkProgress.remove(request.id);
+      await Future.wait(
+          dirty.map((requestId) => cache.refreshRequest(id, requestId)));
+    } catch (_) {
+      /* Individual request errors remain available in query state. */
+    }
+  }
+
+  Future<void> _refreshWorkTimeline({bool activeOnly = false}) async {
+    final cache = _workHistoryCache;
+    final id = widget.workstream.id;
+    try {
+      await cache.refresh(id, activeOnly: activeOnly);
+      if (mounted &&
+          widget.workstream.id == id &&
+          identical(cache, _workHistoryCache)) {
+        _updateState(() {
+          for (final request in _workTimeline) {
+            if (!request.id.startsWith('local-')) {
+              _localWorkProgress.remove(request.id);
+            }
+          }
+        });
+      }
+    } catch (_) {
+      // Query state retains cached history and exposes the existing retry UI.
+    }
+  }
+
+  Future<void> _loadOlderWorkHistory() async {
+    if (_loadingOlderWork) return;
+    _loadingOlderWork = true;
+    final cache = _workHistoryCache;
+    final id = widget.workstream.id;
+    final controller = _workHistoryController;
+    final offset = controller.hasClients ? controller.offset : 0.0;
+    final extent =
+        controller.hasClients ? controller.position.maxScrollExtent : 0.0;
+    _followWork = false;
+    try {
+      await cache.loadOlder(id);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            widget.workstream.id == id &&
+            identical(cache, _workHistoryCache) &&
+            controller.hasClients) {
+          controller.jumpTo(
+              (offset + controller.position.maxScrollExtent - extent)
+                  .clamp(0.0, controller.position.maxScrollExtent));
         }
-        if (activeOnly) {
-          final updatedById = {
-            for (final request in requests) request.id: request
-          };
-          _workTimeline = [
-            for (final existing in _workTimeline)
-              updatedById.remove(existing.id) ?? existing,
-            ...updatedById.values,
-          ]..sort((left, right) => left.createdAt.compareTo(right.createdAt));
-        } else {
-          _workTimeline = [
-            ...requests,
-            ..._workTimeline
-                .where((request) => _localWorkProgress.containsKey(request.id))
-          ]..sort((left, right) => left.createdAt.compareTo(right.createdAt));
-        }
-        _loadingWorkTimeline = false;
-        _workTimelineError = null;
       });
     } catch (error) {
-      if (mounted) {
-        _updateState(() {
-          _loadingWorkTimeline = false;
-          _workTimelineError = error.toString();
-        });
+      if (mounted && widget.workstream.id == id) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Failed to load older Work history: $error')));
       }
     } finally {
-      _refreshingWorkTimeline = false;
-      _workRefreshTimer?.cancel();
-      if (mounted &&
-          _workTimeline.any((request) => const {'queued', 'running', 'waiting'}
-              .contains(request.status))) {
-        _workRefreshTimer = Timer(const Duration(seconds: 5), () {
-          if (mounted) unawaited(_refreshWorkTimeline(activeOnly: true));
-        });
-      }
-      if (_workTimelineRefreshPending && mounted) {
-        _workTimelineRefreshPending = false;
-        unawaited(_refreshWorkTimeline(activeOnly: activeOnly));
-      }
+      _loadingOlderWork = false;
     }
   }
 
@@ -399,7 +421,9 @@ extension _WorkstreamActions on _WorkstreamPageState {
       );
       if (!mounted) return;
       if (closeDetails) Navigator.of(context).pop();
-      unawaited(_refreshWorkTimeline());
+      unawaited(_workHistoryCache
+          .refreshRequest(widget.workstream.id, workRequestId, supersede: true)
+          .catchError((Object _) {}));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Retrying ${step.kind} Step.')),
       );
@@ -423,7 +447,9 @@ extension _WorkstreamActions on _WorkstreamPageState {
       await dataSource.cancelWorkRequest(workRequestId: workRequestId);
       if (!mounted) return;
       if (closeDetails) Navigator.of(context).pop();
-      unawaited(_refreshWorkTimeline());
+      unawaited(_workHistoryCache
+          .refreshRequest(widget.workstream.id, workRequestId, supersede: true)
+          .catchError((Object _) {}));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Run cancelled.')),
       );
@@ -439,85 +465,64 @@ extension _WorkstreamActions on _WorkstreamPageState {
     final text = _discussionController.text;
     if (text.trim().isEmpty) return;
     _discussionController.clear();
-    final now = DateTime.now();
-    final tempId = 'temp-${DateTime.now().microsecondsSinceEpoch}';
-    _updateState(() {
-      _discussion.add(
-        _DiscussionItem(
-          id: tempId,
-          author: 'You',
-          text: text,
-          sentAt: _chatTimestamp(now),
-          isMe: true,
-        ),
-      );
-    });
-
-    final ds = widget.dataSource;
-    if (ds != null) {
-      try {
-        final saved = await ds.sendDiscussionMessage(
-          workstreamId: widget.workstream.id,
-          text: text,
-        );
-        if (!mounted) return;
-        _updateState(() {
-          final idx = _discussion.indexWhere((item) => item.id == tempId);
-          if (idx != -1) {
-            final dt = DateTime.tryParse(saved.createdAt)?.toLocal();
-            final timeStr = _chatTimestamp(dt ?? now);
-            _discussion[idx] = _DiscussionItem(
-              id: saved.id,
-              author: 'You',
-              text: saved.body,
-              sentAt: timeStr,
-              isMe: true,
-            );
-          }
-        });
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to save message: $e'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
+    final cache = _discussionCache;
+    final id = widget.workstream.id;
+    try {
+      await cache.send(id, text,
+          userId: widget.currentUserId, userName: widget.currentUserName);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to save message: $error'),
+          backgroundColor: Colors.redAccent));
     }
   }
 
   Future<void> _editDiscussion(String messageId, String newText) async {
-    _updateState(() {
-      final idx = _discussion.indexWhere((m) => m.id == messageId);
-      if (idx != -1) {
-        final old = _discussion[idx];
-        _discussion[idx] = _DiscussionItem(
-          id: old.id,
-          author: old.author,
-          text: newText,
-          sentAt: old.sentAt,
-          isMe: old.isMe,
-        );
-      }
-    });
+    final cache = _discussionCache;
+    final id = widget.workstream.id;
+    try {
+      await cache.edit(id, messageId, newText);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to update message: $error'),
+          backgroundColor: Colors.redAccent));
+    }
+  }
 
-    final ds = widget.dataSource;
-    if (ds != null && !messageId.startsWith('temp-')) {
-      try {
-        await ds.editDiscussionMessage(
-          messageId: messageId,
-          text: newText,
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update message: $e'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
+  Future<void> _loadOlderDiscussion() async {
+    if (_loadingOlderChat) return;
+    _loadingOlderChat = true;
+    final workstreamId = widget.workstream.id;
+    final cache = _discussionCache;
+    final controller = _chatHistoryController;
+    final offset = controller.hasClients ? controller.offset : 0.0;
+    final extent =
+        controller.hasClients ? controller.position.maxScrollExtent : 0.0;
+    _followChat = false;
+    try {
+      await cache.loadOlder(workstreamId);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            widget.workstream.id == workstreamId &&
+            identical(cache, _discussionCache) &&
+            controller.hasClients) {
+          controller.jumpTo(
+              (offset + controller.position.maxScrollExtent - extent)
+                  .clamp(0.0, controller.position.maxScrollExtent));
+        }
+      });
+    } catch (error) {
+      if (!mounted ||
+          widget.workstream.id != workstreamId ||
+          !identical(cache, _discussionCache)) {
+        return;
       }
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load older messages: $error')));
+    } finally {
+      _loadingOlderChat = false;
     }
   }
 }

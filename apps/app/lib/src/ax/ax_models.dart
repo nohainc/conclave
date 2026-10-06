@@ -258,6 +258,18 @@ class AxWorkstream {
       );
 }
 
+/// Discussion paging contract 1. Messages are in chronological display order.
+class AxDiscussionPage {
+  AxDiscussionPage(
+      {required Iterable<AxDiscussionMessage> messages,
+      this.nextCursor,
+      this.newestCursor})
+      : messages = List.unmodifiable(messages);
+  final List<AxDiscussionMessage> messages;
+  final String? nextCursor;
+  final String? newestCursor;
+}
+
 class AxDiscussionMessage {
   const AxDiscussionMessage({
     required this.id,
@@ -280,6 +292,18 @@ class AxDiscussionMessage {
   final String? editedAt;
   final String createdAt;
   final bool isMe;
+
+  AxDiscussionMessage copyWith({String? id, String? body, String? editedAt}) =>
+      AxDiscussionMessage(
+          id: id ?? this.id,
+          workstreamId: workstreamId,
+          authorUserId: authorUserId,
+          authorName: authorName,
+          body: body ?? this.body,
+          references: references,
+          editedAt: editedAt ?? this.editedAt,
+          createdAt: createdAt,
+          isMe: isMe);
 
   factory AxDiscussionMessage.fromJson(
     Map<String, dynamic> json, {

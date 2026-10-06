@@ -1,7 +1,30 @@
 import 'ax_models.dart';
 
+class AxWorkRequestCursor {
+  const AxWorkRequestCursor({required this.createdAt, required this.id});
+  final String createdAt;
+  final String id;
+  @override
+  bool operator ==(Object other) =>
+      other is AxWorkRequestCursor &&
+      other.createdAt == createdAt &&
+      other.id == id;
+  @override
+  int get hashCode => Object.hash(createdAt, id);
+}
+
+class AxWorkRequestPage {
+  AxWorkRequestPage(
+      {required Iterable<AxWorkRequest> requests, this.nextCursor})
+      : requests = List.unmodifiable(requests);
+  final List<AxWorkRequest> requests;
+  final AxWorkRequestCursor? nextCursor;
+}
+
 class AxWorkRequestStatus {
   const AxWorkRequestStatus({
+    this.id,
+    this.workstreamId,
     required this.status,
     this.text,
     this.error,
@@ -17,6 +40,8 @@ class AxWorkRequestStatus {
     this.steps = const [],
   });
 
+  final String? id;
+  final String? workstreamId;
   final String status;
   final String? text;
   final String? error;
@@ -81,6 +106,30 @@ class AxWorkRequestStep {
   final String? errorMessage;
   final String? retrySessionStrategy;
 
+  AxWorkRequestStep withStatus(String value) => AxWorkRequestStep(
+      kind: kind,
+      status: value,
+      workerId: workerId,
+      workerTypeId: workerTypeId,
+      workerDisplayName: workerDisplayName,
+      engineVersion: engineVersion,
+      profileDefinitionId: profileDefinitionId,
+      profileReleaseVersion: profileReleaseVersion,
+      providerToolName: providerToolName,
+      providerToolVersion: providerToolVersion,
+      model: model,
+      testSummary: testSummary,
+      startedAt: startedAt,
+      updatedAt: updatedAt,
+      elapsedMs: elapsedMs,
+      completedAt: completedAt,
+      resultText: resultText,
+      assignmentId: assignmentId,
+      sessionPolicy: sessionPolicy,
+      errorCode: errorCode,
+      errorMessage: errorMessage,
+      retrySessionStrategy: retrySessionStrategy);
+
   factory AxWorkRequestStep.fromJson(Map<String, dynamic> json) =>
       AxWorkRequestStep(
         kind: json['kind']?.toString() ?? 'implement',
@@ -136,6 +185,21 @@ class AxWorkRequest {
   final List<AxWorkRequestStep> steps;
   final String? finalText;
   final String? error;
+
+  AxWorkRequest copyWith({String? status, List<AxWorkRequestStep>? steps}) =>
+      AxWorkRequest(
+          id: id,
+          requestedByName: requestedByName,
+          requestedByUserId: requestedByUserId,
+          prompt: prompt,
+          workflowId: workflowId,
+          workflowVersion: workflowVersion,
+          workflowName: workflowName,
+          status: status ?? this.status,
+          createdAt: createdAt,
+          steps: steps ?? this.steps,
+          finalText: finalText,
+          error: error);
 
   String? get testSummary {
     for (final step in steps) {
@@ -308,6 +372,7 @@ abstract interface class AxDataSource {
   Future<void> denyDesktopAuthIntent({required String intentId});
   Future<List<AxWorkspace>> loadWorkspaces();
   Future<List<AxProject>> loadProjects({bool includeArchived = false});
+  Future<AxProject> loadProject({required String projectId});
   Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
     required String projectId,
   });
@@ -364,11 +429,23 @@ abstract interface class AxDataSource {
     required String workRequestId,
   }) async =>
       throw UnimplementedError('Work Request cancellation is not available');
+  Future<AxWorkRequestPage> loadWorkstreamWorkRequestPage({
+    required String workstreamId,
+    int limit = 50,
+    String? beforeCreatedAt,
+    String? beforeId,
+    bool activeOnly = false,
+  });
   Future<List<AxWorkRequest>> loadWorkstreamWorkRequests({
     required String workstreamId,
     bool activeOnly = false,
   }) async =>
       const [];
+  Future<AxDiscussionPage> loadDiscussionPage(
+      {required String workstreamId,
+      int limit = 50,
+      String? before,
+      String? after});
   Future<List<AxDiscussionMessage>> loadDiscussionMessages({
     required String workstreamId,
   }) async =>
@@ -417,7 +494,8 @@ abstract interface class AxDataSource {
     required String invitationId,
   });
 
-  /// Composes the current AX view from focused Project and Workspace APIs.
+  /// Application bootstrap/recovery state, never a navigation loader.
+  /// Project details and Workstreams are separate focused resource queries.
   Future<AxSnapshot> loadReadModels({String? projectId, String? workspaceId});
   Future<void> controlRun(String runId, String command);
   Future<void> respondToRunPrompt(String runId, String response);

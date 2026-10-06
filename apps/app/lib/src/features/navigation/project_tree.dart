@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../navigation/ax_navigation.dart';
 import '../../ax/ax_models.dart';
 import 'ax_shell_context.dart';
+import '../../ax/sync/ax_query_builder.dart';
 
 /// Interactive Project Tree component for the Conclave AX App Sidebar.
 class ProjectTree extends StatelessWidget {
@@ -46,12 +47,30 @@ class ProjectTree extends StatelessWidget {
   }
 
   Widget _buildProjectItem(BuildContext context, AxProject project) {
+    final cache = shellContext.projectWorkstreams;
+    if (cache != null && shellContext.isProjectExpanded(project.id)) {
+      return AxQueryBuilder<List<AxWorkstream>>(
+        key: ValueKey('project-workstreams-${project.id}'),
+        engine: cache.engine,
+        query: cache.query(project.id),
+        builder: (context, state) => _projectItem(
+            context, project, state.data ?? const [],
+            loading: !state.hasData && state.isFetching,
+            error: !state.hasData ? state.error : null),
+      );
+    }
+    return _projectItem(context, project,
+        shellContext.workstreamsByProject[project.id] ?? const []);
+  }
+
+  Widget _projectItem(
+      BuildContext context, AxProject project, List<AxWorkstream> workstreams,
+      {bool loading = false, Object? error}) {
     final isProjectFocused = shellContext.navigation.projectId == project.id &&
         shellContext.navigation.kind == AxRouteKind.project;
     final isExpanded = shellContext.isProjectExpanded(project.id);
-    final visibleWorkstreams = project.workstreams
-        .where((w) => w.status.toLowerCase() != 'archived')
-        .toList();
+    final visibleWorkstreams =
+        workstreams.where((w) => w.status.toLowerCase() != 'archived').toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -65,7 +84,10 @@ class ProjectTree extends StatelessWidget {
           ),
           child: InkWell(
             onTap: () {
-              onToggleProjectExpanded(project.id);
+              // Selecting an already-expanded other Project preserves expansion.
+              if (!isExpanded || isProjectFocused) {
+                onToggleProjectExpanded(project.id);
+              }
               onNavigateTo(AxNavigation.project(project.id));
               if (compact) Scaffold.maybeOf(context)?.closeDrawer();
             },
@@ -99,6 +121,17 @@ class ProjectTree extends StatelessWidget {
             ),
           ),
         ),
+        if (isExpanded && loading)
+          const Padding(
+              padding: EdgeInsets.fromLTRB(34, 6, 10, 6),
+              child: Text('Loading Workstreams…',
+                  style: TextStyle(color: Colors.white60, fontSize: 11.5))),
+        if (isExpanded && error != null)
+          TextButton(
+              onPressed: () => shellContext.projectWorkstreams
+                  ?.ensure(project.id)
+                  .then<void>((_) {}, onError: (Object _, StackTrace __) {}),
+              child: const Text('Retry Workstreams')),
         if (isExpanded)
           ...visibleWorkstreams.map(
             (workstream) {

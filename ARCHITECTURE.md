@@ -87,3 +87,21 @@ The repository has converged on the v8 assignment path and clean v8 schema. The 
 - [Protocol Boundaries](docs/architecture/PROTOCOL_BOUNDARIES.md)
 - [Technology Stack](docs/architecture/TECH_STACK.md)
 - [Workspace UX and data contract](docs/architecture/WORKSPACES_UX_CONTRACT.md)
+
+## AX client server-state foundation
+
+The isolated in-memory [AX server-state layer](docs/architecture/AX_SERVER_STATE.md)
+provides typed query caching, scoped listeners, race protection, and optimistic
+mutations over existing HTTP loaders. Project/sidebar navigation now consumes
+independent cached Project details and Workstream collections, retaining
+expanded Projects across navigation. Navigation synchronously changes route
+state and ensures those resources in the background; `loadReadModels` remains
+a bootstrap/recovery API. Work history uses a shared infinite query with a
+bounded recent page, on-demand older pages, and targeted realtime reconciliation.
+Healthy sockets disable Work polling; a fifteen-second fallback runs during
+outages and stops after scoped recovery.
+Other resources remain on their existing paths.
+
+AX Discussion history uses shared, paginated in-memory state with per-message
+optimistic writes; see [server-state ownership](docs/architecture/AX_SERVER_STATE.md)
+and the [v1 paging contract](docs/specifications/DISCUSSION_PAGING.md).

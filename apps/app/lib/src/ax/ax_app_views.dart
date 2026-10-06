@@ -116,71 +116,123 @@ extension _AxAppViews on _AxAppStateMixin {
   Widget _projectOverviewView() {
     final project = selectedProject;
     if (project == null) return _homeView();
-    return ProjectPage(
-      project: project,
-      dataSource: widget.dataSource,
-      onOpenWorkstream: (workstreamId) =>
-          _openWorkstream(project.id, workstreamId),
-      onOpenWorkspace: (workspaceId) =>
-          _navigateTo(AxNavigation.workspaces(workspaceId: workspaceId)),
-      onEdit: () => _editProject(project),
-      onArchive: () => _archiveProject(project),
-      onDelete: () => _deleteProject(project.id),
-      onProjectUpdated: (updated) async {
-        await _loadSnapshot(projectId: project.id, showSpinner: false);
-      },
+    return AxQueryBuilder<List<AxWorkstream>>(
+      key: ValueKey('project-page-${project.id}'),
+      engine: store.projectWorkstreams.engine,
+      query: store.projectWorkstreams.query(project.id),
+      builder: (context, state) => ProjectPage(
+        projectWorkstreams: store.projectWorkstreams,
+        project: project.copyWith(workstreams: state.data ?? const []),
+        dataSource: widget.dataSource,
+        onOpenWorkstream: (workstreamId) =>
+            _openWorkstream(project.id, workstreamId),
+        onOpenWorkspace: (workspaceId) =>
+            _navigateTo(AxNavigation.workspaces(workspaceId: workspaceId)),
+        onEdit: () => _editProject(project),
+        onArchive: () => _archiveProject(project),
+        onDelete: () => _deleteProject(project.id),
+        onProjectUpdated: (updated) async {
+          if (updated.name != project.name ||
+              updated.description != project.description ||
+              updated.instructions != project.instructions ||
+              updated.archived != project.archived ||
+              updated.role != project.role ||
+              !mapEquals(updated.settings, project.settings)) {
+            await store.projectDetails.record(updated);
+            if (!mounted) return;
+            _updateState(() {
+              snapshot = snapshot.copyWith(
+                  projects: snapshot.projects
+                      .map((p) => p.id == updated.id
+                          ? updated.copyWith(workstreams: const [])
+                          : p)
+                      .toList());
+              store.projects.replace(snapshot.projects);
+            });
+          }
+          try {
+            await store.projectWorkstreams.refresh(project.id);
+          } catch (error) {
+            if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
+          }
+        },
+      ),
     );
   }
 
-  Future<void> _openWorkstream(String projectId, String workstreamId) async {
+  void _openWorkstream(String projectId, String workstreamId) {
     _navigateTo(AxNavigation.workstream(projectId, workstreamId));
-    await _loadSnapshot(projectId: projectId, showSpinner: false);
   }
 
   Widget _workstreamView() {
     final project = selectedProject;
-    final workstream = selectedWorkstream;
-    if (project == null || workstream == null) return _homeView();
-    return WorkstreamPage(
-      key: ValueKey(workstream.id),
-      project: project,
-      workstream: workstream,
-      dataSource: widget.dataSource,
-      realtimeEvents: realtimeClient.events,
-      currentUserId: store.auth.viewer?.id ?? snapshot.viewer?.id,
-      currentUserName:
-          store.auth.viewer?.displayName ?? snapshot.viewer?.displayName,
-      onBackToProject: () => _navigateTo(AxNavigation.project(project.id)),
-      onArchive: () async {
-        try {
-          await widget.dataSource.deleteWorkstream(workstreamId: workstream.id);
-          if (!mounted) return;
-          _showSnackBar('Workstream deleted.');
-          _navigateTo(AxNavigation.project(project.id));
-          await _loadSnapshot(projectId: project.id, showSpinner: false);
-        } catch (error) {
-          if (mounted) _showSnackBar(error.toString());
+    if (project == null) return _homeView();
+    return AxQueryBuilder<List<AxWorkstream>>(
+      key: ValueKey('workstream-page-${project.id}'),
+      engine: store.projectWorkstreams.engine,
+      query: store.projectWorkstreams.query(project.id),
+      builder: (context, state) {
+        final workstream = state.data
+            ?.where((w) => w.id == navigation.workstreamId)
+            .firstOrNull;
+        if (workstream == null) {
+          return Center(
+              child: state.error != null
+                  ? TextButton(
+                      onPressed: () => store.projectWorkstreams
+                          .ensure(project.id)
+                          .then<void>((_) {},
+                              onError: (Object _, StackTrace __) {}),
+                      child: const Text('Retry Workstreams'))
+                  : Text(state.hasData
+                      ? 'Workstream unavailable'
+                      : 'Loading Workstream…'));
         }
-      },
-      onRename: (name) async {
-        try {
-          await widget.dataSource.updateWorkstream(
+        return WorkstreamPage(
+          discussionCache: store.discussion,
+          workHistoryCache: store.workHistory,
+          key: ValueKey(workstream.id),
+          project: project,
+          workstream: workstream,
+          dataSource: widget.dataSource,
+          realtimeEvents: realtimeClient.events,
+          currentUserId: store.auth.viewer?.id ?? snapshot.viewer?.id,
+          currentUserName:
+              store.auth.viewer?.displayName ?? snapshot.viewer?.displayName,
+          onBackToProject: () => _navigateTo(AxNavigation.project(project.id)),
+          onArchive: () async {
+            try {
+              await widget.dataSource
+                  .deleteWorkstream(workstreamId: workstream.id);
+              if (!mounted) return;
+              _showSnackBar('Workstream deleted.');
+              _navigateTo(AxNavigation.project(project.id));
+              await store.projectWorkstreams.refresh(project.id);
+            } catch (error) {
+              if (mounted) _showSnackBar(error.toString());
+            }
+          },
+          onRename: (name) async {
+            try {
+              await widget.dataSource.updateWorkstream(
+                workstreamId: workstream.id,
+                name: name,
+              );
+              await store.projectWorkstreams.refresh(project.id);
+              if (mounted) _showSnackBar('Workstream updated.');
+            } catch (error) {
+              if (mounted) _showSnackBar(error.toString());
+            }
+          },
+          onRunWork: (prompt, workflowId, attachments) =>
+              widget.dataSource.createWorkRequest(
             workstreamId: workstream.id,
-            name: name,
-          );
-          await _loadSnapshot(projectId: project.id, showSpinner: false);
-          if (mounted) _showSnackBar('Workstream updated.');
-        } catch (error) {
-          if (mounted) _showSnackBar(error.toString());
-        }
+            workflowId: workflowId,
+            prompt: prompt,
+            attachments: attachments,
+          ),
+        );
       },
-      onRunWork: (prompt, workflowId, attachments) =>
-          widget.dataSource.createWorkRequest(
-        workstreamId: workstream.id,
-        workflowId: workflowId,
-        prompt: prompt,
-        attachments: attachments,
-      ),
     );
   }
 
@@ -189,7 +241,11 @@ extension _AxAppViews on _AxAppStateMixin {
       query: _searchQuery.isNotEmpty
           ? _searchQuery
           : _searchQueryController.text.trim(),
-      snapshot: snapshot,
+      snapshot: snapshot.copyWith(
+          projects: snapshot.projects
+              .map((project) => project.copyWith(
+                  workstreams: store.projectWorkstreams.peek(project.id)))
+              .toList()),
       onNavigateTo: _navigateTo,
       onSelectProject: (projectId) {
         _clearSearch();

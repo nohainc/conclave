@@ -27,6 +27,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   late final RealtimeClient realtimeClient;
   StreamSubscription<Map<String, dynamic>>? realtimeSubscription;
   bool realtimeStarted = false;
+  void Function()? _cancelWorkRealtime;
   bool authRequired = false;
   bool isReconnecting = false;
   bool realtimeStale = false;
@@ -147,15 +148,21 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     _focusSearch();
   }
 
-  AxProject? get selectedProject => snapshot.projects
-      .where((project) => project.id == selectedProjectId)
-      .firstOrNull;
+  AxProject? get selectedProject {
+    final id = navigation.projectId ?? selectedProjectId;
+    if (id == null) return null;
+    return store.projectDetails.peek(id) ??
+        snapshot.projects.where((project) => project.id == id).firstOrNull;
+  }
+
   List<AxWorkspace> get workspaces => store.workspaces.items;
   AxTask? get selectedTask =>
       snapshot.tasks.where((task) => task.id == selectedTaskId).firstOrNull;
   AxWorkstream? get selectedWorkstream {
     final project = selectedProject;
-    return project?.workstreams
+    return (project == null
+            ? <AxWorkstream>[]
+            : store.projectWorkstreams.peek(project.id))
         .where((workstream) => workstream.id == navigation.workstreamId)
         .firstOrNull;
   }
@@ -166,6 +173,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   AxShellContext get _shellContext => AxShellContext(
         navigation: navigation,
         projects: snapshot.projects,
+        projectWorkstreams: store.projectWorkstreams,
         selectedProject: selectedProject,
         selectedWorkstream: selectedWorkstream,
         selectedRun: snapshot.run,
@@ -198,7 +206,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   void initState() {
     super.initState();
     _searchQueryController.addListener(_onSearchQueryChanged);
-    browserNavigation = createAxBrowserNavigation();
+    browserNavigation = widget.browserNavigation ?? createAxBrowserNavigation();
     final initialUri = widget.initialUri ?? browserNavigation.current;
     navigation = AxNavigation.fromUri(initialUri);
     // Expand deep links once; data refreshes must preserve manual collapse.
@@ -217,6 +225,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     realtimeClient = createRealtimeClient();
     realtimeSubscription = realtimeClient.events.listen(_onRealtimeEvent);
     store = AxStore(widget.dataSource);
+    _cancelWorkRealtime = store.workRealtime.listen(realtimeClient.events);
     snapshot = AxSnapshot.empty();
     if (_desktopAuthIntentId != null) {
       unawaited(_pollDesktopAuthStatus());
@@ -242,6 +251,8 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     promptResponseController.dispose();
     unawaited(navigationSubscription?.cancel());
     unawaited(lifecycleSubscription?.cancel());
+    _cancelWorkRealtime?.call();
+    store.workRealtime.dispose();
     unawaited(realtimeSubscription?.cancel());
     unawaited(realtimeClient.close());
     browserNavigation.dispose();
@@ -335,10 +346,14 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
         description: values.$2,
         instructions: values.$3,
       );
+      await store.projectDetails.record(project);
       if (!mounted) return;
       setState(() {
         snapshot = snapshot.copyWith(
-          projects: [...snapshot.projects, project],
+          projects: [
+            ...snapshot.projects,
+            project.copyWith(workstreams: const [])
+          ],
         );
         selectedProjectId = project.id;
         isLoading = false;
@@ -394,43 +409,16 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
       ),
     );
     if (created == null || created.isEmpty) return;
-    final newWorkstreamId =
-        'workstream-${DateTime.now().microsecondsSinceEpoch}';
-    final newWorkstream = AxWorkstream(
-      id: newWorkstreamId,
-      projectId: project.id,
-      name: created,
-      lead: _shellContext.viewerDisplayName ?? 'You',
-      status: 'active',
-      brief: 'Add a brief so collaborators understand the intended outcome.',
-      primaryWorkspace: _shellContext.workspaces.isNotEmpty
-          ? _shellContext.workspaces.first.name
-          : 'Not selected',
-      queueStatus: 'Idle',
-    );
-    final updatedProjects = snapshot.projects.map((p) {
-      if (p.id == project.id) {
-        return AxProject(
-          id: p.id,
-          name: p.name,
-          branch: p.branch,
-          lastActivity: 'just now',
-          description: p.description,
-          instructions: p.instructions,
-          workstreams: [...p.workstreams, newWorkstream],
-        );
-      }
-      return p;
-    }).toList();
-    if (mounted) {
-      setState(() {
-        snapshot = snapshot.copyWith(projects: updatedProjects);
-        expandedProjectIds.add(project.id);
-      });
-      _navigateTo(
-        AxNavigation.workstream(project.id, newWorkstreamId),
-      );
+    try {
+      final workstream = await widget.dataSource
+          .createWorkstream(projectId: project.id, name: created);
+      await store.projectWorkstreams.refresh(project.id);
+      if (!mounted) return;
+      setState(() => expandedProjectIds.add(project.id));
+      _navigateTo(AxNavigation.workstream(project.id, workstream.id));
       _showSnackBar('Workstream created.');
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
     }
   }
 
@@ -493,11 +481,14 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
         description: values.$2,
         instructions: values.$3,
       );
+      await store.projectDetails.record(updated);
       if (!mounted) return;
       setState(() {
         snapshot = snapshot.copyWith(
           projects: snapshot.projects
-              .map((item) => item.id == updated.id ? updated : item)
+              .map((item) => item.id == updated.id
+                  ? updated.copyWith(workstreams: const [])
+                  : item)
               .toList(),
         );
       });
@@ -516,6 +507,10 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     if (!confirmed) return;
     try {
       await widget.dataSource.archiveProject(projectId: project.id);
+      store.syncEngine.remove(store.projectDetails.query(project.id).key);
+      store.projectWorkstreams.engine
+          .remove(store.projectWorkstreams.query(project.id).key);
+      expandedProjectIds.remove(project.id);
       if (!mounted) return;
       setState(() {
         snapshot = snapshot.copyWith(
@@ -541,6 +536,10 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     if (!confirmed) return;
     try {
       await widget.dataSource.deleteProject(projectId: projectId);
+      store.syncEngine.remove(store.projectDetails.query(projectId).key);
+      store.projectWorkstreams.engine
+          .remove(store.projectWorkstreams.query(projectId).key);
+      expandedProjectIds.remove(projectId);
       if (!mounted) return;
       setState(() {
         snapshot = snapshot.copyWith(

@@ -56,6 +56,9 @@ void main() {
   const baseShellContext = AxShellContext(
     navigation: AxNavigation.workstream('p-1', 'ws-1'),
     projects: [testProject],
+    workstreamsByProject: {
+      'p-1': [wsRunning, wsIdle]
+    },
     selectedProject: testProject,
     selectedWorkstream: wsRunning,
     expandedProjectIds: {'p-1'},
@@ -295,7 +298,7 @@ void main() {
   });
 
   group('Phase 13: Project Tree Interaction & Workstream Selection', () {
-    testWidgets('project row expands/collapses and navigates independently',
+    testWidgets('selecting expanded parent preserves expansion and navigates',
         (tester) async {
       String? toggledProjectId;
       AxNavigation? navigated;
@@ -325,12 +328,12 @@ void main() {
         findsOneWidget,
       );
 
-      // Tapping the project item in project tree toggles expansion and navigates to the project
+      // Selecting the expanded parent from a Workstream preserves expansion.
       await tester.tap(find.descendant(
         of: find.byType(ProjectTree),
         matching: find.text('Conclave AX'),
       ));
-      expect(toggledProjectId, 'p-1');
+      expect(toggledProjectId, isNull);
       expect(navigated, const AxNavigation.project('p-1'));
     });
 

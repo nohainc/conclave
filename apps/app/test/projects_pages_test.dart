@@ -482,9 +482,7 @@ void main() {
                     find.widgetWithIcon(IconButton, Icons.send_rounded))
                 .onPressed,
             isNull);
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
         await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
         expect(sends, 1);
         data.requests = [
           const AxWorkRequest(
@@ -1234,7 +1232,7 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets('Work history reloads from Cloud after a realtime reconnect gap',
+  testWidgets('Work history uses slow fallback and scoped reconnect discovery',
       (tester) async {
     final events = StreamController<Map<String, dynamic>>.broadcast();
     addTearDown(events.close);
@@ -1294,7 +1292,7 @@ void main() {
       )
     ];
     // A missing WebSocket notification must not leave the reply hidden.
-    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(seconds: 15));
     await tester.pumpAndSettle();
     expect(find.text('The requested change is complete.'), findsOneWidget);
     expect(find.text('Implement'), findsNothing);
@@ -2260,6 +2258,21 @@ class _PinnedHistoryDataSource extends _WorkHistoryDataSource {
 class _SlowSubmissionDataSource extends _WorkFormDataSource {
   final ready = Completer<List<String>>();
   List<AxWorkRequest> requests = [];
+  @override
+  Future<AxWorkRequestStatus> loadWorkRequest(
+      {required String workRequestId}) async {
+    final value = requests.firstWhere((r) => r.id == workRequestId);
+    return AxWorkRequestStatus(
+        id: value.id,
+        status: value.status,
+        text: value.finalText,
+        originalRequest: value.prompt,
+        workflowId: value.workflowId,
+        workflowVersion: value.workflowVersion,
+        createdAt: value.createdAt,
+        steps: value.steps);
+  }
+
   @override
   Future<List<String>> validateWorkRequestEligibility(
           {required String workstreamId,
