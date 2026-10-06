@@ -30,7 +30,7 @@ A Workstream contains:
 - access policy;
 - default Workflow;
 - Primary Workspace;
-- logical Worker bindings for Direct and Workflow Steps;
+- logical Worker bindings for Work (`direct`) and Workflow Steps;
 - persistent isolated working directory.
 
 ### Discuss

@@ -51,7 +51,7 @@ or HTML documents) become a concrete product requirement.
 
 Cloud encodes durable Work session identities as `work-session-` plus a SHA-256
 hex digest. Keys satisfy the Engine's opaque identifier contract
-(`[A-Za-z0-9_-]+`, at most 256 characters). Direct keeps the same identity across
+(`[A-Za-z0-9_-]+`, at most 256 characters). Work keeps the same identity across
 requests in a Workstream; Chat has a separate Workstream-scoped identity and
 other Steps remain request-scoped. Fresh retries get
 distinct keys. This changes no persisted schema; previously rejected colon-based
@@ -247,14 +247,14 @@ policy to provider arguments. The current ChatGPT Profile expands
 when resuming a conversation. No additional provider-specific flag is used.
 
 Cloud renders prompts through the single Work v1 prompt renderer. Its fixed
-profiles are `research:v1`, `plan:v1`, `implement:v1`, `test:v1`, and
+profiles are `chat:v1`, `research:v1`, `plan:v1`, `implement:v1`, `test:v1`, and
 `verify:v1`. A Workflow step's `promptProfileVersion` selects exactly one
 matching profile. The renderer consumes structured request text, attachments,
 Project and Workstream instructions, step-specific instructions, authorized
 upstream step results, and current Workstream context. It applies bounded input
-limits. Direct is the one-step fast path: it preserves the submitted request
+limits. Work (`direct:v2`) is the writable one-step fast path: it preserves the submitted request
 as the first prompt content, then adds only configured Project, Workstream, and
-Direct instructions plus a short hidden instruction to act in the authorized
+Work instructions (Direct for historical v1) plus a short hidden instruction to act in the authorized
 Workstream and return the result. Other Workflows begin with their fixed
 StepKind instructions and include only the authorized handoff data for that
 Step.
@@ -296,8 +296,8 @@ Work Request even if membership or display-name data later changes.
 The renderer passes only these inputs for each step. It does not append prior
 Worker messages or conversational sessions.
 
-Direct uses one durable logical session scope per Workstream's Direct binding:
-`workstream:<workstreamId>:direct:work-conversation`. This lets later Direct
+Work uses one durable logical session scope per Workstream's `direct` binding:
+`workstream:<workstreamId>:direct:work-conversation`. This lets later Work
 requests continue the same Work conversation. Chat uses its own durable base,
 `workstream:<workstreamId>:chat:conversation`, across requests in that Workstream.
 Chat and Work never share a session key, even when their Worker/model match.
@@ -412,7 +412,7 @@ after another explicit user action.
 Step identity and task role are the canonical `StepKind`; there is no separate
 free-form `role`. A step's `executionMode`, read/write policy, timeout, prompt
 profile, order, and dependencies are product-owned values. The current fixed
-execution modes are `stateless_read` for `research` and `plan`, and
+execution modes are `stateless_read` for `chat`, `research` and `plan`, and
 `stateful_workstream` for `implement`, `test`, and `verify`. A stateful
 Work Request is one whose selected Workflow contains a `stateful_workstream`
 Step. Cloud acquires one Workstream runtime lease before that request starts and
@@ -497,6 +497,23 @@ Cloud serves the authoritative definitions at `GET /api/workflows/catalog` as
 display and selection rather than maintaining a second Workflow list. Backend
 validation and tests use the same shared core catalog.
 
+AX's Work composer offers the newest catalog version of each stable ID:
+Chat, Work, Research, Plan & Implement, Implement & Verify, and Full Cycle.
+Work is the display name of `direct:v2`; submitted IDs remain `chat` or `direct`.
+Settings expose independent Chat and Work bindings followed by Research, Plan,
+Implement, Test and Verify, using dynamically registered Workers. AI Chat is a
+Work Request Workflow, separate from the human/team Chat discussion tab and its
+Discussion message storage. Both AI Chat and Work responses use the shared
+`ConclaveMarkdownBody`; authored Markdown source remains unchanged.
+
+History and Run details project the Workflow name from the immutable saved
+snapshot, falling back to the exact versioned catalog entry when necessary.
+AX carries this historical name in its Work Request read model and uses the
+exact ID/version catalog lookup only for older responses without a name. Thus
+`direct:v1` remains Direct, `direct:v2` is Work, and `chat:v1` is Chat even when
+the current catalog has changed or has not loaded. Names never come from the
+current Workflow ID alone.
+
 Submission also captures a versioned execution snapshot in `snapshot_json`:
 
 ```ts
@@ -528,12 +545,12 @@ The safe Worker inventory exposes the closed input capability set `text`,
 `image`, `audio`, `video`, and `local_file`, derived from each Worker release's
 declared capabilities. The composer eligibility check verifies text support
 for every selected Step, then checks attachment modalities for the bound
-Research and Implement Workers (Direct uses the Implement binding). Local
+Chat, Research and Implement Workers (Work uses the `direct` binding). Local
 files require `local_file` plus the matching text/image/audio/video capability
 when their MIME type identifies one. The Workspace grant must allow each
 required input capability. Incompatibility is reported before submission with
 the affected Step, Worker, and input type. URL references are ordinary text
-references and do not request provider fetching by Workspace. Direct,
+references and do not request provider fetching by Workspace. Chat, Work,
 Research, and Implement receive safe relative file references; Plan receives
 attachment metadata, and Test/Verify use their defined handoff inputs.
 Workstream-local execution materializes file bytes under
@@ -569,17 +586,17 @@ rebootstrapped rather than upgraded through a compatibility layer.
 
 ## Workstream Work configuration
 
-### Direct execution path
+### Work execution path
 
-Direct Work Requests use the configured `direct` Worker binding and hold a
-Workstream runtime lease for the request because Direct contains the stateful
+Work Requests selecting Work use the configured `direct` Worker binding and hold a
+Workstream runtime lease for the request because Work contains the stateful
 `implement` Step. Cloud dispatches the assignment to
 the selected Worker's Workspace; the Workspace starts the generic CLI Worker
 Engine, which resolves the signed Tool Profile and starts the provider CLI.
 Work Requests, step progress, logical Worker and Engine/Profile/provider CLI attribution,
 timing, and final results are available to AX through the Workstream history
 API. The timeline reconstructs from Cloud after page reload or browser restart,
-and each Run retains its original request text. Direct requests use the same
+and each Run retains its original request text. Work requests use the same
 assignment dispatcher and Workspace execution path as Workflow Steps.
 
 Work lifecycle changes publish durable Cloud realtime events: `work_request`

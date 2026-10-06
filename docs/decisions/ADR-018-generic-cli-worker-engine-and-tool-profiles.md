@@ -497,6 +497,7 @@ No profile editor is exposed in v8.
 Architecture v8 does not change the constrained Work v1 model:
 
 ~~~text
+Chat
 Research
 Plan
 Implement
@@ -507,7 +508,8 @@ Verify
 or built-in Workflows:
 
 ~~~text
-Direct
+Chat
+Work
 Research
 Plan & Implement
 Implement & Verify
@@ -522,6 +524,11 @@ Verify    -> Gemini
 ~~~
 
 The profile/engine implementation is resolved locally beneath that abstraction.
+
+Chat is read-only with a durable Workstream provider conversation and no mutation
+lease. Work is the display name of current `direct:v2`, with writable mutation
+coordination and a separate durable conversation. Historical `direct:v1` remains
+Direct; persisted `direct` bindings and identifiers are unchanged.
 
 ## 20. Engine families remain extensible
 

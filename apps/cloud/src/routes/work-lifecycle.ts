@@ -4,6 +4,7 @@ import {
 } from "../assignment-dispatcher.js";
 import {
   STEP_KINDS,
+  BUILTIN_WORKFLOW_CATALOG,
   type BuiltinWorkflowDefinition,
   type StepKind,
 } from "@conclave/core";
@@ -24,6 +25,18 @@ import {
 import type { SecurityEnv } from "./handlers.js";
 
 import { createOrGetRun } from "./work-creation.js";
+
+function historicalWorkflowName(
+  snapshot: { readonly name?: unknown },
+  workflowId: unknown,
+  workflowVersion: unknown,
+): string {
+  return typeof snapshot.name === "string" && snapshot.name.trim()
+    ? snapshot.name
+    : (BUILTIN_WORKFLOW_CATALOG[
+        `${String(workflowId)}:v${Number(workflowVersion)}`
+      ]?.name ?? String(workflowId));
+}
 
 export async function handleRetryWorkRequest(
   request: Request,
@@ -517,10 +530,11 @@ export async function handleGetWorkRequest(
       status: String(row.status),
       workflowId: String(row.workflowId),
       workflowVersion: Number(row.workflowVersion),
-      workflowName:
-        typeof workflow.name === "string"
-          ? workflow.name
-          : String(row.workflowId),
+      workflowName: historicalWorkflowName(
+        workflow,
+        row.workflowId,
+        row.workflowVersion,
+      ),
       originalRequest: String(input.originalRequest ?? input.request ?? ""),
       createdAt: String(row.createdAt),
       updatedAt: String(row.updatedAt),
@@ -820,6 +834,11 @@ export async function handleListWorkRequests(
       prompt: String(input.originalRequest ?? input.request ?? ""),
       workflowId: String(row.workflowId),
       workflowVersion: Number(row.workflowVersion),
+      workflowName: historicalWorkflowName(
+        workflow,
+        row.workflowId,
+        row.workflowVersion,
+      ),
       status: String(row.status),
       createdAt: String(row.createdAt),
       updatedAt: String(row.updatedAt),

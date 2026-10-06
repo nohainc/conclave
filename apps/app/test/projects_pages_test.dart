@@ -11,6 +11,122 @@ import 'ax_fixture_data.dart';
 import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
 
 void main() {
+  testWidgets('history names remain accurate without a loaded catalog',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: WorkstreamPage(
+      initialTab: 1,
+      project: const AxProject(
+          id: 'project-1',
+          name: 'Project',
+          branch: '',
+          lastActivity: '',
+          role: 'owner'),
+      workstream: const AxWorkstream(
+          id: 'stream-1',
+          projectId: 'project-1',
+          name: 'Stream',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      dataSource: _SnapshotHistoryDataSource(),
+      onBackToProject: _noop,
+      onArchive: _noop,
+    ))));
+    await tester.pumpAndSettle();
+    for (final name in ['Direct', 'Work', 'Chat']) {
+      expect(find.text('· $name'), findsOneWidget);
+    }
+  });
+  testWidgets('dynamic AI workflow menu includes Chat and Work with Markdown',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final data = _CurrentWorkflowUiDataSource();
+    final submission = Completer<String>();
+    String? sentWorkflow;
+    String? sentSource;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: WorkstreamPage(
+      initialTab: 1,
+      project: const AxProject(
+          id: 'project-1',
+          name: 'Project',
+          branch: '',
+          lastActivity: '',
+          role: 'owner'),
+      workstream: const AxWorkstream(
+          id: 'stream-1',
+          projectId: 'project-1',
+          name: 'Stream',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      dataSource: data,
+      onBackToProject: _noop,
+      onArchive: _noop,
+      onRunWork: (source, workflow, _) {
+        sentSource = source;
+        sentWorkflow = workflow;
+        return submission.future;
+      },
+    ))));
+    await tester.pumpAndSettle();
+    final markdown = tester
+        .widgetList<ConclaveMarkdownBody>(find.byType(ConclaveMarkdownBody))
+        .map((body) => body.data)
+        .toList();
+    expect(markdown, containsAll(['**Chat answer**', '**Work answer**']));
+    await tester.tap(find.byTooltip('Add attachments or choose workflow'));
+    await tester.pumpAndSettle();
+    final options = tester
+        .widgetList<CheckedPopupMenuItem<String>>(
+            find.byType(CheckedPopupMenuItem<String>))
+        .toList();
+    expect(options.map((item) => item.value), [
+      'chat:v1',
+      'direct:v2',
+      'research:v1',
+      'plan_implement:v1',
+      'implement_verify:v1',
+      'full_cycle:v1',
+    ]);
+    expect(
+        options
+            .map((item) => (item.child as Tooltip).child)
+            .cast<Text>()
+            .map((text) => text.data),
+        [
+          'Chat',
+          'Work',
+          'Research',
+          'Plan & Implement',
+          'Implement & Verify',
+          'Full Cycle',
+        ]);
+    expect(find.text('Direct'), findsNothing);
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is CheckedPopupMenuItem<String> && widget.value == 'chat:v1'));
+    await tester.pumpAndSettle();
+    const source = '## Question\n\n**Explain** this `code`.';
+    await tester.enterText(find.byType(TextField).first, source);
+    await tester.tap(find.byTooltip('Run Work'));
+    await tester.pumpAndSettle();
+    expect(sentWorkflow, 'chat');
+    expect(sentSource, source);
+    expect(data.discussionWrites, 0);
+    await tester.pumpWidget(const SizedBox());
+    submission.complete('chat-saved');
+    await tester.pump();
+  });
   testWidgets('Chat and Work independently save dynamic Workers and models',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
@@ -43,6 +159,27 @@ void main() {
                 )))));
     await tester.pumpAndSettle();
     expect(find.text('Direct'), findsNothing);
+    final workflowDropdown = tester.widget<DropdownButton<String>>(
+        find.byType(DropdownButton<String>).first);
+    expect(workflowDropdown.items!.map((item) => item.value), [
+      'chat',
+      'direct',
+      'research',
+      'plan_implement',
+      'implement_verify',
+      'full_cycle',
+    ]);
+    for (final label in [
+      'Chat',
+      'Work',
+      'Research',
+      'Plan',
+      'Implement',
+      'Test',
+      'Verify'
+    ]) {
+      expect(find.text(label), findsWidgets);
+    }
     for (final id in [
       'chat',
       'direct',
@@ -615,7 +752,7 @@ void main() {
     addTearDown(() => tester.binding.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, null));
     const message =
-        'Cannot run Direct\n• The Project Workspace grant does not allow the access this Step needs.';
+        'Cannot run Work\n• The Project Workspace grant does not allow the access this Step needs.';
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: SizedBox(
@@ -881,7 +1018,7 @@ void main() {
         lessThan(tester
             .getTopLeft(find.byTooltip('Add attachments or choose workflow'))
             .dy));
-    expect(find.text('Direct'), findsWidgets);
+    expect(find.text('Work'), findsWidgets);
     final menu = find
         .ancestor(of: find.text('Add files'), matching: find.byType(Material))
         .first;
@@ -891,13 +1028,13 @@ void main() {
         (tester.widget<Material>(menu).shape as RoundedRectangleBorder)
             .borderRadius,
         BorderRadius.circular(10));
-    final directOption = find.descendant(
+    final workOption = find.descendant(
         of: find.byType(CheckedPopupMenuItem<String>),
-        matching: find.text('Direct'));
-    await tester.ensureVisible(directOption);
+        matching: find.text('Work'));
+    await tester.ensureVisible(workOption);
     await tester.pumpAndSettle();
     await tester.tap(find.ancestor(
-        of: directOption, matching: find.byType(CheckedPopupMenuItem<String>)));
+        of: workOption, matching: find.byType(CheckedPopupMenuItem<String>)));
     await tester.pumpAndSettle();
     const markdownPrompt =
         '  ## Implementation\n\n- **Add tests**\n\n```dart\nfinal ready = true;\n```\n';
@@ -1986,9 +2123,9 @@ class _WorkFormDataSource extends AxFixtureDataSource {
   Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async => [
         AxBuiltinWorkflow.fromJson({
           'id': 'direct',
-          'version': 1,
-          'name': 'Direct',
-          'description': 'Complete a request directly.',
+          'version': 2,
+          'name': 'Work',
+          'description': 'Implement the requested work.',
           'steps': [
             {'kind': 'implement', 'order': 0},
           ],
@@ -2157,10 +2294,88 @@ class _VersionedWorkflowDataSource extends _WorkFormDataSource {
       ];
 }
 
+class _CurrentWorkflowUiDataSource extends _VersionedWorkflowDataSource {
+  int discussionWrites = 0;
+
+  @override
+  Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async => [
+        for (final entry in [
+          ['chat', 1, 'Chat', 'chat'],
+          ['direct', 1, 'Direct', 'implement'],
+          ['direct', 2, 'Work', 'implement'],
+          ['research', 1, 'Research', 'research'],
+          ['plan_implement', 1, 'Plan & Implement', 'plan'],
+          ['implement_verify', 1, 'Implement & Verify', 'implement'],
+          ['full_cycle', 1, 'Full Cycle', 'research'],
+        ])
+          AxBuiltinWorkflow.fromJson({
+            'id': entry[0],
+            'version': entry[1],
+            'name': entry[2],
+            'description': 'Dynamic catalog workflow',
+            'steps': [
+              {'kind': entry[3], 'order': 0}
+            ],
+          }),
+      ];
+
+  @override
+  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests(
+          {required String workstreamId, bool activeOnly = false}) async =>
+      [
+        for (final id in ['chat', 'direct'])
+          AxWorkRequest(
+            id: '$id-result',
+            requestedByName: 'Owner',
+            requestedByUserId: 'user-owner',
+            prompt: '**Question**',
+            workflowId: id,
+            workflowVersion: id == 'chat' ? 1 : 2,
+            status: 'completed',
+            createdAt: '2026-10-06T00:00:00Z',
+            steps: const [],
+            finalText: id == 'chat' ? '**Chat answer**' : '**Work answer**',
+          ),
+      ];
+
+  @override
+  Future<AxDiscussionMessage> sendDiscussionMessage(
+      {required String workstreamId,
+      required String text,
+      List<String> references = const []}) {
+    discussionWrites++;
+    return super.sendDiscussionMessage(
+        workstreamId: workstreamId, text: text, references: references);
+  }
+}
+
+class _SnapshotHistoryDataSource extends AxFixtureDataSource {
+  @override
+  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests(
+          {required String workstreamId, bool activeOnly = false}) async =>
+      [
+        for (final entry in [
+          ['direct', 1, 'Direct'],
+          ['direct', 2, 'Work'],
+          ['chat', 1, 'Chat']
+        ])
+          AxWorkRequest.fromJson({
+            'id': '${entry[0]}-${entry[1]}',
+            'workflowId': entry[0],
+            'workflowVersion': entry[1],
+            'workflowName': entry[2],
+            'status': 'completed',
+            'createdAt': '2026-10-06T00:00:00Z',
+            'prompt': 'History request',
+            'finalText': 'History answer',
+          }),
+      ];
+}
+
 class _IndependentBindingsDataSource extends _GenericWorkerConfigDataSource {
   @override
   Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() =>
-      _VersionedWorkflowDataSource().loadBuiltinWorkflowCatalog();
+      _CurrentWorkflowUiDataSource().loadBuiltinWorkflowCatalog();
   @override
   Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => [
         ...await super.loadWorkspaceWorkerInventory(),

@@ -300,6 +300,7 @@ describe("Work v1 acceptance through the shared assignment dispatcher", () => {
           workRequestId: "request-v8-acceptance",
           sessionPolicy: "durable_session",
           readOnly: definition.steps[index]!.readWritePolicy === "read_only",
+          executionClass: definition.steps[index]!.executionMode,
         });
         const prompt = String(assignment.objective);
         for (const inputKind of definition.steps[index]!.inputsFrom) {

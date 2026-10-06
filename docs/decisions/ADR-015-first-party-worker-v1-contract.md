@@ -37,7 +37,7 @@ Cloud receives only the safe Worker inventory projection. It owns scheduling sta
 
 ### Assignment behavior
 
-Workstream configuration binds logical Worker IDs to the fixed Work v1 Direct/Step slots. A binding does not contain a provider executable path, Profile payload, secret, or runtime version. Workspace resolves the selected logical Worker to an admitted Profile and runs it through the generic Engine.
+Workstream configuration binds logical Worker IDs to the fixed Work v1 Work (`direct`)/Step slots. A binding does not contain a provider executable path, Profile payload, secret, or runtime version. Workspace resolves the selected logical Worker to an admitted Profile and runs it through the generic Engine.
 
 ## Consequences
 

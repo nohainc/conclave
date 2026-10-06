@@ -68,6 +68,7 @@ class SqliteD1 {
     for (const name of [
       "0006_chat_workflow_admission.sql",
       "0007_chat_profile_starter_attestation.sql",
+      "0008_codex_compatibility_approval_policy.sql",
     ]) {
       this.sqlite.exec(
         readFileSync(

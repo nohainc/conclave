@@ -93,11 +93,18 @@ triggering immediate history refresh. It subscribes to the active Workstream
 and resynchronizes after reconnecting. While Work is queued, running, or waiting,
 a five-second HTTP refresh also reconciles progress and completion if a live
 notification is missed. The fallback stops after completion or leaving the page.
-To enable Direct, open **Project → Workspaces → Edit Workspace access** (shield
+To enable Work, open **Project → Workspaces → Edit Workspace access** (shield
 icon), select **Read repository files** and **Change repository files**, then
 confirm. Test steps also require **Execute commands and tests**. Both Workspace
 connection flows present these choices explicitly; permissions are never
 automatically widened. Existing connections retain their permissions.
+
+The Work composer loads the current Workflow catalog: Chat, Work, Research,
+Plan & Implement, Implement & Verify, and Full Cycle. Work displays `direct:v2`;
+historical `direct:v1` requests still display Direct. Choose Chat here for an AI
+conversation: it is read-only, resumes a separate Workstream provider session,
+and acquires no mutation lease. Work is writable and uses mutation coordination.
+The team Chat discussion tab remains a separate collaboration surface.
 
 The package intentionally has no native desktop targets. Desktop execution is
 provided by Conclave Workspace; Conclave AX communicates with Cloud through

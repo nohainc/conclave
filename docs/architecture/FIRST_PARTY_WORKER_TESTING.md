@@ -34,10 +34,16 @@ CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/path/to/evidence \
   dart test test/tool_profile_real_acceptance_test.dart
 ~~~
 
-From `apps/workspace`, the live assignment suite covers Direct, Plan & Implement,
+From `apps/workspace`, the live assignment suite covers Work (`direct`), Plan & Implement,
 Implement & Verify, and Full Cycle for both logical Workers. It uses provider
 allowance and does not replace the evidence-producing release acceptance
 suite.
+
+Chat adds a distinct read-only qualification requirement. Normal and compatibility
+Profile layouts must preserve policy on both new and resumed conversations.
+Fixture coverage is recorded in [Chat/Work regression coverage](../acceptance/CHAT_WORKFLOW.md);
+it does not replace live-provider sandbox qualification. Historical evidence
+continues to use the Workflow names and versions that were tested.
 
 ~~~sh
 CONCLAVE_TEST_REAL_PROFILE_CHATGPT=1 \

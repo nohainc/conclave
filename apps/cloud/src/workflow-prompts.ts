@@ -143,7 +143,9 @@ export function renderWorkStepPrompt(
         boundedText(inputs.workstreamInstructions, MAX_SECTION_CHARS),
       ),
       section(
-        "Additional Direct instructions",
+        workflow.version === 1
+          ? "Additional Direct instructions"
+          : "Additional Work instructions",
         boundedText(inputs.stepInstructions?.[step.kind], MAX_SECTION_CHARS),
       ),
     ].filter((value) => value.length > 0);

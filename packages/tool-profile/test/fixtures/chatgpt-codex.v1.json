@@ -212,6 +212,8 @@
     {
       "providerVersion": { "min": "0.180.0", "maxExclusive": "0.181.0" },
       "executionArguments": [
+        "--ask-for-approval",
+        "never",
         "exec",
         { "sandboxPolicyMapping": true },
         { "modelArguments": true },

@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { workStepSessionKey } from "../src/work-session-key.js";
 
-it("uses Engine-safe opaque keys and preserves the Direct conversation across requests", () => {
+it("uses Engine-safe opaque keys and preserves the Work/direct conversation across requests", () => {
   const params = {
     workBindingId: "direct" as const,
     workstreamId: "workstream-1",

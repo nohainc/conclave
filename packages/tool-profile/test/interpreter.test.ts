@@ -58,6 +58,12 @@ describe("Tool Profile v1 pure interpreter", () => {
             layout,
           );
           const index = args.indexOf("--sandbox");
+          const approval = args.indexOf("--ask-for-approval");
+          expect(approval).toBeGreaterThanOrEqual(0);
+          expect(args[approval + 1]).toBe("never");
+          expect(
+            args.filter((arg) => arg === "--ask-for-approval"),
+          ).toHaveLength(1);
           expect(index).toBeGreaterThanOrEqual(0);
           expect(args[index + 1]).toBe(sandbox);
           expect(args.filter((arg) => arg === "--sandbox")).toHaveLength(1);

@@ -18,13 +18,17 @@ it("provisions only the missing baseline starter table and preserves Drafts and 
         ),
         "utf8",
       ),
-      readFileSync(
-        new URL(
-          "../apps/cloud/migrations-v8/0007_chat_profile_starter_attestation.sql",
-          import.meta.url,
-        ),
-        "utf8",
-      ),
+      [
+        "0007_chat_profile_starter_attestation.sql",
+        "0008_codex_compatibility_approval_policy.sql",
+      ]
+        .map((name) =>
+          readFileSync(
+            new URL(`../apps/cloud/migrations-v8/${name}`, import.meta.url),
+            "utf8",
+          ),
+        )
+        .join("\n"),
     );
     db.exec(sql);
     const canonical = JSON.parse(

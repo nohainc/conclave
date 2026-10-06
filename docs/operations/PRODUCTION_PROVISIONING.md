@@ -55,7 +55,7 @@ and indexes with the v8 canonical contract while preserving all existing rows.
 ## Required deployment order
 
 Before deploying Chat, apply ordered migrations through
-`0007_chat_profile_starter_attestation.sql`. Back up the database and pause new
+`0008_codex_compatibility_approval_policy.sql`. Back up the database and pause new
 Work submissions while applying the migrations. `0006_chat_workflow_admission.sql`
 must run as one atomic migration, never statement by statement: D1 defers foreign
 key checks but still performs cascading deletes. The migration saves and restores
@@ -102,6 +102,17 @@ Never pass these secrets to Flutter through `--dart-define`. The browser uses
 the Better Auth HttpOnly session cookie and same-origin `/api` requests.
 
 ## Release validation
+
+Validate both execution modes after applying migrations and deploying compatible
+clients. In AX's Work composer, Chat should resume the Workstream's Chat provider
+conversation with read-only Profile policy and no mutation lease. Work should
+resume a separate conversation with writable policy and lease/fencing. Confirm
+that old `direct:v1` history still displays Direct and new `direct:v2` displays
+Work. The persisted ID `direct` must remain unchanged. Research, Plan, Test and
+Verify retain their existing analysis/validation semantics and Step session scopes.
+Only a Profile qualified for enforceable read-only execution may run Chat;
+the current Antigravity starter is not eligible. Preserve signed releases and
+qualify a successor when their policy needs correction.
 
 After deployment, run the
 [Workspace desktop lifecycle release validation](WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md),

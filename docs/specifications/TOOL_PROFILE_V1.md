@@ -74,6 +74,9 @@ The Cloud starter after ordered migrations must contain the same payload; the
 provisioning test checks equality and the acceptance manifest's canonical
 reference. The immutable baseline retains its original seed;
 `0007_chat_profile_starter_attestation.sql` updates only that unchanged template.
+`0008_codex_compatibility_approval_policy.sql` preserves explicit
+`--ask-for-approval never` in the compatibility argument layout, updating only
+the unchanged official starter from the preceding migration.
 Profile Lab clones the optional Cloud starter rather than maintaining another
 provider payload. Published releases and historical acceptance evidence remain
 immutable when a development starter changes.

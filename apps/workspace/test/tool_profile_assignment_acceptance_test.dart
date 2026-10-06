@@ -12,9 +12,7 @@ void main() {
     final enabled = Platform.environment[profile.optInVariable] == '1';
     group('live ${profile.workerTypeId} assignment acceptance', () {
       test(
-        profile.workerTypeId == 'chatgpt'
-            ? 'Direct → ChatGPT'
-            : 'Direct → Gemini',
+        profile.workerTypeId == 'chatgpt' ? 'Work → ChatGPT' : 'Work → Gemini',
         skip: enabled
             ? false
             : 'Set ${profile.optInVariable}=1 to use provider allowance',

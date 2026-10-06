@@ -10,8 +10,7 @@ import 'package:test/test.dart';
 import 'support/assignment_worker_fixture.dart';
 
 void main() {
-  test('desktop lifecycle wiring executes Direct with fencing enabled',
-      () async {
+  test('desktop lifecycle wiring executes Work with fencing enabled', () async {
     final root = await Directory.systemTemp.createTemp('direct-runtime-');
     addTearDown(() => root.delete(recursive: true));
     var executions = 0;
@@ -26,7 +25,7 @@ void main() {
         return WorkerResult(
             requestId: 'result-1',
             assignmentId: context.assignmentId,
-            output: 'Direct completed');
+            output: 'Work completed');
       },
     );
     WorkspaceAssignmentContext context(int fence) => WorkspaceAssignmentContext(
@@ -48,8 +47,7 @@ void main() {
             'fencingToken': fence,
           },
         );
-    expect(
-        (await handler.call(context(2))).output?['text'], 'Direct completed');
+    expect((await handler.call(context(2))).output?['text'], 'Work completed');
     await expectLater(
         handler.call(context(1)), throwsA(isA<WorkstreamMutationViolation>()));
     expect(executions, 1);

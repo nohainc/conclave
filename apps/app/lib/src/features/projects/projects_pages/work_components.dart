@@ -220,8 +220,11 @@ class _WorkComposer extends StatelessWidget {
                           inputBox.size.height;
                   final availableHeight =
                       (anchorBottom - 8).clamp(0.0, overlay.size.height);
-                  final menuHeight = ((workflowCatalog.length + 2) * 48.0 + 32)
-                      .clamp(0.0, availableHeight);
+                  final menuHeight =
+                      ((_currentWorkflowVersions(workflowCatalog).length + 2) *
+                                  48.0 +
+                              32)
+                          .clamp(0.0, availableHeight);
                   final value = await showMenu<String>(
                     context: buttonContext,
                     popUpAnimationStyle: AnimationStyle.noAnimation,
@@ -413,6 +416,7 @@ class _WorkTimelineCard extends StatelessWidget {
   final Future<void> Function(String)? onCancelRun;
 
   String get _workflowName =>
+      request.workflowName ??
       workflowCatalog
           .where((workflow) =>
               workflow.id == request.workflowId &&

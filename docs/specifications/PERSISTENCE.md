@@ -23,6 +23,9 @@ additions; review and align those additions before retrying, never delete them.
 [`0007_chat_profile_starter_attestation.sql`](../../apps/cloud/migrations-v8/0007_chat_profile_starter_attestation.sql)
 updates only the unchanged official Codex development starter. It preserves
 operator-edited templates, Drafts and published releases.
+[`0008_codex_compatibility_approval_policy.sql`](../../apps/cloud/migrations-v8/0008_codex_compatibility_approval_policy.sql)
+synchronizes explicit non-interactive approval policy across the Codex starter's
+argument layouts, again preserving customized templates and published releases.
 [`0003_workspace_installations.sql`](../../apps/cloud/migrations-v8/0003_workspace_installations.sql)
 introduces stable installation ownership independently from runtime
 credentials. It seeds ownership from runtime identity history and release audit

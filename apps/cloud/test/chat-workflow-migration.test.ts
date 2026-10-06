@@ -173,6 +173,7 @@ describe("Chat schema migration with foreign keys enabled", () => {
         .prepare("SELECT * FROM tool_profile_starter_templates")
         .all();
       apply(db, sql("0007_chat_profile_starter_attestation.sql"));
+      apply(db, sql("0008_codex_compatibility_approval_policy.sql"));
       expect(
         db.prepare("SELECT * FROM tool_profile_starter_templates").all(),
       ).toEqual(before);

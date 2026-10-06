@@ -263,6 +263,11 @@ describe("Workstream domain", () => {
     expect(BUILTIN_WORKFLOWS.direct.steps).toEqual(
       BUILTIN_WORKFLOW_CATALOG["direct:v1"]!.steps,
     );
+    expect(BUILTIN_WORKFLOWS.direct.steps[0]).toMatchObject({
+      kind: "implement",
+      executionMode: "stateful_workstream",
+      readWritePolicy: "write_workstream",
+    });
     expect(() =>
       validateBuiltinWorkflowDefinition({
         ...BUILTIN_WORKFLOW_CATALOG["direct:v1"]!,

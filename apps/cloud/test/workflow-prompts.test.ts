@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_WORKFLOWS, type StepKind } from "@conclave/core";
+import {
+  BUILTIN_WORKFLOWS,
+  BUILTIN_WORKFLOW_CATALOG,
+  type StepKind,
+} from "@conclave/core";
 import {
   renderWorkStepPrompt,
   workStepPromptInputs,
@@ -20,6 +24,44 @@ const stepResult = (text: string) => ({
 });
 
 describe("Work v1 prompt profiles", () => {
+  it.each([1, 2])(
+    "uses versioned presentation for direct:v%s instructions",
+    (version) => {
+      const workflow = BUILTIN_WORKFLOW_CATALOG[`direct:v${version}`]!;
+      const prompt = renderWorkStepPrompt(workflow, workflow.steps[0]!, {
+        originalRequest: "Implement this change.",
+        stepInstructions: { implement: "Keep existing behavior." },
+      });
+      expect(prompt).toContain(
+        `Additional ${version === 1 ? "Direct" : "Work"} instructions`,
+      );
+      expect(prompt).toContain("Keep existing behavior.");
+    },
+  );
+  it.each(["chat", "direct"] as const)(
+    "preserves Markdown in %s while keeping its execution intent",
+    (id) => {
+      const workflow = BUILTIN_WORKFLOWS[id];
+      const source =
+        "## Request\n\n**Bold** and `code`.\n\n```ts\nconst ok = true;\n```";
+      const prompt = renderWorkStepPrompt(workflow, workflow.steps[0]!, {
+        originalRequest: source,
+      });
+      expect(prompt).toContain(source);
+      if (id === "chat") {
+        expect(prompt).toContain("This is a read-only interaction");
+        expect(prompt).toContain("Do not perform implementation work");
+        expect(prompt).not.toContain(
+          "Carry out the request in the current Workstream",
+        );
+      } else {
+        expect(prompt).toContain(
+          "Carry out the request in the current Workstream",
+        );
+        expect(prompt).not.toContain("This is a read-only interaction");
+      }
+    },
+  );
   it("gives Chat bounded contextual inputs and references without implementation authority", () => {
     const workflow = BUILTIN_WORKFLOWS.chat;
     const prompt = renderWorkStepPrompt(workflow, workflow.steps[0]!, {

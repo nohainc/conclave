@@ -116,6 +116,7 @@ class AxWorkRequest {
     required this.prompt,
     required this.workflowId,
     required this.workflowVersion,
+    this.workflowName,
     required this.status,
     required this.createdAt,
     required this.steps,
@@ -129,6 +130,7 @@ class AxWorkRequest {
   final String prompt;
   final String workflowId;
   final int workflowVersion;
+  final String? workflowName;
   final String status;
   final String createdAt;
   final List<AxWorkRequestStep> steps;
@@ -145,6 +147,12 @@ class AxWorkRequest {
   }
 
   factory AxWorkRequest.fromJson(Map<String, dynamic> json) {
+    final snapshot = json['workflowSnapshot'];
+    final snapshotName = snapshot is Map &&
+            snapshot['id'] == json['workflowId'] &&
+            snapshot['version'] == json['workflowVersion']
+        ? snapshot['name']
+        : null;
     final steps = (json['steps'] as List? ?? const [])
         .whereType<Map>()
         .map((item) => AxWorkRequestStep.fromJson(
@@ -160,6 +168,7 @@ class AxWorkRequest {
       prompt: json['prompt']?.toString() ?? '',
       workflowId: json['workflowId']?.toString() ?? 'direct',
       workflowVersion: json['workflowVersion'] as int? ?? 1,
+      workflowName: (snapshotName ?? json['workflowName'])?.toString(),
       status: json['status']?.toString() ?? 'queued',
       createdAt: json['createdAt']?.toString() ?? '',
       steps: steps,

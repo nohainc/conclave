@@ -21,7 +21,7 @@ are normative and checked by `scripts/verify-v8-architecture.mjs`.
 
 ## Product model
 
-- **Conclave AX** is the human application for Projects, Workstreams, Discuss, Work, Workspace grants, Worker bindings, results, and audit.
+- **Conclave AX** is the human application for Projects, Workstreams, team Chat, AI execution through Work Requests, Workspace grants, Worker bindings, results, and audit.
 - **Conclave Cloud** owns collaboration and scheduling state, the logical Worker catalog, Profile releases, and authorization. Provider credentials stay local.
 - **Conclave Workspace** owns the local Work Root, Worker readiness, Profile verification and cache, Engine supervision, cancellation, and diagnostics.
 - **Logical Workers** such as ChatGPT and Gemini are stable product identities. The Engine and Profile resolve each identity to a supported provider CLI.
@@ -29,6 +29,21 @@ are normative and checked by `scripts/verify-v8-architecture.mjs`.
 ## Work v1
 
 Conclave owns the built-in Steps and Workflows defined by the [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md). Workstreams bind logical Workers to Work (`direct:v2`) and individual Steps. Historical `direct:v1` snapshots retain the name Direct. A Work Request snapshots its Workflow, bindings, models, instructions, attachment references, and prompt-profile versions.
+
+| Workflow | Filesystem authority | Provider session | Mutation coordination |
+| --- | --- | --- | --- |
+| Chat (`chat:v1`) | Read-only conversation | Durable, scoped to Workstream Chat | Stateless request; no mutation lease |
+| Work (`direct:v2`) | Writable within authorized Workstream policy | Durable, scoped to Workstream Work | Stateful request; mutation lease and fencing |
+
+Work is the user-facing current version of the stable internal Workflow ID
+`direct`; persisted IDs and historical snapshots are never renamed for display.
+Chat and Work have separate provider sessions even when their Worker/model match.
+Research and Plan retain read-only analysis semantics. Implement remains writable;
+Test and Verify retain their existing read-only validation/review semantics and
+coordination. Their sessions remain request/Step-scoped. Tool Profiles implement
+permission policies without provider branches in Cloud, Workspace or AX.
+See the [operator workflow guide](docs/operations/WORKSTREAM_EXECUTION.md) and
+[regression coverage](docs/acceptance/CHAT_WORKFLOW.md).
 
 The runtime implementation stays below the logical Worker boundary:
 

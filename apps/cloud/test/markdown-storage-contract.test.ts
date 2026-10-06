@@ -27,12 +27,18 @@ import {
 } from "../src/routes/work-lifecycle.js";
 import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
 
-it.each([
-  BUILTIN_WORKFLOW_CATALOG["direct:v1"]!,
-  BUILTIN_WORKFLOW_CATALOG["direct:v2"]!,
-])(
-  "$name v$version history preserves the snapshot name and raw Markdown",
-  async (definition) => {
+it.each(
+  [
+    BUILTIN_WORKFLOW_CATALOG["direct:v1"]!,
+    BUILTIN_WORKFLOW_CATALOG["direct:v2"]!,
+    BUILTIN_WORKFLOW_CATALOG["chat:v1"]!,
+  ].flatMap((definition) => [
+    { definition, snapshotName: definition.name },
+    { definition, snapshotName: undefined },
+  ]),
+)(
+  "$definition.name v$definition.version history preserves names and Markdown (snapshot name: $snapshotName)",
+  async ({ definition, snapshotName }) => {
     const sqlite = new DatabaseSync(":memory:");
     sqlite.exec(`
     CREATE TABLE users(id TEXT, display_name TEXT);
@@ -62,9 +68,9 @@ it.each([
         "request-test",
         "user-owner",
         "stream-test",
-        "direct",
+        definition.id,
         definition.version,
-        JSON.stringify(definition),
+        JSON.stringify({ ...definition, name: snapshotName }),
         "{}",
         JSON.stringify({ originalRequest: source }),
         "completed",
@@ -78,7 +84,7 @@ it.each([
       .run(
         "task-test",
         "request-test",
-        "implement",
+        definition.steps[0]!.kind,
         "completed",
         JSON.stringify({ text: result }),
         null,
@@ -118,11 +124,15 @@ it.each([
         workRequests: {
           prompt: string;
           finalText: string;
+          workflowName: string;
+          workflowVersion: number;
           steps: { resultText: string }[];
         }[];
       };
       expect(body.workRequests[0]?.prompt).toBe(source);
       expect(body.workRequests[0]?.finalText).toBe(result);
+      expect(body.workRequests[0]?.workflowName).toBe(definition.name);
+      expect(body.workRequests[0]?.workflowVersion).toBe(definition.version);
       const detail = await handleGetWorkRequest(
         new Request("https://conclave.test/api/work-requests/request-test"),
         { CONCLAVE_DB: db } as unknown as Parameters<

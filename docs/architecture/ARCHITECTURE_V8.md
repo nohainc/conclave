@@ -772,6 +772,7 @@ independent of Engine versions, Profile releases, and provider CLI formats.
 Canonical Steps:
 
 ~~~text
+Chat
 Research
 Plan
 Implement
@@ -782,12 +783,21 @@ Verify
 Built-in Workflows:
 
 ~~~text
-Direct
+Chat
+Work
 Research
 Plan & Implement
 Implement & Verify
 Full Cycle
 ~~~
+
+Work is `direct:v2`, the current user-facing version of stable ID `direct`;
+`direct:v1` retains its immutable historical name Direct. Chat (`chat:v1`) is a
+read-only conversational Workflow: its Work Request is stateless and acquires
+no mutation lease, but its provider session is durable within the Workstream.
+Work is writable, has its own durable provider session, and participates in
+Workstream mutation coordination. Research, Plan, Test and Verify keep their
+existing semantics and request/Step session scopes. Full Cycle excludes Chat.
 
 Workstream configuration binds Steps to logical Workers, not profiles:
 
