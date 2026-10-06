@@ -1,3 +1,6 @@
+import { conditionalJson } from "./conditional-read.js";
+import { MutationIdempotency } from "./mutation-idempotency.js";
+import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
   canExecuteWorkstream,
   canManageWorkstream,
@@ -96,7 +99,7 @@ export async function handleListProjectWorkstreams(
     };
   });
   const workstreams = sortWorkstreams(raw, settings.workstreamOrder);
-  return json({ workstreams });
+  return conditionalJson(request, { workstreams });
 }
 
 export async function handleCreateWorkstream(
@@ -116,6 +119,15 @@ export async function handleCreateWorkstream(
     string,
     unknown
   >;
+  const receipt = await MutationIdempotency.from(
+    request,
+    env.CONCLAVE_DB,
+    context.userId,
+    `project:${projectId}:create-workstream`,
+    body,
+  );
+  const replay = await receipt?.replay();
+  if (replay) return replay;
   const name = requiredString(body.name, "name");
   const duplicate = await env.CONCLAVE_DB.prepare(
     `SELECT id FROM workstreams
@@ -125,6 +137,8 @@ export async function handleCreateWorkstream(
     .bind(projectId, name)
     .first<{ id: string }>();
   if (duplicate) {
+    const concurrentReplay = await receipt?.replay();
+    if (concurrentReplay) return concurrentReplay;
     throw new HttpError(
       409,
       "This Project already has a Workstream with this name",
@@ -136,38 +150,42 @@ export async function handleCreateWorkstream(
     typeof body.accessPolicy === "object" && body.accessPolicy !== null
       ? body.accessPolicy
       : DEFAULT_WORKSTREAM_ACCESS_POLICY;
-  await env.CONCLAVE_DB.prepare(
+  const mutation = env.CONCLAVE_DB.prepare(
     `INSERT INTO workstreams
        (id, project_id, name, status, access_policy_json, lead_user_id, created_at, updated_at)
        VALUES (?1, ?2, ?3, 'active', ?4, ?5, ?6, ?6)`,
-  )
-    .bind(
-      id,
-      projectId,
-      name,
-      JSON.stringify(accessPolicy),
-      context.userId,
-      now,
-    )
-    .run();
-  return json(
-    {
-      workstream: {
-        ...workstreamMetadata({
-          id,
-          projectId,
-          name,
-          status: "active",
-          accessPolicyJson: JSON.stringify(accessPolicy),
-          leadUserId: context.userId,
-          createdAt: now,
-          updatedAt: now,
-        }),
-        canConfigureWork: true,
-      },
-    },
-    { status: 201 },
+  ).bind(
+    id,
+    projectId,
+    name,
+    JSON.stringify(accessPolicy),
+    context.userId,
+    now,
   );
+  const response = {
+    workstream: {
+      ...workstreamMetadata({
+        id,
+        projectId,
+        name,
+        status: "active",
+        accessPolicyJson: JSON.stringify(accessPolicy),
+        leadUserId: context.userId,
+        createdAt: now,
+        updatedAt: now,
+      }),
+      canConfigureWork: true,
+    },
+  };
+  const write = (receipts: D1PreparedStatement[]) =>
+    publishCollaborationEvent(env, "workstream.created", projectId, id, {
+      workstreamId: id,
+      mutations: [...receipts, mutation],
+    });
+  const concurrentReplay = receipt
+    ? await receipt.commit(response, 201, write)
+    : (await write([]), null);
+  return concurrentReplay ?? json(response, { status: 201 });
 }
 
 export async function handleUpdateWorkstream(
@@ -324,23 +342,24 @@ export async function handleUpdateWorkstream(
     }
   }
   const now = new Date().toISOString();
-  await env.CONCLAVE_DB.prepare(
-    `UPDATE workstreams
+  const mutations: D1PreparedStatement[] = [];
+  mutations.push(
+    env.CONCLAVE_DB.prepare(
+      `UPDATE workstreams
      SET name = ?1, status = ?2, access_policy_json = ?3, updated_at = ?4
      WHERE id = ?5`,
-  )
-    .bind(name, status, JSON.stringify(accessPolicy), now, workstreamId)
-    .run();
+    ).bind(name, status, JSON.stringify(accessPolicy), now, workstreamId),
+  );
   if (workConfig !== undefined) {
-    await env.CONCLAVE_DB.prepare(
-      `INSERT INTO workstream_work_configs
+    mutations.push(
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO workstream_work_configs
          (workstream_id, config_json, updated_by_user_id, updated_at)
        VALUES (?1, ?2, ?3, ?4)
        ON CONFLICT(workstream_id) DO UPDATE SET config_json = excluded.config_json,
          updated_by_user_id = excluded.updated_by_user_id, updated_at = excluded.updated_at`,
-    )
-      .bind(workstreamId, JSON.stringify(workConfig), context.userId, now)
-      .run();
+      ).bind(workstreamId, JSON.stringify(workConfig), context.userId, now),
+    );
     const bindings = workConfig.bindings as Record<
       string,
       Record<string, unknown>
@@ -354,22 +373,22 @@ export async function handleUpdateWorkstream(
     }
     for (const workerId of selectedWorkerIds) {
       if (!schedulableWorkerIds.has(workerId)) continue;
-      await env.CONCLAVE_DB.prepare(
-        `INSERT INTO worker_scheduling (worker_id, state, updated_by_user_id, updated_at)
+      mutations.push(
+        env.CONCLAVE_DB.prepare(
+          `INSERT INTO worker_scheduling (worker_id, state, updated_by_user_id, updated_at)
          VALUES (?1, 'enabled', ?2, ?3)
          ON CONFLICT(worker_id) DO UPDATE SET state = 'enabled',
            updated_by_user_id = excluded.updated_by_user_id, updated_at = excluded.updated_at,
            drain_requested_by_user_id = NULL, drain_requested_at = NULL, drain_completed_at = NULL`,
-      )
-        .bind(workerId, context.userId, now)
-        .run();
-      await env.CONCLAVE_DB.prepare(
-        `INSERT INTO worker_scheduling_audit
+        ).bind(workerId, context.userId, now),
+      );
+      mutations.push(
+        env.CONCLAVE_DB.prepare(
+          `INSERT INTO worker_scheduling_audit
            (id, worker_id, actor_user_id, action, requested_at, completed_at)
          VALUES (?1, ?2, ?3, 'enabled', ?4, ?4)`,
-      )
-        .bind(crypto.randomUUID(), workerId, context.userId, now)
-        .run();
+        ).bind(crypto.randomUUID(), workerId, context.userId, now),
+      );
     }
   }
   const savedWorkConfigJson =
@@ -395,6 +414,13 @@ export async function handleUpdateWorkstream(
     accessPolicy: accessPolicy as Workstream["accessPolicy"],
     updatedAt: now,
   };
+  await publishCollaborationEvent(
+    env,
+    "workstream.updated",
+    workstream.projectId,
+    workstreamId,
+    { workstreamId, mutations },
+  );
   return json({
     workstream: {
       ...workstreamMetadata({
@@ -425,21 +451,23 @@ export async function handleDeleteWorkstream(
   workstreamId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeWorkstreamAccess(
+  const { projectId } = await authorizeWorkstreamAccess(
     request,
     env,
     workstreamId,
     "manage",
     accessContext,
   );
-  const result = await env.CONCLAVE_DB.prepare(
+  const mutation = env.CONCLAVE_DB.prepare(
     "DELETE FROM workstreams WHERE id = ?1",
-  )
-    .bind(workstreamId)
-    .run();
-  if ((result.meta?.changes ?? 0) === 0) {
-    throw new HttpError(404, "Workstream not found");
-  }
+  ).bind(workstreamId);
+  await publishCollaborationEvent(
+    env,
+    "workstream.deleted",
+    projectId,
+    workstreamId,
+    { workstreamId, mutations: [mutation] },
+  );
   return json({ ok: true, workstreamId });
 }
 
@@ -553,52 +581,94 @@ export async function handleCreateDiscussionMessage(
     accessContext,
   );
   const body = (await request.json()) as Record<string, unknown>;
+  const receipt = await MutationIdempotency.from(
+    request,
+    env.CONCLAVE_DB,
+    context.userId,
+    `workstream:${workstreamId}:send-discussion`,
+    body,
+  );
+  const replay = await receipt?.replay();
+  if (replay) return replay;
   const content = requiredString(body.body ?? body.content, "body");
   const references = discussionReferences(body.references);
   const now = new Date().toISOString();
   const id = `discussion-${crypto.randomUUID()}`;
-  await env.CONCLAVE_DB.prepare(
-    `INSERT INTO discussion_messages
+  const mutations: D1PreparedStatement[] = [];
+  mutations.push(
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO discussion_messages
        (id, workstream_id, author_user_id, body, references_json, created_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
-  )
-    .bind(
+    ).bind(
       id,
       workstreamId,
       context.userId,
       content,
       JSON.stringify(references),
       now,
-    )
-    .run();
-  await env.CONCLAVE_DB.prepare(
-    `INSERT INTO project_audit_log
+    ),
+  );
+  mutations.push(
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO project_audit_log
        (id, project_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
      VALUES (?1, ?2, 'user', ?3, 'workstream.discussion.created', 'discussion_message', ?4, ?5, ?6)`,
-  )
-    .bind(
+    ).bind(
       `pa-${crypto.randomUUID()}`,
       projectId,
       context.userId,
       id,
       JSON.stringify({ workstreamId, references }),
       now,
-    )
-    .run();
-  return json(
-    {
-      message: {
-        id,
-        workstreamId,
-        authorUserId: context.userId,
-        body: content,
-        references,
-        editedAt: null,
-        createdAt: now,
-      },
-    },
-    { status: 201 },
+    ),
   );
+  const response = {
+    message: {
+      id,
+      workstreamId,
+      authorUserId: context.userId,
+      body: content,
+      references,
+      editedAt: null,
+      createdAt: now,
+    },
+  };
+  const write = (receipts: D1PreparedStatement[]) =>
+    publishCollaborationEvent(env, "discussion.created", projectId, id, {
+      workstreamId,
+      mutations: [...receipts, ...mutations],
+    });
+  const concurrentReplay = receipt
+    ? await receipt.commit(response, 201, write)
+    : (await write([]), null);
+  return concurrentReplay ?? json(response, { status: 201 });
+}
+
+export async function handleGetDiscussionMessage(
+  request: Request,
+  env: SecurityEnv,
+  messageId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const message = await env.CONCLAVE_DB.prepare(
+    `SELECT id, workstream_id AS workstreamId, author_user_id AS authorUserId,
+      body, references_json AS referencesJson, edited_at AS editedAt, created_at AS createdAt
+     FROM discussion_messages WHERE id = ?1`,
+  )
+    .bind(messageId)
+    .first<Record<string, unknown>>();
+  if (!message) throw new HttpError(404, "Discussion message not found");
+  await authorizeWorkstreamAccess(
+    request,
+    env,
+    String(message.workstreamId),
+    "view",
+    accessContext,
+  );
+  return json({
+    message: { ...message, references: parseJson(message.referencesJson, []) },
+  });
 }
 
 export async function handleEditDiscussionMessage(
@@ -615,7 +685,7 @@ export async function handleEditDiscussionMessage(
     .bind(messageId)
     .first<Record<string, unknown>>();
   if (!message) throw new HttpError(404, "Discussion message not found");
-  const { context } = await authorizeWorkstreamAccess(
+  const { context, projectId } = await authorizeWorkstreamAccess(
     request,
     env,
     String(message.workstreamId),
@@ -630,10 +700,15 @@ export async function handleEditDiscussionMessage(
     body.references ?? parseJson(message.referencesJson, []),
   );
   const editedAt = new Date().toISOString();
-  await env.CONCLAVE_DB.prepare(
+  const mutation = env.CONCLAVE_DB.prepare(
     "UPDATE discussion_messages SET body = ?1, references_json = ?2, edited_at = ?3 WHERE id = ?4",
-  )
-    .bind(content, JSON.stringify(references), editedAt, messageId)
-    .run();
+  ).bind(content, JSON.stringify(references), editedAt, messageId);
+  await publishCollaborationEvent(
+    env,
+    "discussion.updated",
+    projectId,
+    messageId,
+    { workstreamId: String(message.workstreamId), mutations: [mutation] },
+  );
   return json({ message: { ...message, body: content, references, editedAt } });
 }

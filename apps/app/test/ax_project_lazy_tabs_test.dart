@@ -1,0 +1,245 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:conclave_app/src/ax/sync/ax_project_tab_queries.dart';
+import 'package:conclave_app/src/ax/sync/ax_project_workspace_grants.dart';
+import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:conclave_app/src/features/projects/projects_pages.dart';
+import 'ax_fixture_data.dart';
+
+class TabSource extends AxFixtureDataSource {
+  final calls = <String, int>{};
+  Completer<List<AxProjectMember>>? pending;
+  bool failMembers = false;
+  void count(String resource) =>
+      calls.update(resource, (v) => v + 1, ifAbsent: () => 1);
+  @override
+  Future<List<AxWorkstream>> loadProjectWorkstreams(
+      {required String projectId}) async {
+    count('streams');
+    return [];
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> loadProjectWorkspaces(
+      {required String projectId}) async {
+    count('grants');
+    return [];
+  }
+
+  @override
+  Future<List<AxProjectMember>> loadProjectMembers(
+      {required String projectId}) async {
+    count('members');
+    if (failMembers) throw StateError('Members unavailable');
+    if (pending != null) return pending!.future;
+    return [
+      AxProjectMember.fromJson({
+        'userId': 'u',
+        'displayName': 'Cached member',
+        'role': 'collaborator'
+      })
+    ];
+  }
+
+  @override
+  Future<List<AxProjectInvitation>> loadProjectInvitations(
+      {required String projectId}) async {
+    count('invitations');
+    return [];
+  }
+
+  @override
+  Future<List<AxAuditEntry>> loadProjectAudit(
+      {required String projectId}) async {
+    count('audit');
+    return [];
+  }
+
+  @override
+  Future<List<AxWorkspace>> loadWorkspaces() async {
+    count('owned');
+    return [];
+  }
+}
+
+Widget page(TabSource source, AxProjectTabQueries queries) => MaterialApp(
+        home: Scaffold(
+      body: SingleChildScrollView(
+          child: ProjectPage(
+        project: const AxProject(
+            id: 'P',
+            name: 'Project',
+            branch: '',
+            lastActivity: '',
+            role: 'owner'),
+        dataSource: source,
+        tabQueries: queries,
+        projectWorkstreams: queries.workstreams,
+        workspaceGrants:
+            AxProjectWorkspaceGrants(source, engine: queries.engine),
+        onOpenWorkstream: (_) {},
+        onEdit: () {},
+        onArchive: () {},
+        onDelete: () {},
+      )),
+    ));
+
+void main() {
+  testWidgets(
+      'Project tabs fetch only visible resources and reuse them after navigation',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final source = TabSource();
+    final queries = AxProjectTabQueries(source);
+    await tester.pumpWidget(page(source, queries));
+    await tester.pumpAndSettle();
+    expect(source.calls, {'streams': 1});
+    await tester.tap(find.text('Workspaces'));
+    await tester.pumpAndSettle();
+    expect(source.calls, {'streams': 1, 'grants': 1});
+    await tester.tap(find.text('Members'));
+    await tester.pumpAndSettle();
+    expect(source.calls,
+        {'streams': 1, 'grants': 1, 'members': 1, 'invitations': 1});
+    expect(queries.engine.isObserved(queries.members('P').key), isTrue);
+    await tester.tap(find.text('Workstreams'));
+    await tester.pumpAndSettle();
+    expect(queries.engine.isObserved(queries.members('P').key), isFalse);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(page(source, queries));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Members'));
+    await tester.pumpAndSettle();
+    expect(source.calls['members'], 1);
+    expect(source.calls['invitations'], 1);
+    expect(source.calls['streams'], 1);
+    expect(source.calls['audit'], isNull);
+    expect(source.calls['owned'], isNull);
+  });
+
+  testWidgets(
+      'stale Members remain visible while background refresh is pending',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var now = DateTime.utc(2026);
+    final source = TabSource();
+    final queries =
+        AxProjectTabQueries(source, engine: AxSyncEngine(clock: () => now));
+    await tester.pumpWidget(page(source, queries));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Members'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cached member'), findsOneWidget);
+    await tester.tap(find.text('Workstreams'));
+    await tester.pumpAndSettle();
+    now = now.add(const Duration(minutes: 2));
+    source.pending = Completer();
+    await tester.tap(find.text('Members'));
+    await tester.pumpAndSettle();
+    expect(source.calls['members'], 2);
+    expect(find.text('Cached member'), findsOneWidget);
+    await tester.tap(find.text('Workspaces'));
+    await tester.pumpAndSettle();
+    source.pending!.complete([
+      AxProjectMember.fromJson(
+          {'userId': 'u2', 'displayName': 'New member', 'role': 'collaborator'})
+    ]);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Members'));
+    await tester.pumpAndSettle();
+    expect(find.text('New member'), findsOneWidget);
+    expect(source.calls['members'], 2);
+  });
+
+  testWidgets('Members failure retries only that tab and keeps cached data',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final source = TabSource();
+    final queries = AxProjectTabQueries(source);
+    await tester.pumpWidget(page(source, queries));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Members'));
+    await tester.pumpAndSettle();
+    source.failMembers = true;
+    await expectLater(queries.refreshMembers('P'), throwsStateError);
+    await tester.pumpAndSettle();
+    expect(find.text('Cached member'), findsOneWidget);
+    expect(find.text('Retry Members'), findsOneWidget);
+    source.failMembers = false;
+    await tester.tap(find.text('Retry Members'));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry Members'), findsNothing);
+    expect(source.calls['streams'], 1);
+    expect(source.calls['audit'], isNull);
+  });
+
+  testWidgets(
+      'owned Workspace inventory loads only on Connect action and is reused',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final source = TabSource();
+    final queries = AxProjectTabQueries(source);
+    await tester.pumpWidget(page(source, queries));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Workspaces'));
+    await tester.pumpAndSettle();
+    expect(source.calls['owned'], isNull);
+    await tester.tap(find.byTooltip('Connect Workspace'));
+    await tester.pumpAndSettle();
+    expect(source.calls['owned'], 1);
+    await tester.tap(find.byTooltip('Connect Workspace'));
+    await tester.pumpAndSettle();
+    expect(source.calls['owned'], 1);
+    expect(source.calls['members'], isNull);
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+  });
+
+  test('member mutation revalidates only its affected query; audit stays lazy',
+      () async {
+    final source = TabSource();
+    final queries = AxProjectTabQueries(source);
+    await queries.engine.ensure(queries.members('P'));
+    await queries.engine.ensure(queries.invitations('P'));
+    await queries.refreshMembers('P', includeMembers: false);
+    expect(source.calls, {'members': 1, 'invitations': 2});
+    await queries.engine.ensure(queries.audit('P'));
+    expect(source.calls['audit'], 1);
+  });
+
+  test(
+      'Project recovery recognizes collaboration keys without fetching unopened tabs',
+      () async {
+    final source = TabSource();
+    final queries = AxProjectTabQueries(source);
+    await queries.engine.ensure(queries.workstreams.query('P'));
+    const scope = AxSyncScope('project', 'P');
+    expect(scope.matches(queries.members('P').key), isTrue);
+    expect(scope.matches(queries.invitations('P').key), isTrue);
+    expect(scope.matches(queries.audit('P').key), isTrue);
+    expect(scope.matches(queries.members('Q').key), isFalse);
+    await queries.engine.revalidateWhere(scope.matches);
+    expect(source.calls, {'streams': 2});
+  });
+
+  test('session clear fences a pending tab request and isolates Projects',
+      () async {
+    final source = TabSource()..pending = Completer();
+    final queries = AxProjectTabQueries(source);
+    final flight = queries.engine.ensure(queries.members('P'));
+    queries.engine.clear();
+    source.pending!.complete([]);
+    await flight;
+    expect(queries.engine.peek(queries.members('P')).hasData, isFalse);
+    source.pending = null;
+    await queries.engine.ensure(queries.members('Q'));
+    expect(queries.engine.peek(queries.members('P')).hasData, isFalse);
+    expect(queries.engine.peek(queries.members('Q')).hasData, isTrue);
+  });
+}

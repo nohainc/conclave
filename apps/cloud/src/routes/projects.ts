@@ -1,3 +1,5 @@
+import { conditionalJson } from "./conditional-read.js";
+import { publishCollaborationEvent } from "../collaboration-events.js";
 import { hashToken, authorizeProjectOwner } from "@conclave/security";
 import {
   HttpError,
@@ -113,24 +115,26 @@ export async function handleCreateProject(
     }
     // Projects are independent collaboration resources. Execution is attached
     // only through an explicit Workspace Project Grant.
-    await env.CONCLAVE_DB.batch([
-      env.CONCLAVE_DB.prepare(
-        `INSERT INTO projects (id, owner_user_id, name, description, settings_json, created_at, updated_at)
+    await publishCollaborationEvent(env, "project.created", id, id, {
+      mutations: [
+        env.CONCLAVE_DB.prepare(
+          `INSERT INTO projects (id, owner_user_id, name, description, settings_json, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)`,
-      ).bind(
-        id,
-        context.userId,
-        name,
-        description,
-        JSON.stringify(settings),
-        now,
-      ),
-      env.CONCLAVE_DB.prepare(
-        `INSERT INTO project_memberships (id, project_id, user_id, role, created_at, updated_at)
+        ).bind(
+          id,
+          context.userId,
+          name,
+          description,
+          JSON.stringify(settings),
+          now,
+        ),
+        env.CONCLAVE_DB.prepare(
+          `INSERT INTO project_memberships (id, project_id, user_id, role, created_at, updated_at)
          VALUES (?1, ?2, ?3, 'owner', ?4, ?4)
          ON CONFLICT(project_id, user_id) DO NOTHING`,
-      ).bind(`pm-${crypto.randomUUID()}`, id, context.userId, now),
-    ]);
+        ).bind(`pm-${crypto.randomUUID()}`, id, context.userId, now),
+      ],
+    });
     return json(
       {
         project: {
@@ -180,7 +184,7 @@ export async function handleGetProject(
     }>();
   if (!row) throw new HttpError(404, "Project not found");
   const settings = projectSettings(row.settingsJson);
-  return json({
+  return conditionalJson(request, {
     project: {
       id: row.id,
       name: row.name,
@@ -270,19 +274,27 @@ export async function handleUpdateProject(
       throw new HttpError(409, "You already have a Project with this name");
     }
   }
-  await env.CONCLAVE_DB.prepare(
+  const mutation = env.CONCLAVE_DB.prepare(
     `UPDATE projects SET name = ?1, description = ?2,
        settings_json = ?3, updated_at = ?4
      WHERE id = ?5`,
-  )
-    .bind(
-      project.name,
-      project.description,
-      JSON.stringify(project.settings),
-      now,
-      projectId,
-    )
-    .run();
+  ).bind(
+    project.name,
+    project.description,
+    JSON.stringify(project.settings),
+    now,
+    projectId,
+  );
+  await publishCollaborationEvent(
+    env,
+    settings.archived === true &&
+      projectSettings(existing.settingsJson).archived !== true
+      ? "project.archived"
+      : "project.updated",
+    projectId,
+    projectId,
+    { mutations: [mutation] },
+  );
   return json({
     project: {
       ...project,
@@ -321,12 +333,16 @@ export async function handleDeleteProject(
         error instanceof Error ? error.message : "Forbidden",
       );
     }
+    const audience = await env.CONCLAVE_DB.prepare(
+      "SELECT user_id FROM project_memberships WHERE project_id = ?1",
+    )
+      .bind(projectId)
+      .all<{ user_id: string }>();
     const workstreamFilter = "SELECT id FROM workstreams WHERE project_id = ?1";
     const workRequestFilter = `SELECT id FROM work_requests WHERE workstream_id IN (${workstreamFilter})`;
     const workflowTaskFilter = `SELECT id FROM workflow_tasks WHERE work_request_id IN (${workRequestFilter})`;
-    // D1 batches do not make the failing statement obvious to the client. Keep
-    // this order explicit and execute each statement in sequence so restrictive
-    // Child records are removed before their referenced parent records.
+    // Ordered transactional cleanup removes children before their parents and
+    // commits the deletion signal with the mutation.
     const cleanupStatements = [
       `DELETE FROM workflow_task_dependencies
        WHERE task_id IN (${workflowTaskFilter})
@@ -349,17 +365,18 @@ export async function handleDeleteProject(
       "DELETE FROM artifacts WHERE project_id = ?1",
       "DELETE FROM projects WHERE id = ?1",
     ];
-    for (const sql of cleanupStatements) {
-      await env.CONCLAVE_DB.prepare(sql).bind(projectId).run();
-    }
-    const result = await env.CONCLAVE_DB.prepare(
-      "SELECT id FROM projects WHERE id = ?1",
-    )
-      .bind(projectId)
-      .first<{ id: string }>();
-    if (result) {
-      throw new HttpError(404, "Project not found");
-    }
+    await publishCollaborationEvent(
+      env,
+      "project.deleted",
+      projectId,
+      projectId,
+      {
+        recipientUserIds: (audience.results ?? []).map((row) => row.user_id),
+        mutations: cleanupStatements.map((sql) =>
+          env.CONCLAVE_DB.prepare(sql).bind(projectId),
+        ),
+      },
+    );
     return json({ projectId, deleted: true });
   }
 }

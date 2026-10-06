@@ -394,6 +394,7 @@ abstract interface class AxDataSource {
   Future<AxWorkstream> createWorkstream({
     required String projectId,
     required String name,
+    String? idempotencyKey,
   });
   Future<AxWorkstream> updateWorkstream({
     required String workstreamId,
@@ -407,6 +408,7 @@ abstract interface class AxDataSource {
     required String workflowId,
     required String prompt,
     List<Map<String, dynamic>> attachments = const [],
+    String? idempotencyKey,
   }) async =>
       throw UnimplementedError('Work Request execution is not available');
   Future<List<String>> validateWorkRequestEligibility({
@@ -436,26 +438,20 @@ abstract interface class AxDataSource {
     String? beforeId,
     bool activeOnly = false,
   });
-  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests({
-    required String workstreamId,
-    bool activeOnly = false,
-  }) async =>
-      const [];
   Future<AxDiscussionPage> loadDiscussionPage(
       {required String workstreamId,
       int limit = 50,
       String? before,
       String? after});
-  Future<List<AxDiscussionMessage>> loadDiscussionMessages({
-    required String workstreamId,
-  }) async =>
-      const [];
   Future<AxDiscussionMessage> sendDiscussionMessage({
     required String workstreamId,
     required String text,
     List<String> references = const [],
+    String? idempotencyKey,
   }) async =>
       throw UnimplementedError('Discussion messages are not available');
+  Future<AxDiscussionMessage> loadDiscussionMessage(
+      {required String messageId});
   Future<AxDiscussionMessage> editDiscussionMessage({
     required String messageId,
     required String text,
@@ -496,7 +492,8 @@ abstract interface class AxDataSource {
 
   /// Application bootstrap/recovery state, never a navigation loader.
   /// Project details and Workstreams are separate focused resource queries.
-  Future<AxSnapshot> loadReadModels({String? projectId, String? workspaceId});
+  Future<AxSnapshot> loadBootstrapState(
+      {String? projectId, String? workspaceId});
   Future<void> controlRun(String runId, String command);
   Future<void> respondToRunPrompt(String runId, String response);
   Future<void> revokeWorkspace({required String workspaceId});

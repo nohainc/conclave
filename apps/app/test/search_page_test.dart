@@ -126,7 +126,13 @@ void main() {
           home: Scaffold(
             body: SearchPage(
               query: 'auth',
-              snapshot: sampleSnapshot,
+              projects: sampleSnapshot.projects,
+              workspaces: sampleSnapshot.workspaces,
+              run: sampleSnapshot.run,
+              workstreamsByProject: {
+                for (final project in sampleSnapshot.projects)
+                  project.id: project.workstreams
+              },
               onNavigateTo: (nav) => navigatedTarget = nav,
               onSelectProject: (_) {},
               onClearSearch: () => searchCleared = true,
@@ -163,7 +169,13 @@ void main() {
           home: Scaffold(
             body: SearchPage(
               query: 'nonexistentquery123',
-              snapshot: sampleSnapshot,
+              projects: sampleSnapshot.projects,
+              workspaces: sampleSnapshot.workspaces,
+              run: sampleSnapshot.run,
+              workstreamsByProject: {
+                for (final project in sampleSnapshot.projects)
+                  project.id: project.workstreams
+              },
               onNavigateTo: (_) {},
               onSelectProject: (_) {},
               onClearSearch: () => searchCleared = true,

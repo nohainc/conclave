@@ -16,7 +16,8 @@ mixin _CatalogApi on _AxApiClientCore {
 
   @override
   Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async {
-    final body = await _getJson(Uri.parse('$baseUrl/workflows/catalog'));
+    final body = await _getJson(Uri.parse('$baseUrl/workflows/catalog'),
+        conditional: true);
     return (body['workflows'] as List? ?? const [])
         .whereType<Map>()
         .map((item) =>

@@ -7,8 +7,10 @@ extension _WorkstreamActions on _WorkstreamPageState {
     if (ds == null) return;
     _updateState(() => _savingWorkConfig = true);
     try {
-      final updated = await ds.updateWorkstream(
-        workstreamId: widget.workstream.id,
+      final mutations = widget.mutations ??
+          AxCollaborationMutations(ds, engine: _workHistoryCache.engine);
+      final updated = await mutations.editWorkstream(
+        widget.workstream,
         workConfig: config,
       );
       if (!mounted) return;
@@ -39,7 +41,6 @@ extension _WorkstreamActions on _WorkstreamPageState {
   Future<void> _runWork() async {
     final text = _requestController.text;
     final submit = widget.onRunWork;
-    final dataSource = widget.dataSource;
     if (!_canExecute ||
         (text.trim().isEmpty && _workAttachments.isEmpty) ||
         submit == null ||
@@ -54,113 +55,36 @@ extension _WorkstreamActions on _WorkstreamPageState {
     final workflowVersion = int.tryParse(_workflow.split(':v').last) ?? 1;
     final workstreamId = widget.workstream.id;
     final workCache = _workHistoryCache;
-    final requesterId = widget.currentUserId;
-    final createdAt = DateTime.now().toUtc().toIso8601String();
-    var localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
-    AxWorkRequest localRequest({String status = 'queued', String? error}) =>
-        AxWorkRequest(
-          id: localId,
-          requestedByName: 'You',
-          requestedByUserId: requesterId,
-          prompt: requestText,
-          workflowId: workflowId,
-          workflowVersion: workflowVersion,
-          status: status,
-          createdAt: createdAt,
-          steps: const [],
-          error: error,
-        );
-    void progress(String message) {
-      if (mounted && widget.workstream.id == workstreamId) {
-        _updateState(() => _localWorkProgress[localId] = message);
-      }
-    }
-
-    void fail(String message) {
-      final history = workCache.peek(workstreamId).requests;
-      if (!history.any((r) => r.id == localId)) return;
-      workCache.replace(workstreamId, [
-        for (final request in history)
-          request.id == localId
-              ? localRequest(status: 'failed', error: message)
-              : request
-      ]);
-      if (!mounted || widget.workstream.id != workstreamId) return;
-      _updateState(() {
-        _localWorkProgress[localId] = message;
-        // Preserve authored input for correction/retry after a rejected send.
-        if (_requestController.text.isEmpty) _requestController.text = text;
-        if (_workAttachments.isEmpty) _workAttachments = attachments;
-      });
-    }
-
+    final workflowName = _currentWorkflows
+            .where((w) => w.id == workflowId)
+            .map((w) => w.name)
+            .firstOrNull ??
+        workflowId;
     _updateState(() {
-      _submittingWork = true;
       _workSubmitError = null;
-      _workTimeline = [..._workTimeline, localRequest()];
-      _localWorkProgress[localId] = 'Preparing your request…';
       _workAttachments = [];
     });
     _requestController.clear();
     try {
-      if (dataSource != null) {
-        progress('Checking that everything is ready…');
-        final issues = await dataSource.validateWorkRequestEligibility(
-            workstreamId: workstreamId,
-            workflowId: workflowId,
-            attachments: attachments);
-        if (!workCache
-            .peek(workstreamId)
-            .requests
-            .any((r) => r.id == localId)) {
-          return;
-        }
-        if (issues.isNotEmpty) {
-          final workflowName = _currentWorkflows
-                  .where((definition) => definition.id == workflowId)
-                  .map((definition) => definition.name)
-                  .firstOrNull ??
-              workflowId;
-          fail(
-              'Cannot run $workflowName\n${issues.map((issue) => '• $issue').join('\n')}');
-          return;
-        }
-      }
-      progress('Sending your request…');
-      final workRequestId = await submit(requestText, workflowId, attachments);
-      final history = workCache.peek(workstreamId).requests;
-      if (!history.any((r) => r.id == localId)) return;
-      final previousId = localId;
-      localId = workRequestId;
-      workCache.replace(workstreamId, [
-        for (final request in history)
-          if (request.id != previousId) request,
-        if (!history.any((request) => request.id == workRequestId))
-          localRequest()
-      ]);
-      if (mounted && widget.workstream.id == workstreamId) {
-        _updateState(() {
-          _localWorkProgress.remove(previousId);
-          if (!workCache.peek(workstreamId).confirmedIds.contains(localId)) {
-            _localWorkProgress[localId] = 'Request received. Waiting to start…';
-          }
-        });
-      }
-      if (dataSource != null) {
-        // A detail-read failure cannot turn an accepted submission into a
-        // failed send. Retain it for targeted retry/realtime reconciliation.
-        await workCache
-            .refreshRequest(workstreamId, workRequestId)
-            .catchError((Object _) {});
-      }
+      await workCache.createRequest(workstreamId,
+          prompt: requestText,
+          workflowId: workflowId,
+          workflowVersion: workflowVersion,
+          workflowName: workflowName,
+          requestedByUserId: widget.currentUserId,
+          attachments: attachments,
+          execute: submit);
     } catch (error) {
-      fail(error is AxApiException && error.message.startsWith('Cannot run ')
-          ? error.message
-          : 'Could not send your request: $error');
-    } finally {
-      if (mounted && widget.workstream.id == workstreamId) {
-        _updateState(() => _submittingWork = false);
+      if (!mounted ||
+          widget.workstream.id != workstreamId ||
+          error is AxMutationSuperseded) {
+        return;
       }
+      _updateState(() {
+        // Authored form data stays in this form; mutation/history state is shared.
+        if (_requestController.text.isEmpty) _requestController.text = text;
+        if (_workAttachments.isEmpty) _workAttachments = attachments;
+      });
     }
   }
 
@@ -277,17 +201,6 @@ extension _WorkstreamActions on _WorkstreamPageState {
     final id = widget.workstream.id;
     try {
       await cache.refresh(id, activeOnly: activeOnly);
-      if (mounted &&
-          widget.workstream.id == id &&
-          identical(cache, _workHistoryCache)) {
-        _updateState(() {
-          for (final request in _workTimeline) {
-            if (!request.id.startsWith('local-')) {
-              _localWorkProgress.remove(request.id);
-            }
-          }
-        });
-      }
     } catch (_) {
       // Query state retains cached history and exposes the existing retry UI.
     }

@@ -59,9 +59,22 @@ extension _AxAppController on _AxAppStateMixin {
         if (mounted) _updateState(() => isLoading = false);
         return;
       }
+      final hydrated = await store.hydrateReadCache();
+      if (!mounted) return;
+      if (hydrated) {
+        _updateState(() {
+          authRequired = false;
+          isLoading = false;
+          loadError = null;
+          selectedProjectId =
+              navigation.projectId ?? store.projects.items.firstOrNull?.id;
+          _applyProjectNavigation();
+        });
+        _startRealtime();
+        _ensureNavigationResources(navigation);
+      }
       await _loadWorkspaces();
-      await _loadSnapshot();
-      unawaited(_refreshWorkspaceProjectGrantCounts());
+      await _loadBootstrapState(showSpinner: !hydrated);
       if (navigation.kind == AxRouteKind.profileSecurity) {
         await _loadAccountSecurity();
       }
@@ -77,12 +90,10 @@ extension _AxAppController on _AxAppStateMixin {
 
   Future<void> _logout() async {
     try {
-      await store.auth.logout();
-      store.clearServerState();
+      await store.logout();
       expandedProjectIds.clear();
       if (!mounted) return;
       _updateState(() {
-        snapshot = AxSnapshot.empty();
         selectedProjectId = null;
         authRequired = true;
       });
@@ -251,19 +262,10 @@ extension _AxAppController on _AxAppStateMixin {
 
   Future<void> _loadWorkspaces() async {
     try {
-      final loadedWorkspaces = await store.workspaces.list();
+      await store.workspaces.list();
       if (!mounted) return;
-      _updateState(
-          () => snapshot = snapshot.copyWith(workspaces: loadedWorkspaces));
       try {
-        final localWorkers =
-            await widget.dataSource.loadWorkspaceWorkerInventory();
-        if (mounted) {
-          _updateState(() {
-            workspaceWorkers = localWorkers;
-            workspaceWorkerInventoryLoaded = true;
-          });
-        }
+        await store.catalogs.ensureWorkers();
       } catch (_) {
         // Workspace inventory remains independently optional during registration.
       }
@@ -276,10 +278,25 @@ extension _AxAppController on _AxAppStateMixin {
   void _onRealtimeEvent(Map<String, dynamic> event) {
     final type = event['type'];
     if (!mounted) return;
+    final recoveryGeneration = const {
+      'reconnect.required',
+      'realtime.ready',
+      'realtime.connection',
+      'realtime.stale'
+    }.contains(type)
+        ? ++_realtimeRecoveryGeneration
+        : _realtimeRecoveryGeneration;
+    final routed = store.realtimeCacheRouter.handle(event);
+    if (type != 'reconnect.required') {
+      unawaited(routed.catchError((Object error) {
+        if (mounted) _showSnackBar('Live update refresh failed: $error');
+      }));
+    }
     if (type == 'realtime.connection') {
       final status = event['status'];
-      _updateState(() {
-        realtimeStale = status == 'reconnecting';
+      _realtimeTransportConnected = status == 'connected';
+      _updateLiveState(() {
+        realtimeStale = status != 'connected';
         realtimeNotice = realtimeStale
             ? 'Live updates paused. Conclave AX is reconnecting.'
             : 'Live updates connected.';
@@ -287,29 +304,21 @@ extension _AxAppController on _AxAppStateMixin {
       return;
     }
     if (type == 'realtime.ready') {
-      _updateState(() => realtimeStale = false);
+      _realtimeTransportConnected = true;
+      unawaited(_refreshRealtimeFeatures('project.updated'));
+      _updateLiveState(() => realtimeStale = false);
       return;
     }
     if (type == 'reconnect.required') {
-      final scope = event['scope'];
-      final scopeMap = scope is Map
-          ? Map<String, dynamic>.from(scope)
-          : const <String, dynamic>{};
-      _updateState(() {
+      final scope = AxSyncScope.fromEvent(event);
+      _updateLiveState(() {
         realtimeStale = true;
         realtimeNotice =
             'Some live updates were missed. Refreshing the affected view.';
       });
-      if (scopeMap['kind'] == 'execution_workspace') {
-        unawaited(_refreshRealtimeFeatures('worker.status'));
-      } else {
-        unawaited(_loadSnapshot(
-            projectId: (scopeMap['projectId'] as String?) ?? selectedProjectId,
-            showSpinner: false));
-      }
+      unawaited(_recoverRealtimeScope(scope, routed, recoveryGeneration));
       return;
     }
-    _lastRealtimeProjectId = event['projectId'] as String?;
     _recordNotification(event);
     if (type is String && type.startsWith('typing')) return;
     if (type is String &&
@@ -323,63 +332,75 @@ extension _AxAppController on _AxAppStateMixin {
       final payload = event['payload'];
       final prompt = payload is Map ? payload['prompt'] : null;
       if (prompt is String && prompt.trim().isNotEmpty) {
-        _updateState(() => pendingRunPrompt = prompt.trim());
+        store.pendingRunPrompt.value = prompt.trim();
       }
     }
     _announceRealtimeProgress(event);
     unawaited(_refreshRealtimeFeatures(type is String ? type : ''));
   }
 
+  Future<void> _recoverRealtimeScope(
+      AxSyncScope scope, Future<void> routed, int generation) async {
+    Future<void> workspaceRecovery() async {
+      if (scope.kind == 'execution_workspace' && scope.id != null) {
+        await store.resynchronizeWorkspace(scope.id!);
+      } else if (scope.kind == 'user') {
+        await Future.wait([
+          _refreshRealtimeFeatures('project.updated'),
+          _refreshRealtimeFeatures('workspace.updated'),
+        ]);
+      }
+    }
+
+    try {
+      await Future.wait([routed, workspaceRecovery()]);
+      // The shared Work router receives the same transport frame, independently
+      // of rendering. Wait for that recovery without delivering it twice.
+      await store.workRealtime.pendingRecovery;
+      if (!mounted ||
+          generation != _realtimeRecoveryGeneration ||
+          !_realtimeTransportConnected) {
+        return;
+      }
+      _updateLiveState(() {
+        realtimeStale = false;
+        realtimeNotice = 'Live updates connected.';
+      });
+    } catch (error) {
+      if (mounted) _showSnackBar('Live update refresh failed: $error');
+    }
+  }
+
   Future<void> _refreshRealtimeFeatures(String type) async {
     final workspaceId = executionWorkspaceId;
-    if (workspaceId == null || workspaceId.isEmpty) return;
-    final eventProjectId = _lastRealtimeProjectId;
-    if (eventProjectId != null &&
-        selectedProjectId != null &&
-        eventProjectId != selectedProjectId) {
+    if ((workspaceId == null || workspaceId.isEmpty) &&
+        !type.startsWith('project.') &&
+        type != 'project_workspace_grant.updated') {
       return;
     }
     try {
       if (type.startsWith('workspace.')) {
-        final workspaces = await store.workspaces.list();
-        final localWorkers =
-            await widget.dataSource.loadWorkspaceWorkerInventory();
-        if (!mounted) return;
-        _updateState(() {
-          snapshot = snapshot.copyWith(workspaces: workspaces);
-          workspaceWorkers = localWorkers;
-          workspaceWorkerInventoryLoaded = true;
-        });
+        await Future.wait(
+            [store.workspaces.list(), store.catalogs.refreshWorkers()]);
         return;
       }
       if (type.startsWith('worker.inventory.')) {
-        final localWorkers =
-            await widget.dataSource.loadWorkspaceWorkerInventory();
-        if (!mounted) return;
-        _updateState(() {
-          workspaceWorkers = localWorkers;
-          workspaceWorkerInventoryLoaded = true;
-        });
+        // The cache router owns invalidation; the shared query updates consumers.
         return;
       }
-      if (type.startsWith('project.')) {
-        final projects = await store.projects.refresh();
-        if (!mounted) return;
-        _updateState(() => snapshot = snapshot.copyWith(projects: projects));
-        unawaited(_refreshWorkspaceProjectGrantCounts());
+      if (type == 'project_workspace_grant.updated') {
+        await _refreshWorkspaceGrantSummary();
         return;
       }
-      // Run/Task/Assignment events refresh only the focused execution read
-      // model. A reconnect gap still uses the full initial read model.
-      if (type.startsWith('run.') ||
-          type.startsWith('task.') ||
-          type.startsWith('attempt.') ||
-          type.startsWith('assignment.') ||
-          type.startsWith('artifact.') ||
-          type.startsWith('finding.') ||
-          type.startsWith('verification.')) {
-        await _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
+      if (type.startsWith('project.') ||
+          type == 'project_workspace_grant.updated') {
+        await store.projects.refresh();
+        if (!mounted) return;
+        unawaited(_refreshWorkspaceGrantSummary());
+        return;
       }
+      // Execution events are reconciled by the shared Work router, never by
+      // reloading Projects, Workspaces, authentication, or bootstrap state.
     } catch (error) {
       if (mounted) _showSnackBar('Live update refresh failed: $error');
     }
@@ -391,11 +412,12 @@ extension _AxAppController on _AxAppStateMixin {
         notifications.any((item) => item.id == notification.id)) {
       return;
     }
-    final currentRunId = snapshot.run?.id ?? snapshot.activeRunId;
+    final currentRunId =
+        executionSnapshot.run?.id ?? executionSnapshot.activeRunId;
     final isViewingRun = showRunDetails &&
         notification.runId != null &&
         notification.runId == currentRunId;
-    _updateState(() {
+    _updateNotifications(() {
       notifications.insert(
         0,
         isViewingRun ? notification.markRead() : notification,
@@ -464,7 +486,7 @@ extension _AxAppController on _AxAppStateMixin {
             onPressed: notifications.isEmpty
                 ? null
                 : () {
-                    _updateState(() {
+                    _updateNotifications(() {
                       for (var index = 0;
                           index < notifications.length;
                           index++) {
@@ -483,7 +505,7 @@ extension _AxAppController on _AxAppStateMixin {
       ),
     );
     if (!mounted || selected == null) return;
-    _updateState(() {
+    _updateNotifications(() {
       final index = notifications.indexWhere((item) => item.id == selected.id);
       if (index >= 0) notifications[index] = notifications[index].markRead();
     });
@@ -522,28 +544,28 @@ extension _AxAppController on _AxAppStateMixin {
         : null;
     if (summary is String && summary.trim().isNotEmpty) {
       _lastRealtimeAnnouncement = now;
-      _updateState(() => realtimeNotice = summary.trim());
+      _updateLiveState(() => realtimeNotice = summary.trim());
     }
   }
 
   Future<void> _copyRunDiagnostics() async {
-    final run = snapshot.run;
+    final run = executionSnapshot.run;
     if (run == null) return;
     final diagnostics = <String, Object?>{
       'format': 'conclave-run-diagnostics-v1',
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
-      'workspaceId': snapshot.workspaceId,
+      'workspaceId': executionSnapshot.workspaceId,
       'projectId': selectedProjectId,
       'runId': run.id,
       'status': run.status.name,
-      'tasks': snapshot.tasks
+      'tasks': executionSnapshot.tasks
           .map((task) => {
                 'id': task.id,
                 'status': task.status.name,
                 'worker': task.worker,
               })
           .toList(),
-      'events': snapshot.events
+      'events': executionSnapshot.events
           .map((event) => {
                 'eventId': event.eventId,
                 'correlationId': event.correlationId,
@@ -559,7 +581,6 @@ extension _AxAppController on _AxAppStateMixin {
 
   void _startRealtime() {
     final workspaceId = executionWorkspaceId;
-    if (workspaceId == null || workspaceId.isEmpty) return;
     if (!realtimeStarted) {
       realtimeStarted = true;
       final apiBaseUrl =
@@ -583,19 +604,20 @@ extension _AxAppController on _AxAppStateMixin {
 
   Future<void> _loadAccountSecurity() async {
     if (!mounted) return;
-    _updateState(() => accountSecurityLoading = true);
+    store.securityError.value = null;
+    _updateSecurity(() => accountSecurityLoading = true);
     try {
       final loaded = await widget.dataSource.loadAccountSecurity();
       if (!mounted) return;
-      _updateState(() {
+      _updateSecurity(() {
         accountSecurity = loaded;
         accountSecurityLoading = false;
       });
     } catch (error) {
       if (!mounted) return;
-      _updateState(() {
+      _updateSecurity(() {
         accountSecurityLoading = false;
-        loadError = error.toString();
+        store.securityError.value = error.toString();
       });
     }
   }
@@ -653,11 +675,11 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
-  Future<void> _loadSnapshot(
+  Future<void> _loadBootstrapState(
       {String? projectId, String? workspaceId, bool showSpinner = true}) async {
     if (store.auth.session?.authenticated != true) return;
     if (showSpinner) {
-      final reconnecting = !isLoading && snapshot.projects.isNotEmpty;
+      final reconnecting = !isLoading && store.projects.items.isNotEmpty;
       _updateState(() {
         isLoading = true;
         loadError = null;
@@ -665,31 +687,32 @@ extension _AxAppController on _AxAppStateMixin {
       });
     }
     try {
-      final loaded =
-          await store.reload(projectId: projectId, workspaceId: workspaceId);
+      final loaded = await store.loadBootstrapState(
+          projectId: projectId, workspaceId: workspaceId);
       if (!mounted) return;
-      _updateState(() {
-        snapshot = loaded;
-        optimisticRunStatus = null;
-        selectedProjectId = loaded.projects.any(
-                (project) => project.id == (projectId ?? selectedProjectId))
-            ? (projectId ?? selectedProjectId)
-            : loaded.projects.firstOrNull?.id;
-        isLoading = false;
-        isReconnecting = false;
-        authRequired = false;
-        _applyNavigationToSnapshot(loaded);
-        if (loaded.run?.status == RunStatus.paused) {
-          // The API is the source of truth; no local pause state is maintained.
-        }
-      });
+      optimisticRunStatus = null;
+      if (showSpinner) {
+        _updateState(() {
+          selectedProjectId = loaded.projects.any(
+                  (project) => project.id == (projectId ?? selectedProjectId))
+              ? (projectId ?? selectedProjectId)
+              : loaded.projects.firstOrNull?.id;
+          isLoading = false;
+          isReconnecting = false;
+          authRequired = false;
+          _applyProjectNavigation();
+        });
+      }
       _ensureNavigationResources(navigation);
-      _scheduleRefresh(loaded);
     } catch (error) {
       if (!mounted) return;
       if (error is AxApiException && error.statusCode == 401) {
         _updateState(() => authRequired = true);
         browserNavigation.replaceWithLogin(navigation.toUri());
+        return;
+      }
+      if (!showSpinner) {
+        _showSnackBar(error.toString(), type: ToastType.error);
         return;
       }
       _updateState(() {
@@ -704,6 +727,13 @@ extension _AxAppController on _AxAppStateMixin {
     try {
       final session = await store.auth.load();
       if (!mounted) return;
+      if (session.authenticated &&
+          store.persistence.userId != null &&
+          store.persistence.userId != session.viewer?.id) {
+        store.clearServerState();
+        expandedProjectIds.clear();
+        _updateState(() => authRequired = true);
+      }
       if (!session.authenticated && !authRequired) {
         store.clearServerState();
         expandedProjectIds.clear();
@@ -724,18 +754,26 @@ extension _AxAppController on _AxAppStateMixin {
           loadError = null;
         });
         browserNavigation.replace(target.toUri());
+        final hydrated = await store.hydrateReadCache();
+        if (!mounted) return;
+        if (hydrated) {
+          _updateState(() {
+            isLoading = false;
+            _applyProjectNavigation();
+          });
+        }
         await _loadWorkspaces();
-        await _loadSnapshot();
+        await _loadBootstrapState(showSpinner: !hydrated);
       }
     } catch (_) {
       // The normal load/error path will explain an unavailable auth service.
     }
   }
 
-  void _applyNavigationToSnapshot(AxSnapshot loaded) {
+  void _applyProjectNavigation() {
     final routeProject = navigation.projectId;
     if (routeProject != null &&
-        loaded.projects.any((project) => project.id == routeProject)) {
+        store.projects.items.any((project) => project.id == routeProject)) {
       selectedProjectId = routeProject;
     }
   }
@@ -783,6 +821,10 @@ extension _AxAppController on _AxAppStateMixin {
       mapEquals(actual.queryParameters, canonical.queryParameters);
 
   void _navigateTo(AxNavigation next, {bool replace = false}) {
+    if ((next.projectId?.startsWith('local-project-') ?? false) ||
+        (next.workstreamId?.startsWith('local-workstream-') ?? false)) {
+      return;
+    }
     if (next.kind != AxRouteKind.search &&
         _searchQueryController.text.isNotEmpty) {
       _searchQueryController.removeListener(_onSearchQueryChanged);
@@ -812,27 +854,12 @@ extension _AxAppController on _AxAppStateMixin {
     ));
   }
 
-  void _scheduleRefresh(AxSnapshot loaded) {
-    refreshTimer?.cancel();
-    if (loaded.run != null &&
-        {
-          RunStatus.active,
-          RunStatus.running,
-          RunStatus.waiting,
-          RunStatus.paused
-        }.contains(loaded.run!.status)) {
-      refreshTimer = Timer(const Duration(seconds: 5), () {
-        _loadSnapshot(projectId: selectedProjectId, showSpinner: false);
-      });
-    }
-  }
-
   Future<void> _grantWorkspace(AxWorkspace workspace) async {
-    if (snapshot.projects.isEmpty) {
+    if (store.projects.items.isEmpty) {
       _showSnackBar('Create a Project before granting Workspace access.');
       return;
     }
-    String? selectedProjectId = snapshot.projects.first.id;
+    String? selectedProjectId = store.projects.items.first.id;
     final permissions = <String>{};
     final projectId = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
@@ -843,7 +870,7 @@ extension _AxAppController on _AxAppStateMixin {
             DropdownButtonFormField<String>(
               initialValue: selectedProjectId,
               decoration: const InputDecoration(labelText: 'Project'),
-              items: snapshot.projects
+              items: store.projects.items
                   .map((project) => DropdownMenuItem(
                       value: project.id, child: Text(project.name)))
                   .toList(),
@@ -885,12 +912,13 @@ extension _AxAppController on _AxAppStateMixin {
     );
     if (projectId == null) return;
     try {
-      await widget.dataSource.requestProjectWorkspace(
+      await store.projectWorkspaceGrants.create(
         projectId: projectId,
         workspaceId: workspace.id,
+        workspaceName: workspace.name,
         allowedPermissions: permissions.toList(),
       );
-      await _refreshWorkspaceProjectGrantCounts();
+      await _refreshWorkspaceGrantSummary();
       if (mounted) _showSnackBar('Workspace access request sent.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);

@@ -74,6 +74,7 @@ export {
   handleListDiscussionMessages,
   handleCreateDiscussionMessage,
   handleEditDiscussionMessage,
+  handleGetDiscussionMessage,
 } from "./workstreams.js";
 export {
   handleValidateWorkRequest,

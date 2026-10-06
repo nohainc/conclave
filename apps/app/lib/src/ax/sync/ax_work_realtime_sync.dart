@@ -1,12 +1,15 @@
 import 'dart:async';
 import '../ax_data.dart';
 import 'ax_work_history.dart';
+import 'ax_sync_scope.dart';
 
 class _RecoveryRead {
   final completer = Completer<void>();
   bool again = false;
   bool discover = false;
   bool recent = false;
+  bool allScopes = false;
+  final targets = <String>{};
 }
 
 class _StreamLease {
@@ -39,6 +42,8 @@ class AxWorkRealtimeSync {
   _RecoveryRead? _recovery;
   int _sessionEpoch = 0;
   bool get healthy => _healthy;
+  Future<void> get pendingRecovery =>
+      _recovery?.completer.future ?? Future.value();
   bool get polling => _fallback?.isActive == true;
 
   void Function() listen(Stream<Map<String, dynamic>>? events,
@@ -110,19 +115,27 @@ class AxWorkRealtimeSync {
     _scheduleFallback();
   }
 
-  Future<void> _resync({required bool discover, bool recent = false}) {
+  Future<void> _resync(
+      {required bool discover, bool recent = false, Set<String>? targets}) {
     final pending = _recovery;
     if (pending != null) {
       if (discover) {
         pending.again = true;
         pending.discover = true;
         pending.recent |= recent;
+        if (targets == null) {
+          pending.allScopes = true;
+        } else {
+          pending.targets.addAll(targets);
+        }
       }
       return pending.completer.future;
     }
     final read = _RecoveryRead()
       ..discover = discover
-      ..recent = recent;
+      ..recent = recent
+      ..allScopes = targets == null
+      ..targets.addAll(targets ?? const <String>{});
     _recovery = read;
     final epoch = _sessionEpoch;
     () async {
@@ -134,7 +147,11 @@ class AxWorkRealtimeSync {
           read.discover = false;
           read.recent = false;
           final generation = _generation;
-          for (final id in _scopes.keys.toList()) {
+          final targets = {
+            ...read.targets,
+            if (read.allScopes) ..._scopes.keys,
+          }.toList();
+          for (final id in targets) {
             if (epoch != _sessionEpoch || _disposed) break;
             final ids = {...cache.activeIds(id), ...cache.dirtyIds(id)};
             final found = discover
@@ -194,6 +211,15 @@ class AxWorkRealtimeSync {
       return;
     }
     if (type == 'reconnect.required') {
+      final scope = AxSyncScope.fromEvent(event);
+      if (scope.kind == 'project' || scope.kind == 'unknown') return;
+      if (scope.kind == 'workstream') {
+        // A scoped gap is not a transport outage. Recover retained active
+        // entities in this Workstream without polling unrelated views.
+        if (!cache.workstreamIds.contains(scope.id)) return;
+        await _resync(discover: true, targets: {scope.id!});
+        return;
+      }
       _healthy = false;
       _needsRecovery = true;
       _gapStale = true;
@@ -206,18 +232,30 @@ class AxWorkRealtimeSync {
       _disconnected();
       return;
     }
-    if (!const {
-      'work_request.created',
-      'work_request.started',
-      'work_request.completed',
-      'work_request.failed',
-      'work_request.cancelled',
-      'step.queued',
-      'step.running',
-      'step.completed',
-      'step.failed',
-      'step.cancelled'
-    }.contains(type)) {
+    final executionChange = type is String &&
+        !type.contains('.progress') &&
+        const [
+          'run.',
+          'task.',
+          'attempt.',
+          'assignment.',
+          'artifact.',
+          'finding.',
+          'verification.'
+        ].any(type.startsWith);
+    if (!executionChange &&
+        !const {
+          'work_request.created',
+          'work_request.started',
+          'work_request.completed',
+          'work_request.failed',
+          'work_request.cancelled',
+          'step.queued',
+          'step.running',
+          'step.completed',
+          'step.failed',
+          'step.cancelled'
+        }.contains(type)) {
       return;
     }
     final raw = event['payload'];

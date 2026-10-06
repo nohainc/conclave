@@ -11,6 +11,7 @@ import 'package:conclave_app/src/navigation/ax_browser_navigation.dart';
 import 'package:conclave_app/src/navigation/ax_navigation.dart';
 import 'package:conclave_app/src/platform/platform_services.dart';
 import 'ax_fixture_data.dart';
+import 'ax_fixture_realtime.dart';
 
 const a = AxProject(id: 'a', name: 'Project A', branch: '', lastActivity: '');
 const b = AxProject(id: 'b', name: 'Project B', branch: '', lastActivity: '');
@@ -65,7 +66,7 @@ class NavigationSource extends AxFixtureDataSource {
   }
 
   @override
-  Future<AxSnapshot> loadReadModels(
+  Future<AxSnapshot> loadBootstrapState(
       {String? projectId, String? workspaceId}) async {
     bootstrapCalls++;
     final projects = await loadProjects();
@@ -135,7 +136,8 @@ void main() {
         home: ConclaveAppShell(
             dataSource: source,
             services: const DefaultPlatformServices(),
-            browserNavigation: browser)));
+            browserNavigation: browser,
+            realtimeClient: TestRealtime())));
     await tester.pumpAndSettle();
   }
 

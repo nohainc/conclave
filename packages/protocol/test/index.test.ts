@@ -46,3 +46,42 @@ describe("realtime event contract", () => {
     expect(() => parseRealtimeEvent(input)).toThrow();
   });
 });
+
+describe("collaboration streams", () => {
+  const event = {
+    eventId: "collab",
+    type: "discussion.created",
+    version: "1.1",
+    timestamp: "2026-10-06T00:00:00.000Z",
+    projectId: "same-id",
+    workstreamId: "w",
+    stream: { kind: "project", id: "same-id" },
+    sequence: 1,
+    payload: { entityId: "m", workstreamId: "w" },
+  };
+  it("accepts ID-only collaboration signals with no execution Workspace", () => {
+    expect(parseRealtimeEvent(event)).toEqual(event);
+    expect(isDurableRealtimeEventType("discussion.created")).toBe(true);
+    expect(isDurableRealtimeEventType("project_workspace_grant.updated")).toBe(
+      true,
+    );
+  });
+  it.each([
+    { ...event, workspaceId: "same-id" },
+    { ...event, stream: undefined },
+    { ...event, stream: { kind: "project", id: "wrong-project" } },
+    { ...event, stream: { kind: "execution_workspace", id: "same-id" } },
+    { ...event, version: "1.0" },
+    {
+      ...event,
+      payload: { entityId: "m", workstreamId: "w", text: "large history" },
+    },
+    { ...event, payload: { entityId: "m" } },
+    { ...event, type: "work_request.created" },
+  ])(
+    "rejects ambiguous ownership or oversized entity-bearing signals",
+    (input) => {
+      expect(() => parseRealtimeEvent(input)).toThrow();
+    },
+  );
+});

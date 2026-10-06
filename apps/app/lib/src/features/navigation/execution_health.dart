@@ -18,7 +18,10 @@ class ExecutionStatusPopover extends StatelessWidget {
   final ValueChanged<AxNavigation> onNavigateTo;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      shellContext.watchExecution(() => _body(context));
+
+  Widget _body(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final borderColor =
         isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;

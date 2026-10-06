@@ -64,29 +64,30 @@ abstract final class ConclaveBrand {
     BorderRadius? borderRadius,
     BoxFit fit = BoxFit.contain,
   }) {
-    return ClipRRect(
-      borderRadius: borderRadius ?? BorderRadius.circular(size * (10 / 28)),
-      child: Image.asset(
-        logoAsset,
+    final image = Image.asset(
+      logoAsset,
+      width: size,
+      height: size,
+      fit: fit,
+      errorBuilder: (context, error, stackTrace) => Container(
         width: size,
         height: size,
-        fit: fit,
-        errorBuilder: (context, error, stackTrace) => Container(
-          width: size,
-          height: size,
-          decoration: brandMark,
-          alignment: Alignment.center,
-          child: Text(
-            'C',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: size * 0.54,
-            ),
+        decoration: brandMark,
+        alignment: Alignment.center,
+        child: Text(
+          'C',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: size * 0.54,
           ),
         ),
       ),
     );
+    if (borderRadius != null) {
+      return ClipRRect(borderRadius: borderRadius, child: image);
+    }
+    return image;
   }
 
   // Responsive Breakpoints

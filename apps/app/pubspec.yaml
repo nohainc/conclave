@@ -13,6 +13,7 @@ dependencies:
   conclave_protocol:
     path: ../../packages/dart/protocol
   http: ^1.2.2
+  web: ^1.1.1
   flutter_markdown_plus: ^1.0.12
   markdown: ^7.3.0
   url_launcher: ^6.3.3

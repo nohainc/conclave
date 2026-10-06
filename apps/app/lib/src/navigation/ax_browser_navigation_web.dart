@@ -5,11 +5,25 @@ import 'dart:html' as html;
 
 import 'ax_browser_navigation_stub.dart';
 
-export 'ax_browser_navigation_stub.dart' show AxBrowserNavigation;
+export 'ax_browser_navigation_stub.dart'
+    show AxBrowserNavigation, AxBrowserConnectivity;
 
 AxBrowserNavigation createAxBrowserNavigation() => _WebAxBrowserNavigation();
 
-final class _WebAxBrowserNavigation implements AxBrowserNavigation {
+final class _WebAxBrowserNavigation
+    implements AxBrowserNavigation, AxBrowserConnectivity {
+  final _connectivity = StreamController<bool>.broadcast(sync: true);
+  final _subscriptions = <StreamSubscription<html.Event>>[];
+  _WebAxBrowserNavigation() {
+    _subscriptions
+        .add(html.window.onOnline.listen((_) => _connectivity.add(true)));
+    _subscriptions
+        .add(html.window.onOffline.listen((_) => _connectivity.add(false)));
+  }
+  @override
+  bool get online => html.window.navigator.onLine ?? true;
+  @override
+  Stream<bool> get connectivityChanges => _connectivity.stream;
   Uri _current() => Uri.parse(html.window.location.href);
 
   @override
@@ -19,8 +33,9 @@ final class _WebAxBrowserNavigation implements AxBrowserNavigation {
   Stream<Uri> get changes => html.window.onPopState.map((_) => _current());
 
   @override
-  Stream<void> get lifecycleChanges =>
-      html.document.onVisibilityChange.map((_) {});
+  Stream<void> get lifecycleChanges => html.document.onVisibilityChange
+      .where((_) => html.document.visibilityState == 'visible')
+      .map((_) {});
 
   @override
   void push(Uri uri) => html.window.history.pushState(null, '', uri.toString());
@@ -57,5 +72,10 @@ final class _WebAxBrowserNavigation implements AxBrowserNavigation {
   }
 
   @override
-  void dispose() {}
+  void dispose() {
+    for (final subscription in _subscriptions) {
+      unawaited(subscription.cancel());
+    }
+    unawaited(_connectivity.close());
+  }
 }

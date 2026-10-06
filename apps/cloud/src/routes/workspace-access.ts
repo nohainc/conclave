@@ -1,3 +1,4 @@
+import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
   AuthorizationError,
   authorizeProjectMembership,
@@ -331,6 +332,13 @@ export async function createWorkspaceProjectGrant(
       projectId,
       workspaceId,
     },
+  );
+  await publishCollaborationEvent(
+    env,
+    "project_workspace_grant.updated",
+    projectId,
+    id,
+    { additionalRecipientUserIds: [context.userId] },
   );
   const grant = await loadWorkspaceProjectGrant(env, id);
   return json(

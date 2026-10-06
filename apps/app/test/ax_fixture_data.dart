@@ -15,6 +15,7 @@ class AxFixtureDataSource implements AxDataSource {
     required String workflowId,
     required String prompt,
     List<Map<String, dynamic>> attachments = const [],
+    String? idempotencyKey,
   }) async =>
       throw UnimplementedError('Work Request fixture is not configured');
 
@@ -40,11 +41,10 @@ class AxFixtureDataSource implements AxDataSource {
           String? beforeId,
           bool activeOnly = false}) async =>
       AxWorkRequestPage(
-          requests: await loadWorkstreamWorkRequests(
+          requests: await workRequestRows(
               workstreamId: workstreamId, activeOnly: activeOnly));
 
-  @override
-  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests({
+  Future<List<AxWorkRequest>> workRequestRows({
     required String workstreamId,
     bool activeOnly = false,
   }) async =>
@@ -137,10 +137,9 @@ class AxFixtureDataSource implements AxDataSource {
           String? before,
           String? after}) async =>
       AxDiscussionPage(
-          messages: await loadDiscussionMessages(workstreamId: workstreamId));
+          messages: await discussionRows(workstreamId: workstreamId));
 
-  @override
-  Future<List<AxDiscussionMessage>> loadDiscussionMessages({
+  Future<List<AxDiscussionMessage>> discussionRows({
     required String workstreamId,
   }) async =>
       const [];
@@ -150,6 +149,7 @@ class AxFixtureDataSource implements AxDataSource {
     required String workstreamId,
     required String text,
     List<String> references = const [],
+    String? idempotencyKey,
   }) async =>
       AxDiscussionMessage(
         id: 'msg-${DateTime.now().microsecondsSinceEpoch}',
@@ -161,6 +161,12 @@ class AxFixtureDataSource implements AxDataSource {
         createdAt: DateTime.now().toIso8601String(),
         isMe: true,
       );
+
+  @override
+  Future<AxDiscussionMessage> loadDiscussionMessage(
+          {required String messageId}) async =>
+      throw UnimplementedError(
+          'Discussion message lookup is not provided by this fixture');
 
   @override
   Future<AxDiscussionMessage> editDiscussionMessage({
@@ -347,6 +353,7 @@ class AxFixtureDataSource implements AxDataSource {
   Future<AxWorkstream> createWorkstream({
     required String projectId,
     required String name,
+    String? idempotencyKey,
   }) async =>
       AxWorkstream(
         id: 'workstream-created',
@@ -457,7 +464,7 @@ class AxFixtureDataSource implements AxDataSource {
   }) async {}
 
   @override
-  Future<AxSnapshot> loadReadModels(
+  Future<AxSnapshot> loadBootstrapState(
           {String? projectId, String? workspaceId}) async =>
       axFixtureSnapshot();
 
@@ -480,7 +487,7 @@ class EmptyWorkspaceFixtureDataSource extends AxFixtureDataSource {
   bool hasProject = false;
 
   @override
-  Future<AxSnapshot> loadReadModels(
+  Future<AxSnapshot> loadBootstrapState(
       {String? projectId, String? workspaceId}) async {
     return _snapshot();
   }

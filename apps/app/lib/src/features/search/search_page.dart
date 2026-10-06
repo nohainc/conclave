@@ -10,7 +10,10 @@ class SearchPage extends StatelessWidget {
   const SearchPage({
     super.key,
     required this.query,
-    required this.snapshot,
+    required this.projects,
+    required this.workspaces,
+    required this.workstreamsByProject,
+    this.run,
     required this.onNavigateTo,
     required this.onSelectProject,
     required this.onClearSearch,
@@ -19,7 +22,10 @@ class SearchPage extends StatelessWidget {
   });
 
   final String query;
-  final AxSnapshot snapshot;
+  final List<AxProject> projects;
+  final List<AxWorkspace> workspaces;
+  final Map<String, List<AxWorkstream>> workstreamsByProject;
+  final AxRun? run;
   final ValueChanged<AxNavigation> onNavigateTo;
   final ValueChanged<String> onSelectProject;
   final VoidCallback onClearSearch;
@@ -88,7 +94,7 @@ class SearchPage extends StatelessWidget {
     }
 
     // Projects and Workstreams
-    for (final project in snapshot.projects) {
+    for (final project in projects) {
       actions.add(CommandPaletteAction(
         title: project.name,
         subtitle:
@@ -101,7 +107,8 @@ class SearchPage extends StatelessWidget {
         },
       ));
 
-      for (final workstream in project.workstreams) {
+      for (final workstream
+          in (workstreamsByProject[project.id] ?? const <AxWorkstream>[])) {
         actions.add(CommandPaletteAction(
           title: workstream.name,
           subtitle: '${project.name} · ${workstream.status}',
@@ -116,9 +123,9 @@ class SearchPage extends StatelessWidget {
     }
 
     // Active Run
-    final activeRun = snapshot.run;
+    final activeRun = run;
     if (activeRun != null) {
-      final projectId = snapshot.projects.firstOrNull?.id ?? '';
+      final projectId = projects.firstOrNull?.id ?? '';
       actions.add(CommandPaletteAction(
         title: activeRun.objective.isNotEmpty
             ? activeRun.objective
@@ -139,7 +146,7 @@ class SearchPage extends StatelessWidget {
     }
 
     // Workspaces
-    for (final workspace in snapshot.workspaces) {
+    for (final workspace in workspaces) {
       actions.add(CommandPaletteAction(
         title: workspace.name,
         subtitle: '${workspace.hostname} · ${workspace.status}',

@@ -82,6 +82,34 @@ void main() {
     expect(cache.peek('w').olderCursor, older);
     expect(() => cache.peek('w').requests.clear(), throwsUnsupportedError);
   });
+  test(
+      '5,000 Work Requests: initial 50, older 50 only on demand, no cursor traversal',
+      () async {
+    final server =
+        List.generate(5000, (i) => request(i.toString().padLeft(4, '0')));
+    final first = cache.refresh('w');
+    final pageSize = source.calls.single.limit;
+    expect(pageSize, 50);
+    source.pending.single.complete(AxWorkRequestPage(
+        requests: server.sublist(5000 - pageSize), nextCursor: older));
+    await first;
+    await Future<void>.delayed(Duration.zero);
+    expect(source.calls, hasLength(1));
+    expect(cache.peek('w').requests, hasLength(pageSize));
+    final next = cache.loadOlder('w');
+    expect(source.calls, hasLength(2));
+    expect(source.calls.last.before, older.id);
+    expect(source.calls.last.limit, pageSize);
+    source.pending.last.complete(AxWorkRequestPage(
+        requests: server.sublist(5000 - 2 * pageSize, 5000 - pageSize),
+        nextCursor: const AxWorkRequestCursor(createdAt: 'older', id: 'next')));
+    await next;
+    await Future<void>.delayed(Duration.zero);
+    expect(source.calls, hasLength(2));
+    expect(cache.peek('w').requests, hasLength(2 * pageSize));
+    expect(cache.peek('w').requests.map((row) => row.id).toSet(),
+        hasLength(2 * pageSize));
+  });
   test('older pages prepend and deduplicate, refresh retains them', () async {
     await seed();
     final load = cache.loadOlder('w');
@@ -236,7 +264,8 @@ void main() {
   });
 
   Widget page(String id,
-          {Future<String> Function(String, String, List<Map<String, dynamic>>)?
+          {Future<String> Function(
+                  String, String, List<Map<String, dynamic>>, String)?
               onRun}) =>
       MaterialApp(
           home: Scaffold(
@@ -264,7 +293,8 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
   }
 
-  testWidgets('cached Work history renders immediately after page recreation',
+  testWidgets(
+      'W1 W2 W1: cached Work history renders on the first frame with network pending',
       (tester) async {
     await size(tester);
     await seed();
@@ -273,7 +303,10 @@ void main() {
     expect(find.text('Prompt 30'), findsOneWidget);
     source.pending.last.complete(AxWorkRequestPage(requests: [request('30')]));
     await tester.pumpAndSettle();
-    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pumpWidget(page('w2'));
+    source.pending.last.complete(AxWorkRequestPage(requests: [request('W2')]));
+    await tester.pumpAndSettle();
+    expect(find.text('Prompt W2'), findsOneWidget);
     await tester.pumpWidget(page('w'));
     await tester.pump();
     expect(find.text('Prompt 30'), findsOneWidget);
@@ -312,7 +345,8 @@ void main() {
       (tester) async {
     await size(tester);
     final submit = Completer<String>();
-    await tester.pumpWidget(page('w', onRun: (_, __, ___) => submit.future));
+    await tester
+        .pumpWidget(page('w', onRun: (_, __, ___, key) => submit.future));
     source.pending.last.complete(AxWorkRequestPage(requests: []));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Send this Work');

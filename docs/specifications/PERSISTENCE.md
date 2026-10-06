@@ -133,7 +133,7 @@ persisted.
 
 Cloud runs retention cleanup hourly and deletes up to 10,000 expired rows per
 run, oldest first. Cleanup can take multiple runs to catch up after an outage
-or a large backlog. Per-Workspace sequence cursors are retained indefinitely
+or a large backlog. Per-stream sequence cursors are retained indefinitely
 and are never reset when old events are deleted, so sequence numbers remain
 monotonic. Idempotency is guaranteed for the 90-day event retention window; a
 retry after expiration may create a new event.
@@ -147,3 +147,20 @@ and mutation fencing are specified in
 [ADR-011](../decisions/ADR-011-workstream-working-directories.md).
 
 See [Protocol Boundaries](../architecture/PROTOCOL_BOUNDARIES.md).
+
+Durable realtime stream identity is `(kind, id)` for execution Workspace,
+Project, or user synchronization. Collaboration events have no execution
+Workspace identity. The fresh v8 baseline and one-time hosted alignment preserve
+existing execution counters and events; see [realtime synchronization 1.1](REALTIME_SYNCHRONIZATION.md).
+
+## Human mutation receipts
+
+The fresh v8 baseline includes `mutation_receipts`, keyed by authenticated user,
+mutation endpoint/entity scope, and opaque client idempotency key. A SHA-256 input
+fingerprint and successful response are committed in the same D1 transaction as
+the created entity. Receipts have no automatic expiry and no foreign key to the
+created resource: deleting it must not permit a retry to resurrect it. User
+deletion cascades receipts; authorization is rechecked before every replay.
+See [Mutation idempotency v1](MUTATION_IDEMPOTENCY.md). Existing deployed databases
+need this table created before deploying the updated routes; no migration chain
+is introduced for the unreleased v8 baseline.

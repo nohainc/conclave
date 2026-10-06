@@ -44,6 +44,28 @@ describe("Worker API routes", () => {
     });
   });
 
+  it("returns zero catalog payload bytes when the revision is unchanged", async () => {
+    const first = await routeWorkerRequest(
+      request("/api/workflows/catalog"),
+      {} as Env,
+      undefined,
+      {},
+      dependencies,
+    );
+    expect((await first.text()).length).toBeGreaterThan(0);
+    const next = await routeWorkerRequest(
+      new Request("https://conclave.test/api/workflows/catalog", {
+        headers: { "if-none-match": first.headers.get("etag")! },
+      }),
+      {} as Env,
+      undefined,
+      {},
+      dependencies,
+    );
+    expect(next.status).toBe(304);
+    expect((await next.arrayBuffer()).byteLength).toBe(0);
+  });
+
   it("serves the logical Worker inventory at its current product route", async () => {
     const handler = vi.fn(
       async () => new Response("inventory", { status: 200 }),

@@ -49,6 +49,23 @@ class _ApiResponseClient extends http.BaseClient {
 }
 
 void main() {
+  test('Workspace list reads aggregate grant counts with one HTTP request',
+      () async {
+    final client = _ApiResponseClient({
+      '/api/workspaces': {
+        'workspaces': [
+          {'id': 'owned', 'name': 'Owned', 'activeProjectGrantCount': 30},
+          {'id': 'legacy', 'name': 'Legacy', 'projectGrantCount': 2},
+          {'id': 'empty', 'name': 'Empty'},
+        ]
+      }
+    });
+    final api =
+        AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+    final values = await api.loadWorkspaces();
+    expect(values.map((w) => w.projectGrantCount), [30, 2, 0]);
+    expect(client.requests, ['/api/workspaces']);
+  });
   test('single Work Request details retain identity and authored result',
       () async {
     final client = _JsonClient({
@@ -389,7 +406,7 @@ void main() {
 
   test('populates focused stores from the Cloud read model', () async {
     final store = AxStore(const AxFixtureDataSource());
-    final snapshot = await store.reload();
+    final snapshot = await store.loadBootstrapState();
 
     expect(snapshot.workspaceId, isNull);
     expect(store.projects.items.first.id, 'project-auth');
@@ -509,7 +526,7 @@ void main() {
       client: client,
     );
 
-    final state = await api.loadReadModels(workspaceId: 'workspace-1');
+    final state = await api.loadBootstrapState(workspaceId: 'workspace-1');
 
     expect(state.viewer?.id, 'user-1');
     expect(state.projects.single.workstreams, isEmpty);
@@ -614,7 +631,7 @@ void main() {
       client: client,
     );
 
-    await api.loadReadModels();
+    await api.loadBootstrapState();
 
     expect(client.lastRequest?.headers.containsKey('x-conclave-workspace-id'),
         isFalse);

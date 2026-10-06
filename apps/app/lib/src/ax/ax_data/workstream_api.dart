@@ -5,8 +5,9 @@ mixin _WorkstreamApi on _AxApiClientCore {
   Future<List<AxWorkstream>> loadProjectWorkstreams({
     required String projectId,
   }) async {
-    final body =
-        await _getJson(Uri.parse('$baseUrl/projects/$projectId/workstreams'));
+    final body = await _getJson(
+        Uri.parse('$baseUrl/projects/$projectId/workstreams'),
+        conditional: true);
     return (body['workstreams'] as List? ?? const [])
         .whereType<Map>()
         .map((item) => AxWorkstream.fromJson(Map<String, dynamic>.from(item)))
@@ -17,10 +18,14 @@ mixin _WorkstreamApi on _AxApiClientCore {
   Future<AxWorkstream> createWorkstream({
     required String projectId,
     required String name,
+    String? idempotencyKey,
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/projects/$projectId/workstreams'),
-      headers: _headers(contentType: 'application/json'),
+      headers: {
+        ..._headers(contentType: 'application/json'),
+        'Idempotency-Key': idempotencyKey ?? newAxIdempotencyKey()
+      },
       body: jsonEncode({'name': name}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -105,10 +110,14 @@ mixin _WorkstreamApi on _AxApiClientCore {
     required String workflowId,
     required String prompt,
     List<Map<String, dynamic>> attachments = const [],
+    String? idempotencyKey,
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/workstreams/$workstreamId/work-requests'),
-      headers: _headers(contentType: 'application/json'),
+      headers: {
+        ..._headers(contentType: 'application/json'),
+        'Idempotency-Key': idempotencyKey ?? newAxIdempotencyKey()
+      },
       body: jsonEncode({
         'workflowId': workflowId,
         'input': {'originalRequest': prompt, 'attachments': attachments},
@@ -325,13 +334,6 @@ mixin _WorkstreamApi on _AxApiClientCore {
   }
 
   @override
-  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests(
-          {required String workstreamId, bool activeOnly = false}) async =>
-      (await loadWorkstreamWorkRequestPage(
-              workstreamId: workstreamId, activeOnly: activeOnly))
-          .requests;
-
-  @override
   Future<AxDiscussionPage> loadDiscussionPage(
       {required String workstreamId,
       int limit = 50,
@@ -373,19 +375,18 @@ mixin _WorkstreamApi on _AxApiClientCore {
   }
 
   @override
-  Future<List<AxDiscussionMessage>> loadDiscussionMessages(
-          {required String workstreamId}) async =>
-      (await loadDiscussionPage(workstreamId: workstreamId)).messages;
-
-  @override
   Future<AxDiscussionMessage> sendDiscussionMessage({
     required String workstreamId,
     required String text,
     List<String> references = const [],
+    String? idempotencyKey,
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/workstreams/$workstreamId/discussion-messages'),
-      headers: _headers(contentType: 'application/json'),
+      headers: {
+        ..._headers(contentType: 'application/json'),
+        'Idempotency-Key': idempotencyKey ?? newAxIdempotencyKey()
+      },
       body: jsonEncode({
         'body': text,
         'references': references,
@@ -409,6 +410,26 @@ mixin _WorkstreamApi on _AxApiClientCore {
     final body = jsonDecode(response.body);
     final message = body is Map ? body['message'] : null;
     if (message is! Map) {
+      throw const AxApiException('Discussion message response is malformed');
+    }
+    return AxDiscussionMessage.fromJson(Map<String, dynamic>.from(message));
+  }
+
+  @override
+  Future<AxDiscussionMessage> loadDiscussionMessage(
+      {required String messageId}) async {
+    final response = await client.get(
+        Uri.parse(
+            '$baseUrl/discussion-messages/${Uri.encodeComponent(messageId)}'),
+        headers: _headers());
+    if (response.statusCode != 200) {
+      throw AxApiException(
+          'Discussion message loading failed (${response.statusCode})',
+          statusCode: response.statusCode);
+    }
+    final body = jsonDecode(response.body);
+    final message = body is Map ? body['message'] : null;
+    if (message is! Map || message['id'] != messageId) {
       throw const AxApiException('Discussion message response is malformed');
     }
     return AxDiscussionMessage.fromJson(Map<String, dynamic>.from(message));

@@ -95,12 +95,25 @@ provides typed query caching, scoped listeners, race protection, and optimistic
 mutations over existing HTTP loaders. Project/sidebar navigation now consumes
 independent cached Project details and Workstream collections, retaining
 expanded Projects across navigation. Navigation synchronously changes route
-state and ensures those resources in the background; `loadReadModels` remains
+state and ensures those resources in the background; `loadBootstrapState` remains
 a bootstrap/recovery API. Work history uses a shared infinite query with a
 bounded recent page, on-demand older pages, and targeted realtime reconciliation.
 Healthy sockets disable Work polling; a fifteen-second fallback runs during
-outages and stops after scoped recovery.
-Other resources remain on their existing paths.
+outages and stops after scoped recovery. The shell has no five-second snapshot
+polling: Run/execution signals reconcile identified Work Requests and never
+reload bootstrap, Projects, Workspaces, or session data.
+An optional, user-scoped IndexedDB read cache restores allowlisted server data
+after Cloud authentication, renders it as stale, and revalidates in the background.
+Logout clears memory and that user's persisted data; credentials and pending
+mutations are never persisted. In memory, AX keeps 20 recent Workstream histories
+and up to 200 rows per inactive collection, protecting visible histories and
+pending operations. Eviction releases cache data only; Projects and the Workflow
+catalog remain cached for the authenticated session. Collaboration state lives
+in shared queries; the shell exposes only a legacy execution projection. Browser foreground return and network restoration
+revalidate active stale queries in the background while cached content stays
+visible; temporary failures show a narrow connectivity/staleness notice. Stable
+Project and Workflow reads use optional [content revisions](docs/specifications/AX_CONDITIONAL_READS.md)
+to avoid retransmitting unchanged representations after authorization.
 
 AX Discussion history uses shared, paginated in-memory state with per-message
 optimistic writes; see [server-state ownership](docs/architecture/AX_SERVER_STATE.md)

@@ -73,7 +73,7 @@ void main() {
       dataSource: data,
       onBackToProject: _noop,
       onArchive: _noop,
-      onRunWork: (source, workflow, _) {
+      onRunWork: (source, workflow, _, key) {
         sentSource = source;
         sentWorkflow = workflow;
         return submission.future;
@@ -262,7 +262,7 @@ void main() {
       dataSource: _VersionedWorkflowDataSource(),
       onBackToProject: _noop,
       onArchive: _noop,
-      onRunWork: (_, workflow, ___) {
+      onRunWork: (_, workflow, ___, key) {
         sentWorkflow = workflow;
         return submission.future;
       },
@@ -407,7 +407,7 @@ void main() {
         currentUserId: 'user-owner',
         onBackToProject: _noop,
         onArchive: _noop,
-        onRunWork: (_, __, ___) {
+        onRunWork: (_, __, ___, key) {
           sends++;
           return submitted.future;
         },
@@ -775,7 +775,8 @@ void main() {
         dataSource: _WorkFormDataSource(),
         onBackToProject: _noop,
         onArchive: _noop,
-        onRunWork: (_, __, ___) async => throw const AxApiException(message),
+        onRunWork: (_, __, ___, key) async =>
+            throw const AxApiException(message),
         initialTab: 1,
       ),
     ))));
@@ -993,7 +994,7 @@ void main() {
             dataSource: _WorkFormDataSource(),
             onBackToProject: _noop,
             onArchive: _noop,
-            onRunWork: (work, workflowId, attachments) async {
+            onRunWork: (work, workflowId, attachments, key) async {
               submittedWork = work;
               return 'request-1';
             },
@@ -1595,7 +1596,7 @@ void main() {
         body: SingleChildScrollView(
           child: ProjectPage(
             project: project,
-            dataSource: const AxFixtureDataSource(),
+            dataSource: _ProjectStreamsSource([ws1, ws2, ws3]),
             onOpenWorkstream: (_) {},
             onEdit: () {},
             onArchive: () {},
@@ -1968,6 +1969,18 @@ class _DuplicateTestDataSource extends AxFixtureDataSource {
     this.onInviteMember,
   });
 
+  @override
+  Future<List<AxWorkstream>> loadProjectWorkstreams(
+          {required String projectId}) async =>
+      [
+        AxWorkstream.fromJson({
+          'id': 'ws-1',
+          'projectId': projectId,
+          'name': 'Frontend Design',
+          'status': 'active'
+        })
+      ];
+
   final VoidCallback? onCreateWorkstream;
   final VoidCallback? onRequestWorkspace;
   final VoidCallback? onInviteMember;
@@ -2016,6 +2029,7 @@ class _DuplicateTestDataSource extends AxFixtureDataSource {
     String? brief,
     String? lead,
     String? primaryWorkspace,
+    String? idempotencyKey,
   }) async {
     onCreateWorkstream?.call();
     return AxWorkstream(
@@ -2056,7 +2070,7 @@ class _WorkHistoryDataSource extends AxFixtureDataSource {
   final List<bool> activeOnlyCalls = [];
 
   @override
-  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests({
+  Future<List<AxWorkRequest>> workRequestRows({
     required String workstreamId,
     bool activeOnly = false,
   }) async {
@@ -2067,7 +2081,7 @@ class _WorkHistoryDataSource extends AxFixtureDataSource {
 
 class _DiscussionDataSource extends AxFixtureDataSource {
   @override
-  Future<List<AxDiscussionMessage>> loadDiscussionMessages({
+  Future<List<AxDiscussionMessage>> discussionRows({
     required String workstreamId,
   }) async =>
       [
@@ -2091,7 +2105,8 @@ class _MarkdownDiscussionDataSource extends AxFixtureDataSource {
   Future<AxDiscussionMessage> sendDiscussionMessage(
       {required String workstreamId,
       required String text,
-      List<String> references = const []}) async {
+      List<String> references = const [],
+      String? idempotencyKey}) async {
     createdSource = text;
     return AxDiscussionMessage(
         id: 'saved-message',
@@ -2242,7 +2257,7 @@ class _PinnedHistoryDataSource extends _WorkHistoryDataSource {
                 )));
 
   @override
-  Future<List<AxDiscussionMessage>> loadDiscussionMessages(
+  Future<List<AxDiscussionMessage>> discussionRows(
           {required String workstreamId}) async =>
       List.generate(
           20,
@@ -2280,7 +2295,7 @@ class _SlowSubmissionDataSource extends _WorkFormDataSource {
           List<Map<String, dynamic>> attachments = const []}) =>
       ready.future;
   @override
-  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests(
+  Future<List<AxWorkRequest>> workRequestRows(
           {required String workstreamId, bool activeOnly = false}) async =>
       requests;
 }
@@ -2300,7 +2315,7 @@ class _VersionedWorkflowDataSource extends _WorkFormDataSource {
           }),
       ];
   @override
-  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests(
+  Future<List<AxWorkRequest>> workRequestRows(
           {required String workstreamId, bool activeOnly = false}) async =>
       [
         _workRequest('old-direct', 'Historical request'),
@@ -2333,7 +2348,7 @@ class _CurrentWorkflowUiDataSource extends _VersionedWorkflowDataSource {
       ];
 
   @override
-  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests(
+  Future<List<AxWorkRequest>> workRequestRows(
           {required String workstreamId, bool activeOnly = false}) async =>
       [
         for (final id in ['chat', 'direct'])
@@ -2355,7 +2370,8 @@ class _CurrentWorkflowUiDataSource extends _VersionedWorkflowDataSource {
   Future<AxDiscussionMessage> sendDiscussionMessage(
       {required String workstreamId,
       required String text,
-      List<String> references = const []}) {
+      List<String> references = const [],
+      String? idempotencyKey}) {
     discussionWrites++;
     return super.sendDiscussionMessage(
         workstreamId: workstreamId, text: text, references: references);
@@ -2364,7 +2380,7 @@ class _CurrentWorkflowUiDataSource extends _VersionedWorkflowDataSource {
 
 class _SnapshotHistoryDataSource extends AxFixtureDataSource {
   @override
-  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests(
+  Future<List<AxWorkRequest>> workRequestRows(
           {required String workstreamId, bool activeOnly = false}) async =>
       [
         for (final entry in [
@@ -2403,4 +2419,13 @@ class _IndependentBindingsDataSource extends _GenericWorkerConfigDataSource {
             localConcurrencyLimit: 1,
             capabilities: []),
       ];
+}
+
+class _ProjectStreamsSource extends AxFixtureDataSource {
+  _ProjectStreamsSource(this.streams);
+  final List<AxWorkstream> streams;
+  @override
+  Future<List<AxWorkstream>> loadProjectWorkstreams(
+          {required String projectId}) async =>
+      streams;
 }

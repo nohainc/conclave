@@ -28,7 +28,15 @@ extension _ProjectWorkspaceTabs on _ProjectWorkspaceState {
               ],
             ),
             const SizedBox(height: 8),
-            if (loading)
+            if (workstreamsError != null)
+              TextButton(
+                  onPressed: () {
+                    unawaited(_streams.refresh(widget.project.id).then<void>(
+                        (_) {},
+                        onError: (Object _, StackTrace __) {}));
+                  },
+                  child: const Text('Retry Workstreams')),
+            if (workstreamsLoading)
               const LinearProgressIndicator()
             else if (workstreams.isEmpty)
               const Padding(
@@ -76,6 +84,7 @@ extension _ProjectWorkspaceTabs on _ProjectWorkspaceState {
 
   Widget _workstreamListTile(AxWorkstream workstream, int index) {
     final archived = workstream.status == 'archived';
+    final pending = workstream.id.startsWith('local-workstream-');
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(
@@ -85,8 +94,10 @@ extension _ProjectWorkspaceTabs on _ProjectWorkspaceState {
           fontWeight: FontWeight.w500,
         ),
       ),
-      onTap: archived ? null : () => widget.onOpenWorkstream(workstream.id),
-      trailing: canManage
+      onTap: archived || pending
+          ? null
+          : () => widget.onOpenWorkstream(workstream.id),
+      trailing: canManage && !pending
           ? Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -171,6 +182,14 @@ extension _ProjectWorkspaceTabs on _ProjectWorkspaceState {
               ],
             ),
             const SizedBox(height: 8),
+            if (executionError != null)
+              TextButton(
+                  onPressed: () {
+                    unawaited(_grants.refresh(widget.project.id).then<void>(
+                        (_) {},
+                        onError: (Object _, StackTrace __) {}));
+                  },
+                  child: const Text('Retry Workspace grants')),
             if (executionLoading)
               const LinearProgressIndicator()
             else if (projectWorkspaces.isEmpty)
@@ -209,12 +228,16 @@ extension _ProjectWorkspaceTabs on _ProjectWorkspaceState {
                               icon:
                                   const Icon(Icons.security_outlined, size: 18),
                               tooltip: 'Edit Workspace access',
-                              onPressed: () => _editWorkspaceAccess(workspace),
+                              onPressed: workspace['optimistic'] == true
+                                  ? null
+                                  : () => _editWorkspaceAccess(workspace),
                             ),
                             IconButton(
                               icon: const Icon(Icons.link_off, size: 18),
                               tooltip: 'Revoke grant',
-                              onPressed: () => _revokeWorkspaceGrant(workspace),
+                              onPressed: workspace['optimistic'] == true
+                                  ? null
+                                  : () => _revokeWorkspaceGrant(workspace),
                             ),
                           ])
                         : null,
@@ -252,7 +275,15 @@ extension _ProjectWorkspaceTabs on _ProjectWorkspaceState {
               ],
             ),
             const SizedBox(height: 8),
-            if (loading)
+            if (membersError != null)
+              TextButton(
+                  onPressed: () {
+                    unawaited(_queries
+                        .refreshMembers(widget.project.id)
+                        .catchError((Object _) {}));
+                  },
+                  child: const Text('Retry Members')),
+            if (membersLoading)
               const LinearProgressIndicator()
             else if (members.isEmpty)
               const Padding(

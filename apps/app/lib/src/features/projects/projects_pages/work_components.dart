@@ -98,117 +98,111 @@ class _WorkComposer extends StatelessWidget {
   final Future<void> Function() onRun;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Expanded(child: history(context)),
+        const SizedBox(height: 16),
+        controls(context)
+      ]);
+
+  Widget history(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = Theme.of(context).colorScheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-            child: SingleChildScrollView(
-                controller: historyController,
-                key: const ValueKey('work-history-scroll'),
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (hasOlder)
-                        TextButton(
-                            onPressed: loadingOlder ? null : onLoadOlder,
-                            child: Text(loadingOlder
-                                ? 'Loading older Work history…'
-                                : 'Load older Work history')),
-                      if (timelineError != null && workTimeline.isNotEmpty)
-                        TextButton(
-                            onPressed: onRefresh,
-                            child: const Text('Retry Work sync')),
-                      if (loadingTimeline && workTimeline.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: LinearProgressIndicator(),
-                        )
-                      else if (timelineError != null && workTimeline.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Text(
-                            'Could not load Work history: $timelineError',
-                            style: TextStyle(color: colors.error),
-                          ),
-                        )
-                      else if (workTimeline.isEmpty)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 40, horizontal: 16),
-                          alignment: Alignment.center,
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.chat_bubble_outline_rounded,
-                                size: 42,
-                                color: isDark ? Colors.white24 : Colors.black26,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'No work requests yet',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color:
-                                      isDark ? Colors.white60 : Colors.black54,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Ask AI to do something for the team. Nothing runs until you send the request.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color:
-                                      isDark ? Colors.white38 : Colors.black38,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      else
-                        ListView.separated(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: workTimeline.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final request = workTimeline[index];
-                            return _WorkTimelineCard(
-                              key: ValueKey(request.id),
-                              request: request,
-                              progressText: localWorkProgress[request.id],
-                              currentUserId: currentUserId,
-                              currentUserName: currentUserName,
-                              workflowCatalog: workflowCatalog,
-                              onShowRunDetails:
-                                  localWorkProgress.containsKey(request.id)
-                                      ? null
-                                      : onShowRunDetails,
-                              onRetryStep:
-                                  localWorkProgress.containsKey(request.id)
-                                      ? null
-                                      : onRetryStep,
-                              onCancelRun:
-                                  localWorkProgress.containsKey(request.id)
-                                      ? null
-                                      : onCancelRun,
-                            );
-                          },
-                        ),
-                    ]))),
-        const SizedBox(height: 16),
-        _buildComposerInput(context, isDark, colors),
-      ],
-    );
+    return SingleChildScrollView(
+        controller: historyController,
+        key: const ValueKey('work-history-scroll'),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (hasOlder)
+            TextButton(
+                onPressed: loadingOlder ? null : onLoadOlder,
+                child: Text(loadingOlder
+                    ? 'Loading older Work history…'
+                    : 'Load older Work history')),
+          if (timelineError != null && workTimeline.isNotEmpty)
+            TextButton(
+                onPressed: onRefresh, child: const Text('Retry Work sync')),
+          if (loadingTimeline && workTimeline.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: LinearProgressIndicator(),
+            )
+          else if (timelineError != null && workTimeline.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                'Could not load Work history: $timelineError',
+                style: TextStyle(color: colors.error),
+              ),
+            )
+          else if (workTimeline.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
+              alignment: Alignment.center,
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    size: 42,
+                    color: isDark ? Colors.white24 : Colors.black26,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No work requests yet',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Ask AI to do something for the team. Nothing runs until you send the request.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white38 : Colors.black38,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ListView.separated(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: workTimeline.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final request = workTimeline[index];
+                return _WorkTimelineCard(
+                  key: ValueKey(request.id),
+                  request: request,
+                  progressText: localWorkProgress[request.id],
+                  currentUserId: currentUserId,
+                  currentUserName: currentUserName,
+                  workflowCatalog: workflowCatalog,
+                  onShowRunDetails: localWorkProgress.containsKey(request.id)
+                      ? null
+                      : onShowRunDetails,
+                  onRetryStep: localWorkProgress.containsKey(request.id)
+                      ? null
+                      : onRetryStep,
+                  onCancelRun: localWorkProgress.containsKey(request.id)
+                      ? null
+                      : onCancelRun,
+                );
+              },
+            ),
+        ]));
   }
+
+  Widget controls(BuildContext context) => _buildComposerInput(
+      context,
+      Theme.of(context).brightness == Brightness.dark,
+      Theme.of(context).colorScheme);
 
   Widget _additionalControls(BuildContext context, GlobalKey inputKey) {
     final selected =

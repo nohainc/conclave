@@ -1,22 +1,28 @@
 part of 'ax_app.dart';
 
 mixin _AxAppStateMixin on State<ConclaveAppShell> {
-  late AxSnapshot snapshot;
+  AxSnapshot get executionSnapshot => store.execution;
   String? selectedProjectId;
   RunStatus? optimisticRunStatus;
-  Timer? refreshTimer;
   bool isLoading = true;
   String? loadError;
   String? selectedTaskId = 'implement';
   final Set<String> expandedProjectIds = <String>{};
-  List<AxWorker> workspaceWorkers = const [];
-  bool workspaceWorkerInventoryLoaded = false;
-  Map<String, int> workspaceProjectGrantCounts = const {};
+  List<AxWorker> get workspaceWorkers =>
+      store.syncEngine.peek(store.catalogs.workers).data ?? const [];
+  bool get workspaceWorkerInventoryLoaded =>
+      store.syncEngine.peek(store.catalogs.workers).hasData;
   final authNameController = TextEditingController();
   final authEmailController = TextEditingController();
   final authPasswordController = TextEditingController();
   final authConfirmPasswordController = TextEditingController();
-  final List<AxNotification> notifications = [];
+  List<AxNotification> get notifications => store.notifications;
+  void _updateNotifications(VoidCallback callback) {
+    callback();
+    store.unreadNotifications.value =
+        notifications.where((n) => !n.read).length;
+  }
+
   late final AxStore store;
   final navigatorKey = GlobalKey<NavigatorState>();
   final messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -24,14 +30,23 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   late AxNavigation navigation;
   StreamSubscription<Uri>? navigationSubscription;
   StreamSubscription<void>? lifecycleSubscription;
+  StreamSubscription<bool>? connectivitySubscription;
   late final RealtimeClient realtimeClient;
   StreamSubscription<Map<String, dynamic>>? realtimeSubscription;
   bool realtimeStarted = false;
   void Function()? _cancelWorkRealtime;
+
   bool authRequired = false;
   bool isReconnecting = false;
-  bool realtimeStale = false;
-  String? realtimeNotice;
+  bool get realtimeStale => store.realtimeStatus.value.$1;
+  set realtimeStale(bool value) =>
+      store.realtimeStatus.value = (value, realtimeNotice);
+  bool _realtimeTransportConnected = false;
+  int _realtimeRecoveryGeneration = 0;
+  String? get realtimeNotice => store.realtimeStatus.value.$2;
+  set realtimeNotice(String? value) =>
+      store.realtimeStatus.value = (realtimeStale, value);
+  void _updateLiveState(VoidCallback callback) => callback();
   bool authSignUp = false;
   bool authResetRequest = false;
   bool authBusy = false;
@@ -45,16 +60,17 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   String? desktopAuthError;
   String? authNotice;
   String? authError;
-  String? pendingRunPrompt;
   final promptResponseController = TextEditingController();
   final TextEditingController _searchQueryController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
   AxNavigation? _navigationBeforeSearch;
   DateTime? _lastRealtimeAnnouncement;
-  String? _lastRealtimeProjectId;
-  AxAccountSecurity? accountSecurity;
-  bool accountSecurityLoading = false;
+  AxAccountSecurity? get accountSecurity => store.security.value;
+  set accountSecurity(AxAccountSecurity? value) => store.security.value = value;
+  bool get accountSecurityLoading => store.securityLoading.value;
+  set accountSecurityLoading(bool value) => store.securityLoading.value = value;
+  void _updateSecurity(VoidCallback callback) => callback();
   ThemeMode _themeMode = ThemeMode.system;
   bool _desktopSidebarCollapsed = false;
   bool get showRunDetails => switch (navigation.kind) {
@@ -152,12 +168,13 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     final id = navigation.projectId ?? selectedProjectId;
     if (id == null) return null;
     return store.projectDetails.peek(id) ??
-        snapshot.projects.where((project) => project.id == id).firstOrNull;
+        store.projects.items.where((project) => project.id == id).firstOrNull;
   }
 
   List<AxWorkspace> get workspaces => store.workspaces.items;
-  AxTask? get selectedTask =>
-      snapshot.tasks.where((task) => task.id == selectedTaskId).firstOrNull;
+  AxTask? get selectedTask => executionSnapshot.tasks
+      .where((task) => task.id == selectedTaskId)
+      .firstOrNull;
   AxWorkstream? get selectedWorkstream {
     final project = selectedProject;
     return (project == null
@@ -167,27 +184,30 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
         .firstOrNull;
   }
 
-  String? get executionWorkspaceId => snapshot.workspaceId;
+  String? get executionWorkspaceId => executionSnapshot.workspaceId;
   int get unreadNotificationCount =>
       notifications.where((notification) => !notification.read).length;
   AxShellContext get _shellContext => AxShellContext(
         navigation: navigation,
-        projects: snapshot.projects,
+        projects: store.projects.items,
+        projectListenable: store.projects,
+        workspaceListenable: store.workspaces,
         projectWorkstreams: store.projectWorkstreams,
         selectedProject: selectedProject,
         selectedWorkstream: selectedWorkstream,
-        selectedRun: snapshot.run,
-        workspaces: snapshot.workspaces,
+        selectedRun: executionSnapshot.run,
+        workspaces: store.workspaces.items,
         unreadNotificationCount: unreadNotificationCount,
+        unreadNotifications: store.unreadNotifications,
         isDarkTheme: _themeMode == ThemeMode.dark ||
             (_themeMode == ThemeMode.system &&
                 Theme.of(context).brightness == Brightness.dark),
         themeMode: _themeMode,
         realtimeStale: realtimeStale,
+        realtimeListenable: store.realtimeStatus,
         realtimeNotice: realtimeNotice,
-        viewerDisplayName:
-            store.auth.viewer?.displayName ?? snapshot.viewer?.displayName,
-        viewerEmail: store.auth.viewer?.email ?? snapshot.viewer?.email,
+        viewerDisplayName: store.auth.viewer?.displayName,
+        viewerEmail: store.auth.viewer?.email,
         expandedProjectIds: expandedProjectIds,
       );
   void _toggleProjectExpanded(String projectId) {
@@ -220,13 +240,28 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     }
     navigationSubscription =
         browserNavigation.changes.listen(_onBrowserNavigation);
-    lifecycleSubscription = browserNavigation.lifecycleChanges
-        .listen((_) => unawaited(_syncSession()));
-    realtimeClient = createRealtimeClient();
+    realtimeClient = widget.realtimeClient ?? createRealtimeClient();
     realtimeSubscription = realtimeClient.events.listen(_onRealtimeEvent);
     store = AxStore(widget.dataSource);
+    lifecycleSubscription = browserNavigation.lifecycleChanges.listen((_) {
+      unawaited(() async {
+        await _syncSession();
+        if (mounted && store.auth.session?.authenticated == true) {
+          await store.lifecycle.resume();
+        }
+      }());
+    });
+    final connectivity = browserNavigation;
+    if (connectivity is AxBrowserConnectivity) {
+      final network = connectivity as AxBrowserConnectivity;
+      unawaited(store.lifecycle
+          .connectivityChanged(network.online, revalidate: false));
+      connectivitySubscription = network.connectivityChanges.listen((online) {
+        unawaited(store.lifecycle.connectivityChanged(online,
+            revalidate: store.auth.session?.authenticated == true));
+      });
+    }
     _cancelWorkRealtime = store.workRealtime.listen(realtimeClient.events);
-    snapshot = AxSnapshot.empty();
     if (_desktopAuthIntentId != null) {
       unawaited(_pollDesktopAuthStatus());
       _desktopAuthStatusTimer = Timer.periodic(
@@ -239,7 +274,6 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
 
   @override
   void dispose() {
-    refreshTimer?.cancel();
     _desktopAuthStatusTimer?.cancel();
     _searchQueryController.removeListener(_onSearchQueryChanged);
     _searchQueryController.dispose();
@@ -251,7 +285,9 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     promptResponseController.dispose();
     unawaited(navigationSubscription?.cancel());
     unawaited(lifecycleSubscription?.cancel());
+    unawaited(connectivitySubscription?.cancel());
     _cancelWorkRealtime?.call();
+    store.dispose();
     store.workRealtime.dispose();
     unawaited(realtimeSubscription?.cancel());
     unawaited(realtimeClient.close());
@@ -334,40 +370,14 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
       },
     );
     if (values == null) return;
-    if (mounted) {
-      setState(() {
-        isLoading = true;
-        loadError = null;
-      });
-    }
     try {
-      final project = await widget.dataSource.createProject(
-        name: values.$1,
-        description: values.$2,
-        instructions: values.$3,
-      );
-      await store.projectDetails.record(project);
+      final project = await store.collaboration.createProject(
+          name: values.$1, description: values.$2, instructions: values.$3);
       if (!mounted) return;
-      setState(() {
-        snapshot = snapshot.copyWith(
-          projects: [
-            ...snapshot.projects,
-            project.copyWith(workstreams: const [])
-          ],
-        );
-        selectedProjectId = project.id;
-        isLoading = false;
-      });
       _navigateTo(AxNavigation.project(project.id), replace: true);
       _showSnackBar('Project created. Create a Workstream to get started.');
     } catch (error) {
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-          loadError = null;
-        });
-        _showSnackBar(error.toString(), type: ToastType.error);
-      }
+      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
     }
   }
 
@@ -410,9 +420,8 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     );
     if (created == null || created.isEmpty) return;
     try {
-      final workstream = await widget.dataSource
+      final workstream = await store.collaboration
           .createWorkstream(projectId: project.id, name: created);
-      await store.projectWorkstreams.refresh(project.id);
       if (!mounted) return;
       setState(() => expandedProjectIds.add(project.id));
       _navigateTo(AxNavigation.workstream(project.id, workstream.id));
@@ -475,23 +484,13 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     );
     if (values == null || values.$1.isEmpty) return;
     try {
-      final updated = await widget.dataSource.updateProject(
-        projectId: project.id,
+      await store.collaboration.editProject(
+        project,
         name: values.$1,
         description: values.$2,
         instructions: values.$3,
       );
-      await store.projectDetails.record(updated);
       if (!mounted) return;
-      setState(() {
-        snapshot = snapshot.copyWith(
-          projects: snapshot.projects
-              .map((item) => item.id == updated.id
-                  ? updated.copyWith(workstreams: const [])
-                  : item)
-              .toList(),
-        );
-      });
       _showSnackBar('Project updated.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
@@ -512,13 +511,9 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
           .remove(store.projectWorkstreams.query(project.id).key);
       expandedProjectIds.remove(project.id);
       if (!mounted) return;
-      setState(() {
-        snapshot = snapshot.copyWith(
-          projects:
-              snapshot.projects.where((item) => item.id != project.id).toList(),
-        );
-        selectedProjectId = null;
-      });
+      store.projects.replace(
+          store.projects.items.where((item) => item.id != project.id).toList());
+      selectedProjectId = null;
       _navigateTo(const AxNavigation.home(), replace: true);
       _showSnackBar('Project archived.');
     } catch (error) {
@@ -541,13 +536,9 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
           .remove(store.projectWorkstreams.query(projectId).key);
       expandedProjectIds.remove(projectId);
       if (!mounted) return;
-      setState(() {
-        snapshot = snapshot.copyWith(
-          projects:
-              snapshot.projects.where((item) => item.id != projectId).toList(),
-        );
-        selectedProjectId = null;
-      });
+      store.projects.replace(
+          store.projects.items.where((item) => item.id != projectId).toList());
+      selectedProjectId = null;
       _navigateTo(const AxNavigation.home(), replace: true);
       _showSnackBar('Project deleted.');
     } catch (error) {

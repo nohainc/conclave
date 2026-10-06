@@ -9,8 +9,8 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
     }
     _updateState(() => _savingField = true);
     try {
-      final updated = await widget.dataSource.updateProject(
-        projectId: widget.project.id,
+      final updated = await _collaboration.editProject(
+        widget.project,
         name: name,
         description: _descriptionController.text.trim(),
         instructions: _instructionsController.text.trim(),
@@ -31,24 +31,15 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
     }
   }
 
-  Future<void> _loadExecution() async {
-    try {
-      final loaded = await Future.wait([
-        widget.dataSource.loadWorkspaces(),
-        widget.dataSource.loadProjectWorkspaces(projectId: widget.project.id),
-      ]);
-      if (!mounted) return;
-      _updateState(() {
-        ownedWorkspaces = loaded[0] as List<AxWorkspace>;
-        projectWorkspaces = loaded[1] as List<Map<String, dynamic>>;
-        executionLoading = false;
-      });
-    } catch (_) {
-      if (mounted) _updateState(() => executionLoading = false);
-    }
-  }
-
   Future<void> _connectWorkspace() async {
+    try {
+      final values = await _queries.engine.ensure(_queries.ownedWorkspaces);
+      if (!mounted) return;
+      ownedWorkspaces = values;
+    } catch (error) {
+      if (mounted) _message(error.toString());
+      return;
+    }
     if (ownedWorkspaces.isEmpty) {
       _message(
           'Connect a Workspace first. You can grant it access to this Project later.');
@@ -122,12 +113,15 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
     final permissions = await _chooseWorkspaceAccess(const []);
     if (permissions == null) return;
     try {
-      await widget.dataSource.requestProjectWorkspace(
+      await _grants.create(
         projectId: widget.project.id,
         workspaceId: selectedId,
+        workspaceName: ownedWorkspaces
+            .where((workspace) => workspace.id == selectedId)
+            .first
+            .name,
         allowedPermissions: permissions,
       );
-      await _loadExecution();
       _message('Workspace connected to this Project.');
     } catch (error) {
       _message(error.toString());
@@ -181,11 +175,11 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
             .toList());
     if (permissions == null) return;
     try {
-      await widget.dataSource.updateWorkspaceProjectPermissions(
+      await _grants.updatePermissions(
+        projectId: widget.project.id,
         grantId: (workspace['id'] ?? workspace['grantId']).toString(),
         allowedPermissions: permissions,
       );
-      await _loadExecution();
       if (mounted) {
         _message('Workspace access updated. Return to the chat and run again.');
       }
@@ -221,9 +215,8 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
     if (confirmed != true) return;
     try {
       if (grantId.isNotEmpty) {
-        await widget.dataSource.revokeWorkspaceProjectGrant(grantId: grantId);
+        await _grants.revoke(projectId: widget.project.id, grantId: grantId);
       }
-      await _loadExecution();
       _message('Workspace grant revoked.');
     } catch (error) {
       _message(error.toString());
@@ -284,12 +277,12 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
     );
     if (created == null || created.isEmpty) return;
     try {
-      final workstream = await widget.dataSource.createWorkstream(
+      final workstream = await _collaboration.createWorkstream(
         projectId: widget.project.id,
         name: created,
       );
       if (!mounted) return;
-      _updateState(() => workstreams = [...workstreams, workstream]);
+
       widget.onProjectUpdated?.call(widget.project);
       widget.onOpenWorkstream(workstream.id);
     } catch (error) {
@@ -358,16 +351,12 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
       return;
     }
     try {
-      final updated = await widget.dataSource.updateWorkstream(
-        workstreamId: workstream.id,
+      await _collaboration.editWorkstream(
+        workstream,
         name: updatedName,
       );
       if (!mounted) return;
-      _updateState(() {
-        workstreams = workstreams
-            .map((item) => item.id == updated.id ? updated : item)
-            .toList();
-      });
+
       _message('Workstream updated.');
       widget.onProjectUpdated?.call(widget.project);
     } catch (error) {
@@ -397,12 +386,9 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
     );
     if (confirmed != true) return;
     try {
-      await widget.dataSource.deleteWorkstream(workstreamId: workstream.id);
+      await _collaboration.deleteWorkstream(workstream);
       if (!mounted) return;
-      _updateState(() {
-        workstreams =
-            workstreams.where((item) => item.id != workstream.id).toList();
-      });
+
       _message('Workstream deleted.');
       widget.onProjectUpdated?.call(widget.project);
     } catch (error) {
@@ -415,16 +401,12 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
     bool archived,
   ) async {
     try {
-      final updated = await widget.dataSource.updateWorkstream(
-        workstreamId: workstream.id,
+      await _collaboration.editWorkstream(
+        workstream,
         status: archived ? 'archived' : 'active',
       );
       if (!mounted) return;
-      _updateState(() {
-        workstreams = workstreams
-            .map((item) => item.id == updated.id ? updated : item)
-            .toList();
-      });
+
       _message(archived ? 'Workstream archived.' : 'Workstream restored.');
       widget.onProjectUpdated?.call(widget.project);
     } catch (error) {
@@ -444,8 +426,8 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
     });
     try {
       final orderIds = updatedList.map((w) => w.id).toList();
-      final updatedProject = await widget.dataSource.updateProject(
-        projectId: widget.project.id,
+      final updatedProject = await _collaboration.editProject(
+        widget.project,
         name: widget.project.name,
         description: widget.project.description,
         instructions: widget.project.instructions,
@@ -469,6 +451,7 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
             : widget.project.role,
         settings: updatedProject.settings,
       );
+      _recordWorkstreams();
       widget.onProjectUpdated?.call(mergedProject);
     } catch (error) {
       if (mounted) {
@@ -480,35 +463,8 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
     }
   }
 
-  Future<void> _loadCollaboration() async {
-    try {
-      final loaded = await Future.wait([
-        widget.dataSource.loadProjectMembers(projectId: widget.project.id),
-        widget.dataSource.loadProjectInvitations(projectId: widget.project.id),
-        widget.dataSource.loadProjectAudit(projectId: widget.project.id),
-        widget.projectWorkstreams?.ensure(widget.project.id) ??
-            widget.dataSource
-                .loadProjectWorkstreams(projectId: widget.project.id),
-      ]);
-      if (!mounted) return;
-      final fetchedWorkstreams = loaded[3] as List<AxWorkstream>;
-      _updateState(() {
-        members = loaded[0] as List<AxProjectMember>;
-        invitations = loaded[1] as List<AxProjectInvitation>;
-        audit = loaded[2] as List<AxAuditEntry>;
-        if (widget.projectWorkstreams == null) {
-          workstreams = fetchedWorkstreams.isNotEmpty
-              ? fetchedWorkstreams
-              : widget.project.workstreams;
-        }
-        loading = false;
-      });
-    } catch (_) {
-      if (mounted) _updateState(() => loading = false);
-    }
-  }
-
   void _message(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -633,7 +589,7 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
       await widget.dataSource.inviteProjectMember(
           projectId: widget.project.id, email: result.$1, role: result.$2);
       _message('Project invitation sent.');
-      await _loadCollaboration();
+      await _queries.refreshMembers(widget.project.id, includeMembers: false);
     } catch (error) {
       _message(error.toString());
     }
@@ -655,7 +611,7 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
     if (role == null || role == member.role) return;
     await widget.dataSource.changeProjectMemberRole(
         projectId: widget.project.id, userId: member.userId, role: role);
-    await _loadCollaboration();
+    await _queries.refreshMembers(widget.project.id, includeInvitations: false);
   }
 
   Future<void> _removeMember(AxProjectMember member) async {
@@ -682,7 +638,7 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
     await widget.dataSource.removeProjectMember(
         projectId: widget.project.id, userId: member.userId);
     _message('${member.displayName} was removed from the Project.');
-    await _loadCollaboration();
+    await _queries.refreshMembers(widget.project.id, includeInvitations: false);
   }
 
   Future<void> _revokeInvitation(AxProjectInvitation invite) async {
@@ -711,7 +667,7 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
         invitationId: invite.id,
       );
       _message('Invitation revoked.');
-      await _loadCollaboration();
+      await _queries.refreshMembers(widget.project.id, includeMembers: false);
     } catch (error) {
       _message(error.toString());
     }

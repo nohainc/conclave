@@ -24,6 +24,7 @@ import 'ax_models.dart';
 import 'ax_data.dart';
 import 'ax_stores.dart';
 import 'sync/ax_query_builder.dart';
+import 'sync/ax_sync_scope.dart';
 
 part 'ax_app_state.dart';
 part 'ax_app_shell_views.dart';
@@ -37,11 +38,13 @@ class ConclaveAppShell extends StatefulWidget {
       required this.services,
       required this.dataSource,
       this.initialUri,
-      this.browserNavigation});
+      this.browserNavigation,
+      this.realtimeClient});
   final PlatformServices services;
   final AxDataSource dataSource;
   final Uri? initialUri;
   final AxBrowserNavigation? browserNavigation;
+  final RealtimeClient? realtimeClient;
   @override
   State<ConclaveAppShell> createState() => _AxAppState();
 }

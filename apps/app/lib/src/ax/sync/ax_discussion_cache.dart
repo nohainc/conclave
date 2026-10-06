@@ -1,3 +1,4 @@
+import 'ax_idempotency.dart';
 import 'dart:async';
 import '../ax_data.dart';
 import '../ax_models.dart';
@@ -35,14 +36,44 @@ class _DiscussionContext {
   final listeners = <void Function()>[];
   Future<void>? olderFlight;
   Object? olderError;
+  Object? realtimeError;
   void Function()? cancel;
 }
 
 /// Session-owned paginated server history with independent message overlays.
 /// Disposing a screen cancels its subscription, never its cached messages.
 class AxDiscussionCache {
-  AxDiscussionCache(this.source, {AxSyncEngine? engine})
-      : engine = engine ?? AxSyncEngine();
+  AxDiscussionCache(this.source,
+      {AxSyncEngine? engine, bool registerRetention = true})
+      : engine = engine ?? AxSyncEngine() {
+    if (registerRetention) {
+      this
+          .engine
+          .registerHistoryOwner('discussion', isObserved, _evict, _compact);
+    }
+  }
+  void _evict(String id) {
+    final context = _contexts.remove(id);
+    context?.cancel?.call();
+  }
+
+  void _compact(String id) {
+    final history = engine.cachedValues<AxDiscussionHistory>()[query(id).key];
+    if (history == null ||
+        history.messages.length <= engine.maxRetainedHistoryItems) {
+      return;
+    }
+    engine.update(
+        query(id),
+        (_) => AxDiscussionHistory(
+            messages: history.messages
+                .skip(history.messages.length - engine.maxRetainedHistoryItems),
+            newestCursor: history.newestCursor));
+    // Discussion cursors are opaque. Revalidate the head to obtain a safe
+    // frontier rather than inventing a cursor for the retained oldest message.
+    engine.invalidate(query(id).key);
+  }
+
   final AxDataSource? source;
   final AxSyncEngine engine;
   static final _sources = Expando<AxDiscussionCache>();
@@ -52,15 +83,17 @@ class AxDiscussionCache {
   }
 
   final _contexts = <String, _DiscussionContext>{};
+  final _attempts = AxMutationAttempts();
   int _temporaryId = 0;
 
   _DiscussionContext _context(String id) => _contexts.putIfAbsent(id, () {
         final context = _DiscussionContext();
         context.cancel = engine.watch(query(id), (_) => _emit(context),
-            fireImmediately: false);
+            fireImmediately: false, retain: false);
         return context;
       });
   void _emit(_DiscussionContext context) {
+    engine.scheduleRetention();
     for (final listener in List.of(context.listeners)) {
       if (context.listeners.contains(listener)) listener();
     }
@@ -145,24 +178,75 @@ class AxDiscussionCache {
     };
     return AxDiscussionState(
         messages: List.unmodifiable(_merge(const [], map.values)),
-        hasData: history.initialLoaded || context.pending.isNotEmpty,
+        hasData: state.hasData ||
+            history.initialLoaded ||
+            context.pending.isNotEmpty,
         isFetching: state.isFetching,
         loadingOlder: context.olderFlight != null,
         olderCursor: history.olderCursor,
-        error: context.olderError ?? state.error);
+        error: context.realtimeError ?? context.olderError ?? state.error);
+  }
+
+  /// The engine subscription bridges cache notifications and survives disposal;
+  /// only view listeners and pending writes make this Discussion active.
+  bool isObserved(String id) {
+    final context = _contexts[id];
+    return context != null &&
+        (context.listeners.isNotEmpty ||
+            context.pending.isNotEmpty ||
+            context.olderFlight != null);
   }
 
   void Function() watch(String id, void Function(AxDiscussionState) listener) {
     final context = _context(id);
     void callback() => listener(peek(id));
     context.listeners.add(callback);
-    return () => context.listeners.remove(callback);
+    return () {
+      context.listeners.remove(callback);
+      engine.scheduleRetention();
+    };
   }
 
   Future<AxDiscussionHistory> synchronize(String id,
       {bool reconcileNewest = true}) {
     _context(id);
     return engine.refresh(query(id, reconcileNewest: reconcileNewest));
+  }
+
+  /// Changes to older loaded messages use one detail read; creation follows the
+  /// existing forward cursor and never reloads immutable older pages.
+  Future<void> reconcileSignal(String id, String type, String entityId) async {
+    final context = _contexts[id];
+    final ds = source;
+    if (context == null || ds == null) return;
+    if (type == 'discussion.created') {
+      engine.invalidate(query(id).key);
+      await synchronize(id, reconcileNewest: false);
+      return;
+    }
+    if (!_history(id).messages.any((message) => message.id == entityId)) return;
+    try {
+      final message = await ds.loadDiscussionMessage(messageId: entityId);
+      if (!identical(_contexts[id], context)) return;
+      if (message.id != entityId || message.workstreamId != id) {
+        throw const AxApiException('Discussion message identity mismatch');
+      }
+      context.realtimeError = null;
+      engine.update(query(id), (state) {
+        final history = state.data ?? AxDiscussionHistory();
+        return AxDiscussionHistory(
+            messages: _merge(history.messages, [message]),
+            initialLoaded: history.initialLoaded,
+            olderCursor: history.olderCursor,
+            newestCursor: history.newestCursor);
+      }, fenceReads: false);
+    } catch (error) {
+      if (identical(_contexts[id], context)) {
+        context.realtimeError = error;
+        _emit(context);
+      }
+      rethrow;
+    }
   }
 
   void _background(String id) {
@@ -226,6 +310,8 @@ class AxDiscussionCache {
   Future<void> send(String id, String text,
       {String? userId, String? userName}) async {
     final context = _context(id);
+    final scope = 'workstream:$id:send-discussion';
+    final key = _attempts.keyFor(scope, text);
     final temp = AxDiscussionMessage(
         id: 'temp-${DateTime.now().microsecondsSinceEpoch}-${++_temporaryId}',
         workstreamId: id,
@@ -234,27 +320,42 @@ class AxDiscussionCache {
         body: text,
         createdAt: DateTime.now().toUtc().toIso8601String(),
         isMe: true);
-    context.pending[temp.id] = temp;
-    _emit(context);
-    try {
-      final saved = source == null
-          ? temp.copyWith(id: temp.id.replaceFirst('temp-', 'local-'))
-          : await source!.sendDiscussionMessage(workstreamId: id, text: text);
-      if (!identical(_contexts[id], context)) return;
-      if (saved.id.isEmpty || saved.workstreamId != id) {
-        throw const AxApiException(
-            'Discussion response identity does not match');
-      }
-      context.pending.remove(temp.id);
-      _patch(id, saved);
-      _background(id);
-    } catch (_) {
-      if (identical(_contexts[id], context)) {
-        context.pending.remove(temp.id);
-        _emit(context);
-      }
-      rethrow;
-    }
+    final fence = engine.fence(query(id).key);
+    return engine.mutations
+        .run(AxMutationOperation<AxDiscussionMessage, _DiscussionContext>(
+          rejectSuperseded: false,
+          key: AxQueryKey(['mutation', 'discussion-send', key]),
+          optimisticUpdate: () {
+            context.pending[temp.id] = temp;
+            _emit(context);
+            return context;
+          },
+          isCurrent: (context) => identical(_contexts[id], context) && fence(),
+          execute: (_) async {
+            final saved = source == null
+                ? temp.copyWith(id: temp.id.replaceFirst('temp-', 'local-'))
+                : await source!.sendDiscussionMessage(
+                    workstreamId: id, text: text, idempotencyKey: key);
+            if (saved.id.isEmpty || saved.workstreamId != id) {
+              throw const AxApiException(
+                  'Discussion response identity does not match');
+            }
+            return saved;
+          },
+          commit: (saved, context) {
+            _attempts.complete(scope, text, key);
+            context.pending.remove(temp.id);
+            _patch(id, saved);
+          },
+          rollback: (_, __, context) {
+            context.pending.remove(temp.id);
+            _emit(context);
+          },
+          invalidate: (_, __) async {
+            _background(id);
+          },
+        ))
+        .then<void>((_) {});
   }
 
   Future<void> edit(String id, String messageId, String text) async {
@@ -265,34 +366,48 @@ class AxDiscussionCache {
     final original =
         _history(id).messages.where((m) => m.id == messageId).firstOrNull;
     if (original == null) throw StateError('Message is not saved');
-    context.pending[messageId] = original.copyWith(body: text);
-    _emit(context);
-    try {
-      final saved = source == null
-          ? original.copyWith(body: text)
-          : await source!.editDiscussionMessage(
-              messageId: messageId,
-              text: text,
-              references: original.references);
-      if (!identical(_contexts[id], context)) return;
-      if (saved.id != messageId || saved.workstreamId != id) {
-        throw const AxApiException(
-            'Discussion response identity does not match');
-      }
-      context.pending.remove(messageId);
-      _patch(id, saved);
-      _background(id);
-    } catch (_) {
-      if (identical(_contexts[id], context)) {
-        context.pending.remove(messageId);
-        _patch(id, original);
-      }
-      rethrow;
-    }
+    final fence = engine.fence(query(id).key);
+    return engine.mutations
+        .run(AxMutationOperation<AxDiscussionMessage, _DiscussionContext>(
+          key: AxQueryKey(['mutation', 'discussion', messageId]),
+          rejectSuperseded: false,
+          optimisticUpdate: () {
+            context.pending[messageId] = original.copyWith(body: text);
+            _emit(context);
+            return context;
+          },
+          isCurrent: (context) => identical(_contexts[id], context) && fence(),
+          execute: (_) async {
+            final saved = source == null
+                ? original.copyWith(body: text)
+                : await source!.editDiscussionMessage(
+                    messageId: messageId,
+                    text: text,
+                    references: original.references);
+            if (saved.id != messageId || saved.workstreamId != id) {
+              throw const AxApiException(
+                  'Discussion response identity does not match');
+            }
+            return saved;
+          },
+          commit: (saved, context) {
+            context.pending.remove(messageId);
+            _patch(id, saved);
+          },
+          rollback: (_, __, context) {
+            context.pending.remove(messageId);
+            _emit(context);
+          },
+          invalidate: (_, __) async {
+            _background(id);
+          },
+        ))
+        .then<void>((_) {});
   }
 
   /// Session boundary only; never call from widget disposal.
   void clear() {
+    _attempts.clear();
     final ids = _contexts.keys.toList();
     for (final context in _contexts.values) {
       context.cancel?.call();

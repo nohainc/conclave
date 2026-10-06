@@ -16,7 +16,8 @@ export async function handleListWorkspaces(
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
   const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT id, name, status,
+    `SELECT execution_workspaces.id, name, status,
+            COALESCE(grants.activeProjectGrantCount, 0) AS activeProjectGrantCount,
             EXISTS (SELECT 1 FROM workspace_runtime_identities identity
                     WHERE identity.workspace_id = execution_workspaces.id
                       AND identity.revoked_at IS NULL) AS hasRuntimeIdentity,
@@ -41,10 +42,20 @@ export async function handleListWorkspaces(
             execution_workspaces.updated_at AS updatedAt
        FROM execution_workspaces
        LEFT JOIN workspace_runtime_facts f ON f.workspace_id = execution_workspaces.id
+       LEFT JOIN (
+         SELECT g.workspace_id, COUNT(DISTINCT g.project_id) AS activeProjectGrantCount
+           FROM workspace_project_grants g
+           JOIN projects p ON p.id = g.project_id
+           JOIN execution_workspaces owned ON owned.id = g.workspace_id
+          WHERE owned.owner_user_id = ?1 AND g.status = 'active'
+            AND (g.expires_at IS NULL OR g.expires_at > ?2)
+            AND COALESCE(json_extract(p.settings_json, '$.archived'), 0) = 0
+          GROUP BY g.workspace_id
+       ) grants ON grants.workspace_id = execution_workspaces.id
       WHERE owner_user_id = ?1 AND status <> 'revoked'
       ORDER BY name ASC`,
   )
-    .bind(context.userId)
+    .bind(context.userId, new Date().toISOString())
     .all();
   const workspaces = await Promise.all(
     (rows.results ?? []).map(async (raw) => {

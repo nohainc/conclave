@@ -21,85 +21,95 @@ extension _AxAppRunDetails on _AxAppStateMixin {
       case AxRouteKind.desktopAuthApproval:
         break;
     }
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Wrap(
-        spacing: 16,
-        runSpacing: 10,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(selectedProject?.name ?? 'Project',
-                style: const TextStyle(color: Color(0xff777683), fontSize: 12)),
-            const SizedBox(height: 7),
-            const Text('Run details',
-                style: TextStyle(
-                    fontSize: 25,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xff20202c),
-                    letterSpacing: -.5)),
-            const SizedBox(height: 5),
-            const Text(
-                'Follow execution, results, verification, and diagnostics.',
-                style: TextStyle(color: Color(0xff777683), fontSize: 13)),
-          ]),
-        ],
-      ),
-      const SizedBox(height: 20),
-      _runSection(
-        title: 'Overview',
-        subtitle: 'Status, elapsed work, Engine, Profile, and findings',
-        icon: Icons.dashboard_outlined,
-        child: Column(children: [
-          _runHeader(compact),
-          const SizedBox(height: 16),
-          _runContextCard(),
-          const SizedBox(height: 16),
-        ]),
-      ),
-      const SizedBox(height: 16),
-      _runSection(
-        title: 'Workspaces',
-        subtitle: 'Task DAG, progress, and active Worker details',
-        icon: Icons.account_tree_outlined,
-        child: compact
-            ? Column(children: [
-                _executionCard(),
-                const SizedBox(height: 16),
-                _taskDetailsCard(),
-              ])
-            : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(flex: 6, child: _executionCard()),
-                const SizedBox(width: 16),
-                Expanded(flex: 4, child: _taskDetailsCard()),
-              ]),
-      ),
-      const SizedBox(height: 16),
-      _runSection(
-        title: 'Results',
-        subtitle: 'Candidate answers, synthesis, and artifacts',
-        icon: Icons.auto_awesome_outlined,
-        child: _resultsDetailsCard(),
-      ),
-      const SizedBox(height: 16),
-      _runSection(
-        title: 'Verification',
-        subtitle: 'Tests, findings, and completion criteria',
-        icon: Icons.verified_outlined,
-        child: _evidenceCard(),
-      ),
-      const SizedBox(height: 16),
-      _runSection(
-        title: 'Technical',
-        subtitle: 'Events, model calls, correlation IDs, and diagnostics',
-        icon: Icons.code_outlined,
-        initiallyExpanded: false,
-        child: Column(children: [
-          _technicalDetailsCard(),
-          const SizedBox(height: 16),
-          _timelineCard(),
-        ]),
-      ),
-    ]);
+    return ListenableBuilder(
+        listenable: store.executionChanges,
+        builder: (context, _) =>
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Wrap(
+                spacing: 16,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(selectedProject?.name ?? 'Project',
+                            style: const TextStyle(
+                                color: Color(0xff777683), fontSize: 12)),
+                        const SizedBox(height: 7),
+                        const Text('Run details',
+                            style: TextStyle(
+                                fontSize: 25,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xff20202c),
+                                letterSpacing: -.5)),
+                        const SizedBox(height: 5),
+                        const Text(
+                            'Follow execution, results, verification, and diagnostics.',
+                            style: TextStyle(
+                                color: Color(0xff777683), fontSize: 13)),
+                      ]),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _runSection(
+                title: 'Overview',
+                subtitle: 'Status, elapsed work, Engine, Profile, and findings',
+                icon: Icons.dashboard_outlined,
+                child: Column(children: [
+                  _runHeader(compact),
+                  const SizedBox(height: 16),
+                  _runContextCard(),
+                  const SizedBox(height: 16),
+                ]),
+              ),
+              const SizedBox(height: 16),
+              _runSection(
+                title: 'Workspaces',
+                subtitle: 'Task DAG, progress, and active Worker details',
+                icon: Icons.account_tree_outlined,
+                child: compact
+                    ? Column(children: [
+                        _executionCard(),
+                        const SizedBox(height: 16),
+                        _taskDetailsCard(),
+                      ])
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                            Expanded(flex: 6, child: _executionCard()),
+                            const SizedBox(width: 16),
+                            Expanded(flex: 4, child: _taskDetailsCard()),
+                          ]),
+              ),
+              const SizedBox(height: 16),
+              _runSection(
+                title: 'Results',
+                subtitle: 'Candidate answers, synthesis, and artifacts',
+                icon: Icons.auto_awesome_outlined,
+                child: _resultsDetailsCard(),
+              ),
+              const SizedBox(height: 16),
+              _runSection(
+                title: 'Verification',
+                subtitle: 'Tests, findings, and completion criteria',
+                icon: Icons.verified_outlined,
+                child: _evidenceCard(),
+              ),
+              const SizedBox(height: 16),
+              _runSection(
+                title: 'Technical',
+                subtitle:
+                    'Events, model calls, correlation IDs, and diagnostics',
+                icon: Icons.code_outlined,
+                initiallyExpanded: false,
+                child: Column(children: [
+                  _technicalDetailsCard(),
+                  const SizedBox(height: 16),
+                  _timelineCard(),
+                ]),
+              ),
+            ]));
   }
 
   Widget _runSection({
@@ -134,7 +144,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
       status.name[0].toUpperCase() + status.name.substring(1);
 
   Future<void> _controlRun(String command) async {
-    final runId = snapshot.run?.id ?? snapshot.activeRunId;
+    final runId = executionSnapshot.run?.id ?? executionSnapshot.activeRunId;
     if (runId == null) return;
     try {
       await store.runs.control(runId, command);
@@ -153,7 +163,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
   }
 
   Widget _runHeader(bool compact) {
-    final run = snapshot.run;
+    final run = executionSnapshot.run;
     final status = optimisticRunStatus ?? run?.status ?? RunStatus.completed;
     final canControl = run != null &&
         {
@@ -223,8 +233,8 @@ extension _AxAppRunDetails on _AxAppStateMixin {
   }
 
   Widget _executionCard() {
-    final run = snapshot.run;
-    if (snapshot.tasks.isEmpty) {
+    final run = executionSnapshot.run;
+    if (executionSnapshot.tasks.isEmpty) {
       return _panel(
         title: 'Execution tree',
         subtitle: 'Live run state',
@@ -236,27 +246,28 @@ extension _AxAppRunDetails on _AxAppStateMixin {
         ),
       );
     }
-    final completed = snapshot.tasks
+    final completed = executionSnapshot.tasks
         .where((task) => task.status == TaskStatus.completed)
         .length;
     return _panel(
         title: 'Execution tree',
         subtitle: 'Live run state',
-        trailing: _statusChip('$completed / ${snapshot.tasks.length} tasks',
+        trailing: _statusChip(
+            '$completed / ${executionSnapshot.tasks.length} tasks',
             const Color(0xff6254d9)),
         child: Column(children: [
           TaskPipelineDAG(
-            tasks: snapshot.tasks,
+            tasks: executionSnapshot.tasks,
             selectedTaskId: selectedTaskId,
             onSelectTask: (taskId) =>
                 _updateState(() => selectedTaskId = taskId),
           ),
-          ...snapshot.tasks.map(_taskRow),
+          ...executionSnapshot.tasks.map(_taskRow),
         ]));
   }
 
   Widget _runContextCard() {
-    final task = selectedTask ?? snapshot.tasks.firstOrNull;
+    final task = selectedTask ?? executionSnapshot.tasks.firstOrNull;
     final worker = task?.worker.isNotEmpty == true ? task!.worker : 'Auto';
     return _panel(
       title: 'Execution context',
@@ -302,12 +313,13 @@ extension _AxAppRunDetails on _AxAppStateMixin {
           const SizedBox(height: 16),
           _panel(
             title: 'Artifacts and changes',
-            subtitle: '${snapshot.artifacts.length} stored result artifacts',
-            child: snapshot.artifacts.isEmpty
+            subtitle:
+                '${executionSnapshot.artifacts.length} stored result artifacts',
+            child: executionSnapshot.artifacts.isEmpty
                 ? const Text(
                     'Artifacts will appear here as the Run produces results.')
                 : Column(
-                    children: snapshot.artifacts
+                    children: executionSnapshot.artifacts
                         .map((artifact) => ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: const Icon(Icons.description_outlined),
@@ -328,11 +340,11 @@ extension _AxAppRunDetails on _AxAppStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (snapshot.events.isEmpty)
+            if (executionSnapshot.events.isEmpty)
               const Text('Diagnostics will appear as Workers execute.')
             else
               Text(
-                  'Correlation IDs: ${snapshot.events.where((event) => event.correlationId != null).map((event) => event.correlationId).toSet().join(', ')}',
+                  'Correlation IDs: ${executionSnapshot.events.where((event) => event.correlationId != null).map((event) => event.correlationId).toSet().join(', ')}',
                   style:
                       const TextStyle(fontSize: 11, color: Color(0xff777683))),
           ],
@@ -340,8 +352,8 @@ extension _AxAppRunDetails on _AxAppStateMixin {
       );
 
   Widget _candidateOutputsCard() {
-    final outputs = snapshot.candidateOutputs;
-    final decision = snapshot.synthesisDecision;
+    final outputs = executionSnapshot.candidateOutputs;
+    final decision = executionSnapshot.synthesisDecision;
     if (outputs.isEmpty && decision == null) {
       return _panel(
         title: 'Candidate outputs',
@@ -473,7 +485,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
   }
 
   Widget _taskDetailsCard() {
-    final task = selectedTask ?? snapshot.tasks.firstOrNull;
+    final task = selectedTask ?? executionSnapshot.tasks.firstOrNull;
     if (task == null) {
       return _panel(
         title: 'Task details',
@@ -569,7 +581,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
             onPressed: _copyRunDiagnostics,
             child: const Text('Export diagnostics')),
         child: Column(
-          children: snapshot.events
+          children: executionSnapshot.events
               .map(
                 (event) => Padding(
                   padding: const EdgeInsets.only(bottom: 15),
@@ -613,11 +625,11 @@ extension _AxAppRunDetails on _AxAppStateMixin {
   Widget _evidenceCard() => _panel(
       title: 'Evidence & findings',
       subtitle:
-          '${snapshot.findings.length} findings · ${snapshot.artifacts.length} artifacts',
+          '${executionSnapshot.findings.length} findings · ${executionSnapshot.artifacts.length} artifacts',
       trailing: TextButton(
           onPressed: () {
             final project = selectedProject;
-            final run = snapshot.run;
+            final run = executionSnapshot.run;
             if (project != null && run != null) {
               _navigateTo(AxNavigation.run(project.id, run.id));
             }
@@ -625,13 +637,13 @@ extension _AxAppRunDetails on _AxAppStateMixin {
           child: const Text('Open run details')),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          _metric('Tasks', '${snapshot.tasks.length}'),
-          _metric('Findings', '${snapshot.findings.length}'),
+          _metric('Tasks', '${executionSnapshot.tasks.length}'),
+          _metric('Findings', '${executionSnapshot.findings.length}'),
           _metric('Checks',
-              '${snapshot.run?.verifiedCriterionCount ?? 0} / ${snapshot.run?.criterionCount ?? 0}')
+              '${executionSnapshot.run?.verifiedCriterionCount ?? 0} / ${executionSnapshot.run?.criterionCount ?? 0}')
         ]),
         const SizedBox(height: 16),
-        ...snapshot.findings.map((finding) => _findingRow(finding))
+        ...executionSnapshot.findings.map((finding) => _findingRow(finding))
       ]));
 
   Widget _metric(String label, String value) => Expanded(

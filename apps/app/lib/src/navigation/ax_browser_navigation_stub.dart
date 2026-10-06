@@ -1,5 +1,11 @@
 import 'dart:async';
 
+/// Optional connectivity surface; existing navigation adapters remain valid.
+abstract interface class AxBrowserConnectivity {
+  bool get online;
+  Stream<bool> get connectivityChanges;
+}
+
 abstract interface class AxBrowserNavigation {
   Uri get current;
   Stream<Uri> get changes;

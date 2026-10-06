@@ -39,6 +39,10 @@ execution policy, Workspace grants, human-readable Workspace/Worker inventory,
 results, artifacts, and audit/read models. AX uses it to request product
 actions and display Cloud-authoritative state.
 
+Critical creation routes support the [v1 mutation idempotency contract](../specifications/MUTATION_IDEMPOTENCY.md)
+through an optional `Idempotency-Key` header. AX retains keys for explicit retries;
+connectivity restoration never replays Work execution automatically.
+
 AX MUST NOT open a Workspace Runtime Protocol connection, construct runtime
 messages, or authenticate as a Workspace machine. AX cannot dispatch an
 assignment directly to a Workspace or provider CLI. Cloud authorizes and
@@ -205,3 +209,14 @@ source for Worker Protocol 4.0 models and validation.
 
 Discussion reads use the [versioned paging contract](../specifications/DISCUSSION_PAGING.md). AX retains shared cached history across page disposal,
 synchronizes on reopening, and reconciles optimistic sends and edits per message.
+
+Human Product realtime collaboration signals and independent durable Project/user
+stream sequencing are specified in [Realtime synchronization 1.1](../specifications/REALTIME_SYNCHRONIZATION.md).
+Existing execution Workspace envelopes remain compatible; this does not change
+Workspace Runtime or Local Worker Protocol transport.
+
+Workspace Project grant collections and the additive aggregate count in
+`GET /api/workspaces` are Human Product HTTP read models. Their versioned
+[read model contract 1.1](../specifications/WORKSPACE_PROJECT_GRANTS.md) preserves
+existing mutation endpoints and authorization. Runtime inventory and grant
+admission still belong to their existing Cloud/Workspace boundaries.

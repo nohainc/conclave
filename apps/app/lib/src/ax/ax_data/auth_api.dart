@@ -6,21 +6,26 @@ mixin _AuthApi on _AxApiClientCore {
     final response =
         await client.get(Uri.parse('$baseUrl/session'), headers: _headers());
     if (response.statusCode == 401) {
+      _bindReadUser(null);
       return const AxSession(authenticated: false);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AxApiException('Session lookup failed (${response.statusCode})',
           statusCode: response.statusCode);
     }
-    return AxSession.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
+    final session =
+        AxSession.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    _bindReadUser(session.authenticated ? session.viewer?.id : null);
+    return session;
   }
 
   @override
   Future<void> logout() async {
+    clearConditionalReads();
     final response = await client.post(Uri.parse('$baseUrl/auth/sign-out'),
         headers: _headers(contentType: 'application/json'),
         body: jsonEncode(const <String, dynamic>{}));
+    clearConditionalReads();
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AxApiException('Logout failed (${response.statusCode})',
           statusCode: response.statusCode);

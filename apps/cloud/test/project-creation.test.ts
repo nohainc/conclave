@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   handleCreateProject,
   handleCreateWorkstream,
@@ -6,6 +6,21 @@ import {
   handleUpdateProject,
 } from "../src/routes/handlers.js";
 
+vi.mock("../src/collaboration-events.js", () => ({
+  publishCollaborationEvent: async (
+    env: {
+      CONCLAVE_DB: { batch?: (statements: unknown[]) => Promise<unknown> };
+    },
+    _type: string,
+    _project: string,
+    _entity: string,
+    options: { mutations?: { run: () => Promise<unknown> }[] } = {},
+  ) => {
+    if (env.CONCLAVE_DB.batch)
+      await env.CONCLAVE_DB.batch(options.mutations ?? []);
+    else for (const statement of options.mutations ?? []) await statement.run();
+  },
+}));
 describe("Project creation", () => {
   it("creates a Project without requiring an execution Workspace", async () => {
     const prepared: string[] = [];

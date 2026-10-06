@@ -2,7 +2,7 @@ part of '../ax_data.dart';
 
 mixin _ReadModelApi on _AxApiClientCore {
   @override
-  Future<AxSnapshot> loadReadModels(
+  Future<AxSnapshot> loadBootstrapState(
       {String? projectId, String? workspaceId}) async {
     final results = await Future.wait<Object>([
       loadProjects(),

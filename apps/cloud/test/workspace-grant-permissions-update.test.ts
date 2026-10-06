@@ -1,3 +1,6 @@
+vi.mock("../src/collaboration-events.js", () => ({
+  publishCollaborationEvent: vi.fn(async () => {}),
+}));
 import { describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ status: "active", owner: true }));
@@ -7,6 +10,7 @@ vi.mock("../src/routes/handlers.js", async (importOriginal) => ({
   loadWorkspaceProjectGrant: async () => ({
     id: "grant-1",
     workspace_id: "workspace-1",
+    project_id: "project-1",
     status: state.status,
     allowed_permissions_json: "[]",
     expires_at: null,

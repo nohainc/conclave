@@ -42,7 +42,7 @@ function createHarness(options: { duplicate?: boolean } = {}) {
         },
         async first<T>() {
           if (query.includes("FROM realtime_events")) {
-            const [workspaceId, eventId, idempotencyKey] = this.args;
+            const [, workspaceId, eventId, idempotencyKey] = this.args;
             return (eventRows.find(
               (row) =>
                 row.workspace_id === workspaceId &&

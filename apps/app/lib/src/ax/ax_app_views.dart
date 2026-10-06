@@ -14,22 +14,29 @@ extension _AxAppViews on _AxAppStateMixin {
     });
   }
 
-  Widget _homeView() => HomePage(
-        projects: snapshot.projects,
-        workspaces: snapshot.workspaces,
-        workers: workspaceWorkers,
-        run: snapshot.run,
-        openFindingCount: snapshot.findings
-            .where((finding) => finding.status == FindingStatus.open)
-            .length,
-        onOpenWorkspaces: () => _navigateTo(const AxNavigation.workspaces()),
-        onOpenProject: (projectId) =>
-            _navigateTo(AxNavigation.project(projectId)),
-        onOpenRun: (projectId, runId) =>
-            _navigateTo(AxNavigation.run(projectId, runId)),
-        onCreateProject: _createProject,
-        onOpenArchivedProjects: _showArchivedProjects,
-      );
+  Widget _homeView() => ListenableBuilder(
+      listenable: Listenable.merge(
+          [store.projects, store.workspaces, store.executionChanges]),
+      builder: (context, _) => AxQueryBuilder<List<AxWorker>>(
+          engine: store.syncEngine,
+          query: store.catalogs.workers,
+          builder: (context, workers) => HomePage(
+                projects: store.projects.items,
+                workspaces: store.workspaces.items,
+                workers: workers.data ?? const [],
+                run: executionSnapshot.run,
+                openFindingCount: executionSnapshot.findings
+                    .where((finding) => finding.status == FindingStatus.open)
+                    .length,
+                onOpenWorkspaces: () =>
+                    _navigateTo(const AxNavigation.workspaces()),
+                onOpenProject: (projectId) =>
+                    _navigateTo(AxNavigation.project(projectId)),
+                onOpenRun: (projectId, runId) =>
+                    _navigateTo(AxNavigation.run(projectId, runId)),
+                onCreateProject: _createProject,
+                onOpenArchivedProjects: _showArchivedProjects,
+              )));
   Future<void> _showArchivedProjects() async {
     try {
       final archived =
@@ -65,8 +72,8 @@ extension _AxAppViews on _AxAppStateMixin {
                                     setDialogState(
                                         () => restoringProjectId = project.id);
                                     try {
-                                      await widget.dataSource.updateProject(
-                                        projectId: project.id,
+                                      await store.collaboration.editProject(
+                                        project,
                                         settings: const {'archived': false},
                                       );
                                       if (dialogContext.mounted) {
@@ -78,7 +85,7 @@ extension _AxAppViews on _AxAppStateMixin {
                                           restoringProjectId = null;
                                         });
                                       }
-                                      await _loadSnapshot(showSpinner: false);
+                                      await store.projects.refresh();
                                       if (mounted) {
                                         _showSnackBar('Project restored.');
                                       }
@@ -116,47 +123,21 @@ extension _AxAppViews on _AxAppStateMixin {
   Widget _projectOverviewView() {
     final project = selectedProject;
     if (project == null) return _homeView();
-    return AxQueryBuilder<List<AxWorkstream>>(
+    return ProjectPage(
       key: ValueKey('project-page-${project.id}'),
-      engine: store.projectWorkstreams.engine,
-      query: store.projectWorkstreams.query(project.id),
-      builder: (context, state) => ProjectPage(
-        projectWorkstreams: store.projectWorkstreams,
-        project: project.copyWith(workstreams: state.data ?? const []),
-        dataSource: widget.dataSource,
-        onOpenWorkstream: (workstreamId) =>
-            _openWorkstream(project.id, workstreamId),
-        onOpenWorkspace: (workspaceId) =>
-            _navigateTo(AxNavigation.workspaces(workspaceId: workspaceId)),
-        onEdit: () => _editProject(project),
-        onArchive: () => _archiveProject(project),
-        onDelete: () => _deleteProject(project.id),
-        onProjectUpdated: (updated) async {
-          if (updated.name != project.name ||
-              updated.description != project.description ||
-              updated.instructions != project.instructions ||
-              updated.archived != project.archived ||
-              updated.role != project.role ||
-              !mapEquals(updated.settings, project.settings)) {
-            await store.projectDetails.record(updated);
-            if (!mounted) return;
-            _updateState(() {
-              snapshot = snapshot.copyWith(
-                  projects: snapshot.projects
-                      .map((p) => p.id == updated.id
-                          ? updated.copyWith(workstreams: const [])
-                          : p)
-                      .toList());
-              store.projects.replace(snapshot.projects);
-            });
-          }
-          try {
-            await store.projectWorkstreams.refresh(project.id);
-          } catch (error) {
-            if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
-          }
-        },
-      ),
+      projectWorkstreams: store.projectWorkstreams,
+      workspaceGrants: store.projectWorkspaceGrants,
+      tabQueries: store.projectTabs,
+      mutations: store.collaboration,
+      project: project,
+      dataSource: widget.dataSource,
+      onOpenWorkstream: (workstreamId) =>
+          _openWorkstream(project.id, workstreamId),
+      onOpenWorkspace: (workspaceId) =>
+          _navigateTo(AxNavigation.workspaces(workspaceId: workspaceId)),
+      onEdit: () => _editProject(project),
+      onArchive: () => _archiveProject(project),
+      onDelete: () => _deleteProject(project.id),
     );
   }
 
@@ -189,6 +170,9 @@ extension _AxAppViews on _AxAppStateMixin {
                       : 'Loading Workstream…'));
         }
         return WorkstreamPage(
+          catalogs: store.catalogs,
+          mutations: store.collaboration,
+          workspaceGrants: store.projectWorkspaceGrants,
           discussionCache: store.discussion,
           workHistoryCache: store.workHistory,
           key: ValueKey(workstream.id),
@@ -196,40 +180,37 @@ extension _AxAppViews on _AxAppStateMixin {
           workstream: workstream,
           dataSource: widget.dataSource,
           realtimeEvents: realtimeClient.events,
-          currentUserId: store.auth.viewer?.id ?? snapshot.viewer?.id,
-          currentUserName:
-              store.auth.viewer?.displayName ?? snapshot.viewer?.displayName,
+          currentUserId: store.auth.viewer?.id,
+          currentUserName: store.auth.viewer?.displayName,
           onBackToProject: () => _navigateTo(AxNavigation.project(project.id)),
           onArchive: () async {
             try {
-              await widget.dataSource
-                  .deleteWorkstream(workstreamId: workstream.id);
+              await store.collaboration.deleteWorkstream(workstream);
               if (!mounted) return;
               _showSnackBar('Workstream deleted.');
               _navigateTo(AxNavigation.project(project.id));
-              await store.projectWorkstreams.refresh(project.id);
             } catch (error) {
               if (mounted) _showSnackBar(error.toString());
             }
           },
           onRename: (name) async {
             try {
-              await widget.dataSource.updateWorkstream(
-                workstreamId: workstream.id,
+              await store.collaboration.editWorkstream(
+                workstream,
                 name: name,
               );
-              await store.projectWorkstreams.refresh(project.id);
               if (mounted) _showSnackBar('Workstream updated.');
             } catch (error) {
               if (mounted) _showSnackBar(error.toString());
             }
           },
-          onRunWork: (prompt, workflowId, attachments) =>
+          onRunWork: (prompt, workflowId, attachments, idempotencyKey) =>
               widget.dataSource.createWorkRequest(
             workstreamId: workstream.id,
             workflowId: workflowId,
             prompt: prompt,
             attachments: attachments,
+            idempotencyKey: idempotencyKey,
           ),
         );
       },
@@ -237,24 +218,42 @@ extension _AxAppViews on _AxAppStateMixin {
   }
 
   Widget _searchView() {
-    return SearchPage(
-      query: _searchQuery.isNotEmpty
-          ? _searchQuery
-          : _searchQueryController.text.trim(),
-      snapshot: snapshot.copyWith(
-          projects: snapshot.projects
-              .map((project) => project.copyWith(
-                  workstreams: store.projectWorkstreams.peek(project.id)))
-              .toList()),
-      onNavigateTo: _navigateTo,
-      onSelectProject: (projectId) {
-        _clearSearch();
-        _navigateTo(AxNavigation.project(projectId));
-      },
-      onClearSearch: _clearSearch,
-      onToggleTheme: _toggleTheme,
-      onCreateContextualItem: _handleContextualCreate,
-    );
+    return ListenableBuilder(
+        listenable: store.projects,
+        builder: (context, _) => _searchCollections(
+            0,
+            () => SearchPage(
+                  query: _searchQuery.isNotEmpty
+                      ? _searchQuery
+                      : _searchQueryController.text.trim(),
+                  projects: store.projects.items,
+                  workspaces: store.workspaces.items,
+                  run: executionSnapshot.run,
+                  workstreamsByProject: {
+                    for (final project in store.projects.items)
+                      project.id: store.projectWorkstreams.peek(project.id),
+                  },
+                  onNavigateTo: _navigateTo,
+                  onSelectProject: (projectId) {
+                    _clearSearch();
+                    _navigateTo(AxNavigation.project(projectId));
+                  },
+                  onClearSearch: _clearSearch,
+                  onToggleTheme: _toggleTheme,
+                  onCreateContextualItem: _handleContextualCreate,
+                )));
+  }
+
+  Widget _searchCollections(int index, Widget Function() build) {
+    if (index >= store.projects.items.length) return build();
+    final query =
+        store.projectWorkstreams.query(store.projects.items[index].id);
+    // Search watches already cached collections, without eagerly fetching all Projects.
+    return AxQueryBuilder<List<AxWorkstream>>(
+        engine: store.syncEngine,
+        query: query,
+        ensure: false,
+        builder: (context, _) => _searchCollections(index + 1, build));
   }
 
   List<AxWorkspace> _workspaceCards() =>
@@ -268,53 +267,47 @@ extension _AxAppViews on _AxAppStateMixin {
           workerCount: workspaceWorkerInventoryLoaded
               ? inventoryCount
               : workspace.workerCount,
-          projectGrantCount: workspaceProjectGrantCounts[workspace.id] ?? 0,
           lastSeen: workspace.lastSeen,
         );
       }).toList(growable: false);
 
-  Future<void> _refreshWorkspaceProjectGrantCounts() async {
-    final projects = snapshot.projects;
-    if (projects.isEmpty) return;
-    final counts = <String, int>{};
-    await Future.wait(projects.map((project) async {
-      try {
-        final grants = await widget.dataSource
-            .loadProjectWorkspaces(projectId: project.id);
-        for (final grant in grants) {
-          final workspaceId = grant['workspaceId']?.toString();
-          if (workspaceId != null &&
-              workspaceId.isNotEmpty &&
-              grant['status']?.toString() == 'active') {
-            counts.update(workspaceId, (count) => count + 1, ifAbsent: () => 1);
-          }
-        }
-      } catch (_) {
-        // Some Projects may not be readable; keep counts from readable ones.
-      }
-    }));
-    if (mounted) _updateState(() => workspaceProjectGrantCounts = counts);
+  Future<void> _refreshWorkspaceGrantSummary() async {
+    try {
+      await store.workspaces.list();
+    } catch (_) {
+      // Preserve the previous aggregate counts while offline.
+    }
   }
 
-  Widget _workspacesView() => WorkspacesPage(
-        workspaces: _workspaceCards(),
-        workspaceWorkers: workspaceWorkers,
-        initialWorkspaceId: navigation.workspaceId,
-        onSelectWorkspace: (workspaceId) {
-          if (workspaceId != null) {
-            _navigateTo(AxNavigation.workspaces(workspaceId: workspaceId));
-          } else {
-            _navigateTo(const AxNavigation.workspaces());
-          }
-        },
-        onOpenDownloads: () => browserNavigation.openExternal(
-          Uri.parse(conclaveDownloadsUrl),
-        ),
-        onGrant: _grantWorkspace,
-      );
+  Widget _workspacesView() => ListenableBuilder(
+      listenable: store.workspaces,
+      builder: (context, _) => AxQueryBuilder<List<AxWorker>>(
+          engine: store.syncEngine,
+          query: store.catalogs.workers,
+          builder: (context, _) => WorkspacesPage(
+                workspaces: _workspaceCards(),
+                workspaceWorkers: workspaceWorkers,
+                initialWorkspaceId: navigation.workspaceId,
+                onSelectWorkspace: (workspaceId) {
+                  if (workspaceId != null) {
+                    _navigateTo(
+                        AxNavigation.workspaces(workspaceId: workspaceId));
+                  } else {
+                    _navigateTo(const AxNavigation.workspaces());
+                  }
+                },
+                onOpenDownloads: () => browserNavigation.openExternal(
+                  Uri.parse(conclaveDownloadsUrl),
+                ),
+                onGrant: _grantWorkspace,
+              )));
 
-  Widget _profileSecurityView() {
-    final viewer = store.auth.viewer ?? snapshot.viewer;
+  Widget _profileSecurityView() => ListenableBuilder(
+      listenable: Listenable.merge(
+          [store.security, store.securityLoading, store.securityError]),
+      builder: (context, _) => _profileSecurityBody());
+  Widget _profileSecurityBody() {
+    final viewer = store.auth.viewer;
     final security = accountSecurity;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -328,6 +321,11 @@ extension _AxAppViews on _AxAppStateMixin {
         const Text(
             'Manage your Conclave identity, login methods, sessions, and passkeys.',
             style: TextStyle(color: Color(0xff777683), fontSize: 13)),
+        if (store.securityError.value != null)
+          TextButton(
+              onPressed: _loadAccountSecurity,
+              child:
+                  Text('Retry account security: ${store.securityError.value}')),
         const SizedBox(height: 24),
         _panel(
           title: 'Profile',

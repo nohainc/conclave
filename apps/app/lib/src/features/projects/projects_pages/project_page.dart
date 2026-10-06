@@ -12,6 +12,9 @@ class ProjectPage extends StatelessWidget {
     required this.onDelete,
     this.onProjectUpdated,
     this.projectWorkstreams,
+    this.workspaceGrants,
+    this.tabQueries,
+    this.mutations,
   });
 
   final AxProject project;
@@ -23,6 +26,9 @@ class ProjectPage extends StatelessWidget {
   final VoidCallback onDelete;
   final ValueChanged<AxProject>? onProjectUpdated;
   final AxProjectWorkstreams? projectWorkstreams;
+  final AxProjectWorkspaceGrants? workspaceGrants;
+  final AxProjectTabQueries? tabQueries;
+  final AxCollaborationMutations? mutations;
 
   @override
   Widget build(BuildContext context) => _ProjectWorkspace(
@@ -36,6 +42,9 @@ class ProjectPage extends StatelessWidget {
         onDelete: onDelete,
         onProjectUpdated: onProjectUpdated,
         projectWorkstreams: projectWorkstreams,
+        workspaceGrants: workspaceGrants,
+        tabQueries: tabQueries,
+        mutations: mutations,
       );
 }
 
@@ -51,6 +60,9 @@ class _ProjectWorkspace extends StatefulWidget {
     required this.onDelete,
     this.onProjectUpdated,
     this.projectWorkstreams,
+    this.workspaceGrants,
+    this.tabQueries,
+    this.mutations,
   });
 
   final AxProject project;
@@ -62,6 +74,9 @@ class _ProjectWorkspace extends StatefulWidget {
   final VoidCallback onDelete;
   final ValueChanged<AxProject>? onProjectUpdated;
   final AxProjectWorkstreams? projectWorkstreams;
+  final AxProjectWorkspaceGrants? workspaceGrants;
+  final AxProjectTabQueries? tabQueries;
+  final AxCollaborationMutations? mutations;
 
   @override
   State<_ProjectWorkspace> createState() => _ProjectWorkspaceState();
@@ -73,11 +88,20 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
   late List<AxWorkstream> workstreams;
   List<AxProjectMember> members = const [];
   List<AxProjectInvitation> invitations = const [];
-  List<AxAuditEntry> audit = const [];
   List<AxWorkspace> ownedWorkspaces = const [];
   List<Map<String, dynamic>> projectWorkspaces = const [];
-  bool loading = true;
+  bool workstreamsLoading = true;
+  bool membersLoading = true;
+  Object? workstreamsError;
+  Object? membersError;
+  late AxProjectTabQueries _queries;
+  late AxProjectWorkstreams _streams;
+  late AxCollaborationMutations _collaboration;
+  final _tabCancels = <void Function()>[];
+  int _activeTab = -1;
   bool executionLoading = true;
+  Object? executionError;
+  late AxProjectWorkspaceGrants _grants;
   bool _savingField = false;
   String? _editingField;
 
@@ -98,9 +122,99 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
         TextEditingController(text: widget.project.description);
     _instructionsController =
         TextEditingController(text: widget.project.instructions);
-    workstreams = [...widget.project.workstreams];
-    _loadCollaboration();
-    _loadExecution();
+    _configureQueries();
+    _tabController.addListener(_onTabChanged);
+    _onTabChanged();
+  }
+
+  void _configureQueries() {
+    _queries =
+        widget.tabQueries ?? AxProjectTabQueries.forSource(widget.dataSource);
+    _streams = widget.projectWorkstreams ?? _queries.workstreams;
+    _collaboration = widget.mutations ??
+        AxCollaborationMutations(widget.dataSource, engine: _streams.engine);
+    _grants = widget.workspaceGrants ??
+        AxProjectWorkspaceGrants.forSource(widget.dataSource);
+    workstreams = _streams.peek(widget.project.id);
+  }
+
+  void _onTabChanged() {
+    if (_activeTab == _tabController.index) return;
+    _activeTab = _tabController.index;
+    _bindActiveTab();
+  }
+
+  void _cancelTab() {
+    for (final cancel in _tabCancels) {
+      cancel();
+    }
+    _tabCancels.clear();
+  }
+
+  void _ensure<T>(AxSyncEngine engine, AxQuery<T> query) {
+    unawaited(engine
+        .ensure(query)
+        .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+  }
+
+  void _bindActiveTab() {
+    _cancelTab();
+    final id = widget.project.id;
+    if (_activeTab == 0) {
+      final query = _streams.query(id);
+      void apply(AxQueryState<List<AxWorkstream>> state) {
+        workstreams = state.data ?? const [];
+        workstreamsLoading = !state.hasData && state.isFetching;
+        workstreamsError = state.error;
+      }
+
+      apply(_streams.engine.peek(query));
+      _tabCancels.add(_streams.engine.watch(query, (state) {
+        if (mounted) _updateState(() => apply(state));
+      }, fireImmediately: false));
+      _ensure(_streams.engine, query);
+    } else if (_activeTab == 1) {
+      void apply(AxQueryState<AxWorkspaceGrants> state) {
+        projectWorkspaces = state.data ?? const [];
+        executionError = state.error;
+        executionLoading = !state.hasData && state.isFetching;
+      }
+
+      apply(_grants.peek(id));
+      _tabCancels.add(_grants.watch(id, (state) {
+        if (mounted) _updateState(() => apply(state));
+      }));
+      unawaited(_grants
+          .ensure(id)
+          .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    } else {
+      final membersQuery = _queries.members(id);
+      final invitationsQuery = _queries.invitations(id);
+      void apply() {
+        final memberState = _queries.engine.peek(membersQuery);
+        final invitationState = _queries.engine.peek(invitationsQuery);
+        members = memberState.data ?? const [];
+        invitations = invitationState.data ?? const [];
+        membersLoading = !memberState.hasData && memberState.isFetching;
+        membersError = memberState.error ?? invitationState.error;
+      }
+
+      apply();
+      _tabCancels.add(_queries.engine.watch(membersQuery, (_) {
+        if (mounted) _updateState(apply);
+      }, fireImmediately: false));
+      _tabCancels.add(_queries.engine.watch(invitationsQuery, (_) {
+        if (mounted) _updateState(apply);
+      }, fireImmediately: false));
+      _ensure(_queries.engine, membersQuery);
+      _ensure(_queries.engine, invitationsQuery);
+    }
+  }
+
+  void _recordWorkstreams() {
+    _streams.engine.update(_streams.query(widget.project.id),
+        (_) => List.unmodifiable(workstreams));
+    _queries.engine.invalidate(_queries.audit(widget.project.id).key);
   }
 
   @override
@@ -117,19 +231,21 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
       }
     }
     if (oldWidget.project.id != widget.project.id ||
-        oldWidget.project.workstreams != widget.project.workstreams) {
-      workstreams = [...widget.project.workstreams];
-    }
-    if (oldWidget.project.id != widget.project.id) {
-      loading = true;
-      executionLoading = true;
-      _loadCollaboration();
-      _loadExecution();
+        oldWidget.dataSource != widget.dataSource ||
+        oldWidget.projectWorkstreams != widget.projectWorkstreams ||
+        oldWidget.workspaceGrants != widget.workspaceGrants ||
+        oldWidget.tabQueries != widget.tabQueries ||
+        oldWidget.mutations != widget.mutations) {
+      _cancelTab();
+      _configureQueries();
+      _bindActiveTab();
     }
   }
 
   @override
   void dispose() {
+    _cancelTab();
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _nameController.dispose();
     _descriptionController.dispose();

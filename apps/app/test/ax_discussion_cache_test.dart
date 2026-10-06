@@ -5,6 +5,7 @@ import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:conclave_app/src/ax/sync/ax_discussion_cache.dart';
 import 'package:conclave_app/src/features/projects/projects_pages.dart';
 import 'ax_fixture_data.dart';
+import 'package:conclave_app/src/ax/sync/ax_realtime_cache_router.dart';
 
 AxDiscussionMessage message(String id, String body,
         {String ws = 'w', String? editedAt}) =>
@@ -19,6 +20,17 @@ AxDiscussionMessage message(String id, String body,
 class DiscussionSource extends AxFixtureDataSource {
   final queuedPages = <Completer<AxDiscussionPage>>[];
   final pages = <({String ws, String? before, String? after, int limit})>[];
+  final detailLoads = <String>[];
+  final queuedDetails = <Completer<AxDiscussionMessage>>[];
+  @override
+  Future<AxDiscussionMessage> loadDiscussionMessage(
+      {required String messageId}) {
+    detailLoads.add(messageId);
+    if (queuedDetails.isNotEmpty) return queuedDetails.removeAt(0).future;
+    return Future.value(
+        server.firstWhere((message) => message.id == messageId));
+  }
+
   final sends = <Completer<AxDiscussionMessage>>[];
   final edits = <Completer<AxDiscussionMessage>>[];
   List<AxDiscussionMessage> server = [];
@@ -38,7 +50,8 @@ class DiscussionSource extends AxFixtureDataSource {
   Future<AxDiscussionMessage> sendDiscussionMessage(
       {required String workstreamId,
       required String text,
-      List<String> references = const []}) {
+      List<String> references = const [],
+      String? idempotencyKey}) {
     final request = Completer<AxDiscussionMessage>();
     sends.add(request);
     return request.future;
@@ -64,6 +77,115 @@ void main() {
   });
   Future<void> drain() => Future<void>.delayed(Duration.zero);
 
+  test('5,000 Discussion messages: recent 50 and one requested older page only',
+      () async {
+    final server = List.generate(
+        5000, (i) => message(i.toString().padLeft(4, '0'), 'Message $i'));
+    final head = Completer<AxDiscussionPage>();
+    source.queuedPages.add(head);
+    final first = cache.synchronize('w');
+    final pageSize = source.pages.single.limit;
+    expect(pageSize, 50);
+    head.complete(AxDiscussionPage(
+        messages: server.sublist(5000 - pageSize),
+        nextCursor: 'older',
+        newestCursor: 'latest'));
+    await first;
+    await drain();
+    expect(source.pages, hasLength(1));
+    expect(cache.peek('w').messages, hasLength(pageSize));
+    final previous = Completer<AxDiscussionPage>();
+    source.queuedPages.add(previous);
+    final next = cache.loadOlder('w');
+    expect(source.pages, hasLength(2));
+    expect(source.pages.last.before, 'older');
+    expect(source.pages.last.limit, pageSize);
+    previous.complete(AxDiscussionPage(
+        messages: server.sublist(5000 - 2 * pageSize, 5000 - pageSize),
+        nextCursor: 'even-older'));
+    await next;
+    await drain();
+    expect(source.pages, hasLength(2));
+    expect(cache.peek('w').messages, hasLength(2 * pageSize));
+    expect(cache.peek('w').messages.map((row) => row.id).toSet(),
+        hasLength(2 * pageSize));
+  });
+
+  test('remote edits merge an older loaded message through one detail read',
+      () async {
+    final head = Completer<AxDiscussionPage>();
+    source.queuedPages.add(head);
+    final first = cache.synchronize('w');
+    head.complete(AxDiscussionPage(
+        messages: [message('new', 'recent')], nextCursor: 'older'));
+    await first;
+    final oldPage = Completer<AxDiscussionPage>();
+    source.queuedPages.add(oldPage);
+    final older = cache.loadOlder('w');
+    oldPage.complete(AxDiscussionPage(
+        messages: [message('old', 'old body')], nextCursor: 'oldest'));
+    await older;
+    final pages = source.pages.length;
+    source.server = [
+      message('old', 'remote edit', editedAt: '2026-10-06T01:00:00.000Z')
+    ];
+    await cache.reconcileSignal('w', 'discussion.updated', 'old');
+    expect(source.detailLoads, ['old']);
+    expect(source.pages.length, pages);
+    expect(cache.peek('w').olderCursor, 'oldest');
+    expect(cache.peek('w').messages.map((message) => message.body),
+        ['recent', 'remote edit']);
+  });
+  test('creation signals use only the newest known cursor', () async {
+    final initial = Completer<AxDiscussionPage>();
+    source.queuedPages.add(initial);
+    final first = cache.synchronize('w');
+    initial.complete(AxDiscussionPage(
+        messages: [message('one', 'cached')],
+        newestCursor: 'anchor',
+        nextCursor: 'older'));
+    await first;
+    final next = Completer<AxDiscussionPage>();
+    source.queuedPages.add(next);
+    final signal = cache.reconcileSignal('w', 'discussion.created', 'two');
+    next.complete(AxDiscussionPage(
+        messages: [message('two', 'new')], newestCursor: 'next'));
+    await signal;
+    expect(source.pages.map((page) => page.after), [null, 'anchor']);
+    expect(cache.peek('w').olderCursor, 'older');
+    expect(cache.peek('w').messages.length, 2);
+  });
+  test('unloaded edit targets do not fetch history', () async {
+    source.server = [message('one', 'one')];
+    await cache.synchronize('w');
+    await cache.reconcileSignal('w', 'discussion.updated', 'unloaded');
+    expect(source.detailLoads, isEmpty);
+    expect(source.pages.length, 1);
+  });
+  test('late detail responses cannot repopulate a cleared session', () async {
+    source.server = [message('one', 'old')];
+    await cache.synchronize('w');
+    final detail = Completer<AxDiscussionMessage>();
+    source.queuedDetails.add(detail);
+    final signal = cache.reconcileSignal('w', 'discussion.updated', 'one');
+    cache.clear();
+    detail.complete(message('one', 'late'));
+    await signal;
+    expect(cache.peek('w').messages, isEmpty);
+  });
+  test(
+      'failed detail reconciliation preserves cached data and reports the error',
+      () async {
+    source.server = [message('one', 'cached')];
+    await cache.synchronize('w');
+    final detail = Completer<AxDiscussionMessage>();
+    source.queuedDetails.add(detail);
+    final signal = cache.reconcileSignal('w', 'discussion.updated', 'one');
+    detail.completeError(StateError('offline'));
+    await expectLater(signal, throwsStateError);
+    expect(cache.peek('w').messages.single.body, 'cached');
+    expect(cache.peek('w').error, isA<StateError>());
+  });
   test('reopening retains cache and deduplicates initial synchronization',
       () async {
     source.server = [message('1', 'cached')];
@@ -315,6 +437,14 @@ void main() {
     await size(tester);
     final events = StreamController<Map<String, dynamic>>.broadcast();
     addTearDown(events.close);
+    final router = AxRealtimeCacheRouter(cache.engine,
+        discussionResynchronize: (id) async {
+      await cache.synchronize(id, reconcileNewest: false);
+    });
+    final subscription = events.stream.listen((event) {
+      unawaited(router.handle(event));
+    });
+    addTearDown(subscription.cancel);
     final initial = Completer<AxDiscussionPage>();
     source.queuedPages.add(initial);
     await tester.pumpWidget(page('w', realtime: events.stream));
@@ -323,9 +453,13 @@ void main() {
     await tester.pumpAndSettle();
     final forward = Completer<AxDiscussionPage>();
     source.queuedPages.add(forward);
-    events.add({'type': 'reconnect.required'});
+    events.add({
+      'type': 'reconnect.required',
+      'scope': {'kind': 'workstream', 'workstreamId': 'w'}
+    });
     await tester.pump();
     expect(source.pages.last.after, 'anchor');
+    expect(find.text('cached'), findsOneWidget);
     forward.complete(AxDiscussionPage(
         messages: [message('2', 'new')], newestCursor: 'latest'));
     await tester.pumpAndSettle();

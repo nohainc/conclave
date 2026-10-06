@@ -2,8 +2,9 @@ import { z } from "zod";
 
 import {
   DURABLE_REALTIME_EVENT_TYPES,
+  REALTIME_STREAM_KINDS,
+  COLLABORATION_REALTIME_EVENT_TYPES,
   EPHEMERAL_REALTIME_EVENT_TYPES,
-  REALTIME_EVENTS_VERSION,
 } from "./generated.js";
 
 const realtimeVersionPattern = /^\d+\.\d+$/;
@@ -33,13 +34,22 @@ export const RealtimeEventPayloadSchema = z
   .strict();
 export type RealtimeEventPayload = z.infer<typeof RealtimeEventPayloadSchema>;
 
+export const RealtimeStreamSchema = z
+  .object({
+    kind: z.enum(REALTIME_STREAM_KINDS),
+    id,
+  })
+  .strict();
+export type RealtimeStream = z.infer<typeof RealtimeStreamSchema>;
+
 export const RealtimeEventEnvelopeSchema = z
   .object({
     eventId: id,
     type: z.string().regex(/^[a-z][a-z0-9_-]*(?:\.[a-z0-9_-]+)+$/),
     version: z.string().regex(realtimeVersionPattern),
     timestamp,
-    workspaceId: id,
+    workspaceId: id.optional(),
+    stream: RealtimeStreamSchema.optional(),
     projectId: id.optional(),
     workstreamId: id.optional(),
     runId: id.optional(),
@@ -50,7 +60,98 @@ export const RealtimeEventEnvelopeSchema = z
     sequence: z.number().int().min(0),
     payload: RealtimeEventPayloadSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((event, context) => {
+    const stream = event.stream;
+    const collaboration = (
+      COLLABORATION_REALTIME_EVENT_TYPES as readonly string[]
+    ).includes(event.type);
+    if (
+      collaboration &&
+      (!stream ||
+        stream.kind === "execution_workspace" ||
+        !event.projectId ||
+        !event.payload.entityId)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Collaboration signals require a synchronization stream, projectId and entityId",
+      });
+    }
+    if (
+      collaboration &&
+      (event.type.startsWith("workstream.") ||
+        event.type.startsWith("discussion.")) &&
+      (!event.workstreamId || event.payload.workstreamId !== event.workstreamId)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Workstream signals require matching workstreamId",
+      });
+    }
+    if (
+      collaboration &&
+      Object.keys(event.payload).some(
+        (key) => !["entityId", "workstreamId"].includes(key),
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Collaboration payloads contain identifiers only",
+      });
+    }
+    if (
+      !collaboration &&
+      isKnownRealtimeEventType(event.type) &&
+      !event.workspaceId
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Existing execution events require workspaceId",
+      });
+    }
+    if (
+      (!stream || stream.kind === "execution_workspace") &&
+      !event.workspaceId
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Execution events require workspaceId",
+      });
+    }
+    if (
+      stream?.kind === "execution_workspace" &&
+      stream.id !== event.workspaceId
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Execution stream must match workspaceId",
+      });
+    }
+    if (stream?.kind === "project" && stream.id !== event.projectId) {
+      context.addIssue({
+        code: "custom",
+        message: "Project stream must match projectId",
+      });
+    }
+    if (stream && stream.kind !== "execution_workspace" && event.workspaceId) {
+      context.addIssue({
+        code: "custom",
+        message: "Synchronization streams must not invent workspaceId",
+      });
+    }
+    if (
+      stream &&
+      stream.kind !== "execution_workspace" &&
+      event.version === "1.0"
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Synchronization streams require version 1.1",
+      });
+    }
+  });
 export type RealtimeEventEnvelope = z.infer<typeof RealtimeEventEnvelopeSchema>;
 
 function versionParts(version: string): [number, number] {
@@ -99,10 +200,22 @@ export function isEphemeralRealtimeEventType(type: string): boolean {
 export function parseRealtimeEvent(input: unknown): RealtimeEventEnvelope {
   const value = typeof input === "string" ? JSON.parse(input) : input;
   const event = RealtimeEventEnvelopeSchema.parse(value);
-  if (
-    !isCompatibleRealtimeEventVersion(REALTIME_EVENTS_VERSION, event.version)
-  ) {
+  if (!isCompatibleRealtimeEventVersion("1.0", event.version)) {
     throw new Error(`Unsupported realtime event version: ${event.version}`);
   }
   return event;
+}
+
+/** Legacy execution envelopes infer their stream from the real Workspace ID. */
+export function realtimeEventStream(
+  event: RealtimeEventEnvelope,
+): RealtimeStream {
+  return (
+    event.stream ?? { kind: "execution_workspace", id: event.workspaceId! }
+  );
+}
+
+/** Structured JSON keys cannot collide across stream kinds or arbitrary IDs. */
+export function realtimeStreamKey(stream: RealtimeStream): string {
+  return JSON.stringify([stream.kind, stream.id]);
 }

@@ -1,3 +1,4 @@
+import 'ax_idempotency.dart';
 import 'dart:async';
 import '../ax_data.dart';
 import 'ax_sync_engine.dart';
@@ -36,6 +37,7 @@ class _HistoryContext {
   Future<void>? olderFlight;
   Object? olderError;
   final revisions = <String, int>{};
+  final localProgress = <String, String>{};
   final details = <String, _RequestRead>{};
   final detailErrors = <String, Object>{};
   final listeners = <void Function()>[];
@@ -47,8 +49,72 @@ class _HistoryContext {
 /// Session-owned infinite Work history. Head and active refreshes never traverse
 /// immutable historical pages; each older cursor has its own cached page.
 class AxWorkHistoryCache {
-  AxWorkHistoryCache(this.source, {AxSyncEngine? engine})
-      : engine = engine ?? AxSyncEngine();
+  final _attempts = AxMutationAttempts();
+  AxWorkHistoryCache(this.source,
+      {AxSyncEngine? engine, bool registerRetention = true})
+      : engine = engine ?? AxSyncEngine() {
+    if (registerRetention) {
+      this
+          .engine
+          .registerHistoryOwner('work-requests', _protected, _evict, _compact);
+    }
+  }
+  bool _protected(String id) {
+    final context = _contexts[id];
+    return engine.mutations.isRunning(_creationKey(id)) ||
+        (context != null &&
+            (context.listeners.isNotEmpty ||
+                context.olderFlight != null ||
+                context.details.isNotEmpty));
+  }
+
+  void _evict(String id) {
+    final context = _contexts.remove(id);
+    context?.cancel?.call();
+  }
+
+  void _compact(String id) {
+    final history = engine.cachedValues<AxWorkHistory>()[query(id).key];
+    if (history == null ||
+        history.requests.length <= engine.maxRetainedHistoryItems) {
+      return;
+    }
+    final recent = history.requests
+        .skip(history.requests.length - engine.maxRetainedHistoryItems)
+        .toList();
+    final context = _contexts[id];
+    for (final key in context?.pageKeys.toList() ?? <AxQueryKey>[]) {
+      engine.remove(key);
+    }
+    context?.pageKeys.clear();
+    context?.consumedCursors.clear();
+    final ids = recent.map((request) => request.id).toSet();
+    context?.revisions.removeWhere((id, _) => !ids.contains(id));
+    context?.localProgress.removeWhere((id, _) => !ids.contains(id));
+    context?.detailErrors.removeWhere((id, _) => !ids.contains(id));
+    final oldestServer =
+        recent.where((request) => !request.id.startsWith('local-')).firstOrNull;
+    final frontier = oldestServer == null
+        ? history.olderCursor
+        : AxWorkRequestCursor(
+            createdAt: oldestServer.createdAt, id: oldestServer.id);
+    final gaps = history._gaps
+        .where((gap) => _compare(gap.boundary, recent.first) >= 0)
+        .toList();
+    if (gaps.isNotEmpty) {
+      gaps[gaps.length - 1] = AxWorkHistoryGap(gaps.last.boundary, frontier);
+    }
+    engine.update(
+        query(id),
+        (_) => AxWorkHistory(
+            requests: recent,
+            initialLoaded: history.initialLoaded,
+            newestPageRequest: recent.last,
+            olderCursor: gaps.isNotEmpty ? history.olderCursor : frontier,
+            gaps: gaps,
+            confirmedIds: history.confirmedIds.intersection(ids)));
+  }
+
   final AxDataSource? source;
   final AxSyncEngine engine;
   static final _sources = Expando<AxWorkHistoryCache>();
@@ -70,10 +136,11 @@ class AxWorkHistoryCache {
   _HistoryContext _context(String id) => _contexts.putIfAbsent(id, () {
         final context = _HistoryContext();
         context.cancel = engine.watch(query(id), (_) => _emit(context),
-            fireImmediately: false);
+            fireImmediately: false, retain: false);
         return context;
       });
   void _emit(_HistoryContext context) {
+    engine.scheduleRetention();
     for (final listener in List.of(context.listeners)) {
       if (context.listeners.contains(listener)) listener();
     }
@@ -85,6 +152,7 @@ class AxWorkHistoryCache {
     return () {
       context.listeners.remove(listener);
       _contexts[id]?.listeners.remove(listener);
+      engine.scheduleRetention();
     };
   }
 
@@ -137,6 +205,11 @@ class AxWorkHistoryCache {
       bool activeOnly,
       _HistoryContext context,
       Map<String, int> revisions) {
+    for (final r in records) {
+      if ((context.revisions[r.id] ?? 0) == (revisions[r.id] ?? 0)) {
+        context.localProgress.remove(r.id);
+      }
+    }
     final current = peek(id);
     var olderCursor =
         current.initialLoaded ? current.olderCursor : first.nextCursor;
@@ -193,6 +266,169 @@ class AxWorkHistoryCache {
             gaps: current._gaps,
             confirmedIds: current.confirmedIds);
       });
+  AxQueryKey _creationKey(String id) =>
+      AxQueryKey(['mutation', 'workstream', id, 'create-work-request']);
+  bool submitting(String id) => engine.mutations.isRunning(_creationKey(id));
+  Map<String, String> localProgress(String id) =>
+      Map.unmodifiable(_context(id).localProgress);
+  void removeLocalProgress(String id, String requestId) {
+    final context = _context(id);
+    context.localProgress.remove(requestId);
+    _emit(context);
+  }
+
+  /// A local request and progress belong to shared history, not a mounted form.
+  /// There is no automatic retry/reconnect replay of the submission POST.
+  Future<String> createRequest(
+    String id, {
+    required String prompt,
+    required String workflowId,
+    String? idempotencyKey,
+    int workflowVersion = 1,
+    String? workflowName,
+    String? requestedByUserId,
+    String? requestedByName,
+    List<Map<String, dynamic>> attachments = const [],
+    required Future<String> Function(
+            String, String, List<Map<String, dynamic>>, String)
+        execute,
+  }) async {
+    if (submitting(id) ||
+        peek(id).requests.any(
+            (r) => const {'queued', 'running', 'waiting'}.contains(r.status))) {
+      throw StateError('A Work Request is already active');
+    }
+    final inputs = List<Map<String, dynamic>>.unmodifiable(attachments
+        .map((item) => freezeAxMutationInput(item) as Map<String, dynamic>));
+    final scope = 'workstream:$id:create-work-request';
+    final input = {
+      'workflowId': workflowId,
+      'prompt': prompt,
+      'attachments': inputs
+    };
+    final key = idempotencyKey ?? _attempts.keyFor(scope, input);
+    final retrySubmission = _attempts.wasSubmitted(key);
+    final context = _context(id);
+    final fence = engine.fence(query(id).key);
+    final localId = 'local-$key';
+    final local = AxWorkRequest(
+        id: localId,
+        requestedByName: requestedByName ?? 'You',
+        requestedByUserId: requestedByUserId,
+        prompt: prompt,
+        workflowId: workflowId,
+        workflowVersion: workflowVersion,
+        workflowName: workflowName,
+        status: 'queued',
+        createdAt: DateTime.now().toUtc().toIso8601String(),
+        steps: const []);
+    var attemptedPost = false;
+    bool current(_HistoryContext value) =>
+        identical(_contexts[id], value) && fence();
+    void progress(String text) {
+      context.localProgress[localId] = text;
+      _emit(context);
+    }
+
+    try {
+      return await engine.mutations
+          .run(AxMutationOperation<String, _HistoryContext>(
+        key: _creationKey(id),
+        optimisticUpdate: () {
+          context.localProgress[localId] = 'Preparing your request…';
+          replace(
+              id, [...peek(id).requests.where((r) => r.id != localId), local]);
+          return context;
+        },
+        isCurrent: current,
+        cancel: (context) => context.localProgress.remove(localId),
+        execute: (context) async {
+          if (source != null && !retrySubmission) {
+            progress('Checking that everything is ready…');
+            final issues = await source!.validateWorkRequestEligibility(
+                workstreamId: id, workflowId: workflowId, attachments: inputs);
+            if (!current(context)) throw const AxMutationSuperseded();
+            if (issues.isNotEmpty) {
+              throw AxApiException(
+                  'Cannot run ${workflowName ?? workflowId}\n${issues.map((issue) => '• $issue').join('\n')}');
+            }
+          }
+          if (!current(context)) throw const AxMutationSuperseded();
+          progress('Sending your request…');
+          attemptedPost = true;
+          _attempts.markSubmitted(key);
+          final savedId = await execute(prompt, workflowId, inputs, key);
+          if (savedId.isEmpty || savedId.startsWith('local-')) {
+            throw const AxApiException(
+                'Work Request response identity does not match');
+          }
+          return savedId;
+        },
+        commit: (savedId, context) {
+          _attempts.complete(scope, input, key);
+          final history = peek(id);
+          context.localProgress.remove(localId);
+          if (!history.confirmedIds.contains(savedId)) {
+            context.localProgress[savedId] =
+                'Request received. Waiting to start…';
+          }
+          // Realtime may already have delivered a newer, complete server entity.
+          replace(id, [
+            for (final request in history.requests)
+              if (request.id != localId) request,
+            if (!history.requests.any((r) => r.id == savedId))
+              AxWorkRequest(
+                  id: savedId,
+                  requestedByName: local.requestedByName,
+                  requestedByUserId: local.requestedByUserId,
+                  prompt: prompt,
+                  workflowId: workflowId,
+                  workflowVersion: workflowVersion,
+                  workflowName: workflowName,
+                  status: 'queued',
+                  createdAt: local.createdAt,
+                  steps: const []),
+          ]);
+        },
+        rollback: (error, _, context) {
+          final rejected = error is AxApiException &&
+              (error.message.startsWith('Cannot run ') ||
+                  (error.statusCode != null &&
+                      error.statusCode! >= 400 &&
+                      error.statusCode! < 500 &&
+                      error.statusCode != 408));
+          final message = error is AxApiException &&
+                  error.message.startsWith('Cannot run ')
+              ? error.message
+              : 'Could not send your request: $error${attemptedPost && !rejected ? '\nSubmission status is unknown. Sending the same request again safely retries this submission.' : ''}';
+          context.localProgress[localId] = message;
+          // Keep the failed local row for correction/history; no automatic replay.
+          replace(id, [
+            for (final r in peek(id).requests)
+              if (r.id == localId)
+                AxWorkRequest(
+                    id: localId,
+                    requestedByName: local.requestedByName,
+                    requestedByUserId: local.requestedByUserId,
+                    prompt: prompt,
+                    workflowId: workflowId,
+                    workflowVersion: workflowVersion,
+                    workflowName: workflowName,
+                    status: 'failed',
+                    createdAt: local.createdAt,
+                    steps: const [],
+                    error: message)
+              else
+                r
+          ]);
+        },
+        invalidate: (savedId, _) => refreshRequest(id, savedId),
+      ));
+    } finally {
+      if (current(context)) _emit(context);
+    }
+  }
+
   Future<void> loadOlder(String id) {
     final context = _context(id);
     if (context.olderFlight != null) return context.olderFlight!;
@@ -290,6 +526,7 @@ class AxWorkHistoryCache {
   }
 
   void _recordRequest(String id, AxWorkRequest value) {
+    _context(id).localProgress.remove(value.id);
     engine.update(query(id), (state) {
       final current = state.data ?? AxWorkHistory();
       return AxWorkHistory(
@@ -451,6 +688,7 @@ class AxWorkHistoryCache {
   }
 
   void clear() {
+    _attempts.clear();
     for (final entry in _contexts.entries) {
       entry.value.cancel?.call();
       for (final key in entry.value.pageKeys) {

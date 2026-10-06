@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'sync/ax_idempotency.dart';
 
 import 'package:http/http.dart' as http;
 
@@ -26,7 +27,13 @@ class AxApiException implements Exception {
   String toString() => message;
 }
 
-abstract class _AxApiClientCore implements AxDataSource {
+/// Session-bound transport validators for stable read resources only.
+abstract interface class AxConditionalReadCache {
+  void clearConditionalReads();
+}
+
+abstract class _AxApiClientCore
+    implements AxDataSource, AxConditionalReadCache {
   _AxApiClientCore({String? baseUrl, http.Client? client})
       : baseUrl = baseUrl ??
             (const String.fromEnvironment('CONCLAVE_API_URL').isNotEmpty
@@ -37,7 +44,28 @@ abstract class _AxApiClientCore implements AxDataSource {
   final String baseUrl;
   final http.Client client;
   final passkeyBrowser = passkeys.createAxPasskeyBrowser();
-  String? sessionToken;
+  String? _sessionToken;
+  String? get sessionToken => _sessionToken;
+  set sessionToken(String? value) {
+    if (value != _sessionToken) clearConditionalReads();
+    _sessionToken = value;
+  }
+
+  String? _readUserId;
+  int _readGeneration = 0;
+  int _readSequence = 0;
+  final _conditionalReads =
+      <String, ({String etag, String body, int sequence})>{};
+  @override
+  void clearConditionalReads() {
+    _readGeneration++;
+    _conditionalReads.clear();
+  }
+
+  void _bindReadUser(String? id) {
+    if (_readUserId != id) clearConditionalReads();
+    _readUserId = id;
+  }
 
   Map<String, String> _headers({String? contentType}) => {
         'accept': 'application/json',
@@ -46,8 +74,24 @@ abstract class _AxApiClientCore implements AxDataSource {
           'authorization': 'Bearer $sessionToken',
       };
 
-  Future<Map<String, dynamic>> _getJson(Uri uri) async {
-    final response = await client.get(uri, headers: _headers());
+  Future<Map<String, dynamic>> _getJson(Uri uri,
+      {bool conditional = false}) async {
+    final generation = _readGeneration;
+    final sequence = ++_readSequence;
+    final key = uri.toString();
+    final cached = conditional ? _conditionalReads.remove(key) : null;
+    if (cached != null) _conditionalReads[key] = cached;
+    final response = await client.get(uri, headers: {
+      ..._headers(),
+      if (cached != null) 'if-none-match': cached.etag,
+    });
+    if (response.statusCode == 304) {
+      if (cached == null || generation != _readGeneration) {
+        throw const AxApiException(
+            'Conditional read has no current cached representation');
+      }
+      return Map<String, dynamic>.from(jsonDecode(cached.body) as Map);
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       var detail = '';
       try {
@@ -66,6 +110,25 @@ abstract class _AxApiClientCore implements AxDataSource {
     final decoded = jsonDecode(response.body);
     if (decoded is! Map) {
       throw const AxApiException('Read model response is malformed');
+    }
+    if (conditional && generation == _readGeneration) {
+      final etag = response.headers['etag'];
+      if (etag != null &&
+          etag.isNotEmpty &&
+          response.bodyBytes.length <= 262144 &&
+          (_conditionalReads[key]?.sequence ?? -1) <= sequence) {
+        _conditionalReads.remove(key);
+        _conditionalReads[key] =
+            (etag: etag, body: response.body, sequence: sequence);
+        while (_conditionalReads.length > 16 ||
+            _conditionalReads.values.fold<int>(
+                    0, (sum, value) => sum + utf8.encode(value.body).length) >
+                1048576) {
+          _conditionalReads.remove(_conditionalReads.keys.first);
+        }
+      } else if ((_conditionalReads[key]?.sequence ?? -1) <= sequence) {
+        _conditionalReads.remove(key);
+      }
     }
     return Map<String, dynamic>.from(decoded);
   }

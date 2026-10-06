@@ -97,7 +97,7 @@ describe("Project lifecycle integrity", () => {
     expect(body).toContain(
       "DELETE FROM workspace_project_grants WHERE project_id = ?1",
     );
-    expect(body).toContain("for (const sql of cleanupStatements)");
+    expect(body).toContain("mutations: cleanupStatements.map");
     expect(body).toContain("DELETE FROM projects WHERE id = ?1");
   });
 });

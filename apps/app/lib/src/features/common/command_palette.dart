@@ -25,13 +25,19 @@ class CommandPaletteAction {
 class CommandPaletteDialog extends StatefulWidget {
   const CommandPaletteDialog({
     super.key,
-    required this.snapshot,
+    required this.projects,
+    required this.workspaces,
+    required this.workstreamsByProject,
+    this.run,
     required this.onSelectProject,
     required this.onNavigateTo,
     required this.onToggleTheme,
   });
 
-  final AxSnapshot snapshot;
+  final List<AxProject> projects;
+  final List<AxWorkspace> workspaces;
+  final Map<String, List<AxWorkstream>> workstreamsByProject;
+  final AxRun? run;
   final ValueChanged<String> onSelectProject;
   final ValueChanged<AxNavigation> onNavigateTo;
   final VoidCallback onToggleTheme;
@@ -108,7 +114,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     ];
 
     // Add Projects and Workstreams
-    for (final project in widget.snapshot.projects) {
+    for (final project in widget.projects) {
       actions.add(CommandPaletteAction(
         title: 'Project: ${project.name}',
         subtitle:
@@ -122,7 +128,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
       ));
 
       // Add Workstreams (First-class)
-      for (final workstream in project.workstreams) {
+      for (final workstream in (widget.workstreamsByProject[project.id] ??
+          const <AxWorkstream>[])) {
         actions.add(CommandPaletteAction(
           title: 'Workstream: ${workstream.name}',
           subtitle: '${project.name} · ${workstream.status}',
@@ -138,9 +145,9 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     }
 
     // Add Active Run if present
-    final activeRun = widget.snapshot.run;
+    final activeRun = widget.run;
     if (activeRun != null) {
-      final projectId = widget.snapshot.projects.firstOrNull?.id ?? '';
+      final projectId = widget.projects.firstOrNull?.id ?? '';
       actions.add(CommandPaletteAction(
         title:
             'Active Run: ${activeRun.objective.isNotEmpty ? activeRun.objective : activeRun.id}',
@@ -160,7 +167,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     }
 
     // Add Workspaces
-    for (final workspace in widget.snapshot.workspaces) {
+    for (final workspace in widget.workspaces) {
       actions.add(CommandPaletteAction(
         title: 'Workspace: ${workspace.name}',
         subtitle: '${workspace.hostname} · ${workspace.status}',

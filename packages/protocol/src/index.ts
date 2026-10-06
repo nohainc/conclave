@@ -7,6 +7,10 @@ export {
   EXECUTION_ERROR_CODES,
   EXECUTION_ERROR_MESSAGES,
 } from "./generated.js";
+export {
+  COLLABORATION_REALTIME_EVENT_TYPES,
+  REALTIME_STREAM_KINDS,
+} from "./generated.js";
 export * from "./realtime-events.js";
 export * from "./execution-permissions.js";
 export * from "./worker-descriptor.js";

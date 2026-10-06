@@ -512,7 +512,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
             safe: 'Your existing work is safe. No new work was started.',
             nextStep: 'Check your connection, then try again.',
             retrying: isReconnecting,
-            onRetry: () => _loadSnapshot(),
+            onRetry: () => _loadBootstrapState(),
           ),
         ),
       );
@@ -551,27 +551,42 @@ extension _AxAppShellViews on _AxAppStateMixin {
   Widget _content({required bool compact, required bool showTopHud}) {
     return _projectContextBuilder(() => Column(children: [
           if (showTopHud)
-            _workstreamContextBuilder(() => AxTopBar(
-                  shellContext: _shellContext,
-                  onNavigateTo: _navigateTo,
-                  onOpenCommandPalette: _openCommandPalette,
-                  onOpenNotifications: _showNotifications,
-                  searchController: _searchQueryController,
-                  searchFocusNode: _searchFocusNode,
-                  onClearSearch: _clearSearch,
-                  onToggleTheme: _toggleTheme,
-                  onOpenAbout: () => unawaited(_showAboutConclave()),
-                  onLogout: () => unawaited(_logout()),
-                  onOpenExternal: (uri) => browserNavigation.openExternal(uri),
-                  compact: compact,
-                )),
-          if (realtimeStale) _realtimeStatusBanner(),
-          if (realtimeNotice != null)
-            Semantics(
-              liveRegion: true,
-              label: realtimeNotice!,
-              child: const SizedBox(width: 1, height: 1),
-            ),
+            _workstreamContextBuilder(() => ListenableBuilder(
+                listenable: Listenable.merge([
+                  store.workspaces,
+                  store.executionChanges,
+                  store.realtimeStatus
+                ]),
+                builder: (context, _) => AxTopBar(
+                      shellContext: _shellContext,
+                      onNavigateTo: _navigateTo,
+                      onOpenCommandPalette: _openCommandPalette,
+                      onOpenNotifications: _showNotifications,
+                      searchController: _searchQueryController,
+                      searchFocusNode: _searchFocusNode,
+                      onClearSearch: _clearSearch,
+                      onToggleTheme: _toggleTheme,
+                      onOpenAbout: () => unawaited(_showAboutConclave()),
+                      onLogout: () => unawaited(_logout()),
+                      onOpenExternal: (uri) =>
+                          browserNavigation.openExternal(uri),
+                      compact: compact,
+                    ))),
+          ListenableBuilder(
+              listenable: Listenable.merge(
+                  [store.realtimeStatus, store.lifecycleNotice]),
+              builder: (context, _) {
+                final status = store.realtimeStatus.value;
+                return Column(children: [
+                  if (status.$1 || store.lifecycleNotice.value != null)
+                    _realtimeStatusBanner(),
+                  if (status.$2 != null)
+                    Semantics(
+                        liveRegion: true,
+                        label: status.$2!,
+                        child: const SizedBox(width: 1, height: 1)),
+                ]);
+              }),
           Expanded(
             child: navigation.kind == AxRouteKind.workstream
                 ? Padding(
@@ -590,7 +605,9 @@ extension _AxAppShellViews on _AxAppStateMixin {
 
   Widget _realtimeStatusBanner() => Semantics(
         liveRegion: true,
-        label: realtimeNotice ?? 'Live updates are reconnecting.',
+        label: store.lifecycleNotice.value ??
+            realtimeNotice ??
+            'Live updates are reconnecting.',
         child: Container(
           width: double.infinity,
           color: const Color(0xfffff6df),
@@ -601,7 +618,9 @@ extension _AxAppShellViews on _AxAppStateMixin {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                realtimeNotice ?? 'Live updates are reconnecting.',
+                store.lifecycleNotice.value ??
+                    realtimeNotice ??
+                    'Live updates are reconnecting.',
                 style: const TextStyle(color: Color(0xff765817), fontSize: 12),
               ),
             ),

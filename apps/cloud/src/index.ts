@@ -146,6 +146,7 @@ export const routeHandlers = {
   handleListDiscussionMessages: handlers.handleListDiscussionMessages,
   handleCreateDiscussionMessage: handlers.handleCreateDiscussionMessage,
   handleEditDiscussionMessage: handlers.handleEditDiscussionMessage,
+  handleGetDiscussionMessage: handlers.handleGetDiscussionMessage,
   handleCreateWorkRequest: handlers.handleCreateWorkRequest,
   handleRetryWorkRequest: handlers.handleRetryWorkRequest,
   handleValidateWorkRequest: handlers.handleValidateWorkRequest,
@@ -228,7 +229,7 @@ export default {
               "GET, POST, PUT, PATCH, DELETE, OPTIONS",
             "access-control-allow-headers":
               request.headers.get("access-control-request-headers") ||
-              "authorization, content-type, accept, x-request-id",
+              "authorization, content-type, accept, x-request-id, idempotency-key",
             "access-control-max-age": "86400",
           },
         }),

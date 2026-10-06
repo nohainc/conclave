@@ -10,7 +10,11 @@ class RealtimeEvent {
   String get eventId => value['eventId']! as String;
   String get type => value['type']! as String;
   String get version => value['version']! as String;
-  String get workspaceId => value['workspaceId']! as String;
+  String? get workspaceId => value['workspaceId'] as String?;
+  Map<String, Object?> get stream => value['stream'] is Map
+      ? Map<String, Object?>.from(value['stream'] as Map)
+      : {'kind': 'execution_workspace', 'id': workspaceId};
+  String get streamKey => jsonEncode([stream['kind'], stream['id']]);
   int get sequence => value['sequence']! as int;
   Map<String, Object?> get payload =>
       Map<String, Object?>.from(value['payload']! as Map);
@@ -29,7 +33,6 @@ class RealtimeEvent {
       'type',
       'version',
       'timestamp',
-      'workspaceId',
       'sequence',
       'payload',
     ]) {
@@ -41,19 +44,71 @@ class RealtimeEvent {
     _requiredString(decoded, 'type');
     final version = _requiredString(decoded, 'version');
     if (!RegExp(r'^\d+\.\d+$').hasMatch(version) ||
-        !isCompatibleVersion(realtimeEventsVersion, version)) {
+        !isCompatibleVersion('1.0', version)) {
       throw ProtocolException('unsupported realtime event version: $version');
     }
     if (DateTime.tryParse(_requiredString(decoded, 'timestamp')) == null) {
       throw const ProtocolException('Realtime event timestamp is invalid');
     }
-    _requiredString(decoded, 'workspaceId');
+    final rawStream = decoded['stream'];
+    if (rawStream != null) {
+      if (rawStream is! Map ||
+          rawStream.keys.any((key) => key != 'kind' && key != 'id')) {
+        throw const ProtocolException('Realtime stream is invalid');
+      }
+      final stream = Map<String, Object?>.from(rawStream);
+      final kind = _requiredString(stream, 'kind');
+      final streamId = _requiredString(stream, 'id');
+      if (!realtimeStreamKinds.contains(kind)) {
+        throw const ProtocolException('Realtime stream kind is invalid');
+      }
+      if (kind == 'execution_workspace') {
+        if (_requiredString(decoded, 'workspaceId') != streamId) {
+          throw const ProtocolException(
+              'Execution stream must match workspaceId');
+        }
+      } else {
+        if (decoded.containsKey('workspaceId') || version == '1.0') {
+          throw const ProtocolException(
+              'Synchronization streams require 1.1 and no workspaceId');
+        }
+        if (kind == 'project' && decoded['projectId'] != streamId) {
+          throw const ProtocolException('Project stream must match projectId');
+        }
+      }
+    } else {
+      _requiredString(decoded, 'workspaceId');
+    }
     if (decoded['sequence'] is! int || (decoded['sequence'] as int) < 0) {
       throw const ProtocolException('Realtime event sequence is invalid');
     }
     final payload = decoded['payload'];
     if (payload is! Map) {
       throw const ProtocolException('Realtime event payload must be an object');
+    }
+    if (collaborationRealtimeEventTypes.contains(decoded['type'])) {
+      if (rawStream is! Map || rawStream['kind'] == 'execution_workspace') {
+        throw const ProtocolException(
+            'Collaboration requires a synchronization stream');
+      }
+      _requiredString(decoded, 'projectId');
+      _requiredString(Map<String, Object?>.from(payload), 'entityId');
+      if (payload.keys
+          .any((key) => key != 'entityId' && key != 'workstreamId')) {
+        throw const ProtocolException(
+            'Collaboration payloads contain identifiers only');
+      }
+      if ((decoded['type'] as String).startsWith('workstream.') ||
+          (decoded['type'] as String).startsWith('discussion.')) {
+        if (_requiredString(decoded, 'workstreamId') !=
+            payload['workstreamId']) {
+          throw const ProtocolException('Workstream signal identity mismatch');
+        }
+      }
+    } else if ((durableRealtimeEventTypes.contains(decoded['type']) ||
+            ephemeralRealtimeEventTypes.contains(decoded['type'])) &&
+        decoded['workspaceId'] == null) {
+      throw const ProtocolException('Execution events require workspaceId');
     }
     const allowedPayloadFields = {
       'entityId',
@@ -65,6 +120,10 @@ class RealtimeEvent {
       'tool',
       'artifactId',
       'workerId',
+      'workRequestId',
+      'workstreamId',
+      'stepKind',
+      'leaseId',
       'percentage',
       'durationMs',
       'tokenCount',

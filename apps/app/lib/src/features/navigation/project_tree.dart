@@ -26,6 +26,16 @@ class ProjectTree extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final projects = shellContext.projectListenable;
+    if (projects != null) {
+      return ValueListenableBuilder<List<AxProject>>(
+          valueListenable: projects,
+          builder: (context, _, __) => _tree(context));
+    }
+    return _tree(context);
+  }
+
+  Widget _tree(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -83,14 +93,16 @@ class ProjectTree extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child: InkWell(
-            onTap: () {
-              // Selecting an already-expanded other Project preserves expansion.
-              if (!isExpanded || isProjectFocused) {
-                onToggleProjectExpanded(project.id);
-              }
-              onNavigateTo(AxNavigation.project(project.id));
-              if (compact) Scaffold.maybeOf(context)?.closeDrawer();
-            },
+            onTap: project.id.startsWith('local-project-')
+                ? null
+                : () {
+                    // Selecting an already-expanded other Project preserves expansion.
+                    if (!isExpanded || isProjectFocused) {
+                      onToggleProjectExpanded(project.id);
+                    }
+                    onNavigateTo(AxNavigation.project(project.id));
+                    if (compact) Scaffold.maybeOf(context)?.closeDrawer();
+                  },
             borderRadius: BorderRadius.circular(8),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -142,11 +154,13 @@ class ProjectTree extends StatelessWidget {
                   _buildWorkstreamStatusIndicator(workstream.status);
 
               return InkWell(
-                onTap: () {
-                  onNavigateTo(
-                      AxNavigation.workstream(project.id, workstream.id));
-                  if (compact) Scaffold.maybeOf(context)?.closeDrawer();
-                },
+                onTap: workstream.id.startsWith('local-workstream-')
+                    ? null
+                    : () {
+                        onNavigateTo(
+                            AxNavigation.workstream(project.id, workstream.id));
+                        if (compact) Scaffold.maybeOf(context)?.closeDrawer();
+                      },
                 borderRadius: BorderRadius.circular(6),
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 1),

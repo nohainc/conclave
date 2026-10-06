@@ -295,3 +295,58 @@ describe("realtime gateway contract", () => {
     ).resolves.toBe(false);
   });
 });
+
+describe("independent synchronization cursor delivery", () => {
+  it("accepts stream cursors alongside legacy execution Workspace cursors", () => {
+    const key = JSON.stringify(["project", "same"]);
+    expect(
+      parseRealtimeClientMessage({
+        type: "realtime.hello",
+        lastDurableSequences: { same: 10 },
+        lastDurableStreamSequences: { [key]: 2 },
+      }),
+    ).toMatchObject({
+      lastDurableSequences: { same: 10 },
+      lastDurableStreamSequences: { [key]: 2 },
+    });
+    for (const bad of [
+      { invalid: 1 },
+      { '["project","p"]': -1 },
+      { '["bogus","p"]': 1 },
+    ]) {
+      expect(() =>
+        parseRealtimeClientMessage({
+          type: "realtime.hello",
+          lastDurableStreamSequences: bad,
+        }),
+      ).toThrow();
+    }
+  });
+  it("matches collaboration signals to user/Project/Workstream scopes without inventing Workspace access", () => {
+    const event = {
+      eventId: "e",
+      type: "discussion.created",
+      version: "1.1",
+      timestamp: "2026-10-06T00:00:00.000Z",
+      stream: { kind: "project", id: "same" },
+      projectId: "same",
+      workstreamId: "w",
+      sequence: 1,
+      payload: { entityId: "m", workstreamId: "w" },
+    } as const;
+    expect(eventMatchesScope(event, { kind: "user" })).toBe(true);
+    expect(
+      eventMatchesScope(event, { kind: "project", projectId: "same" }),
+    ).toBe(true);
+    expect(
+      eventMatchesScope(event, { kind: "workstream", workstreamId: "w" }),
+    ).toBe(true);
+    expect(
+      eventMatchesScope(event, {
+        kind: "execution_workspace",
+        executionWorkspaceId: "same",
+      }),
+    ).toBe(false);
+    expect(eventMatchesScope(event, { workspaceId: "same" })).toBe(false);
+  });
+});

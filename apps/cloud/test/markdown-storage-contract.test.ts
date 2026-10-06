@@ -1,3 +1,14 @@
+vi.mock("../src/collaboration-events.js", () => ({
+  publishCollaborationEvent: async (
+    _env: unknown,
+    _type: string,
+    _project: string,
+    _entity: string,
+    options: { mutations?: { run: () => Promise<unknown> }[] } = {},
+  ) => {
+    for (const mutation of options.mutations ?? []) await mutation.run();
+  },
+}));
 import { DatabaseSync } from "node:sqlite";
 import { expect, it, vi } from "vitest";
 

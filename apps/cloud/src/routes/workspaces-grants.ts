@@ -1,3 +1,4 @@
+import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
   canTransitionWorkspaceProjectGrantStatus,
   isWorkspaceProjectGrantStatus,
@@ -193,6 +194,13 @@ export async function handleUpdateWorkspaceProjectGrant(
     grantId,
     { status, allowedPermissions: JSON.parse(permissions) },
   );
+  await publishCollaborationEvent(
+    env,
+    "project_workspace_grant.updated",
+    String(existing.project_id),
+    grantId,
+    { additionalRecipientUserIds: [context.userId] },
+  );
   const updated = await loadWorkspaceProjectGrant(env, grantId);
   return json({
     grant: updated ? workspaceProjectGrantMetadata(updated) : null,
@@ -246,6 +254,13 @@ export async function handleRevokeWorkspaceProjectGrant(
     "workspace_project_grant",
     grantId,
     { projectId: existing.project_id, workspaceId: existing.workspace_id },
+  );
+  await publishCollaborationEvent(
+    env,
+    "project_workspace_grant.updated",
+    String(existing.project_id),
+    grantId,
+    { additionalRecipientUserIds: [context.userId] },
   );
   return json({ ok: true, revokedAt: now });
 }

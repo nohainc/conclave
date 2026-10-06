@@ -40,6 +40,7 @@ class RealtimeSource extends AxFixtureDataSource {
   List<AxWorkRequest> records = [work('r')];
   final pages = <bool>[];
   final gets = <String>[];
+  final pageScopes = <String>[];
   final queuedDetails = <Completer<AxWorkRequestStatus>>[];
   Completer<AxWorkRequestPage>? queuedPage;
   @override
@@ -50,6 +51,7 @@ class RealtimeSource extends AxFixtureDataSource {
       String? beforeId,
       bool activeOnly = false}) {
     pages.add(activeOnly);
+    pageScopes.add(workstreamId);
     final pending = queuedPage;
     queuedPage = null;
     return pending?.future ??
@@ -96,6 +98,53 @@ void main() {
   }
 
   Future<void> drain() => Future<void>.delayed(Duration.zero);
+  test('Workstream gap recovers its retained active entities only', () async {
+    await seed();
+    await cache.refresh('other');
+    source.pages.clear();
+    source.pageScopes.clear();
+    source.records = [];
+    await sync.handle({
+      'type': 'reconnect.required',
+      'scope': {'kind': 'workstream', 'workstreamId': 'w'}
+    });
+    expect(source.pageScopes, ['w']);
+    expect(source.pages, [true]);
+    expect(source.gets, ['r']);
+    expect(cache.request('other', 'r')!.status, 'running');
+    expect(cache.request('w', 'r')!.status, 'completed');
+  });
+  test('background gap is retained while visible recovery is in flight',
+      () async {
+    await seed();
+    await cache.refresh('background');
+    final cancel = sync.listen(null, workstreamId: 'w');
+    final delayed = Completer<AxWorkRequestPage>();
+    source.queuedPage = delayed;
+    final visible = sync.handle({
+      'type': 'reconnect.required',
+      'scope': {'kind': 'user'}
+    });
+    final background = sync.handle({
+      'type': 'reconnect.required',
+      'scope': {'kind': 'workstream', 'workstreamId': 'background'}
+    });
+    delayed.complete(AxWorkRequestPage(requests: source.records));
+    await Future.wait([visible, background]);
+    expect(source.pageScopes.where((id) => id == 'background').length, 2);
+    expect(cache.request('background', 'r'), isNotNull);
+    cancel();
+  });
+  test('Project stream gaps do not fetch execution history', () async {
+    await seed();
+    await sync.handle({
+      'type': 'reconnect.required',
+      'scope': {'kind': 'user'},
+      'stream': {'kind': 'project', 'id': 'P'}
+    });
+    expect(source.pages, [false]);
+    expect(source.gets, isEmpty);
+  });
   test('sufficient Work and Step statuses patch without HTTP', () async {
     source.records = [work('r', status: 'queued')];
     await seed();
@@ -275,6 +324,57 @@ void main() {
     expect(source.gets.length, gets);
     cancel();
   });
+  test('progress-only execution bursts perform no history or detail reads',
+      () async {
+    await seed();
+    source.pages.clear();
+    for (var i = 0; i < 100; i++) {
+      await sync.handle(event('assignment.progress'));
+      await sync.handle(event('task.progress'));
+    }
+    expect(source.gets, isEmpty);
+    expect(source.pages, isEmpty);
+  });
+
+  test(
+      'execution signals reconcile their request without reading any history page',
+      () async {
+    await seed();
+    source.pages.clear();
+    for (final type in [
+      'run.completed',
+      'task.completed',
+      'attempt.failed',
+      'assignment.completed',
+      'artifact.created',
+      'finding.created',
+      'verification.completed'
+    ]) {
+      await sync.handle(event(type));
+    }
+    expect(source.gets, List.filled(7, 'r'));
+    expect(source.pages, isEmpty);
+    expect(cache.request('w', 'r')!.status, 'completed');
+  });
+  testWidgets(
+      'disconnected fallback only reads visible scopes and stops after release',
+      (tester) async {
+    await cache.refresh('w');
+    await cache.refresh('background');
+    source.pages.clear();
+    source.pageScopes.clear();
+    final release = sync.listen(null, workstreamId: 'w');
+    await sync
+        .handle({'type': 'realtime.connection', 'status': 'reconnecting'});
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pump();
+    expect(source.pageScopes, ['w']);
+    release();
+    expect(sync.polling, isFalse);
+    await tester.pump(const Duration(seconds: 60));
+    expect(source.pageScopes, ['w']);
+  });
+
   test('Step events notify only their own Workstream', () async {
     await seed();
     var a = 0, b = 0;

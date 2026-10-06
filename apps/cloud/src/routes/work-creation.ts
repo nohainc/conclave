@@ -1,3 +1,4 @@
+import { MutationIdempotency } from "./mutation-idempotency.js";
 import {
   validateWorkRequest,
   validateBuiltinWorkflowDefinition,
@@ -169,6 +170,15 @@ export async function handleCreateWorkRequest(
       "Only a Project owner or collaborator with Work execution access can submit Work",
     );
   const body = (await request.json()) as Record<string, unknown>;
+  const receipt = await MutationIdempotency.from(
+    request,
+    env.CONCLAVE_DB,
+    context.userId,
+    `workstream:${workstreamId}:create-work-request`,
+    body,
+  );
+  const replay = await receipt?.replay();
+  if (replay) return resumeSubmission(env, replay);
   const requestedMode =
     body.mode === "stateful"
       ? "stateful"
@@ -507,42 +517,52 @@ export async function handleCreateWorkRequest(
     );
   }
   const runId = `run-${crypto.randomUUID()}`;
-  await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
-      `INSERT INTO work_requests
+  const responseBody = {
+    workRequest,
+    run: { id: runId, projectId, workstreamId, status: "created" },
+  };
+  const write = (receipts: D1PreparedStatement[]) =>
+    env.CONCLAVE_DB.batch([
+      ...receipts,
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO work_requests
        (id, workstream_id, requested_by_user_id, mode, workflow_id, workflow_version, workflow_snapshot_json, snapshot_json, status, primary_workspace_id, input_json, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'queued', ?9, ?10, ?11, ?11)`,
-    ).bind(
-      workRequest.id,
-      workstreamId,
-      context.userId,
-      mode,
-      workflowId,
-      workflowVersion,
-      JSON.stringify(workflowSnapshot),
-      JSON.stringify(snapshot),
-      workRequest.primaryWorkspaceId,
-      JSON.stringify(workRequest.input),
-      now,
-    ),
-    env.CONCLAVE_DB.prepare(
-      `INSERT INTO runs
+      ).bind(
+        workRequest.id,
+        workstreamId,
+        context.userId,
+        mode,
+        workflowId,
+        workflowVersion,
+        JSON.stringify(workflowSnapshot),
+        JSON.stringify(snapshot),
+        workRequest.primaryWorkspaceId,
+        JSON.stringify(workRequest.input),
+        now,
+      ),
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO runs
        (id, project_id, workstream_id, work_request_id, status, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, 'created', ?5, ?5)`,
-    ).bind(runId, projectId, workstreamId, workRequest.id, now),
-    env.CONCLAVE_DB.prepare(
-      `INSERT INTO project_audit_log
+      ).bind(runId, projectId, workstreamId, workRequest.id, now),
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO project_audit_log
        (id, project_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
        VALUES (?1, ?2, 'user', ?3, 'workstream.work_requested', 'work_request', ?4, ?5, ?6)`,
-    ).bind(
-      `pa-${crypto.randomUUID()}`,
-      projectId,
-      context.userId,
-      workRequest.id,
-      JSON.stringify({ workstreamId, runId, workflowId, workflowVersion }),
-      now,
-    ),
-  ]);
+      ).bind(
+        `pa-${crypto.randomUUID()}`,
+        projectId,
+        context.userId,
+        workRequest.id,
+        JSON.stringify({ workstreamId, runId, workflowId, workflowVersion }),
+        now,
+      ),
+    ]);
+  const concurrentReplay = receipt
+    ? await receipt.commit(responseBody, 202, write)
+    : (await write([]), null);
+  if (concurrentReplay) return resumeSubmission(env, concurrentReplay);
   try {
     await createEventPublisher(env).publish({
       type: "work_request.created",
@@ -560,39 +580,55 @@ export async function handleCreateWorkRequest(
   } catch (error) {
     console.error("Failed to publish work_request.created", error);
   }
-  if (mode === "stateful" && env.CONCLAVE_WORKSTREAM_COORDINATOR) {
-    const coordinator =
-      env.CONCLAVE_WORKSTREAM_COORDINATOR.getByName(workstreamId);
-    const response = await coordinator.fetch(
+  return resumeSubmission(env, json(responseBody, { status: 202 }), false);
+}
+
+/** Resume only this committed submission, using its existing runtime identities. */
+async function resumeSubmission(
+  env: SecurityEnv,
+  response: Response,
+  replay = true,
+): Promise<Response> {
+  const { workRequest, run } = (await response.clone().json()) as {
+    workRequest: WorkRequest;
+    run: { id: string; projectId: string; workstreamId: string };
+  };
+  if (replay) {
+    const row = await env.CONCLAVE_DB.prepare(
+      "SELECT status FROM work_requests WHERE id = ?1",
+    )
+      .bind(workRequest.id)
+      .first<{ status: string }>();
+    if (!row || ["completed", "failed", "cancelled"].includes(row.status))
+      return response;
+  }
+  if (workRequest.mode === "stateful" && env.CONCLAVE_WORKSTREAM_COORDINATOR) {
+    const coordinator = env.CONCLAVE_WORKSTREAM_COORDINATOR.getByName(
+      workRequest.workstreamId,
+    );
+    const result = await coordinator.fetch(
       new Request("https://workstream-coordinator/enqueue", {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-workstream-id": workstreamId,
+          "x-workstream-id": workRequest.workstreamId,
         },
         body: JSON.stringify({ workRequestId: workRequest.id }),
       }),
     );
-    if (!response.ok) {
+    if (!result.ok)
       throw new HttpError(503, "Workstream execution coordinator unavailable");
-    }
   }
   await createOrGetRun(env, {
-    runId,
+    runId: run.id,
     goalId: workRequest.id,
     idempotencyKey: workRequest.id,
     organizationId: workRequest.primaryWorkspaceId!,
     workRequestId: workRequest.id,
-    workstreamId,
-    projectId,
-    builtinWorkflow: workflowSnapshot,
-    input: requestInput,
+    workstreamId: workRequest.workstreamId,
+    projectId: run.projectId,
+    builtinWorkflow: workRequest.workflowSnapshot,
+    input: workRequest.input,
   });
-  return json(
-    {
-      workRequest,
-      run: { id: runId, projectId, workstreamId, status: "created" },
-    },
-    { status: 202 },
-  );
+  return response;
 }

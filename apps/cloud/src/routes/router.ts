@@ -1,3 +1,4 @@
+import { conditionalJson } from "./conditional-read.js";
 import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
 
 export type RouteHandler = (...args: unknown[]) => Promise<Response>;
@@ -182,7 +183,9 @@ export async function routeWorkerRequest(
       return await handlers.handleListWorkspaces!(request, env, ctx);
     }
     if (request.method === "GET" && url.pathname === "/api/workflows/catalog") {
-      return deps.json({ workflows: Object.values(BUILTIN_WORKFLOW_CATALOG) });
+      return conditionalJson(request, {
+        workflows: Object.values(BUILTIN_WORKFLOW_CATALOG),
+      });
     }
     if (request.method === "GET" && url.pathname === "/api/release-trust") {
       return await handlers.handleGetReleaseTrustState!(env);
@@ -843,6 +846,14 @@ export async function routeWorkerRequest(
     const discussionMessageMatch = url.pathname.match(
       /^\/api\/discussion-messages\/([^/]+)$/,
     );
+    if (request.method === "GET" && discussionMessageMatch?.[1]) {
+      return await handlers.handleGetDiscussionMessage!(
+        request,
+        env,
+        discussionMessageMatch[1],
+        ctx,
+      );
+    }
     if (request.method === "PATCH" && discussionMessageMatch?.[1]) {
       return await handlers.handleEditDiscussionMessage!(
         request,

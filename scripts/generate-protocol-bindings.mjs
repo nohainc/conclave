@@ -143,6 +143,12 @@ ${jsonItems(value.envelopeFields)}
 export const REALTIME_EVENT_OPTIONAL_ENVELOPE_FIELDS = [
 ${jsonItems(value.optionalEnvelopeFields)}
 ] as const;
+export const REALTIME_STREAM_KINDS = [
+${jsonItems(value.streamKinds)}
+] as const;
+export const COLLABORATION_REALTIME_EVENT_TYPES = [
+${jsonItems(value.collaborationTypes)}
+] as const;
 export const DURABLE_REALTIME_EVENT_TYPES = [
 ${jsonItems(value.durableTypes)}
 ] as const;
@@ -176,6 +182,12 @@ ${dartItems(value.envelopeFields)}
 const realtimeEventOptionalEnvelopeFields = <String>[
 ${dartItems(value.optionalEnvelopeFields)}
 ];
+const realtimeStreamKinds = <String>{
+${dartItems(value.streamKinds)}
+};
+const collaborationRealtimeEventTypes = <String>{
+${dartItems(value.collaborationTypes)}
+};
 const durableRealtimeEventTypes = <String>{
 ${dartItems(value.durableTypes)}
 };

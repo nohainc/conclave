@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+vi.mock("../src/collaboration-events.js", () => ({
+  publishCollaborationEvent: vi.fn(async () => {}),
+}));
+import { describe, expect, it, vi } from "vitest";
 import { createWorkspaceProjectGrant } from "../src/routes/workspace-access.js";
 
 function environment(

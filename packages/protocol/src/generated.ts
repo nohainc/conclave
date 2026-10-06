@@ -30,13 +30,12 @@ export const EXECUTION_ERROR_MESSAGES = {
 } as const;
 
 export const REALTIME_EVENTS_NAME = "conclave.realtime-events" as const;
-export const REALTIME_EVENTS_VERSION = "1.0" as const;
+export const REALTIME_EVENTS_VERSION = "1.1" as const;
 export const REALTIME_EVENT_ENVELOPE_FIELDS = [
   "eventId",
   "type",
   "version",
   "timestamp",
-  "workspaceId",
   "sequence",
   "payload",
 ] as const;
@@ -48,6 +47,25 @@ export const REALTIME_EVENT_OPTIONAL_ENVELOPE_FIELDS = [
   "workstreamId",
   "attemptId",
   "workspaceRuntimeId",
+  "workspaceId",
+  "stream",
+] as const;
+export const REALTIME_STREAM_KINDS = [
+  "execution_workspace",
+  "project",
+  "user",
+] as const;
+export const COLLABORATION_REALTIME_EVENT_TYPES = [
+  "project.created",
+  "project.updated",
+  "project.archived",
+  "project.deleted",
+  "workstream.created",
+  "workstream.updated",
+  "workstream.deleted",
+  "discussion.created",
+  "discussion.updated",
+  "project_workspace_grant.updated",
 ] as const;
 export const DURABLE_REALTIME_EVENT_TYPES = [
   "work_request.created",
@@ -70,6 +88,16 @@ export const DURABLE_REALTIME_EVENT_TYPES = [
   "assignment.failed",
   "assignment.cancelled",
   "artifact.created",
+  "project.created",
+  "project.updated",
+  "project.archived",
+  "project.deleted",
+  "workstream.created",
+  "workstream.updated",
+  "workstream.deleted",
+  "discussion.created",
+  "discussion.updated",
+  "project_workspace_grant.updated",
 ] as const;
 export const EPHEMERAL_REALTIME_EVENT_TYPES = [
   "assignment.progress",

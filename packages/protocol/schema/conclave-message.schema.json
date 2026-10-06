@@ -75,13 +75,12 @@
   },
   "x-realtime-events": {
     "name": "conclave.realtime-events",
-    "version": "1.0",
+    "version": "1.1",
     "envelopeFields": [
       "eventId",
       "type",
       "version",
       "timestamp",
-      "workspaceId",
       "sequence",
       "payload"
     ],
@@ -92,7 +91,9 @@
       "assignmentId",
       "workstreamId",
       "attemptId",
-      "workspaceRuntimeId"
+      "workspaceRuntimeId",
+      "workspaceId",
+      "stream"
     ],
     "durableTypes": [
       "work_request.created",
@@ -114,13 +115,36 @@
       "assignment.completed",
       "assignment.failed",
       "assignment.cancelled",
-      "artifact.created"
+      "artifact.created",
+      "project.created",
+      "project.updated",
+      "project.archived",
+      "project.deleted",
+      "workstream.created",
+      "workstream.updated",
+      "workstream.deleted",
+      "discussion.created",
+      "discussion.updated",
+      "project_workspace_grant.updated"
     ],
     "ephemeralTypes": [
       "assignment.progress",
       "stream.delta",
       "tool.invocation.status",
       "heartbeat"
+    ],
+    "streamKinds": ["execution_workspace", "project", "user"],
+    "collaborationTypes": [
+      "project.created",
+      "project.updated",
+      "project.archived",
+      "project.deleted",
+      "workstream.created",
+      "workstream.updated",
+      "workstream.deleted",
+      "discussion.created",
+      "discussion.updated",
+      "project_workspace_grant.updated"
     ]
   }
 }

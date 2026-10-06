@@ -240,6 +240,22 @@ class AxWorkstream {
   final bool canExecuteWork;
   final bool archived;
 
+  AxWorkstream copyWith(
+          {String? name, String? status, Map<String, dynamic>? workConfig}) =>
+      AxWorkstream(
+          id: id,
+          projectId: projectId,
+          name: name ?? this.name,
+          lead: lead,
+          status: status ?? this.status,
+          brief: brief,
+          primaryWorkspace: primaryWorkspace,
+          queueStatus: queueStatus,
+          workConfig: workConfig ?? this.workConfig,
+          canConfigureWork: canConfigureWork,
+          canExecuteWork: canExecuteWork,
+          archived: status == null ? archived : status == 'archived');
+
   factory AxWorkstream.fromJson(Map<String, dynamic> json) => AxWorkstream(
         id: _string(json, 'id'),
         projectId: _string(json, 'projectId'),
@@ -842,7 +858,9 @@ class AxWorkspace {
             json, 'lastSeen', json['factsUpdatedAt']?.toString() ?? '—'),
         workerCount: json['workerCount'] as int? ?? 0,
         activeTaskCount: json['activeTaskCount'] as int? ?? 0,
-        projectGrantCount: json['projectGrantCount'] as int? ?? 0,
+        projectGrantCount: (json['activeProjectGrantCount'] ??
+                json['projectGrantCount']) as int? ??
+            0,
       );
 
   AxWorkspace copyWith({

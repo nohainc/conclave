@@ -319,47 +319,48 @@ class _AppTopHudState extends State<AppTopHud> {
               ],
 
               // Notifications Bell
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  IconButton(
-                    tooltip: 'Notifications',
-                    onPressed: widget.onOpenNotifications,
-                    icon: Icon(Icons.notifications_none_rounded,
-                        size: 21, color: mutedInk),
-                    splashRadius: 20,
-                  ),
-                  if (widget.shellContext.unreadNotificationCount > 0)
-                    Positioned(
-                      right: 6,
-                      top: 6,
-                      child: Semantics(
-                        label:
-                            '${widget.shellContext.unreadNotificationCount} unread notifications',
-                        child: Container(
-                          constraints:
-                              const BoxConstraints(minWidth: 15, minHeight: 15),
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          decoration: const BoxDecoration(
-                            color: ConclaveBrand.accent,
-                            shape: BoxShape.circle,
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            widget.shellContext.unreadNotificationCount > 9
-                                ? '9+'
-                                : '${widget.shellContext.unreadNotificationCount}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
+              widget.shellContext.watchNotifications(() => Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      IconButton(
+                        tooltip: 'Notifications',
+                        onPressed: widget.onOpenNotifications,
+                        icon: Icon(Icons.notifications_none_rounded,
+                            size: 21, color: mutedInk),
+                        splashRadius: 20,
+                      ),
+                      if (widget.shellContext.unreadNotificationCount > 0)
+                        Positioned(
+                          right: 6,
+                          top: 6,
+                          child: Semantics(
+                            label:
+                                '${widget.shellContext.unreadNotificationCount} unread notifications',
+                            child: Container(
+                              constraints: const BoxConstraints(
+                                  minWidth: 15, minHeight: 15),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              decoration: const BoxDecoration(
+                                color: ConclaveBrand.accent,
+                                shape: BoxShape.circle,
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                widget.shellContext.unreadNotificationCount > 9
+                                    ? '9+'
+                                    : '${widget.shellContext.unreadNotificationCount}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                ],
-              ),
+                    ],
+                  )),
             ],
           ),
         );

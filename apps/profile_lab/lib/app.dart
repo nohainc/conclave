@@ -70,6 +70,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                             'assets/branding/conclave_logo_32.png',
                             width: 24,
                             height: 24,
+                            fit: BoxFit.contain,
                             errorBuilder: (ctx, err, stack) => const Icon(
                                 Icons.science,
                                 color: ProfileLabTheme.primaryAccent,

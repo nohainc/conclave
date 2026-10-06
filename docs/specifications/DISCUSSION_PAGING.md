@@ -34,3 +34,12 @@ newest page, rather than unbounded history. AX loads additional history through
 scroll-triggered pagination. Reconnects with a known newest cursor fetch only
 forward pages and never refetch loaded older pages. Reopening additionally
 reconciles the newest window for edits; creation-order cursors do not track edits.
+
+Realtime contract 1.1 adds ID-only `discussion.created` and `discussion.updated`
+[signals](REALTIME_SYNCHRONIZATION.md). Creation uses the existing forward cursor.
+For edits, `GET /api/discussion-messages/:id` returns `{ message }` after current
+Workstream view authorization (404 when missing; access denied when unauthorized).
+It preserves authored Markdown and returns parsed references. AX
+`loadDiscussionMessage(messageId:)` merges that single entity when already cached,
+including in older pages, without changing either pagination cursor. Custom AX
+data sources must implement the lookup. The paging envelope remains version 1.

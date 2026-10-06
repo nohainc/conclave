@@ -8,6 +8,9 @@ class WorkstreamPage extends StatefulWidget {
     this.dataSource,
     this.discussionCache,
     this.workHistoryCache,
+    this.catalogs,
+    this.mutations,
+    this.workspaceGrants,
     this.currentUserId,
     this.currentUserName,
     required this.onBackToProject,
@@ -23,13 +26,16 @@ class WorkstreamPage extends StatefulWidget {
   final AxDataSource? dataSource;
   final AxDiscussionCache? discussionCache;
   final AxWorkHistoryCache? workHistoryCache;
+  final AxSessionCatalogs? catalogs;
+  final AxCollaborationMutations? mutations;
+  final AxProjectWorkspaceGrants? workspaceGrants;
   final String? currentUserId;
   final String? currentUserName;
   final VoidCallback onBackToProject;
   final VoidCallback onArchive;
   final Future<void> Function(String name)? onRename;
   final Future<String> Function(String prompt, String workflowId,
-      List<Map<String, dynamic>> attachments)? onRunWork;
+      List<Map<String, dynamic>> attachments, String idempotencyKey)? onRunWork;
   final Stream<Map<String, dynamic>>? realtimeEvents;
   final int initialTab;
 
@@ -48,7 +54,8 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   bool _loadingOlderChat = false;
   final _chatComposerKey = GlobalKey();
   final _workComposerKey = GlobalKey();
-  double _chatComposerSpace = 48;
+  final _chatComposerSpaceChanges = ValueNotifier<double>(48);
+  double get _chatComposerSpace => _chatComposerSpaceChanges.value;
 
   void _alignComposers() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -63,7 +70,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       final space = (_chatComposerSpace + work.size.height - chat.size.height)
           .clamp(0.0, 500.0);
       if ((space - _chatComposerSpace).abs() > 0.5) {
-        setState(() => _chatComposerSpace = space);
+        _chatComposerSpaceChanges.value = space;
       }
     });
   }
@@ -87,6 +94,13 @@ class _WorkstreamPageState extends State<WorkstreamPage>
 
   final _discussionController = TextEditingController();
   late final TextEditingController _workstreamInstructionsController;
+  late AxSessionCatalogs _catalogs;
+  late AxProjectWorkspaceGrants _grants;
+  void Function()? _cancelGrants;
+  void Function()? _cancelWorkflows;
+  void Function()? _cancelWorkers;
+  Set<String> _grantedWorkspaceIds = {};
+  int _choicesGeneration = 0;
   String _workflow = '';
   List<AxBuiltinWorkflow> _workflowCatalog = const [];
   List<AxBuiltinWorkflow> get _currentWorkflows =>
@@ -103,21 +117,17 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   bool _loadingOlderWork = false;
   List<AxWorkRequest> get _workTimeline =>
       _workHistoryCache.peek(widget.workstream.id).requests;
-  set _workTimeline(List<AxWorkRequest> value) =>
-      _workHistoryCache.replace(widget.workstream.id, value);
   void _subscribeWorkHistory() {
     _cancelWorkHistory?.call();
     _cancelWorkHistory = _workHistoryCache.watch(widget.workstream.id, () {
       if (!mounted) return;
-      setState(() {
-        final confirmed =
-            _workHistoryCache.peek(widget.workstream.id).confirmedIds;
-        _localWorkProgress.removeWhere((id, _) => confirmed.contains(id));
-      });
+      _updateWorkHistory(() {});
+      _workSettingsChanges.value++;
     });
   }
 
-  final Map<String, String> _localWorkProgress = {};
+  Map<String, String> get _localWorkProgress =>
+      _workHistoryCache.localProgress(widget.workstream.id);
   bool get _loadingWorkTimeline =>
       !_workHistoryCache.peek(widget.workstream.id).initialLoaded &&
       _workHistoryCache.loading(widget.workstream.id);
@@ -126,7 +136,8 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   String? _workSubmitError;
   StreamSubscription<Map<String, dynamic>>? _workEventSubscription;
   void Function()? _cancelWorkRealtime;
-  bool _submittingWork = false;
+  bool get _submittingWork =>
+      _workHistoryCache.submitting(widget.workstream.id);
   List<Map<String, dynamic>> _workAttachments = [];
   List<AxWorker> _projectWorkers = const [];
   List<AxWorker> _eligibleWorkers = const [];
@@ -134,6 +145,16 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   bool _loadingWorkChoices = true;
   bool _savingWorkConfig = false;
   final _workSettingsChanges = ValueNotifier<int>(0);
+  final _workHistoryChanges = ValueNotifier<int>(0);
+  void _updateWorkSettings(VoidCallback callback) {
+    callback();
+    _workSettingsChanges.value++;
+  }
+
+  void _updateWorkHistory(VoidCallback callback) {
+    callback();
+    _workHistoryChanges.value++;
+  }
 
   @override
   void initState() {
@@ -191,23 +212,76 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     );
     _refreshWorkTimeline();
     _subscribeToWorkEvents();
+    _subscribeCatalogs();
+    _subscribeGrants();
     _loadWorkChoices();
     _loadWorkflowCatalog();
   }
 
+  void _applyWorkers(List<AxWorker> workers) {
+    _projectWorkers = workers
+        .where((worker) => _grantedWorkspaceIds.contains(worker.workspaceId))
+        .toList();
+    _eligibleWorkers = _projectWorkers
+        .where((worker) =>
+            worker.activationState == 'enabled' &&
+            worker.readinessState == 'ready' &&
+            worker.catalogLifecycleState == 'active' &&
+            worker.catalogVisibilityState == 'visible')
+        .toList();
+  }
+
+  void _subscribeCatalogs() {
+    _cancelWorkflows?.call();
+    _cancelWorkers?.call();
+    _catalogs =
+        widget.catalogs ?? AxSessionCatalogs.forSource(widget.dataSource);
+    final workflows = _catalogs.engine.peek(_catalogs.workflows);
+    _workflowCatalog = workflows.data ?? const [];
+    _loadingWorkflows = !workflows.hasData;
+    if (_workflowCatalog.isNotEmpty) {
+      _workflow = _workstreamDefaultReference(_workflowCatalog);
+    }
+    _applyWorkers(_catalogs.engine.peek(_catalogs.workers).data ?? const []);
+    _cancelWorkflows = _catalogs.engine.watch(_catalogs.workflows, (state) {
+      if (!mounted) return;
+      _updateWorkSettings(() {
+        if (state.hasData) {
+          _workflowCatalog = state.data!;
+          if (!_workflowCatalog.any((item) => item.reference == _workflow)) {
+            _workflow = _workstreamDefaultReference(_workflowCatalog);
+          }
+        }
+        _loadingWorkflows = !state.hasData && state.isFetching;
+        _workflowCatalogError = state.error != null
+            ? 'Could not load the Workflow catalog.'
+            : state.hasData && state.data!.isEmpty
+                ? 'No built-in Workflows are available.'
+                : null;
+      });
+    }, fireImmediately: false);
+    _cancelWorkers = _catalogs.engine.watch(_catalogs.workers, (state) {
+      if (!mounted) return;
+      _updateWorkSettings(() => _applyWorkers(state.data ?? const []));
+    }, fireImmediately: false);
+  }
+
   Future<void> _loadWorkflowCatalog() async {
     final ds = widget.dataSource;
+    final catalogs = _catalogs;
     if (ds == null) {
-      setState(() {
+      _updateWorkSettings(() {
         _loadingWorkflows = false;
         _workflowCatalogError = 'Workflow catalog is unavailable.';
       });
       return;
     }
     try {
-      final workflows = await ds.loadBuiltinWorkflowCatalog();
-      if (!mounted) return;
-      setState(() {
+      await catalogs.ensureWorkflows();
+      if (!mounted || catalogs != _catalogs) return;
+      final workflows = catalogs.engine.peek(catalogs.workflows).data ??
+          const <AxBuiltinWorkflow>[];
+      _updateWorkSettings(() {
         _workflowCatalog = workflows;
         _loadingWorkflows = false;
         _workflowCatalogError =
@@ -216,8 +290,8 @@ class _WorkstreamPageState extends State<WorkstreamPage>
             workflows.isEmpty ? '' : _workstreamDefaultReference(workflows);
       });
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
+      if (!mounted || catalogs != _catalogs) return;
+      _updateWorkSettings(() {
         _loadingWorkflows = false;
         _workflowCatalogError = 'Could not load the Workflow catalog.';
       });
@@ -235,46 +309,76 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         current.first.reference;
   }
 
+  void _applyGrants(AxWorkspaceGrants grants) {
+    _grantedWorkspaceIds = grants
+        .where(
+            (value) => value['status'] == null || value['status'] == 'active')
+        .map((value) => (value['workspaceId'] ?? value['id'] ?? '').toString())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    _applyWorkers(_catalogs.engine.peek(_catalogs.workers).data ?? const []);
+  }
+
+  void _subscribeGrants() {
+    _cancelGrants?.call();
+    _grants = widget.workspaceGrants ??
+        AxProjectWorkspaceGrants.forSource(widget.dataSource);
+    final state = _grants.peek(widget.project.id);
+    _applyGrants(state.data ?? const []);
+    _loadingWorkChoices = !state.hasData;
+    _cancelGrants = _grants.watch(widget.project.id, (state) {
+      if (!mounted) return;
+      _updateWorkSettings(() {
+        _applyGrants(state.data ?? const []);
+        if (state.hasData) _loadingWorkChoices = false;
+      });
+    });
+  }
+
   Future<void> _loadWorkChoices() async {
     final ds = widget.dataSource;
+    final generation = ++_choicesGeneration;
+    final catalogs = _catalogs;
+    final grantsCache = _grants;
+    final projectId = widget.project.id;
     if (ds == null) {
-      setState(() => _loadingWorkChoices = false);
+      _updateWorkSettings(() => _loadingWorkChoices = false);
       return;
     }
     try {
-      final loaded = await Future.wait([
-        ds.loadWorkspaceWorkerInventory(),
-        ds.loadProjectWorkspaces(projectId: widget.project.id),
+      await Future.wait([
+        catalogs.ensureWorkers(),
+        grantsCache.ensure(projectId),
       ]);
       if (!mounted) return;
-      final grants = loaded[1] as List<Map<String, dynamic>>;
-      final grantedWorkspaceIds = <String>{};
-      for (final grant in grants) {
-        final id = (grant['workspaceId'] ?? grant['id'] ?? '').toString();
-        if (id.isEmpty) continue;
-        grantedWorkspaceIds.add(id);
-      }
-      setState(() {
-        _projectWorkers = (loaded[0] as List<AxWorker>)
-            .where((worker) => grantedWorkspaceIds.contains(worker.workspaceId))
-            .toList();
-        _eligibleWorkers = _projectWorkers
-            .where((worker) =>
-                worker.activationState == 'enabled' &&
-                worker.readinessState == 'ready' &&
-                worker.catalogLifecycleState == 'active' &&
-                worker.catalogVisibilityState == 'visible')
-            .toList();
+      if (generation != _choicesGeneration || catalogs != _catalogs) return;
+      if (grantsCache != _grants || projectId != widget.project.id) return;
+      _updateWorkSettings(() {
+        _applyGrants(grantsCache.peek(projectId).data ?? const []);
         _loadingWorkChoices = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loadingWorkChoices = false);
+      if (mounted && generation == _choicesGeneration) {
+        _updateWorkSettings(() => _loadingWorkChoices = false);
+      }
     }
   }
 
   @override
   void didUpdateWidget(WorkstreamPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.catalogs != widget.catalogs ||
+        oldWidget.dataSource != widget.dataSource) {
+      _subscribeCatalogs();
+      unawaited(_loadWorkflowCatalog());
+    }
+    if (oldWidget.catalogs != widget.catalogs ||
+        oldWidget.dataSource != widget.dataSource ||
+        oldWidget.project.id != widget.project.id ||
+        oldWidget.workspaceGrants != widget.workspaceGrants) {
+      _subscribeGrants();
+      unawaited(_loadWorkChoices());
+    }
     if (oldWidget.dataSource != widget.dataSource ||
         oldWidget.discussionCache != widget.discussionCache) {
       _fallbackDiscussionCache = widget.discussionCache ??
@@ -293,8 +397,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     }
     if (oldWidget.workstream.id != widget.workstream.id) {
       _discussionController.clear();
-      _localWorkProgress.clear();
-      _submittingWork = false;
       _followWork = _followChat = true;
     }
     if (oldWidget.initialTab != widget.initialTab) {
@@ -331,16 +433,12 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       final type = event['type'];
       final payload = event['payload'];
       if ((type is String &&
-              type.startsWith('workstream.discussion.') &&
-              ((payload is Map &&
-                      payload['workstreamId'] == widget.workstream.id) ||
-                  event['workstreamId'] == widget.workstream.id)) ||
-          type == 'reconnect.required' ||
-          (type == 'realtime.connection' && event['status'] == 'connected')) {
+          type.startsWith('workstream.discussion.') &&
+          ((payload is Map &&
+                  payload['workstreamId'] == widget.workstream.id) ||
+              event['workstreamId'] == widget.workstream.id))) {
         unawaited(_discussionCache
-            .synchronize(widget.workstream.id,
-                reconcileNewest:
-                    type is String && type.startsWith('workstream.discussion.'))
+            .synchronize(widget.workstream.id, reconcileNewest: true)
             .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
       }
     });
@@ -353,6 +451,9 @@ class _WorkstreamPageState extends State<WorkstreamPage>
 
   @override
   void dispose() {
+    _cancelWorkflows?.call();
+    _cancelWorkers?.call();
+    _cancelGrants?.call();
     _cancelWorkHistory?.call();
     _cancelWorkRealtime?.call();
     _workEventSubscription?.cancel();
@@ -363,10 +464,16 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     _discussionController.dispose();
     _workstreamInstructionsController.dispose();
     _workSettingsChanges.dispose();
+    _workHistoryChanges.dispose();
+    _chatComposerSpaceChanges.dispose();
     super.dispose();
   }
 
-  void _updateState(VoidCallback callback) => setState(callback);
+  void _updateState(VoidCallback callback) {
+    callback();
+    _workHistoryChanges.value++;
+    _workSettingsChanges.value++;
+  }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -568,51 +675,72 @@ class _WorkstreamPageState extends State<WorkstreamPage>
           chatStyle: true,
           onSend: _sendDiscussion,
           additionalControlsBuilder: alignWithWork
-              ? (_) => SizedBox(height: _chatComposerSpace)
+              ? (_) => ValueListenableBuilder<double>(
+                  valueListenable: _chatComposerSpaceChanges,
+                  builder: (context, space, _) => SizedBox(height: space))
               : null,
         ),
       ],
     );
   }
 
-  Widget _work(BuildContext context) {
-    _followLatest(_workHistoryController, _followWork);
-    return _WorkComposer(
-      composerKey: _workComposerKey,
-      requestController: _requestController,
-      historyController: _workHistoryController,
-      currentUserId: widget.currentUserId,
-      currentUserName: widget.currentUserName,
-      workflow: _workflow,
-      workflowCatalog: _workflowCatalog,
-      loadingWorkflows: _loadingWorkflows,
-      workflowCatalogError: _workflowCatalogError,
-      canExecute: _canExecute,
-      canConfigureWork: _canConfigureWork,
-      workTimeline: _workTimeline,
-      localWorkProgress: _localWorkProgress,
-      loadingTimeline: _loadingWorkTimeline,
-      timelineError: _workTimelineError,
-      submitError: _workSubmitError,
-      submitting: _submittingWork,
-      awaitingResponse: _awaitingWorkResponse,
-      attachments: _workAttachments,
-      onAddFiles: _addWorkFiles,
-      onAddReference: _addWorkReference,
-      onRemoveAttachment: (index) => setState(() {
-        _workAttachments.removeAt(index);
-      }),
-      onRefresh: _retryWorkSync,
-      hasOlder:
-          _workHistoryCache.peek(widget.workstream.id).olderCursor != null,
-      loadingOlder: _workHistoryCache.loadingOlder(widget.workstream.id),
-      onLoadOlder: _loadOlderWorkHistory,
-      onShowRunDetails: widget.dataSource == null ? null : _showRunDetails,
-      onRetryStep: widget.dataSource == null ? null : _retryWorkRequestStep,
-      onCancelRun: widget.dataSource == null ? null : _cancelFailedWorkRequest,
-      onWorkflowChanged: (value) => setState(() => _workflow = value),
-      onOpenSettings: () => _openWorkSettings(context),
-      onRun: _runWork,
-    );
-  }
+  Widget _work(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+              child: ListenableBuilder(
+                  listenable: _workHistoryChanges,
+                  builder: (context, _) {
+                    _followLatest(_workHistoryController, _followWork);
+                    return _workComposer().history(context);
+                  })),
+          const SizedBox(height: 16),
+          ListenableBuilder(
+              listenable: _workSettingsChanges,
+              builder: (context, _) {
+                _alignComposers();
+                return _workComposer().controls(context);
+              }),
+        ],
+      );
+
+  _WorkComposer _workComposer() => _WorkComposer(
+        composerKey: _workComposerKey,
+        requestController: _requestController,
+        historyController: _workHistoryController,
+        currentUserId: widget.currentUserId,
+        currentUserName: widget.currentUserName,
+        workflow: _workflow,
+        workflowCatalog: _workflowCatalog,
+        loadingWorkflows: _loadingWorkflows,
+        workflowCatalogError: _workflowCatalogError,
+        canExecute: _canExecute,
+        canConfigureWork: _canConfigureWork,
+        workTimeline: _workTimeline,
+        localWorkProgress: _localWorkProgress,
+        loadingTimeline: _loadingWorkTimeline,
+        timelineError: _workTimelineError,
+        submitError: _workSubmitError,
+        submitting: _submittingWork,
+        awaitingResponse: _awaitingWorkResponse,
+        attachments: _workAttachments,
+        onAddFiles: _addWorkFiles,
+        onAddReference: _addWorkReference,
+        onRemoveAttachment: (index) => _updateWorkSettings(() {
+          _workAttachments.removeAt(index);
+        }),
+        onRefresh: _retryWorkSync,
+        hasOlder:
+            _workHistoryCache.peek(widget.workstream.id).olderCursor != null,
+        loadingOlder: _workHistoryCache.loadingOlder(widget.workstream.id),
+        onLoadOlder: _loadOlderWorkHistory,
+        onShowRunDetails: widget.dataSource == null ? null : _showRunDetails,
+        onRetryStep: widget.dataSource == null ? null : _retryWorkRequestStep,
+        onCancelRun:
+            widget.dataSource == null ? null : _cancelFailedWorkRequest,
+        onWorkflowChanged: (value) =>
+            _updateWorkSettings(() => _workflow = value),
+        onOpenSettings: () => _openWorkSettings(context),
+        onRun: _runWork,
+      );
 }

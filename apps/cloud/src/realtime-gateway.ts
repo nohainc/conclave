@@ -1,6 +1,9 @@
 import {
   isDurableRealtimeEventType,
   parseRealtimeEvent,
+  realtimeEventStream,
+  realtimeStreamKey,
+  RealtimeStreamSchema,
   type RealtimeEventEnvelope,
 } from "@conclave/protocol";
 import {
@@ -26,6 +29,7 @@ export type RealtimeClientMessage =
   | {
       type: "realtime.hello";
       lastDurableSequences?: Record<string, number>;
+      lastDurableStreamSequences?: Record<string, number>;
     }
   | { type: "subscribe"; scope: RealtimeScope }
   | { type: "unsubscribe"; scope: RealtimeScope }
@@ -39,7 +43,7 @@ interface ConnectedClient {
   readonly socket: WebSocket;
   readonly identity: AuthenticatedIdentity;
   readonly subscriptions: Map<string, RealtimeScope>;
-  /** Durable cursors are per execution Workspace, not per subscription scope. */
+  /** Durable cursors are per stream; subscription scopes only control rendering/delivery. */
   readonly lastDurableSequences: Map<string, number>;
   readonly queue: BoundedRealtimeQueue;
   flushScheduled: boolean;
@@ -104,8 +108,39 @@ export function parseRealtimeClientMessage(
       }
       sequences[workspaceId] = sequence;
     }
+    const streams: Record<string, number> = {};
+    const rawStreams = value.lastDurableStreamSequences;
+    if (
+      rawStreams !== undefined &&
+      (!rawStreams ||
+        typeof rawStreams !== "object" ||
+        Array.isArray(rawStreams))
+    ) {
+      throw new Error("lastDurableStreamSequences must be an object");
+    }
+    for (const [key, sequence] of Object.entries(
+      (rawStreams ?? {}) as Record<string, unknown>,
+    )) {
+      const parts = JSON.parse(key) as unknown;
+      if (!Array.isArray(parts) || parts.length !== 2)
+        throw new Error("Invalid stream cursor key");
+      const stream = RealtimeStreamSchema.parse({
+        kind: parts[0],
+        id: parts[1],
+      });
+      if (
+        typeof sequence !== "number" ||
+        !Number.isSafeInteger(sequence) ||
+        sequence < 0
+      )
+        throw new Error("Invalid stream sequence");
+      streams[realtimeStreamKey(stream)] = sequence;
+    }
     return {
       type: "realtime.hello",
+      ...(Object.keys(streams).length > 0
+        ? { lastDurableStreamSequences: streams }
+        : {}),
       ...(Object.keys(sequences).length > 0
         ? { lastDurableSequences: sequences }
         : {}),
@@ -209,6 +244,7 @@ export function eventMatchesScope(
     return event.workspaceId === scope.executionWorkspaceId;
   }
   return (
+    !!event.workspaceId &&
     event.workspaceId === scope.workspaceId &&
     (!scope.projectId || event.projectId === scope.projectId) &&
     (!scope.runId || event.runId === scope.runId)
@@ -410,7 +446,7 @@ export class RealtimeGateway implements DurableObject {
     this.sendRaw(server, {
       type: "realtime.ready",
       connectionId,
-      eventVersion: "1.0",
+      eventVersion: "1.1",
     });
     server.addEventListener("message", (event) => {
       void this.handleClientMessage(connectionId, event.data);
@@ -458,12 +494,20 @@ export class RealtimeGateway implements DurableObject {
         for (const [key, value] of Object.entries(
           message.lastDurableSequences ?? {},
         )) {
+          connected.lastDurableSequences.set(
+            realtimeStreamKey({ kind: "execution_workspace", id: key }),
+            value,
+          );
+        }
+        for (const [key, value] of Object.entries(
+          message.lastDurableStreamSequences ?? {},
+        )) {
           connected.lastDurableSequences.set(key, value);
         }
         this.sendRaw(connected.socket, {
           type: "realtime.ready",
           connectionId,
-          eventVersion: "1.0",
+          eventVersion: "1.1",
         });
         return;
       }
@@ -508,7 +552,28 @@ export class RealtimeGateway implements DurableObject {
     try {
       const event = parseRealtimeEvent(await request.json());
       this.metrics.publishedEvents += 1;
+      const stream = realtimeEventStream(event);
+      const streamKey = realtimeStreamKey(stream);
       for (const connected of this.clients.values()) {
+        // Deletion removes memberships. Deliver its ID-only signal to the
+        // captured audience without keeping now-invalid focused subscriptions.
+        if (event.type === "project.deleted") {
+          for (const [key, scope] of connected.subscriptions) {
+            if (
+              scope.projectId === event.projectId ||
+              ((scope.kind === "workstream" || scope.kind === "run") &&
+                !(
+                  await authorizeRealtimeScope(
+                    this.env.CONCLAVE_DB,
+                    connected.identity.userId,
+                    scope,
+                  )
+                ).allowed)
+            ) {
+              connected.subscriptions.delete(key);
+            }
+          }
+        }
         if (
           !(await isRealtimeIdentityAuthorized(
             this.env.CONCLAVE_DB,
@@ -526,6 +591,30 @@ export class RealtimeGateway implements DurableObject {
           this.metrics.activeAppSockets = this.clients.size;
           continue;
         }
+        if (stream.kind === "user" && stream.id !== connected.identity.userId)
+          continue;
+        if (stream.kind === "project" && event.type !== "project.deleted") {
+          const member = await authorizeRealtimeScope(
+            this.env.CONCLAVE_DB,
+            connected.identity.userId,
+            { kind: "project", projectId: stream.id },
+          );
+          if (!member.allowed) {
+            const owner =
+              event.type === "project_workspace_grant.updated"
+                ? await this.env.CONCLAVE_DB.prepare(
+                    "SELECT 1 AS owner FROM workspace_project_grants WHERE id = ?1 AND project_id = ?2 AND granted_by_user_id = ?3",
+                  )
+                    .bind(
+                      event.payload.entityId,
+                      stream.id,
+                      connected.identity.userId,
+                    )
+                    .first()
+                : null;
+            if (!owner) continue;
+          }
+        }
         const matchingScopes = [...connected.subscriptions.values()].filter(
           (scope) => eventMatchesScope(event, scope),
         );
@@ -533,22 +622,32 @@ export class RealtimeGateway implements DurableObject {
         const gapScope = isDurableRealtimeEventType(event.type)
           ? matchingScopes.find((_scope) =>
               requiresRealtimeReconnect(
-                connected.lastDurableSequences.get(event.workspaceId) ?? null,
+                connected.lastDurableSequences.get(streamKey) ?? null,
                 event.sequence,
               ),
             )
           : undefined;
         if (gapScope) {
           this.metrics.reconnects += 1;
-          const lastSequence = connected.lastDurableSequences.get(
-            event.workspaceId,
+          const lastSequence = connected.lastDurableSequences.get(streamKey);
+          connected.lastDurableSequences.set(
+            streamKey,
+            Math.max(
+              connected.lastDurableSequences.get(streamKey) ?? 0,
+              event.sequence,
+            ),
           );
-          connected.lastDurableSequences.set(event.workspaceId, event.sequence);
           this.sendRaw(connected.socket, {
             type: "reconnect.required",
             reason: "durable_event_gap",
-            scope: gapScope,
-            workspaceId: event.workspaceId,
+            scope:
+              stream.kind === "project"
+                ? { kind: "project", projectId: stream.id }
+                : stream.kind === "user"
+                  ? { kind: "user" }
+                  : gapScope,
+            ...(event.workspaceId ? { workspaceId: event.workspaceId } : {}),
+            stream: realtimeEventStream(event),
             lastDurableSequence: lastSequence,
             nextSequence: event.sequence,
           });
@@ -557,7 +656,13 @@ export class RealtimeGateway implements DurableObject {
         const result = this.enqueueEvent(connected, event);
         this.recordQueueResult(result);
         if (isDurableRealtimeEventType(event.type)) {
-          connected.lastDurableSequences.set(event.workspaceId, event.sequence);
+          connected.lastDurableSequences.set(
+            streamKey,
+            Math.max(
+              connected.lastDurableSequences.get(streamKey) ?? 0,
+              event.sequence,
+            ),
+          );
         }
       }
       return Response.json({ delivered: true });
@@ -579,7 +684,7 @@ export class RealtimeGateway implements DurableObject {
     const durable = isDurableRealtimeEventType(event.type);
     const coalesceKey = durable
       ? undefined
-      : `${event.type}:${event.workspaceId}:${event.projectId ?? ""}:${event.runId ?? ""}:${event.assignmentId ?? ""}`;
+      : `${event.type}:${realtimeStreamKey(realtimeEventStream(event))}:${event.projectId ?? ""}:${event.runId ?? ""}:${event.assignmentId ?? ""}`;
     const frame = JSON.stringify({ type: "event", event });
     if (
       connected.queue.depth === 0 &&
@@ -605,7 +710,16 @@ export class RealtimeGateway implements DurableObject {
       this.sendRaw(connected.socket, {
         type: "reconnect.required",
         reason: "connection_queue_limit",
-        workspaceId: event.workspaceId,
+        ...(realtimeEventStream(event).kind === "project"
+          ? {
+              scope: {
+                kind: "project",
+                projectId: realtimeEventStream(event).id,
+              },
+            }
+          : {}),
+        ...(event.workspaceId ? { workspaceId: event.workspaceId } : {}),
+        stream: realtimeEventStream(event),
         nextSequence: event.sequence,
       });
       return result;

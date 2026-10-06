@@ -9,12 +9,12 @@ import 'package:conclave_protocol/conclave_protocol.dart';
 
 import 'realtime_client_stub.dart';
 import 'realtime_health.dart';
+import 'realtime_cursors.dart';
 
 class _BrowserRealtimeClient implements RealtimeClient {
   final _events = StreamController<Map<String, dynamic>>.broadcast();
   html.WebSocket? _socket;
   Uri? _endpoint;
-  String? _workspaceId;
   String? _projectId;
   String? _workstreamId;
   String? _runId;
@@ -29,17 +29,16 @@ class _BrowserRealtimeClient implements RealtimeClient {
         _scheduleReconnect();
       });
   int _attempt = 0;
-  final _lastDurableSequences = <String, int>{};
+  final _cursors = RealtimeCursors();
   bool _closed = false;
 
   @override
   Stream<Map<String, dynamic>> get events => _events.stream;
 
   @override
-  Future<void> connect(Uri endpoint, String workspaceId) async {
+  Future<void> connect(Uri endpoint, [String? workspaceId]) async {
     _closed = false;
     _endpoint = endpoint;
-    _workspaceId = workspaceId;
     _attempt = 0;
     _open();
   }
@@ -73,19 +72,14 @@ class _BrowserRealtimeClient implements RealtimeClient {
 
   void _open() {
     final endpoint = _endpoint;
-    final workspaceId = _workspaceId;
-    if (_closed || endpoint == null || workspaceId == null) return;
+    if (_closed || endpoint == null) return;
     final socket = html.WebSocket(endpoint.toString());
     _socket = socket;
     socket.onOpen.listen((_) {
       if (_closed || !identical(_socket, socket)) return;
       _attempt = 0;
       _events.add({'type': 'realtime.connection', 'status': 'connected'});
-      _send({
-        'type': 'realtime.hello',
-        if (_lastDurableSequences.isNotEmpty)
-          'lastDurableSequences': _lastDurableSequences,
-      });
+      _send(_cursors.hello());
       _send({
         'type': 'subscribe',
         'scope': {'kind': 'user'}
@@ -107,24 +101,14 @@ class _BrowserRealtimeClient implements RealtimeClient {
           _events.add(message);
         } else if (message['type'] == 'event' && message['event'] is Map) {
           final eventValue = Map<String, dynamic>.from(message['event'] as Map);
-          final sequence = eventValue['sequence'];
           final type = eventValue['type'];
-          final workspaceId = eventValue['workspaceId'];
-          if (sequence is int &&
-              type is String &&
-              durableRealtimeEventTypes.contains(type) &&
-              workspaceId is String) {
-            _lastDurableSequences[workspaceId] = sequence;
+          if (type is String && durableRealtimeEventTypes.contains(type)) {
+            _cursors.record(eventValue);
           }
           _events.add(eventValue);
         } else if (message['type'] == 'reconnect.required') {
-          final workspaceId = message['workspaceId'];
-          final nextSequence = message['nextSequence'];
-          if (workspaceId is String && nextSequence is int) {
-            _lastDurableSequences[workspaceId] = nextSequence;
-          }
-          // The App performs an authenticated HTTP snapshot resync before
-          // continuing to render after a durable event gap.
+          _cursors.record(message);
+          // Query routers reconcile the affected stream through authenticated HTTP.
           _events.add(message);
         }
       } on FormatException {

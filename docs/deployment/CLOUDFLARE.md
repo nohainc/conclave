@@ -330,3 +330,28 @@ and preserves all events and indexes; new baseline databases already include it.
 Workspace HTTP delivery persists queued messages before reporting dispatch
 success. Unacknowledged assignments fail after 30 seconds; acknowledged provider
 execution retains its Step deadline.
+
+## Durable realtime stream alignment
+
+The [1.1 synchronization contract](../specifications/REALTIME_SYNCHRONIZATION.md)
+separates collaboration sequencing from execution Workspace ownership. Fresh v8
+baseline databases include the stream columns and indexes.
+
+For an existing database with Workspace-only realtime tables, export/back up the
+`realtime_events` and `realtime_event_cursors` tables first. Confirm that
+`workspace_runtime_id` exists (apply the preceding nullable-field alignment if
+needed) and that `stream_kind` does not yet exist. Run
+`node scripts/align-realtime-stream-schema.mjs` to produce
+`.development/align-realtime-stream-schema.sql`. Inspect it against the hosted
+schema and apply its ordered statements as one transactional D1 batch during a
+publication maintenance window, before deploying the new publisher. Do not
+reapply it to an already aligned database.
+
+The alignment copies all existing events/counters into execution Workspace
+streams and rebuilds the current indexes. It preserves payloads, runtime IDs,
+idempotency keys and sequence counters, including counters ahead of retained
+rows. Verify row counts and counters against the backup before deploying Cloud
+and AX. Restore the backup if alignment fails; do not reset execution sequences.
+The repository's fresh-start baseline remains the canonical schema rather than
+an upgrade migration chain. No deployment or hosted-schema changes happen when
+running the SQL generator.

@@ -1,6 +1,8 @@
 import {
   isDurableRealtimeEventType,
   parseRealtimeEvent,
+  realtimeEventStream,
+  type RealtimeStream,
   type RealtimeEventEnvelope,
   type RealtimeEventPayload,
 } from "@conclave/protocol";
@@ -14,7 +16,14 @@ export interface DomainEventInput {
   readonly eventId?: string;
   readonly idempotencyKey?: string;
   readonly type: string;
-  readonly workspaceId: string;
+  readonly workspaceId?: string;
+  readonly stream?: RealtimeStream;
+  readonly workstreamId?: string;
+  /** Trusted route audience captured before a destructive mutation; never a wire field. */
+  readonly recipientUserIds?: readonly string[];
+  readonly additionalRecipientUserIds?: readonly string[];
+  /** Optional domain writes committed in the same transaction as the signal. */
+  readonly mutations?: readonly D1PreparedStatement[];
   readonly projectId?: string;
   readonly runId?: string;
   readonly taskId?: string;
@@ -44,9 +53,18 @@ function eventFromRow(row: Record<string, unknown>): RealtimeEventEnvelope {
   return parseRealtimeEvent({
     eventId: String(row.event_id),
     type: String(row.event_type),
-    version: "1.0",
+    version:
+      row.stream_kind && row.stream_kind !== "execution_workspace"
+        ? "1.1"
+        : "1.0",
     timestamp: String(row.occurred_at),
-    workspaceId: String(row.workspace_id),
+    ...(row.workspace_id ? { workspaceId: String(row.workspace_id) } : {}),
+    ...(row.stream_kind && row.stream_kind !== "execution_workspace"
+      ? {
+          stream: { kind: row.stream_kind, id: row.stream_id },
+        }
+      : {}),
+    ...(row.workstream_id ? { workstreamId: String(row.workstream_id) } : {}),
     ...(row.project_id ? { projectId: String(row.project_id) } : {}),
     ...(row.run_id ? { runId: String(row.run_id) } : {}),
     ...(row.task_id ? { taskId: String(row.task_id) } : {}),
@@ -84,9 +102,14 @@ export class CloudEventPublisher implements EventPublisher {
       event = parseRealtimeEvent({
         eventId,
         type: input.type,
-        version: "1.0",
+        version:
+          input.stream && input.stream.kind !== "execution_workspace"
+            ? "1.1"
+            : "1.0",
         timestamp: occurredAt,
-        workspaceId: input.workspaceId,
+        ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
+        ...(input.stream ? { stream: input.stream } : {}),
+        ...(input.workstreamId ? { workstreamId: input.workstreamId } : {}),
         ...(input.projectId ? { projectId: input.projectId } : {}),
         ...(input.runId ? { runId: input.runId } : {}),
         ...(input.taskId ? { taskId: input.taskId } : {}),
@@ -100,7 +123,10 @@ export class CloudEventPublisher implements EventPublisher {
       });
     }
 
-    const deliveredSubscribers = await this.fanout(event);
+    const deliveredSubscribers = await this.fanout(
+      event,
+      input.recipientUserIds,
+    );
     return { event, persisted, deliveredSubscribers };
   }
 
@@ -114,9 +140,14 @@ export class CloudEventPublisher implements EventPublisher {
     const eventBase = {
       eventId: input.eventId,
       type: input.type,
-      version: "1.0",
+      version:
+        input.stream && input.stream.kind !== "execution_workspace"
+          ? "1.1"
+          : "1.0",
       timestamp: input.occurredAt,
-      workspaceId: input.workspaceId,
+      ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
+      ...(input.stream ? { stream: input.stream } : {}),
+      ...(input.workstreamId ? { workstreamId: input.workstreamId } : {}),
       ...(input.projectId ? { projectId: input.projectId } : {}),
       ...(input.runId ? { runId: input.runId } : {}),
       ...(input.taskId ? { taskId: input.taskId } : {}),
@@ -128,56 +159,49 @@ export class CloudEventPublisher implements EventPublisher {
       payload: input.payload,
     };
     // Validate the complete contract before a sequence can be consumed.
-    parseRealtimeEvent({ ...eventBase, sequence: 0 });
+    const validated = parseRealtimeEvent({ ...eventBase, sequence: 0 });
+    const stream = realtimeEventStream(validated);
 
     const db = this.env.CONCLAVE_DB;
     const results = await db.batch([
+      ...(input.mutations ?? []),
       db
         .prepare(
-          `INSERT INTO realtime_event_cursors (workspace_id, next_sequence)
-           VALUES (
-             ?1,
-             COALESCE(
-               (SELECT MAX(sequence) + 1 FROM realtime_events WHERE workspace_id = ?1),
-               1
-             )
-           )
-           ON CONFLICT(workspace_id) DO NOTHING`,
+          `INSERT INTO realtime_event_cursors (stream_kind, stream_id, workspace_id, next_sequence)
+           VALUES (?1, ?2, ?3, COALESCE(
+             (SELECT MAX(sequence) + 1 FROM realtime_events
+              WHERE stream_kind = ?1 AND COALESCE(stream_id, workspace_id) = ?2), 1))
+           ON CONFLICT DO NOTHING`,
         )
-        .bind(input.workspaceId),
+        .bind(stream.kind, stream.id, input.workspaceId ?? null),
       db
         .prepare(
-          `UPDATE realtime_event_cursors
-           SET next_sequence = next_sequence + 1
-           WHERE workspace_id = ?1
-             AND NOT EXISTS (
-               SELECT 1 FROM realtime_events
-               WHERE workspace_id = ?1
-                 AND (event_id = ?2 OR idempotency_key = ?3)
-             )
-           RETURNING next_sequence - 1 AS sequence`,
+          `UPDATE realtime_event_cursors SET next_sequence = next_sequence + 1
+         WHERE stream_kind = ?1 AND COALESCE(stream_id, workspace_id) = ?2
+           AND NOT EXISTS (SELECT 1 FROM realtime_events
+             WHERE stream_kind = ?1 AND COALESCE(stream_id, workspace_id) = ?2
+               AND (event_id = ?3 OR idempotency_key = ?4))
+         RETURNING next_sequence - 1 AS sequence`,
         )
-        .bind(input.workspaceId, input.eventId, input.idempotencyKey),
+        .bind(stream.kind, stream.id, input.eventId, input.idempotencyKey),
       db
         .prepare(
           `INSERT INTO realtime_events
-           (event_id, workspace_id, project_id, run_id, task_id,
-            attempt_id, assignment_id, workspace_runtime_id, sequence,
-            event_type, payload_json, idempotency_key, occurred_at)
-           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, cursor.next_sequence - 1,
-                  ?9, ?10, ?11, ?12
-           FROM realtime_event_cursors AS cursor
-           WHERE cursor.workspace_id = ?2
-             AND NOT EXISTS (
-               SELECT 1 FROM realtime_events
-               WHERE workspace_id = ?2
-                 AND (event_id = ?1 OR idempotency_key = ?11)
-             )
-           RETURNING *`,
+         (event_id, workspace_id, project_id, run_id, task_id, attempt_id,
+          assignment_id, workspace_runtime_id, sequence, event_type, payload_json,
+          idempotency_key, occurred_at, stream_kind, stream_id, workstream_id)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, cursor.next_sequence - 1,
+                ?9, ?10, ?11, ?12, ?13, ?14, ?15
+         FROM realtime_event_cursors AS cursor
+         WHERE cursor.stream_kind = ?13 AND COALESCE(cursor.stream_id, cursor.workspace_id) = ?14
+           AND NOT EXISTS (SELECT 1 FROM realtime_events
+             WHERE stream_kind = ?13 AND COALESCE(stream_id, workspace_id) = ?14
+               AND (event_id = ?1 OR idempotency_key = ?11))
+         RETURNING *`,
         )
         .bind(
           input.eventId,
-          input.workspaceId,
+          input.workspaceId ?? null,
           input.projectId ?? null,
           input.runId ?? null,
           input.taskId ?? null,
@@ -188,10 +212,13 @@ export class CloudEventPublisher implements EventPublisher {
           json(input.payload),
           input.idempotencyKey,
           input.occurredAt,
+          stream.kind,
+          stream.id,
+          input.workstreamId ?? null,
         ),
     ]);
 
-    const inserted = results[2]?.results?.[0] as
+    const inserted = results[results.length - 1]?.results?.[0] as
       Record<string, unknown> | undefined;
     if (inserted) {
       return { event: eventFromRow(inserted), persisted: true };
@@ -200,33 +227,48 @@ export class CloudEventPublisher implements EventPublisher {
     const duplicate = await db
       .prepare(
         `SELECT * FROM realtime_events
-         WHERE workspace_id = ?1 AND (event_id = ?2 OR idempotency_key = ?3)
+         WHERE stream_kind = ?1 AND COALESCE(stream_id, workspace_id) = ?2
+           AND (event_id = ?3 OR idempotency_key = ?4)
          LIMIT 1`,
       )
-      .bind(input.workspaceId, input.eventId, input.idempotencyKey)
+      .bind(stream.kind, stream.id, input.eventId, input.idempotencyKey)
       .first<Record<string, unknown>>();
     if (duplicate) return { event: eventFromRow(duplicate), persisted: false };
     throw new Error("Could not persist durable realtime event");
   }
 
-  private async fanout(event: RealtimeEventEnvelope): Promise<number> {
+  private async fanout(
+    event: RealtimeEventEnvelope,
+    recipientUserIds?: readonly string[],
+    additionalRecipientUserIds: readonly string[] = [],
+  ): Promise<number> {
     const gateway = this.env.CONCLAVE_REALTIME_GATEWAY;
     if (!gateway) return 0;
-    const members = event.projectId
-      ? await this.env.CONCLAVE_DB.prepare(
-          `SELECT user_id FROM project_memberships
+    const stream = realtimeEventStream(event);
+    const members = recipientUserIds
+      ? { results: recipientUserIds.map((user_id) => ({ user_id })) }
+      : stream.kind === "user"
+        ? { results: [{ user_id: stream.id }] }
+        : event.projectId
+          ? await this.env.CONCLAVE_DB.prepare(
+              `SELECT user_id FROM project_memberships
            WHERE project_id = ?1`,
-        )
-          .bind(event.projectId)
-          .all<{ user_id: string }>()
-      : await this.env.CONCLAVE_DB.prepare(
-          `SELECT owner_user_id AS user_id FROM execution_workspaces
+            )
+              .bind(event.projectId)
+              .all<{ user_id: string }>()
+          : await this.env.CONCLAVE_DB.prepare(
+              `SELECT owner_user_id AS user_id FROM execution_workspaces
            WHERE id = ?1 AND status <> 'revoked'`,
-        )
-          .bind(event.workspaceId)
-          .all<{ user_id: string }>();
+            )
+              .bind(event.workspaceId)
+              .all<{ user_id: string }>();
     const results = await Promise.all(
-      (members.results ?? []).map(async ({ user_id: userId }) => {
+      [
+        ...new Set([
+          ...(members.results ?? []).map((row) => row.user_id),
+          ...additionalRecipientUserIds,
+        ]),
+      ].map(async (userId) => {
         try {
           const response = await gateway.getByName(`user:${userId}`).fetch(
             new Request("https://realtime.internal/publish", {

@@ -3,7 +3,8 @@ part of '../ax_data.dart';
 mixin _ProjectApi on _AxApiClientCore {
   @override
   Future<AxProject> loadProject({required String projectId}) async {
-    final response = await _getJson(Uri.parse('$baseUrl/projects/$projectId'));
+    final response = await _getJson(Uri.parse('$baseUrl/projects/$projectId'),
+        conditional: true);
     final value = response['project'];
     if (value is! Map) {
       throw const AxApiException('Project response is malformed');

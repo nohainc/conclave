@@ -8,7 +8,9 @@ class AxQueryBuilder<T> extends StatefulWidget {
       {super.key,
       required this.engine,
       required this.query,
-      required this.builder});
+      required this.builder,
+      this.ensure = true});
+  final bool ensure;
   final AxSyncEngine engine;
   final AxQuery<T> query;
   final Widget Function(BuildContext, AxQueryState<T>) builder;
@@ -31,16 +33,19 @@ class _AxQueryBuilderState<T> extends State<AxQueryBuilder<T>> {
       if (mounted) setState(() => state = value);
     }, fireImmediately: false);
     // Attach query state/error handling locally, never to the complete shell.
-    unawaited(widget.engine
-        .ensure(widget.query)
-        .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    if (widget.ensure) {
+      unawaited(widget.engine
+          .ensure(widget.query)
+          .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    }
   }
 
   @override
   void didUpdateWidget(covariant AxQueryBuilder<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.engine != widget.engine ||
-        oldWidget.query.key != widget.query.key) {
+        oldWidget.query.key != widget.query.key ||
+        oldWidget.ensure != widget.ensure) {
       cancel?.call();
       _subscribe();
     }
