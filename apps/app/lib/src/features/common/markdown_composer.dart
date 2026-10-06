@@ -102,7 +102,7 @@ class MarkdownComposer extends StatefulWidget {
   final TextEditingController controller;
   final VoidCallback? onSend;
   final VoidCallback? onSubmit;
-  final Widget Function(Widget? formattingToolbar)? additionalControlsBuilder;
+  final Widget Function(GlobalKey inputKey)? additionalControlsBuilder;
   final bool sendEnabled;
   final String sendTooltip;
   final bool compact;
@@ -120,6 +120,7 @@ class MarkdownComposer extends StatefulWidget {
 
 class _MarkdownComposerState extends State<MarkdownComposer> {
   final _focus = FocusNode();
+  final _inputKey = GlobalKey();
   bool _preview = false;
   bool _showFormatting = false;
 
@@ -241,6 +242,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
           if (!widget.chatStyle && !_preview) _formattingToolbar(),
           if (!_preview) ...[
             CallbackShortcuts(
+                key: _inputKey,
                 bindings: {
                   for (final modifier in [true, false]) ...{
                     SingleActivator(LogicalKeyboardKey.keyB,
@@ -314,6 +316,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                 )),
           ] else
             ValueListenableBuilder<TextEditingValue>(
+              key: _inputKey,
               valueListenable: widget.controller,
               builder: (context, value, _) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -326,15 +329,10 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                       ),
               ),
             ),
-          if (widget.additionalControlsBuilder != null)
-            widget.additionalControlsBuilder!(
-                widget.chatStyle && (_showFormatting || _preview)
-                    ? _formattingToolbar()
-                    : null),
-          if (widget.additionalControlsBuilder == null &&
-              widget.chatStyle &&
-              (_showFormatting || _preview))
+          if (widget.chatStyle && (_showFormatting || _preview))
             _formattingToolbar(),
+          if (widget.additionalControlsBuilder != null)
+            widget.additionalControlsBuilder!(_inputKey),
           if (!widget.chatStyle &&
               (widget.onSend != null || widget.onSubmit != null))
             Row(children: [

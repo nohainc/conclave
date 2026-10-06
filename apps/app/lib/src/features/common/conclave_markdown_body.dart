@@ -73,10 +73,12 @@ class ConclaveMarkdownBody extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => MarkdownBody(
+  Widget build(BuildContext context) => SelectionArea(
+          child: MarkdownBody(
         data: data,
         extensionSet: md.ExtensionSet.gitHubFlavored,
-        selectable: true,
+        // One selection region joins paragraphs, lists and code blocks.
+        selectable: false,
         softLineBreak: true,
         builders: {'pre': ConclaveCodeBlockBuilder()},
         syntaxHighlighter: ConclaveSyntaxHighlighter(Theme.of(context)),
@@ -93,7 +95,7 @@ class ConclaveMarkdownBody extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodyMedium),
           ],
         ),
-      );
+      ));
 }
 
 /// One light/dark theme-derived style sheet for every AX Markdown surface.

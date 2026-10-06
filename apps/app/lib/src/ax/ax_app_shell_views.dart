@@ -543,8 +543,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
       Expanded(
         child: navigation.kind == AxRouteKind.workstream
             ? Padding(
-                padding: EdgeInsets.fromLTRB(
-                    compact ? 18 : 34, 26, compact ? 18 : 34, 16),
+                padding: EdgeInsets.zero,
                 child: _workstreamView(),
               )
             : SingleChildScrollView(

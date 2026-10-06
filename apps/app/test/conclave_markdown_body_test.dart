@@ -1,5 +1,6 @@
 import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -42,6 +43,41 @@ final status = 'ready';
 ''';
 
 void main() {
+  testWidgets('selection copies the whole response across paragraphs and code',
+      (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String;
+      }
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+          body: ConclaveMarkdownBody(
+        data:
+            'First **paragraph**.\n\nSecond paragraph.\n\n```dart\nfinal value = 1;\n```\n\nLast paragraph.',
+      )),
+    ));
+    await tester.pumpAndSettle();
+    final region =
+        tester.state<SelectableRegionState>(find.byType(SelectableRegion));
+    region.selectAll();
+    await tester.pump();
+    region.contextMenuButtonItems
+        .firstWhere((item) => item.type == ContextMenuButtonType.copy)
+        .onPressed!();
+    await tester.pump();
+    expect(copied, contains('First paragraph.'));
+    expect(copied, contains('Second paragraph.'));
+    expect(copied, contains('final value = 1;'));
+    expect(copied, contains('Last paragraph.'));
+    expect(copied, isNot(contains('Copy code')));
+    expect(copied, isNot(contains('dart')));
+  });
   for (final content in [
     '<script>alert("unsafe")</script>',
     '<iframe src="https://example.com"></iframe>',
@@ -78,15 +114,15 @@ void main() {
       ));
       final renderer = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
       expect(renderer.extensionSet, same(md.ExtensionSet.gitHubFlavored));
-      expect(renderer.selectable, isTrue);
+      expect(renderer.selectable, isFalse);
+      expect(find.byType(SelectionArea), findsOneWidget);
       expect(renderer.softLineBreak, isTrue);
       expect(renderer.data, source);
       expect(find.byType(Table), findsOneWidget);
       expect(find.byIcon(Icons.check_box), findsOneWidget);
       expect(find.byIcon(Icons.check_box_outline_blank), findsOneWidget);
-      expect(find.byType(SelectableText), findsWidgets);
       final text = tester
-          .widgetList<SelectableText>(find.byType(SelectableText))
+          .widgetList<Text>(find.byType(Text))
           .map((widget) => widget.textSpan?.toPlainText() ?? widget.data ?? '')
           .join('\n');
       expect(text, contains('Heading'));

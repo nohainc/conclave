@@ -11,6 +11,24 @@ AX edits and previews that source and renders it for reading. Existing ordinary
 plain-text records remain valid Markdown; no content-format database migration
 or record conversion is required in v1.
 
+Rendered messages use one selection region across paragraphs, lists and code
+blocks, allowing partial or whole-message selection. Copy Markdown preserves
+the original source; copying a text selection copies the visible text.
+
+Chat and Work history open at the latest message and follow updates while the
+reader is at the bottom. Scrolling up pauses following until the reader returns
+to the bottom. Work sending (including keyboard submission) stays disabled while
+a request is preparing or awaiting completion, failure or cancellation.
+
+Workstream content is capped at 800 logical pixels per pane. At available widths
+of 1000 pixels or more, Chat and Work appear side by side with a vertical divider;
+smaller windows use the Chat/Work tabs. Both layouts use the same tab controls.
+Each pane has 20 pixels of side and bottom padding and no top padding. The
+vertical divider uses the inactive navigation background color and is inset
+20 pixels from the top and bottom. Both panes keep their composers fixed.
+In the two-pane layout, Chat reserves space below its composer to align the
+send controls with Work's composer and additional controls.
+
 The canonical values remain strings:
 
 - Chat: `discussion_messages.body`.

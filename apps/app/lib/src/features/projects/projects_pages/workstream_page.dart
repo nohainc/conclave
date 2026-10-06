@@ -37,6 +37,49 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _requestController = TextEditingController();
+  final _workHistoryController = ScrollController();
+  final _chatHistoryController = ScrollController();
+  bool _followWork = true;
+  bool _followChat = true;
+  final _chatComposerKey = GlobalKey();
+  final _workComposerKey = GlobalKey();
+  double _chatComposerSpace = 48;
+
+  void _alignComposers() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final chat =
+          _chatComposerKey.currentContext?.findRenderObject() as RenderBox?;
+      final work =
+          _workComposerKey.currentContext?.findRenderObject() as RenderBox?;
+      if (chat == null || work == null || !chat.hasSize || !work.hasSize) {
+        return;
+      }
+      final space = (_chatComposerSpace + work.size.height - chat.size.height)
+          .clamp(0.0, 500.0);
+      if ((space - _chatComposerSpace).abs() > 0.5) {
+        setState(() => _chatComposerSpace = space);
+      }
+    });
+  }
+
+  bool get _awaitingWorkResponse =>
+      _submittingWork ||
+      _workTimeline.any((request) =>
+          !const {'completed', 'failed', 'cancelled'}.contains(request.status));
+
+  void _followLatest(ScrollController controller, bool follow) {
+    if (!follow) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !controller.hasClients) return;
+      final stillFollowing =
+          controller == _workHistoryController ? _followWork : _followChat;
+      if (stillFollowing) {
+        controller.jumpTo(controller.position.maxScrollExtent);
+      }
+    });
+  }
+
   final _discussionController = TextEditingController();
   late final TextEditingController _workstreamInstructionsController;
   String _workflow = '';
@@ -45,6 +88,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   String? _workflowCatalogError;
   final List<_DiscussionItem> _discussion = [];
   List<AxWorkRequest> _workTimeline = const [];
+  final Map<String, String> _localWorkProgress = {};
   bool _loadingWorkTimeline = true;
   bool _refreshingWorkTimeline = false;
   bool _workTimelineRefreshPending = false;
@@ -63,6 +107,18 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   @override
   void initState() {
     super.initState();
+    _workHistoryController.addListener(() {
+      if (_workHistoryController.position.userScrollDirection !=
+          ScrollDirection.idle) {
+        _followWork = _workHistoryController.position.extentAfter <= 24;
+      }
+    });
+    _chatHistoryController.addListener(() {
+      if (_chatHistoryController.position.userScrollDirection !=
+          ScrollDirection.idle) {
+        _followChat = _chatHistoryController.position.extentAfter <= 24;
+      }
+    });
     _tabController = TabController(
       length: 2,
       initialIndex: widget.initialTab == 2 ? 1 : widget.initialTab.clamp(0, 1),
@@ -195,6 +251,11 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   @override
   void didUpdateWidget(WorkstreamPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.workstream.id != widget.workstream.id) {
+      _localWorkProgress.clear();
+      _submittingWork = false;
+      _followWork = _followChat = true;
+    }
     if (oldWidget.initialTab != widget.initialTab) {
       final targetIndex =
           widget.initialTab == 2 ? 1 : widget.initialTab.clamp(0, 1);
@@ -255,6 +316,8 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     _workEventSubscription?.cancel();
     _tabController.dispose();
     _requestController.dispose();
+    _workHistoryController.dispose();
+    _chatHistoryController.dispose();
     _discussionController.dispose();
     _workstreamInstructionsController.dispose();
     super.dispose();
@@ -265,30 +328,78 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
         animation: _tabController,
-        builder: (context, _) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                tabAlignment: TabAlignment.center,
-                tabs: const [
-                  Tab(text: 'Chat'),
-                  Tab(text: 'Work'),
+        builder: (context, _) => LayoutBuilder(builder: (context, constraints) {
+          Widget tabHeader(List<String> names, {TabController? controller}) =>
+              DefaultTabController(
+                length: names.length,
+                child: Column(children: [
+                  Center(
+                      child: TabBar(
+                    controller: controller,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.center,
+                    dividerHeight: 0,
+                    tabs: names.map((name) => Tab(text: name)).toList(),
+                  )),
+                  const Divider(height: 1, thickness: 1),
+                  const SizedBox(height: 16),
+                ]),
+              );
+          Widget pane(String name, Widget content) => Padding(
+              key: ValueKey('workstream-$name-padding'),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                key: ValueKey('workstream-$name-pane'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  tabHeader([name]),
+                  Expanded(child: content),
                 ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-                child: _tabController.index == 0
-                    ? _discuss(context)
-                    : _work(context)),
-          ],
-        ),
+              ));
+          if (constraints.maxWidth >= 1000) {
+            _alignComposers();
+            return Center(
+                child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1681),
+              child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                        child: pane(
+                            'Chat', _discuss(context, alignWithWork: true))),
+                    const VerticalDivider(
+                      width: 1,
+                      thickness: 1,
+                      indent: 20,
+                      endIndent: 20,
+                      color: ConclaveBrand.navigation,
+                    ),
+                    Expanded(child: pane('Work', _work(context))),
+                  ]),
+            ));
+          }
+          return Center(
+              child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 840),
+            child: Padding(
+                key: const ValueKey('workstream-tab-padding'),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    tabHeader(['Chat', 'Work'], controller: _tabController),
+                    Expanded(
+                        child: _tabController.index == 0
+                            ? _discuss(context)
+                            : _work(context)),
+                  ],
+                )),
+          ));
+        }),
       );
 
-  Widget _discuss(BuildContext context) {
+  Widget _discuss(BuildContext context, {bool alignWithWork = false}) {
+    _followLatest(_chatHistoryController, _followChat);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
@@ -297,6 +408,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         Expanded(
             child: SingleChildScrollView(
                 key: const ValueKey('chat-history-scroll'),
+                controller: _chatHistoryController,
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -337,6 +449,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                         )
                       else
                         ListView.separated(
+                          padding: EdgeInsets.zero,
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: _discussion.length,
@@ -366,42 +479,52 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                     ]))),
         const SizedBox(height: 16),
         MarkdownComposer(
+          key: alignWithWork ? _chatComposerKey : null,
           controller: _discussionController,
           chatStyle: true,
           onSend: _sendDiscussion,
+          additionalControlsBuilder: alignWithWork
+              ? (_) => SizedBox(height: _chatComposerSpace)
+              : null,
         ),
       ],
     );
   }
 
-  Widget _work(BuildContext context) => _WorkComposer(
-        requestController: _requestController,
-        currentUserId: widget.currentUserId,
-        currentUserName: widget.currentUserName,
-        workflow: _workflow,
-        workflowCatalog: _workflowCatalog,
-        loadingWorkflows: _loadingWorkflows,
-        workflowCatalogError: _workflowCatalogError,
-        canExecute: _canExecute,
-        canConfigureWork: _canConfigureWork,
-        workTimeline: _workTimeline,
-        loadingTimeline: _loadingWorkTimeline,
-        timelineError: _workTimelineError,
-        submitError: _workSubmitError,
-        submitting: _submittingWork,
-        attachments: _workAttachments,
-        onAddFiles: _addWorkFiles,
-        onAddReference: _addWorkReference,
-        onRemoveAttachment: (index) => setState(() {
-          _workAttachments.removeAt(index);
-        }),
-        onRefresh: _refreshWorkTimeline,
-        onShowRunDetails: widget.dataSource == null ? null : _showRunDetails,
-        onRetryStep: widget.dataSource == null ? null : _retryWorkRequestStep,
-        onCancelRun:
-            widget.dataSource == null ? null : _cancelFailedWorkRequest,
-        onWorkflowChanged: (value) => setState(() => _workflow = value),
-        onOpenSettings: () => _openWorkSettings(context),
-        onRun: _runWork,
-      );
+  Widget _work(BuildContext context) {
+    _followLatest(_workHistoryController, _followWork);
+    return _WorkComposer(
+      composerKey: _workComposerKey,
+      requestController: _requestController,
+      historyController: _workHistoryController,
+      currentUserId: widget.currentUserId,
+      currentUserName: widget.currentUserName,
+      workflow: _workflow,
+      workflowCatalog: _workflowCatalog,
+      loadingWorkflows: _loadingWorkflows,
+      workflowCatalogError: _workflowCatalogError,
+      canExecute: _canExecute,
+      canConfigureWork: _canConfigureWork,
+      workTimeline: _workTimeline,
+      localWorkProgress: _localWorkProgress,
+      loadingTimeline: _loadingWorkTimeline,
+      timelineError: _workTimelineError,
+      submitError: _workSubmitError,
+      submitting: _submittingWork,
+      awaitingResponse: _awaitingWorkResponse,
+      attachments: _workAttachments,
+      onAddFiles: _addWorkFiles,
+      onAddReference: _addWorkReference,
+      onRemoveAttachment: (index) => setState(() {
+        _workAttachments.removeAt(index);
+      }),
+      onRefresh: _refreshWorkTimeline,
+      onShowRunDetails: widget.dataSource == null ? null : _showRunDetails,
+      onRetryStep: widget.dataSource == null ? null : _retryWorkRequestStep,
+      onCancelRun: widget.dataSource == null ? null : _cancelFailedWorkRequest,
+      onWorkflowChanged: (value) => setState(() => _workflow = value),
+      onOpenSettings: () => _openWorkSettings(context),
+      onRun: _runWork,
+    );
+  }
 }

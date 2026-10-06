@@ -38,75 +38,109 @@ extension _WorkstreamActions on _WorkstreamPageState {
 
   Future<void> _runWork() async {
     final text = _requestController.text;
-    final requestText = text.trim().isEmpty
-        ? 'Please use the attached inputs to complete the request.'
-        : text;
     final submit = widget.onRunWork;
     final dataSource = widget.dataSource;
     if (!_canExecute ||
         (text.trim().isEmpty && _workAttachments.isEmpty) ||
         submit == null ||
-        _submittingWork) {
+        _awaitingWorkResponse) {
       return;
     }
+    final requestText = text.trim().isEmpty
+        ? 'Please use the attached inputs to complete the request.'
+        : text;
+    final attachments = List<Map<String, dynamic>>.from(_workAttachments);
+    final workflowId = _workflow.split(':').first;
+    final workstreamId = widget.workstream.id;
+    final createdAt = DateTime.now().toUtc().toIso8601String();
+    var localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+    AxWorkRequest localRequest({String status = 'queued', String? error}) =>
+        AxWorkRequest(
+          id: localId,
+          requestedByName: 'You',
+          requestedByUserId: widget.currentUserId,
+          prompt: requestText,
+          workflowId: workflowId,
+          workflowVersion: 1,
+          status: status,
+          createdAt: createdAt,
+          steps: const [],
+          error: error,
+        );
+    void progress(String message) {
+      if (mounted && widget.workstream.id == workstreamId) {
+        _updateState(() => _localWorkProgress[localId] = message);
+      }
+    }
+
+    void fail(String message) {
+      if (!mounted || widget.workstream.id != workstreamId) return;
+      _updateState(() {
+        _workTimeline = [
+          for (final request in _workTimeline)
+            request.id == localId
+                ? localRequest(status: 'failed', error: message)
+                : request
+        ];
+        _localWorkProgress[localId] = message;
+        // Preserve authored input for correction/retry after a rejected send.
+        if (_requestController.text.isEmpty) _requestController.text = text;
+        if (_workAttachments.isEmpty) _workAttachments = attachments;
+      });
+    }
+
     _updateState(() {
       _submittingWork = true;
       _workSubmitError = null;
+      _workTimeline = [..._workTimeline, localRequest()];
+      _localWorkProgress[localId] = 'Preparing your request…';
+      _workAttachments = [];
     });
+    _requestController.clear();
     try {
-      final workflowId = _workflow.split(':').first;
       if (dataSource != null) {
+        progress('Checking that everything is ready…');
         final issues = await dataSource.validateWorkRequestEligibility(
-          workstreamId: widget.workstream.id,
-          workflowId: workflowId,
-          attachments: _workAttachments,
-        );
+            workstreamId: workstreamId,
+            workflowId: workflowId,
+            attachments: attachments);
+        if (!mounted || widget.workstream.id != workstreamId) return;
         if (issues.isNotEmpty) {
           final workflowName = _workflowCatalog
                   .where((definition) => definition.id == workflowId)
                   .map((definition) => definition.name)
                   .firstOrNull ??
               workflowId;
-          if (mounted) {
-            _updateState(() => _workSubmitError =
-                'Cannot run $workflowName\n${issues.map((issue) => '• $issue').join('\n')}');
-          }
+          fail(
+              'Cannot run $workflowName\n${issues.map((issue) => '• $issue').join('\n')}');
           return;
         }
       }
-      final workRequestId =
-          await submit(requestText, workflowId, _workAttachments);
-      if (!mounted) return;
-      _requestController.clear();
+      progress('Sending your request…');
+      final workRequestId = await submit(requestText, workflowId, attachments);
+      if (!mounted || widget.workstream.id != workstreamId) {
+        return;
+      }
+      final previousId = localId;
+      localId = workRequestId;
       _updateState(() {
-        _workAttachments = [];
+        _localWorkProgress.remove(previousId);
+        _localWorkProgress[localId] = 'Request received. Waiting to start…';
         _workTimeline = [
-          ..._workTimeline,
-          AxWorkRequest(
-            id: workRequestId,
-            requestedByName: 'You',
-            prompt: requestText,
-            workflowId: workflowId,
-            workflowVersion: 1,
-            status: 'queued',
-            createdAt: DateTime.now().toUtc().toIso8601String(),
-            steps: const [],
-          ),
+          for (final request in _workTimeline)
+            if (request.id != workRequestId)
+              request.id == previousId ? localRequest() : request
         ];
       });
-      if (dataSource != null) {
-        await _refreshWorkTimeline();
-      }
+      if (dataSource != null) await _refreshWorkTimeline();
     } catch (error) {
-      if (mounted) {
-        final message =
-            error is AxApiException && error.message.startsWith('Cannot run ')
-                ? error.message
-                : 'Could not run Work: $error';
-        _updateState(() => _workSubmitError = message);
-      }
+      fail(error is AxApiException && error.message.startsWith('Cannot run ')
+          ? error.message
+          : 'Could not send your request: $error');
     } finally {
-      if (mounted) _updateState(() => _submittingWork = false);
+      if (mounted && widget.workstream.id == workstreamId) {
+        _updateState(() => _submittingWork = false);
+      }
     }
   }
 
@@ -222,6 +256,9 @@ extension _WorkstreamActions on _WorkstreamPageState {
       );
       if (!mounted) return;
       _updateState(() {
+        for (final request in requests) {
+          _localWorkProgress.remove(request.id);
+        }
         if (activeOnly) {
           final updatedById = {
             for (final request in requests) request.id: request
@@ -232,7 +269,11 @@ extension _WorkstreamActions on _WorkstreamPageState {
             ...updatedById.values,
           ]..sort((left, right) => left.createdAt.compareTo(right.createdAt));
         } else {
-          _workTimeline = requests;
+          _workTimeline = [
+            ...requests,
+            ..._workTimeline
+                .where((request) => _localWorkProgress.containsKey(request.id))
+          ]..sort((left, right) => left.createdAt.compareTo(right.createdAt));
         }
         _loadingWorkTimeline = false;
         _workTimelineError = null;

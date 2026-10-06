@@ -64,11 +64,19 @@ same borderless bubbles, own-prompt background and alignment as Chat.
 Work uses the same send icon beside the formatting toggle to start execution;
 Cmd/Ctrl+Enter also sends the request. A second row contains a plus menu for
 files, links and workflow choices, followed by refresh/settings icons and the
-selected workflow name. Revealed Markdown tools share that second row, with
-horizontal scrolling when needed. The plus menu opens above its icon with the
+selected workflow name. Revealed Markdown tools occupy their own second row,
+moving attachment/workflow controls to the third row. The plus menu grows upward
+from the input's bottom edge, has no opening/closing animation, and uses the
 same 10px corner radius as the input.
 The original Markdown source is submitted unchanged, including whitespace and
 fenced code. Viewer access and submission readiness still gate execution.
+Sending immediately adds the prompt and a Conclave preparation message to the
+timeline and clears the composer. Readiness checks and Cloud submission update
+that response in place; accepted requests resolve to live progress, an answer or
+an error. Refresh preserves pending local entries until Cloud returns their
+canonical requests. Rejected submissions remain visible for the current page
+session, with the original prompt and attachments restored for correction.
+Local preparation messages are UI state, not persisted Cloud Work Requests.
 
 Fenced code uses a distinct themed block with its language label, horizontal
 scrolling, selectable content and Copy code. Syntax coloring supports Dart,

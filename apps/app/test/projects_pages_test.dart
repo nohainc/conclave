@@ -11,9 +11,232 @@ import 'ax_fixture_data.dart';
 import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
 
 void main() {
+  testWidgets(
+      'Workstream uses bounded tabs or two panes at the width breakpoint',
+      (tester) async {
+    tester.view.physicalSize = const Size(1800, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final width in [600.0, 999.0, 1000.0, 1800.0]) {
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: Center(
+        child: SizedBox(
+            width: width,
+            child: WorkstreamPage(
+              key: ValueKey(width),
+              project: const AxProject(
+                  id: 'project-1',
+                  name: 'Project',
+                  branch: '',
+                  lastActivity: '',
+                  role: 'owner'),
+              workstream: const AxWorkstream(
+                  id: 'workstream-1',
+                  projectId: 'project-1',
+                  name: 'Stream',
+                  lead: '',
+                  status: 'active',
+                  brief: '',
+                  primaryWorkspace: '',
+                  queueStatus: ''),
+              dataSource: _PinnedHistoryDataSource(),
+              onBackToProject: _noop,
+              onArchive: _noop,
+            )),
+      ))));
+      await tester.pumpAndSettle();
+      final chat = find.byKey(const ValueKey('chat-history-scroll'));
+      expect(tester.getSize(chat).width, lessThanOrEqualTo(800));
+      if (width < 1000) {
+        expect(
+            tester
+                .widget<Padding>(
+                    find.byKey(const ValueKey('workstream-tab-padding')))
+                .padding,
+            const EdgeInsets.fromLTRB(20, 0, 20, 20));
+        expect(find.byType(TabBar), findsOneWidget);
+        expect(find.byKey(const ValueKey('work-history-scroll')), findsNothing);
+        expect(find.byType(VerticalDivider), findsNothing);
+      } else {
+        for (final name in ['Chat', 'Work']) {
+          expect(
+              tester
+                  .widget<Padding>(
+                      find.byKey(ValueKey('workstream-$name-padding')))
+                  .padding,
+              const EdgeInsets.fromLTRB(20, 0, 20, 20));
+        }
+        final work = find.byKey(const ValueKey('work-history-scroll'));
+        expect(find.byType(TabBar), findsNWidgets(2));
+        expect(find.byType(VerticalDivider), findsOneWidget);
+        final divider =
+            tester.widget<VerticalDivider>(find.byType(VerticalDivider));
+        expect(divider.indent, 20);
+        expect(divider.endIndent, 20);
+        expect(tester.getSize(work).width, lessThanOrEqualTo(800));
+        expect(tester.getRect(chat).right, lessThan(tester.getRect(work).left));
+        final chatSend =
+            find.widgetWithIcon(IconButton, Icons.send_rounded).first;
+        final workSend =
+            find.widgetWithIcon(IconButton, Icons.send_rounded).last;
+        expect(tester.getCenter(chatSend).dy,
+            closeTo(tester.getCenter(workSend).dy, 1));
+      }
+      expect(tester.takeException(), isNull);
+    }
+  });
+  testWidgets(
+      'Work appears before validation and progress becomes result or error',
+      (tester) async {
+    for (final reject in [false, true]) {
+      final data = _SlowSubmissionDataSource();
+      final submitted = Completer<String>();
+      var sends = 0;
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: WorkstreamPage(
+        key: ValueKey(reject),
+        initialTab: 1,
+        project: const AxProject(
+            id: 'project-1',
+            name: 'Project',
+            branch: '',
+            lastActivity: '',
+            role: 'owner'),
+        workstream: const AxWorkstream(
+            id: 'workstream-1',
+            projectId: 'project-1',
+            name: 'Stream',
+            lead: '',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: '',
+            queueStatus: ''),
+        dataSource: data,
+        currentUserId: 'user-owner',
+        onBackToProject: _noop,
+        onArchive: _noop,
+        onRunWork: (_, __, ___) {
+          sends++;
+          return submitted.future;
+        },
+      ))));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byType(TextField).first, '**Immediate request**');
+      await tester.tap(find.byTooltip('Run Work'));
+      await tester.pump();
+      expect(
+          tester
+              .widget<TextField>(find.byType(TextField).first)
+              .controller!
+              .text,
+          isEmpty);
+      expect(
+          find.byType(ConclaveMarkdownBody).evaluate().where((element) =>
+              (element.widget as ConclaveMarkdownBody).data ==
+              '**Immediate request**'),
+          hasLength(1));
+      expect(
+          find.byType(ConclaveMarkdownBody).evaluate().any((element) =>
+              (element.widget as ConclaveMarkdownBody).data ==
+              'Checking that everything is ready…'),
+          isTrue);
+      expect(sends, 0);
+      await tester.tap(find.byTooltip('Refresh Work history'));
+      await tester.pumpAndSettle();
+      expect(
+          find.byType(ConclaveMarkdownBody).evaluate().where((element) =>
+              (element.widget as ConclaveMarkdownBody).data ==
+              '**Immediate request**'),
+          hasLength(1));
+      data.ready.complete(reject ? ['Project access is required.'] : []);
+      await tester.pumpAndSettle();
+      if (reject) {
+        expect(sends, 0);
+        expect(
+            find.textContaining('Project access is required.'), findsOneWidget);
+        expect(
+            tester
+                .widget<TextField>(find.byType(TextField).first)
+                .controller!
+                .text,
+            '**Immediate request**');
+      } else {
+        expect(sends, 1);
+        expect(
+            find.byType(ConclaveMarkdownBody).evaluate().any((element) =>
+                (element.widget as ConclaveMarkdownBody).data ==
+                'Sending your request…'),
+            isTrue);
+        data.requests = [
+          const AxWorkRequest(
+              id: 'saved-1',
+              requestedByName: 'You',
+              requestedByUserId: 'user-owner',
+              prompt: '**Immediate request**',
+              workflowId: 'direct',
+              workflowVersion: 1,
+              status: 'running',
+              createdAt: '2026-10-06T10:00:00Z',
+              steps: [],
+              finalText: null)
+        ];
+        submitted.complete('saved-1');
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField).first, 'Next request');
+        expect(
+            tester
+                .widget<IconButton>(
+                    find.widgetWithIcon(IconButton, Icons.send_rounded))
+                .onPressed,
+            isNull);
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        expect(sends, 1);
+        data.requests = [
+          const AxWorkRequest(
+            id: 'saved-1',
+            requestedByName: 'You',
+            requestedByUserId: 'user-owner',
+            prompt: '**Immediate request**',
+            workflowId: 'direct',
+            workflowVersion: 1,
+            status: 'completed',
+            createdAt: '2026-10-06T10:00:00Z',
+            steps: [],
+            finalText: 'Completed answer',
+          )
+        ];
+        await tester.tap(find.byTooltip('Refresh Work history'));
+        await tester.pumpAndSettle();
+        expect(
+            tester
+                .widget<IconButton>(
+                    find.widgetWithIcon(IconButton, Icons.send_rounded))
+                .onPressed,
+            isNotNull);
+        expect(
+            find.byType(ConclaveMarkdownBody).evaluate().any((element) =>
+                (element.widget as ConclaveMarkdownBody).data ==
+                'Completed answer'),
+            isTrue);
+        expect(
+            find.byType(ConclaveMarkdownBody).evaluate().where((element) =>
+                (element.widget as ConclaveMarkdownBody).data ==
+                '**Immediate request**'),
+            hasLength(1));
+      }
+      expect(tester.takeException(), isNull);
+    }
+  });
   testWidgets('Chat and Work controls stay fixed while history scrolls',
       (tester) async {
     for (final tab in [0, 1]) {
+      final data = _PinnedHistoryDataSource();
       await tester.pumpWidget(MaterialApp(
           home: Scaffold(
               body: WorkstreamPage(
@@ -33,7 +256,7 @@ void main() {
             brief: '',
             primaryWorkspace: '',
             queueStatus: ''),
-        dataSource: _PinnedHistoryDataSource(),
+        dataSource: data,
         initialTab: tab,
         onBackToProject: _noop,
         onArchive: _noop,
@@ -47,8 +270,34 @@ void main() {
           find.descendant(of: history, matching: find.byType(Scrollable)).first;
       final position = tester.state<ScrollableState>(scrollable).position;
       expect(position.maxScrollExtent, greaterThan(0));
-      await tester.drag(history, const Offset(0, -250));
+      expect(position.extentAfter, closeTo(0, 1));
+      await tester.drag(history, const Offset(0, 250));
       await tester.pumpAndSettle();
+      expect(position.extentAfter, greaterThan(24));
+      final readingOffset = position.pixels;
+      // Changing the composer rebuilds the page without pulling the reader down.
+      await tester.enterText(field, 'A new draft');
+      if (tab == 1) {
+        data.requests = [
+          ...data.requests,
+          _workRequest('new-result', 'completed')
+        ];
+        await tester.tap(find.byTooltip('Refresh Work history'));
+      }
+      await tester.pumpAndSettle();
+      expect(position.pixels, closeTo(readingOffset, 1));
+      await tester.drag(history, const Offset(0, -500));
+      await tester.pumpAndSettle();
+      expect(position.extentAfter, lessThanOrEqualTo(24));
+      if (tab == 1) {
+        data.requests = [
+          ...data.requests,
+          _workRequest('another-result', 'completed')
+        ];
+        await tester.tap(find.byTooltip('Refresh Work history'));
+        await tester.pumpAndSettle();
+        expect(position.extentAfter, closeTo(0, 1));
+      }
       expect(position.pixels, greaterThan(0));
       expect(tester.getRect(field), before);
       expect(find.ancestor(of: field, matching: history), findsNothing);
@@ -100,7 +349,7 @@ void main() {
                 )))));
     await tester.pumpAndSettle();
     const source = '  **raw**\n\n```dart\nfinal x = 1;\n```\n';
-    await tester.enterText(find.byType(TextField).last, source);
+    await tester.enterText(find.byType(TextField).first, source);
     await tester.tap(find.byTooltip('Send message'));
     await tester.pumpAndSettle();
     expect(ds.createdSource, source);
@@ -244,13 +493,12 @@ void main() {
       ),
     ))));
     await tester.pumpAndSettle();
-    await tester.enterText(
-        find.byType(TextField).first, 'Implement the change');
+    await tester.enterText(find.byType(TextField).last, 'Implement the change');
     await tester.ensureVisible(find.byTooltip('Run Work'));
     await tester.tap(find.byTooltip('Run Work'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byTooltip('Copy Run error'));
-    await tester.tap(find.byTooltip('Copy Run error'));
+    await tester.ensureVisible(find.byTooltip('Copy error'));
+    await tester.tap(find.byTooltip('Copy error'));
     await tester.pumpAndSettle();
     expect(copied, message);
     final diagnostic = tester.widget<SelectableText>(find.byWidgetPredicate(
@@ -485,11 +733,8 @@ void main() {
     final menu = find
         .ancestor(of: find.text('Add files'), matching: find.byType(Material))
         .first;
-    expect(
-        tester.getBottomLeft(menu).dy,
-        lessThan(tester
-            .getTopLeft(find.byTooltip('Add attachments or choose workflow'))
-            .dy));
+    expect(tester.getBottomLeft(menu).dy,
+        closeTo(tester.getBottomLeft(find.byType(TextField).first).dy, 1));
     expect(
         (tester.widget<Material>(menu).shape as RoundedRectangleBorder)
             .borderRadius,
@@ -516,11 +761,9 @@ void main() {
     await tester.pump();
     expect(
         tester.getCenter(find.byTooltip('Bold')).dy,
-        closeTo(
-            tester
-                .getCenter(find.byTooltip('Add attachments or choose workflow'))
-                .dy,
-            1));
+        lessThan(tester
+            .getTopLeft(find.byTooltip('Add attachments or choose workflow'))
+            .dy));
     expect(
         tester.getTopLeft(find.byTooltip('Bold')).dy,
         greaterThanOrEqualTo(
@@ -1723,4 +1966,19 @@ class _PinnedHistoryDataSource extends _WorkHistoryDataSource {
                 body: 'Chat message $i',
                 createdAt: '2026-10-06T10:00:00Z',
               ));
+}
+
+class _SlowSubmissionDataSource extends _WorkFormDataSource {
+  final ready = Completer<List<String>>();
+  List<AxWorkRequest> requests = [];
+  @override
+  Future<List<String>> validateWorkRequestEligibility(
+          {required String workstreamId,
+          required String workflowId,
+          List<Map<String, dynamic>> attachments = const []}) =>
+      ready.future;
+  @override
+  Future<List<AxWorkRequest>> loadWorkstreamWorkRequests(
+          {required String workstreamId, bool activeOnly = false}) async =>
+      requests;
 }

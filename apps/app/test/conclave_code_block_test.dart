@@ -61,7 +61,7 @@ void main() {
             widget is SingleChildScrollView &&
             widget.scrollDirection == Axis.horizontal),
         findsOneWidget);
-    expect(find.byType(SelectableText), findsWidgets);
+    expect(find.byType(SelectionArea), findsOneWidget);
     await tester.tap(find.byTooltip('Copy code'));
     await tester.pump();
     expect(copied, code);

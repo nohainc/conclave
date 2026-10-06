@@ -31,6 +31,7 @@ Widget _workflowOption(
 class _WorkComposer extends StatelessWidget {
   const _WorkComposer({
     required this.requestController,
+    required this.historyController,
     required this.currentUserId,
     required this.currentUserName,
     required this.workflow,
@@ -40,10 +41,13 @@ class _WorkComposer extends StatelessWidget {
     required this.canExecute,
     this.canConfigureWork = true,
     required this.workTimeline,
+    required this.localWorkProgress,
     required this.loadingTimeline,
     required this.timelineError,
     required this.submitError,
     required this.submitting,
+    required this.awaitingResponse,
+    required this.composerKey,
     required this.attachments,
     required this.onAddFiles,
     required this.onAddReference,
@@ -58,6 +62,7 @@ class _WorkComposer extends StatelessWidget {
   });
 
   final TextEditingController requestController;
+  final ScrollController historyController;
   final String? currentUserId;
   final String? currentUserName;
   final String workflow;
@@ -67,10 +72,13 @@ class _WorkComposer extends StatelessWidget {
   final bool canExecute;
   final bool canConfigureWork;
   final List<AxWorkRequest> workTimeline;
+  final Map<String, String> localWorkProgress;
   final bool loadingTimeline;
   final String? timelineError;
   final String? submitError;
   final bool submitting;
+  final bool awaitingResponse;
+  final GlobalKey composerKey;
   final List<Map<String, dynamic>> attachments;
   final Future<void> Function() onAddFiles;
   final Future<void> Function() onAddReference;
@@ -93,6 +101,7 @@ class _WorkComposer extends StatelessWidget {
       children: [
         Expanded(
             child: SingleChildScrollView(
+                controller: historyController,
                 key: const ValueKey('work-history-scroll'),
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -148,6 +157,7 @@ class _WorkComposer extends StatelessWidget {
                         )
                       else
                         ListView.separated(
+                          padding: EdgeInsets.zero,
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: workTimeline.length,
@@ -158,12 +168,22 @@ class _WorkComposer extends StatelessWidget {
                             return _WorkTimelineCard(
                               key: ValueKey(request.id),
                               request: request,
+                              progressText: localWorkProgress[request.id],
                               currentUserId: currentUserId,
                               currentUserName: currentUserName,
                               workflowCatalog: workflowCatalog,
-                              onShowRunDetails: onShowRunDetails,
-                              onRetryStep: onRetryStep,
-                              onCancelRun: onCancelRun,
+                              onShowRunDetails:
+                                  localWorkProgress.containsKey(request.id)
+                                      ? null
+                                      : onShowRunDetails,
+                              onRetryStep:
+                                  localWorkProgress.containsKey(request.id)
+                                      ? null
+                                      : onRetryStep,
+                              onCancelRun:
+                                  localWorkProgress.containsKey(request.id)
+                                      ? null
+                                      : onCancelRun,
                             );
                           },
                         ),
@@ -174,7 +194,7 @@ class _WorkComposer extends StatelessWidget {
     );
   }
 
-  Widget _additionalControls(BuildContext context, Widget? formattingToolbar) {
+  Widget _additionalControls(BuildContext context, GlobalKey inputKey) {
     final selected =
         workflowCatalog.where((item) => item.reference == workflow).firstOrNull;
     return Row(children: [
@@ -190,17 +210,26 @@ class _WorkComposer extends StatelessWidget {
                   final rect =
                       box.localToGlobal(Offset.zero, ancestor: overlay) &
                           box.size;
+                  final inputBox =
+                      inputKey.currentContext?.findRenderObject() as RenderBox?;
+                  final anchorBottom = inputBox == null
+                      ? rect.top
+                      : inputBox
+                              .localToGlobal(Offset.zero, ancestor: overlay)
+                              .dy +
+                          inputBox.size.height;
                   final availableHeight =
-                      (rect.top - 16).clamp(0.0, overlay.size.height);
+                      (anchorBottom - 8).clamp(0.0, overlay.size.height);
                   final menuHeight = ((workflowCatalog.length + 2) * 48.0 + 32)
                       .clamp(0.0, availableHeight);
                   final value = await showMenu<String>(
                     context: buttonContext,
+                    popUpAnimationStyle: AnimationStyle.noAnimation,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                     constraints: BoxConstraints(maxHeight: menuHeight),
                     position: RelativeRect.fromRect(
-                        Rect.fromLTWH(rect.left, rect.top - menuHeight - 8,
+                        Rect.fromLTWH(rect.left, anchorBottom - menuHeight,
                             rect.width, 0),
                         Offset.zero & overlay.size),
                     items: [
@@ -248,10 +277,6 @@ class _WorkComposer extends StatelessWidget {
             tooltip: 'Work settings',
             onPressed: onOpenSettings,
             icon: const Icon(Icons.tune_rounded, size: 18)),
-      if (formattingToolbar != null)
-        Expanded(
-            child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal, child: formattingToolbar)),
       const SizedBox(width: 6),
       ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 120),
@@ -267,7 +292,8 @@ class _WorkComposer extends StatelessWidget {
     ColorScheme colors,
   ) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      padding: EdgeInsets.zero,
+      key: composerKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -280,11 +306,11 @@ class _WorkComposer extends StatelessWidget {
             onSend: () => onRun(),
             sendTooltip: 'Run Work',
             sendEnabled: canExecute &&
-                !submitting &&
+                !awaitingResponse &&
                 !loadingWorkflows &&
                 workflowCatalogError == null,
-            additionalControlsBuilder: (toolbar) =>
-                _additionalControls(context, toolbar),
+            additionalControlsBuilder: (inputKey) =>
+                _additionalControls(context, inputKey),
           ),
           if (attachments.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -333,15 +359,6 @@ class _WorkComposer extends StatelessWidget {
                 style: TextStyle(fontSize: 12),
               ),
             ),
-          if (submitting) ...[
-            const SizedBox(height: 10),
-            const LinearProgressIndicator(),
-            const SizedBox(height: 6),
-            const Text(
-              'Checking Engine, Profile, and Provider CLI before starting Work…',
-              style: TextStyle(fontSize: 12),
-            ),
-          ],
           if (submitError != null) ...[
             const SizedBox(height: 10),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -376,6 +393,7 @@ class _WorkTimelineCard extends StatelessWidget {
   const _WorkTimelineCard({
     super.key,
     required this.request,
+    this.progressText,
     required this.currentUserId,
     required this.currentUserName,
     required this.workflowCatalog,
@@ -385,6 +403,7 @@ class _WorkTimelineCard extends StatelessWidget {
   });
 
   final AxWorkRequest request;
+  final String? progressText;
   final String? currentUserId;
   final String? currentUserName;
   final List<AxBuiltinWorkflow> workflowCatalog;
@@ -466,7 +485,7 @@ class _WorkTimelineCard extends StatelessWidget {
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: EdgeInsets.fromLTRB(isOwnRequest ? 14 : 0, 10, 14, 10),
               child: Column(
                 crossAxisAlignment: isOwnRequest
                     ? CrossAxisAlignment.end
@@ -560,7 +579,7 @@ class _WorkTimelineCard extends StatelessWidget {
                 color: Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
               ),
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.fromLTRB(0, 14, 14, 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -618,7 +637,15 @@ class _WorkTimelineCard extends StatelessWidget {
                             ? response!
                             : request.status == 'cancelled'
                                 ? 'Run cancelled.'
-                                : 'Preparing Worker assignment…';
+                                : progressText ??
+                                    switch (request.status) {
+                                      'running' => 'Working on your request…',
+                                      'waiting' => 'Waiting for the next step…',
+                                      'completed' => 'Request completed.',
+                                      'failed' =>
+                                        'Your request could not be completed.',
+                                      _ => 'Preparing your request…',
+                                    };
                     final isError = error?.isNotEmpty == true;
                     Widget compactAction({
                       required String tooltip,
@@ -1044,7 +1071,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: EdgeInsets.fromLTRB(isMe ? 14 : 0, 10, 14, 10),
           child: Column(
             crossAxisAlignment:
                 isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,

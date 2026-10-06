@@ -114,28 +114,30 @@ class ConclaveCodeBlock extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: theme.colorScheme.outlineVariant)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Row(children: [
-              Text(language.isEmpty ? 'Code' : language,
-                  style: theme.textTheme.labelSmall),
-              const Spacer(),
-              IconButton(
-                  tooltip: 'Copy code',
-                  iconSize: 16,
-                  icon: const Icon(Icons.copy_outlined),
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: code));
-                    if (context.mounted) {
-                      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                          const SnackBar(content: Text('Code copied')));
-                    }
-                  }),
-            ])),
+        SelectionContainer.disabled(
+            child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Row(children: [
+                  Text(language.isEmpty ? 'Code' : language,
+                      style: theme.textTheme.labelSmall),
+                  const Spacer(),
+                  IconButton(
+                      tooltip: 'Copy code',
+                      iconSize: 16,
+                      icon: const Icon(Icons.copy_outlined),
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: code));
+                        if (context.mounted) {
+                          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                              const SnackBar(content: Text('Code copied')));
+                        }
+                      }),
+                ]))),
         SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.all(12),
-            child: SelectableText.rich(
+            child: Text.rich(
                 ConclaveSyntaxHighlighter(theme, language: language)
                     .format(code))),
       ]),
