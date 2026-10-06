@@ -28,6 +28,42 @@ Widget _workflowOption(
       ),
     );
 
+List<String> _modelsForWorker(AxWorker worker) {
+  final workerType = worker.workerTypeId.toLowerCase();
+  final profileId = (worker.profileDefinitionId ?? '').toLowerCase();
+  if (workerType == 'chatgpt' ||
+      profileId.contains('chatgpt') ||
+      profileId.contains('codex')) {
+    return const [
+      'o3',
+      'o3-mini',
+      'o1',
+      'o1-mini',
+      'o1-preview',
+      'gpt-4.5-preview',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'chatgpt-4o-latest',
+      'gpt-4-turbo',
+      'gpt-4',
+      'codex-mini',
+    ];
+  } else if (workerType == 'gemini' ||
+      profileId.contains('gemini') ||
+      profileId.contains('antigravity')) {
+    return const [
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash',
+      'gemini-pro',
+      'gemini-flash',
+    ];
+  }
+  return const [];
+}
+
 class _WorkComposer extends StatelessWidget {
   const _WorkComposer({
     required this.requestController,
@@ -36,6 +72,9 @@ class _WorkComposer extends StatelessWidget {
     required this.currentUserName,
     required this.workflow,
     required this.workflowCatalog,
+    this.workConfig = const <String, dynamic>{},
+    this.projectWorkers = const <AxWorker>[],
+    this.eligibleWorkers = const <AxWorker>[],
     required this.loadingWorkflows,
     required this.workflowCatalogError,
     required this.canExecute,
@@ -60,6 +99,7 @@ class _WorkComposer extends StatelessWidget {
     required this.onRetryStep,
     required this.onCancelRun,
     required this.onWorkflowChanged,
+    this.onModelChanged,
     this.onOpenSettings,
     required this.onRun,
   });
@@ -70,6 +110,9 @@ class _WorkComposer extends StatelessWidget {
   final String? currentUserName;
   final String workflow;
   final List<AxBuiltinWorkflow> workflowCatalog;
+  final Map<String, dynamic> workConfig;
+  final List<AxWorker> projectWorkers;
+  final List<AxWorker> eligibleWorkers;
   final bool loadingWorkflows;
   final String? workflowCatalogError;
   final bool canExecute;
@@ -94,6 +137,7 @@ class _WorkComposer extends StatelessWidget {
   final Future<void> Function(String, AxWorkRequestStep)? onRetryStep;
   final Future<void> Function(String)? onCancelRun;
   final ValueChanged<String> onWorkflowChanged;
+  final void Function(String stepKind, String model)? onModelChanged;
   final VoidCallback? onOpenSettings;
   final Future<void> Function() onRun;
 
@@ -205,99 +249,314 @@ class _WorkComposer extends StatelessWidget {
       Theme.of(context).colorScheme);
 
   Widget _additionalControls(BuildContext context, GlobalKey inputKey) {
-    final selected =
-        workflowCatalog.where((item) => item.reference == workflow).firstOrNull;
-    return Row(children: [
-      Builder(
-          builder: (buttonContext) => IconButton(
-                tooltip: 'Add attachments or choose workflow',
-                icon: const Icon(Icons.add, size: 18),
-                onPressed: () async {
-                  final box = buttonContext.findRenderObject()! as RenderBox;
-                  final overlay = Overlay.of(buttonContext)
-                      .context
-                      .findRenderObject()! as RenderBox;
-                  final rect =
-                      box.localToGlobal(Offset.zero, ancestor: overlay) &
-                          box.size;
-                  final inputBox =
-                      inputKey.currentContext?.findRenderObject() as RenderBox?;
-                  final anchorBottom = inputBox == null
-                      ? rect.top
-                      : inputBox
-                              .localToGlobal(Offset.zero, ancestor: overlay)
-                              .dy +
-                          inputBox.size.height;
-                  final availableHeight =
-                      (anchorBottom - 8).clamp(0.0, overlay.size.height);
-                  final menuHeight =
-                      ((_currentWorkflowVersions(workflowCatalog).length + 2) *
-                                  48.0 +
-                              32)
-                          .clamp(0.0, availableHeight);
-                  final value = await showMenu<String>(
-                    context: buttonContext,
-                    popUpAnimationStyle: AnimationStyle.noAnimation,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                    constraints: BoxConstraints(maxHeight: menuHeight),
-                    position: RelativeRect.fromRect(
-                        Rect.fromLTWH(rect.left, anchorBottom - menuHeight,
-                            rect.width, 0),
-                        Offset.zero & overlay.size),
-                    items: [
-                      PopupMenuItem(
-                          value: 'files',
-                          enabled: canExecute && !submitting,
-                          child: const ListTile(
-                              dense: true,
-                              leading: Icon(Icons.attach_file, size: 18),
-                              title: Text('Add files'))),
-                      PopupMenuItem(
-                          value: 'link',
-                          enabled: canExecute && !submitting,
-                          child: const ListTile(
-                              dense: true,
-                              leading: Icon(Icons.link, size: 18),
-                              title: Text('Add link'))),
-                      const PopupMenuDivider(),
-                      for (final item
-                          in _currentWorkflowVersions(workflowCatalog))
-                        CheckedPopupMenuItem(
-                            value: item.reference,
-                            checked: item.reference == workflow,
-                            enabled: canExecute && !submitting,
-                            child: Tooltip(
-                                message: item.description,
-                                child: Text(item.name))),
+    final colors = Theme.of(context).colorScheme;
+    final selectedWorkflow = workflowCatalog
+            .where((item) => item.reference == workflow)
+            .firstOrNull ??
+        workflowCatalog
+            .where((item) => item.id == workflow.split(':').first)
+            .firstOrNull;
+
+    final bindings = workConfig['bindings'] is Map
+        ? Map<String, dynamic>.from(workConfig['bindings'] as Map)
+        : <String, dynamic>{};
+    final stepKind = selectedWorkflow?.steps.firstOrNull?.kind ??
+        (selectedWorkflow?.id == 'chat' ? 'chat' : 'implement');
+    final rawBinding = bindings[stepKind] ??
+        (selectedWorkflow != null ? bindings[selectedWorkflow.id] : null) ??
+        bindings['direct'];
+    final binding = rawBinding is Map
+        ? Map<String, dynamic>.from(rawBinding)
+        : <String, dynamic>{};
+    final workerId =
+        (binding['workerId'] ?? binding['worker_id'])?.toString() ?? '';
+    final assignedWorker = workerId.isEmpty
+        ? null
+        : (eligibleWorkers.where((w) => w.id == workerId).firstOrNull ??
+            projectWorkers.where((w) => w.id == workerId).firstOrNull);
+    final isWorkerAssigned = assignedWorker != null &&
+        eligibleWorkers.any((w) => w.id == assignedWorker.id);
+    final selectedModel = binding['model']?.toString().trim() ?? '';
+    final availableModels =
+        assignedWorker != null ? _modelsForWorker(assignedWorker) : const <String>[];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Builder(
+            builder: (buttonContext) => IconButton(
+              tooltip: 'Add attachments',
+              icon: const Icon(Icons.add, size: 18),
+              onPressed: () async {
+                final box = buttonContext.findRenderObject()! as RenderBox;
+                final overlay = Overlay.of(buttonContext)
+                    .context
+                    .findRenderObject()! as RenderBox;
+                final rect =
+                    box.localToGlobal(Offset.zero, ancestor: overlay) &
+                        box.size;
+                final inputBox =
+                    inputKey.currentContext?.findRenderObject() as RenderBox?;
+                final anchorBottom = inputBox == null
+                    ? rect.top
+                    : inputBox
+                            .localToGlobal(Offset.zero, ancestor: overlay)
+                            .dy +
+                        inputBox.size.height;
+                final availableHeight =
+                    (anchorBottom - 8).clamp(0.0, overlay.size.height);
+                final menuHeight = (2 * 48.0 + 32).clamp(0.0, availableHeight);
+                final value = await showMenu<String>(
+                  context: buttonContext,
+                  popUpAnimationStyle: AnimationStyle.noAnimation,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  constraints: BoxConstraints(maxHeight: menuHeight),
+                  position: RelativeRect.fromRect(
+                      Rect.fromLTWH(rect.left, anchorBottom - menuHeight,
+                          rect.width, 0),
+                      Offset.zero & overlay.size),
+                  items: [
+                    PopupMenuItem(
+                      value: 'files',
+                      enabled: canExecute && !submitting,
+                      child: const ListTile(
+                        dense: true,
+                        leading: Icon(Icons.attach_file, size: 18),
+                        title: Text('Add files'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'link',
+                      enabled: canExecute && !submitting,
+                      child: const ListTile(
+                        dense: true,
+                        leading: Icon(Icons.link, size: 18),
+                        title: Text('Add link'),
+                      ),
+                    ),
+                  ],
+                );
+                if (!buttonContext.mounted || value == null) return;
+                if (value == 'files') {
+                  onAddFiles();
+                } else if (value == 'link') {
+                  onAddReference();
+                }
+              },
+            ),
+          ),
+          IconButton(
+            tooltip: 'Refresh Work history',
+            onPressed: () => onRefresh(),
+            icon: const Icon(Icons.refresh, size: 18),
+          ),
+          if (onOpenSettings != null)
+            IconButton(
+              tooltip: 'Work settings',
+              onPressed: onOpenSettings,
+              icon: const Icon(Icons.tune_rounded, size: 18),
+            ),
+          const SizedBox(width: 4),
+          Builder(
+            builder: (workflowBtnContext) => Tooltip(
+              message: 'Choose workflow',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: canExecute && !submitting && workflowCatalog.isNotEmpty
+                    ? () async {
+                        final box =
+                            workflowBtnContext.findRenderObject()! as RenderBox;
+                        final overlay = Overlay.of(workflowBtnContext)
+                            .context
+                            .findRenderObject()! as RenderBox;
+                        final rect =
+                            box.localToGlobal(Offset.zero, ancestor: overlay) &
+                                box.size;
+                        final inputBox = inputKey.currentContext
+                            ?.findRenderObject() as RenderBox?;
+                        final anchorBottom = inputBox == null
+                            ? rect.top
+                            : inputBox
+                                    .localToGlobal(Offset.zero,
+                                        ancestor: overlay)
+                                    .dy +
+                                inputBox.size.height;
+                        final availableHeight =
+                            (anchorBottom - 8).clamp(0.0, overlay.size.height);
+                        final versions =
+                            _currentWorkflowVersions(workflowCatalog);
+                        final menuHeight = (versions.length * 48.0 + 32)
+                            .clamp(0.0, availableHeight);
+                        final value = await showMenu<String>(
+                          context: workflowBtnContext,
+                          popUpAnimationStyle: AnimationStyle.noAnimation,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          constraints: BoxConstraints(maxHeight: menuHeight),
+                          position: RelativeRect.fromRect(
+                              Rect.fromLTWH(rect.left,
+                                  anchorBottom - menuHeight, rect.width, 0),
+                              Offset.zero & overlay.size),
+                          items: [
+                            for (final item in versions)
+                              CheckedPopupMenuItem(
+                                value: item.reference,
+                                checked: item.reference == workflow,
+                                enabled: canExecute && !submitting,
+                                child: Tooltip(
+                                  message: item.description,
+                                  child: Text(item.name),
+                                ),
+                              ),
+                          ],
+                        );
+                        if (!workflowBtnContext.mounted || value == null) return;
+                        onWorkflowChanged(value);
+                      }
+                    : null,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 130),
+                        child: Text(
+                          selectedWorkflow?.name ?? 'Choose workflow',
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.keyboard_arrow_down, size: 14),
                     ],
-                  );
-                  if (!buttonContext.mounted || value == null) return;
-                  if (value == 'files') {
-                    onAddFiles();
-                  } else if (value == 'link') {
-                    onAddReference();
-                  } else {
-                    onWorkflowChanged(value);
-                  }
-                },
-              )),
-      IconButton(
-          tooltip: 'Refresh Work history',
-          onPressed: () => onRefresh(),
-          icon: const Icon(Icons.refresh, size: 18)),
-      if (onOpenSettings != null)
-        IconButton(
-            tooltip: 'Work settings',
-            onPressed: onOpenSettings,
-            icon: const Icon(Icons.tune_rounded, size: 18)),
-      const SizedBox(width: 6),
-      ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 120),
-          child: Text(selected?.name ?? 'Choose workflow',
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall)),
-    ]);
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          if (!isWorkerAssigned)
+            Tooltip(
+              message: onOpenSettings != null
+                  ? 'No worker assigned for this workflow. Click to configure in Work settings.'
+                  : 'No worker assigned for this workflow.',
+              child: InkWell(
+                onTap: onOpenSettings,
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  child: Text(
+                    'No worker assigned',
+                    style: TextStyle(
+                      color: colors.error,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else
+            Builder(
+              builder: (modelBtnContext) => Tooltip(
+                message: 'Choose model',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: canExecute && !submitting && onModelChanged != null
+                      ? () async {
+                          final box =
+                              modelBtnContext.findRenderObject()! as RenderBox;
+                          final overlay = Overlay.of(modelBtnContext)
+                              .context
+                              .findRenderObject()! as RenderBox;
+                          final rect = box.localToGlobal(Offset.zero,
+                                  ancestor: overlay) &
+                              box.size;
+                          final inputBox = inputKey.currentContext
+                              ?.findRenderObject() as RenderBox?;
+                          final anchorBottom = inputBox == null
+                              ? rect.top
+                              : inputBox
+                                      .localToGlobal(Offset.zero,
+                                          ancestor: overlay)
+                                      .dy +
+                                  inputBox.size.height;
+                          final availableHeight = (anchorBottom - 8)
+                              .clamp(0.0, overlay.size.height);
+                          final menuItems = <PopupMenuEntry<String>>[
+                            CheckedPopupMenuItem<String>(
+                              value: '',
+                              checked: selectedModel.isEmpty,
+                              child: const Text('Default model'),
+                            ),
+                            if (availableModels.isNotEmpty)
+                              const PopupMenuDivider(),
+                            for (final model in availableModels)
+                              CheckedPopupMenuItem<String>(
+                                value: model,
+                                checked: selectedModel == model,
+                                child: Text(model),
+                              ),
+                          ];
+                          final menuHeight = ((menuItems.length) * 48.0 + 32)
+                              .clamp(0.0, availableHeight);
+                          final value = await showMenu<String>(
+                            context: modelBtnContext,
+                            popUpAnimationStyle: AnimationStyle.noAnimation,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            constraints: BoxConstraints(maxHeight: menuHeight),
+                            position: RelativeRect.fromRect(
+                                Rect.fromLTWH(rect.left,
+                                    anchorBottom - menuHeight, rect.width, 0),
+                                Offset.zero & overlay.size),
+                            items: menuItems,
+                          );
+                          if (!modelBtnContext.mounted || value == null) return;
+                          onModelChanged?.call(stepKind, value);
+                        }
+                      : null,
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 130),
+                          child: Text(
+                            selectedModel.isEmpty
+                                ? 'Default model'
+                                : selectedModel,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: colors.primary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        Icon(Icons.keyboard_arrow_down,
+                            size: 14, color: colors.primary),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _buildComposerInput(
@@ -517,10 +776,7 @@ class _WorkTimelineCard extends StatelessWidget {
 
     final metadataSegments = [
       if (_workflowName.isNotEmpty) _workflowName,
-      if (selectedModel != null &&
-          selectedModel.isNotEmpty &&
-          (!isWorkerResponse || selectedModel != workerDisplayName))
-        selectedModel,
+      if (selectedModel != null && selectedModel.isNotEmpty) selectedModel,
       if (elapsed.isNotEmpty) elapsed,
     ];
     final metadataString =

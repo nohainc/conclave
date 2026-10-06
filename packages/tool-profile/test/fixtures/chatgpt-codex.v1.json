@@ -132,7 +132,22 @@
   "model": {
     "supported": true,
     "arguments": ["--model", "{{model}}"],
-    "unknownModelPolicy": "pass_through"
+    "unknownModelPolicy": "profile_allowlist",
+    "allowlist": [
+      "o3",
+      "o3-mini",
+      "o1",
+      "o1-mini",
+      "o1-preview",
+      "gpt-4.5-preview",
+      "gpt-4o",
+      "gpt-4o-mini",
+      "chatgpt-4o-latest",
+      "gpt-4-turbo",
+      "gpt-4",
+      "codex-mini",
+      "gpt-test"
+    ]
   },
   "timeout": { "providerArguments": [], "providerReserveMs": 2000 },
   "sandbox": {

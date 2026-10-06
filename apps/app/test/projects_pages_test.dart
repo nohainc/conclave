@@ -85,7 +85,7 @@ void main() {
         .map((body) => body.data)
         .toList();
     expect(markdown, containsAll(['**Chat answer**', '**Work answer**']));
-    await tester.tap(find.byTooltip('Add attachments or choose workflow'));
+    await tester.tap(find.byTooltip('Choose workflow'));
     await tester.pumpAndSettle();
     final options = tester
         .widgetList<CheckedPopupMenuItem<String>>(
@@ -269,7 +269,7 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     expect(find.text('· Direct'), findsOneWidget);
-    await tester.tap(find.byTooltip('Add attachments or choose workflow'));
+    await tester.tap(find.byTooltip('Choose workflow'));
     await tester.pumpAndSettle();
     final options = tester
         .widgetList<CheckedPopupMenuItem<String>>(
@@ -1006,27 +1006,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('What should Conclave do?'), findsNothing);
-    expect(
-        find.byTooltip('Add attachments or choose workflow'), findsOneWidget);
-    await tester.tap(find.byTooltip('Add attachments or choose workflow'));
+    expect(find.byTooltip('Add attachments'), findsOneWidget);
+    await tester.tap(find.byTooltip('Add attachments'));
     await tester.pumpAndSettle();
     expect(find.text('Add files'), findsOneWidget);
     expect(find.text('Add link'), findsOneWidget);
     expect(
         tester.getBottomLeft(find.text('Add files')).dy,
-        lessThan(tester
-            .getTopLeft(find.byTooltip('Add attachments or choose workflow'))
-            .dy));
-    expect(find.text('Work'), findsWidgets);
+        lessThan(
+            tester.getTopLeft(find.byTooltip('Add attachments')).dy));
     final menu = find
         .ancestor(of: find.text('Add files'), matching: find.byType(Material))
         .first;
-    expect(tester.getBottomLeft(menu).dy,
-        closeTo(tester.getBottomLeft(find.byType(TextField).first).dy, 1));
     expect(
         (tester.widget<Material>(menu).shape as RoundedRectangleBorder)
             .borderRadius,
         BorderRadius.circular(10));
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Choose workflow'), findsOneWidget);
+    await tester.tap(find.byTooltip('Choose workflow'));
+    await tester.pumpAndSettle();
     final workOption = find.descendant(
         of: find.byType(CheckedPopupMenuItem<String>),
         matching: find.text('Work'));
@@ -1050,7 +1050,7 @@ void main() {
     expect(
         tester.getCenter(find.byTooltip('Bold')).dy,
         lessThan(tester
-            .getTopLeft(find.byTooltip('Add attachments or choose workflow'))
+            .getTopLeft(find.byTooltip('Add attachments'))
             .dy));
     expect(
         tester.getTopLeft(find.byTooltip('Bold')).dy,
@@ -2028,6 +2028,125 @@ void main() {
 
     await tester.binding.setSurfaceSize(null);
   });
+
+  testWidgets(
+      'Work tab allows selecting workflow, models per worker, and displays No worker assigned when unassigned',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1000));
+    final dataSource = _ModelSelectionTestDataSource();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: WorkstreamPage(
+          initialTab: 1,
+          project: const AxProject(
+            id: 'project-1',
+            name: 'Project',
+            branch: '',
+            lastActivity: '',
+            role: 'owner',
+          ),
+          workstream: const AxWorkstream(
+            id: 'stream-1',
+            projectId: 'project-1',
+            name: 'Implementation',
+            lead: 'Vitalii',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: 'Workspace',
+            queueStatus: 'idle',
+            workConfig: {
+              'bindings': {
+                'implement': {
+                  'worker_id': 'w-chatgpt',
+                  'model': 'gpt-4o',
+                },
+              },
+            },
+          ),
+          onBackToProject: _noop,
+          onArchive: _noop,
+          dataSource: dataSource,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // 1. Verify '+' menu has only 'Add files' and 'Add link'
+    expect(find.byTooltip('Add attachments'), findsOneWidget);
+    await tester.tap(find.byTooltip('Add attachments'));
+    await tester.pumpAndSettle();
+    expect(find.text('Add files'), findsOneWidget);
+    expect(find.text('Add link'), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byType(PopupMenuItem), matching: find.text('Work')),
+        findsNothing);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
+
+    // 2. Verify model selector shows 'gpt-4o'
+    expect(find.text('gpt-4o'), findsOneWidget);
+    await tester.tap(find.byTooltip('Choose model'));
+    await tester.pumpAndSettle();
+
+    // Verify chatgpt models are present
+    expect(find.text('Default model'), findsOneWidget);
+    expect(find.text('o3'), findsOneWidget);
+    expect(find.text('o3-mini'), findsOneWidget);
+    expect(find.text('gpt-4.5-preview'), findsOneWidget);
+
+    // Select 'o3'
+    final o3Option = find.descendant(
+      of: find.byType(CheckedPopupMenuItem<String>),
+      matching: find.text('o3'),
+    );
+    await tester.ensureVisible(o3Option);
+    await tester.pumpAndSettle();
+    await tester.tap(find.ancestor(
+      of: o3Option,
+      matching: find.byType(CheckedPopupMenuItem<String>),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('o3'), findsOneWidget);
+    expect(
+        dataSource.savedWorkConfig?['bindings']?['implement']?['model'], 'o3');
+
+    // Dismiss SnackBar if present
+    ScaffoldMessenger.of(tester.element(find.byType(Scaffold).first))
+        .hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+
+    // 3. Switch workflow to 'Research' which has no worker assigned
+    expect(find.byTooltip('Choose workflow'), findsOneWidget);
+    await tester.tap(find.byTooltip('Choose workflow'));
+    await tester.pumpAndSettle();
+    final researchOption = find.descendant(
+      of: find.byType(CheckedPopupMenuItem<String>),
+      matching: find.text('Research'),
+    );
+    await tester.ensureVisible(researchOption);
+    await tester.pumpAndSettle();
+    await tester.tap(find.ancestor(
+      of: researchOption,
+      matching: find.byType(CheckedPopupMenuItem<String>),
+    ));
+    await tester.pumpAndSettle();
+
+    // 4. Verify 'No worker assigned' is shown with error styling
+    expect(find.text('No worker assigned'), findsOneWidget);
+    final errorTextWidget =
+        tester.widget<Text>(find.text('No worker assigned'));
+    expect(errorTextWidget.style?.color, isNotNull);
+
+    // Tap 'No worker assigned' opens Work settings dialog
+    await tester.tap(find.text('No worker assigned'));
+    await tester.pumpAndSettle();
+    expect(find.text('Work settings'), findsOneWidget);
+    expect(find.text('Save Work settings'), findsOneWidget);
+
+    await tester.binding.setSurfaceSize(null);
+  });
 }
 
 class _WorkspaceTestDataSource extends AxFixtureDataSource {
@@ -2520,3 +2639,43 @@ class _ProjectStreamsSource extends AxFixtureDataSource {
           {required String projectId}) async =>
       streams;
 }
+
+class _ModelSelectionTestDataSource extends _GenericWorkerConfigDataSource {
+  @override
+  Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async => [
+        AxBuiltinWorkflow.fromJson({
+          'id': 'direct',
+          'version': 2,
+          'name': 'Work',
+          'description': 'Implement the requested work.',
+          'steps': [
+            {'kind': 'implement', 'order': 0},
+          ],
+        }),
+        AxBuiltinWorkflow.fromJson({
+          'id': 'research',
+          'version': 1,
+          'name': 'Research',
+          'description': 'Investigate and research codebase.',
+          'steps': [
+            {'kind': 'research', 'order': 0},
+          ],
+        }),
+      ];
+
+  @override
+  Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => const [
+        AxWorker(
+          id: 'w-chatgpt',
+          workspaceId: 'workspace-1',
+          workspaceName: 'MacBook Pro',
+          workerTypeId: 'chatgpt',
+          displayName: 'ChatGPT',
+          status: 'ready',
+          readinessState: 'ready',
+          localConcurrencyLimit: 1,
+          capabilities: [],
+        ),
+      ];
+}
+

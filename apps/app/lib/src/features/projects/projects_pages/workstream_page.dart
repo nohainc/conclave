@@ -751,6 +751,26 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         ],
       );
 
+  void _onModelChanged(String stepKind, String model) {
+    final bindings = _workConfig['bindings'] is Map
+        ? Map<String, dynamic>.from(_workConfig['bindings'] as Map)
+        : <String, dynamic>{};
+    final rawBinding = bindings[stepKind];
+    final binding = rawBinding is Map
+        ? Map<String, dynamic>.from(rawBinding)
+        : <String, dynamic>{};
+    final updated = Map<String, dynamic>.from(binding);
+    if (model.trim().isEmpty) {
+      updated.remove('model');
+    } else {
+      updated['model'] = model.trim();
+    }
+    _setStepBinding(stepKind, updated);
+    if (_canConfigureWork) {
+      unawaited(_saveWorkConfig(_workConfig));
+    }
+  }
+
   _WorkComposer _workComposer() => _WorkComposer(
         composerKey: _workComposerKey,
         requestController: _requestController,
@@ -759,6 +779,9 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         currentUserName: widget.currentUserName,
         workflow: _workflow,
         workflowCatalog: _workflowCatalog,
+        workConfig: _workConfig,
+        projectWorkers: _projectWorkers,
+        eligibleWorkers: _eligibleWorkers,
         loadingWorkflows: _loadingWorkflows,
         workflowCatalogError: _workflowCatalogError,
         canExecute: _canExecute,
@@ -787,6 +810,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
             widget.dataSource == null ? null : _cancelFailedWorkRequest,
         onWorkflowChanged: (value) =>
             _updateWorkSettings(() => _workflow = value),
+        onModelChanged: _onModelChanged,
         onOpenSettings: () => _openWorkSettings(context),
         onRun: _runWork,
       );

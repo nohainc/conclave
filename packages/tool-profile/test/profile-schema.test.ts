@@ -246,6 +246,7 @@ describe("Tool Profile v1 canonical schema", () => {
         "model policy",
         (p) => {
           p.model.unknownModelPolicy = "profile_allowlist";
+          delete p.model.allowlist;
         },
       ],
       [
