@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="conclave-gradient" x1="10" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E879F9"/>
+      <stop offset=".45" stop-color="#A855F7"/>
+      <stop offset="1" stop-color="#5B21F4"/>
+    </linearGradient>
+    <mask id="conclave-spark-cutout">
+      <rect width="64" height="64" fill="white"/>
+      <path d="M32 25C33.3 29 35 30.7 39 32C35 33.3 33.3 35 32 39C30.7 35 29 33.3 25 32C29 30.7 30.7 29 32 25Z" fill="black"/>
+    </mask>
+  </defs>
+  <g fill="url(#conclave-gradient)" mask="url(#conclave-spark-cutout)">
+    <path id="conclave-petal" d="M32 4C43.8 4 53.6 12 56.5 22.8C48.8 19.2 41.6 20.1 36.7 25C34.8 26.9 33.6 29.1 33.1 31.5L26.1 24.5C21.2 19.6 20.8 13.5 23.6 7.6C26.2 5.3 29 4 32 4Z"/>
+    <use href="#conclave-petal" transform="rotate(90 32 32)"/>
+    <use href="#conclave-petal" transform="rotate(180 32 32)"/>
+    <use href="#conclave-petal" transform="rotate(270 32 32)"/>
+  </g>
+</svg>
