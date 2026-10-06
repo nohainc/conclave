@@ -134,6 +134,14 @@
     "arguments": ["--model", "{{model}}"],
     "unknownModelPolicy": "profile_allowlist",
     "allowlist": [
+      "gpt-6.1-sol",
+      "gpt-6-astra",
+      "gpt-6-sol",
+      "gpt-6-luna",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+      "gpt-reserve",
       "o3",
       "o3-mini",
       "o1",
@@ -149,6 +157,54 @@
       "gpt-test"
     ],
     "catalog": [
+      {
+        "id": "gpt-6.1-sol",
+        "name": "GPT-6.1 Sol",
+        "badge": "Workhorse",
+        "description": "Latest workhorse model for coding and everyday work"
+      },
+      {
+        "id": "gpt-6-astra",
+        "name": "GPT-6 Astra",
+        "badge": "Frontier Reasoning",
+        "description": "Frontier intelligence for the most demanding work"
+      },
+      {
+        "id": "gpt-6-sol",
+        "name": "GPT-6 Sol",
+        "badge": "Workhorse",
+        "description": "Previous generation workhorse model"
+      },
+      {
+        "id": "gpt-6-luna",
+        "name": "GPT-6 Luna",
+        "badge": "Fast & Affordable",
+        "description": "Fast and affordable model for easier tasks"
+      },
+      {
+        "id": "gpt-5.6-sol",
+        "name": "GPT-5.6 Sol",
+        "badge": "Workhorse",
+        "description": "Older generation workhorse model"
+      },
+      {
+        "id": "gpt-5.6-terra",
+        "name": "GPT-5.6 Terra",
+        "badge": "Balanced",
+        "description": "Older balanced model for straightforward work"
+      },
+      {
+        "id": "gpt-5.6-luna",
+        "name": "GPT-5.6 Luna",
+        "badge": "Fast",
+        "description": "Older fast and efficient model"
+      },
+      {
+        "id": "gpt-reserve",
+        "name": "GPT Reserve",
+        "badge": "Agentic",
+        "description": "Fast and affordable agentic coding model"
+      },
       {
         "id": "o3",
         "name": "o3",

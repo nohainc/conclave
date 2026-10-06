@@ -56,6 +56,54 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
       displayName.contains('openai')) {
     return const [
       AxModelOption(
+        id: 'gpt-6.1-sol',
+        name: 'GPT-6.1 Sol',
+        badge: 'Workhorse',
+        description: 'Latest workhorse model for coding and everyday work',
+      ),
+      AxModelOption(
+        id: 'gpt-6-astra',
+        name: 'GPT-6 Astra',
+        badge: 'Frontier Reasoning',
+        description: 'Frontier intelligence for the most demanding work',
+      ),
+      AxModelOption(
+        id: 'gpt-6-sol',
+        name: 'GPT-6 Sol',
+        badge: 'Workhorse',
+        description: 'Previous generation workhorse model',
+      ),
+      AxModelOption(
+        id: 'gpt-6-luna',
+        name: 'GPT-6 Luna',
+        badge: 'Fast & Affordable',
+        description: 'Fast and affordable model for easier tasks',
+      ),
+      AxModelOption(
+        id: 'gpt-5.6-sol',
+        name: 'GPT-5.6 Sol',
+        badge: 'Workhorse',
+        description: 'Older generation workhorse model',
+      ),
+      AxModelOption(
+        id: 'gpt-5.6-terra',
+        name: 'GPT-5.6 Terra',
+        badge: 'Balanced',
+        description: 'Older balanced model for straightforward work',
+      ),
+      AxModelOption(
+        id: 'gpt-5.6-luna',
+        name: 'GPT-5.6 Luna',
+        badge: 'Fast',
+        description: 'Older fast and efficient model',
+      ),
+      AxModelOption(
+        id: 'gpt-reserve',
+        name: 'GPT Reserve',
+        badge: 'Agentic',
+        description: 'Fast and affordable agentic coding model',
+      ),
+      AxModelOption(
         id: 'o3',
         name: 'o3',
         badge: 'Reasoning',
