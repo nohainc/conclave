@@ -837,3 +837,13 @@ error icon and an inline Retry Chat sync link. Malformed envelopes identify the 
 without including message bodies. It never labels a failed read as “No chat messages yet”; that empty state
 is reserved for a successful empty result. Cached messages remain visible on
 failure and retry clears the error after a successful response.
+
+Invitation and membership invalidations addressed to a non-member use a durable
+recipient `user` stream in addition to the normal Project stream. Adding a user
+only to Project-event fanout is insufficient: the realtime gateway correctly
+rejects that stream before invitation acceptance or after membership removal.
+Recipient signals contain entity IDs only, retain existing event types, and
+refresh the authenticated user's invitations and Project list. Project stream
+membership checks remain enforced; no Project access is granted by an invitation
+notification. Offline recipients recover through their user stream or initial
+invitation loading. Existing pending invitation records need no migration.

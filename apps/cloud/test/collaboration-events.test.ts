@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { pruneExpiredRealtimeEvents } from "../src/realtime-retention.js";
 import { CloudEventPublisher } from "../src/event-publisher.js";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
+import { publishCollaborationEvent } from "../src/collaboration-events.js";
+import {
+  authorizeRealtimeScope,
+  eventMatchesScope,
+} from "../src/realtime-gateway.js";
+import { parseRealtimeEvent } from "@conclave/protocol";
 import {
   handleCreateProject,
   handleUpdateProject,
@@ -66,6 +72,74 @@ function fixture() {
 }
 
 describe("collaboration durable signals", () => {
+  it("delivers a durable recipient signal without granting Project membership", async () => {
+    const f = fixture();
+    try {
+      const response = await handleCreateProject(
+        f.request({ name: "Private project" }),
+        f.env,
+      );
+      const { project } = (await response.json()) as {
+        project: { id: string };
+      };
+      f.deliveries.length = 0;
+      await publishCollaborationEvent(
+        f.env,
+        "project.updated",
+        project.id,
+        "invitation",
+        { additionalRecipientUserIds: ["outsider", "outsider"] },
+      );
+      const recipient = f.deliveries.filter(
+        (item) => item.user === "user:outsider",
+      );
+      expect(recipient).toHaveLength(1);
+      expect(recipient[0]!.event).toMatchObject({
+        stream: { kind: "user", id: "outsider" },
+        payload: { entityId: "invitation" },
+      });
+      expect(
+        (
+          await authorizeRealtimeScope(
+            f.db as unknown as D1Database,
+            "outsider",
+            { kind: "project", projectId: project.id },
+          )
+        ).allowed,
+      ).toBe(false);
+      expect(
+        (
+          await authorizeRealtimeScope(
+            f.db as unknown as D1Database,
+            "outsider",
+            { kind: "user" },
+          )
+        ).allowed,
+      ).toBe(true);
+      expect(
+        eventMatchesScope(parseRealtimeEvent(recipient[0]!.event), {
+          kind: "user",
+        }),
+      ).toBe(true);
+      expect(
+        f
+          .events()
+          .filter(
+            (event) =>
+              event.stream_kind === "user" && event.stream_id === "outsider",
+          ),
+      ).toHaveLength(1);
+      expect(
+        f.sqlite
+          .prepare(
+            "SELECT count(*) AS n FROM project_memberships WHERE user_id='outsider'",
+          )
+          .get(),
+      ).toEqual({ n: 0 });
+    } finally {
+      f.sqlite.close();
+    }
+  });
   it("publishes all collaboration CRUD signals with real authorization and no execution Workspace", async () => {
     const f = fixture();
     try {
@@ -210,7 +284,11 @@ describe("collaboration durable signals", () => {
       );
       const grants = f
         .events()
-        .filter((row) => row.event_type === "project_workspace_grant.updated");
+        .filter(
+          (row) =>
+            row.event_type === "project_workspace_grant.updated" &&
+            row.stream_kind === "project",
+        );
       expect(grants).toHaveLength(3);
       expect(
         grants.every(

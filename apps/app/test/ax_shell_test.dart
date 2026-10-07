@@ -2175,8 +2175,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Zero-project screen with Welcome and Pending Invitation (both on Home and Sidebar)
-      expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+      // Zero-project screen with Pending Invitation in For You (both on Home and Sidebar)
+      expect(find.text('For you'), findsOneWidget);
       expect(find.text('Pending invitations (1)'), findsNWidgets(2));
       expect(find.text('Joined AX Core'), findsWidgets);
 
@@ -2185,7 +2185,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Invitation is accepted and disappears, user is navigated into project
-      expect(find.text('Welcome to Conclave AX'), findsNothing);
+      expect(find.text('For you'), findsNothing);
       expect(find.text('Pending invitations (1)'), findsNothing);
       expect(find.text('Joined Joined AX Core.'), findsOneWidget);
       expect(find.text('Joined AX Core'), findsWidgets);

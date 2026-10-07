@@ -78,12 +78,39 @@ The following legacy concepts are **prohibited** from established-user Home:
 - ❌ Static `"Nothing needs your attention"` filler
 - ❌ `"Archived Projects"` header button
 - ❌ Generic `"Your execution capacity at a glance"` subtitle
+- ❌ Onboarding / Getting Started cards mixed into the dashboard
 
 ---
 
-## Onboarding / New User Path
-For new users with zero projects:
-- Primary flow focuses on **collaboration**:
-  1. Accept an invitation (if invited)
-  2. Create a Project and invite friends/family/teammates
-- Advanced path: Connect AI / Conclave Workspace.
+## Clean Separation of Home Surfaces
+
+```text
+HomePage (Dispatcher)
+    │
+    ├── isNewUser == true  (projects.isEmpty && invitations.isEmpty)
+    │     └── NewUserHome
+    │
+    └── isNewUser == false (projects.isNotEmpty || invitations.isNotEmpty)
+          └── EstablishedUserHome
+```
+
+### 1. NewUserHome
+- **Condition:** Active *only* when the user has `projects.isEmpty && invitations.isEmpty`.
+- **Experience:**
+  - Dedicated welcome header explaining Conclave AX as a collaborative AI workspace.
+  - Actionable **Get started** card with two clear pathways:
+    1. `Create a Project`: Start a shared project and collaborate.
+    2. `Connect AI / Workspace`: Advanced pairing of local workspace and CLI workers.
+  - **How Conclave AX works** highlights: People first, Private credentials, and Shared conversations.
+  - Completely omits dashboard sections (`For you`, `Continue working`, `What's new in Conclave`, `AI updates`) to avoid blank/confusing dashboard states.
+
+### 2. EstablishedUserHome
+- **Condition:** Active when the user has either `projects.isNotEmpty` OR `invitations.isNotEmpty`.
+- **Key Invariant:** A user with 0 projects but pending invitations is **not** a new user; they have an active collaboration context awaiting decision.
+- **Experience:**
+  - **For You**: Prioritizes pending invitations with direct `Accept` / `Decline` controls, as well as workstream attention items and findings.
+  - **Running Now**: Conditionally visible when active runs exist.
+  - **Continue Working**: Contextual workstreams (omitted if no projects exist).
+  - **What's New in Conclave**: Official product updates.
+  - **AI Updates**: Scoped AI capability news for available worker types.
+  - Strictly omits onboarding cards and getting-started tutorials.

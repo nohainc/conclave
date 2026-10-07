@@ -172,9 +172,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // 1. Zero-project Welcome screen renders pending invitation hero card
+    // 1. Zero-project recipient with pending invitation renders EstablishedUserHome with For You invitations
     expect(find.byType(HomePage), findsOneWidget);
-    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('For you'), findsOneWidget);
     expect(find.text('Pending invitations (1)'), findsNWidgets(2));
     expect(find.text('Conclave AX Development'), findsWidgets);
     expect(find.text('Accept'), findsWidgets);

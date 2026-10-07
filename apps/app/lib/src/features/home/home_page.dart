@@ -45,18 +45,18 @@ class HomePage extends StatelessWidget {
   final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
   final void Function(String projectId, String workstreamId)? onOpenWorkstream;
 
-  bool get isNewWorkspace => projects.isEmpty;
+  /// A user is considered a new user ONLY if they have no projects AND no pending invitations.
+  /// If they have pending invitations, they have active collaboration context and receive
+  /// the EstablishedUserHome where invitations are prioritized in "For you".
+  bool get isNewUser => projects.isEmpty && invitations.isEmpty;
 
   @override
-  Widget build(BuildContext context) => isNewWorkspace
-      ? _GettingStarted(
-          invitations: invitations,
-          onAcceptInvitation: onAcceptInvitation,
-          onDeclineInvitation: onDeclineInvitation,
-          onOpenWorkspaces: onOpenWorkspaces,
+  Widget build(BuildContext context) => isNewUser
+      ? NewUserHome(
           onCreateProject: onCreateProject,
+          onOpenWorkspaces: onOpenWorkspaces,
         )
-      : _EstablishedHome(
+      : EstablishedUserHome(
           projects: projects,
           workspaces: workspaces,
           workers: workers,
@@ -76,23 +76,23 @@ class HomePage extends StatelessWidget {
         );
 }
 
-class _GettingStarted extends StatelessWidget {
-  const _GettingStarted({
-    required this.onOpenWorkspaces,
+class NewUserHome extends StatelessWidget {
+  const NewUserHome({
+    super.key,
     required this.onCreateProject,
-    this.invitations = const [],
-    this.onAcceptInvitation,
-    this.onDeclineInvitation,
+    required this.onOpenWorkspaces,
   });
 
-  final VoidCallback onOpenWorkspaces;
   final VoidCallback onCreateProject;
-  final List<AxProjectInvitation> invitations;
-  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
-  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
+  final VoidCallback onOpenWorkspaces;
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return SingleChildScrollView(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
@@ -101,54 +101,78 @@ class _GettingStarted extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            invitations.isNotEmpty
-                ? 'You have pending project invitations. Join an existing project or create your own.'
-                : 'A shared workspace to collaborate with people and AI together.',
+            'A shared AI workspace for people who want to think, decide, create, and collaborate together using the AI tools they already have.',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 14,
+              color: colorScheme.onSurfaceVariant,
+              fontSize: 15,
+              height: 1.4,
             ),
           ),
-          if (invitations.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            _PendingInvitationsSection(
-              invitations: invitations,
-              onAccept: onAcceptInvitation,
-              onDecline: onDeclineInvitation,
-            ),
-          ],
           const SizedBox(height: 24),
           Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              side: BorderSide(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'What would you like to do?',
+                    'Get started',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 16),
                   ListTile(
-                    leading: const Icon(Icons.add_circle_outline, size: 28),
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.group_add_outlined,
+                        color: colorScheme.primary,
+                        size: 24,
+                      ),
+                    ),
                     title: const Text(
                       'Create a Project',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                      style:
+                          TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                     ),
                     subtitle: const Text(
-                      'Start a shared project, invite teammates or family, and collaborate with AI.',
+                      'Start a shared space, invite teammates or family, and collaborate in context.',
                     ),
                     trailing: FilledButton(
                       onPressed: onCreateProject,
                       child: const Text('Create project'),
                     ),
                   ),
-                  const Divider(height: 24),
+                  const Divider(height: 28),
                   ListTile(
-                    leading: const Icon(Icons.computer_outlined, size: 28),
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.computer_outlined,
+                        color: colorScheme.onSurfaceVariant,
+                        size: 24,
+                      ),
+                    ),
                     title: const Text(
                       'Connect AI / Workspace',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                      style:
+                          TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                     ),
                     subtitle: const Text(
                       'Advanced: Pair Conclave Workspace to contribute local CLI Workers or local codebases.',
@@ -162,12 +186,107 @@ class _GettingStarted extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 28),
+          const Text(
+            'How Conclave AX works',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 700;
+              return GridView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: isWide ? 3 : 1,
+                  mainAxisExtent: isWide ? 160 : 100,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                ),
+                children: const [
+                  _OnboardingValueCard(
+                    icon: Icons.people_alt_outlined,
+                    title: 'People first',
+                    description:
+                        'Invite teammates, family, and collaborators to work together with shared AI.',
+                  ),
+                  _OnboardingValueCard(
+                    icon: Icons.shield_outlined,
+                    title: 'Private credentials',
+                    description:
+                        'Share AI access in projects without ever exposing your API keys or machine logins.',
+                  ),
+                  _OnboardingValueCard(
+                    icon: Icons.forum_outlined,
+                    title: 'Shared conversations',
+                    description:
+                        'Keep context intact across team members and switch AI models seamlessly.',
+                  ),
+                ],
+              );
+            },
+          ),
         ],
-      );
+      ),
+    );
+  }
 }
 
-class _EstablishedHome extends StatelessWidget {
-  const _EstablishedHome({
+class _OnboardingValueCard extends StatelessWidget {
+  const _OnboardingValueCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 24, color: theme.colorScheme.primary),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+            const SizedBox(height: 4),
+            Expanded(
+              child: Text(
+                description,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.3,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class EstablishedUserHome extends StatelessWidget {
+  const EstablishedUserHome({
+    super.key,
     required this.projects,
     required this.workspaces,
     required this.workers,

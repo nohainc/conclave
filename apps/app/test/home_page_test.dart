@@ -15,7 +15,7 @@ void main() {
     lastActivity: 'Today',
   );
 
-  testWidgets('Getting Started gives collaborative project-first choices',
+  testWidgets('NewUserHome renders collaborative onboarding and value cards',
       (tester) async {
     var projectCreated = false;
     var workspaceOpened = false;
@@ -24,6 +24,7 @@ void main() {
       projects: const [],
       workspaces: const [],
       workers: const [],
+      invitations: const [],
       run: null,
       openFindingCount: 0,
       onOpenWorkspaces: () => workspaceOpened = true,
@@ -32,11 +33,25 @@ void main() {
       onCreateProject: () => projectCreated = true,
     )));
 
+    // NewUserHome Header & Getting Started
     expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('Get started'), findsOneWidget);
     expect(find.text('Create a Project'), findsOneWidget);
     expect(find.text('Connect AI / Workspace'), findsOneWidget);
-    expect(find.text('Archived Projects'), findsNothing);
+
+    // Value cards
+    expect(find.text('How Conclave AX works'), findsOneWidget);
+    expect(find.text('People first'), findsOneWidget);
+    expect(find.text('Private credentials'), findsOneWidget);
+    expect(find.text('Shared conversations'), findsOneWidget);
+
+    // Dashboard sections must NOT appear for new user
+    expect(find.text('For you'), findsNothing);
+    expect(find.text('Continue working'), findsNothing);
+    expect(find.text("What's new in Conclave"), findsNothing);
+    expect(find.text('AI updates'), findsNothing);
     expect(find.text('Ready Workers'), findsNothing);
+    expect(find.text('Archived Projects'), findsNothing);
 
     await tester.tap(find.text('Create project'));
     expect(projectCreated, isTrue);
@@ -45,7 +60,8 @@ void main() {
     expect(workspaceOpened, isTrue);
   });
 
-  testWidgets('Established Home implements the 4-part Home V1 contract',
+  testWidgets(
+      'EstablishedUserHome implements the 4-part contract and omits onboarding',
       (tester) async {
     var openedProject = '';
     var openedWorkstream = '';
@@ -124,7 +140,10 @@ void main() {
     expect(find.text('AI updates'), findsOneWidget);
     expect(find.text('ChatGPT Worker'), findsOneWidget);
 
-    // INVARIANTS: Prohibited legacy elements must NOT appear
+    // INVARIANTS: Onboarding cards and prohibited legacy elements must NOT appear
+    expect(find.text('Welcome to Conclave AX'), findsNothing);
+    expect(find.text('Get started'), findsNothing);
+    expect(find.text('How Conclave AX works'), findsNothing);
     expect(find.text('Projects count'), findsNothing);
     expect(find.text('Ready Workers count'), findsNothing);
     expect(find.text('Workspaces count'), findsNothing);
@@ -138,7 +157,8 @@ void main() {
     expect(openedWorkstream, 'ws-landing');
   });
 
-  testWidgets('Pending invitations appear in For You with accept/decline',
+  testWidgets(
+      'Zero-project user with pending invitations is routed to EstablishedUserHome with For You invitations',
       (tester) async {
     var accepted = false;
     var declined = false;
@@ -156,7 +176,7 @@ void main() {
     );
 
     await tester.pumpWidget(scaffold(HomePage(
-      projects: const [project],
+      projects: const [],
       workspaces: const [],
       workers: const [],
       invitations: const [invite],
@@ -170,6 +190,12 @@ void main() {
       onCreateProject: () {},
     )));
 
+    // Must be in EstablishedUserHome (NOT NewUserHome)
+    expect(find.text('Welcome to Conclave AX'), findsNothing);
+    expect(find.text('Get started'), findsNothing);
+    expect(find.text('How Conclave AX works'), findsNothing);
+
+    // For You contains the pending invitations
     expect(find.text('For you'), findsOneWidget);
     expect(find.text('Pending invitations (1)'), findsOneWidget);
     expect(find.text('Family Travel'), findsOneWidget);
