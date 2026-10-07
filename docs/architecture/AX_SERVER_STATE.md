@@ -847,3 +847,11 @@ refresh the authenticated user's invitations and Project list. Project stream
 membership checks remain enforced; no Project access is granted by an invitation
 notification. Offline recipients recover through their user stream or initial
 invitation loading. Existing pending invitation records need no migration.
+
+Owned Workspace inventory uses the shared `ownedWorkspacesQuery` definition for
+WorkspaceStore, the Project Connect Workspace picker and persisted-cache restore.
+The `workspaces`
+key has a single 30-second freshness policy and immutable list result shape.
+Consumers may register in either order without conflicting query definitions;
+they observe the same cached data and refresh updates. No API or schema change
+is required.

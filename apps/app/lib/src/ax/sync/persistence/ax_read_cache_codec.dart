@@ -6,6 +6,7 @@ import '../ax_project_workstreams.dart';
 import '../ax_session_catalogs.dart';
 import '../../ax_data.dart';
 import '../../ax_models.dart';
+import '../ax_owned_workspaces.dart';
 
 /// Explicit safe DTO allowlist, not a serializer for arbitrary query state.
 class AxReadCacheCodec {
@@ -328,8 +329,7 @@ class AxReadCacheCodec {
               workflow(AxBuiltinWorkflow.fromJson(v))))));
     }
     if (parts.length == 1 && parts.first == 'workspaces') {
-      return seed<List<AxWorkspace>>(
-          AxQuery<List<AxWorkspace>>(key: key, load: source.loadWorkspaces),
+      return seed<List<AxWorkspace>>(ownedWorkspacesQuery(source),
           List.unmodifiable(list(data).map(AxWorkspace.fromJson)));
     }
     if (parts.length == 3 &&

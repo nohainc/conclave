@@ -14,6 +14,7 @@ import 'sync/ax_realtime_cache_router.dart';
 import 'sync/ax_session_catalogs.dart';
 import 'sync/ax_project_workspace_grants.dart';
 import 'sync/ax_project_tab_queries.dart';
+import 'sync/ax_owned_workspaces.dart';
 import 'sync/ax_collaboration_mutations.dart';
 import 'sync/ax_lifecycle_sync.dart';
 
@@ -305,8 +306,7 @@ class WorkspaceStore extends ValueNotifier<List<AxWorkspace>> {
   }
   final AxSyncEngine engine;
   late final void Function() _cancel;
-  late final query = AxQuery<List<AxWorkspace>>(
-      key: AxQueryKey(['workspaces']), load: source.loadWorkspaces);
+  late final query = ownedWorkspacesQuery(source);
   final AxDataSource source;
   int _generation = 0;
   bool _disposed = false;
