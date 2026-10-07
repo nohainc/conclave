@@ -220,5 +220,56 @@ void main() {
           _contrastRatio(ConclaveColors.textSecondaryDark, ConclaveColors.surfaceHoverDark),
           greaterThanOrEqualTo(3.0));
     });
+
+    test('Component theme data (Buttons, Cards, Inputs, Dialogs) is configured with theme tokens', () {
+      for (final theme in [ConclaveBrand.lightTheme(), ConclaveBrand.darkTheme()]) {
+        final isDark = theme.brightness == Brightness.dark;
+        
+        // Component Theme Properties
+        expect(theme.cardTheme.elevation, 0);
+        expect(theme.cardTheme.color, isDark ? ConclaveColors.surfaceDark : ConclaveColors.surfaceLight);
+
+        // Input Decoration Theme
+        expect(theme.inputDecorationTheme.filled, isTrue);
+        expect(theme.inputDecorationTheme.fillColor, isDark ? ConclaveColors.surfaceDark : ConclaveColors.surfaceLight);
+
+        // Button Themes
+        expect(theme.filledButtonTheme.style?.shape?.resolve({}), isA<OutlinedBorder>());
+        expect(theme.outlinedButtonTheme.style?.shape?.resolve({}), isA<OutlinedBorder>());
+
+        // AppBar Theme
+        expect(theme.appBarTheme.elevation, 0);
+        expect(theme.appBarTheme.backgroundColor, isDark ? ConclaveColors.surfaceDark : ConclaveColors.surfaceLight);
+
+        // SnackBar Theme
+        expect(theme.snackBarTheme.behavior, SnackBarBehavior.floating);
+      }
+    });
+
+    test('Geometry tokens (Radius, Spacing, Assets) are deterministic and immutable', () {
+      expect(ConclaveRadius.xs, 4.0);
+      expect(ConclaveRadius.sm, 6.0);
+      expect(ConclaveRadius.md, 10.0);
+      expect(ConclaveRadius.lg, 14.0);
+      expect(ConclaveRadius.xl, 20.0);
+      expect(ConclaveRadius.pill, 999.0);
+
+      expect(ConclaveSpacing.xxs, 2.0);
+      expect(ConclaveSpacing.xs, 4.0);
+      expect(ConclaveSpacing.sm, 8.0);
+      expect(ConclaveSpacing.md, 12.0);
+      expect(ConclaveSpacing.lg, 16.0);
+      expect(ConclaveSpacing.xl, 24.0);
+      expect(ConclaveSpacing.xxl, 32.0);
+      expect(ConclaveSpacing.xxxl, 48.0);
+
+      expect(ConclaveBrandAssets.logoMasterSvg, contains('logo.svg'));
+      expect(ConclaveBrandAssets.logoPng32, contains('32.png'));
+      expect(ConclaveBrandAssets.logoPng64, contains('64.png'));
+      expect(ConclaveBrandAssets.logoPng128, contains('128.png'));
+      expect(ConclaveBrandAssets.logoPng192, contains('192.png'));
+      expect(ConclaveBrandAssets.logoPng512, contains('512.png'));
+      expect(ConclaveBrandAssets.logoPng1024, contains('logo.png'));
+    });
   });
 }
