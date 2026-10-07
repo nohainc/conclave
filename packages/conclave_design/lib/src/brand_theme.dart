@@ -93,12 +93,18 @@ abstract final class ConclaveBrand {
       primaryContainer: ConclaveColors.primarySoft,
       secondary: ConclaveColors.primaryPressed,
       surface: ConclaveColors.surfaceLight,
+      surfaceContainerLowest: ConclaveColors.canvasLight,
+      surfaceContainerLow: ConclaveColors.surfaceLight,
+      surfaceContainer: ConclaveColors.surfaceLight,
+      surfaceContainerHigh: ConclaveColors.surfaceHoverLight,
+      surfaceContainerHighest: ConclaveColors.codeBackgroundLight,
       error: ConclaveColors.error,
       onPrimary: Colors.white,
       onPrimaryContainer: ConclaveColors.primaryPressed,
       onSurface: ConclaveColors.textPrimaryLight,
       onError: Colors.white,
       outline: ConclaveColors.borderLight,
+      outlineVariant: ConclaveColors.borderLight,
     );
 
     return ThemeData(
@@ -172,12 +178,18 @@ abstract final class ConclaveBrand {
       primaryContainer: ConclaveColors.primarySoftDark,
       secondary: ConclaveColors.primaryPressed,
       surface: ConclaveColors.surfaceDark,
+      surfaceContainerLowest: ConclaveColors.canvasDark,
+      surfaceContainerLow: ConclaveColors.surfaceDark,
+      surfaceContainer: ConclaveColors.surfaceDark,
+      surfaceContainerHigh: ConclaveColors.surfaceHoverDark,
+      surfaceContainerHighest: ConclaveColors.codeBackgroundDark,
       error: ConclaveColors.error,
       onPrimary: Colors.white,
       onPrimaryContainer: Colors.white,
       onSurface: ConclaveColors.textPrimaryDark,
       onError: Colors.white,
       outline: ConclaveColors.borderDark,
+      outlineVariant: ConclaveColors.borderDark,
     );
 
     return ThemeData(
