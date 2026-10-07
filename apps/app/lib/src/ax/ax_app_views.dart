@@ -79,6 +79,8 @@ extension _AxAppViews on _AxAppStateMixin {
                     createdAt: n.createdAt,
                   );
                 }).toList(),
+                continueWorkItems:
+                    _deriveContinueWorkItems(store.projects.items),
                 onAcceptInvitation: _acceptInvitation,
                 onDeclineInvitation: _declineInvitation,
                 run: executionSnapshot.run,
@@ -89,12 +91,55 @@ extension _AxAppViews on _AxAppStateMixin {
                     _navigateTo(const AxNavigation.workspaces()),
                 onOpenProject: (projectId) =>
                     _navigateTo(AxNavigation.project(projectId)),
+                onOpenWorkstream: (projectId, workstreamId) => _navigateTo(
+                    AxNavigation.workstream(projectId, workstreamId)),
                 onOpenRun: (projectId, runId) =>
                     _navigateTo(AxNavigation.run(projectId, runId)),
                 onCreateProject: _createProject,
                 onOpenArchivedProjects: _showArchivedProjects,
                 onOpenNotifications: _showNotifications,
               )));
+
+  List<AxContinueWorkItem> _deriveContinueWorkItems(List<AxProject> projects) {
+    final items = <AxContinueWorkItem>[];
+    for (final project in projects) {
+      if (project.archived) continue;
+      if (project.workstreams.isNotEmpty) {
+        for (final ws in project.workstreams) {
+          if (ws.archived) continue;
+          items.add(AxContinueWorkItem(
+            projectId: project.id,
+            projectName: project.name,
+            workstreamId: ws.id,
+            workstreamTitle: ws.name,
+            collaboratorsDisplay: ws.lead.isNotEmpty && ws.lead != 'Unassigned'
+                ? ws.lead
+                : 'You and team AI',
+            lastMessageSnippet: ws.brief.isNotEmpty
+                ? ws.brief
+                : 'Continue conversation and work in context',
+            lastActivityDisplay: project.lastActivity.isNotEmpty
+                ? project.lastActivity
+                : 'Recently',
+          ));
+        }
+      } else {
+        items.add(AxContinueWorkItem(
+          projectId: project.id,
+          projectName: project.name,
+          workstreamId: 'default',
+          workstreamTitle: 'Main Workstream',
+          collaboratorsDisplay: 'You and team AI',
+          lastMessageSnippet: 'Continue conversation and work in context',
+          lastActivityDisplay: project.lastActivity.isNotEmpty
+              ? project.lastActivity
+              : 'Recently',
+        ));
+      }
+    }
+    return items.take(5).toList();
+  }
+
   Future<void> _showArchivedProjects() async {
     try {
       final archived =

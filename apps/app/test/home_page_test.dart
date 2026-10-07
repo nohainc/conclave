@@ -253,9 +253,10 @@ void main() {
 
     // 2. CONTINUE WORKING
     expect(find.text('Continue working'), findsOneWidget);
-    expect(find.text('Website Redesign'), findsOneWidget);
+    expect(find.text('WEBSITE REDESIGN'), findsOneWidget);
     expect(find.text('Landing page'), findsOneWidget);
-    expect(find.text('You and ChatGPT'), findsOneWidget);
+    expect(find.text('You and ChatGPT · 18 min ago'), findsOneWidget);
+    expect(find.text('"Let\'s simplify the hero section..."'), findsOneWidget);
     expect(find.text('Continue →'), findsOneWidget);
 
     // 3. WHAT'S NEW
@@ -278,10 +279,12 @@ void main() {
     expect(find.text('Archived Projects'), findsNothing);
     expect(find.text('Your execution capacity at a glance.'), findsNothing);
 
+    await tester.ensureVisible(find.text('Continue →'));
     await tester.tap(find.text('Continue →'));
     expect(openedProject, 'project-1');
     expect(openedWorkstream, 'ws-landing');
 
+    await tester.ensureVisible(find.text('Accept'));
     await tester.tap(find.text('Accept'));
     expect(acceptedInvite?.id, 'inv-1');
   });
@@ -602,5 +605,125 @@ void main() {
     openedProject = '';
     projected[2].primaryAction?.onPerform();
     expect(openedProject, 'project-1');
+  });
+
+  testWidgets(
+      'Continue Working displays 3-5 workstream cards with project, title, collaborators, snippet and action',
+      (tester) async {
+    var openedProject = '';
+    var openedWorkstream = '';
+
+    final continueItems = [
+      const AxContinueWorkItem(
+        projectId: 'proj-conclave',
+        projectName: 'Conclave Development',
+        workstreamId: 'ws-sessions',
+        workstreamTitle: 'Worker Sessions',
+        collaboratorsDisplay: 'ChatGPT',
+        lastMessageSnippet: 'We should persist the session context.',
+        lastActivityDisplay: '23 min ago',
+      ),
+      const AxContinueWorkItem(
+        projectId: 'proj-web',
+        projectName: 'Website',
+        workstreamId: 'ws-landing',
+        workstreamTitle: 'Landing Page',
+        collaboratorsDisplay: 'You + Gemini',
+        lastMessageSnippet: 'The hero should bring people together.',
+        lastActivityDisplay: 'Yesterday',
+      ),
+      const AxContinueWorkItem(
+        projectId: 'proj-docs',
+        projectName: 'Documentation',
+        workstreamId: 'ws-architecture',
+        workstreamTitle: 'Architecture v8',
+        collaboratorsDisplay: 'Julia + Claude',
+        lastMessageSnippet: 'ADRs updated with signed tool profiles.',
+        lastActivityDisplay: '2 days ago',
+      ),
+      const AxContinueWorkItem(
+        projectId: 'proj-cloud',
+        projectName: 'Cloud Services',
+        workstreamId: 'ws-d1',
+        workstreamTitle: 'D1 Migrations',
+        collaboratorsDisplay: 'Erik',
+        lastMessageSnippet: 'Baseline schema applied.',
+        lastActivityDisplay: '3 days ago',
+      ),
+      const AxContinueWorkItem(
+        projectId: 'proj-mobile',
+        projectName: 'Mobile App',
+        workstreamId: 'ws-ios',
+        workstreamTitle: 'iOS Polish',
+        collaboratorsDisplay: 'Alex',
+        lastMessageSnippet: 'Responsive layouts fixed.',
+        lastActivityDisplay: '4 days ago',
+      ),
+      const AxContinueWorkItem(
+        projectId: 'proj-extra',
+        projectName: 'Extra Project',
+        workstreamId: 'ws-extra',
+        workstreamTitle: 'Extra Workstream',
+        collaboratorsDisplay: 'Bot',
+        lastMessageSnippet: 'Should not appear past 5 items.',
+        lastActivityDisplay: '5 days ago',
+      ),
+    ];
+
+    await tester.pumpWidget(scaffold(HomePage(
+      projects: const [project],
+      workspaces: const [],
+      workers: const [],
+      invitations: const [],
+      continueWorkItems: continueItems,
+      run: null,
+      openFindingCount: 0,
+      onOpenWorkspaces: () {},
+      onOpenProject: (_) {},
+      onOpenRun: (_, __) {},
+      onCreateProject: () {},
+      onOpenWorkstream: (pId, wsId) {
+        openedProject = pId;
+        openedWorkstream = wsId;
+      },
+    )));
+
+    expect(find.text('Continue working'), findsOneWidget);
+
+    // Card 1
+    expect(find.text('CONCLAVE DEVELOPMENT'), findsOneWidget);
+    expect(find.text('Worker Sessions'), findsOneWidget);
+    expect(find.text('ChatGPT · 23 min ago'), findsOneWidget);
+    expect(
+        find.text('"We should persist the session context."'), findsOneWidget);
+
+    // Card 2
+    expect(find.text('WEBSITE'), findsOneWidget);
+    expect(find.text('Landing Page'), findsOneWidget);
+    expect(find.text('You + Gemini · Yesterday'), findsOneWidget);
+    expect(
+        find.text('"The hero should bring people together."'), findsOneWidget);
+
+    // Card 3
+    expect(find.text('DOCUMENTATION'), findsOneWidget);
+    expect(find.text('Architecture v8'), findsOneWidget);
+
+    // Card 4
+    expect(find.text('CLOUD SERVICES'), findsOneWidget);
+    expect(find.text('D1 Migrations'), findsOneWidget);
+
+    // Card 5
+    expect(find.text('MOBILE APP'), findsOneWidget);
+    expect(find.text('iOS Polish'), findsOneWidget);
+
+    // 6th item should be truncated by 5-item limit
+    expect(find.text('EXTRA PROJECT'), findsNothing);
+    expect(find.text('Extra Workstream'), findsNothing);
+
+    // Test clicking Continue → on first card
+    await tester.ensureVisible(find.text('Continue →').first);
+    await tester.tap(find.text('Continue →').first);
+    expect(openedProject, 'proj-conclave');
+    expect(openedWorkstream, 'ws-sessions');
   });
 }

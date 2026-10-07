@@ -50,15 +50,16 @@ HOME
   - Contextual action buttons (`Decline` / `Accept`, `Review →`, `Open →`, `Inspect →`, `Fix →`, `Connect →`).
 - **Absence Behavior:** If nothing requires attention, the section renders `const SizedBox.shrink()` (zero filler/empty placeholder text like `"Nothing needs your attention"`).
 
-### 2. Continue Working
-- **Purpose:** Fast resumption of ongoing collaborative work in context.
-- **Content:** Replaces raw project list with active Workstreams:
-  - Project Name + Workstream Title
-  - Active Collaborators & AI Worker involved (e.g., *"You and ChatGPT"*, *"Julia and Gemini"*)
-  - Last activity snippet / decision summary
-  - Relative timestamp
-  - Direct `Continue →` action navigating straight into the Workstream conversation
-- **Absence Behavior:** Omitted if no recent workstream history exists.
+### 2. Continue Working (Phase 8)
+- **Purpose:** Fast resumption of ongoing collaborative work in context. Projects are broad; the true return destination is the active Workstream/conversation.
+- **Capacity:** Shows 3–5 recent Workstreams.
+- **Card Structure:**
+  1. **Project Name:** Uppercase tracked label (e.g., `CONCLAVE DEVELOPMENT`, `WEBSITE`).
+  2. **Workstream Title:** Prominent bold title (e.g., `Worker Sessions`, `Landing Page`).
+  3. **Collaborators + Relative Time:** Context badge indicating who is working together and when (e.g., `ChatGPT · 23 min ago`, `You + Gemini · Yesterday`).
+  4. **Last Message / Work Quote:** Italicized discussion snippet or decision quote (e.g., `"We should persist the..."`, `"The hero should..."`).
+  5. **Direct CTA:** `Continue →` button navigating straight into the Workstream conversation (`AxNavigation.workstream(projectId, workstreamId)`).
+- **Absence Behavior:** Omitted if no project or workstream history exists.
 
 ### 3. What's New
 - **Purpose:** Product updates, capability announcements, and changelogs.

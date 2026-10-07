@@ -598,6 +598,45 @@ class EstablishedUserHome extends StatelessWidget {
     }).toList();
   }
 
+  List<AxContinueWorkItem> _deriveDefaultContinueWorkItems(
+      List<AxProject> projects) {
+    final list = <AxContinueWorkItem>[];
+    for (final p in projects) {
+      if (p.archived) continue;
+      if (p.workstreams.isNotEmpty) {
+        for (final ws in p.workstreams) {
+          if (ws.archived) continue;
+          list.add(AxContinueWorkItem(
+            projectId: p.id,
+            projectName: p.name,
+            workstreamId: ws.id,
+            workstreamTitle: ws.name,
+            collaboratorsDisplay: ws.lead.isNotEmpty && ws.lead != 'Unassigned'
+                ? ws.lead
+                : 'You and team AI',
+            lastMessageSnippet: ws.brief.isNotEmpty
+                ? ws.brief
+                : 'Continue conversation and work in context',
+            lastActivityDisplay:
+                p.lastActivity.isNotEmpty ? p.lastActivity : 'Recently',
+          ));
+        }
+      } else {
+        list.add(AxContinueWorkItem(
+          projectId: p.id,
+          projectName: p.name,
+          workstreamId: 'default',
+          workstreamTitle: 'Main Workstream',
+          collaboratorsDisplay: 'You and team AI',
+          lastMessageSnippet: 'Continue conversation and work in context',
+          lastActivityDisplay:
+              p.lastActivity.isNotEmpty ? p.lastActivity : 'Recently',
+        ));
+      }
+    }
+    return list;
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasActiveRun = run != null;
@@ -653,35 +692,25 @@ class EstablishedUserHome extends StatelessWidget {
             const SizedBox(height: 24),
           ],
 
-          // 2. CONTINUE WORKING (Recent relevant Workstreams)
+          // 2. CONTINUE WORKING (Recent relevant Workstreams, 3-5 items)
           if (hasContinueWork) ...[
             const _SectionHeader(title: 'Continue working'),
             const SizedBox(height: 12),
             LayoutBuilder(
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth > 700;
-                final items = continueWorkItems.isNotEmpty
-                    ? continueWorkItems
-                    : projects
-                        .take(3)
-                        .map((p) => AxContinueWorkItem(
-                              projectId: p.id,
-                              projectName: p.name,
-                              workstreamId: 'default',
-                              workstreamTitle: 'Main Workstream',
-                              collaboratorsDisplay: 'You and team AI',
-                              lastMessageSnippet:
-                                  'Continue conversation and work in context',
-                              lastActivityDisplay: p.lastActivity,
-                            ))
-                        .toList();
+                final items = (continueWorkItems.isNotEmpty
+                        ? continueWorkItems
+                        : _deriveDefaultContinueWorkItems(projects))
+                    .take(5)
+                    .toList();
 
                 return GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: isWide ? 2 : 1,
-                    mainAxisExtent: 130,
+                    mainAxisExtent: isWide ? 195 : 205,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
                   ),
@@ -1223,7 +1252,31 @@ class _ContinueWorkCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final snippetText = item.lastMessageSnippet.isNotEmpty
+        ? (item.lastMessageSnippet.startsWith('"')
+            ? item.lastMessageSnippet
+            : '"${item.lastMessageSnippet}"')
+        : '';
+
+    final contextMeta = item.collaboratorsDisplay.isNotEmpty &&
+            item.lastActivityDisplay.isNotEmpty
+        ? '${item.collaboratorsDisplay} · ${item.lastActivityDisplay}'
+        : (item.collaboratorsDisplay.isNotEmpty
+            ? item.collaboratorsDisplay
+            : item.lastActivityDisplay);
+
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
@@ -1233,56 +1286,76 @@ class _ContinueWorkCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: Text(
-                      item.projectName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                  // 1. PROJECT NAME (uppercase, tracked label)
                   Text(
-                    item.lastActivityDisplay,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                item.workstreamTitle,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      item.collaboratorsDisplay,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const Text(
-                    'Continue →',
+                    item.projectName.toUpperCase(),
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      fontSize: 12,
+                      fontSize: 11,
+                      letterSpacing: 0.5,
+                      color: colorScheme.onSurfaceVariant,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  // 2. WORKSTREAM TITLE
+                  Text(
+                    item.workstreamTitle,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  // 3. Collaborators + Time (e.g., ChatGPT · 23 min ago)
+                  if (contextMeta.isNotEmpty)
+                    Text(
+                      contextMeta,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: ConclaveColors.primaryForeground(isDark),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  if (snippetText.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    // 4. "We should persist the..." snippet
+                    Text(
+                      snippetText,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: colorScheme.onSurfaceVariant,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              // 5. Action: Continue →
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  FilledButton.tonal(
+                    onPressed: onTap,
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 4),
+                    ),
+                    child: const Text('Continue →'),
                   ),
                 ],
               ),
