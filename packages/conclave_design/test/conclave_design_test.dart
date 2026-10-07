@@ -197,6 +197,28 @@ void main() {
       expect(
           _contrastRatio(ConclaveColors.textPrimaryDark, ConclaveColors.codeBackgroundDark),
           greaterThanOrEqualTo(4.5));
+
+      // 10. Status badge foreground & wash pairings
+      expect(
+          _contrastRatio(const Color(0xff14532d), ConclaveColors.successSoftLight),
+          greaterThanOrEqualTo(4.5));
+      expect(
+          _contrastRatio(const Color(0xff78350f), ConclaveColors.warningSoftLight),
+          greaterThanOrEqualTo(4.5));
+      expect(
+          _contrastRatio(const Color(0xff7f1d1d), ConclaveColors.errorSoftLight),
+          greaterThanOrEqualTo(4.5));
+      expect(
+          _contrastRatio(const Color(0xff1e3a8a), ConclaveColors.infoSoftLight),
+          greaterThanOrEqualTo(4.5));
+
+      // 11. Disabled control indicators
+      expect(
+          _contrastRatio(ConclaveColors.textSecondaryLight, ConclaveColors.surfaceHoverLight),
+          greaterThanOrEqualTo(3.0));
+      expect(
+          _contrastRatio(ConclaveColors.textSecondaryDark, ConclaveColors.surfaceHoverDark),
+          greaterThanOrEqualTo(3.0));
     });
   });
 }
