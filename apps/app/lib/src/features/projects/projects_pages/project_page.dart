@@ -288,16 +288,19 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
                   controller: _descriptionController,
                   maxLines: 2,
                 ),
-                const SizedBox(height: 6),
-                // Project instructions
-                _buildEditableField(
-                  label: 'Project Instructions',
-                  fieldKey: 'instructions',
-                  value: widget.project.instructions,
-                  placeholder: 'No instructions configured.',
-                  controller: _instructionsController,
-                  maxLines: 3,
-                ),
+                if (isOwner ||
+                    widget.project.instructions.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  // Project instructions
+                  _buildEditableField(
+                    label: 'Project Instructions',
+                    fieldKey: 'instructions',
+                    value: widget.project.instructions,
+                    placeholder: 'No instructions configured.',
+                    controller: _instructionsController,
+                    maxLines: 3,
+                  ),
+                ],
                 if (isOwner) ...[
                   const SizedBox(height: 12),
                   Wrap(

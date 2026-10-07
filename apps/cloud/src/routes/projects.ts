@@ -175,15 +175,17 @@ export async function handleGetProject(
     accessContext,
   );
   const row = await env.CONCLAVE_DB.prepare(
-    `SELECT p.id, p.name, p.description,
+    `SELECT p.id, p.name, p.description, pm.role,
             p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
-     FROM projects p WHERE p.id = ?1`,
+     FROM projects p JOIN project_memberships pm ON pm.project_id = p.id
+     WHERE p.id = ?1 AND pm.user_id = ?2`,
   )
-    .bind(projectId)
+    .bind(projectId, context.userId)
     .first<{
       id: string;
       name: string;
       description: string | null;
+      role: string;
       settingsJson: string;
       createdAt: string;
       updatedAt: string;
@@ -195,7 +197,7 @@ export async function handleGetProject(
       id: row.id,
       name: row.name,
       description: row.description,
-      role: context.projectRoles[projectId],
+      role: row.role,
       instructions:
         typeof settings.instructions === "string" ? settings.instructions : "",
       settings,
@@ -211,7 +213,7 @@ export async function handleUpdateProject(
   projectId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeRequest(
+  const context = await authorizeRequest(
     request,
     env,
     "projects:write",
@@ -237,6 +239,20 @@ export async function handleUpdateProject(
   if (!existing) throw new HttpError(404, "Project not found");
 
   const body = (await request.json()) as Record<string, unknown>;
+  if (
+    body.settings &&
+    typeof body.settings === "object" &&
+    Object.prototype.hasOwnProperty.call(body.settings, "workstreamOrder")
+  ) {
+    if (
+      context.userId !== existing.ownerUserId &&
+      context.projectRoles[projectId] !== "owner"
+    )
+      throw new HttpError(
+        403,
+        "Only the Project owner can reorder Workstreams",
+      );
+  }
   const settings = {
     ...projectSettings(existing.settingsJson),
     ...(typeof body.settings === "object" && body.settings !== null

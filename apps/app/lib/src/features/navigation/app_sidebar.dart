@@ -661,12 +661,12 @@ class AppIconRail extends StatelessWidget {
           shellContext.watchProjectsAndWorkstreams(() => Column(children: [
                 for (final group in [
                   (
-                    label: 'Your projects',
+                    label: 'YOUR PROJECTS',
                     projects: shellContext.ownedProjects,
                     icon: Icons.folder_outlined
                   ),
                   (
-                    label: 'Shared with you',
+                    label: 'SHARED WITH YOU',
                     projects: shellContext.sharedProjects,
                     icon: Icons.folder_shared_outlined
                   ),

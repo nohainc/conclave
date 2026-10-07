@@ -851,3 +851,21 @@ choices from existing WorkflowRun/StepRun records. Current Chat/Work never enabl
 this presentation, including when metadata contains several steps. Rendering and
 new workflow definitions remain deferred. See
 [Phase 21](CONVERSATION_CONTINUITY_V1.md#phase-21--future-multi-step-presentation-capability).
+
+### Workstream management ownership
+
+Project owners may rename, configure, archive, restore or delete any Workstream.
+Collaborators may create Workstreams and perform those operations only on a
+Workstream where they are the assigned lead. Creation sets the authenticated
+creator as lead, so existing `lead_user_id` is the management-responsibility
+boundary; this phase does not reinterpret or replace existing leads. Viewers
+cannot create or manage Workstreams. View, Discuss and execution remain governed
+by their existing access policy and are not reduced by hiding management actions.
+
+Project Workstream rows use the server's `canConfigureWork` result for management
+menus, with an owner override. Project-wide Workstream reordering is owner-only
+in both UI and API, because it changes ordering for other members' Workstreams.
+The creation response includes management/execution capabilities immediately,
+without waiting for a collection refresh. Existing update/delete authorization
+continues to reject cross-lead writes; UI visibility is not the security boundary.
+No schema migration is required. Lead transfers are not exposed by this change.

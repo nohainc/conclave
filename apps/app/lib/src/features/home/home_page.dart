@@ -148,48 +148,6 @@ class NewUserHome extends StatelessWidget {
             ),
           ],
 
-          const SizedBox(height: 24),
-
-          // Advanced / Workspace pairing option
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              side: BorderSide(
-                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.computer_outlined,
-                  color: colorScheme.onSurfaceVariant,
-                  size: 20,
-                ),
-              ),
-              title: const Text(
-                'Connect AI / Workspace',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-              subtitle: const Text(
-                'Advanced: Pair Conclave Workspace to contribute local CLI Workers or local codebases.',
-                style: TextStyle(fontSize: 12),
-              ),
-              trailing: OutlinedButton(
-                onPressed: onOpenWorkspaces,
-                style: OutlinedButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                ),
-                child: const Text('Connect Workspace'),
-              ),
-            ),
-          ),
-
           const SizedBox(height: 28),
           const Text(
             'How Conclave AX works',
@@ -231,7 +189,131 @@ class NewUserHome extends StatelessWidget {
               );
             },
           ),
+
+          const SizedBox(height: 28),
+
+          // Advanced local execution path (visually secondary)
+          _AdvancedWorkspaceCard(
+            onOpenWorkspaces: onOpenWorkspaces,
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _AdvancedWorkspaceCard extends StatelessWidget {
+  const _AdvancedWorkspaceCard({required this.onOpenWorkspaces});
+
+  final VoidCallback onOpenWorkspaces;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark
+            ? colorScheme.surfaceContainerLow
+            : colorScheme.surfaceContainerLowest,
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 560;
+          if (isCompact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.terminal_outlined,
+                      size: 20,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Want to use AI or tools running on your computer?',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Connect Conclave Workspace to make local Workers available to your Projects.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: onOpenWorkspaces,
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('Connect Workspace →'),
+                ),
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.terminal_outlined,
+                size: 24,
+                color: colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Want to use AI or tools running on your computer?',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Connect Conclave Workspace to make local Workers available to your Projects.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              OutlinedButton(
+                onPressed: onOpenWorkspaces,
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: const Text('Connect Workspace →'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

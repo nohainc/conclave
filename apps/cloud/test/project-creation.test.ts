@@ -94,7 +94,9 @@ describe("Project creation", () => {
             return this;
           },
           async first() {
-            return null;
+            return query.includes("project_memberships")
+              ? { role: "owner" }
+              : null;
           },
           async run() {
             return { success: true };
@@ -169,6 +171,8 @@ describe("Project creation", () => {
               return {
                 id: "project-1",
                 name: "Original Name",
+                ownerUserId: "user-1",
+                role: "owner",
                 description: "Original Desc",
                 settingsJson: JSON.stringify({
                   workstreamOrder: ["ws-1", "ws-2"],

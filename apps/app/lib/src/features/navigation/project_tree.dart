@@ -108,12 +108,12 @@ class ProjectTree extends StatelessWidget {
           ),
         if (shellContext.ownedProjects.isNotEmpty) ...[
           if (shellContext.sharedProjects.isNotEmpty)
-            _groupLabel('Your projects'),
+            _groupLabel('YOUR PROJECTS'),
           ...shellContext.ownedProjects
               .map((project) => _buildProjectItem(context, project)),
         ],
         if (shellContext.sharedProjects.isNotEmpty) ...[
-          _groupLabel('Shared with you'),
+          _groupLabel('SHARED WITH YOU'),
           ...shellContext.sharedProjects
               .map((project) => _buildProjectItem(context, project)),
         ],

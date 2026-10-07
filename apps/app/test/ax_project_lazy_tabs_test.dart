@@ -9,6 +9,7 @@ import 'package:conclave_app/src/features/projects/projects_pages.dart';
 import 'ax_fixture_data.dart';
 
 class TabSource extends AxFixtureDataSource {
+  List<AxWorkstream> streams = [];
   final calls = <String, int>{};
   Completer<List<AxProjectMember>>? pending;
   bool failMembers = false;
@@ -18,7 +19,7 @@ class TabSource extends AxFixtureDataSource {
   Future<List<AxWorkstream>> loadProjectWorkstreams(
       {required String projectId}) async {
     count('streams');
-    return [];
+    return streams;
   }
 
   @override
@@ -64,16 +65,19 @@ class TabSource extends AxFixtureDataSource {
   }
 }
 
-Widget page(TabSource source, AxProjectTabQueries queries) => MaterialApp(
+Widget page(TabSource source, AxProjectTabQueries queries,
+        {String role = 'owner', String instructions = ''}) =>
+    MaterialApp(
         home: Scaffold(
       body: SingleChildScrollView(
           child: ProjectPage(
-        project: const AxProject(
+        project: AxProject(
             id: 'P',
             name: 'Project',
             branch: '',
             lastActivity: '',
-            role: 'owner'),
+            role: role,
+            instructions: instructions),
         dataSource: source,
         tabQueries: queries,
         projectWorkstreams: queries.workstreams,
@@ -87,6 +91,60 @@ Widget page(TabSource source, AxProjectTabQueries queries) => MaterialApp(
     ));
 
 void main() {
+  for (final role in ['owner', 'collaborator', 'viewer']) {
+    testWidgets('$role sees only authorized Workstream management actions',
+        (tester) async {
+      final source = TabSource()
+        ..streams = [
+          const AxWorkstream(
+              id: 'own',
+              projectId: 'P',
+              name: 'Own stream',
+              lead: 'Me',
+              status: 'active',
+              brief: '',
+              primaryWorkspace: '',
+              queueStatus: '',
+              canConfigureWork: true),
+          const AxWorkstream(
+              id: 'other',
+              projectId: 'P',
+              name: 'Other stream',
+              lead: 'Other',
+              status: 'active',
+              brief: '',
+              primaryWorkspace: '',
+              queueStatus: ''),
+        ];
+      await tester
+          .pumpWidget(page(source, AxProjectTabQueries(source), role: role));
+      await tester.pumpAndSettle();
+      expect(
+          find.byTooltip('Workstream actions'),
+          role == 'owner'
+              ? findsNWidgets(2)
+              : role == 'collaborator'
+                  ? findsOneWidget
+                  : findsNothing);
+      expect(find.byTooltip('Move up'),
+          role == 'owner' ? findsNWidgets(2) : findsNothing);
+    });
+  }
+
+  testWidgets(
+      'shared Project hides empty instructions but displays supplied instructions',
+      (tester) async {
+    final source = TabSource();
+    final queries = AxProjectTabQueries(source);
+    await tester.pumpWidget(page(source, queries, role: 'collaborator'));
+    await tester.pumpAndSettle();
+    expect(find.text('No instructions configured.'), findsNothing);
+    await tester.pumpWidget(page(source, queries,
+        role: 'collaborator', instructions: 'Use our conventions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Use our conventions'), findsOneWidget);
+  });
+
   testWidgets(
       'Project tabs fetch only visible resources and reuse them after navigation',
       (tester) async {
@@ -169,9 +227,14 @@ void main() {
     await expectLater(queries.refreshMembers('P'), throwsStateError);
     await tester.pumpAndSettle();
     expect(find.text('Cached member'), findsOneWidget);
-    expect(find.text('Retry Members'), findsOneWidget);
+    expect(find.text('Retry Members'), findsNothing);
+    expect(
+        find.text('Members could not be loaded. Reopen this tab to try again.'),
+        findsOneWidget);
     source.failMembers = false;
-    await tester.tap(find.text('Retry Members'));
+    await tester.tap(find.text('Workstreams'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
     expect(find.text('Retry Members'), findsNothing);
     expect(source.calls['streams'], 1);

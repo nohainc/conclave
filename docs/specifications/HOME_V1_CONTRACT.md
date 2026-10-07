@@ -92,8 +92,8 @@ HomePage (Dispatcher)
     │           ├── (Priority if invitations.isNotEmpty) Join a Project card
     │           ├── ("or" divider if invitations.isNotEmpty)
     │           ├── Create your first Project card
-    │           ├── Advanced Connect AI / Workspace card
-    │           └── How Conclave AX works (value foundation cards)
+    │           ├── How Conclave AX works (value foundation cards)
+    │           └── Advanced local execution (Want to use AI or tools running on your computer?)
     │
     └── isNewUser == false (projects.isNotEmpty)
           └── EstablishedUserHome
@@ -106,7 +106,16 @@ HomePage (Dispatcher)
 
 ### 1. NewUserHome
 - **Condition:** Active when `projects.isEmpty`.
-- **Experience:**
+- **Experience & Onboarding Hierarchy:**
+  ```text
+  Create / Join Project
+          ↓
+  Collaborate
+          ↓
+  Add AI
+          ↓
+  Advanced local execution if required
+  ```
   - Dedicated header: `Welcome to Conclave AX` / `Bring your people and AI together.`
   - **Priority Invitation Card** (when `invitations.isNotEmpty`):
     - Displays `Join a Project` with count badge (*"You have N invitations."*).
@@ -115,12 +124,14 @@ HomePage (Dispatcher)
   - **Primary Project Action**:
     - `Create your first Project` (*"Start a shared space for people, conversations and AI."*).
     - `Create Project →` action button.
-  - **Advanced Local AI Connection**:
-    - `Connect AI / Workspace`: Understated option to pair Conclave Workspace for local CLI Workers or codebases.
   - **How Conclave AX works** value foundation:
     - `People first`: Invite teammates, family, and collaborators to work together with shared AI.
     - `Private credentials`: Share AI access without exposing private keys.
     - `Shared conversations`: Maintain shared project context across members.
+  - **Advanced Local Execution Path** (visually secondary at bottom):
+    - Title: *"Want to use AI or tools running on your computer?"*
+    - Description: *"Connect Conclave Workspace to make local Workers available to your Projects."*
+    - Action: `Connect Workspace →`
   - Completely omits established dashboard sections (`For you`, `Continue working`, `What's new in Conclave`, `AI updates`).
 
 ### 2. EstablishedUserHome

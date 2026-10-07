@@ -115,6 +115,17 @@ export async function handleCreateWorkstream(
     projectId,
     accessContext,
   );
+  const membership = await env.CONCLAVE_DB.prepare(
+    "SELECT role FROM project_memberships WHERE project_id = ?1 AND user_id = ?2",
+  )
+    .bind(projectId, context.userId)
+    .first<{ role: string }>();
+  const role = membership?.role ?? context.projectRoles[projectId];
+  if (role !== "owner" && role !== "collaborator")
+    throw new HttpError(
+      403,
+      "Project collaborator access is required to create a Workstream",
+    );
   const body = (await request.json().catch(() => ({}))) as Record<
     string,
     unknown
@@ -164,6 +175,8 @@ export async function handleCreateWorkstream(
   );
   const response = {
     workstream: {
+      canConfigureWork: true,
+      canExecuteWork: true,
       ...workstreamMetadata({
         id,
         projectId,
@@ -174,7 +187,6 @@ export async function handleCreateWorkstream(
         createdAt: now,
         updatedAt: now,
       }),
-      canConfigureWork: true,
     },
   };
   const write = (receipts: D1PreparedStatement[]) =>

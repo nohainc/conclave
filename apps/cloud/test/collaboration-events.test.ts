@@ -11,6 +11,7 @@ import { parseRealtimeEvent } from "@conclave/protocol";
 import {
   handleCreateProject,
   handleListProjects,
+  handleGetProject,
   handleUpdateProject,
   handleDeleteProject,
   handleCreateWorkstream,
@@ -93,6 +94,14 @@ describe("collaboration durable signals", () => {
           expect.objectContaining({ name: "Shared", role: "collaborator" }),
         ]),
       );
+      const detail = await handleGetProject(
+        new Request("https://cloud.test/api/projects/shared"),
+        f.env,
+        "shared",
+      );
+      expect(await detail.json()).toMatchObject({
+        project: { role: "collaborator" },
+      });
     } finally {
       f.sqlite.close();
     }

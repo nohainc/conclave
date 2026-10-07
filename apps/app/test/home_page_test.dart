@@ -67,7 +67,6 @@ void main() {
     expect(find.text('Start a shared space for people, conversations and AI.'),
         findsOneWidget);
     expect(find.text('Create Project →'), findsOneWidget);
-    expect(find.text('Connect AI / Workspace'), findsOneWidget);
 
     // No priority invitation card or separator
     expect(find.text('Join a Project'), findsNothing);
@@ -78,6 +77,15 @@ void main() {
     expect(find.text('People first'), findsOneWidget);
     expect(find.text('Private credentials'), findsOneWidget);
     expect(find.text('Shared conversations'), findsOneWidget);
+
+    // Advanced local execution card
+    expect(find.text('Want to use AI or tools running on your computer?'),
+        findsOneWidget);
+    expect(
+        find.text(
+            'Connect Conclave Workspace to make local Workers available to your Projects.'),
+        findsOneWidget);
+    expect(find.text('Connect Workspace →'), findsOneWidget);
 
     // Dashboard sections must NOT appear for new user
     expect(find.text('For you'), findsNothing);
@@ -90,7 +98,8 @@ void main() {
     await tester.tap(find.text('Create Project →'));
     expect(projectCreated, isTrue);
 
-    await tester.tap(find.text('Connect Workspace'));
+    await tester.ensureVisible(find.text('Connect Workspace →'));
+    await tester.tap(find.text('Connect Workspace →'));
     expect(workspaceOpened, isTrue);
   });
 
@@ -134,14 +143,20 @@ void main() {
     expect(find.text('Create your first Project'), findsOneWidget);
     expect(find.text('Create Project →'), findsOneWidget);
 
-    // Advanced workspace connection
-    expect(find.text('Connect AI / Workspace'), findsOneWidget);
-
     // Value cards
     expect(find.text('How Conclave AX works'), findsOneWidget);
     expect(find.text('People first'), findsOneWidget);
     expect(find.text('Private credentials'), findsOneWidget);
     expect(find.text('Shared conversations'), findsOneWidget);
+
+    // Advanced workspace connection
+    expect(find.text('Want to use AI or tools running on your computer?'),
+        findsOneWidget);
+    expect(
+        find.text(
+            'Connect Conclave Workspace to make local Workers available to your Projects.'),
+        findsOneWidget);
+    expect(find.text('Connect Workspace →'), findsOneWidget);
 
     // Test accept on first invite
     await tester.tap(find.text('Accept').first);
@@ -156,8 +171,8 @@ void main() {
     expect(projectCreated, isTrue);
 
     // Test connect workspace
-    await tester.ensureVisible(find.text('Connect Workspace'));
-    await tester.tap(find.text('Connect Workspace'));
+    await tester.ensureVisible(find.text('Connect Workspace →'));
+    await tester.tap(find.text('Connect Workspace →'));
     expect(workspaceOpened, isTrue);
   });
 

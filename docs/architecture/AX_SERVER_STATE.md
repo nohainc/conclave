@@ -865,3 +865,12 @@ folder selectors only for populated groups, each containing its own Projects and
 Workstreams. Groups derive from the reactive Project list, so invitation
 acceptance and refresh update both views without a separate persisted category.
 No server contract or data migration is required.
+
+Project list and detail responses include the authenticated viewer's membership
+`role`. Sidebar grouping must use that server attribution, including after a
+Project detail refresh, rather than inferring ownership from a missing field.
+
+Sidebar group labels use uppercase text. Shared Project pages omit the empty
+instructions section while continuing to show configured instructions. The
+Members tab retains cached rows and an inline loading-failure notice without a
+Retry Members button; reopening the tab retries its stale query.

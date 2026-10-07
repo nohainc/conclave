@@ -97,61 +97,62 @@ extension _ProjectWorkspaceTabs on _ProjectWorkspaceState {
       onTap: archived || pending
           ? null
           : () => widget.onOpenWorkstream(workstream.id),
-      trailing: canManage && !pending
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!archived)
-                  IconButton(
-                    icon: const Icon(Icons.keyboard_arrow_up_rounded),
-                    tooltip: 'Move up',
-                    iconSize: 20,
-                    splashRadius: 16,
-                    onPressed:
-                        index > 0 ? () => _moveWorkstream(index, -1) : null,
-                  ),
-                if (!archived)
-                  IconButton(
-                    icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                    tooltip: 'Move down',
-                    iconSize: 20,
-                    splashRadius: 16,
-                    onPressed: index < workstreams.length - 1
-                        ? () => _moveWorkstream(index, 1)
-                        : null,
-                  ),
-                PopupMenuButton<String>(
-                  tooltip: 'Workstream actions',
-                  onSelected: (action) {
-                    if (action == 'edit') {
-                      _editWorkstream(workstream);
-                    } else if (action == 'archive') {
-                      _setWorkstreamArchived(workstream, true);
-                    } else if (action == 'restore') {
-                      _setWorkstreamArchived(workstream, false);
-                    } else if (action == 'delete') {
-                      _deleteWorkstream(workstream);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    if (!archived)
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Text('Rename'),
+      trailing:
+          (isOwner || (canManage && workstream.canConfigureWork)) && !pending
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isOwner && !archived)
+                      IconButton(
+                        icon: const Icon(Icons.keyboard_arrow_up_rounded),
+                        tooltip: 'Move up',
+                        iconSize: 20,
+                        splashRadius: 16,
+                        onPressed:
+                            index > 0 ? () => _moveWorkstream(index, -1) : null,
                       ),
-                    PopupMenuItem(
-                      value: archived ? 'restore' : 'archive',
-                      child: Text(archived ? 'Restore' : 'Archive'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Text('Delete'),
+                    if (isOwner && !archived)
+                      IconButton(
+                        icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                        tooltip: 'Move down',
+                        iconSize: 20,
+                        splashRadius: 16,
+                        onPressed: index < workstreams.length - 1
+                            ? () => _moveWorkstream(index, 1)
+                            : null,
+                      ),
+                    PopupMenuButton<String>(
+                      tooltip: 'Workstream actions',
+                      onSelected: (action) {
+                        if (action == 'edit') {
+                          _editWorkstream(workstream);
+                        } else if (action == 'archive') {
+                          _setWorkstreamArchived(workstream, true);
+                        } else if (action == 'restore') {
+                          _setWorkstreamArchived(workstream, false);
+                        } else if (action == 'delete') {
+                          _deleteWorkstream(workstream);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        if (!archived)
+                          const PopupMenuItem(
+                            value: 'edit',
+                            child: Text('Rename'),
+                          ),
+                        PopupMenuItem(
+                          value: archived ? 'restore' : 'archive',
+                          child: Text(archived ? 'Restore' : 'Archive'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Delete'),
+                        ),
+                      ],
                     ),
                   ],
-                ),
-              ],
-            )
-          : null,
+                )
+              : null,
     );
   }
 
@@ -291,13 +292,8 @@ extension _ProjectWorkspaceTabs on _ProjectWorkspaceState {
             ),
             const SizedBox(height: 8),
             if (membersError != null)
-              TextButton(
-                  onPressed: () {
-                    unawaited(_queries
-                        .refreshMembers(widget.project.id)
-                        .catchError((Object _) {}));
-                  },
-                  child: const Text('Retry Members')),
+              const Text(
+                  'Members could not be loaded. Reopen this tab to try again.'),
             if (membersLoading)
               const LinearProgressIndicator()
             else ...[

@@ -38,11 +38,11 @@ void main() {
         onCreateProject: () {},
       ))));
       expect(
-          find.text('Your projects'),
+          find.text('YOUR PROJECTS'),
           projects.contains(own) && projects.contains(shared)
               ? findsOneWidget
               : findsNothing);
-      expect(find.text('Shared with you'),
+      expect(find.text('SHARED WITH YOU'),
           projects.contains(shared) ? findsOneWidget : findsNothing);
       if (projects.length == 2) {
         expect(tester.getTopLeft(find.text(own.name)).dy,
@@ -62,12 +62,12 @@ void main() {
         onOpenAbout: () {},
         onOpenExternal: (_) {},
       ))));
-      expect(find.byTooltip('Your projects'),
+      expect(find.byTooltip('YOUR PROJECTS'),
           projects.contains(own) ? findsOneWidget : findsNothing);
-      expect(find.byTooltip('Shared with you'),
+      expect(find.byTooltip('SHARED WITH YOU'),
           projects.contains(shared) ? findsOneWidget : findsNothing);
       if (projects.contains(shared)) {
-        await tester.tap(find.byTooltip('Shared with you'));
+        await tester.tap(find.byTooltip('SHARED WITH YOU'));
         await tester.pumpAndSettle();
         expect(find.text(own.name), findsNothing);
         await tester.tap(find.text(shared.name));

@@ -1029,7 +1029,7 @@ void main() {
       expect(find.byTooltip('Search...'), findsOneWidget);
       expect(find.byTooltip('Add Project'), findsOneWidget);
       expect(find.byTooltip('Notifications'), findsOneWidget);
-      expect(find.byTooltip('Your projects'), findsOneWidget);
+      expect(find.byTooltip('YOUR PROJECTS'), findsOneWidget);
       expect(find.byTooltip('Vitalii Noha'), findsOneWidget);
       expect(find.byTooltip('Application menu'), findsOneWidget);
 
@@ -1064,7 +1064,7 @@ void main() {
       expect(notificationsOpened, isTrue);
 
       // Tapping Projects & Workstreams popup menu
-      await tester.tap(find.byTooltip('Your projects'));
+      await tester.tap(find.byTooltip('YOUR PROJECTS'));
       await tester.pumpAndSettle();
       expect(find.byType(ConclaveFolderIcon), findsAtLeastNWidgets(1));
       expect(find.text(testProject.name), findsOneWidget);
