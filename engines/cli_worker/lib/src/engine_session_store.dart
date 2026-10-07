@@ -131,6 +131,7 @@ class EngineSessionStore {
           'Worker Session contains context newer than this turn',
         );
       }
+      onSessionRead?.call(stored);
       if (stored.status == 'invalidated') return null;
       if (!modelSwitchSupported && stored.lastModelId != requestedModelId) {
         if (allowModelReconstruction) return null;
@@ -152,7 +153,6 @@ class EngineSessionStore {
           'Worker Session requires context synchronization',
         );
       }
-      onSessionRead?.call(stored);
     }
     if (decoded['version'] == 1 &&
         workerSession?.bootstrap?.turnRevision != null) {

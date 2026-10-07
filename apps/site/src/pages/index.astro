@@ -9,6 +9,7 @@ import ProjectMembersDiagram from "../components/ProjectMembersDiagram.astro";
 import CredentialPrivacyDiagram from "../components/CredentialPrivacyDiagram.astro";
 import ConversationContinuity from "../components/ConversationContinuity.astro";
 import ProjectWorkstreamShowcase from "../components/ProjectWorkstreamShowcase.astro";
+import ComparisonTable from "../components/ComparisonTable.astro";
 import WorkflowShowcase from "../components/WorkflowShowcase.astro";
 import AudienceCards from "../components/AudienceCards.astro";
 import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
@@ -25,7 +26,7 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
         <div class="eyebrow">SHARED AI WORKSPACE</div>
         <h1>Bring your people and AI together.</h1>
         <p class="lede">
-          Conclave AX gives families, friends and teams one shared place to work with AI. Create projects together, share access to AI Workers without sharing credentials, keep conversations and work in context, and use powerful workflows when a problem needs more than one AI.
+          A shared workspace where families, friends and teams can work with AI together. Bring AI Workers into shared projects, collaborate in the same conversations, and keep credentials private.
         </p>
         <div class="actions">
           <Button href="https://app.conclaveax.com" label="Open Conclave AX" />
@@ -75,49 +76,19 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
     </section>
   </Container>
 
-  <!-- Section 1: One Project. People + AI -->
-  <Section>
-    <Container>
-      <div class="split-section">
-        <div>
-          <SectionHeader
-            eyebrow="ONE PROJECT. PEOPLE + AI."
-            title="Bring everyone's AI into the same project."
-            description="Everyone doesn't need the same AI setup. Project members can contribute the AI Workers they choose to make available, while Conclave keeps access, credentials and usage controlled."
-          />
-          <div class="feature-bullets">
-            <div class="bullet-item">
-              <strong>Multi-Provider Architecture</strong>
-              <p>Conclave is designed to bring different AI Workers into the same project—starting with ChatGPT and Gemini today, and extensible to Claude, open models, and local runtimes.</p>
-            </div>
-            <div class="bullet-item">
-              <strong>Equal Access for Everyone</strong>
-              <p>All members of your project can query shared AI Workers authorized for the project without needing access to owner credentials.</p>
-            </div>
-            <div class="bullet-item">
-              <strong>Complete Group Context</strong>
-              <p>Responses, attachments, and follow-ups stay visible to everyone in the project.</p>
-            </div>
-          </div>
-        </div>
-        <ProjectMembersDiagram />
-      </div>
-    </Container>
-  </Section>
-
-  <!-- Section 2: Share Access. Keep Credentials Private -->
+  <!-- Section 1: Mental Model - One project. Your people. Their AI. -->
   <Section>
     <Container>
       <SectionHeader
-        eyebrow="CREDENTIALS STAY PRIVATE"
-        title="Share access. Keep credentials private."
-        description="An AI Account stays owned by its owner. When it is shared with a project, members can use that AI capability for project work, but no one ever sees your API keys, tokens or login secrets. Permissions can be granted, scoped or revoked at any time."
+        eyebrow="ONE PROJECT. PEOPLE + AI."
+        title="One project. Your people. Their AI."
+        description="Everyone doesn't need the same AI setup. Project members can make their supported AI Workers available to the project, while Conclave keeps access, credentials and usage securely controlled."
       />
-      <CredentialPrivacyDiagram />
+      <ProjectMembersDiagram />
     </Container>
   </Section>
 
-  <!-- Section 3: Collaborative Conversations & Model Switching -->
+  <!-- Section 2: Collaborative Conversations -->
   <Section>
     <Container>
       <div class="split-section split-section--reversed">
@@ -125,21 +96,33 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
           <SectionHeader
             eyebrow="COLLABORATION IN CONTEXT"
             title="One conversation. Everyone stays in context."
-            description="Stop taking screenshots of chatbot answers or copying and pasting between tabs. In Conclave AX, everyone in the project sees the prompt, the AI response, the follow-up questions and the decisions being made."
+            description="AI stops being an isolated chat between one person and a bot. In Conclave AX, everyone in the project sees the prompt, the AI response, the follow-up questions and the decisions being made."
           />
           <div class="feature-bullets">
             <div class="bullet-item">
               <strong>Change the AI, not the conversation</strong>
-              <p>Need a different perspective or specialized capability? Switch between supported AI Workers within the same conversation without losing the history of what you've already discussed.</p>
+              <p>Need a different perspective or specialized capability? Switch between authorized Workers in the same Workstream without losing the history of what you've already discussed.</p>
             </div>
             <div class="bullet-item">
               <strong>Shared turn history</strong>
-              <p>Every turn retains citations, code blocks, and context so your whole group can iterate smoothly.</p>
+              <p>Every turn retains citations, code blocks, tables, and decisions so your whole group iterates smoothly together.</p>
             </div>
           </div>
         </div>
         <ConversationContinuity />
       </div>
+    </Container>
+  </Section>
+
+  <!-- Section 3: Share Access. Keep Credentials Private -->
+  <Section>
+    <Container>
+      <SectionHeader
+        eyebrow="CREDENTIALS STAY PRIVATE"
+        title="Share access. Keep credentials private."
+        description="When you make an AI Worker available to a project, members can use that AI capability for project work, but no one ever sees your API keys, tokens or login secrets. Permissions can be granted, scoped or revoked at any time."
+      />
+      <CredentialPrivacyDiagram />
     </Container>
   </Section>
 
@@ -149,13 +132,25 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
       <SectionHeader
         eyebrow="ORGANIZATION"
         title="Keep every conversation focused."
-        description="Separate major efforts into Projects, and divide complex topics into Workstreams. Keep your summer vacation separate from your home renovation, or your product research separate from your sprint backlog."
+        description="Separate major efforts into Projects, and divide complex topics into Workstreams. Keep your vacation planning separate from your household budget, or your product research separate from your sprint backlog."
       />
       <ProjectWorkstreamShowcase />
     </Container>
   </Section>
 
-  <!-- Section 5: Advanced Workflows -->
+  <!-- Section 5: Comparison - Why not normal AI chat? -->
+  <Section>
+    <Container>
+      <SectionHeader
+        eyebrow="THE COLLABORATION DIFFERENCE"
+        title="AI chat was designed for one person. Conclave is designed for a group."
+        description="Traditional AI chatbots trap prompts, answers, and subscriptions in individual browser tabs. Conclave AX creates a shared collaboration layer where teams think and decide together."
+      />
+      <ComparisonTable />
+    </Container>
+  </Section>
+
+  <!-- Section 6: Advanced Workflows -->
   <Section>
     <Container>
       <SectionHeader
@@ -167,11 +162,11 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
     </Container>
   </Section>
 
-  <!-- Section 6: Who It's For -->
+  <!-- Section 7: Who It's For -->
   <Section id="use-cases">
     <Container>
       <SectionHeader
-        eyebrow="BUILT FOR EVERY TEAM"
+        eyebrow="BUILT FOR EVERY GROUP"
         title="Designed for how people actually collaborate."
         description="Whether you're organizing a family trip, leading product decisions with your team, or shipping verified code, Conclave AX brings people and AI into a unified collaboration layer."
       />
@@ -179,7 +174,7 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
     </Container>
   </Section>
 
-  <!-- Section 7: Power Users & Developers (Local Workspaces) -->
+  <!-- Section 8: Power Users & Developers (Local Workspaces) -->
   <Section>
     <Container>
       <div class="workspace-section" data-site-event="section.workspace_reached">

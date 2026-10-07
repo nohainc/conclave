@@ -24,7 +24,10 @@ import {
   type AssignmentDispatcherEnv,
 } from "./assignment-dispatcher.js";
 import type { WorkstreamBindingId } from "@conclave/core";
-import { workStepSessionKey } from "./work-session-key.js";
+import {
+  prepareWorkerStepExecution,
+  completeWorkerStepExecution,
+} from "./execution-engine.js";
 import { assignmentDeliveryExpired } from "./assignment-delivery.js";
 
 export interface ConclaveWorkflowParams {
@@ -620,54 +623,34 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
               workRequestSnapshot: _snapshot,
               ...workerInput
             } = promptInput;
+            const execution = prepareWorkerStepExecution({
+              taskId: task.id,
+              step: task.step,
+              bindingId,
+              binding: stepBinding,
+              prompt,
+              workerInput,
+              scope: {
+                projectId: context.projectId,
+                requesterUserId: context.requesterUserId,
+                workstreamId: context.workstreamId,
+                workRequestId: params.workRequestId!,
+              },
+              retry: {
+                stepKind: params.retryStepKind,
+                sessionStrategy: params.retrySessionStrategy,
+                number: params.retryNumber,
+              },
+            });
             const dispatched = await dispatchTaskAssignment(
               this.env as unknown as AssignmentDispatcherEnv,
               {
                 workspaceId: params.organizationId ?? "",
                 runId: params.runId,
                 taskId: task.id,
-                explicitWorkerId:
-                  typeof stepBinding.workerId === "string"
-                    ? stepBinding.workerId
-                    : undefined,
+                explicitWorkerId: execution.workerId,
                 explicitAttemptNumber: attempt,
-                task: {
-                  id: task.id,
-                  role: task.step.kind,
-                  objective: prompt,
-                  capabilities: task.step.requiredCapabilities,
-                  input: {
-                    ...workerInput,
-                    prompt,
-                    effectiveWorkerPrompt: prompt,
-                  },
-                  timeoutMs: task.step.timeoutMs,
-                  sessionPolicy: "durable_session",
-                  sessionKey: workStepSessionKey({
-                    workBindingId: bindingId,
-                    workstreamId: context.workstreamId,
-                    workRequestId: params.workRequestId!,
-                    stepKind: task.step.kind,
-                    retryStepKind: params.retryStepKind,
-                    retrySessionStrategy: params.retrySessionStrategy,
-                    retryNumber: params.retryNumber,
-                  }),
-                  projectId: context.projectId,
-                  requestedByUserId: context.requesterUserId,
-                  workstreamId: context.workstreamId,
-                  workRequestId: params.workRequestId,
-                  workBindingId: bindingId,
-                  executionClass: task.step.executionMode,
-                  readOnly: task.step.readWritePolicy === "read_only",
-                  model:
-                    typeof stepBinding.model === "string"
-                      ? stepBinding.model
-                      : undefined,
-                  reasoningEffort:
-                    typeof stepBinding.reasoningEffort === "string"
-                      ? stepBinding.reasoningEffort
-                      : undefined,
-                },
+                task: execution.task,
               },
             );
             if (dispatched.status === "cancelled") {
@@ -774,55 +757,19 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         if (terminal?.status !== "completed" || !terminal.outputJson) {
           throw new Error("Work Step assignment timed out");
         }
-        const rawOutput = parseJsonRecord(terminal.outputJson);
-        const nested =
-          typeof rawOutput.output === "object" && rawOutput.output !== null
-            ? (rawOutput.output as Record<string, unknown>)
-            : rawOutput;
-        const finalText =
-          typeof nested.text === "string"
-            ? nested.text
-            : typeof nested.finalAnswer === "string"
-              ? nested.finalAnswer
-              : typeof nested.summary === "string"
-                ? nested.summary
-                : null;
-        if (!finalText?.trim())
-          throw new Error("Work Step completed without final answer text");
-        const evidence = parseJsonRecord(terminal.permissionSnapshotJson);
-        const completedAt = new Date().toISOString();
-        const stepResult: StepResult = {
-          text: finalText.slice(0, 96_000),
-          status: "completed",
+        const stepResult = completeWorkerStepExecution({
+          output: parseJsonRecord(terminal.outputJson),
+          evidence: parseJsonRecord(terminal.permissionSnapshotJson),
+          attribution: {
+            workerId: terminal.workerId,
+            workerTypeId: terminal.workerTypeId,
+            engineVersion: terminal.engineVersion,
+            model: terminal.model,
+          },
           startedAt: terminal.startedAt || startedAt,
-          completedAt,
-          workerId: terminal.workerId,
-          workerTypeId: terminal.workerTypeId,
-          engineVersion:
-            typeof evidence.profileDefinitionId === "string"
-              ? terminal.engineVersion
-              : null,
-          profileDefinitionId:
-            typeof evidence.profileDefinitionId === "string"
-              ? evidence.profileDefinitionId
-              : null,
-          profileReleaseVersion:
-            Number.isSafeInteger(evidence.profileReleaseVersion) &&
-            Number(evidence.profileReleaseVersion) > 0
-              ? Number(evidence.profileReleaseVersion)
-              : null,
-          providerToolVersion:
-            typeof evidence.providerToolVersion === "string"
-              ? evidence.providerToolVersion
-              : null,
-          model: terminal.model,
-          reasoningEffort:
-            typeof evidence.reasoningEffort === "string"
-              ? evidence.reasoningEffort
-              : typeof stepBinding.reasoningEffort === "string"
-                ? stepBinding.reasoningEffort
-                : null,
-        };
+          completedAt: new Date().toISOString(),
+          configuredEffort: stepBinding.reasoningEffort,
+        });
         return { task, status: "completed", output: stepResult, stepResult };
       } catch (error) {
         if (

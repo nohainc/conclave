@@ -72,6 +72,9 @@ signed Profile error mappings authorize one bounded reconstruction attempt.
 Dispatch and StepRun evidence retain the frozen request context boundary. Local
 session synchronization advances only on successful consumption and cannot move
 backwards; revision and history-watermark evidence is recorded in local diagnostics.
+Concurrent steps retain independent context evidence, including a frozen snapshot
+fingerprint. Native session execution is exclusive across local Engine processes;
+different Workers and stateless steps remain independent.
 Versioned product Workflow definitions pin existing execution graphs, with
 Work (`work:v1`) mapped to `direct:v2`. Native provider continuity remains local to Workspace/Engine. Conclave owns an append-only canonical history of messages,
 responses, workflow/execution events, artifact events, and context events; provider

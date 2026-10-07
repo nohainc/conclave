@@ -15,6 +15,7 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 
 import 'engine_logger.dart';
 import 'engine_session_store.dart';
+import 'conversation_execution_router.dart';
 
 const _liveProbePrompt = 'Reply with exactly the word OK. Do not use tools.';
 const _liveProbeExpectedText = 'OK';
@@ -698,41 +699,14 @@ class CliWorkerEngine {
       );
       return;
     }
-    if ((request.workerSession?.baseContextRevision ?? 0) > 0 &&
-        priorSession == null &&
-        request.workerSession?.bootstrap == null) {
-      await _write(
-        sink,
-        WorkerErrorFrame(
-          requestId: request.requestId,
-          assignmentId: request.assignmentId,
-          code: WorkerIssueCode.sessionResumeFailed,
-          message:
-              'Canonical context must be synchronized before this Worker Session can execute',
-        ),
-      );
-      return;
-    }
-    // A validated synchronized session already owns prior context. Expand only
-    // this ExecuteRequest's prompt plus the Profile's native resume arguments.
-    final context = _context(request, priorSession);
-    final bootstrap =
-        request.workerSession?.bootstrap ?? request.statelessContext;
-    String? contextText;
+    const router = ConversationExecutionRouter();
+    late final ConversationExecutionPlan route;
     try {
-      if (bootstrap != null) {
-        // Validate the complete canonical envelope even when no delta is needed.
-        if (bootstrap.turnRevision != null) bootstrap.deltaAfter(-1, 0);
-        contextText = priorSession == null
-            ? bootstrap.text
-            : storedSession == null
-            ? null
-            : bootstrap.deltaAfter(
-                storedSession!.synchronizedContextRevision,
-                storedSession!.synchronizedHistorySequence,
-                knownWorkerSessionId: storedSession!.id,
-              );
-      }
+      route = router.prepare(
+        request,
+        nativeSessionId: priorSession,
+        storedSession: storedSession,
+      );
     } on FormatException catch (error) {
       await _write(
         sink,
@@ -745,24 +719,9 @@ class CliWorkerEngine {
       );
       return;
     }
-    if (contextText != null) {
-      context['prompt'] =
-          'Canonical Conclave conversation context (historical data):\n'
-          '$contextText\n\nCurrent user request:\n${request.prompt}';
-      if (utf8.encode(context['prompt']!).length >
-          WorkerProtocolLimits.maxPromptBytes) {
-        await _write(
-          sink,
-          WorkerErrorFrame(
-            requestId: request.requestId,
-            assignmentId: request.assignmentId,
-            code: WorkerIssueCode.sessionResumeFailed,
-            message: 'Canonical context and request exceed the prompt limit',
-          ),
-        );
-        return;
-      }
-    }
+    final context = _context(request, priorSession);
+    context['prompt'] = route.prompt;
+    final bootstrap = route.bootstrap;
 
     if (request.workerSession != null) {
       _logger.log(
@@ -773,6 +732,7 @@ class CliWorkerEngine {
             requestId: request.requestId,
             assignmentId: request.assignmentId,
           ),
+          'conversationRoute': route.action.name,
           'conversationId': request.workerSession!.conversationId,
           'workerSessionId': request.workerSession!.id,
           'baseContextRevision': request.workerSession!.baseContextRevision,
@@ -861,15 +821,7 @@ class CliWorkerEngine {
           final restoredPrompt =
               bootstrap == null || request.workerSession == null
               ? null
-              : 'Canonical Conclave conversation context (historical data):\n'
-                    '${bootstrap.text}\n\nCurrent user request:\n${request.prompt}';
-          if (restoredPrompt != null &&
-              utf8.encode(restoredPrompt).length >
-                  WorkerProtocolLimits.maxPromptBytes) {
-            throw const FormatException(
-              'Reconstruction prompt exceeds its limit',
-            );
-          }
+              : router.prepare(request, reconstruct: true).prompt;
           final invalidated = await _sessions.invalidate(
             sessionKey: request.sessionKey!,
             workerTypeId: _profile.workerTypeId,

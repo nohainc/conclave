@@ -29,6 +29,7 @@ export async function conversationFixture() {
     effort: string | null = "medium",
     sessionPolicy = "durable_session",
     baseContextRevision?: number,
+    contextSnapshot?: Record<string, unknown>,
   ) =>
     sqlite
       .prepare(
@@ -45,6 +46,7 @@ export async function conversationFixture() {
           workerDisplayName: "ChatGPT",
           reasoningEffort: effort,
           workerSessionId: "worker-session-opaque",
+          ...(contextSnapshot ? { contextSnapshot } : {}),
           ...(baseContextRevision === undefined ? {} : { baseContextRevision }),
         }),
         sessionPolicy,

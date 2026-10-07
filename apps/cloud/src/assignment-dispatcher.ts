@@ -188,6 +188,17 @@ async function dispatchWorkspaceWorkerAssignment(
   }
   const snapshot = {
     ...target.permissionSnapshot,
+    ...(bootstrap
+      ? {
+          contextSnapshot: {
+            schemaVersion: 1,
+            baseContextRevision: bootstrap.contextRevision,
+            turnRevision: bootstrap.turnRevision,
+            throughSequence: bootstrap.throughSequence,
+            digest: createHash("sha256").update(bootstrap.text).digest("hex"),
+          },
+        }
+      : {}),
     selectionExplanation: target.selectionExplanation,
     baseContextRevision: target.baseContextRevision ?? 0,
     workerSessionId: conversationWorkerSessionReference(

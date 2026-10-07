@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:crypto/crypto.dart';
+import 'package:conclave_cli_worker_engine/src/engine_session_store.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -31,6 +32,7 @@ void main() {
         String sessionKey = 'direct-and-work-session',
         ConversationBootstrap? bootstrap,
         bool expectFailure = false,
+        bool sessionBusy = false,
         String workerId = "worker-fixture",
       }) async {
         final profile =
@@ -73,6 +75,14 @@ void main() {
         final profileBytes = utf8.encode(jsonEncode(profile));
         final profileFile = File('${root.path}/profile-$releaseVersion.json')
           ..writeAsBytesSync(profileBytes);
+        final heldSession = sessionBusy
+            ? await EngineSessionStore(stateDirectory).acquireExecution(
+                sessionKey: sessionKey,
+                workerTypeId: 'gemini',
+                profileDefinitionId: 'gemini-antigravity',
+                providerToolIdentity: provider['name'] as String,
+              )
+            : null;
         final process = await Process.start(
           Platform.resolvedExecutable,
           [
@@ -166,6 +176,12 @@ void main() {
           );
           if (expectFailure) {
             expect(result, isA<WorkerErrorFrame>());
+            if (sessionBusy) {
+              expect(
+                (result as WorkerErrorFrame).code,
+                WorkerIssueCode.providerUnavailable,
+              );
+            }
             return null;
           }
           expect(
@@ -213,6 +229,7 @@ void main() {
           await process.exitCode.timeout(const Duration(seconds: 10));
           await lines.cancel();
           await stderrTask.cancel();
+          await heldSession?.release();
         }
       }
 
@@ -626,6 +643,18 @@ void main() {
         bootstrap: contextSnapshot(1, priorHistory),
       );
       expect(afterRestart!.output, 'Gemini answer');
+      await executeRelease(
+        releaseVersion: 4,
+        sessionFormatId: 'antigravity-conversation-v1',
+        compatibleFormatIds: ['antigravity-conversation-v1'],
+        requestId: 'busy-native-session',
+        prompt: 'Must not reach provider',
+        model: 'model-A',
+        sessionKey: missingContextScope,
+        bootstrap: contextSnapshot(2, priorHistory),
+        sessionBusy: true,
+        expectFailure: true,
+      );
     },
   );
 }

@@ -1,6 +1,6 @@
 # Multi-Worker Conversation Continuity v1
 
-**Status:** implemented through Phase 26, including structured context and revision evidence.
+**Status:** implemented through Phase 27, including context/revision evidence and concurrency guards.
 **Boundary:** Conclave Core and Human Product Protocol. **Contract version:** 1.
 
 Project → Workstream → Conversation → Work Requests is the product ownership
@@ -1091,3 +1091,42 @@ Local schema-v1 fields and public/runtime contracts are unchanged. A new guard i
 part of the existing v8 fresh-start schema; existing initialized databases need
 that guard installed separately before claiming equivalent enforcement. No remote
 schema or Engine deployment was performed.
+
+## Phase 27 — Parallel-step causality and native-session exclusion
+
+Independent Worker steps may start from the same accepted context boundary.
+Their immutable turns and response events retain that base when either completes
+or the Conversation advances. Canonical context excludes current-request sibling
+responses; workflow context supplies completed prerequisite results only. A
+sibling's completion never retroactively changes an already supplied snapshot.
+
+Dispatch now persists versioned `contextSnapshot` evidence in the assignment
+permission snapshot: base revision, consumed-turn target revision, history
+watermark and SHA-256 fingerprint of the exact canonical context sent. The
+fresh-start schema prevents rewriting this evidence after a Conversation turn
+exists. A fingerprint identifies the supplied payload; it does not imply the
+worker saw later results or archive the payload itself.
+
+Native session execution is exclusive within its local scope. The generic Engine
+holds a nonblocking OS file lock from before reading native state through provider
+execution, reconstruction and persistence, with an in-process guard for multiple
+Engine instances. A competing execution fails before provider startup with an
+existing availability error; it does not wait and silently ingest newer state.
+Different Worker/session scopes and stateless executions remain independent.
+Callers may retry a rejected execution through existing request handling.
+
+Persistent lock files are not ownership markers. OS ownership ends on normal
+release or process death, so restart does not require deleting a stale lock file.
+The lock directory stays inside Workspace-owned Engine state. This coordinates
+Conclave Engine processes; external CLI usage is outside that boundary. Runtime
+Engine processes execute in one isolate; this is not a multi-isolate lock service.
+
+Tests exercise two Worker steps from one base, sibling-response exclusion, frozen
+turn/event evidence after Conversation advancement, immutable snapshot evidence,
+same-scope exclusion, independent scopes, cross-process exclusion, crash release
+and rejection before provider invocation. No parallel product workflow or UI is
+enabled by this phase.
+
+Public/runtime and local session schemas are unchanged. Local `.session-locks`
+files are created automatically. Existing databases need the new snapshot guard
+installed for matching enforcement; no remote schema deployment was performed.

@@ -1,0 +1,99 @@
+import { expect, it } from "vitest";
+import { BUILTIN_WORKFLOWS } from "@conclave/core";
+import {
+  prepareWorkerStepExecution,
+  completeWorkerStepExecution,
+} from "../src/execution-engine.js";
+
+it("execution boundary configures next-turn choices without rewriting workflow or earlier executions", () => {
+  const binding = {
+    workerId: "worker-a",
+    model: "model-x",
+    reasoningEffort: "medium",
+  };
+  const input = {
+    taskId: "task",
+    step: BUILTIN_WORKFLOWS.direct.steps[0]!,
+    bindingId: "direct" as const,
+    binding,
+    prompt: "Implement this",
+    workerInput: { attachment: "A" },
+    scope: {
+      projectId: "P",
+      requesterUserId: "U",
+      workstreamId: "W",
+      workRequestId: "R",
+    },
+    retry: {},
+  };
+  const before = JSON.stringify(BUILTIN_WORKFLOWS.direct);
+  const first = prepareWorkerStepExecution(input);
+  binding.workerId = "worker-b";
+  binding.model = "model-y";
+  binding.reasoningEffort = "high";
+  const second = prepareWorkerStepExecution({
+    ...input,
+    scope: { ...input.scope, workRequestId: "R2" },
+  });
+  expect(first.workerId).toBe("worker-a");
+  expect(first.task).toMatchObject({
+    model: "model-x",
+    reasoningEffort: "medium",
+    readOnly: false,
+    executionClass: "stateful_workstream",
+    sessionPolicy: "durable_session",
+    input: { attachment: "A", prompt: "Implement this" },
+  });
+  expect(second.workerId).toBe("worker-b");
+  expect(second.task.model).toBe("model-y");
+  expect(second.task.sessionKey).toBe(first.task.sessionKey);
+  expect(JSON.stringify(BUILTIN_WORKFLOWS.direct)).toBe(before);
+  const chat = prepareWorkerStepExecution({
+    ...input,
+    step: BUILTIN_WORKFLOWS.chat.steps[0]!,
+    bindingId: "chat",
+  });
+  expect(chat.task.readOnly).toBe(true);
+  expect(chat.task.sessionKey).not.toBe(first.task.sessionKey);
+  expect(() => prepareWorkerStepExecution({ ...input, prompt: " " })).toThrow(
+    /empty/,
+  );
+});
+
+it("execution evidence produces the generic result consumed by workflow planning", () => {
+  const result = completeWorkerStepExecution({
+    output: { output: { text: "Worker answer" } },
+    evidence: {
+      profileDefinitionId: "profile",
+      profileReleaseVersion: 3,
+      reasoningEffort: "high",
+    },
+    attribution: {
+      workerId: "worker",
+      workerTypeId: "type",
+      engineVersion: "1.0.0",
+      model: "model-y",
+    },
+    startedAt: "start",
+    completedAt: "end",
+    configuredEffort: "medium",
+  });
+  expect(result).toMatchObject({
+    text: "Worker answer",
+    workerId: "worker",
+    model: "model-y",
+    reasoningEffort: "high",
+    profileReleaseVersion: 3,
+    status: "completed",
+  });
+  expect(() =>
+    completeWorkerStepExecution({
+      output: {},
+      evidence: {},
+      attribution: result,
+      startedAt: "start",
+      completedAt: "end",
+      configuredEffort: null,
+    }),
+  ).toThrow(/final answer/);
+});

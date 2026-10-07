@@ -84,6 +84,13 @@ WHEN typeof(NEW.base_context_revision) != 'integer' OR NOT EXISTS (
     AND cr.work_request_id=NEW.work_request_id
     AND NEW.base_context_revision=cr.conversation_revision-1)
 BEGIN SELECT RAISE(ABORT, 'Worker turn context revision must match its request boundary'); END;
+-- A completion or later Conversation revision cannot rewrite what was supplied.
+CREATE TRIGGER trg_assignment_context_snapshot_immutable
+BEFORE UPDATE OF permission_snapshot_json ON worker_assignments
+WHEN EXISTS (SELECT 1 FROM conversation_turns WHERE assignment_id=OLD.id)
+  AND json_extract(OLD.permission_snapshot_json,'$.contextSnapshot')
+      IS NOT json_extract(NEW.permission_snapshot_json,'$.contextSnapshot')
+BEGIN SELECT RAISE(ABORT, 'Assignment context snapshot is immutable'); END;
 DROP TRIGGER trg_conversation_turn_assignment_insert;
 CREATE TRIGGER trg_conversation_turn_assignment_insert
 AFTER INSERT ON worker_assignments

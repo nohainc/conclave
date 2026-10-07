@@ -211,3 +211,106 @@ it("assembles Work environment and scoped prerequisite results for the receiving
     f.sqlite.close();
   }
 });
+
+it("parallel worker steps preserve one base and never acquire a sibling's response retroactively", async () => {
+  const f = await conversationFixture();
+  try {
+    f.sqlite
+      .exec(`INSERT INTO workflow_tasks(id,work_request_id,step_kind,execution_mode,timeout_ms,prompt_profile_version,status,created_at,updated_at)
+      VALUES('VERIFY','R','verify','stateless_read',1000,'verify:v1','running','now','now')`);
+    const { id } = f.sqlite.prepare("SELECT id FROM conversations").get() as {
+      id: string;
+    };
+    const first = await loadConversationBootstrap(
+      f.db as unknown as D1Database,
+      id,
+      "R",
+      0,
+      "bootstrap",
+      "T",
+    );
+    const second = await loadConversationBootstrap(
+      f.db as unknown as D1Database,
+      id,
+      "R",
+      0,
+      "bootstrap",
+      "VERIFY",
+    );
+    const evidence = (snapshot: typeof first) => ({
+      schemaVersion: 1,
+      baseContextRevision: snapshot.contextRevision,
+      turnRevision: snapshot.turnRevision,
+      throughSequence: snapshot.throughSequence,
+    });
+    f.assign(
+      "PARALLEL-A",
+      "model-x",
+      "medium",
+      "durable_session",
+      0,
+      evidence(first),
+    );
+    f.sqlite
+      .prepare(
+        `INSERT INTO worker_assignments
+      (id,project_id,execution_workspace_id,runtime_identity_id,worker_type_id,workspace_worker_id,task_id,status,model,permission_snapshot_json,session_policy,created_at,updated_at)
+      VALUES('PARALLEL-B','P','WS','RT','gemini','worker-b','VERIFY','created','model-y',?,'durable_session','now','now')`,
+      )
+      .run(
+        JSON.stringify({
+          profileDefinitionId: "gemini-antigravity",
+          profileReleaseVersion: 1,
+          workerSessionId: "gemini-session",
+          baseContextRevision: 0,
+          contextSnapshot: evidence(second),
+        }),
+      );
+    await recordAssignmentResult(f.db as unknown as D1Database, "PARALLEL-B", {
+      assignmentId: "PARALLEL-B",
+      status: "completed",
+      output: { text: "Sibling private response" },
+      artifactIds: [],
+      completedAt: "first-completion",
+    });
+    const afterSibling = await loadConversationBootstrap(
+      f.db as unknown as D1Database,
+      id,
+      "R",
+      0,
+      "bootstrap",
+      "T",
+    );
+    expect(first.text).not.toContain("Sibling private response");
+    expect(second.text).not.toContain("Sibling private response");
+    expect(afterSibling.text).not.toContain("Sibling private response");
+    f.sqlite.exec(
+      "UPDATE conversations SET conversation_revision=107,context_revision=107",
+    );
+    await recordAssignmentResult(f.db as unknown as D1Database, "PARALLEL-A", {
+      assignmentId: "PARALLEL-A",
+      status: "completed",
+      output: { text: "Independent answer" },
+      artifactIds: [],
+      completedAt: "second-completion",
+    });
+    const turns = await f.turns();
+    expect(turns).toHaveLength(2);
+    expect(turns.map((t) => t.baseContextRevision)).toEqual([0, 0]);
+    const metadata = f.sqlite
+      .prepare(
+        "SELECT metadata_json FROM conversation_history_entries WHERE kind='worker_response'",
+      )
+      .all() as { metadata_json: string }[];
+    expect(
+      metadata.map((row) => JSON.parse(row.metadata_json).baseContextRevision),
+    ).toEqual([0, 0]);
+    expect(() =>
+      f.sqlite.exec(
+        `UPDATE worker_assignments SET permission_snapshot_json=json_set(permission_snapshot_json,'$.contextSnapshot.baseContextRevision',107) WHERE id='PARALLEL-B'`,
+      ),
+    ).toThrow(/snapshot is immutable/);
+  } finally {
+    f.sqlite.close();
+  }
+});

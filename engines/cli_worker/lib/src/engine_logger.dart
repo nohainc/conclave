@@ -13,6 +13,7 @@ class EngineLogger {
   }) {
     final safe = <String, Object?>{};
     for (final key in const {
+      'conversationRoute',
       'conversationId',
       'workerSessionId',
       'baseContextRevision',
