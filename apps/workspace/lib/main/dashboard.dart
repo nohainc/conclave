@@ -134,7 +134,9 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: isConnected ? Colors.green : Colors.orange,
+                        color: isConnected
+                            ? ConclaveBrand.success
+                            : ConclaveBrand.warning,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -148,9 +150,11 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                           fontWeight: FontWeight.w500,
                           color: isConnected
                               ? (theme.brightness == Brightness.dark
-                                  ? Colors.greenAccent
-                                  : Colors.green.shade700)
-                              : Colors.orange.shade700,
+                                  ? const Color(0xff86efac)
+                                  : const Color(0xff15803d))
+                              : (theme.brightness == Brightness.dark
+                                  ? const Color(0xfffcd34d)
+                                  : const Color(0xffb45309)),
                         ),
                       ),
                     ),

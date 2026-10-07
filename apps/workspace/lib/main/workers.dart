@@ -562,7 +562,7 @@ class _CatalogStatusBadge extends StatelessWidget {
       'Catalog unavailable' ||
       'Catalog available' ||
       'Profile · Resolving' =>
-        Colors.grey,
+        ConclaveBrand.neutral,
       'Setup required' ||
       'Preparing integration…' ||
       'Authentication required' ||
