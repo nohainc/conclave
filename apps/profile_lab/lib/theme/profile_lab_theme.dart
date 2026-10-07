@@ -10,6 +10,7 @@ abstract final class ProfileLabTheme {
   static const darkBackground = ConclaveColors.canvasDark;
   static const darkSurface = ConclaveColors.surfaceDark;
   static const darkCard = ConclaveColors.surfaceHoverDark;
+  static const darkForeground = ConclaveColors.textPrimaryDark;
   static const passColor = ConclaveColors.success;
   static const warnColor = ConclaveColors.warning;
   static const failColor = ConclaveColors.error;

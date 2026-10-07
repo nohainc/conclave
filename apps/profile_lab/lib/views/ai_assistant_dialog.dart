@@ -133,19 +133,20 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.12),
+                  color: ProfileLabTheme.warnColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.amber),
+                  border: Border.all(color: ProfileLabTheme.warnColor),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.science_outlined, color: Colors.amber, size: 18),
-                    SizedBox(width: 8),
-                    Expanded(
+                    Icon(Icons.science_outlined,
+                        color: ProfileLabTheme.warnColor, size: 18),
+                    const SizedBox(width: 8),
+                    const Expanded(
                       child: Text(
                         'A signed Stable Worker Profile runs through the local generic Engine. The model proposes a Draft edit only. Review the diff, apply it yourself, and run the real test ladder; model output is never evidence.',
-                        style:
-                            TextStyle(fontSize: 11, color: Colors.white),
+                        style: TextStyle(
+                            fontSize: 11, color: ProfileLabTheme.darkForeground),
                       ),
                     ),
                   ],
@@ -208,7 +209,8 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                 Text(
                   _generationError ??
                       'No trusted Stable Worker Profile is available.',
-                  style: const TextStyle(fontSize: 11, color: Colors.amber),
+                  style: const TextStyle(
+                      fontSize: 11, color: ProfileLabTheme.warnColor),
                 )
               else
                 DropdownButtonFormField<String>(

@@ -195,19 +195,20 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.12),
+                  color: ProfileLabTheme.warnColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.amber),
+                  border: Border.all(color: ProfileLabTheme.warnColor),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.science_outlined, color: Colors.amber, size: 18),
-                    SizedBox(width: 8),
-                    Expanded(
+                    Icon(Icons.science_outlined,
+                        color: ProfileLabTheme.warnColor, size: 18),
+                    const SizedBox(width: 8),
+                    const Expanded(
                       child: Text(
                         'Experimental local heuristic. No AI model is called; suggestions need human review and real tests, and never count as acceptance evidence.',
-                        style:
-                            TextStyle(fontSize: 11, color: Colors.white),
+                        style: TextStyle(
+                            fontSize: 11, color: ProfileLabTheme.darkForeground),
                       ),
                     ),
                   ],

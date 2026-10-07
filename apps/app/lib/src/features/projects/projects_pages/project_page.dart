@@ -315,7 +315,7 @@ class _ProjectWorkspaceState extends State<_ProjectWorkspace>
                         icon: const Icon(Icons.delete_outline),
                         label: const Text('Delete'),
                         style: TextButton.styleFrom(
-                            foregroundColor: Colors.red.shade700),
+                            foregroundColor: ConclaveColors.error),
                       ),
                     ],
                   ),

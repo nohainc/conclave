@@ -206,7 +206,7 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            style: FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
             child: const Text('Revoke'),
           ),
         ],
@@ -378,7 +378,7 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            style: FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
             child: const Text('Delete'),
           ),
         ],
@@ -628,7 +628,7 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            style: FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
             child: const Text('Remove'),
           ),
         ],
@@ -654,7 +654,7 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            style: FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
             child: const Text('Revoke'),
           ),
         ],
@@ -721,7 +721,7 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.check, color: Colors.green),
+                  : const Icon(Icons.check, color: ConclaveColors.success),
               onPressed: _savingField ? null : () => _saveField(fieldKey),
             ),
             IconButton(

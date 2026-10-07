@@ -301,19 +301,21 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.12),
+                    color: ProfileLabTheme.warnColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.amber),
+                    border: Border.all(color: ProfileLabTheme.warnColor),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.lock_outline, color: Colors.amber, size: 18),
-                      SizedBox(width: 8),
-                      Expanded(
+                      Icon(Icons.lock_outline,
+                          color: ProfileLabTheme.warnColor, size: 18),
+                      const SizedBox(width: 8),
+                      const Expanded(
                         child: Text(
                           'Stable promotion requires current acceptance evidence already stored and validated by Cloud. Submit the complete sandbox evidence from the Evidence view.',
-                          style:
-                              TextStyle(fontSize: 11, color: Colors.white),
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: ProfileLabTheme.darkForeground),
                         ),
                       ),
                     ],
@@ -378,20 +380,21 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.15),
+                    color: ProfileLabTheme.warnColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.amber),
+                    border: Border.all(color: ProfileLabTheme.warnColor),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
                       Icon(Icons.warning_amber_rounded,
-                          color: Colors.amber, size: 18),
-                      SizedBox(width: 8),
-                      Expanded(
+                          color: ProfileLabTheme.warnColor, size: 18),
+                      const SizedBox(width: 8),
+                      const Expanded(
                         child: Text(
                           'Promotion is blocked until all listed checks pass. Stable promotion additionally requires current evidence already validated and stored by Cloud.',
-                          style:
-                              TextStyle(fontSize: 11, color: Colors.white),
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: ProfileLabTheme.darkForeground),
                         ),
                       ),
                     ],
@@ -459,7 +462,9 @@ class _GateItemTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final statusColor = item.passed
         ? ProfileLabTheme.passColor
-        : (item.isSecurityGate ? ProfileLabTheme.failColor : Colors.amber);
+        : (item.isSecurityGate
+            ? ProfileLabTheme.failColor
+            : ProfileLabTheme.warnColor);
 
     final statusIcon = item.passed
         ? Icons.check_circle_outline

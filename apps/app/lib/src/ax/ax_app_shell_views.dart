@@ -259,7 +259,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                     if (authError != null) ...[
                       const SizedBox(height: 12),
                       Text(authError!,
-                          style: TextStyle(color: Colors.red.shade700)),
+                          style: const TextStyle(color: ConclaveColors.error)),
                     ],
                     if (authNotice != null) ...[
                       const SizedBox(height: 12),

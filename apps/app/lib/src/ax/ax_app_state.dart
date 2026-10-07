@@ -564,7 +564,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
           ),
           FilledButton(
             style: destructive
-                ? FilledButton.styleFrom(backgroundColor: Colors.red)
+                ? FilledButton.styleFrom(backgroundColor: ConclaveColors.error)
                 : null,
             onPressed: () => Navigator.pop(dialogContext, true),
             child: Text(action),

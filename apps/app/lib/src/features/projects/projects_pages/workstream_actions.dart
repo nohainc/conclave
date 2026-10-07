@@ -387,7 +387,7 @@ extension _WorkstreamActions on _WorkstreamPageState {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Failed to save message: $error'),
-          backgroundColor: Colors.redAccent));
+          backgroundColor: ConclaveColors.error));
     }
   }
 
@@ -400,7 +400,7 @@ extension _WorkstreamActions on _WorkstreamPageState {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Failed to update message: $error'),
-          backgroundColor: Colors.redAccent));
+          backgroundColor: ConclaveColors.error));
     }
   }
 

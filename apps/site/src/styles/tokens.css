@@ -27,6 +27,10 @@
   --color-success-wash: rgba(34, 197, 94, 0.12);
   --color-warning: #f59e0b;
   --color-warning-wash: rgba(245, 158, 11, 0.12);
+  --color-error: #ef4444;
+  --color-error-wash: rgba(239, 68, 68, 0.12);
+  --color-info: #3b82f6;
+  --color-info-wash: rgba(59, 130, 246, 0.12);
 
   --gradient-brand: linear-gradient(
     135deg,
