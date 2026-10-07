@@ -11,6 +11,59 @@ class EngineSessionStore {
 
   final Directory directory;
 
+  static final _heldExecutionLocks = <String>{};
+
+  /// Hold the native session scope for the entire provider invocation. OS locks
+  /// release on process exit; persistent lock files are never deleted or treated
+  /// as ownership evidence. The in-process set covers separate Engine instances.
+  Future<EngineSessionLease> acquireExecution({
+    required String sessionKey,
+    required String workerTypeId,
+    required String profileDefinitionId,
+    required String providerToolIdentity,
+  }) async {
+    await directory.create(recursive: true);
+    final root = await directory.resolveSymbolicLinks();
+    final stateFile = _file(
+      sessionKey,
+      workerTypeId,
+      profileDefinitionId,
+      providerToolIdentity,
+    );
+    final locks = Directory('$root${Platform.pathSeparator}.session-locks');
+    if (await FileSystemEntity.type(locks.path, followLinks: false) ==
+        FileSystemEntityType.link) {
+      throw const FormatException(
+        'Session lock directory cannot be a symbolic link',
+      );
+    }
+    await locks.create();
+    if (await locks.resolveSymbolicLinks() != locks.path) {
+      throw const FormatException('Session lock directory escaped local state');
+    }
+    final name = stateFile.uri.pathSegments.last;
+    final file = File('${locks.path}${Platform.pathSeparator}$name.lock');
+    await _assertContained(file, allowMissing: true);
+    if (!_heldExecutionLocks.add(file.path)) throw const EngineSessionBusy();
+    RandomAccessFile? handle;
+    try {
+      handle = await file.open(mode: FileMode.append);
+      try {
+        await handle.lock(FileLock.exclusive);
+      } on FileSystemException {
+        throw const EngineSessionBusy();
+      }
+      return EngineSessionLease(
+        handle,
+        () => _heldExecutionLocks.remove(file.path),
+      );
+    } catch (_) {
+      await handle?.close();
+      _heldExecutionLocks.remove(file.path);
+      rethrow;
+    }
+  }
+
   Future<String?> read({
     required String sessionKey,
     required String workerTypeId,
@@ -313,6 +366,26 @@ class EngineSessionStore {
     return File(
       '${directory.path}${Platform.pathSeparator}session-$scopeDigest.json',
     );
+  }
+}
+
+class EngineSessionBusy implements Exception {
+  const EngineSessionBusy();
+}
+
+class EngineSessionLease {
+  EngineSessionLease(this._handle, this._released);
+  final RandomAccessFile _handle;
+  final void Function() _released;
+  bool _closed = false;
+  Future<void> release() async {
+    if (_closed) return;
+    _closed = true;
+    try {
+      await _handle.close();
+    } finally {
+      _released();
+    }
   }
 }
 

@@ -574,6 +574,37 @@ class CliWorkerEngine {
   }
 
   Future<void> _execute(ExecuteRequest request, IOSink sink) async {
+    if (!_initialized ||
+        request.sessionPolicy != WorkerSessionPolicy.durableSession) {
+      return _executeSession(request, sink);
+    }
+    EngineSessionLease lease;
+    try {
+      lease = await _sessions.acquireExecution(
+        sessionKey: request.sessionKey!,
+        workerTypeId: _profile.workerTypeId,
+        profileDefinitionId: _profile.definitionId,
+        providerToolIdentity: _string(_profile.providerTool['name']),
+      );
+    } on EngineSessionBusy {
+      return _write(
+        sink,
+        WorkerErrorFrame(
+          requestId: request.requestId,
+          assignmentId: request.assignmentId,
+          code: WorkerIssueCode.providerUnavailable,
+          message: 'This Worker session is already executing a request',
+        ),
+      );
+    }
+    try {
+      await _executeSession(request, sink);
+    } finally {
+      await lease.release();
+    }
+  }
+
+  Future<void> _executeSession(ExecuteRequest request, IOSink sink) async {
     _operationStarts[request.requestId] = Stopwatch()..start();
     if (!_initialized)
       return _write(
