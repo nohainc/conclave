@@ -678,6 +678,14 @@ independently broaden local permissions.
 
 Profiles may map bounded provider evidence to stable Conclave issue codes.
 
+The approved `session_unavailable` stderr matcher identifies a missing or
+unavailable session/thread/conversation. Mapping it to `session_resume_failed`
+allows the Engine to invalidate a rejected native handle and reconstruct once
+from canonical context within the same assignment. Generic error mappings do not
+authorize reconstruction; final response/success or work-progress evidence also
+prevents automatic replay. This additive schema-v1 matcher requires an updated
+Engine and a newly signed Profile release; existing releases remain immutable.
+
 Evidence types v1:
 - exit code;
 - terminal status value;

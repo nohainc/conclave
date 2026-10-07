@@ -94,6 +94,38 @@ String _modelDisplayName(String? modelId, {AxWorker? worker}) {
   return modelId;
 }
 
+// Execution diagnostics remain in Workspace/Engine logs, not conversation text.
+String _executionFailureMessage(String? code, {String? validationMessage}) =>
+    switch (code) {
+      'session_resume_failed' =>
+        'The worker could not continue the previous conversation. Please retry your request.',
+      'worker_not_ready' =>
+        'The selected worker is not ready on its workspace.',
+      'cli_not_found' ||
+      'provider_tool_unavailable' =>
+        'The worker needs to be set up on its workspace before it can respond.',
+      'authentication_required' ||
+      'provider_authentication_required' =>
+        'Sign in to the worker on its workspace, then retry your request.',
+      'unsupported_cli_version' ||
+      'unsupported_provider_tool_version' =>
+        'Update the worker on its workspace, then retry your request.',
+      'model_not_supported' =>
+        'The selected model is not available for this worker. Choose another model and retry.',
+      'permission_denied' =>
+        'The worker does not have the access needed to complete your request.',
+      'quota_exhausted' => 'The worker’s usage limit has been reached.',
+      'provider_unavailable' =>
+        'The worker is temporarily unavailable. Please try again later.',
+      'timeout' ||
+      'deadline_exceeded' =>
+        'The worker took too long to respond. Please retry your request.',
+      'cancelled' => 'Request cancelled.',
+      null => validationMessage ??
+          'Your request could not be completed. Please retry.',
+      _ => 'Your request could not be completed. Please retry.',
+    };
+
 String _reasoningEffortDisplayName(String? effort) {
   if (effort == null || effort.trim().isEmpty) return '';
   return switch (effort.trim().toLowerCase()) {
@@ -1163,17 +1195,6 @@ class _WorkTimelineCard extends StatelessWidget {
         .firstOrNull;
     final stepForContext =
         activeStep ?? lastCompletedStep ?? request.steps.firstOrNull;
-    final contextTurn = request.turns
-        .where((turn) => turn.assignmentId == stepForContext?.assignmentId)
-        .lastOrNull;
-    final selectedModel =
-        (contextTurn != null ? contextTurn.modelId : stepForContext?.model)
-            ?.trim();
-    final selectedReasoningEffort = (contextTurn != null
-            ? contextTurn.effort
-            : stepForContext?.reasoningEffort)
-        ?.trim();
-
     final response = request.finalText?.trim().isNotEmpty == true
         ? request.finalText!
         : request.turns
@@ -1187,9 +1208,13 @@ class _WorkTimelineCard extends StatelessWidget {
                 .whereType<String>()
                 .where((text) => text.trim().isNotEmpty)
                 .firstOrNull;
-    final error = request.error?.trim().isNotEmpty == true
+    final rawError = request.error?.trim().isNotEmpty == true
         ? request.error!
         : failedStep?.errorMessage;
+    final error = request.status == 'failed' || rawError?.isNotEmpty == true
+        ? _executionFailureMessage(failedStep?.errorCode,
+            validationMessage: request.steps.isEmpty ? rawError : null)
+        : null;
     final isError = error?.isNotEmpty == true;
 
     // Waiting/queued messages belong to Conclave. A running Step is the
@@ -1200,6 +1225,11 @@ class _WorkTimelineCard extends StatelessWidget {
     final senderTurn = request.turns
         .where((turn) => turn.assignmentId == senderStep?.assignmentId)
         .lastOrNull;
+    final selectedModel =
+        (senderTurn != null ? senderTurn.modelId : senderStep?.model)?.trim();
+    final selectedReasoningEffort =
+        (senderTurn != null ? senderTurn.effort : senderStep?.reasoningEffort)
+            ?.trim();
     final workerType = (senderTurn?.workerTypeId ?? senderStep?.workerTypeId)
         ?.trim()
         .toLowerCase();
@@ -1232,29 +1262,27 @@ class _WorkTimelineCard extends StatelessWidget {
       if (selectedReasoningEffort != null &&
           selectedReasoningEffort.isNotEmpty) {
         formattedModelInfo =
-            '$modelName (${_reasoningEffortDisplayName(selectedReasoningEffort).toLowerCase()})';
+            '$modelName · ${_reasoningEffortDisplayName(selectedReasoningEffort)}';
       } else {
         formattedModelInfo = modelName;
       }
     } else if (selectedReasoningEffort != null &&
         selectedReasoningEffort.isNotEmpty) {
       formattedModelInfo =
-          'Reasoning: ${_reasoningEffortDisplayName(selectedReasoningEffort).toLowerCase()}';
+          'Default model · ${_reasoningEffortDisplayName(selectedReasoningEffort)}';
     }
 
-    if (contextTurn != null) {
+    if (senderTurn != null) {
       final modelLabel = selectedModel?.isNotEmpty == true
           ? _modelDisplayName(selectedModel)
           : 'Default model';
       final effortLabel = selectedReasoningEffort?.isNotEmpty == true
-          ? _reasoningEffortDisplayName(selectedReasoningEffort).toLowerCase()
-          : 'default effort';
-      formattedModelInfo = '$modelLabel ($effortLabel)';
+          ? _reasoningEffortDisplayName(selectedReasoningEffort)
+          : 'Default effort';
+      formattedModelInfo = '$modelLabel · $effortLabel';
     }
     final metadataSegments = [
       if (_workflowName.isNotEmpty) _workflowName,
-      if (formattedModelInfo != null && formattedModelInfo.isNotEmpty)
-        formattedModelInfo,
       if (elapsed.isNotEmpty) elapsed,
     ];
     final metadataString =
@@ -1410,6 +1438,18 @@ class _WorkTimelineCard extends StatelessWidget {
                           color: isDark ? Colors.white : Colors.black87,
                         ),
                       ),
+                      if (isWorkerResponse && formattedModelInfo != null) ...[
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: formattedModelInfo,
+                          triggerMode: TooltipTriggerMode.tap,
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(Icons.info_outline_rounded,
+                                size: 14, color: metaColor),
+                          ),
+                        ),
+                      ],
                       if (metadataString.isNotEmpty) ...[
                         const SizedBox(width: 6),
                         Expanded(
@@ -1685,8 +1725,8 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                           ] else if (step.status == 'failed') ...[
                             const Divider(height: 24),
                             SelectableText(
-                              step.errorMessage ??
-                                  'This request did not produce a response.',
+                              _executionFailureMessage(
+                                  step.errorCode ?? details.errorCode),
                               style: ConclaveMessageTypography.fromTheme(
                                       Theme.of(context))
                                   .copyWith(color: colors.error),
@@ -1700,56 +1740,16 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                               ),
                             ],
                           ],
-                          ExpansionTile(
-                            tilePadding: EdgeInsets.zero,
-                            childrenPadding: EdgeInsets.zero,
-                            title: const Text('Advanced technical details'),
-                            children: [
-                              if (step.assignmentId != null)
-                                _detailValue(
-                                    'Assignment ID', step.assignmentId!),
-                              if (step.engineVersion != null)
-                                _detailValue(
-                                    'Engine version', step.engineVersion!),
-                              if (step.profileDefinitionId != null)
-                                _detailValue(
-                                  'Tool Profile',
-                                  '${step.profileDefinitionId}'
-                                      '${step.profileReleaseVersion == null ? '' : '@${step.profileReleaseVersion}'}',
-                                ),
-                              if (step.providerToolVersion != null)
-                                _detailValue(
-                                    '${step.providerToolName ?? 'Provider tool'} version',
-                                    step.providerToolVersion!),
-                              if (step.model != null)
-                                _detailValue('Model', step.model!),
-                              if (step.sessionPolicy != null)
-                                _detailValue(
-                                  'Session mode',
-                                  step.sessionPolicy == 'durable_session'
-                                      ? 'Durable session'
-                                      : 'Stateless',
-                                ),
-                              if (step.retrySessionStrategy != null)
-                                _detailValue(
-                                  'Last retry session',
-                                  step.retrySessionStrategy == 'fresh'
-                                      ? 'Started fresh'
-                                      : 'Resumed previous session',
-                                ),
-                              if (step.errorCode != null)
-                                _detailValue(
-                                    'Stable error code', step.errorCode!),
-                            ],
-                          ),
                         ],
                       ),
                     ),
                   ),
                 ],
-                if (details.errorCode != null &&
-                    details.steps.every((step) => step.errorCode == null))
-                  SelectableText('Request error code: ${details.errorCode}'),
+                if (details.status == 'failed' && details.steps.isEmpty) ...[
+                  const SizedBox(height: 12),
+                  SelectableText(_executionFailureMessage(details.errorCode),
+                      style: TextStyle(color: colors.error)),
+                ],
                 if (details.status == 'failed' ||
                     details.status == 'queued' ||
                     details.status == 'running') ...[
@@ -1767,17 +1767,6 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
       ),
     );
   }
-
-  Widget _detailValue(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(width: 180, child: Text(label)),
-            Expanded(child: SelectableText(value)),
-          ],
-        ),
-      );
 }
 
 class _DiscussionItem {

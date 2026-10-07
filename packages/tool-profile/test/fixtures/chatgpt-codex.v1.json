@@ -416,6 +416,13 @@
   "errors": {
     "mappings": [
       {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "session_unavailable"
+        },
+        "issueCode": "session_resume_failed"
+      },
+      {
         "evidence": { "kind": "stderr_pattern", "patternId": "cancelled" },
         "issueCode": "cancelled"
       },

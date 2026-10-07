@@ -946,3 +946,109 @@ records to prove that count alone never enables orchestration UI.
 No new UI widget, active product flag, workflow definition, database migration,
 API or runtime protocol change is introduced. Rendering and explicit rollout
 remain deferred until multi-step Conversation workflows are enabled.
+
+## Phase 22 — Worker switch UX
+
+Chat and Work apply composer Worker changes immediately to next-turn preferences,
+without confirmation dialogs or context-synchronization messages. Sending retains
+the same Workstream and selected workflow; routing, bootstrap, resume and delta
+synchronization remain below the UI boundary. Existing turns retain their recorded
+Worker attribution. No extra timeline event is needed while the selected Worker
+is already visible beside Send.
+
+Switching clears the prior Worker's model/effort before reconciling the target
+Profile's capabilities and restoring its remembered choices. It also refreshes
+the display label and clears the previous fallback Worker and fallback label,
+so the next-turn binding cannot carry another Worker's identity metadata.
+
+Widget regressions exercise repeated switches for both Chat and Work, immediate
+submission to the selected Worker, absence of confirmation/synchronization UI,
+and no mutation of shared Workstream defaults. Existing composer tests preserve
+earlier submitted selections when preferences change. No database migration,
+public API or runtime protocol change is required.
+
+## Phase 23 — Model and effort UX
+
+Model and effort selections configure the next request without adding change
+messages to the timeline. Worker responses expose compact recorded metadata such
+as `Model Y · High` through an information icon beside the Worker name. Hovering
+or tapping reveals the detail, keeping ordinary Chat and Work headers quiet and
+making the information accessible on touch devices as well as desktop.
+
+Metadata uses the immutable matching Worker turn, with request-step snapshots
+only when turn evidence is absent. It never uses current composer or catalog
+selections to relabel historical responses. Null recorded choices remain
+`Default model · Default effort`; Conclave does not invent resolved provider
+defaults. Conclave progress/error messages do not show Worker configuration.
+
+Widget coverage exercises Chat and Work, distinct historical configurations,
+explicit defaults, misleading current-step metadata and tap disclosure. No
+database, API or protocol changes are required.
+
+## Phase 24 — Failure UX
+
+Chat and Work translate execution failures into actionable product messages.
+Unavailable conversation continuity asks the user to retry without exposing a
+native session handle or resume status. Other stable failure codes explain
+readiness, sign-in, access, usage limits, model availability and timeouts.
+Unknown execution failures receive a generic retry message, not provider output.
+Local submission validation messages remain available to explain form/access
+problems before an execution exists.
+
+Request details retain results, timing, Worker identity and execution choices,
+but remove the technical expansion containing assignment IDs, Engine/Profile/tool
+versions, session policy, retry session strategy and raw error codes. Technical
+evidence remains in existing Workspace/Engine logs and Profile Lab diagnostics;
+presentation does not modify stored failure evidence or execution behavior.
+
+A successful reconstruction notice requires explicit recovery evidence. This
+phase does not infer recovery from an error code or claim that context was
+restored; automatic reconstruction belongs to Phase 25. Existing Cloud failure
+normalization may classify continuity failures as generic execution failures,
+which receive the generic message rather than an unsupported diagnosis.
+
+Widget regressions exercise failure messages and detail views in both Chat and
+Work, hiding native identifiers and diagnostics. No migration or public contract
+change is introduced.
+
+## Phase 25 — Worker-step session reconstruction
+
+The generic CLI Worker Engine owns reconstruction inside the existing assignment
+execution. An unavailable native session is invalidated locally, then a single
+replacement attempt receives the complete frozen canonical bootstrap from the
+Context Engine plus the current request. WorkflowRun, StepRun, assignment,
+logical WorkerSession scope, model, effort and base revision remain unchanged.
+The replacement uses the Profile's ordinary new-session arguments, without the
+rejected native handle. Native handles remain local execution state.
+
+Reconstruction requires a signed `session_unavailable` stderr-pattern mapping to
+`session_resume_failed`, a failed native resume, no final response or success
+evidence, and no reported provider work/tool progress. Generic provider failures,
+timeouts, authentication failures, malformed output and successful session-ID
+mismatches do not trigger replay. Both attempts share the original timeout
+budget; a failed replacement is terminal rather than recursively retried.
+
+Local WorkerSession schema v1 adds `invalidated` status. Rejected handles cannot
+resume after Engine restart. Invalidation checks the expected native handle so
+an already replaced mapping is preserved. Successful replacement records its
+new native identity and consumed revision/history watermark, retaining logical
+scope and creation time. Failure leaves invalidated state and never advances
+synchronization. Missing canonical context invalidates the rejected handle but
+does not attempt reconstruction. Scope/attribution errors still fail closed.
+
+Technical invalidation/reconstruction events are logged locally with request and
+assignment correlation. Normal UI receives only the eventual result or friendly
+failure; the Engine does not claim recovery before successful completion.
+
+Tool Profile schema v1 adds the bounded `session_unavailable` pattern vocabulary.
+ChatGPT/Gemini fixture profiles and fresh-start draft starter seeds include it.
+Existing Drafts and signed releases are not rewritten. Rollout requires the
+updated Engine and a newly qualified/promoted signed Profile with the mapping.
+No runtime protocol or D1 table migration is required; the baseline seed change
+affects new starter provisioning only.
+
+Executable tests cover full-context reconstruction, failed replacement without
+revision advancement, missing context, restart after invalidation, stale-handle
+invalidation rejection and signed error classification. Existing session scope,
+model-switch, output mismatch and provider failure tests remain applicable.
+Live provider reconstruction and remote Profile promotion were not performed.

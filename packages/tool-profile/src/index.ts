@@ -49,6 +49,7 @@ const issueCode = z.enum([
   "provider_failure",
 ]);
 const stderrPatternId = z.enum([
+  "session_unavailable",
   "cancelled",
   "deadline_exceeded",
   "provider_tool_unavailable",

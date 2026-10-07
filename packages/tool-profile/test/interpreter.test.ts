@@ -427,6 +427,29 @@ describe("Tool Profile v1 pure interpreter", () => {
     ).toBe("session_resume_failed");
   });
 
+  it.each(["chatgpt-codex.v1", "gemini-antigravity.v1"])(
+    "classifies unavailable native sessions through the signed %s mapping",
+    (name) => {
+      const profile = loadProfile(name);
+      expect(
+        interpretProfileExecution(profile, {
+          context: context(),
+          stdout: "",
+          stderr: "Conversation not found",
+          exitCode: 1,
+        }).issueCode,
+      ).toBe("session_resume_failed");
+      expect(
+        interpretProfileExecution(profile, {
+          context: context(),
+          stdout: "",
+          stderr: "Provider temporarily unavailable",
+          exitCode: 1,
+        }).issueCode,
+      ).not.toBe("session_resume_failed");
+    },
+  );
+
   it("maps provider authentication evidence and Engine-owned timeout failures", () => {
     const profile = loadProfile("chatgpt-codex.v1");
     expect(

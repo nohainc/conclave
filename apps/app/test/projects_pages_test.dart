@@ -165,76 +165,169 @@ void main() {
     });
   }
 
-  testWidgets('history uses immutable turns for each response model and effort',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1200, 1400));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final rows = [
-      for (final config in [
-        ('X', 'model-x', 'medium'),
-        ('Y', 'model-y', 'high')
-      ])
-        AxWorkRequest.fromJson({
-          'id': config.$1,
-          'requestedByName': 'User',
-          'prompt': 'Request ${config.$1}',
-          'workflowId': 'direct',
-          'workflowVersion': 2,
-          'workflowName': 'Work',
-          'status': 'completed',
-          'createdAt': '2026-10-07T10:00:00Z',
-          'turns': [
-            turnFixture(
-                    id: config.$1,
-                    requestId: config.$1,
-                    model: config.$2,
-                    effort: config.$3)
-                .toJson()
-          ],
-          'steps': [
-            {
-              'kind': 'implement',
-              'status': 'completed',
-              'workerId': 'worker-a',
-              'assignmentId': 'assignment-${config.$1}',
-              'workerTypeId': 'gemini',
-              'workerDisplayName': 'Wrong current worker',
-              'model': 'wrong-current-model',
-              'reasoningEffort': 'low'
-            }
-          ],
-        })
-    ];
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            body: WorkstreamPage(
-      initialTab: 1,
-      project: const AxProject(
-          id: 'project-1',
-          name: 'Project',
-          branch: '',
-          lastActivity: '',
-          role: 'owner'),
-      workstream: const AxWorkstream(
-          id: 'stream-1',
-          projectId: 'project-1',
-          name: 'Stream',
-          lead: '',
-          status: 'active',
-          brief: '',
-          primaryWorkspace: '',
-          queueStatus: ''),
-      dataSource: _WorkHistoryDataSource(rows),
-      onBackToProject: _noop,
-      onArchive: _noop,
-    ))));
-    await tester.pumpAndSettle();
-    expect(find.text('ChatGPT'), findsNWidgets(2));
-    expect(find.textContaining('model-x (medium)'), findsOneWidget);
-    expect(find.textContaining('model-y (high)'), findsOneWidget);
-    expect(find.text('Wrong current worker'), findsNothing);
-    expect(find.textContaining('wrong-current-model'), findsNothing);
-  });
+  for (final workflow in ['chat', 'direct']) {
+    for (final code in [
+      'session_resume_failed',
+      'execution_failed',
+      'unknown_code'
+    ]) {
+      testWidgets('$workflow $code hides technical diagnostics',
+          (tester) async {
+        await tester.binding.setSurfaceSize(const Size(900, 1200));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        const raw = 'Session C123 failed with resume status XYZ';
+        final step = AxWorkRequestStep(
+            kind: workflow == 'chat' ? 'chat' : 'implement',
+            status: 'failed',
+            workerId: 'worker-a',
+            workerDisplayName: 'ChatGPT',
+            errorCode: code,
+            errorMessage: raw,
+            assignmentId: 'secret-assignment',
+            sessionPolicy: 'durable_session',
+            engineVersion: 'secret-engine-version');
+        final request = AxWorkRequest(
+            id: 'failed-request',
+            requestedByName: 'User',
+            prompt: 'Continue',
+            workflowId: workflow,
+            workflowVersion: workflow == 'chat' ? 1 : 2,
+            status: 'failed',
+            createdAt: '2026-10-07T10:00:00Z',
+            error: raw,
+            steps: [step]);
+        await tester.pumpWidget(MaterialApp(
+            home: Scaffold(
+                body: WorkstreamPage(
+          initialTab: 1,
+          project: const AxProject(
+              id: 'project-1',
+              name: 'Project',
+              branch: '',
+              lastActivity: '',
+              role: 'owner'),
+          workstream: const AxWorkstream(
+              id: 'stream-1',
+              projectId: 'project-1',
+              name: 'Stream',
+              lead: '',
+              status: 'active',
+              brief: '',
+              primaryWorkspace: '',
+              queueStatus: ''),
+          dataSource: _ContinuityFailureDataSource(request, step),
+          onBackToProject: _noop,
+          onArchive: _noop,
+        ))));
+        await tester.pumpAndSettle();
+        final friendly = code == 'session_resume_failed'
+            ? 'The worker could not continue the previous conversation. Please retry your request.'
+            : 'Your request could not be completed. Please retry.';
+        expect(find.text(friendly), findsOneWidget);
+        expect(find.textContaining('C123'), findsNothing);
+        await tester.tap(find.byTooltip('View request details'));
+        await tester.pumpAndSettle();
+        expect(find.text(friendly), findsWidgets);
+        for (final hidden in [
+          raw,
+          code,
+          'secret-assignment',
+          'secret-engine-version',
+          'Advanced technical details',
+          'Session mode'
+        ]) {
+          expect(find.textContaining(hidden), findsNothing);
+        }
+        expect(find.textContaining('restored'), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  for (final workflow in ['chat', 'direct']) {
+    testWidgets('$workflow response details use immutable model and effort',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final rows = [
+        for (final config in [
+          ('X', 'model-x', 'medium'),
+          ('Y', 'model-y', 'high'),
+          ('Default', null, null)
+        ])
+          AxWorkRequest.fromJson({
+            'id': config.$1,
+            'requestedByName': 'User',
+            'prompt': 'Request ${config.$1}',
+            'workflowId': workflow,
+            'workflowVersion': workflow == 'chat' ? 1 : 2,
+            'workflowName': workflow == 'chat' ? 'Chat' : 'Work',
+            'status': 'completed',
+            'createdAt': '2026-10-07T10:00:00Z',
+            'turns': [
+              turnFixture(
+                      id: config.$1,
+                      requestId: config.$1,
+                      model: config.$2,
+                      effort: config.$3)
+                  .toJson()
+                ..['workflowId'] = workflow
+                ..['workflowVersion'] = workflow == 'chat' ? 1 : 2
+            ],
+            'steps': [
+              {
+                'kind': 'implement',
+                'status': 'completed',
+                'workerId': 'worker-a',
+                'assignmentId': 'assignment-${config.$1}',
+                'workerTypeId': 'gemini',
+                'workerDisplayName': 'Wrong current worker',
+                'model': 'wrong-current-model',
+                'reasoningEffort': 'low'
+              }
+            ],
+          })
+      ];
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: WorkstreamPage(
+        initialTab: 1,
+        project: const AxProject(
+            id: 'project-1',
+            name: 'Project',
+            branch: '',
+            lastActivity: '',
+            role: 'owner'),
+        workstream: const AxWorkstream(
+            id: 'stream-1',
+            projectId: 'project-1',
+            name: 'Stream',
+            lead: '',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: '',
+            queueStatus: ''),
+        dataSource: _WorkHistoryDataSource(rows),
+        onBackToProject: _noop,
+        onArchive: _noop,
+      ))));
+      await tester.pumpAndSettle();
+      expect(find.text('ChatGPT'), findsNWidgets(3));
+      expect(find.textContaining('model-x'), findsNothing);
+      expect(find.textContaining('model-y'), findsNothing);
+      expect(find.byTooltip('model-x · Medium'), findsOneWidget);
+      expect(find.byTooltip('model-y · High'), findsOneWidget);
+      expect(find.byTooltip('Default model · Default effort'), findsOneWidget);
+      expect(find.text('Default model · Default effort'), findsNothing);
+      await tester.tap(find.byTooltip('model-x · Medium'));
+      await tester.pumpAndSettle();
+      expect(find.text('model-x · Medium'), findsOneWidget);
+      expect(find.textContaining('Model changed'), findsNothing);
+      expect(find.textContaining('Effort changed'), findsNothing);
+      expect(find.text('Wrong current worker'), findsNothing);
+      expect(find.textContaining('wrong-current-model'), findsNothing);
+    });
+  }
 
   testWidgets(
       'composer choices follow policy and binding metadata for any workflow',
@@ -2428,15 +2521,16 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // Verify Conclave system event has Conclave identity, workflow, model, and elapsed time
+    // Conclave progress keeps workflow/timing without Worker configuration.
     expect(find.text('Conclave'), findsOneWidget);
-    expect(
-        find.textContaining('Direct Execution · gpt-4o · 5s'), findsOneWidget);
+    expect(find.textContaining('Direct Execution · 5s'), findsOneWidget);
+    expect(find.byTooltip('gpt-4o'), findsNothing);
 
-    // Verify Worker completed response has Worker name, official worker icon, workflow, and model
+    // Worker identity stays visible; its model is available on demand.
     expect(find.text('Claude 3.7 Sonnet'), findsOneWidget);
-    expect(find.textContaining('Direct Execution · claude-3-7-sonnet · 12s'),
-        findsOneWidget);
+    expect(find.textContaining('Direct Execution · 12s'), findsOneWidget);
+    expect(find.byTooltip('claude-3-7-sonnet'), findsOneWidget);
+    expect(find.textContaining('claude-3-7-sonnet'), findsNothing);
     // A running response has worker attribution before any result text exists.
     expect(find.text('ChatGPT'), findsOneWidget);
     final assetImages = tester
@@ -2574,6 +2668,89 @@ void main() {
 
     await tester.binding.setSurfaceSize(null);
   });
+
+  for (final workflow in ['direct:v2', 'chat:v1']) {
+    testWidgets('$workflow switches worker without a continuity warning',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final data = _WorkerSwitchDataSource();
+      AxTurnExecutionSelection? sent;
+      String? sentWorkflow;
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: WorkstreamPage(
+        initialTab: 1,
+        project: const AxProject(
+            id: 'project-1',
+            name: 'Project',
+            branch: '',
+            lastActivity: '',
+            role: 'collaborator'),
+        workstream: const AxWorkstream(
+            id: 'stream-1',
+            projectId: 'project-1',
+            name: 'Stream',
+            lead: '',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: '',
+            queueStatus: '',
+            canExecuteWork: true,
+            workConfig: {
+              'bindings': {
+                'direct': {
+                  'workerId': 'w-chatgpt',
+                  'model': 'typed-model',
+                  'workerLabel': {'displayName': 'ChatGPT'},
+                  'fallbackWorkerId': 'old-fallback',
+                  'fallbackWorkerLabel': {'displayName': 'Old fallback'}
+                },
+                'chat': {'workerId': 'w-chatgpt', 'model': 'typed-model'}
+              }
+            }),
+        dataSource: data,
+        onBackToProject: _noop,
+        onArchive: _noop,
+        onRunWork: (_, selectedWorkflow, ___, key, selection) async {
+          sentWorkflow = selectedWorkflow;
+          sent = selection;
+          return 'switch-request';
+        },
+      ))));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Choose workflow'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byWidgetPredicate((widget) =>
+          widget is CheckedPopupMenuItem<String> && widget.value == workflow));
+      await tester.pumpAndSettle();
+      for (final workerId in ['w-second', 'w-chatgpt', 'w-second']) {
+        await tester.tap(find.byTooltip('Choose worker'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byWidgetPredicate((widget) =>
+            widget is CheckedPopupMenuItem<String> &&
+            widget.value == workerId));
+        await tester.pumpAndSettle();
+        expect(find.byType(AlertDialog), findsNothing);
+        expect(find.textContaining('context synchronized'), findsNothing);
+        expect(find.textContaining('Are you sure'), findsNothing);
+      }
+      expect(find.text('Second Worker'), findsOneWidget);
+      expect(find.byTooltip('Choose model'), findsNothing);
+      final composer = find.byType(MarkdownComposer).last;
+      await tester.enterText(
+          find.descendant(of: composer, matching: find.byType(TextField)),
+          'Continue with this worker');
+      await tester.tap(find.byTooltip('Send request'));
+      await tester.pumpAndSettle();
+      expect(sent?.workerId, 'w-second');
+      expect(sent?.modelId, isNull);
+      expect(sent?.effort, isNull);
+      expect(sentWorkflow, workflow.split(':').first);
+      expect(data.savedWorkConfig, isNull);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets(
       'composer uses normalized capabilities and snapshots local next-turn choices',
@@ -3447,4 +3624,25 @@ class _SimpleConversationDataSource extends _WorkHistoryDataSource {
           workflowVersion: request.workflowVersion,
           steps: request.steps,
           requestedByName: request.requestedByName);
+}
+
+class _WorkerSwitchDataSource extends _ComposerOptionsDataSource {
+  @override
+  Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() =>
+      _CurrentWorkflowUiDataSource().loadBuiltinWorkflowCatalog();
+}
+
+class _ContinuityFailureDataSource extends _WorkHistoryDataSource {
+  _ContinuityFailureDataSource(this.request, this.step) : super([request]);
+  final AxWorkRequest request;
+  final AxWorkRequestStep step;
+  @override
+  Future<AxWorkRequestStatus> loadWorkRequest(
+          {required String workRequestId}) async =>
+      AxWorkRequestStatus(
+          id: workRequestId,
+          status: 'failed',
+          errorCode: step.errorCode,
+          errorMessage: step.errorMessage,
+          steps: [step]);
 }

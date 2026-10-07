@@ -743,6 +743,8 @@ function boundedText(value: string): string {
 }
 
 const stderrMatchers: Record<string, RegExp> = {
+  session_unavailable:
+    /(?:session|thread|conversation).{0,60}(?:not found|does not exist|no longer exists|unavailable)|(?:no such|unknown) (?:session|thread|conversation)/i,
   cancelled: /cancelled|canceled|interrupted|user interrupted/i,
   deadline_exceeded: /timeout|timed out|deadline exceeded/i,
   provider_tool_unavailable: /enoent|executable not found|command not found/i,

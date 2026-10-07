@@ -6,6 +6,67 @@ import 'package:conclave_cli_worker_engine/src/engine_session_store.dart';
 
 void main() {
   test(
+    'invalidated native session cannot resume after restart and replacement retains scope',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'session-invalidation-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final store = EngineSessionStore(root);
+      final scope = WorkerSessionContext(
+        id: 'logical-session',
+        conversationId: 'conversation',
+        workerId: 'worker',
+        baseContextRevision: 0,
+      );
+      Future<void> write(String native) => store.write(
+        sessionKey: 'scope',
+        workerTypeId: 'fixture',
+        profileDefinitionId: 'profile',
+        providerToolIdentity: 'tool',
+        profileReleaseVersion: 1,
+        sessionFormatId: 'format',
+        sessionId: native,
+        workerSession: scope,
+      );
+      Future<bool> invalidate(String expected) => store.invalidate(
+        sessionKey: 'scope',
+        workerTypeId: 'fixture',
+        profileDefinitionId: 'profile',
+        providerToolIdentity: 'tool',
+        expectedNativeSessionId: expected,
+      );
+      Future<String?> read() => EngineSessionStore(root).read(
+        sessionKey: 'scope',
+        workerTypeId: 'fixture',
+        profileDefinitionId: 'profile',
+        providerToolIdentity: 'tool',
+        compatibleFormatIds: ['format'],
+        workerSession: scope,
+      );
+      await write('old-native');
+      final file = root.listSync().whereType<File>().single;
+      final createdAt =
+          (jsonDecode(file.readAsStringSync())
+              as Map)['workerSession']['createdAt'];
+      expect(await invalidate('another-native'), isFalse);
+      expect(await read(), 'old-native');
+      expect(await invalidate('old-native'), isTrue);
+      expect(await read(), isNull);
+      await write('replacement-native');
+      expect(await read(), 'replacement-native');
+      final metadata =
+          (jsonDecode(file.readAsStringSync()) as Map)['workerSession'] as Map;
+      expect(metadata['id'], 'logical-session');
+      expect(metadata['conversationId'], 'conversation');
+      expect(metadata['createdAt'], createdAt);
+      expect(metadata['status'], 'active');
+      expect(await invalidate('old-native'), isFalse);
+      expect(await read(), 'replacement-native');
+    },
+  );
+
+  test(
     'fast path requires exact synchronized context and active native state',
     () async {
       final root = await Directory.systemTemp.createTemp('session-fast-path-');

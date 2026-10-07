@@ -70,6 +70,7 @@ class EngineSessionStore {
           'Worker Session belongs to another Conversation or Worker',
         );
       }
+      if (stored.status == 'invalidated') return null;
       // Effort is a per-turn Profile option. It never participates in native
       // session identity or model-switch compatibility checks.
       if (stored.synchronizedContextRevision >
@@ -119,6 +120,37 @@ class EngineSessionStore {
     final storedFormat = decoded['sessionFormatId'] as String;
     if (!compatibleFormatIds.contains(storedFormat)) return null;
     return decoded['sessionId'] as String;
+  }
+
+  /// Invalidate only the native handle read by this execution. Retain local
+  /// attribution for diagnostics; a concurrent replacement must never be erased.
+  Future<bool> invalidate({
+    required String sessionKey,
+    required String workerTypeId,
+    required String profileDefinitionId,
+    required String providerToolIdentity,
+    required String expectedNativeSessionId,
+  }) async {
+    final file = _file(
+      sessionKey,
+      workerTypeId,
+      profileDefinitionId,
+      providerToolIdentity,
+    );
+    if (!await file.exists()) return false;
+    await _assertContained(file);
+    if (await file.length() > 8192)
+      throw const FormatException('Session state exceeds its limit');
+    final decoded =
+        jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    if (decoded['sessionId'] != expectedNativeSessionId) return false;
+    if (decoded['workerSession'] is Map) {
+      (decoded['workerSession'] as Map)['status'] = 'invalidated';
+      await file.writeAsString(jsonEncode(decoded));
+    } else {
+      await file.delete();
+    }
+    return true;
   }
 
   Future<void> write({

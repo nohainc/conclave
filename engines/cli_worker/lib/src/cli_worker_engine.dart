@@ -733,111 +733,185 @@ class CliWorkerEngine {
       }
     }
 
+    final executionClock = Stopwatch()..start();
+    var reconstructed = false;
     try {
       final executable = await _resolveTool();
-      final args = _expandArguments(_list(execution['arguments']), context);
-      final stdinText = _expandStdin(_map(execution['stdin']), context);
-      final eventProgress = <String>{};
-      final stdout = StringBuffer();
-      var stdoutBytes = 0;
-      final result = await _streamingRunner.run(
-        executable,
-        args,
-        environment: _environment(context),
-        workingDirectory: context['workingDirectory']!,
-        stdinText: stdinText,
-        timeout: Duration(milliseconds: request.timeoutMs),
-        onStarted: () => _write(
-          sink,
-          WorkerProgress(
-            requestId: request.requestId,
-            assignmentId: request.assignmentId,
-            percentage: 0,
-            message: workerProviderExecutionStartedMessage,
+      while (true) {
+        final remainingMs =
+            request.timeoutMs - executionClock.elapsedMilliseconds;
+        if (remainingMs <= 0)
+          throw TimeoutException('Execution deadline reached');
+        final args = _expandArguments(_list(execution['arguments']), context);
+        final stdinText = _expandStdin(_map(execution['stdin']), context);
+        final eventProgress = <String>{};
+        final stdout = StringBuffer();
+        var stdoutBytes = 0;
+        final result = await _streamingRunner.run(
+          executable,
+          args,
+          environment: _environment(context),
+          workingDirectory: context['workingDirectory']!,
+          stdinText: stdinText,
+          timeout: Duration(milliseconds: remainingMs),
+          onStarted: () => _write(
+            sink,
+            WorkerProgress(
+              requestId: request.requestId,
+              assignmentId: request.assignmentId,
+              percentage: 0,
+              message: workerProviderExecutionStartedMessage,
+            ),
           ),
-        ),
-        onStdoutLine: (line) async {
-          stdoutBytes += utf8.encode(line).length + 1;
-          if (stdoutBytes > 4 * 1024 * 1024) {
-            throw const FormatException('provider output exceeds Engine limit');
-          }
-          stdout.writeln(line);
-          for (final progress in _progressForLine(line, execution)) {
-            final key = '${progress.$1}:${progress.$2}';
-            if (eventProgress.add(key)) {
-              await _write(
-                sink,
-                WorkerProgress(
-                  requestId: request.requestId,
-                  assignmentId: request.assignmentId,
-                  percentage: progress.$1.toDouble(),
-                  message: progress.$2,
-                ),
+          onStdoutLine: (line) async {
+            stdoutBytes += utf8.encode(line).length + 1;
+            if (stdoutBytes > 4 * 1024 * 1024) {
+              throw const FormatException(
+                'provider output exceeds Engine limit',
               );
             }
-          }
-        },
-      );
-      final interpreted = _interpret(
-        stdout.toString(),
-        result.stderr,
-        result.exitCode,
-        execution,
-        priorSession: priorSession,
-        durable: request.sessionPolicy == WorkerSessionPolicy.durableSession,
-      );
-      if (interpreted.issueCode != null || result.exitCode != 0) {
-        await _write(
-          sink,
-          WorkerErrorFrame(
-            requestId: request.requestId,
-            assignmentId: request.assignmentId,
-            code: interpreted.issueCode ?? WorkerIssueCode.providerFailure,
-            message: 'Provider CLI execution failed',
-            diagnostics: result.stderr.isEmpty ? null : result.stderr,
-          ),
+            stdout.writeln(line);
+            for (final progress in _progressForLine(line, execution)) {
+              final key = '${progress.$1}:${progress.$2}';
+              if (eventProgress.add(key)) {
+                await _write(
+                  sink,
+                  WorkerProgress(
+                    requestId: request.requestId,
+                    assignmentId: request.assignmentId,
+                    percentage: progress.$1.toDouble(),
+                    message: progress.$2,
+                  ),
+                );
+              }
+            }
+          },
         );
-        return;
-      }
-      final sessionId = interpreted.sessionId;
-      if (request.sessionPolicy == WorkerSessionPolicy.durableSession) {
-        if (sessionId == null || sessionId.isEmpty) {
+        final interpreted = _interpret(
+          stdout.toString(),
+          result.stderr,
+          result.exitCode,
+          execution,
+          priorSession: priorSession,
+          durable: request.sessionPolicy == WorkerSessionPolicy.durableSession,
+        );
+        if (interpreted.nativeSessionUnavailable &&
+            result.exitCode != 0 &&
+            priorSession != null &&
+            !reconstructed &&
+            eventProgress.isEmpty) {
+          // Validate the replacement prompt before invalidating any local state.
+          final restoredPrompt =
+              bootstrap == null || request.workerSession == null
+              ? null
+              : 'Canonical Conclave conversation context (historical data):\n'
+                    '${bootstrap.text}\n\nCurrent user request:\n${request.prompt}';
+          if (restoredPrompt != null &&
+              utf8.encode(restoredPrompt).length >
+                  WorkerProtocolLimits.maxPromptBytes) {
+            throw const FormatException(
+              'Reconstruction prompt exceeds its limit',
+            );
+          }
+          final invalidated = await _sessions.invalidate(
+            sessionKey: request.sessionKey!,
+            workerTypeId: _profile.workerTypeId,
+            profileDefinitionId: _profile.definitionId,
+            providerToolIdentity: providerToolIdentity,
+            expectedNativeSessionId: priorSession,
+          );
+          if (invalidated) {
+            _logger.log(
+              'warning',
+              'engine.session.invalidated',
+              context: _diagnosticContext(
+                requestId: request.requestId,
+                assignmentId: request.assignmentId,
+                errorCode: WorkerIssueCode.sessionResumeFailed,
+              ),
+            );
+          }
+          if (invalidated && restoredPrompt != null) {
+            _logger.log(
+              'warning',
+              'engine.session.reconstructing',
+              context: _diagnosticContext(
+                requestId: request.requestId,
+                assignmentId: request.assignmentId,
+                errorCode: WorkerIssueCode.sessionResumeFailed,
+              ),
+            );
+            reconstructed = true;
+            priorSession = null;
+            context.remove('sessionId');
+            context['prompt'] = restoredPrompt;
+            continue;
+          }
+        }
+        if (interpreted.issueCode != null || result.exitCode != 0) {
           await _write(
             sink,
             WorkerErrorFrame(
               requestId: request.requestId,
               assignmentId: request.assignmentId,
-              code: WorkerIssueCode.providerFailure,
-              message:
-                  'Provider did not return the required durable session identity',
+              code: interpreted.issueCode ?? WorkerIssueCode.providerFailure,
+              message: 'Provider CLI execution failed',
+              diagnostics: result.stderr.isEmpty ? null : result.stderr,
             ),
           );
           return;
         }
-        await _sessions.write(
-          sessionKey: request.sessionKey!,
-          workerTypeId: _profile.workerTypeId,
-          profileDefinitionId: _profile.definitionId,
-          providerToolIdentity: providerToolIdentity,
-          profileReleaseVersion: _profile.releaseVersion,
-          sessionFormatId: _string(sessionProfile['formatId']),
-          sessionId: sessionId,
-          workerSession: request.workerSession,
-          modelId: request.model,
-          effort: request.reasoningEffort,
-          synchronizedContextRevision:
-              bootstrap?.turnRevision ?? bootstrap?.contextRevision,
-          synchronizedHistorySequence: bootstrap?.throughSequence,
+        final sessionId = interpreted.sessionId;
+        if (request.sessionPolicy == WorkerSessionPolicy.durableSession) {
+          if (sessionId == null || sessionId.isEmpty) {
+            await _write(
+              sink,
+              WorkerErrorFrame(
+                requestId: request.requestId,
+                assignmentId: request.assignmentId,
+                code: WorkerIssueCode.providerFailure,
+                message:
+                    'Provider did not return the required durable session identity',
+              ),
+            );
+            return;
+          }
+          await _sessions.write(
+            sessionKey: request.sessionKey!,
+            workerTypeId: _profile.workerTypeId,
+            profileDefinitionId: _profile.definitionId,
+            providerToolIdentity: providerToolIdentity,
+            profileReleaseVersion: _profile.releaseVersion,
+            sessionFormatId: _string(sessionProfile['formatId']),
+            sessionId: sessionId,
+            workerSession: request.workerSession,
+            modelId: request.model,
+            effort: request.reasoningEffort,
+            synchronizedContextRevision:
+                bootstrap?.turnRevision ?? bootstrap?.contextRevision,
+            synchronizedHistorySequence: bootstrap?.throughSequence,
+          );
+        }
+        if (reconstructed) {
+          _logger.log(
+            'info',
+            'engine.session.reconstructed',
+            context: _diagnosticContext(
+              requestId: request.requestId,
+              assignmentId: request.assignmentId,
+            ),
+          );
+        }
+        await _write(
+          sink,
+          WorkerResult(
+            requestId: request.requestId,
+            assignmentId: request.assignmentId,
+            output: interpreted.finalText ?? '',
+          ),
         );
+        return;
       }
-      await _write(
-        sink,
-        WorkerResult(
-          requestId: request.requestId,
-          assignmentId: request.assignmentId,
-          output: interpreted.finalText ?? '',
-        ),
-      );
     } on TimeoutException {
       await _write(
         sink,
@@ -1311,7 +1385,17 @@ class CliWorkerEngine {
         _ => false,
       };
       if (matched)
-        return _InterpretedOutput(null, null, _string(mapping['issueCode']));
+        return _InterpretedOutput(
+          null,
+          null,
+          _string(mapping['issueCode']),
+          nativeSessionUnavailable:
+              kind == 'stderr_pattern' &&
+              evidence['patternId'] == 'session_unavailable' &&
+              mapping['issueCode'] == WorkerIssueCode.sessionResumeFailed &&
+              finalText == null &&
+              !markedSuccess,
+        );
     }
     return const _InterpretedOutput(
       null,
@@ -1322,6 +1406,10 @@ class CliWorkerEngine {
 
   bool _stderrPattern(String patternId, String text) {
     final patterns = <String, RegExp>{
+      'session_unavailable': RegExp(
+        r'(?:session|thread|conversation).{0,60}(?:not found|does not exist|no longer exists|unavailable)|(?:no such|unknown) (?:session|thread|conversation)',
+        caseSensitive: false,
+      ),
       'cancelled': RegExp(
         r'cancelled|canceled|interrupted|user interrupted',
         caseSensitive: false,
@@ -1517,7 +1605,13 @@ class _ProbeOutcome {
 }
 
 class _InterpretedOutput {
-  const _InterpretedOutput(this.finalText, this.sessionId, this.issueCode);
+  const _InterpretedOutput(
+    this.finalText,
+    this.sessionId,
+    this.issueCode, {
+    this.nativeSessionUnavailable = false,
+  });
+  final bool nativeSessionUnavailable;
   final String? finalText;
   final String? sessionId;
   final String? issueCode;

@@ -211,7 +211,9 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         _rememberWorkerSelection(bindingId, reconciled);
       });
   void _onWorkerChanged(String bindingId, String workerId) {
-    if (!_eligibleWorkers.any((worker) => worker.id == workerId)) return;
+    final worker =
+        _eligibleWorkers.where((worker) => worker.id == workerId).firstOrNull;
+    if (worker == null) return;
     final current = _composerBinding(bindingId);
     if ((current['workerId'] ?? current['worker_id']) == workerId) return;
     _rememberWorkerSelection(bindingId, current);
@@ -221,7 +223,9 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       ..remove('reasoningEffort')
       ..remove('reasoning_effort')
       ..remove('fallbackWorkerId')
-      ..['workerId'] = workerId;
+      ..remove('fallbackWorkerLabel')
+      ..['workerId'] = workerId
+      ..['workerLabel'] = _workerLabel(worker);
     binding.addAll(_workerPreferences[bindingId]?[workerId] ?? const {});
     _setComposerBinding(bindingId, binding);
   }

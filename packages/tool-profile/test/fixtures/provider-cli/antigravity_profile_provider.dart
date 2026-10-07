@@ -133,6 +133,51 @@ Future<void> main(List<String> arguments) async {
     }
   }
 
+  if (prompt.startsWith('Recover unavailable')) {
+    final resumed = arguments.contains('--conversation');
+    if (resumed || prompt == 'Recover unavailable failure') {
+      stderr.writeln('Conversation not found');
+      exitCode = 1;
+      return;
+    }
+    const prefix =
+        'Canonical Conclave conversation context (historical data):\n';
+    if (!transportedPrompt.startsWith(prefix) || separator < 0) {
+      stderr.writeln('Missing reconstruction context');
+      exitCode = 2;
+      return;
+    }
+    final doc =
+        jsonDecode(transportedPrompt.substring(prefix.length, separator))
+            as Map;
+    if (jsonEncode(doc['history']) !=
+        jsonEncode([
+          {
+            'sequence': 1,
+            'contextRevision': 1,
+            'kind': 'user_message',
+            'text': 'Earlier question',
+          },
+          {
+            'sequence': 2,
+            'contextRevision': 1,
+            'kind': 'worker_response',
+            'text': 'ChatGPT answer',
+          },
+        ])) {
+      stderr.writeln('Reconstruction did not use full canonical history');
+      exitCode = 2;
+      return;
+    }
+    final content = await File(
+      'packages/tool-profile/test/fixtures/antigravity-events/success.jsonl',
+    ).readAsString();
+    stdout.write(
+      content.replaceAll('fixture-conversation-1', 'replacement-conversation'),
+    );
+    return;
+  }
+
   final isLive = prompt == _livePrompt;
   final isResume = arguments.contains('--conversation');
   final isMismatch = prompt == 'Continue safely';

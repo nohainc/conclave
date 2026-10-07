@@ -537,6 +537,95 @@ void main() {
         synchronized['workerSession'],
         containsPair('synchronizedHistorySequence', 8),
       );
+      for (final failReplacement in [false, true]) {
+        final scope =
+            'reconstruction-${failReplacement ? 'failure' : 'success'}';
+        await executeRelease(
+          releaseVersion: 4,
+          sessionFormatId: 'antigravity-conversation-v1',
+          compatibleFormatIds: ['antigravity-conversation-v1'],
+          requestId: '$scope-start',
+          prompt: 'Start model A',
+          model: 'model-A',
+          sessionKey: scope,
+        );
+        final reconstructed = await executeRelease(
+          releaseVersion: 4,
+          sessionFormatId: 'antigravity-conversation-v1',
+          compatibleFormatIds: ['antigravity-conversation-v1'],
+          requestId: '$scope-recover',
+          prompt: failReplacement
+              ? 'Recover unavailable failure'
+              : 'Recover unavailable',
+          model: 'model-A',
+          sessionKey: scope,
+          bootstrap: contextSnapshot(1, priorHistory),
+          expectFailure: failReplacement,
+        );
+        final state = stateDirectory
+            .listSync()
+            .whereType<File>()
+            .where((f) => f.uri.pathSegments.last.startsWith('session-'))
+            .map((f) => jsonDecode(f.readAsStringSync()) as Map)
+            .singleWhere((s) => s['sessionKey'] == scope);
+        if (failReplacement) {
+          expect(reconstructed, isNull);
+          expect(state['workerSession'], containsPair('status', 'invalidated'));
+          expect(
+            state['workerSession'],
+            containsPair('synchronizedContextRevision', 0),
+          );
+        } else {
+          expect(reconstructed!.output, 'Gemini answer');
+          expect(state['sessionId'], 'replacement-conversation');
+          expect(state['workerSession'], containsPair('status', 'active'));
+          expect(
+            state['workerSession'],
+            containsPair('synchronizedContextRevision', 2),
+          );
+        }
+      }
+      const missingContextScope = 'reconstruction-missing-context';
+      await executeRelease(
+        releaseVersion: 4,
+        sessionFormatId: 'antigravity-conversation-v1',
+        compatibleFormatIds: ['antigravity-conversation-v1'],
+        requestId: 'missing-context-start',
+        prompt: 'Start model A',
+        model: 'model-A',
+        sessionKey: missingContextScope,
+      );
+      await executeRelease(
+        releaseVersion: 4,
+        sessionFormatId: 'antigravity-conversation-v1',
+        compatibleFormatIds: ['antigravity-conversation-v1'],
+        requestId: 'missing-context-failure',
+        prompt: 'Recover unavailable',
+        model: 'model-A',
+        sessionKey: missingContextScope,
+        expectFailure: true,
+      );
+      final unavailableState = stateDirectory
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.uri.pathSegments.last.startsWith('session-'))
+          .map((f) => jsonDecode(f.readAsStringSync()) as Map)
+          .singleWhere((s) => s['sessionKey'] == missingContextScope);
+      expect(
+        unavailableState['workerSession'],
+        containsPair('status', 'invalidated'),
+      );
+      final afterRestart = await executeRelease(
+        releaseVersion: 4,
+        sessionFormatId: 'antigravity-conversation-v1',
+        compatibleFormatIds: ['antigravity-conversation-v1'],
+        requestId: 'missing-context-restored',
+        prompt: 'Recover unavailable',
+        model: 'model-A',
+        sessionKey: missingContextScope,
+        bootstrap: contextSnapshot(1, priorHistory),
+      );
+      expect(afterRestart!.output, 'Gemini answer');
     },
   );
 }

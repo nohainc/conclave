@@ -309,6 +309,18 @@ inferring a global Worker from Workflow names or the first graph Step. Model
 effort choices remain Profile-constrained. See
 [Workflow execution policy](CONVERSATION_CONTINUITY_V1.md#workflow-execution-policy-phase-2).
 
+Changing composer model or effort does not append a conversation message. Chat
+and Work responses keep recorded model/effort in a compact hover/tap detail beside
+the Worker name, rather than repeating the configuration in each visible header.
+Historical details follow the displayed Worker turn, including explicit default
+selections; current composer choices never rewrite them.
+
+Failed responses and request details use plain-language execution messages.
+Native session identifiers, resume statuses, assignment IDs, runtime versions
+and raw error codes belong in Workspace/Engine logs and Profile Lab diagnostics,
+not ordinary Chat/Work details. Recovery notices require confirmed recovery;
+an error alone never implies that the conversation context was restored.
+
 ## Step handoff semantics
 
 The renderer passes only these inputs for each step. It does not append prior

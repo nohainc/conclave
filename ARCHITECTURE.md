@@ -65,6 +65,10 @@ A future step-list presentation adapter requires explicit enablement and a match
 versioned multi-step workflow; backend record counts alone never enable it.
 Per-assignment turns preserve immutable
 execution attribution, and lifecycle evidence; retries retain separate records.
+The CLI Worker Engine reconstructs unavailable native sessions at the Worker-step
+boundary using frozen canonical context, within the same assignment and workflow
+run. Rejected handles remain invalidated locally until replacement succeeds;
+signed Profile error mappings authorize one bounded reconstruction attempt.
 Versioned product Workflow definitions pin existing execution graphs, with
 Work (`work:v1`) mapped to `direct:v2`. Native provider continuity remains local to Workspace/Engine. Conclave owns an append-only canonical history of messages,
 responses, workflow/execution events, artifact events, and context events; provider

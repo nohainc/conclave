@@ -1971,7 +1971,10 @@ h3 {
 }
 
 .trust-icon {
-  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent-primary, #7c5cfc);
 }
 
 @media (max-width: 640px) {
@@ -2043,7 +2046,10 @@ h3 {
 }
 
 .project-icon {
-  font-size: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-soft);
 }
 
 .project-name {
@@ -2176,8 +2182,15 @@ h3 {
 }
 
 .ws-icon {
-  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-soft);
   flex-shrink: 0;
+}
+
+.ws-item.is-active .ws-icon {
+  color: var(--color-accent-primary, #7c5cfc);
 }
 
 .ws-name {
@@ -2614,7 +2627,14 @@ h3 {
 }
 
 .privacy-node-icon {
-  font-size: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-soft);
+}
+
+.privacy-flow-node--secure .privacy-node-icon {
+  color: var(--color-accent-primary, #7c5cfc);
 }
 
 .privacy-flow-node strong {
@@ -2661,7 +2681,10 @@ h3 {
 }
 
 .privacy-card-icon {
-  font-size: 1.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  color: var(--color-accent-primary, #7c5cfc);
 }
 
 .privacy-card strong {
@@ -2865,7 +2888,10 @@ h3 {
 }
 
 .project-card-icon {
-  font-size: 1.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent-primary, #7c5cfc);
 }
 
 .project-card-header h3 {
@@ -2905,8 +2931,16 @@ h3 {
 }
 
 .ws-mini-icon {
-  font-size: 0.85rem;
-  margin-top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-soft);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.ws-mini-item--active .ws-mini-icon {
+  color: var(--color-accent-primary, #7c5cfc);
 }
 
 .ws-mini-text {
@@ -3122,16 +3156,19 @@ h3 {
 .audience-card__icon-badge--family {
   background: rgba(236, 72, 153, 0.12);
   border: 1px solid rgba(236, 72, 153, 0.3);
+  color: #ec4899;
 }
 
 .audience-card__icon-badge--teams {
   background: rgba(59, 130, 246, 0.12);
   border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #3b82f6;
 }
 
 .audience-card__icon-badge--dev {
   background: rgba(168, 85, 247, 0.12);
   border: 1px solid rgba(168, 85, 247, 0.3);
+  color: #a855f7;
 }
 
 .audience-card h3 {
@@ -3268,7 +3305,10 @@ h3 {
 }
 
 .usecase-card-icon {
-  font-size: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  color: var(--color-accent-primary, #7c5cfc);
 }
 
 .usecase-card h3 {

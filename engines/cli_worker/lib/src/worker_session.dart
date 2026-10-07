@@ -57,6 +57,7 @@ class WorkerSession {
         (json['lastEffort'] != null && json['lastEffort'] is! String) ||
         !const {
           'active',
+          'invalidated',
           'requires_synchronization',
         }.contains(json['status'])) {
       throw const FormatException('Invalid local Worker Session schema');
