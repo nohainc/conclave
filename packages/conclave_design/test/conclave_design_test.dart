@@ -73,6 +73,9 @@ void main() {
       expect(ConclaveTypography.codeSmall.fontSize, 12);
       expect(ConclaveTypography.codeBlock.fontSize, 13);
       expect(ConclaveTypography.monoSmall.fontSize, 11);
+      expect(ConclaveTypography.wordmark.fontSize, 16);
+      expect(ConclaveTypography.wordmark.fontWeight, FontWeight.w700);
+      expect(ConclaveTypography.wordmark.letterSpacing, -0.32);
 
       // Verify no typography scale item is below 11px
       expect(ConclaveTypography.caption.fontSize!, greaterThanOrEqualTo(11.0));

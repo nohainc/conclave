@@ -86,15 +86,12 @@ class AppSidebar extends StatelessWidget {
                           children: [
                             ConclaveBrand.logoMark(size: 28),
                             const SizedBox(width: 10),
-                            const Flexible(
+                            Flexible(
                               child: Text(
                                 'Conclave AX',
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
+                                style: ConclaveBrand.wordmark.copyWith(
                                   color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16,
-                                  letterSpacing: -.3,
                                 ),
                               ),
                             ),

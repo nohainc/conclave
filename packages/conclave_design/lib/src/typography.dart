@@ -24,6 +24,16 @@ abstract final class ConclaveTypography {
     'monospace',
   ];
 
+  /// Wordmark typography (Inter, 700, -0.02em tracking)
+  static const wordmark = TextStyle(
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
+    fontSize: 16,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.32,
+    height: 1.2,
+  );
+
   /// Display / Hero headline (26px, 700)
   static const display = TextStyle(
     fontFamily: fontFamily,
