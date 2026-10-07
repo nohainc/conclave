@@ -54,8 +54,15 @@ export async function listPendingInvitations(
   email: string,
   now = new Date().toISOString(),
 ): Promise<PendingInvitation[]> {
-  void db;
-  void email;
-  void now;
-  return [];
+  const normalized = email.trim().toLowerCase();
+  const rows = await db
+    .prepare(
+      `SELECT id, project_id AS projectId, email, role, status, expires_at AS expiresAt
+       FROM project_invitations
+       WHERE lower(email) = lower(?1) AND status = 'pending' AND expires_at > ?2
+       ORDER BY created_at DESC`,
+    )
+    .bind(normalized, now)
+    .all<PendingInvitation>();
+  return (rows.results ?? []) as PendingInvitation[];
 }

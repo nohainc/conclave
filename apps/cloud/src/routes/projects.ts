@@ -640,6 +640,38 @@ export async function handleExpireProjectInvitation(
   return json({ id: invitationId, status: "expired" });
 }
 
+export async function handleListCurrentUserInvitations(
+  request: Request,
+  env: SecurityEnv,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, accessContext);
+  const email = context.user.email.trim().toLowerCase();
+  const now = new Date().toISOString();
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT 
+       pi.id,
+       pi.project_id AS projectId,
+       p.name AS projectName,
+       pi.email,
+       pi.role,
+       pi.status,
+       pi.invited_by_user_id AS invitedByUserId,
+       u.display_name AS invitedByUserName,
+       u.email AS invitedByUserEmail,
+       pi.expires_at AS expiresAt,
+       pi.created_at AS createdAt
+     FROM project_invitations pi
+     JOIN projects p ON p.id = pi.project_id
+     JOIN users u ON u.id = pi.invited_by_user_id
+     WHERE LOWER(pi.email) = ?1 AND pi.status = 'pending' AND pi.expires_at > ?2
+     ORDER BY pi.created_at DESC`,
+  )
+    .bind(email, now)
+    .all();
+  return json({ invitations: rows.results ?? [] });
+}
+
 export async function handleAcceptProjectInvitation(
   request: Request,
   env: SecurityEnv,
@@ -664,7 +696,10 @@ export async function handleAcceptProjectInvitation(
     throw new HttpError(404, "Project invitation not found");
   if (new Date(invitation.expiresAt).getTime() <= Date.now())
     throw new HttpError(410, "Project invitation expired");
-  if (context.user.email.toLowerCase() !== invitation.email.toLowerCase())
+  if (
+    context.user.email.trim().toLowerCase() !==
+    invitation.email.trim().toLowerCase()
+  )
     throw new HttpError(403, "Invitation email does not match signed-in user");
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.batch([
@@ -691,8 +726,62 @@ export async function handleAcceptProjectInvitation(
     ),
   ]);
   return json({
+    id: invitation.id,
     projectId: invitation.projectId,
     role: invitation.role,
+    status: "accepted",
     accepted: true,
+  });
+}
+
+export async function handleDeclineProjectInvitation(
+  request: Request,
+  env: SecurityEnv,
+  invitationId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, accessContext);
+  const invitation = await env.CONCLAVE_DB.prepare(
+    `SELECT id, project_id AS projectId, email, role, status, expires_at AS expiresAt
+     FROM project_invitations WHERE id = ?1`,
+  )
+    .bind(invitationId)
+    .first<{
+      id: string;
+      projectId: string;
+      email: string;
+      role: "collaborator" | "viewer";
+      status: string;
+      expiresAt: string;
+    }>();
+  if (!invitation || invitation.status !== "pending")
+    throw new HttpError(404, "Project invitation not found");
+  if (new Date(invitation.expiresAt).getTime() <= Date.now())
+    throw new HttpError(410, "Project invitation expired");
+  if (
+    context.user.email.trim().toLowerCase() !==
+    invitation.email.trim().toLowerCase()
+  )
+    throw new HttpError(403, "Invitation email does not match signed-in user");
+  const now = new Date().toISOString();
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      `UPDATE project_invitations SET status = 'declined', updated_at = ?1 WHERE id = ?2 AND status = 'pending'`,
+    ).bind(now, invitation.id),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO project_audit_log (id, project_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, 'project.invitation.declined', 'invitation', ?4, '{}', ?5)`,
+    ).bind(
+      `pa-${crypto.randomUUID()}`,
+      invitation.projectId,
+      context.userId,
+      invitation.id,
+      now,
+    ),
+  ]);
+  return json({
+    id: invitation.id,
+    projectId: invitation.projectId,
+    status: "declined",
+    declined: true,
   });
 }

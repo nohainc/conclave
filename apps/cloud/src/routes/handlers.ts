@@ -1,3 +1,4 @@
+export { handleListConversationHistory } from "./conversation-history.js";
 export { ConclaveRunWorkflow } from "../workflow.js";
 export { WorkspaceGateway } from "../workspace-gateway.js";
 export {
@@ -11,6 +12,7 @@ export {
 
 export * from "./http-security.js";
 export * from "./workstream-policy.js";
+export { handleListConversations } from "./conversations.js";
 export * from "./workspace-access.js";
 export * from "./profile-admin.js";
 
@@ -45,6 +47,8 @@ export {
   handleRemoveProjectMember,
   handleExpireProjectInvitation,
   handleAcceptProjectInvitation,
+  handleDeclineProjectInvitation,
+  handleListCurrentUserInvitations,
 } from "./projects.js";
 export {
   handleListWorkspaces,

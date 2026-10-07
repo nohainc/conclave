@@ -1,5 +1,9 @@
 import { conditionalJson } from "./conditional-read.js";
-import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
+import {
+  BUILTIN_WORKFLOW_CATALOG,
+  CONVERSATION_WORKFLOWS,
+  workflowCatalogEntry,
+} from "@conclave/core";
 
 export type RouteHandler = (...args: unknown[]) => Promise<Response>;
 export type WorkerRouteHandlers = Record<string, RouteHandler>;
@@ -184,7 +188,17 @@ export async function routeWorkerRequest(
     }
     if (request.method === "GET" && url.pathname === "/api/workflows/catalog") {
       return conditionalJson(request, {
-        workflows: Object.values(BUILTIN_WORKFLOW_CATALOG),
+        workflows: Object.values(BUILTIN_WORKFLOW_CATALOG).map(
+          workflowCatalogEntry,
+        ),
+      });
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/workflows/definitions"
+    ) {
+      return conditionalJson(request, {
+        workflows: Object.values(CONVERSATION_WORKFLOWS),
       });
     }
     if (request.method === "GET" && url.pathname === "/api/release-trust") {
@@ -750,13 +764,35 @@ export async function routeWorkerRequest(
       );
     }
     const projectInvitationAcceptMatch = url.pathname.match(
-      /^\/api\/project-invitations\/([^/]+)\/accept$/,
+      /^\/api\/(?:project-)?invitations\/([^/]+)\/accept$/,
     );
     if (request.method === "POST" && projectInvitationAcceptMatch?.[1]) {
       return await handlers.handleAcceptProjectInvitation!(
         request,
         env,
         projectInvitationAcceptMatch[1],
+        ctx,
+      );
+    }
+    const projectInvitationDeclineMatch = url.pathname.match(
+      /^\/api\/(?:project-)?invitations\/([^/]+)\/decline$/,
+    );
+    if (request.method === "POST" && projectInvitationDeclineMatch?.[1]) {
+      return await handlers.handleDeclineProjectInvitation!(
+        request,
+        env,
+        projectInvitationDeclineMatch[1],
+        ctx,
+      );
+    }
+    if (
+      request.method === "GET" &&
+      (url.pathname === "/api/me/invitations" ||
+        url.pathname === "/api/invitations")
+    ) {
+      return await handlers.handleListCurrentUserInvitations!(
+        request,
+        env,
         ctx,
       );
     }
@@ -865,6 +901,33 @@ export async function routeWorkerRequest(
     const createWorkRequestMatch = url.pathname.match(
       /^\/api\/workstreams\/([^/]+)\/work-requests$/,
     );
+    const conversationHistoryMatch = url.pathname.match(
+      /^\/api\/workstreams\/([^/]+)\/conversations\/([^/]+)\/history$/,
+    );
+    if (
+      request.method === "GET" &&
+      conversationHistoryMatch?.[1] &&
+      conversationHistoryMatch[2]
+    ) {
+      return await handlers.handleListConversationHistory!(
+        request,
+        env,
+        conversationHistoryMatch[1],
+        conversationHistoryMatch[2],
+        ctx,
+      );
+    }
+    const conversationsMatch = url.pathname.match(
+      /^\/api\/workstreams\/([^/]+)\/conversations$/,
+    );
+    if (request.method === "GET" && conversationsMatch?.[1]) {
+      return await handlers.handleListConversations!(
+        request,
+        env,
+        conversationsMatch[1],
+        ctx,
+      );
+    }
     const validateWorkRequestMatch = url.pathname.match(
       /^\/api\/workstreams\/([^/]+)\/work-requests\/validate$/,
     );

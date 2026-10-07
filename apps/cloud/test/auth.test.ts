@@ -370,7 +370,17 @@ describe("IdentityService", () => {
         "person@example.test",
         "2026-09-23T00:00:00.000Z",
       ),
-    ).resolves.toEqual([]);
+    ).resolves.toEqual([
+      {
+        id: "inv-1",
+        workspaceId: "ws-team",
+        projectId: null,
+        email: "person@example.test",
+        role: "member",
+        status: "pending",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+      },
+    ]);
   });
 
   it("does not expose a pending invitation to a different email", async () => {
