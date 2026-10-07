@@ -517,12 +517,12 @@ class _WorkstreamPageState extends State<WorkstreamPage>
                     Expanded(
                         child: pane(
                             'Chat', _discuss(context, alignWithWork: true))),
-                    const VerticalDivider(
+                    VerticalDivider(
                       width: 1,
                       thickness: 1,
                       indent: 20,
                       endIndent: 20,
-                      color: ConclaveBrand.navigation,
+                      color: Theme.of(context).dividerColor,
                     ),
                     Expanded(child: pane('Work', _work(context))),
                   ]),

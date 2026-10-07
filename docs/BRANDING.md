@@ -15,7 +15,7 @@ The mark uses four identical elements with **four-fold rotational symmetry** (`0
 
 ## 2. Canonical Vector Variants & Marketing Artwork
 
-All official product variants are located in `assets/branding/` and synchronized across all client applications. Optional decorative artwork is isolated in `assets/branding/marketing/`:
+All official product variants are located in `assets/branding/` and synchronized across all client applications. Optional decorative artwork is isolated strictly in `marketing/`:
 
 ```
 assets/branding/
@@ -27,8 +27,8 @@ assets/branding/
     conclave_wordmark_dark.svg     ← official horizontal wordmark (dark)
     conclave_logo.svg              ← official product vector master
 
-    marketing/
-        conclave_mark_3d.png       ← optional decorative marketing artwork
+marketing/
+    conclave_mark_3d.png           ← optional decorative marketing artwork
 ```
 
 ### Official Product Mark vs. Marketing Artwork Separation

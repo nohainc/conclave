@@ -178,9 +178,4 @@ abstract final class ConclaveTypography {
   static const titleLarge = pageTitle;
   static const titleMedium = sectionTitle;
   static const titleSmall = cardTitle;
-
-  // Backward-compatible aliases
-  static const h1 = display;
-  static const h2 = pageTitle;
-  static const h3 = sectionTitle;
 }

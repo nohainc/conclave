@@ -28,7 +28,7 @@ void main() {
                 children: [
                   ConclaveBrand.logoMark(size: 28),
                   const SizedBox(width: 10),
-                  const Text('Conclave AX', style: ConclaveBrand.wordmark),
+                  const Text('Conclave AX', style: ConclaveTypography.wordmark),
                 ],
               ),
             ),
@@ -444,7 +444,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
               body: Column(
                 children: [
                   ConclaveBrand.logoMark(size: 32),
-                  const Text('Conclave AX', style: ConclaveBrand.wordmark),
+                  const Text('Conclave AX', style: ConclaveTypography.wordmark),
                   ElevatedButton(
                     onPressed: () {
                       setState(() {

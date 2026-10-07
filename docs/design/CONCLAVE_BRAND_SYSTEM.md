@@ -178,8 +178,8 @@ assets/branding/
     conclave_wordmark_dark.svg     ← official horizontal wordmark (dark)
     conclave_logo.svg              ← canonical master vector
 
-    marketing/
-        conclave_mark_3d.png       ← optional decorative marketing illustration
+marketing/
+    conclave_mark_3d.png           ← optional decorative marketing illustration
 ```
 
 **Prohibited Usage for 3D Marketing Artwork:**

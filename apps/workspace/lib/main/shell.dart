@@ -269,7 +269,7 @@ class _MinimalShell extends StatelessWidget {
             Expanded(
               child: Text(
                 'Conclave Workspace',
-                style: ConclaveBrand.wordmark.copyWith(fontSize: 14),
+                style: ConclaveTypography.wordmark.copyWith(fontSize: 14),
               ),
             ),
             const SizedBox(width: 4),

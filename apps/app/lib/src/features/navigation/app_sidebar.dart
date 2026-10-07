@@ -58,7 +58,7 @@ class AppSidebar extends StatelessWidget {
     return Builder(
       builder: (sidebarContext) => Container(
         width: compact ? double.infinity : 248,
-        color: ConclaveBrand.navigation,
+        color: ConclaveColors.navigationBackgroundDark,
         padding: const EdgeInsets.fromLTRB(10, 16, 10, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -90,7 +90,7 @@ class AppSidebar extends StatelessWidget {
                               child: Text(
                                 'Conclave AX',
                                 overflow: TextOverflow.ellipsis,
-                                style: ConclaveBrand.wordmark.copyWith(
+                                style: ConclaveTypography.wordmark.copyWith(
                                   color: Colors.white,
                                 ),
                               ),

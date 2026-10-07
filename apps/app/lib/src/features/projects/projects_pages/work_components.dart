@@ -1504,9 +1504,7 @@ class _WorkTimelineCard extends StatelessWidget {
             child: Container(
               decoration: BoxDecoration(
                 color: isOwnRequest
-                    ? (isDark
-                        ? ConclaveBrand.navigationSelection
-                        : ConclaveBrand.accentWash)
+                    ? ConclaveColors.primarySoftColor(isDark)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -2085,9 +2083,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
         child: Container(
           decoration: BoxDecoration(
             color: isMe
-                ? (isDark
-                    ? ConclaveBrand.navigationSelection
-                    : ConclaveBrand.accentWash)
+                ? ConclaveColors.primarySoftColor(isDark)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),

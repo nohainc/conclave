@@ -12,7 +12,6 @@ abstract final class ConclaveBrand {
   static const accentDark = ConclaveColors.primaryPressed;
   static const accentWash = ConclaveColors.primarySoft;
   static const accentWashDark = ConclaveColors.primarySoftDark;
-  static const navigationSelection = ConclaveColors.navigationSelected;
 
   // Light Palette
   static const lightInk = ConclaveColors.textPrimaryLight;
@@ -52,21 +51,6 @@ abstract final class ConclaveBrand {
   static const neutral = ConclaveColors.neutral;
   static const neutralWash = ConclaveColors.neutralSoftLight;
   static const neutralWashDark = ConclaveColors.neutralSoftDark;
-
-  // Legacy compatibility getters for existing code
-  static const ink = lightInk;
-  static const paper = lightPaper;
-  static const surface = lightSurface;
-  static const line = lightLine;
-  static const navigation = ConclaveColors.navigationBackgroundDark;
-  static const wordmark = ConclaveTypography.wordmark;
-
-  static const brandMark = BoxDecoration(
-    color: accent,
-    borderRadius: BorderRadius.all(Radius.circular(10)),
-  );
-
-  static const logoAsset = ConclaveBrandAssets.logoPng1024;
 
   static Widget logoMark({
     double size = 28,
