@@ -346,4 +346,129 @@ describe("Recipient Invitations API", () => {
       expect(JSON.parse(event.payload_json)).toEqual({ entityId: "pinv-rt-1" });
     });
   });
+
+  describe("End-to-End Invitation Lifecycle & Edge Cases", () => {
+    it("handles new user invited before account creation, who signs in later", async () => {
+      const { sqlite, env } = createTestEnv();
+      const now = new Date().toISOString();
+      const future = new Date(Date.now() + 86400000).toISOString();
+
+      // Vitalii invites newuser@example.com (does not exist in users table yet)
+      sqlite.exec(`
+        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        VALUES ('pinv-newuser', 'proj-1', 'newuser@example.com', 'collaborator', 'hash-nu', 'user-vitalii', 'pending', '${future}', '${now}', '${now}');
+      `);
+
+      // Later, user signs up / authenticates
+      sqlite.exec(`
+        INSERT INTO users (id, email, display_name, status, created_at, updated_at)
+        VALUES ('user-new', 'newuser@example.com', 'New User', 'active', '${now}', '${now}');
+      `);
+
+      const reqAuth = new Request("https://conclave.test/api/me/invitations", {
+        headers: { authorization: "Bearer newuser" },
+      });
+      const customEnv = {
+        ...env,
+        TEST_AUTHENTICATION: async () => ({
+          userId: "user-new",
+          user: {
+            id: "user-new",
+            email: "newuser@example.com",
+            displayName: "New User",
+            status: "active",
+          },
+          workspaceId: "",
+          projectRoles: {},
+          sessionId: "sess-new",
+          clientType: "web",
+        }),
+      };
+
+      // 1. Discovery on sign-in
+      const res = await handleListCurrentUserInvitations(reqAuth, customEnv as never);
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { invitations: Array<{ id: string }> };
+      expect(data.invitations).toHaveLength(1);
+      expect(data.invitations[0].id).toBe("pinv-newuser");
+
+      // 2. Acceptance
+      const acceptReq = new Request("https://conclave.test/api/invitations/pinv-newuser/accept", {
+        method: "POST",
+        headers: { authorization: "Bearer newuser" },
+      });
+      const acceptRes = await handleAcceptProjectInvitation(acceptReq, customEnv as never, "pinv-newuser");
+      expect(acceptRes.status).toBe(200);
+
+      // Verify membership
+      const member = sqlite
+        .prepare("SELECT user_id, role FROM project_memberships WHERE project_id = 'proj-1' AND user_id = 'user-new'")
+        .get() as { user_id: string; role: string };
+      expect(member).toEqual({ user_id: "user-new", role: "collaborator" });
+    });
+
+    it("prevents duplicate pending invitation to the same email", async () => {
+      const { sqlite, env } = createTestEnv();
+      const future = new Date(Date.now() + 86400000).toISOString();
+
+      sqlite.exec(`
+        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        VALUES ('pinv-dup-1', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-d1', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
+      `);
+
+      const req = new Request("https://conclave.test/api/projects/proj-1/invitations", {
+        method: "POST",
+        headers: { authorization: "Bearer vitalii", "content-type": "application/json" },
+        body: JSON.stringify({ email: "ulikossnokia@gmail.com", role: "collaborator" }),
+      });
+
+      const { handleCreateProjectInvitation } = await import("../src/routes/projects.js");
+      await expect(handleCreateProjectInvitation(req, env as never, "proj-1")).rejects.toThrow(
+        "A pending invitation already exists for this user",
+      );
+    });
+
+    it("prevents inviting a user who is already a project member", async () => {
+      const { env } = createTestEnv();
+      const req = new Request("https://conclave.test/api/projects/proj-1/invitations", {
+        method: "POST",
+        headers: { authorization: "Bearer vitalii", "content-type": "application/json" },
+        body: JSON.stringify({ email: "vitalii@nohainc.com", role: "collaborator" }),
+      });
+
+      const { handleCreateProjectInvitation } = await import("../src/routes/projects.js");
+      await expect(handleCreateProjectInvitation(req, env as never, "proj-1")).rejects.toThrow(
+        "This user is already a Project member",
+      );
+    });
+
+    it("handles simultaneous accept and revoke race conditions", async () => {
+      const { sqlite, env } = createTestEnv();
+      const future = new Date(Date.now() + 86400000).toISOString();
+
+      sqlite.exec(`
+        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        VALUES ('pinv-race-1', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-rc', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
+      `);
+
+      const { handleExpireProjectInvitation } = await import("../src/routes/projects.js");
+
+      // Case A: Revoke happens first
+      const revokeReq = new Request("https://conclave.test/api/projects/proj-1/invitations/pinv-race-1/expire", {
+        method: "POST",
+        headers: { authorization: "Bearer vitalii" },
+      });
+      const revokeRes = await handleExpireProjectInvitation(revokeReq, env as never, "proj-1", "pinv-race-1");
+      expect(revokeRes.status).toBe(200);
+
+      // Subsequent accept attempt fails
+      const acceptReq = new Request("https://conclave.test/api/invitations/pinv-race-1/accept", {
+        method: "POST",
+        headers: { authorization: "Bearer ulikoss" },
+      });
+      await expect(handleAcceptProjectInvitation(acceptReq, env as never, "pinv-race-1")).rejects.toThrow(
+        "Project invitation not found",
+      );
+    });
+  });
 });

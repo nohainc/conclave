@@ -17,6 +17,7 @@ class TestRealtime implements RealtimeClient {
       String? workstreamId,
       String? runId,
       String? executionWorkspaceId}) async {}
+  void emit(Map<String, dynamic> event) => controller.add(event);
   @override
   Future<void> close() => controller.close();
 }
