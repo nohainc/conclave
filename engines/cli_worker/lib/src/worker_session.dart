@@ -47,12 +47,15 @@ class WorkerSession {
   factory WorkerSession.fromJson(Map<String, Object?> json) {
     if ((json['synchronizedHistorySequence'] != null &&
             (json['synchronizedHistorySequence'] is! int ||
-                (json['synchronizedHistorySequence'] as int) < 0)) ||
+                ((json['synchronizedHistorySequence'] as int) < 0 ||
+                    (json['synchronizedHistorySequence'] as int) >
+                        9007199254740991))) ||
         json['schemaVersion'] != 1 ||
         json['profileVersion'] is! int ||
         (json['profileVersion'] as int) < 1 ||
         json['synchronizedContextRevision'] is! int ||
         (json['synchronizedContextRevision'] as int) < 0 ||
+        (json['synchronizedContextRevision'] as int) > 9007199254740991 ||
         (json['lastModelId'] != null && json['lastModelId'] is! String) ||
         (json['lastEffort'] != null && json['lastEffort'] is! String) ||
         !const {

@@ -74,6 +74,16 @@ BEGIN SELECT RAISE(ABORT, 'Worker turn must belong to its scoped Workflow Step R
 CREATE TRIGGER trg_conversation_turn_step_run_immutable BEFORE UPDATE OF workflow_step_run_id ON conversation_turns
 WHEN OLD.workflow_step_run_id IS NOT NEW.workflow_step_run_id
 BEGIN SELECT RAISE(ABORT, 'Worker turn Workflow Step Run is immutable'); END;
+-- Phase 26: dispatch evidence must match the immutable accepted-request boundary,
+-- even when the Conversation advances before this assignment is inserted.
+CREATE TRIGGER trg_conversation_turn_context_boundary_insert
+BEFORE INSERT ON conversation_turns
+WHEN typeof(NEW.base_context_revision) != 'integer' OR NOT EXISTS (
+  SELECT 1 FROM conversation_work_requests cr
+  WHERE cr.conversation_id=NEW.conversation_id
+    AND cr.work_request_id=NEW.work_request_id
+    AND NEW.base_context_revision=cr.conversation_revision-1)
+BEGIN SELECT RAISE(ABORT, 'Worker turn context revision must match its request boundary'); END;
 DROP TRIGGER trg_conversation_turn_assignment_insert;
 CREATE TRIGGER trg_conversation_turn_assignment_insert
 AFTER INSERT ON worker_assignments
@@ -102,4 +112,3 @@ BEGIN
   JOIN conversation_workflow_step_runs wsr ON wsr.task_id = wt.id AND wsr.workflow_run_id = wfr.id
   WHERE wt.id = NEW.task_id;
 END;
-

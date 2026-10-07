@@ -1,6 +1,6 @@
 # Multi-Worker Conversation Continuity v1
 
-**Status:** implemented through Phase 21, including structured context materialization.
+**Status:** implemented through Phase 26, including structured context and revision evidence.
 **Boundary:** Conclave Core and Human Product Protocol. **Contract version:** 1.
 
 Project → Workstream → Conversation → Work Requests is the product ownership
@@ -1052,3 +1052,42 @@ revision advancement, missing context, restart after invalidation, stale-handle
 invalidation rejection and signed error classification. Existing session scope,
 model-switch, output mismatch and provider failure tests remain applicable.
 Live provider reconstruction and remote Profile promotion were not performed.
+
+## Phase 26 — Context revision and synchronization evidence
+
+Conversation acceptance maintains separate monotonic `conversationRevision` and
+`contextRevision` fields. Under the current exact-history policy both advance on
+accepted requests; history sequence additionally identifies late responses and
+context/artifact events within that revision. Replays, progress and failed batches
+do not invent revisions. These semantics supersede the Phase 1 reservation above.
+
+Each dispatch freezes the preceding accepted-request boundary as
+`baseContextRevision`, plus its canonical history watermark. WorkflowStepRun
+projects that immutable invocation evidence from its Worker turn; queued steps
+use the immutable request boundary. Later Conversation changes and completion
+never relabel an older step's starting revision. The fresh-start schema rejects
+turn insertion when its base differs from its scoped request boundary, and retains
+the existing immutable-attribution update guard.
+
+Workspace-local WorkerSession records `synchronizedContextRevision` and
+`synchronizedHistorySequence` only after successful native execution. With a
+bootstrap, the consumed revision includes the current request (`turnRevision`);
+it cannot merely record the preceding base. Store writes reject incorrect
+bootstrap watermarks, decreasing revisions/sequences and values outside the
+protocol's safe-integer bounds before changing the file. Invalidated sessions
+also cannot bypass the newer-than-turn context guard.
+
+Local diagnostic events `engine.context.selected` and
+`engine.context.synchronized` record logical Conversation/WorkerSession scope,
+request/assignment correlation, the frozen base, prior synchronized revision,
+target revision and history watermark. The synchronized event follows successful
+persistence; failures produce no success evidence. Native handles and context text
+remain excluded. No continuity bookkeeping is added to ordinary Chat/Work UI.
+
+Tests cover wrong dispatch boundaries, rollback of rejected assignments, frozen
+StepRun/turn evidence after Conversation advancement, consumed-turn synchronization,
+regression/bounds rejection without file changes and safe diagnostic fields.
+Local schema-v1 fields and public/runtime contracts are unchanged. A new guard is
+part of the existing v8 fresh-start schema; existing initialized databases need
+that guard installed separately before claiming equivalent enforcement. No remote
+schema or Engine deployment was performed.

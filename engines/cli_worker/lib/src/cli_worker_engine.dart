@@ -733,6 +733,32 @@ class CliWorkerEngine {
       }
     }
 
+    if (request.workerSession != null) {
+      _logger.log(
+        'info',
+        'engine.context.selected',
+        context: {
+          ..._diagnosticContext(
+            requestId: request.requestId,
+            assignmentId: request.assignmentId,
+          ),
+          'conversationId': request.workerSession!.conversationId,
+          'workerSessionId': request.workerSession!.id,
+          'baseContextRevision': request.workerSession!.baseContextRevision,
+          if (storedSession != null)
+            'synchronizedContextRevision':
+                storedSession!.synchronizedContextRevision,
+          if (storedSession != null)
+            'synchronizedHistorySequence':
+                storedSession!.synchronizedHistorySequence,
+          if (bootstrap != null)
+            'targetContextRevision':
+                bootstrap.turnRevision ?? bootstrap.contextRevision,
+          if (bootstrap != null) 'throughSequence': bootstrap.throughSequence,
+        },
+      );
+    }
+
     final executionClock = Stopwatch()..start();
     var reconstructed = false;
     try {
@@ -890,6 +916,30 @@ class CliWorkerEngine {
             synchronizedContextRevision:
                 bootstrap?.turnRevision ?? bootstrap?.contextRevision,
             synchronizedHistorySequence: bootstrap?.throughSequence,
+          );
+        }
+        if (request.workerSession != null) {
+          _logger.log(
+            'info',
+            'engine.context.synchronized',
+            context: {
+              ..._diagnosticContext(
+                requestId: request.requestId,
+                assignmentId: request.assignmentId,
+              ),
+              'conversationId': request.workerSession!.conversationId,
+              'workerSessionId': request.workerSession!.id,
+              'baseContextRevision': request.workerSession!.baseContextRevision,
+              'synchronizedContextRevision':
+                  bootstrap?.turnRevision ??
+                  bootstrap?.contextRevision ??
+                  storedSession?.synchronizedContextRevision ??
+                  0,
+              'synchronizedHistorySequence':
+                  bootstrap?.throughSequence ??
+                  storedSession?.synchronizedHistorySequence ??
+                  0,
+            },
           );
         }
         if (reconstructed) {

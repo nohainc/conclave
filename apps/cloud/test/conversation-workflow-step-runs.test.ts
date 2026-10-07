@@ -165,3 +165,48 @@ it("retries retain one StepRun and first-start evidence while clearing stale ter
     f.sqlite.close();
   }
 });
+
+it("StepRun and immutable turns retain their accepted context boundary as the Conversation advances", async () => {
+  const f = await conversationFixture();
+  try {
+    const read = async () =>
+      (
+        await loadConversationWorkflowRuns(f.db as unknown as D1Database, ["R"])
+      ).get("R")!.stepRuns[0]!;
+    expect((await read()).baseContextRevision).toBe(0);
+    f.sqlite.exec(
+      "UPDATE conversations SET conversation_revision=104,context_revision=104",
+    );
+    expect(() =>
+      f.assign("wrong-revision", "model-x", "medium", "durable_session", 104),
+    ).toThrow(/context revision.*boundary/);
+    expect(
+      f.sqlite
+        .prepare(
+          "SELECT count(*) AS n FROM worker_assignments WHERE id='wrong-revision'",
+        )
+        .get(),
+    ).toEqual({ n: 0 });
+    f.assign("frozen-revision", "model-x", "medium", "durable_session", 0);
+    await recordAssignmentResult(
+      f.db as unknown as D1Database,
+      "frozen-revision",
+      {
+        assignmentId: "frozen-revision",
+        status: "completed",
+        output: { text: "Result" },
+        artifactIds: [],
+        completedAt: "later",
+      },
+    );
+    expect((await read()).baseContextRevision).toBe(0);
+    expect((await f.turns())[0]!.baseContextRevision).toBe(0);
+    expect(() =>
+      f.sqlite.exec(
+        "UPDATE conversation_turns SET base_context_revision=104 WHERE assignment_id='frozen-revision'",
+      ),
+    ).toThrow(/immutable/);
+  } finally {
+    f.sqlite.close();
+  }
+});

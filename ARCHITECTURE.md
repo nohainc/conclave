@@ -69,6 +69,9 @@ The CLI Worker Engine reconstructs unavailable native sessions at the Worker-ste
 boundary using frozen canonical context, within the same assignment and workflow
 run. Rejected handles remain invalidated locally until replacement succeeds;
 signed Profile error mappings authorize one bounded reconstruction attempt.
+Dispatch and StepRun evidence retain the frozen request context boundary. Local
+session synchronization advances only on successful consumption and cannot move
+backwards; revision and history-watermark evidence is recorded in local diagnostics.
 Versioned product Workflow definitions pin existing execution graphs, with
 Work (`work:v1`) mapped to `direct:v2`. Native provider continuity remains local to Workspace/Engine. Conclave owns an append-only canonical history of messages,
 responses, workflow/execution events, artifact events, and context events; provider

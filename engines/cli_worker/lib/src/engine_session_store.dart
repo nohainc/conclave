@@ -70,7 +70,6 @@ class EngineSessionStore {
           'Worker Session belongs to another Conversation or Worker',
         );
       }
-      if (stored.status == 'invalidated') return null;
       // Effort is a per-turn Profile option. It never participates in native
       // session identity or model-switch compatibility checks.
       if (stored.synchronizedContextRevision >
@@ -79,6 +78,7 @@ class EngineSessionStore {
           'Worker Session contains context newer than this turn',
         );
       }
+      if (stored.status == 'invalidated') return null;
       if (!modelSwitchSupported && stored.lastModelId != requestedModelId) {
         if (allowModelReconstruction) return null;
         throw const FormatException(
@@ -202,21 +202,41 @@ class EngineSessionStore {
           }
         }
       }
+      final consumedRevision =
+          workerSession.bootstrap?.turnRevision ??
+          workerSession.baseContextRevision;
       if (synchronizedContextRevision != null &&
-          synchronizedContextRevision != workerSession.baseContextRevision &&
-          synchronizedContextRevision !=
-              workerSession.bootstrap?.turnRevision) {
+          synchronizedContextRevision != consumedRevision) {
         throw const FormatException('Invalid bootstrap synchronized revision');
       }
       final synchronizedRevision =
           synchronizedContextRevision ??
           previous?.synchronizedContextRevision ??
           0;
+      final historySequence =
+          synchronizedHistorySequence ??
+          previous?.synchronizedHistorySequence ??
+          0;
+      if (synchronizedRevision < 0 ||
+          synchronizedRevision > 9007199254740991 ||
+          historySequence < 0 ||
+          historySequence > 9007199254740991 ||
+          synchronizedRevision < (previous?.synchronizedContextRevision ?? 0) ||
+          historySequence < (previous?.synchronizedHistorySequence ?? 0)) {
+        throw const FormatException(
+          'Worker Session synchronization cannot decrease or exceed its bounds',
+        );
+      }
+      if (synchronizedHistorySequence != null &&
+          workerSession.bootstrap != null &&
+          synchronizedHistorySequence !=
+              workerSession.bootstrap!.throughSequence) {
+        throw const FormatException(
+          'History watermark does not match consumed context',
+        );
+      }
       session = WorkerSession(
-        synchronizedHistorySequence:
-            synchronizedHistorySequence ??
-            previous?.synchronizedHistorySequence ??
-            0,
+        synchronizedHistorySequence: historySequence,
         id: workerSession.id,
         conversationId: workerSession.conversationId,
         workerId: workerSession.workerId,

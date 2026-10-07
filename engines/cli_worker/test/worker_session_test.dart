@@ -6,6 +6,86 @@ import 'package:conclave_cli_worker_engine/src/engine_session_store.dart';
 
 void main() {
   test(
+    'session revision and history watermarks reflect consumed context and never regress',
+    () async {
+      final root = await Directory.systemTemp.createTemp('session-revisions-');
+      addTearDown(() => root.delete(recursive: true));
+      final store = EngineSessionStore(root);
+      WorkerSessionContext scope(
+        int base, {
+        ConversationBootstrap? bootstrap,
+      }) => WorkerSessionContext(
+        id: 'session',
+        conversationId: 'conversation',
+        workerId: 'worker',
+        baseContextRevision: base,
+        bootstrap: bootstrap,
+      );
+      Future<void> write(
+        WorkerSessionContext context,
+        int revision,
+        int sequence,
+      ) => store.write(
+        sessionKey: 'scope',
+        workerTypeId: 'fixture',
+        profileDefinitionId: 'profile',
+        providerToolIdentity: 'tool',
+        profileReleaseVersion: 1,
+        sessionFormatId: 'format',
+        sessionId: 'native',
+        workerSession: context,
+        synchronizedContextRevision: revision,
+        synchronizedHistorySequence: sequence,
+      );
+      final bootstrap = ConversationBootstrap(
+        conversationId: 'conversation',
+        contextRevision: 103,
+        turnRevision: 104,
+        throughSequence: 20,
+        text: '{}',
+      );
+      await write(scope(103, bootstrap: bootstrap), 104, 20);
+      final file = root.listSync().whereType<File>().single;
+      final evidence = file.readAsStringSync();
+      for (final candidate in [
+        (scope(103), 103, 20),
+        (scope(104), 104, 19),
+        (scope(104), 105, 20),
+        (scope(104), 104, -1),
+        (scope(104), 104, 9007199254740992),
+        (scope(103, bootstrap: bootstrap), 103, 20),
+        (scope(103, bootstrap: bootstrap), 104, 21),
+      ]) {
+        await expectLater(
+          write(candidate.$1, candidate.$2, candidate.$3),
+          throwsFormatException,
+        );
+        expect(file.readAsStringSync(), evidence);
+      }
+      await write(scope(104), 104, 20);
+      final state =
+          (jsonDecode(file.readAsStringSync()) as Map)['workerSession'] as Map;
+      expect(state['synchronizedContextRevision'], 104);
+      expect(state['synchronizedHistorySequence'], 20);
+      state['synchronizedContextRevision'] = 9007199254740992;
+      final decoded = jsonDecode(file.readAsStringSync()) as Map;
+      decoded['workerSession'] = state;
+      file.writeAsStringSync(jsonEncode(decoded));
+      await expectLater(
+        store.read(
+          sessionKey: 'scope',
+          workerTypeId: 'fixture',
+          profileDefinitionId: 'profile',
+          providerToolIdentity: 'tool',
+          compatibleFormatIds: ['format'],
+          workerSession: scope(104),
+        ),
+        throwsFormatException,
+      );
+    },
+  );
+
+  test(
     'invalidated native session cannot resume after restart and replacement retains scope',
     () async {
       final root = await Directory.systemTemp.createTemp(
