@@ -27,20 +27,75 @@ class ProjectTree extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget content(BuildContext context) {
+      final invitations = shellContext.invitationsListenable;
+      if (invitations != null) {
+        return ValueListenableBuilder<List<AxProjectInvitation>>(
+          valueListenable: invitations,
+          builder: (context, _, __) => _tree(context),
+        );
+      }
+      return _tree(context);
+    }
+
     final projects = shellContext.projectListenable;
     if (projects != null) {
       return ValueListenableBuilder<List<AxProject>>(
-          valueListenable: projects,
-          builder: (context, _, __) => _tree(context));
+        valueListenable: projects,
+        builder: (context, _, __) => content(context),
+      );
     }
-    return _tree(context);
+    return content(context);
   }
 
   Widget _tree(BuildContext context) {
+    final invitations = shellContext.invitations;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (shellContext.projects.isEmpty)
+        if (invitations.isNotEmpty) ...[
+          Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: ConclaveBrand.accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: ConclaveBrand.accent.withValues(alpha: 0.3),
+              ),
+            ),
+            child: InkWell(
+              onTap: () => onNavigateTo(const AxNavigation.home()),
+              borderRadius: BorderRadius.circular(6),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.mail_outline,
+                    size: 14,
+                    color: ConclaveBrand.accent,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Pending invitations (${invitations.length})',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 14,
+                    color: Colors.white54,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        if (shellContext.projects.isEmpty && invitations.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Text(

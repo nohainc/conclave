@@ -135,6 +135,7 @@ void main() {
       onOpenArchivedProjects: () {},
     )));
 
+    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
     expect(find.text('Pending invitations (1)'), findsOneWidget);
     expect(find.text('Conclave AX Development'), findsOneWidget);
     expect(find.text('Invited by Vitalii Noha · MEMBER'), findsOneWidget);

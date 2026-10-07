@@ -82,22 +82,43 @@ class _GettingStarted extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (invitations.isNotEmpty) ...[
+            const Text('Welcome to Conclave AX',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text(
+                'You have pending project invitations. Join an existing project or set up your workspace.',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 14)),
+            const SizedBox(height: 20),
             _PendingInvitationsSection(
               invitations: invitations,
               onAccept: onAcceptInvitation,
               onDecline: onDeclineInvitation,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
+            const Divider(height: 1),
+            const SizedBox(height: 28),
+            const Text('Getting started',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text(
+                'Set up the pieces Conclave AX needs, then make your first request.',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 14)),
+            const SizedBox(height: 20),
+          ] else ...[
+            const Text('Getting started',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text(
+                'Set up the pieces Conclave AX needs, then make your first request.',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 14)),
+            const SizedBox(height: 28),
           ],
-          const Text('Getting started',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          Text(
-              'Set up the pieces Conclave AX needs, then make your first request.',
-              style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 14)),
-          const SizedBox(height: 28),
           _SetupStep(
               number: '1',
               title: 'Connect a Workspace',
