@@ -8,9 +8,129 @@ import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 
 import 'ax_fixture_data.dart';
+import 'conversation_turn_fixture.dart';
 import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
 
 void main() {
+  testWidgets('history uses immutable turns for each response model and effort',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final rows = [
+      for (final config in [
+        ('X', 'model-x', 'medium'),
+        ('Y', 'model-y', 'high')
+      ])
+        AxWorkRequest.fromJson({
+          'id': config.$1,
+          'requestedByName': 'User',
+          'prompt': 'Request ${config.$1}',
+          'workflowId': 'direct',
+          'workflowVersion': 2,
+          'workflowName': 'Work',
+          'status': 'completed',
+          'createdAt': '2026-10-07T10:00:00Z',
+          'turns': [
+            turnFixture(
+                    id: config.$1,
+                    requestId: config.$1,
+                    model: config.$2,
+                    effort: config.$3)
+                .toJson()
+          ],
+          'steps': [
+            {
+              'kind': 'implement',
+              'status': 'completed',
+              'workerId': 'worker-a',
+              'assignmentId': 'assignment-${config.$1}',
+              'workerTypeId': 'gemini',
+              'workerDisplayName': 'Wrong current worker',
+              'model': 'wrong-current-model',
+              'reasoningEffort': 'low'
+            }
+          ],
+        })
+    ];
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: WorkstreamPage(
+      initialTab: 1,
+      project: const AxProject(
+          id: 'project-1',
+          name: 'Project',
+          branch: '',
+          lastActivity: '',
+          role: 'owner'),
+      workstream: const AxWorkstream(
+          id: 'stream-1',
+          projectId: 'project-1',
+          name: 'Stream',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      dataSource: _WorkHistoryDataSource(rows),
+      onBackToProject: _noop,
+      onArchive: _noop,
+    ))));
+    await tester.pumpAndSettle();
+    expect(find.text('ChatGPT'), findsNWidgets(2));
+    expect(find.textContaining('model-x (medium)'), findsOneWidget);
+    expect(find.textContaining('model-y (high)'), findsOneWidget);
+    expect(find.text('Wrong current worker'), findsNothing);
+    expect(find.textContaining('wrong-current-model'), findsNothing);
+  });
+
+  testWidgets(
+      'composer choices follow policy and binding metadata for any workflow',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final choices in [
+      (true, false, true),
+      (false, true, true),
+      (true, true, false)
+    ]) {
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: WorkstreamPage(
+        key: ValueKey(choices),
+        initialTab: 1,
+        project: const AxProject(
+            id: 'project-1',
+            name: 'Project',
+            branch: '',
+            lastActivity: '',
+            role: 'owner'),
+        workstream: const AxWorkstream(
+            id: 'stream-1',
+            projectId: 'project-1',
+            name: 'Stream',
+            lead: '',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: '',
+            queueStatus: '',
+            workConfig: {
+              'defaultWorkflowId': 'policy-fixture',
+              'bindings': {
+                'policy-binding': {'workerId': 'w-chatgpt', 'model': 'o3'}
+              },
+            }),
+        dataSource: _PolicyWorkflowDataSource(
+            model: choices.$1, effort: choices.$2, binding: choices.$3),
+        onBackToProject: _noop,
+        onArchive: _noop,
+      ))));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Choose model'),
+          choices.$1 && choices.$3 ? findsOneWidget : findsNothing);
+      expect(find.byTooltip('Choose reasoning effort'),
+          choices.$2 && choices.$3 ? findsOneWidget : findsNothing);
+    }
+  });
   testWidgets('history names remain accurate without a loaded catalog',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
@@ -73,7 +193,7 @@ void main() {
       dataSource: data,
       onBackToProject: _noop,
       onArchive: _noop,
-      onRunWork: (source, workflow, _, key) {
+      onRunWork: (source, workflow, _, key, selection) {
         sentSource = source;
         sentWorkflow = workflow;
         return submission.future;
@@ -262,7 +382,7 @@ void main() {
       dataSource: _VersionedWorkflowDataSource(),
       onBackToProject: _noop,
       onArchive: _noop,
-      onRunWork: (_, workflow, ___, key) {
+      onRunWork: (_, workflow, ___, key, selection) {
         sentWorkflow = workflow;
         return submission.future;
       },
@@ -407,7 +527,7 @@ void main() {
         currentUserId: 'user-owner',
         onBackToProject: _noop,
         onArchive: _noop,
-        onRunWork: (_, __, ___, key) {
+        onRunWork: (_, __, ___, key, selection) {
           sends++;
           return submitted.future;
         },
@@ -808,7 +928,7 @@ void main() {
         dataSource: _WorkFormDataSource(),
         onBackToProject: _noop,
         onArchive: _noop,
-        onRunWork: (_, __, ___, key) async =>
+        onRunWork: (_, __, ___, key, selection) async =>
             throw const AxApiException(message),
         initialTab: 1,
       ),
@@ -1027,7 +1147,7 @@ void main() {
             dataSource: _WorkFormDataSource(),
             onBackToProject: _noop,
             onArchive: _noop,
-            onRunWork: (work, workflowId, attachments, key) async {
+            onRunWork: (work, workflowId, attachments, key, selection) async {
               submittedWork = work;
               return 'request-1';
             },
@@ -1967,6 +2087,92 @@ void main() {
   });
 
   testWidgets(
+      'Owner Members tab distinguishes Members and Pending invitations with Resend and Revoke controls',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+
+    final customDataSource = _MembersTabTestDataSource(
+      members: const [
+        AxProjectMember(
+          userId: 'u-vitalii',
+          email: 'vitalii@nohainc.com',
+          displayName: 'Vitalii Noha',
+          role: 'owner',
+          createdAt: '2026-01-01',
+        ),
+      ],
+      invitations: const [
+        AxProjectInvitation(
+          id: 'pinv-1',
+          projectId: 'p-1',
+          email: 'ulikossnokia@gmail.com',
+          role: 'collaborator',
+          status: 'pending',
+          createdAt: '2026-10-07T12:00:00Z',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ProjectPage(
+            project: const AxProject(
+              id: 'p-1',
+              name: 'Test Project',
+              branch: 'main',
+              lastActivity: 'today',
+            ),
+            dataSource: customDataSource,
+            onOpenWorkstream: (_) {},
+            onEdit: () {},
+            onArchive: () {},
+            onDelete: () {},
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Switch to Members Tab
+    await tester.tap(find.text('Members'));
+    await tester.pumpAndSettle();
+
+    // Verify distinct sections
+    expect(find.text('Members (1)'), findsOneWidget);
+    expect(find.text('Vitalii Noha'), findsOneWidget);
+    expect(find.text('owner'), findsOneWidget);
+
+    expect(find.text('Pending invitations (1)'), findsOneWidget);
+    expect(find.text('ulikossnokia@gmail.com'), findsOneWidget);
+    expect(find.text('PENDING'), findsOneWidget);
+
+    // Resend action
+    expect(find.byTooltip('Resend invitation'), findsOneWidget);
+    await tester.tap(find.byTooltip('Resend invitation'));
+    await tester.pumpAndSettle();
+    expect(customDataSource.resendCount, 1);
+
+    // Revoke action
+    expect(find.byTooltip('Revoke invitation'), findsOneWidget);
+    await tester.tap(find.byTooltip('Revoke invitation'));
+    await tester.pumpAndSettle();
+
+    // Verify confirmation dialog
+    expect(find.text('Revoke invitation?'), findsOneWidget);
+    expect(find.text('Cancel pending invitation for ulikossnokia@gmail.com?'),
+        findsOneWidget);
+
+    // Confirm revoke
+    await tester.tap(find.text('Revoke'));
+    await tester.pumpAndSettle();
+    expect(customDataSource.revokeCount, 2);
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets(
       'Work tab dynamically displays Conclave system events with current logo and Worker responses with official icon',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1000));
@@ -2403,6 +2609,12 @@ class _WorkFormDataSource extends AxFixtureDataSource {
   Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async => [
         AxBuiltinWorkflow.fromJson({
           'id': 'direct',
+          'executionPolicy': const {
+            'userSelectsWorker': true,
+            'userSelectsModel': true,
+            'userSelectsEffort': true
+          },
+          'composerBindingId': 'direct',
           'version': 2,
           'name': 'Work',
           'description': 'Implement the requested work.',
@@ -2556,10 +2768,12 @@ class _SlowSubmissionDataSource extends _WorkFormDataSource {
   }
 
   @override
-  Future<List<String>> validateWorkRequestEligibility(
-          {required String workstreamId,
-          required String workflowId,
-          List<Map<String, dynamic>> attachments = const []}) =>
+  Future<List<String>> validateWorkRequestEligibility({
+    required String workstreamId,
+    required String workflowId,
+    List<Map<String, dynamic>> attachments = const [],
+    AxTurnExecutionSelection? executionSelection,
+  }) =>
       ready.future;
   @override
   Future<List<AxWorkRequest>> workRequestRows(
@@ -2573,6 +2787,12 @@ class _VersionedWorkflowDataSource extends _WorkFormDataSource {
         for (final version in [1, 2])
           AxBuiltinWorkflow.fromJson({
             'id': 'direct',
+            'executionPolicy': const {
+              'userSelectsWorker': true,
+              'userSelectsModel': true,
+              'userSelectsEffort': true
+            },
+            'composerBindingId': 'direct',
             'version': version,
             'name': version == 1 ? 'Direct' : 'Work',
             'description': 'Implement the requested work.',
@@ -2605,6 +2825,12 @@ class _CurrentWorkflowUiDataSource extends _VersionedWorkflowDataSource {
         ])
           AxBuiltinWorkflow.fromJson({
             'id': entry[0],
+            'executionPolicy': const {
+              'userSelectsWorker': true,
+              'userSelectsModel': true,
+              'userSelectsEffort': true
+            },
+            'composerBindingId': entry[0] == 'direct' ? 'direct' : entry[3],
             'version': entry[1],
             'name': entry[2],
             'description': 'Dynamic catalog workflow',
@@ -2697,11 +2923,45 @@ class _ProjectStreamsSource extends AxFixtureDataSource {
       streams;
 }
 
+class _PolicyWorkflowDataSource extends _ModelSelectionTestDataSource {
+  _PolicyWorkflowDataSource(
+      {required this.model, required this.effort, required this.binding});
+  final bool model;
+  final bool effort;
+  final bool binding;
+
+  @override
+  Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async => [
+        AxBuiltinWorkflow.fromJson({
+          'id': 'policy-fixture',
+          'version': 1,
+          'name': 'Policy fixture',
+          'description': '',
+          'steps': [
+            {'kind': 'implement', 'order': 0}
+          ],
+          'executionPolicy': {
+            'userSelectsWorker': true,
+            'userSelectsModel': model,
+            'userSelectsEffort': effort,
+            'multiStep': !binding
+          },
+          'composerBindingId': binding ? 'policy-binding' : null,
+        })
+      ];
+}
+
 class _ModelSelectionTestDataSource extends _GenericWorkerConfigDataSource {
   @override
   Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async => [
         AxBuiltinWorkflow.fromJson({
           'id': 'direct',
+          'executionPolicy': const {
+            'userSelectsWorker': true,
+            'userSelectsModel': true,
+            'userSelectsEffort': true
+          },
+          'composerBindingId': 'direct',
           'version': 2,
           'name': 'Work',
           'description': 'Implement the requested work.',
@@ -2711,6 +2971,12 @@ class _ModelSelectionTestDataSource extends _GenericWorkerConfigDataSource {
         }),
         AxBuiltinWorkflow.fromJson({
           'id': 'research',
+          'executionPolicy': const {
+            'userSelectsWorker': true,
+            'userSelectsModel': true,
+            'userSelectsEffort': true
+          },
+          'composerBindingId': 'research',
           'version': 1,
           'name': 'Research',
           'description': 'Investigate and research codebase.',
@@ -2748,4 +3014,53 @@ class _ModelSelectionTestDataSource extends _GenericWorkerConfigDataSource {
           },
         ),
       ];
+}
+
+class _MembersTabTestDataSource extends AxFixtureDataSource {
+  _MembersTabTestDataSource({
+    required this.members,
+    required this.invitations,
+  });
+
+  final List<AxProjectMember> members;
+  final List<AxProjectInvitation> invitations;
+  int resendCount = 0;
+  int revokeCount = 0;
+
+  @override
+  Future<List<AxProjectMember>> loadProjectMembers({
+    required String projectId,
+  }) async =>
+      members;
+
+  @override
+  Future<List<AxProjectInvitation>> loadProjectInvitations({
+    required String projectId,
+  }) async =>
+      invitations;
+
+  @override
+  Future<void> expireProjectInvitation({
+    required String projectId,
+    required String invitationId,
+  }) async {
+    revokeCount++;
+  }
+
+  @override
+  Future<AxProjectInvitation> inviteProjectMember({
+    required String projectId,
+    required String email,
+    required String role,
+  }) async {
+    resendCount++;
+    return AxProjectInvitation(
+      id: 'pinv-new',
+      projectId: projectId,
+      email: email,
+      role: role,
+      status: 'pending',
+      createdAt: DateTime.now().toIso8601String(),
+    );
+  }
 }

@@ -248,6 +248,21 @@ extension _ProjectWorkspaceTabs on _ProjectWorkspaceState {
         ),
       );
 
+  String _formatInvitationTime(String raw) {
+    if (raw.isEmpty) return '';
+    try {
+      final parsed = DateTime.parse(raw).toLocal();
+      final diff = DateTime.now().difference(parsed);
+      if (diff.inSeconds < 60) return 'just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      if (diff.inDays < 7) return '${diff.inDays}d ago';
+      return '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return raw;
+    }
+  }
+
   Widget _membersTab() => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
@@ -285,99 +300,173 @@ extension _ProjectWorkspaceTabs on _ProjectWorkspaceState {
                   child: const Text('Retry Members')),
             if (membersLoading)
               const LinearProgressIndicator()
-            else if (members.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('No members found.'),
-              )
-            else
-              Column(
-                children: [
-                  ...members.map((member) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          member.displayName.isNotEmpty
-                              ? member.displayName
-                              : member.email,
+            else ...[
+              if (members.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: Text(
+                    'Members (${members.length})',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                ...members.map((member) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        radius: 16,
+                        backgroundColor:
+                            ConclaveBrand.accent.withValues(alpha: 0.15),
+                        child: Text(
+                          (member.displayName.isNotEmpty
+                                  ? member.displayName[0]
+                                  : member.email.isNotEmpty
+                                      ? member.email[0]
+                                      : 'M')
+                              .toUpperCase(),
                           style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: ConclaveBrand.accent,
                           ),
                         ),
-                        subtitle: member.displayName.isNotEmpty &&
-                                member.email.isNotEmpty &&
-                                member.displayName != member.email
-                            ? Text(member.email)
-                            : null,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Chip(label: Text(member.role)),
-                            if (isOwner && member.role != 'owner') ...[
-                              const SizedBox(width: 4),
-                              PopupMenuButton<String>(
-                                tooltip: 'Member actions',
-                                onSelected: (action) {
-                                  if (action == 'role') {
-                                    _changeRole(member);
-                                  } else if (action == 'remove') {
-                                    _removeMember(member);
-                                  }
-                                },
-                                itemBuilder: (context) => const [
-                                  PopupMenuItem(
-                                    value: 'role',
-                                    child: Text('Change role'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'remove',
-                                    child: Text('Remove from Project'),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ],
+                      ),
+                      title: Text(
+                        member.displayName.isNotEmpty
+                            ? member.displayName
+                            : member.email,
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w500,
                         ),
-                      )),
-                  if (invitations.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      'Pending invitations',
+                      ),
+                      subtitle: member.displayName.isNotEmpty &&
+                              member.email.isNotEmpty &&
+                              member.displayName != member.email
+                          ? Text(member.email)
+                          : null,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Chip(label: Text(member.role)),
+                          if (isOwner && member.role != 'owner') ...[
+                            const SizedBox(width: 4),
+                            PopupMenuButton<String>(
+                              tooltip: 'Member actions',
+                              onSelected: (action) {
+                                if (action == 'role') {
+                                  _changeRole(member);
+                                } else if (action == 'remove') {
+                                  _removeMember(member);
+                                }
+                              },
+                              itemBuilder: (context) => const [
+                                PopupMenuItem(
+                                  value: 'role',
+                                  child: Text('Change role'),
+                                ),
+                                PopupMenuItem(
+                                  value: 'remove',
+                                  child: Text('Remove from Project'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    )),
+              ] else
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('No members found.'),
+                ),
+              if (invitations.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    'Pending invitations (${invitations.length})',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                ...invitations.map((invite) {
+                  final timeText = _formatInvitationTime(invite.createdAt);
+                  final roleText = invite.role.toUpperCase();
+                  final subtitle = timeText.isNotEmpty
+                      ? '$roleText · Invited $timeText'
+                      : roleText;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      radius: 16,
+                      backgroundColor: Colors.amber.withValues(alpha: 0.15),
+                      child: const Icon(
+                        Icons.mail_outline,
+                        size: 16,
+                        color: Colors.amber,
+                      ),
+                    ),
+                    title: Text(
+                      invite.email,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    subtitle: Text(
+                      subtitle,
                       style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    ...invitations.map((invite) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            invite.email,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: Colors.amber.withValues(alpha: 0.4),
                             ),
                           ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Chip(label: Text('Pending')),
-                              if (isOwner) ...[
-                                const SizedBox(width: 4),
-                                IconButton(
-                                  icon: const Icon(Icons.cancel_outlined,
-                                      size: 18),
-                                  tooltip: 'Revoke invitation',
-                                  onPressed: () => _revokeInvitation(invite),
-                                ),
-                              ],
-                            ],
+                          child: const Text(
+                            'PENDING',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.amber,
+                            ),
                           ),
-                        )),
-                  ],
-                ],
-              ),
+                        ),
+                        if (isOwner) ...[
+                          const SizedBox(width: 4),
+                          IconButton(
+                            icon: const Icon(Icons.refresh, size: 18),
+                            tooltip: 'Resend invitation',
+                            onPressed: () => _resendInvitation(invite),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.cancel_outlined, size: 18),
+                            tooltip: 'Revoke invitation',
+                            onPressed: () => _revokeInvitation(invite),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ],
           ],
         ),
       );

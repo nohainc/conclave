@@ -677,6 +677,26 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
     }
   }
 
+  Future<void> _resendInvitation(AxProjectInvitation invite) async {
+    try {
+      try {
+        await widget.dataSource.expireProjectInvitation(
+          projectId: widget.project.id,
+          invitationId: invite.id,
+        );
+      } catch (_) {}
+      await widget.dataSource.inviteProjectMember(
+        projectId: widget.project.id,
+        email: invite.email,
+        role: invite.role.isNotEmpty ? invite.role : 'collaborator',
+      );
+      _message('Invitation resent to ${invite.email}.');
+      await _queries.refreshMembers(widget.project.id, includeMembers: false);
+    } catch (error) {
+      _message(error.toString());
+    }
+  }
+
   Widget _buildEditableField({
     required String label,
     required String fieldKey,
