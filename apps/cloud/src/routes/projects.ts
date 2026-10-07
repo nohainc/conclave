@@ -515,6 +515,20 @@ export async function handleCreateProjectInvitation(
       now.toISOString(),
     )
     .run();
+  const recipient = await env.CONCLAVE_DB.prepare(
+    `SELECT id FROM users WHERE LOWER(email) = LOWER(?1) LIMIT 1`,
+  )
+    .bind(email)
+    .first<{ id: string }>();
+  await publishCollaborationEvent(
+    env,
+    "project.updated",
+    projectId,
+    id,
+    {
+      additionalRecipientUserIds: recipient ? [recipient.id] : [],
+    },
+  );
   return json(
     { invitation: { id, projectId, email, role, status: "pending" }, token },
     { status: 201 },
@@ -558,6 +572,15 @@ export async function handleChangeProjectMemberRole(
       new Date().toISOString(),
     )
     .run();
+  await publishCollaborationEvent(
+    env,
+    "project.updated",
+    projectId,
+    userId,
+    {
+      additionalRecipientUserIds: [userId],
+    },
+  );
   return json({ projectId, userId, role });
 }
 
@@ -603,6 +626,15 @@ export async function handleRemoveProjectMember(
       new Date().toISOString(),
     )
     .run();
+  await publishCollaborationEvent(
+    env,
+    "project.updated",
+    projectId,
+    userId,
+    {
+      additionalRecipientUserIds: [userId],
+    },
+  );
   return json({ projectId, userId, removed: true });
 }
 
@@ -619,6 +651,13 @@ export async function handleExpireProjectInvitation(
     projectId,
     accessContext,
   );
+  const existing = await env.CONCLAVE_DB.prepare(
+    `SELECT id, email FROM project_invitations WHERE id = ?1 AND project_id = ?2 AND status = 'pending'`,
+  )
+    .bind(invitationId, projectId)
+    .first<{ id: string; email: string }>();
+  if (!existing) throw new HttpError(404, "Pending invitation not found");
+
   const result = await env.CONCLAVE_DB.prepare(
     `UPDATE project_invitations SET status = 'expired', updated_at = ?1 WHERE id = ?2 AND project_id = ?3 AND status = 'pending'`,
   )
@@ -637,6 +676,20 @@ export async function handleExpireProjectInvitation(
       new Date().toISOString(),
     )
     .run();
+  const recipient = await env.CONCLAVE_DB.prepare(
+    `SELECT id FROM users WHERE LOWER(email) = LOWER(?1) LIMIT 1`,
+  )
+    .bind(existing.email)
+    .first<{ id: string }>();
+  await publishCollaborationEvent(
+    env,
+    "project.updated",
+    projectId,
+    invitationId,
+    {
+      additionalRecipientUserIds: recipient ? [recipient.id] : [],
+    },
+  );
   return json({ id: invitationId, status: "expired" });
 }
 
@@ -725,6 +778,15 @@ export async function handleAcceptProjectInvitation(
       now,
     ),
   ]);
+  await publishCollaborationEvent(
+    env,
+    "project.updated",
+    invitation.projectId,
+    invitation.id,
+    {
+      additionalRecipientUserIds: [context.userId],
+    },
+  );
   return json({
     id: invitation.id,
     projectId: invitation.projectId,
@@ -778,6 +840,15 @@ export async function handleDeclineProjectInvitation(
       now,
     ),
   ]);
+  await publishCollaborationEvent(
+    env,
+    "project.updated",
+    invitation.projectId,
+    invitation.id,
+    {
+      additionalRecipientUserIds: [context.userId],
+    },
+  );
   return json({
     id: invitation.id,
     projectId: invitation.projectId,

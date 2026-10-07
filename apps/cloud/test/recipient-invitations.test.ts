@@ -315,5 +315,35 @@ describe("Recipient Invitations API", () => {
         handleDeclineProjectInvitation(req, env as never, "pinv-dec-wrong"),
       ).rejects.toThrow("Invitation email does not match signed-in user");
     });
+
+    it("publishes realtime events for invitation lifecycle actions", async () => {
+      const { sqlite, env } = createTestEnv();
+      const future = new Date(Date.now() + 86400000).toISOString();
+
+      sqlite.exec(`
+        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        VALUES ('pinv-rt-1', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-rt', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
+      `);
+
+      const req = new Request(
+        "https://conclave.test/api/invitations/pinv-rt-1/accept",
+        {
+          method: "POST",
+          headers: { authorization: "Bearer ulikoss" },
+        },
+      );
+      await handleAcceptProjectInvitation(req, env as never, "pinv-rt-1");
+
+      const event = sqlite
+        .prepare(
+          "SELECT event_type, project_id, payload_json FROM realtime_events WHERE project_id = 'proj-1' ORDER BY sequence DESC LIMIT 1",
+        )
+        .get() as { event_type: string; project_id: string; payload_json: string };
+
+      expect(event).toBeDefined();
+      expect(event.event_type).toBe("project.updated");
+      expect(event.project_id).toBe("proj-1");
+      expect(JSON.parse(event.payload_json)).toEqual({ entityId: "pinv-rt-1" });
+    });
   });
 });

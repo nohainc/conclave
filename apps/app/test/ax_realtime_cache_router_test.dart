@@ -321,4 +321,36 @@ void main() {
     await first;
     expect(engine.peek(q).data, 2);
   });
+  test('project and invitation events revalidate invitations, projects and member queries',
+      () async {
+    final myInvitations = query(['me', 'invitations']);
+    final projects = query(['projects']);
+    final projectMembers = query(['project', 'A', 'members']);
+    final projectInvitations = query(['project', 'A', 'invitations']);
+    final otherProject = query(['project', 'B', 'members']);
+
+    await engine.ensure(myInvitations);
+    await engine.ensure(projects);
+    await engine.ensure(projectMembers);
+    await engine.ensure(projectInvitations);
+    await engine.ensure(otherProject);
+
+    expect(loads['me:invitations'], 1);
+    expect(loads['projects'], 1);
+    expect(loads['project:A:members'], 1);
+    expect(loads['project:A:invitations'], 1);
+    expect(loads['project:B:members'], 1);
+
+    await router.handle({
+      'type': 'project.updated',
+      'projectId': 'A',
+      'payload': {'entityId': 'pinv-123'},
+    });
+
+    expect(loads['me:invitations'], 2);
+    expect(loads['projects'], 2);
+    expect(loads['project:A:members'], 2);
+    expect(loads['project:A:invitations'], 2);
+    expect(loads['project:B:members'], 1);
+  });
 }

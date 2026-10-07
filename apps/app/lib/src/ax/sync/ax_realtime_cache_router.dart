@@ -70,18 +70,21 @@ class AxRealtimeCacheRouter {
       }
       return;
     }
-    if (type.startsWith('project.')) {
+    if (type.startsWith('project.') || type.startsWith('invitation.')) {
       final affected = projectId ?? id(payload['entityId']);
       if (affected == null) return;
       if (type == 'project.deleted') {
         projectRemoved?.call(affected);
         engine.remove(AxQueryKey(['project', affected]), prefix: true);
+        await engine.revalidateWhere((key) => key == AxQueryKey(['projects']));
         return;
       }
       await engine.revalidateWhere((key) =>
-          key.parts[0] == 'project' &&
-          key.parts.length >= 2 &&
-          key.parts[1] == affected);
+          (key.parts[0] == 'project' &&
+              key.parts.length >= 2 &&
+              key.parts[1] == affected) ||
+          key == AxQueryKey(['projects']) ||
+          key == AxQueryKey(['me', 'invitations']));
     } else if (type.startsWith('workstream.')) {
       final affectedWorkstream = workstreamId ?? id(payload['entityId']);
       final parents = <String>{if (projectId != null) projectId};

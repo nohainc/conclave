@@ -126,6 +126,7 @@ export class CloudEventPublisher implements EventPublisher {
     const deliveredSubscribers = await this.fanout(
       event,
       input.recipientUserIds,
+      input.additionalRecipientUserIds,
     );
     return { event, persisted, deliveredSubscribers };
   }
