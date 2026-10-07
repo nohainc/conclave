@@ -2573,7 +2573,7 @@ void main() {
             workConfig: {
               'bindings': {
                 'direct': {
-                  'worker_id': 'w-chatgpt',
+                  'workerId': 'w-chatgpt',
                   'model': 'gpt-4o',
                 },
               },

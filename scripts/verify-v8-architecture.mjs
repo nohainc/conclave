@@ -575,6 +575,52 @@ for (const required of [
   }
 }
 
+// Continuity responsibilities stay below Workflow planning and product UI.
+const workflowRunner = readRequired("apps/cloud/src/workflow.ts");
+if (
+  /work-session-key|sessionPolicy\s*:|sessionKey\s*:|Process\.start|child_process/.test(
+    workflowRunner,
+  )
+) {
+  failures.push(
+    "Workflow runner must delegate session/execution configuration to the Execution Engine.",
+  );
+}
+for (const entry of [
+  "prepareWorkerStepExecution",
+  "completeWorkerStepExecution",
+]) {
+  if (!workflowRunner.includes(`${entry}(`))
+    failures.push(`Workflow runner must use ${entry}.`);
+}
+const cliEngine = readRequired(
+  "engines/cli_worker/lib/src/cli_worker_engine.dart",
+);
+if (
+  cliEngine.includes(".deltaAfter(") ||
+  !cliEngine.includes("router.prepare(")
+) {
+  failures.push(
+    "CLI Worker Engine must delegate canonical prompt preparation to the Conversation Router.",
+  );
+}
+for (const file of [
+  "apps/app/lib/src/features/projects/projects_pages/workstream_page.dart",
+  "apps/app/lib/src/features/projects/projects_pages/workstream_actions.dart",
+  "apps/app/lib/src/features/projects/projects_pages/work_components.dart",
+]) {
+  const source = readRequired(file);
+  if (
+    /\[['"](?:worker_id|reasoning_effort)['"]\]|EngineSessionStore|nativeSessionId|Process\.start|conclave_cli_worker/.test(
+      source,
+    )
+  ) {
+    failures.push(
+      `${file} must use canonical product choices, without legacy binding aliases or native execution state.`,
+    );
+  }
+}
+
 if (failures.length > 0) {
   console.error("Architecture v8 guard failed:");
   for (const failure of failures) console.error(`- ${failure}`);

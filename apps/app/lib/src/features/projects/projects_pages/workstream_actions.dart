@@ -62,7 +62,7 @@ extension _WorkstreamActions on _WorkstreamPageState {
     final binding = rawBinding is Map
         ? Map<String, dynamic>.from(rawBinding)
         : <String, dynamic>{};
-    final workerId = (binding['workerId'] ?? binding['worker_id'])?.toString();
+    final workerId = binding['workerId']?.toString();
     final worker = [..._eligibleWorkers, ..._projectWorkers]
         .where((w) => w.id == workerId)
         .firstOrNull;
@@ -77,8 +77,7 @@ extension _WorkstreamActions on _WorkstreamPageState {
                 profileId: worker?.profileDefinitionId,
                 profileReleaseVersion: worker?.profileReleaseVersion,
                 modelId: optional(binding['model']),
-                effort: optional(
-                    binding['reasoningEffort'] ?? binding['reasoning_effort']),
+                effort: optional(binding['reasoningEffort']),
               );
     final workstreamId = widget.workstream.id;
     final workCache = _workHistoryCache;

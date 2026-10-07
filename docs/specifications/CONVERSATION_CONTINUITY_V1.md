@@ -1,6 +1,6 @@
 # Multi-Worker Conversation Continuity v1
 
-**Status:** implemented through Phase 28, including context/revision evidence, concurrency guards and execution boundaries.
+**Status:** implemented through Phase 30, including legacy-assumption cleanup, the continuity regression matrix, context/revision evidence, concurrency guards and execution boundaries.
 **Boundary:** Conclave Core and Human Product Protocol. **Contract version:** 1.
 
 Project → Workstream → Conversation → Work Requests is the product ownership
@@ -1172,3 +1172,72 @@ Existing execution, reconstruction, concurrency and Profile acceptance fixtures
 continue to exercise the integrated path. Public/runtime contracts, local session
 schemas and database schemas are unchanged; this phase requires no migration.
 Live provider and remote deployment validation remain separate release gates.
+
+## Phase 29 — Continuity regression matrix
+
+Coverage combines provider-independent routing, SQLite-backed Cloud persistence,
+local Engine subprocess fixtures and AX widget tests. Each layer verifies its own
+boundary; routing decisions alone are not evidence that a provider resumed.
+
+| Transition / invariant | Expected | Executable coverage |
+| --- | --- | --- |
+| Same Worker/model/effort | Continue, new request only | Core `conversation-router.test.ts`; Engine `conversation_execution_router_test.dart`, `engine_session_release_compatibility_test.dart` |
+| Effort change only | Same native scope, new turn effort | Core routing matrix; Cloud `conversation-turns.test.ts`; Engine `worker_session_test.dart` |
+| Model change | Keep session or reconstruct according to Profile capability | Core routing matrix; Engine release compatibility subprocess fixtures |
+| New Worker | Bootstrap existing canonical context | Core routing matrix; Cloud bootstrap fixtures |
+| Return to previous Worker | Resume its own session with bounded delta | Core round-trip regression; Engine delta-context fixtures |
+| Worker switch in Chat/Work | No warning | AX `projects_pages_test.dart` |
+| Workspace/Engine restart | Read persisted native state without in-memory dependency | Engine `worker_session_test.dart` uses a new store instance; release compatibility tests start separate Engine processes |
+| Lost native session | Invalidate, reconstruct once, retain logical run | Engine release compatibility fixtures and invalidation/replacement tests |
+| Chat request | One WorkflowRun and one StepRun | Cloud turn regression and workflow-run projection tests |
+| Work request | One WorkflowRun and one StepRun | Cloud `conversation-workflow-step-runs.test.ts` |
+| Future multi-step records | Several StepRuns under one trigger message | Cloud `conversation-workflow-runs.test.ts`; no new product workflow is enabled |
+| Parallel steps | Preserve each frozen base and exclude unseen sibling answers | Cloud `conversation-bootstrap.test.ts`; Engine session-lock tests |
+| Next-turn defaults change | Historical attribution remains unchanged | Core immutable-input matrix; Cloud completed-turn/defaults regression; AX response-details tests |
+
+The round-trip regression retains separate Worker/Profile identities and checks
+that returning to the original Worker selects its existing session and only the
+missing revision range. The completed-turn regression changes persisted Workstream
+execution defaults and reads historical attribution again, rather than relying on
+an unchanged in-memory object. Native-state tests recreate their store to make
+restart persistence explicit.
+
+This phase changes tests and documentation only. Database, runtime and public
+contracts are unchanged; no migration or deployment is required. Fixture providers
+establish deterministic protocol behavior, not live-provider acceptance.
+
+## Phase 30 — Remove superseded execution assumptions
+
+The audit retains the product defaults and removes residual compatibility paths
+rather than deleting valid configuration or historical evidence.
+
+| Old assumption | Current ownership / cleanup |
+| --- | --- |
+| Selected Worker identifies the Conversation | Conversation identity is Workstream + Workflow; turns and WorkerSessions carry Worker/Profile identity |
+| Model/effort are global conversation state | Workstream bindings are configuration defaults; composer choices are local next-turn preferences; immutable turns retain actual execution choices |
+| Messages invoke CLI directly | Submission creates product request/run records; Workflow scheduling delegates execution; Workspace supervises the generic Engine |
+| Work tab knows a provider runtime | Composer consumes normalized Worker options; shared `WorkerPresentation` owns branding and generic fallback, with no execution behavior |
+| Workflow owns provider/session behavior | Execution Engine owns session scope/configuration; local Router and Worker Engine own continuity and native handles |
+| One request means one provider session | Runs own StepRuns and immutable invocation turns; compatible native sessions can span requests and reconstruction stays within a step |
+
+Composer, submission and binding controls now use only the canonical product
+fields `workerId` and `reasoningEffort`. Removed snake-case aliases are not part
+of the v8 product contract. The fixture that previously supplied `worker_id` now
+uses that contract. SQL column names and runtime protocol fields are unaffected.
+The Worker icon/name mapping shared by composer and responses is isolated in
+`worker_presentation.dart`; unknown Workers retain catalog names and a generic
+visual fallback. Signed Profiles remain the source of execution capabilities.
+
+The existing v8 architecture guard now checks that Workflow dispatch and result
+handling use the Execution Engine, session keys/policies do not move back into
+Workflow planning, canonical prompt preparation stays in the local Router, and
+composer modules do not regain native execution state or legacy binding aliases.
+No historical turn projection, native release-format handling, execution default
+settings or existing workflow graph is removed.
+
+Verification includes the full JavaScript and AX suites, static analysis and
+architecture/protocol/documentation guards. This phase introduces no schema or
+public protocol migration. Clients or hand-authored configuration that supplied
+only the retired snake-case binding aliases must use the canonical camel-case
+fields; no unreleased-architecture compatibility adapter is retained. No remote
+rollout or live-provider validation is performed by this cleanup.

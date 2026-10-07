@@ -101,6 +101,11 @@ session validation, locking and persistence, signed Profile interpretation and
 provider process execution. Reconstruction stays inside the Worker step; the
 Workflow receives a generic result and does not manage native provider handles.
 These are responsibilities within the existing v8 path, not additional services.
+AX uses canonical `workerId`, `model` and `reasoningEffort` binding fields as
+execution defaults. They do not identify the Conversation or rewrite historical
+turns. Worker branding is a shared presentation concern; the Work view has no
+provider execution branches. Architecture checks enforce the Workflow execution
+delegation and keep native session state out of composer code.
 See [Conversation Continuity v1](docs/specifications/CONVERSATION_CONTINUITY_V1.md#phase-28--workflow-and-execution-boundaries).
 
 ## Runtime and protocol boundaries

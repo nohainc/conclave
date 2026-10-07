@@ -220,12 +220,9 @@ Future<T?> _showAnchoredMenu<T>({
 }
 
 Widget _workerIcon(BuildContext context, AxWorker worker) {
-  final asset = switch (worker.workerTypeId) {
-    'chatgpt' => 'assets/worker_icons/chatgpt.png',
-    'gemini' => 'assets/worker_icons/gemini.png',
-    'claude' => 'assets/worker_icons/claude.png',
-    _ => null,
-  };
+  final asset =
+      WorkerPresentation.resolve(worker.workerTypeId, worker.displayName)
+          .iconAsset;
   return SizedBox(
       width: 18,
       height: 18,
@@ -437,8 +434,7 @@ class _WorkComposer extends StatelessWidget {
     final binding = rawBinding is Map
         ? Map<String, dynamic>.from(rawBinding)
         : <String, dynamic>{};
-    final workerId =
-        (binding['workerId'] ?? binding['worker_id'])?.toString() ?? '';
+    final workerId = binding['workerId']?.toString() ?? '';
     if (workerId.isEmpty) return null;
     return eligibleWorkers.where((w) => w.id == workerId).firstOrNull ??
         projectWorkers.where((w) => w.id == workerId).firstOrNull;
@@ -478,10 +474,7 @@ class _WorkComposer extends StatelessWidget {
         selectedWorkflow?.executionPolicy ?? const AxWorkflowCapabilities();
     final selectedModel = binding['model']?.toString().trim() ?? '';
     final selectedReasoningEffort =
-        (binding['reasoningEffort'] ?? binding['reasoning_effort'])
-                ?.toString()
-                .trim() ??
-            '';
+        binding['reasoningEffort']?.toString().trim() ?? '';
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final availableModels = assignedWorker != null
         ? _modelsForWorker(assignedWorker)
@@ -1236,25 +1229,15 @@ class _WorkTimelineCard extends StatelessWidget {
     final workerDisplayName =
         (senderTurn?.workerDisplayName ?? senderStep?.workerDisplayName)
             ?.trim();
-    final workerName = workerDisplayName?.isNotEmpty == true
-        ? workerDisplayName!
-        : switch (workerType) {
-            'chatgpt' => 'ChatGPT',
-            'claude' => 'Claude',
-            'gemini' => 'Gemini',
-            _ => 'Worker',
-          };
+    final presentation =
+        WorkerPresentation.resolve(workerType, workerDisplayName);
+    final workerName = presentation.name;
     final isWorkerResponse = !isError &&
         (senderStep?.status == 'running' || response?.isNotEmpty == true) &&
         (workerDisplayName?.isNotEmpty == true ||
             workerType?.isNotEmpty == true);
     final senderName = isWorkerResponse ? workerName : 'Conclave';
-    final workerIcon = switch (workerType) {
-      'chatgpt' => 'assets/worker_icons/chatgpt.png',
-      'claude' => 'assets/worker_icons/claude.png',
-      'gemini' => 'assets/worker_icons/gemini.png',
-      _ => null,
-    };
+    final workerIcon = presentation.iconAsset;
 
     String? formattedModelInfo;
     if (selectedModel != null && selectedModel.isNotEmpty) {

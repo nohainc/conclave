@@ -153,15 +153,13 @@ class _WorkstreamPageState extends State<WorkstreamPage>
 
   void _rememberWorkerSelection(
       String bindingId, Map<String, dynamic> binding) {
-    final workerId = (binding['workerId'] ?? binding['worker_id'])?.toString();
+    final workerId = binding['workerId']?.toString();
     if (workerId == null || workerId.isEmpty) return;
     final value = _reconcileComposerBinding(binding);
     (_workerPreferences[bindingId] ??= {})[workerId] = {
       if (value['model'] != null) 'model': value['model'],
       if (value['reasoningEffort'] != null)
         'reasoningEffort': value['reasoningEffort'],
-      if (value['reasoning_effort'] != null && value['reasoningEffort'] == null)
-        'reasoningEffort': value['reasoning_effort'],
     };
   }
 
@@ -182,18 +180,16 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       };
   Map<String, dynamic> _reconcileComposerBinding(Map<String, dynamic> value) {
     final binding = Map<String, dynamic>.from(value);
-    final workerId = binding['workerId'] ?? binding['worker_id'];
+    final workerId = binding['workerId'];
     final worker = _projectWorkers.where((w) => w.id == workerId).firstOrNull;
     final options = worker?.executionOptions;
     if (options == null) return binding;
     final selection = options.reconcileSelection(
       model: binding['model']?.toString(),
-      effort: (binding['reasoningEffort'] ?? binding['reasoning_effort'])
-          ?.toString(),
+      effort: binding['reasoningEffort']?.toString(),
     );
     binding.remove('model');
     binding.remove('reasoningEffort');
-    binding.remove('reasoning_effort');
     if (selection.model != null) binding['model'] = selection.model;
     if (selection.effort != null) binding['reasoningEffort'] = selection.effort;
     return binding;
@@ -215,13 +211,11 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         _eligibleWorkers.where((worker) => worker.id == workerId).firstOrNull;
     if (worker == null) return;
     final current = _composerBinding(bindingId);
-    if ((current['workerId'] ?? current['worker_id']) == workerId) return;
+    if (current['workerId'] == workerId) return;
     _rememberWorkerSelection(bindingId, current);
     final binding = current
-      ..remove('worker_id')
       ..remove('model')
       ..remove('reasoningEffort')
-      ..remove('reasoning_effort')
       ..remove('fallbackWorkerId')
       ..remove('fallbackWorkerLabel')
       ..['workerId'] = workerId
@@ -327,7 +321,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     for (final entry in bindings.entries) {
       if (entry.value is Map) {
         final binding = Map<String, dynamic>.from(entry.value as Map);
-        final workerId = binding['workerId'] ?? binding['worker_id'];
+        final workerId = binding['workerId'];
         if (_projectWorkers.any((worker) =>
             worker.id == workerId && worker.executionOptions != null)) {
           _composerBindings[entry.key.toString()] = binding;
@@ -899,7 +893,6 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     final updated = Map<String, dynamic>.from(binding);
     if (reasoningEffort.trim().isEmpty) {
       updated.remove('reasoningEffort');
-      updated.remove('reasoning_effort');
     } else {
       updated['reasoningEffort'] = reasoningEffort.trim();
     }
