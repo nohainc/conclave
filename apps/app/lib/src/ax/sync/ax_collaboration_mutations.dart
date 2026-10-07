@@ -252,7 +252,8 @@ class AxCollaborationMutations {
       branch: 'main',
       lastActivity: 'now',
     );
-    return engine.mutations.run(AxMutationOperation<void,
+    return engine.mutations.run(AxMutationOperation<
+        void,
         (
           AxOptimisticUpdate<List<AxProjectInvitation>>,
           AxOptimisticUpdate<List<AxProject>>
@@ -278,8 +279,7 @@ class AxCollaborationMutations {
         changes.$1.rollback();
         changes.$2.rollback();
       },
-      execute: (_) =>
-          source.acceptProjectInvitation(invitationId: invite.id),
+      execute: (_) => source.acceptProjectInvitation(invitationId: invite.id),
       commit: (_, changes) {
         changes.$1.commit((state) => List.unmodifiable(
             (state.data ?? const <AxProjectInvitation>[])
@@ -318,8 +318,7 @@ class AxCollaborationMutations {
         return List.unmodifiable(items.where((i) => i.id != invite.id));
       }),
       isCurrent: (change) => change.isCurrent(),
-      execute: (_) =>
-          source.declineProjectInvitation(invitationId: invite.id),
+      execute: (_) => source.declineProjectInvitation(invitationId: invite.id),
       commit: (_, change) {
         change.commit((state) => List.unmodifiable(
             (state.data ?? const <AxProjectInvitation>[])

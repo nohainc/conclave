@@ -24,7 +24,7 @@ class AxStore {
       bool persistReadCache = const bool.fromEnvironment(
           'AX_PERSIST_READ_CACHE',
           defaultValue: true)})
-      :    _readCacheBackend = readCacheBackend,
+      : _readCacheBackend = readCacheBackend,
         _persistReadCache = persistReadCache,
         auth = AuthStore(dataSource),
         runs = RunStore(dataSource) {
@@ -106,8 +106,8 @@ class AxStore {
   }
 
   void _updateUnreadNotifications() {
-    unreadNotifications.value = notifications.where((n) => !n.read).length +
-        invitations.items.length;
+    unreadNotifications.value =
+        notifications.where((n) => !n.read).length + invitations.items.length;
   }
 
   Future<void> acceptInvitation(AxProjectInvitation invite) =>

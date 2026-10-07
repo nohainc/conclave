@@ -524,15 +524,9 @@ export async function handleCreateProjectInvitation(
   )
     .bind(email)
     .first<{ id: string }>();
-  await publishCollaborationEvent(
-    env,
-    "project.updated",
-    projectId,
-    id,
-    {
-      additionalRecipientUserIds: recipient ? [recipient.id] : [],
-    },
-  );
+  await publishCollaborationEvent(env, "project.updated", projectId, id, {
+    additionalRecipientUserIds: recipient ? [recipient.id] : [],
+  });
 
   const projectRow = await env.CONCLAVE_DB.prepare(
     `SELECT name FROM projects WHERE id = ?1`,
@@ -599,15 +593,9 @@ export async function handleChangeProjectMemberRole(
       new Date().toISOString(),
     )
     .run();
-  await publishCollaborationEvent(
-    env,
-    "project.updated",
-    projectId,
-    userId,
-    {
-      additionalRecipientUserIds: [userId],
-    },
-  );
+  await publishCollaborationEvent(env, "project.updated", projectId, userId, {
+    additionalRecipientUserIds: [userId],
+  });
   return json({ projectId, userId, role });
 }
 
@@ -653,15 +641,9 @@ export async function handleRemoveProjectMember(
       new Date().toISOString(),
     )
     .run();
-  await publishCollaborationEvent(
-    env,
-    "project.updated",
-    projectId,
-    userId,
-    {
-      additionalRecipientUserIds: [userId],
-    },
-  );
+  await publishCollaborationEvent(env, "project.updated", projectId, userId, {
+    additionalRecipientUserIds: [userId],
+  });
   return json({ projectId, userId, removed: true });
 }
 

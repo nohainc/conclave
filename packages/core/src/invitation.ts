@@ -79,7 +79,9 @@ export function canTransitionInvitation(
   targetStatus: InvitationStatus,
 ): boolean {
   if (currentStatus !== "pending") return false;
-  return targetStatus !== "pending" && INVITATION_STATUSES.includes(targetStatus);
+  return (
+    targetStatus !== "pending" && INVITATION_STATUSES.includes(targetStatus)
+  );
 }
 
 /**

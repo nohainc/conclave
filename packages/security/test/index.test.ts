@@ -270,6 +270,8 @@ describe("invitation authorization", () => {
       sessionId: "s3",
       clientType: "web",
     };
-    expect(canAccessProjectInvitation(unrelatedContext, invitation)).toBe(false);
+    expect(canAccessProjectInvitation(unrelatedContext, invitation)).toBe(
+      false,
+    );
   });
 });

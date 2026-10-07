@@ -1987,7 +1987,9 @@ h3 {
   background: var(--color-surface);
   border: 1px solid var(--color-line-glow);
   border-radius: var(--radius-xl);
-  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.8), var(--shadow-glow);
+  box-shadow:
+    0 24px 60px -12px rgba(0, 0, 0, 0.8),
+    var(--shadow-glow);
   overflow: hidden;
   position: relative;
 }
@@ -1999,7 +2001,12 @@ h3 {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(184, 169, 254, 0.6), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(184, 169, 254, 0.6),
+    transparent
+  );
 }
 
 .mockup-header {
@@ -2516,7 +2523,11 @@ h3 {
   flex-direction: column;
   gap: 8px;
   padding: var(--space-5);
-  background: linear-gradient(135deg, rgba(94, 75, 216, 0.15) 0%, rgba(26, 26, 34, 0.9) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(94, 75, 216, 0.15) 0%,
+    rgba(26, 26, 34, 0.9) 100%
+  );
   border: 1px solid var(--color-line-glow);
   border-radius: var(--radius-lg);
   text-align: center;
@@ -2594,7 +2605,11 @@ h3 {
 
 .privacy-flow-node--secure {
   border-color: var(--color-line-glow);
-  background: linear-gradient(180deg, rgba(94, 75, 216, 0.12) 0%, var(--color-surface-raised) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(94, 75, 216, 0.12) 0%,
+    var(--color-surface-raised) 100%
+  );
   box-shadow: 0 0 20px rgba(94, 75, 216, 0.2);
 }
 
@@ -2882,7 +2897,11 @@ h3 {
 
 .ws-mini-item--active {
   border-color: var(--color-line-glow);
-  background: linear-gradient(135deg, rgba(94, 75, 216, 0.08) 0%, var(--color-surface-raised) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(94, 75, 216, 0.08) 0%,
+    var(--color-surface-raised) 100%
+  );
 }
 
 .ws-mini-icon {
@@ -3080,7 +3099,9 @@ h3 {
   border: var(--border-thin);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-card);
-  transition: transform var(--motion-fast), border-color var(--motion-fast);
+  transition:
+    transform var(--motion-fast),
+    border-color var(--motion-fast);
 }
 
 .audience-card:hover {
@@ -3310,4 +3331,3 @@ h3 {
 .split-section--reversed > * {
   direction: ltr;
 }
-

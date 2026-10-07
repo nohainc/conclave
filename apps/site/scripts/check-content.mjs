@@ -12,6 +12,7 @@ const routes = new Map([
   ["/downloads/", "downloads/index.html"],
 ]);
 
+/** @param {string | undefined} [str] @returns {string} */
 function decodeHtml(str) {
   if (!str) return "";
   return str
@@ -111,9 +112,7 @@ for (const [route, file] of routes) {
   const rawTitle = source.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim();
   const title = decodeHtml(rawTitle);
   const description = decodeHtml(
-    source.match(
-      /<meta\b[^>]*name="description"[^>]*content="([^"]+)"/i,
-    )?.[1],
+    source.match(/<meta\b[^>]*name="description"[^>]*content="([^"]+)"/i)?.[1],
   );
   const canonical = source.match(
     /<link\b[^>]*rel="canonical"[^>]*href="([^"]+)"/i,
@@ -132,14 +131,18 @@ for (const [route, file] of routes) {
   );
 
   if (title !== contract.title)
-    errors.push(`${route}: title changed or missing (found: "${title}", expected: "${contract.title}")`);
+    errors.push(
+      `${route}: title changed or missing (found: "${title}", expected: "${contract.title}")`,
+    );
   if (!description?.trim()) errors.push(`${route}: description missing`);
   if (!canonical?.startsWith("https://conclaveax.com/"))
     errors.push(`${route}: canonical URL is malformed`);
   if (!ogImage?.startsWith("https://conclaveax.com/"))
     errors.push(`${route}: OpenGraph image URL is malformed`);
   if (!heading?.includes(contract.heading))
-    errors.push(`${route}: critical h1 content changed or missing (found: "${heading}", expected to contain: "${contract.heading}")`);
+    errors.push(
+      `${route}: critical h1 content changed or missing (found: "${heading}", expected to contain: "${contract.heading}")`,
+    );
   for (const phrase of contract.content) {
     if (!visibleText.includes(phrase))
       errors.push(`${route}: required content missing: ${phrase}`);

@@ -299,8 +299,9 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
     }
     final statelessContext = rawPayload['statelessContext'];
     if (statelessContext != null) {
-      if (sessionPolicy != 'stateless' || statelessContext is! Map)
+      if (sessionPolicy != 'stateless' || statelessContext is! Map) {
         return 'Invalid stateless Conversation context';
+      }
       try {
         ConversationBootstrap.fromJson(
             Map<String, Object?>.from(statelessContext));

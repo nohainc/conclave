@@ -2226,8 +2226,7 @@ class _ProjectScopedFixture extends AxFixtureDataSource {
 }
 
 class _InvitationTestFixture extends AxFixtureDataSource {
-  _InvitationTestFixture({this.initialProjects = const []});
-  final List<AxProject> initialProjects;
+  final List<AxProject> initialProjects = const [];
   var pendingInvitations = <AxProjectInvitation>[
     const AxProjectInvitation(
       id: 'inv-invite-1',
@@ -2245,8 +2244,8 @@ class _InvitationTestFixture extends AxFixtureDataSource {
   @override
   Future<AxSnapshot> loadBootstrapState(
       {String? projectId, String? workspaceId}) async {
-    final base = await super.loadBootstrapState(
-        projectId: projectId, workspaceId: workspaceId);
+    final base = await super
+        .loadBootstrapState(projectId: projectId, workspaceId: workspaceId);
     return base.copyWith(projects: initialProjects);
   }
 

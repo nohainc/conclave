@@ -321,7 +321,8 @@ void main() {
     await first;
     expect(engine.peek(q).data, 2);
   });
-  test('project and invitation events revalidate invitations, projects and member queries',
+  test(
+      'project and invitation events revalidate invitations, projects and member queries',
       () async {
     final myInvitations = query(['me', 'invitations']);
     final projects = query(['projects']);

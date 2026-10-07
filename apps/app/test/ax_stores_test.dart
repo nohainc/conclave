@@ -212,8 +212,7 @@ void main() {
 
       expect(store.invitations.items, isEmpty);
       expect(store.unreadNotifications.value, 0);
-      expect(
-          store.projects.items.any((p) => p.id == 'proj-new-store'), isTrue);
+      expect(store.projects.items.any((p) => p.id == 'proj-new-store'), isTrue);
     });
   });
 }

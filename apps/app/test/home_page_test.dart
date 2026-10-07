@@ -179,6 +179,7 @@ void main() {
 
     expect(find.text('Pending invitations (1)'), findsOneWidget);
     expect(find.text('Conclave AX Development'), findsOneWidget);
-    expect(find.text('Invited by vitalii@nohainc.com · MEMBER'), findsOneWidget);
+    expect(
+        find.text('Invited by vitalii@nohainc.com · MEMBER'), findsOneWidget);
   });
 }

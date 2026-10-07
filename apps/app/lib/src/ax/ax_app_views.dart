@@ -15,8 +15,12 @@ extension _AxAppViews on _AxAppStateMixin {
   }
 
   Widget _homeView() => ListenableBuilder(
-      listenable: Listenable.merge(
-          [store.projects, store.workspaces, store.executionChanges, store.invitations]),
+      listenable: Listenable.merge([
+        store.projects,
+        store.workspaces,
+        store.executionChanges,
+        store.invitations
+      ]),
       builder: (context, _) => AxQueryBuilder<List<AxWorker>>(
           engine: store.syncEngine,
           query: store.catalogs.workers,

@@ -368,7 +368,7 @@ extension _WorkstreamActions on _WorkstreamPageState {
           .refreshRequest(widget.workstream.id, workRequestId, supersede: true)
           .catchError((Object _) {}));
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Retrying your request.')),
+        const SnackBar(content: Text('Retrying your request.')),
       );
     } catch (_) {
       if (!mounted) return;

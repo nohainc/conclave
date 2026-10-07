@@ -58,12 +58,12 @@ describe("invitation domain", () => {
       const future = new Date(Date.now() + 100000).toISOString();
       const past = new Date(Date.now() - 100000).toISOString();
 
-      expect(
-        isInvitationActive({ status: "pending", expiresAt: future }),
-      ).toBe(true);
-      expect(
-        isInvitationActive({ status: "pending", expiresAt: past }),
-      ).toBe(false);
+      expect(isInvitationActive({ status: "pending", expiresAt: future })).toBe(
+        true,
+      );
+      expect(isInvitationActive({ status: "pending", expiresAt: past })).toBe(
+        false,
+      );
       expect(
         isInvitationActive({ status: "accepted", expiresAt: future }),
       ).toBe(false);
@@ -101,9 +101,9 @@ describe("invitation domain", () => {
       expect(() =>
         validateInvitationTransition("declined", "accepted"),
       ).toThrow(DomainInvariantError);
-      expect(() =>
-        validateInvitationTransition("expired", "accepted"),
-      ).toThrow(DomainInvariantError);
+      expect(() => validateInvitationTransition("expired", "accepted")).toThrow(
+        DomainInvariantError,
+      );
     });
   });
 

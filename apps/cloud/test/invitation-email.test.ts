@@ -8,12 +8,18 @@ import { sqliteD1 } from "./helpers/sqlite-d1.js";
 
 describe("Invitation Email Delivery", () => {
   it("resolves app URL from CONCLAVE_APP_URL, BETTER_AUTH_URL, or request URL", () => {
-    const req = new Request("https://conclave.internal/api/projects/proj-1/invitations");
+    const req = new Request(
+      "https://conclave.internal/api/projects/proj-1/invitations",
+    );
     expect(
-      resolveAppUrl(req, { CONCLAVE_APP_URL: "https://app.conclave.dev/" } as never),
+      resolveAppUrl(req, {
+        CONCLAVE_APP_URL: "https://app.conclave.dev/",
+      } as never),
     ).toBe("https://app.conclave.dev");
     expect(
-      resolveAppUrl(req, { BETTER_AUTH_URL: "https://auth.conclave.dev/" } as never),
+      resolveAppUrl(req, {
+        BETTER_AUTH_URL: "https://auth.conclave.dev/",
+      } as never),
     ).toBe("https://auth.conclave.dev");
     expect(resolveAppUrl(req, {} as never)).toBe("https://conclave.internal");
   });
@@ -29,7 +35,7 @@ describe("Invitation Email Delivery", () => {
 
     const mockEmail = {
       send: vi.fn(async (msg: unknown) => {
-        sentEmails.push(msg as typeof sentEmails[0]);
+        sentEmails.push(msg as (typeof sentEmails)[0]);
       }),
     };
 
@@ -48,7 +54,8 @@ describe("Invitation Email Delivery", () => {
 
     expect(ok).toBe(true);
     expect(mockEmail.send).toHaveBeenCalledOnce();
-    expect(sentEmails[0]).toMatchObject({
+    const sent = sentEmails[0]!;
+    expect(sent).toMatchObject({
       to: "ulikossnokia@gmail.com",
       from: {
         email: "invitations@conclaveax.com",
@@ -56,19 +63,27 @@ describe("Invitation Email Delivery", () => {
       },
       subject: "Vitalii Noha invited you to Conclave AX Development",
     });
-    expect(sentEmails[0].text).toContain("Vitalii Noha invited you to join \"Conclave AX Development\" as a collaborator on Conclave AX.");
-    expect(sentEmails[0].text).toContain("https://app.conclave.dev/?invitation=pinv-123");
-    expect(sentEmails[0].text).toContain("Sign in with ulikossnokia@gmail.com to accept.");
-    expect(sentEmails[0].html).toContain("<strong>Vitalii Noha</strong>");
-    expect(sentEmails[0].html).toContain("<strong>Conclave AX Development</strong>");
-    expect(sentEmails[0].html).toContain("href=\"https://app.conclave.dev/?invitation=pinv-123\"");
+    expect(sent.text).toContain(
+      'Vitalii Noha invited you to join "Conclave AX Development" as a collaborator on Conclave AX.',
+    );
+    expect(sent.text).toContain(
+      "https://app.conclave.dev/?invitation=pinv-123",
+    );
+    expect(sent.text).toContain(
+      "Sign in with ulikossnokia@gmail.com to accept.",
+    );
+    expect(sent.html).toContain("<strong>Vitalii Noha</strong>");
+    expect(sent.html).toContain("<strong>Conclave AX Development</strong>");
+    expect(sent.html).toContain(
+      'href="https://app.conclave.dev/?invitation=pinv-123"',
+    );
   });
 
   it("escapes HTML in user inputs for security", async () => {
     const sentEmails: Array<{ html: string }> = [];
     const mockEmail = {
       send: vi.fn(async (msg: unknown) => {
-        sentEmails.push(msg as typeof sentEmails[0]);
+        sentEmails.push(msg as (typeof sentEmails)[0]);
       }),
     };
 
@@ -84,9 +99,12 @@ describe("Invitation Email Delivery", () => {
       appUrl: "https://app.conclave.dev/?invitation=pinv-xss",
     });
 
-    expect(sentEmails[0].html).not.toContain("<script>");
-    expect(sentEmails[0].html).toContain("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;");
-    expect(sentEmails[0].html).toContain("Project &lt;img src=x onerror=alert(1)&gt;");
+    const sent = sentEmails[0]!;
+    expect(sent.html).not.toContain("<script>");
+    expect(sent.html).toContain(
+      "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;",
+    );
+    expect(sent.html).toContain("Project &lt;img src=x onerror=alert(1)&gt;");
   });
 
   it("sends email and creates invitation on handleCreateProjectInvitation", async () => {
@@ -127,19 +145,26 @@ describe("Invitation Email Delivery", () => {
       }),
     };
 
-    const req = new Request("https://conclave.internal/api/projects/proj-1/invitations", {
-      method: "POST",
-      headers: {
-        authorization: "Bearer vitalii",
-        "content-type": "application/json",
+    const req = new Request(
+      "https://conclave.internal/api/projects/proj-1/invitations",
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer vitalii",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          email: "ulikossnokia@gmail.com",
+          role: "collaborator",
+        }),
       },
-      body: JSON.stringify({
-        email: "ulikossnokia@gmail.com",
-        role: "collaborator",
-      }),
-    });
+    );
 
-    const res = await handleCreateProjectInvitation(req, env as never, "proj-1");
+    const res = await handleCreateProjectInvitation(
+      req,
+      env as never,
+      "proj-1",
+    );
     expect(res.status).toBe(201);
     expect(sentEmails).toHaveLength(1);
     expect(sentEmails[0]).toMatchObject({

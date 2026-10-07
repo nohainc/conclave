@@ -57,7 +57,7 @@ jobs:
         run: bash scripts/test-profile-lab-macos.sh
       - name: Build Profile Lab for macOS
         env:
-          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
+          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
         run: bash scripts/build-profile-lab-macos.sh --release
 
   site-astro:
@@ -91,6 +91,7 @@ jobs:
           test -f dist/index.html
           test -f dist/how-it-works/index.html
           test -f dist/workers/index.html
+          test -f dist/use-cases/index.html
           test -f dist/security/index.html
           test -f dist/downloads/index.html
 
@@ -116,4 +117,5 @@ jobs:
         working-directory: .
         env:
           CONCLAVE_WORKSPACE_SKIP_CHECKS: "1"
+          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
         run: bash scripts/build-workspace-macos.sh
