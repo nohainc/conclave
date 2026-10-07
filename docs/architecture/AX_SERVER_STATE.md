@@ -855,3 +855,13 @@ key has a single 30-second freshness policy and immutable list result shape.
 Consumers may register in either order without conflicting query definitions;
 they observe the same cached data and refresh updates. No API or schema change
 is required.
+
+Sidebar Projects are grouped from the authenticated user's role: `owner` entries
+appear in Your projects, and other accessible roles in Shared with you. Each
+group preserves the server's ordering and existing Workstream expansion state.
+Owned-only expanded sidebars omit the group heading; shared groups remain labeled
+and empty groups are hidden. The collapsed rail shows separate folder and shared
+folder selectors only for populated groups, each containing its own Projects and
+Workstreams. Groups derive from the reactive Project list, so invitation
+acceptance and refresh update both views without a separate persisted category.
+No server contract or data migration is required.

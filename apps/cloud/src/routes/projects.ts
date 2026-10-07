@@ -43,7 +43,7 @@ export async function handleListProjects(
     const includeArchived =
       new URL(request.url).searchParams.get("archived") === "true";
     const rows = await env.CONCLAVE_DB.prepare(
-      `SELECT p.id, p.name, p.description,
+      `SELECT p.id, p.name, p.description, pm.role,
               p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
        FROM projects p
        JOIN project_memberships pm ON pm.project_id = p.id
@@ -56,6 +56,7 @@ export async function handleListProjects(
         id: string;
         name: string;
         description: string | null;
+        role: string;
         settingsJson: string;
         createdAt: string;
         updatedAt: string;
@@ -67,6 +68,7 @@ export async function handleListProjects(
         id: row.id,
         name: row.name,
         description: row.description,
+        role: row.role,
         instructions:
           typeof settings.instructions === "string"
             ? settings.instructions
@@ -165,7 +167,7 @@ export async function handleGetProject(
   projectId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeRequest(
+  const context = await authorizeRequest(
     request,
     env,
     "projects:read",
@@ -193,6 +195,7 @@ export async function handleGetProject(
       id: row.id,
       name: row.name,
       description: row.description,
+      role: context.projectRoles[projectId],
       instructions:
         typeof settings.instructions === "string" ? settings.instructions : "",
       settings,

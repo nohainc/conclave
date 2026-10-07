@@ -63,6 +63,10 @@ class AxShellContext {
   final List<AxProject> _projects;
   final ValueListenable<List<AxProject>>? projectListenable;
   List<AxProject> get projects => projectListenable?.value ?? _projects;
+  List<AxProject> get ownedProjects =>
+      projects.where((project) => project.role == 'owner').toList();
+  List<AxProject> get sharedProjects =>
+      projects.where((project) => project.role != 'owner').toList();
   final AxProjectWorkstreams? projectWorkstreams;
   final Map<String, List<AxWorkstream>> workstreamsByProject;
   final AxProject? selectedProject;

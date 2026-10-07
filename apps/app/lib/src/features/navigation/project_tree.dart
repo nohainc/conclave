@@ -106,11 +106,28 @@ class ProjectTree extends StatelessWidget {
               ),
             ),
           ),
-        ...shellContext.projects
-            .map((project) => _buildProjectItem(context, project)),
+        if (shellContext.ownedProjects.isNotEmpty) ...[
+          if (shellContext.sharedProjects.isNotEmpty)
+            _groupLabel('Your projects'),
+          ...shellContext.ownedProjects
+              .map((project) => _buildProjectItem(context, project)),
+        ],
+        if (shellContext.sharedProjects.isNotEmpty) ...[
+          _groupLabel('Shared with you'),
+          ...shellContext.sharedProjects
+              .map((project) => _buildProjectItem(context, project)),
+        ],
       ],
     );
   }
+
+  Widget _groupLabel(String label) => Padding(
+      padding: const EdgeInsets.fromLTRB(10, 12, 8, 6),
+      child: Text(label,
+          style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: Colors.white54)));
 
   Widget _buildProjectItem(BuildContext context, AxProject project) {
     final cache = shellContext.projectWorkstreams;

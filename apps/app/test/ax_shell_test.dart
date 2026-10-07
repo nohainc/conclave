@@ -1029,7 +1029,7 @@ void main() {
       expect(find.byTooltip('Search...'), findsOneWidget);
       expect(find.byTooltip('Add Project'), findsOneWidget);
       expect(find.byTooltip('Notifications'), findsOneWidget);
-      expect(find.byTooltip('Projects & Workstreams'), findsOneWidget);
+      expect(find.byTooltip('Your projects'), findsOneWidget);
       expect(find.byTooltip('Vitalii Noha'), findsOneWidget);
       expect(find.byTooltip('Application menu'), findsOneWidget);
 
@@ -1064,7 +1064,7 @@ void main() {
       expect(notificationsOpened, isTrue);
 
       // Tapping Projects & Workstreams popup menu
-      await tester.tap(find.byTooltip('Projects & Workstreams'));
+      await tester.tap(find.byTooltip('Your projects'));
       await tester.pumpAndSettle();
       expect(find.byType(ConclaveFolderIcon), findsAtLeastNWidgets(1));
       expect(find.text(testProject.name), findsOneWidget);
@@ -2175,9 +2175,10 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Zero-project screen with Pending Invitation in For You (both on Home and Sidebar)
-      expect(find.text('For you'), findsOneWidget);
-      expect(find.text('Pending invitations (1)'), findsNWidgets(2));
+      // Zero-project screen with Pending Invitation in Join a Project priority card
+      expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+      expect(find.text('Join a Project'), findsOneWidget);
+      expect(find.text('You have 1 invitation.'), findsOneWidget);
       expect(find.text('Joined AX Core'), findsWidgets);
 
       // Tap Accept
@@ -2185,8 +2186,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Invitation is accepted and disappears, user is navigated into project
-      expect(find.text('For you'), findsNothing);
-      expect(find.text('Pending invitations (1)'), findsNothing);
+      expect(find.text('Welcome to Conclave AX'), findsNothing);
+      expect(find.text('Join a Project'), findsNothing);
       expect(find.text('Joined Joined AX Core.'), findsOneWidget);
       expect(find.text('Joined AX Core'), findsWidgets);
 

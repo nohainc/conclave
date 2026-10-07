@@ -87,30 +87,48 @@ The following legacy concepts are **prohibited** from established-user Home:
 ```text
 HomePage (Dispatcher)
     │
-    ├── isNewUser == true  (projects.isEmpty && invitations.isEmpty)
+    ├── isNewUser == true  (projects.isEmpty)
     │     └── NewUserHome
+    │           ├── (Priority if invitations.isNotEmpty) Join a Project card
+    │           ├── ("or" divider if invitations.isNotEmpty)
+    │           ├── Create your first Project card
+    │           ├── Advanced Connect AI / Workspace card
+    │           └── How Conclave AX works (value foundation cards)
     │
-    └── isNewUser == false (projects.isNotEmpty || invitations.isNotEmpty)
+    └── isNewUser == false (projects.isNotEmpty)
           └── EstablishedUserHome
+                ├── 1. For You (attention items + pending invitations)
+                ├── 2. Running Now (if active runs)
+                ├── 3. Continue Working (active workstreams)
+                ├── 4. What's New in Conclave (product updates)
+                └── 5. AI Updates (scoped model updates)
 ```
 
 ### 1. NewUserHome
-- **Condition:** Active *only* when the user has `projects.isEmpty && invitations.isEmpty`.
+- **Condition:** Active when `projects.isEmpty`.
 - **Experience:**
-  - Dedicated welcome header explaining Conclave AX as a collaborative AI workspace.
-  - Actionable **Get started** card with two clear pathways:
-    1. `Create a Project`: Start a shared project and collaborate.
-    2. `Connect AI / Workspace`: Advanced pairing of local workspace and CLI workers.
-  - **How Conclave AX works** highlights: People first, Private credentials, and Shared conversations.
-  - Completely omits dashboard sections (`For you`, `Continue working`, `What's new in Conclave`, `AI updates`) to avoid blank/confusing dashboard states.
+  - Dedicated header: `Welcome to Conclave AX` / `Bring your people and AI together.`
+  - **Priority Invitation Card** (when `invitations.isNotEmpty`):
+    - Displays `Join a Project` with count badge (*"You have N invitations."*).
+    - Inlines invitations with direct `Accept` and `Decline` actions.
+    - Followed by an `or` separator.
+  - **Primary Project Action**:
+    - `Create your first Project` (*"Start a shared space for people, conversations and AI."*).
+    - `Create Project →` action button.
+  - **Advanced Local AI Connection**:
+    - `Connect AI / Workspace`: Understated option to pair Conclave Workspace for local CLI Workers or codebases.
+  - **How Conclave AX works** value foundation:
+    - `People first`: Invite teammates, family, and collaborators to work together with shared AI.
+    - `Private credentials`: Share AI access without exposing private keys.
+    - `Shared conversations`: Maintain shared project context across members.
+  - Completely omits established dashboard sections (`For you`, `Continue working`, `What's new in Conclave`, `AI updates`).
 
 ### 2. EstablishedUserHome
-- **Condition:** Active when the user has either `projects.isNotEmpty` OR `invitations.isNotEmpty`.
-- **Key Invariant:** A user with 0 projects but pending invitations is **not** a new user; they have an active collaboration context awaiting decision.
+- **Condition:** Active when `projects.isNotEmpty`.
 - **Experience:**
-  - **For You**: Prioritizes pending invitations with direct `Accept` / `Decline` controls, as well as workstream attention items and findings.
+  - **For You**: Prioritizes attention items, workstream input requests, and pending invitations.
   - **Running Now**: Conditionally visible when active runs exist.
-  - **Continue Working**: Contextual workstreams (omitted if no projects exist).
+  - **Continue Working**: Contextual workstreams with collaborators, snippet, and `Continue →` button.
   - **What's New in Conclave**: Official product updates.
   - **AI Updates**: Scoped AI capability news for available worker types.
   - Strictly omits onboarding cards and getting-started tutorials.

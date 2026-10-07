@@ -45,16 +45,17 @@ class HomePage extends StatelessWidget {
   final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
   final void Function(String projectId, String workstreamId)? onOpenWorkstream;
 
-  /// A user is considered a new user ONLY if they have no projects AND no pending invitations.
-  /// If they have pending invitations, they have active collaboration context and receive
-  /// the EstablishedUserHome where invitations are prioritized in "For you".
-  bool get isNewUser => projects.isEmpty && invitations.isEmpty;
+  /// New-user experience is active when user has zero projects.
+  bool get isNewUser => projects.isEmpty;
 
   @override
   Widget build(BuildContext context) => isNewUser
       ? NewUserHome(
           onCreateProject: onCreateProject,
           onOpenWorkspaces: onOpenWorkspaces,
+          invitations: invitations,
+          onAcceptInvitation: onAcceptInvitation,
+          onDeclineInvitation: onDeclineInvitation,
         )
       : EstablishedUserHome(
           projects: projects,
@@ -81,15 +82,22 @@ class NewUserHome extends StatelessWidget {
     super.key,
     required this.onCreateProject,
     required this.onOpenWorkspaces,
+    this.invitations = const [],
+    this.onAcceptInvitation,
+    this.onDeclineInvitation,
   });
 
   final VoidCallback onCreateProject;
   final VoidCallback onOpenWorkspaces;
+  final List<AxProjectInvitation> invitations;
+  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
+  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final hasInvitations = invitations.isNotEmpty;
 
     return SingleChildScrollView(
       child: Column(
@@ -101,91 +109,87 @@ class NewUserHome extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'A shared AI workspace for people who want to think, decide, create, and collaborate together using the AI tools they already have.',
+            'Bring your people and AI together.',
             style: TextStyle(
               color: colorScheme.onSurfaceVariant,
-              fontSize: 15,
-              height: 1.4,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 24),
+
+          // If invitations exist, Join a Project takes priority
+          if (hasInvitations) ...[
+            _JoinProjectPriorityCard(
+              invitations: invitations,
+              onAccept: onAcceptInvitation,
+              onDecline: onDeclineInvitation,
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: Text(
+                'or',
+                style: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _CreateFirstProjectCard(
+              onCreateProject: onCreateProject,
+              isSecondary: true,
+            ),
+          ] else ...[
+            _CreateFirstProjectCard(
+              onCreateProject: onCreateProject,
+              isSecondary: false,
+            ),
+          ],
+
+          const SizedBox(height: 24),
+
+          // Advanced / Workspace pairing option
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
               side: BorderSide(
-                color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
               ),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Get started',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        Icons.group_add_outlined,
-                        color: colorScheme.primary,
-                        size: 24,
-                      ),
-                    ),
-                    title: const Text(
-                      'Create a Project',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                    ),
-                    subtitle: const Text(
-                      'Start a shared space, invite teammates or family, and collaborate in context.',
-                    ),
-                    trailing: FilledButton(
-                      onPressed: onCreateProject,
-                      child: const Text('Create project'),
-                    ),
-                  ),
-                  const Divider(height: 28),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        Icons.computer_outlined,
-                        color: colorScheme.onSurfaceVariant,
-                        size: 24,
-                      ),
-                    ),
-                    title: const Text(
-                      'Connect AI / Workspace',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                    ),
-                    subtitle: const Text(
-                      'Advanced: Pair Conclave Workspace to contribute local CLI Workers or local codebases.',
-                    ),
-                    trailing: OutlinedButton(
-                      onPressed: onOpenWorkspaces,
-                      child: const Text('Connect Workspace'),
-                    ),
-                  ),
-                ],
+            child: ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.computer_outlined,
+                  color: colorScheme.onSurfaceVariant,
+                  size: 20,
+                ),
+              ),
+              title: const Text(
+                'Connect AI / Workspace',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              subtitle: const Text(
+                'Advanced: Pair Conclave Workspace to contribute local CLI Workers or local codebases.',
+                style: TextStyle(fontSize: 12),
+              ),
+              trailing: OutlinedButton(
+                onPressed: onOpenWorkspaces,
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: const Text('Connect Workspace'),
               ),
             ),
           ),
+
           const SizedBox(height: 28),
           const Text(
             'How Conclave AX works',
@@ -228,6 +232,178 @@ class NewUserHome extends StatelessWidget {
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CreateFirstProjectCard extends StatelessWidget {
+  const _CreateFirstProjectCard({
+    required this.onCreateProject,
+    this.isSecondary = false,
+  });
+
+  final VoidCallback onCreateProject;
+  final bool isSecondary;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Card(
+      elevation: 0,
+      color: isSecondary
+          ? null
+          : (isDark
+              ? colorScheme.surfaceContainerHigh
+              : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)),
+      shape: RoundedRectangleBorder(
+        side: BorderSide(
+          color: isSecondary
+              ? colorScheme.outlineVariant.withValues(alpha: 0.6)
+              : colorScheme.primary.withValues(alpha: 0.3),
+          width: isSecondary ? 1 : 1.5,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.add_circle_outline,
+                    color: colorScheme.primary,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Create your first Project',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Start a shared space for people, conversations and AI.',
+              style: TextStyle(
+                fontSize: 14,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onCreateProject,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Create Project →'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _JoinProjectPriorityCard extends StatelessWidget {
+  const _JoinProjectPriorityCard({
+    required this.invitations,
+    this.onAccept,
+    this.onDecline,
+  });
+
+  final List<AxProjectInvitation> invitations;
+  final ValueChanged<AxProjectInvitation>? onAccept;
+  final ValueChanged<AxProjectInvitation>? onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final count = invitations.length;
+
+    return Card(
+      elevation: 0,
+      color: ConclaveColors.primarySoftColor(isDark),
+      shape: RoundedRectangleBorder(
+        side: BorderSide(
+          color:
+              ConclaveColors.primaryForeground(isDark).withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: ConclaveColors.primarySoftColor(isDark),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.mail_outline,
+                    color: ConclaveColors.primaryForeground(isDark),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Join a Project',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: ConclaveColors.primaryForeground(isDark),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'You have $count invitation${count == 1 ? '' : 's'}.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: ConclaveColors.primaryForeground(isDark)
+                              .withValues(alpha: 0.9),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            for (final invite in invitations) ...[
+              _InvitationItem(
+                invitation: invite,
+                onAccept: onAccept != null ? () => onAccept!(invite) : null,
+                onDecline: onDecline != null ? () => onDecline!(invite) : null,
+              ),
+              if (invite != invitations.last) const SizedBox(height: 8),
+            ],
+          ],
+        ),
       ),
     );
   }

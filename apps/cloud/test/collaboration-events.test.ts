@@ -10,6 +10,7 @@ import {
 import { parseRealtimeEvent } from "@conclave/protocol";
 import {
   handleCreateProject,
+  handleListProjects,
   handleUpdateProject,
   handleDeleteProject,
   handleCreateWorkstream,
@@ -72,6 +73,30 @@ function fixture() {
 }
 
 describe("collaboration durable signals", () => {
+  it("project list preserves the viewer's owner and shared membership roles", async () => {
+    const f = fixture();
+    try {
+      await handleCreateProject(f.request({ name: "Owned" }), f.env);
+      f.sqlite.exec(
+        "INSERT INTO projects(id,name,owner_user_id,created_at,updated_at) VALUES('shared','Shared','member','now','now'); INSERT INTO project_memberships(id,project_id,user_id,role,created_at,updated_at) VALUES('shared-access','shared','owner','collaborator','now','now');",
+      );
+      const response = await handleListProjects(
+        new Request("https://cloud.test/api/projects"),
+        f.env,
+      );
+      const body = (await response.json()) as {
+        projects: { name: string; role: string }[];
+      };
+      expect(body.projects).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "Owned", role: "owner" }),
+          expect.objectContaining({ name: "Shared", role: "collaborator" }),
+        ]),
+      );
+    } finally {
+      f.sqlite.close();
+    }
+  });
   it("delivers a durable recipient signal without granting Project membership", async () => {
     const f = fixture();
     try {

@@ -658,100 +658,100 @@ class AppIconRail extends StatelessWidget {
           const SizedBox(height: 6),
 
           // Project & Workstream Switcher MenuAnchor using matching popup style
-          shellContext.watchProjectsAndWorkstreams(() => MenuAnchor(
-                style: menuStyle,
-                builder: (context, controller, child) {
-                  return _railIconButton(
-                    icon: Icons.folder_outlined,
-                    iconWidget: ConclaveFolderIcon(
-                      isExpanded: controller.isOpen,
-                      size: 20,
-                      color: Colors.white70,
-                    ),
-                    tooltip: 'Projects & Workstreams',
-                    onPressed: () {
-                      if (controller.isOpen) {
-                        controller.close();
-                      } else {
-                        controller.open();
-                      }
-                    },
-                  );
-                },
-                menuChildren: [
-                  if (shellContext.projects.isEmpty)
-                    MenuItemButton(
-                      style: itemStyle(),
-                      child: Text(
-                        'No projects yet',
-                        style: TextStyle(
-                          fontStyle: FontStyle.italic,
-                          color: isDark ? Colors.white54 : Colors.black54,
-                        ),
-                      ),
-                    )
-                  else
-                    for (final project in shellContext.projects) ...[
-                      MenuItemButton(
-                        style: itemStyle(),
-                        leadingIcon: ConclaveFolderIcon(
-                          isExpanded: true,
-                          size: 16,
-                          color: shellContext
-                                  .isNavActive(AxNavigation.project(project.id))
-                              ? ConclaveColors.primaryForegroundDark
-                              : (isDark ? Colors.white70 : Colors.black87),
-                        ),
-                        onPressed: () =>
-                            onNavigateTo(AxNavigation.project(project.id)),
-                        child: Text(
-                          project.name,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: shellContext.isNavActive(
-                                    AxNavigation.project(project.id))
-                                ? FontWeight.bold
-                                : FontWeight.w600,
-                            color: shellContext.isNavActive(
-                                    AxNavigation.project(project.id))
-                                ? ConclaveColors.primaryForegroundDark
-                                : (isDark ? Colors.white : Colors.black87),
-                          ),
-                        ),
-                      ),
-                      for (final workstream in (shellContext.projectWorkstreams
-                              ?.peek(project.id) ??
-                          shellContext.workstreamsByProject[project.id] ??
-                          const <AxWorkstream>[]))
-                        MenuItemButton(
-                          style: itemStyle(),
-                          onPressed: () => onNavigateTo(AxNavigation.workstream(
-                              project.id, workstream.id)),
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 24),
+          shellContext.watchProjectsAndWorkstreams(() => Column(children: [
+                for (final group in [
+                  (
+                    label: 'Your projects',
+                    projects: shellContext.ownedProjects,
+                    icon: Icons.folder_outlined
+                  ),
+                  (
+                    label: 'Shared with you',
+                    projects: shellContext.sharedProjects,
+                    icon: Icons.folder_shared_outlined
+                  ),
+                ])
+                  if (group.projects.isNotEmpty)
+                    MenuAnchor(
+                      style: menuStyle,
+                      builder: (context, controller, child) {
+                        return _railIconButton(
+                          icon: group.icon,
+                          tooltip: group.label,
+                          onPressed: () {
+                            if (controller.isOpen) {
+                              controller.close();
+                            } else {
+                              controller.open();
+                            }
+                          },
+                        );
+                      },
+                      menuChildren: [
+                        for (final project in group.projects) ...[
+                          MenuItemButton(
+                            style: itemStyle(),
+                            leadingIcon: ConclaveFolderIcon(
+                              isExpanded: true,
+                              size: 16,
+                              color: shellContext.isNavActive(
+                                      AxNavigation.project(project.id))
+                                  ? ConclaveColors.primaryForegroundDark
+                                  : (isDark ? Colors.white70 : Colors.black87),
+                            ),
+                            onPressed: () =>
+                                onNavigateTo(AxNavigation.project(project.id)),
                             child: Text(
-                              workstream.name,
+                              project.name,
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 13,
                                 fontWeight: shellContext.isNavActive(
-                                        AxNavigation.workstream(
-                                            project.id, workstream.id))
+                                        AxNavigation.project(project.id))
                                     ? FontWeight.bold
-                                    : FontWeight.normal,
+                                    : FontWeight.w600,
                                 color: shellContext.isNavActive(
-                                        AxNavigation.workstream(
-                                            project.id, workstream.id))
+                                        AxNavigation.project(project.id))
                                     ? ConclaveColors.primaryForegroundDark
-                                    : (isDark
-                                        ? Colors.white70
-                                        : Colors.black87),
+                                    : (isDark ? Colors.white : Colors.black87),
                               ),
                             ),
                           ),
-                        ),
-                    ],
-                ],
-              )),
+                          for (final workstream in (shellContext
+                                  .projectWorkstreams
+                                  ?.peek(project.id) ??
+                              shellContext.workstreamsByProject[project.id] ??
+                              const <AxWorkstream>[]))
+                            MenuItemButton(
+                              style: itemStyle(),
+                              onPressed: () => onNavigateTo(
+                                  AxNavigation.workstream(
+                                      project.id, workstream.id)),
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 24),
+                                child: Text(
+                                  workstream.name,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: shellContext.isNavActive(
+                                            AxNavigation.workstream(
+                                                project.id, workstream.id))
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    color: shellContext.isNavActive(
+                                            AxNavigation.workstream(
+                                                project.id, workstream.id))
+                                        ? ConclaveColors.primaryForegroundDark
+                                        : (isDark
+                                            ? Colors.white70
+                                            : Colors.black87),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+              ])),
 
           const Spacer(),
 

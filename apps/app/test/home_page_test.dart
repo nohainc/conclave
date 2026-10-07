@@ -15,7 +15,34 @@ void main() {
     lastActivity: 'Today',
   );
 
-  testWidgets('NewUserHome renders collaborative onboarding and value cards',
+  const testInvite1 = AxProjectInvitation(
+    id: 'inv-1',
+    projectId: 'proj-123',
+    projectName: 'Family Travel',
+    email: 'vitalii@nohainc.com',
+    role: 'owner',
+    status: 'pending',
+    invitedByUserId: 'user-2',
+    invitedByUserEmail: 'julia@nohainc.com',
+    invitedByUserName: 'Julia',
+    createdAt: '2026-10-07T12:00:00Z',
+  );
+
+  const testInvite2 = AxProjectInvitation(
+    id: 'inv-2',
+    projectId: 'proj-456',
+    projectName: 'Home Renovation',
+    email: 'vitalii@nohainc.com',
+    role: 'editor',
+    status: 'pending',
+    invitedByUserId: 'user-3',
+    invitedByUserEmail: 'alex@nohainc.com',
+    invitedByUserName: 'Alex',
+    createdAt: '2026-10-07T14:00:00Z',
+  );
+
+  testWidgets(
+      'NewUserHome renders collaborative onboarding and value cards when no invitations exist',
       (tester) async {
     var projectCreated = false;
     var workspaceOpened = false;
@@ -33,11 +60,18 @@ void main() {
       onCreateProject: () => projectCreated = true,
     )));
 
-    // NewUserHome Header & Getting Started
+    // NewUserHome Header & Hero
     expect(find.text('Welcome to Conclave AX'), findsOneWidget);
-    expect(find.text('Get started'), findsOneWidget);
-    expect(find.text('Create a Project'), findsOneWidget);
+    expect(find.text('Bring your people and AI together.'), findsOneWidget);
+    expect(find.text('Create your first Project'), findsOneWidget);
+    expect(find.text('Start a shared space for people, conversations and AI.'),
+        findsOneWidget);
+    expect(find.text('Create Project →'), findsOneWidget);
     expect(find.text('Connect AI / Workspace'), findsOneWidget);
+
+    // No priority invitation card or separator
+    expect(find.text('Join a Project'), findsNothing);
+    expect(find.text('or'), findsNothing);
 
     // Value cards
     expect(find.text('How Conclave AX works'), findsOneWidget);
@@ -53,9 +87,76 @@ void main() {
     expect(find.text('Ready Workers'), findsNothing);
     expect(find.text('Archived Projects'), findsNothing);
 
-    await tester.tap(find.text('Create project'));
+    await tester.tap(find.text('Create Project →'));
     expect(projectCreated, isTrue);
 
+    await tester.tap(find.text('Connect Workspace'));
+    expect(workspaceOpened, isTrue);
+  });
+
+  testWidgets(
+      'NewUserHome prioritizes Join a Project card when user has 0 projects but has pending invitations',
+      (tester) async {
+    var projectCreated = false;
+    var workspaceOpened = false;
+    AxProjectInvitation? acceptedInvite;
+    AxProjectInvitation? declinedInvite;
+
+    await tester.pumpWidget(scaffold(HomePage(
+      projects: const [],
+      workspaces: const [],
+      workers: const [],
+      invitations: const [testInvite1, testInvite2],
+      run: null,
+      openFindingCount: 0,
+      onOpenWorkspaces: () => workspaceOpened = true,
+      onOpenProject: (_) {},
+      onOpenRun: (_, __) {},
+      onCreateProject: () => projectCreated = true,
+      onAcceptInvitation: (inv) => acceptedInvite = inv,
+      onDeclineInvitation: (inv) => declinedInvite = inv,
+    )));
+
+    // Header
+    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('Bring your people and AI together.'), findsOneWidget);
+
+    // Priority Join a Project card
+    expect(find.text('Join a Project'), findsOneWidget);
+    expect(find.text('You have 2 invitations.'), findsOneWidget);
+    expect(find.text('Family Travel'), findsOneWidget);
+    expect(find.text('Invited by Julia · OWNER'), findsOneWidget);
+    expect(find.text('Home Renovation'), findsOneWidget);
+    expect(find.text('Invited by Alex · EDITOR'), findsOneWidget);
+
+    // 'or' divider and Create your first Project
+    expect(find.text('or'), findsOneWidget);
+    expect(find.text('Create your first Project'), findsOneWidget);
+    expect(find.text('Create Project →'), findsOneWidget);
+
+    // Advanced workspace connection
+    expect(find.text('Connect AI / Workspace'), findsOneWidget);
+
+    // Value cards
+    expect(find.text('How Conclave AX works'), findsOneWidget);
+    expect(find.text('People first'), findsOneWidget);
+    expect(find.text('Private credentials'), findsOneWidget);
+    expect(find.text('Shared conversations'), findsOneWidget);
+
+    // Test accept on first invite
+    await tester.tap(find.text('Accept').first);
+    expect(acceptedInvite?.id, 'inv-1');
+
+    // Test decline on second invite
+    await tester.tap(find.text('Decline').last);
+    expect(declinedInvite?.id, 'inv-2');
+
+    // Test create project
+    await tester.tap(find.text('Create Project →'));
+    expect(projectCreated, isTrue);
+
+    // Test connect workspace
+    await tester.ensureVisible(find.text('Connect Workspace'));
     await tester.tap(find.text('Connect Workspace'));
     expect(workspaceOpened, isTrue);
   });
@@ -65,6 +166,7 @@ void main() {
       (tester) async {
     var openedProject = '';
     var openedWorkstream = '';
+    AxProjectInvitation? acceptedInvite;
 
     await tester.pumpWidget(scaffold(HomePage(
       projects: const [project],
@@ -84,6 +186,7 @@ void main() {
           capabilities: [],
         ),
       ],
+      invitations: const [testInvite1],
       continueWorkItems: const [
         AxContinueWorkItem(
           projectId: 'project-1',
@@ -112,17 +215,20 @@ void main() {
       onOpenProject: (id) => openedProject = id,
       onOpenRun: (_, __) {},
       onCreateProject: () {},
+      onAcceptInvitation: (inv) => acceptedInvite = inv,
       onOpenWorkstream: (pId, wsId) {
         openedProject = pId;
         openedWorkstream = wsId;
       },
     )));
 
-    // 1. FOR YOU
+    // 1. FOR YOU (both attention items and invitations)
     expect(find.text('For you'), findsOneWidget);
     expect(find.text('Authentication workstream needs your input'),
         findsOneWidget);
     expect(find.text('Open'), findsOneWidget);
+    expect(find.text('Pending invitations (1)'), findsOneWidget);
+    expect(find.text('Family Travel'), findsOneWidget);
 
     // 2. CONTINUE WORKING
     expect(find.text('Continue working'), findsOneWidget);
@@ -142,7 +248,6 @@ void main() {
 
     // INVARIANTS: Onboarding cards and prohibited legacy elements must NOT appear
     expect(find.text('Welcome to Conclave AX'), findsNothing);
-    expect(find.text('Get started'), findsNothing);
     expect(find.text('How Conclave AX works'), findsNothing);
     expect(find.text('Projects count'), findsNothing);
     expect(find.text('Ready Workers count'), findsNothing);
@@ -155,58 +260,8 @@ void main() {
     await tester.tap(find.text('Continue →'));
     expect(openedProject, 'project-1');
     expect(openedWorkstream, 'ws-landing');
-  });
-
-  testWidgets(
-      'Zero-project user with pending invitations is routed to EstablishedUserHome with For You invitations',
-      (tester) async {
-    var accepted = false;
-    var declined = false;
-    const invite = AxProjectInvitation(
-      id: 'inv-1',
-      projectId: 'proj-123',
-      projectName: 'Family Travel',
-      email: 'vitalii@nohainc.com',
-      role: 'owner',
-      status: 'pending',
-      invitedByUserId: 'user-2',
-      invitedByUserEmail: 'julia@nohainc.com',
-      invitedByUserName: 'Julia',
-      createdAt: '2026-10-07T12:00:00Z',
-    );
-
-    await tester.pumpWidget(scaffold(HomePage(
-      projects: const [],
-      workspaces: const [],
-      workers: const [],
-      invitations: const [invite],
-      onAcceptInvitation: (_) => accepted = true,
-      onDeclineInvitation: (_) => declined = true,
-      run: null,
-      openFindingCount: 0,
-      onOpenWorkspaces: () {},
-      onOpenProject: (_) {},
-      onOpenRun: (_, __) {},
-      onCreateProject: () {},
-    )));
-
-    // Must be in EstablishedUserHome (NOT NewUserHome)
-    expect(find.text('Welcome to Conclave AX'), findsNothing);
-    expect(find.text('Get started'), findsNothing);
-    expect(find.text('How Conclave AX works'), findsNothing);
-
-    // For You contains the pending invitations
-    expect(find.text('For you'), findsOneWidget);
-    expect(find.text('Pending invitations (1)'), findsOneWidget);
-    expect(find.text('Family Travel'), findsOneWidget);
-    expect(find.text('Invited by Julia · OWNER'), findsOneWidget);
-    expect(find.text('Accept'), findsOneWidget);
-    expect(find.text('Decline'), findsOneWidget);
 
     await tester.tap(find.text('Accept'));
-    expect(accepted, isTrue);
-
-    await tester.tap(find.text('Decline'));
-    expect(declined, isTrue);
+    expect(acceptedInvite?.id, 'inv-1');
   });
 }
