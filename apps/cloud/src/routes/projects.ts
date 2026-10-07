@@ -1,5 +1,9 @@
 import { conditionalJson } from "./conditional-read.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
+import {
+  resolveAppUrl,
+  sendProjectInvitationEmail,
+} from "../invitation-email.js";
 import { hashToken, authorizeProjectOwner } from "@conclave/security";
 import {
   HttpError,
@@ -529,6 +533,29 @@ export async function handleCreateProjectInvitation(
       additionalRecipientUserIds: recipient ? [recipient.id] : [],
     },
   );
+
+  const projectRow = await env.CONCLAVE_DB.prepare(
+    `SELECT name FROM projects WHERE id = ?1`,
+  )
+    .bind(projectId)
+    .first<{ name: string }>();
+  const projectName = projectRow?.name ?? "Project";
+  const appUrl = resolveAppUrl(request, env);
+  const invitationLink = `${appUrl}/?invitation=${id}`;
+
+  try {
+    await sendProjectInvitationEmail(env, {
+      recipientEmail: email,
+      inviterName:
+        context.user.displayName || context.user.email || "A team member",
+      projectName,
+      role,
+      appUrl: invitationLink,
+    });
+  } catch (emailError) {
+    console.warn("Failed to dispatch invitation email", emailError);
+  }
+
   return json(
     { invitation: { id, projectId, email, role, status: "pending" }, token },
     { status: 201 },
