@@ -1523,17 +1523,14 @@ class _WorkTimelineCard extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           radius: 11,
-                          backgroundColor: isDark
-                              ? const Color(0xff3f3b61)
-                              : const Color(0xffd8d2ff),
+                          backgroundColor:
+                              ConclaveColors.primarySoftColor(isDark),
                           child: Text(
                             requesterInitials,
                             style: TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.bold,
-                              color: isDark
-                                  ? Colors.white70
-                                  : const Color(0xff4238a0),
+                              color: ConclaveColors.primaryForeground(isDark),
                             ),
                           ),
                         ),
@@ -2106,16 +2103,14 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                   children: [
                     CircleAvatar(
                       radius: 11,
-                      backgroundColor: isDark
-                          ? const Color(0xff3f3b61)
-                          : const Color(0xffd8d2ff),
+                      backgroundColor:
+                          ConclaveColors.primarySoftColor(isDark),
                       child: Text(
                         initials,
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.bold,
-                          color:
-                              isDark ? Colors.white70 : const Color(0xff4238a0),
+                          color: ConclaveColors.primaryForeground(isDark),
                         ),
                       ),
                     ),

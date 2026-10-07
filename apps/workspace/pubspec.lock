@@ -95,6 +95,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0"
+  conclave_design:
+    dependency: "direct main"
+    description:
+      path: "../../packages/conclave_design"
+      relative: true
+    source: path
+    version: "1.0.0"
   conclave_profile_lab:
     dependency: "direct dev"
     description:

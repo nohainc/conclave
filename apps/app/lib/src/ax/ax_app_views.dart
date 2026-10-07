@@ -333,9 +333,16 @@ extension _AxAppViews on _AxAppStateMixin {
           child: ListTile(
             contentPadding: EdgeInsets.zero,
             leading: CircleAvatar(
-              backgroundColor: const Color(0xffeeecff),
-              child: Text(_shellContext.viewerInitials,
-                  style: const TextStyle(color: Color(0xff4238a0))),
+              backgroundColor: ConclaveColors.primarySoftColor(
+                  Theme.of(context).brightness == Brightness.dark),
+              child: Text(
+                _shellContext.viewerInitials,
+                style: TextStyle(
+                  color: ConclaveColors.primaryForeground(
+                      Theme.of(context).brightness == Brightness.dark),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
             title: Text(viewer?.displayName ?? 'Conclave user'),
             subtitle: Text(viewer?.email ?? 'Email unavailable'),

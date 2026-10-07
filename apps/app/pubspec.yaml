@@ -10,6 +10,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  conclave_design:
+    path: ../../packages/conclave_design
   conclave_protocol:
     path: ../../packages/dart/protocol
   http: ^1.2.2

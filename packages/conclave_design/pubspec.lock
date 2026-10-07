@@ -17,14 +17,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "12.1.0"
-  archive:
-    dependency: "direct main"
-    description:
-      name: archive
-      sha256: "6c5bcd986e06b94e3c40244af471750840a3d2341d1f9763a1100a14add517b4"
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.3.0"
   args:
     dependency: transitive
     description:
@@ -81,41 +73,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.1"
-  conclave_cli_worker_runtime:
-    dependency: "direct main"
-    description:
-      path: "../../packages/conclave_cli_worker_runtime"
-      relative: true
-    source: path
-    version: "0.1.0"
-  conclave_design:
-    dependency: "direct main"
-    description:
-      path: "../../packages/conclave_design"
-      relative: true
-    source: path
-    version: "1.0.0"
-  conclave_protocol:
-    dependency: "direct main"
-    description:
-      path: "../../packages/dart/protocol"
-      relative: true
-    source: path
-    version: "0.1.0"
-  conclave_tool_profile_v1:
-    dependency: "direct main"
-    description:
-      path: "../../packages/tool_profile_v1"
-      relative: true
-    source: path
-    version: "0.1.0"
-  conclave_worker_protocol:
-    dependency: "direct main"
-    description:
-      path: "../../packages/conclave_worker_protocol"
-      relative: true
-    source: path
-    version: "0.1.0"
   convert:
     dependency: transitive
     description:
@@ -133,21 +90,13 @@ packages:
     source: hosted
     version: "1.15.1"
   crypto:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: crypto
       sha256: c8ea0233063ba03258fbcf2ca4d6dadfefe14f02fab57702265467a19f27fadf
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
-  cryptography:
-    dependency: "direct main"
-    description:
-      name: cryptography
-      sha256: "3eda3029d34ec9095a27a198ac9785630fe525c0eb6a49f3d575272f8e792ef0"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.9.0"
   fake_async:
     dependency: transitive
     description:
@@ -156,14 +105,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.3.3"
-  ffi:
-    dependency: transitive
-    description:
-      name: ffi
-      sha256: "6d7fd89431262d8f3125e81b50d3847a091d846eafcd4fdb88dd06f36d705a45"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.2.0"
   file:
     dependency: transitive
     description:
@@ -334,14 +275,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.5.3"
-  posix:
-    dependency: transitive
-    description:
-      name: posix
-      sha256: bc1bad54ad2b735816e31f8d4600cfde6c7839975085ddfbca48b6c9f7c4044e
-      url: "https://pub.dev"
-    source: hosted
-    version: "6.5.2"
   pub_semver:
     dependency: transitive
     description:
@@ -540,5 +473,5 @@ packages:
     source: hosted
     version: "3.1.4"
 sdks:
-  dart: ">=3.11.0 <4.0.0"
+  dart: ">=3.10.0-0.0.dev <4.0.0"
   flutter: ">=3.24.0"

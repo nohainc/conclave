@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
+import '../../brand.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({
@@ -123,22 +124,29 @@ class _SetupStep extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) => Card(
-        margin: const EdgeInsets.only(bottom: 10),
-        child: ListTile(
-          leading: CircleAvatar(
-            radius: 16,
-            backgroundColor: const Color(0xffeeecff),
-            child: Text(number,
-                style: const TextStyle(
-                    color: Color(0xff5143b8), fontWeight: FontWeight.w700)),
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: CircleAvatar(
+          radius: 16,
+          backgroundColor: ConclaveColors.primarySoftColor(isDark),
+          child: Text(
+            number,
+            style: TextStyle(
+              color: ConclaveColors.primaryForeground(isDark),
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          title:
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-          subtitle: Text(detail),
-          trailing: OutlinedButton(onPressed: onPressed, child: Text(action)),
         ),
-      );
+        title:
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(detail),
+        trailing: OutlinedButton(onPressed: onPressed, child: Text(action)),
+      ),
+    );
+  }
 }
 
 class _EstablishedHome extends StatelessWidget {

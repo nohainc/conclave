@@ -123,7 +123,9 @@ extension _AxAppRunDetails on _AxAppStateMixin {
         clipBehavior: Clip.antiAlias,
         child: ExpansionTile(
           initiallyExpanded: initiallyExpanded,
-          leading: Icon(icon, color: const Color(0xff6254d9)),
+          leading: Icon(icon,
+              color: ConclaveColors.primaryForeground(
+                  Theme.of(context).brightness == Brightness.dark)),
           title: Text(title,
               style:
                   const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
@@ -134,10 +136,10 @@ extension _AxAppRunDetails on _AxAppStateMixin {
       );
 
   Color _runStatusColor(RunStatus status) => switch (status) {
-        RunStatus.completed => const Color(0xff43b17f),
-        RunStatus.failed || RunStatus.cancelled => const Color(0xffbd6565),
-        RunStatus.paused || RunStatus.waiting => const Color(0xffedb84d),
-        _ => const Color(0xff6254d9),
+        RunStatus.completed => ConclaveColors.success,
+        RunStatus.failed || RunStatus.cancelled => ConclaveColors.error,
+        RunStatus.paused || RunStatus.waiting => ConclaveColors.warning,
+        _ => ConclaveColors.primary,
       };
 
   String _statusLabel(RunStatus status) =>
@@ -181,8 +183,10 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                 runSpacing: 15,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  const Icon(Icons.bolt_rounded,
-                      color: Color(0xff6254d9), size: 24),
+                  Icon(Icons.bolt_rounded,
+                      color: ConclaveColors.primaryForeground(
+                          Theme.of(context).brightness == Brightness.dark),
+                      size: 24),
                   Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -254,7 +258,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
         subtitle: 'Live run state',
         trailing: _statusChip(
             '$completed / ${executionSnapshot.tasks.length} tasks',
-            const Color(0xff6254d9)),
+            ConclaveColors.primary),
         child: Column(children: [
           TaskPipelineDAG(
             tasks: executionSnapshot.tasks,
@@ -372,15 +376,20 @@ extension _AxAppRunDetails on _AxAppStateMixin {
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xfffafaff),
+                color: ConclaveColors.surface(
+                    Theme.of(context).brightness == Brightness.dark),
                 borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: const Color(0xffe6e3f8)),
+                border: Border.all(
+                    color: ConclaveColors.border(
+                        Theme.of(context).brightness == Brightness.dark)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.account_tree_outlined,
-                      size: 18, color: Color(0xff6254d9)),
+                  Icon(Icons.account_tree_outlined,
+                      size: 18,
+                      color: ConclaveColors.primaryForeground(
+                          Theme.of(context).brightness == Brightness.dark)),
                   const SizedBox(width: 9),
                   Expanded(
                     child: Column(
@@ -396,7 +405,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                       ],
                     ),
                   ),
-                  _statusChip(output.status, const Color(0xff43b17f)),
+                  _statusChip(output.status, ConclaveColors.success),
                 ],
               ),
             ),
@@ -404,13 +413,15 @@ extension _AxAppRunDetails on _AxAppStateMixin {
           if (decision != null) ...[
             const SizedBox(height: 4),
             Row(children: [
-              const Icon(Icons.auto_awesome,
-                  color: Color(0xff6254d9), size: 18),
+              Icon(Icons.auto_awesome,
+                  color: ConclaveColors.primaryForeground(
+                      Theme.of(context).brightness == Brightness.dark),
+                  size: 18),
               const SizedBox(width: 8),
               const Text('Synthesis decision',
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
               const Spacer(),
-              _statusChip(decision.status, const Color(0xff43b17f)),
+              _statusChip(decision.status, ConclaveColors.success),
             ]),
             const SizedBox(height: 6),
             Text(decision.summary,
@@ -426,13 +437,14 @@ extension _AxAppRunDetails on _AxAppStateMixin {
 
   Widget _taskRow(AxTask task, {bool selected = false}) {
     final active = selectedTaskId == task.id;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final color = task.status == TaskStatus.completed
-        ? const Color(0xff43b17f)
+        ? ConclaveColors.success
         : task.status.isFailed
-            ? const Color(0xffb64b4b)
+            ? ConclaveColors.error
             : task.status == TaskStatus.running
-                ? const Color(0xff6254d9)
-                : const Color(0xffaaa8b2);
+                ? ConclaveColors.primary
+                : ConclaveColors.textSecondary(isDark);
     return InkWell(
         onTap: () => _updateState(() => selectedTaskId = task.id),
         borderRadius: BorderRadius.circular(9),
@@ -440,11 +452,16 @@ extension _AxAppRunDetails on _AxAppStateMixin {
             margin: const EdgeInsets.only(bottom: 5),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-                color: active ? const Color(0xfff3f1ff) : Colors.transparent,
+                color: active
+                    ? ConclaveColors.primarySoftColor(isDark)
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(9),
                 border: Border.all(
-                    color:
-                        active ? const Color(0xffdcd7ff) : Colors.transparent)),
+                    color: active
+                        ? (isDark
+                            ? ConclaveColors.primaryForegroundDark
+                            : ConclaveColors.primarySoft)
+                        : Colors.transparent)),
             child: Row(children: [
               Icon(
                   task.status == TaskStatus.completed
@@ -476,8 +493,9 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                         value: task.progress,
                         minHeight: 5,
                         borderRadius: BorderRadius.circular(4),
-                        color: const Color(0xff7467e4),
-                        backgroundColor: const Color(0xffe3e0f7))),
+                        color: ConclaveColors.primary,
+                        backgroundColor:
+                            ConclaveColors.primarySoftColor(isDark))),
               const SizedBox(width: 5),
               const Icon(Icons.chevron_right_rounded,
                   size: 17, color: Color(0xffb5b3bd))
@@ -486,6 +504,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
 
   Widget _taskDetailsCard() {
     final task = selectedTask ?? executionSnapshot.tasks.firstOrNull;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (task == null) {
       return _panel(
         title: 'Task details',
@@ -499,8 +518,8 @@ extension _AxAppRunDetails on _AxAppStateMixin {
         trailing: _statusChip(
             task.status.name,
             task.status == TaskStatus.running
-                ? const Color(0xff6254d9)
-                : const Color(0xff43b17f)),
+                ? ConclaveColors.primary
+                : ConclaveColors.success),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(task.title,
               style:
@@ -550,8 +569,8 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                 icon: const Icon(Icons.refresh_rounded, size: 16),
                 label: const Text('Retry task'),
                 style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xffefedf9),
-                    foregroundColor: const Color(0xff5549be),
+                    backgroundColor: ConclaveColors.primarySoftColor(isDark),
+                    foregroundColor: ConclaveColors.primaryForeground(isDark),
                     elevation: 0))
         ]));
   }
@@ -598,7 +617,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                           height: 8,
                           margin: const EdgeInsets.only(top: 3, right: 11),
                           decoration: const BoxDecoration(
-                              color: Color(0xff786be4),
+                              color: ConclaveColors.primary,
                               shape: BoxShape.circle)),
                       Expanded(
                         child: Column(
