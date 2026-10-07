@@ -16,6 +16,21 @@ class CollaborationSource extends AxFixtureDataSource {
   final streamCreates = <Completer<AxWorkstream>>[];
   final streamEdits = <Completer<AxWorkstream>>[];
   final deletes = <Completer<void>>[];
+  final acceptInvites = <Completer<void>>[];
+  final declineInvites = <Completer<void>>[];
+  @override
+  Future<void> acceptProjectInvitation({required String invitationId}) {
+    final response = Completer<void>();
+    acceptInvites.add(response);
+    return response.future;
+  }
+
+  @override
+  Future<void> declineProjectInvitation({required String invitationId}) {
+    final response = Completer<void>();
+    declineInvites.add(response);
+    return response.future;
+  }
   @override
   Future<AxProject> createProject(
       {required String name, String? description, String? instructions}) {
@@ -258,5 +273,114 @@ void main() {
     source.projectEdits.single.complete(project('P', 'Late'));
     await check;
     expect(store.projects.items.map((p) => p.id), ['Q']);
+  });
+
+  test(
+      'acceptInvitation removes invitation immediately, adds project optimistically, and confirms on server completion',
+      () async {
+    final invite = AxProjectInvitation(
+      id: 'inv-1',
+      projectId: 'proj-new',
+      projectName: 'Alpha Project',
+      email: 'user@example.com',
+      role: 'member',
+      status: 'pending',
+      invitedByUserId: 'u-1',
+      createdAt: DateTime.now().toIso8601String(),
+    );
+    store.invitations.replace([invite]);
+    expect(store.invitations.items.map((i) => i.id), ['inv-1']);
+    expect(store.projects.items.map((p) => p.id), ['P', 'Q']);
+
+    final write = store.collaboration.acceptInvitation(invite);
+
+    // Optimistic state
+    expect(store.invitations.items, isEmpty);
+    expect(store.projects.items.map((p) => p.id), ['P', 'Q', 'proj-new']);
+    expect(store.projects.items.last.name, 'Alpha Project');
+
+    // Complete server write
+    source.acceptInvites.single.complete();
+    await write;
+
+    expect(store.invitations.items, isEmpty);
+    expect(store.projects.items.map((p) => p.id), ['P', 'Q', 'proj-new']);
+  });
+
+  test(
+      'failed acceptInvitation rolls back removed invitation and optimistic project',
+      () async {
+    final invite = AxProjectInvitation(
+      id: 'inv-1',
+      projectId: 'proj-new',
+      projectName: 'Alpha Project',
+      email: 'user@example.com',
+      role: 'member',
+      status: 'pending',
+      invitedByUserId: 'u-1',
+      createdAt: DateTime.now().toIso8601String(),
+    );
+    store.invitations.replace([invite]);
+
+    final write = store.collaboration.acceptInvitation(invite);
+    final check = expectLater(write, throwsA(isA<StateError>()));
+
+    expect(store.invitations.items, isEmpty);
+    expect(store.projects.items.map((p) => p.id), ['P', 'Q', 'proj-new']);
+
+    source.acceptInvites.single.completeError(StateError('expired'));
+    await check;
+
+    // Rolled back
+    expect(store.invitations.items.map((i) => i.id), ['inv-1']);
+    expect(store.projects.items.map((p) => p.id), ['P', 'Q']);
+  });
+
+  test(
+      'declineInvitation removes invitation immediately and confirms on server completion',
+      () async {
+    final invite = AxProjectInvitation(
+      id: 'inv-1',
+      projectId: 'proj-new',
+      projectName: 'Alpha Project',
+      email: 'user@example.com',
+      role: 'member',
+      status: 'pending',
+      invitedByUserId: 'u-1',
+      createdAt: DateTime.now().toIso8601String(),
+    );
+    store.invitations.replace([invite]);
+
+    final write = store.collaboration.declineInvitation(invite);
+    expect(store.invitations.items, isEmpty);
+
+    source.declineInvites.single.complete();
+    await write;
+
+    expect(store.invitations.items, isEmpty);
+  });
+
+  test('failed declineInvitation rolls back removed invitation', () async {
+    final invite = AxProjectInvitation(
+      id: 'inv-1',
+      projectId: 'proj-new',
+      projectName: 'Alpha Project',
+      email: 'user@example.com',
+      role: 'member',
+      status: 'pending',
+      invitedByUserId: 'u-1',
+      createdAt: DateTime.now().toIso8601String(),
+    );
+    store.invitations.replace([invite]);
+
+    final write = store.collaboration.declineInvitation(invite);
+    final check = expectLater(write, throwsA(isA<StateError>()));
+
+    expect(store.invitations.items, isEmpty);
+
+    source.declineInvites.single.completeError(StateError('forbidden'));
+    await check;
+
+    expect(store.invitations.items.map((i) => i.id), ['inv-1']);
   });
 }

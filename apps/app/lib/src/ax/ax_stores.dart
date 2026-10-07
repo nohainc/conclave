@@ -110,21 +110,11 @@ class AxStore {
         invitations.items.length;
   }
 
-  Future<void> acceptInvitation(AxProjectInvitation invite) async {
-    await dataSource.acceptProjectInvitation(invitationId: invite.id);
-    await Future.wait([
-      invitations.refresh(),
-      projects.refresh(),
-    ]);
-    if (invite.projectId.isNotEmpty) {
-      projectTabs.refreshMembers(invite.projectId);
-    }
-  }
+  Future<void> acceptInvitation(AxProjectInvitation invite) =>
+      collaboration.acceptInvitation(invite);
 
-  Future<void> declineInvitation(AxProjectInvitation invite) async {
-    await dataSource.declineProjectInvitation(invitationId: invite.id);
-    await invitations.refresh();
-  }
+  Future<void> declineInvitation(AxProjectInvitation invite) =>
+      collaboration.declineInvitation(invite);
 
   void dispose() {
     invitations.removeListener(_updateUnreadNotifications);

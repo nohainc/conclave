@@ -2157,6 +2157,43 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsNothing);
     });
+
+    testWidgets(
+        'Phase 6: Accepting invitation on zero-project screen navigates directly into accepted project without reload',
+        (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final data = _InvitationTestFixture();
+      await tester.pumpWidget(MaterialApp(
+        home: ConclaveAppShell(
+          services: const DefaultPlatformServices(),
+          dataSource: data,
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // Zero-project screen with Welcome and Pending Invitation (both on Home and Sidebar)
+      expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+      expect(find.text('Pending invitations (1)'), findsNWidgets(2));
+      expect(find.text('Joined AX Core'), findsWidgets);
+
+      // Tap Accept
+      await tester.tap(find.text('Accept'));
+      await tester.pumpAndSettle();
+
+      // Invitation is accepted and disappears, user is navigated into project
+      expect(find.text('Welcome to Conclave AX'), findsNothing);
+      expect(find.text('Pending invitations (1)'), findsNothing);
+      expect(find.text('Joined Joined AX Core.'), findsOneWidget);
+      expect(find.text('Joined AX Core'), findsWidgets);
+
+      // Drain toast timer
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 }
 
@@ -2185,5 +2222,51 @@ class _ProjectScopedFixture extends AxFixtureDataSource {
           primaryWorkspace: '',
           queueStatus: 'Idle')
     ];
+  }
+}
+
+class _InvitationTestFixture extends AxFixtureDataSource {
+  _InvitationTestFixture({this.initialProjects = const []});
+  final List<AxProject> initialProjects;
+  var pendingInvitations = <AxProjectInvitation>[
+    const AxProjectInvitation(
+      id: 'inv-invite-1',
+      projectId: 'proj-joined-1',
+      projectName: 'Joined AX Core',
+      email: 'user@example.com',
+      role: 'member',
+      status: 'pending',
+      invitedByUserId: 'u-1',
+      invitedByUserName: 'Vitalii Noha',
+      createdAt: '2026-10-07T12:00:00Z',
+    ),
+  ];
+
+  @override
+  Future<AxSnapshot> loadBootstrapState(
+      {String? projectId, String? workspaceId}) async {
+    final base = await super.loadBootstrapState(
+        projectId: projectId, workspaceId: workspaceId);
+    return base.copyWith(projects: initialProjects);
+  }
+
+  @override
+  Future<List<AxProject>> loadProjects({bool includeArchived = false}) async =>
+      initialProjects;
+
+  @override
+  Future<List<AxProjectInvitation>> loadCurrentUserInvitations() async =>
+      pendingInvitations;
+
+  @override
+  Future<void> acceptProjectInvitation({required String invitationId}) async {
+    pendingInvitations =
+        pendingInvitations.where((i) => i.id != invitationId).toList();
+  }
+
+  @override
+  Future<void> declineProjectInvitation({required String invitationId}) async {
+    pendingInvitations =
+        pendingInvitations.where((i) => i.id != invitationId).toList();
   }
 }

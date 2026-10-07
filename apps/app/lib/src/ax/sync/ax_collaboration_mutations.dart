@@ -19,6 +19,9 @@ class AxCollaborationMutations {
       key: AxQueryKey(['projects']),
       load: () async => List.unmodifiable((await source.loadProjects())
           .map((p) => p.copyWith(workstreams: const []))));
+  late final invitations = AxQuery<List<AxProjectInvitation>>(
+      key: AxQueryKey(['me', 'invitations']),
+      load: source.loadCurrentUserInvitations);
 
   String _temporary(String kind) =>
       'local-$kind-${DateTime.now().microsecondsSinceEpoch}-${++_nextId}';
@@ -234,6 +237,97 @@ class AxCollaborationMutations {
       rollback: (_, __, change) => change.rollback(),
       invalidate: (_, __) async {
         engine.invalidate(AxQueryKey(['project', original.projectId, 'audit']));
+      },
+    ));
+  }
+
+  Future<void> acceptInvitation(AxProjectInvitation invite) {
+    final inviteQuery = invitations;
+    final projectQuery = projects;
+    final projectLocal = AxProject(
+      id: invite.projectId,
+      name: invite.projectName.isNotEmpty ? invite.projectName : 'Project',
+      description: '',
+      instructions: '',
+      branch: 'main',
+      lastActivity: 'now',
+    );
+    return engine.mutations.run(AxMutationOperation<void,
+        (
+          AxOptimisticUpdate<List<AxProjectInvitation>>,
+          AxOptimisticUpdate<List<AxProject>>
+        )>(
+      key: AxQueryKey(['mutation', 'invitation', 'accept', invite.id]),
+      optimisticUpdate: () {
+        final inviteChange = engine.optimisticUpdate(inviteQuery, (state) {
+          final items = state.data ?? const <AxProjectInvitation>[];
+          return List.unmodifiable(items.where((i) => i.id != invite.id));
+        });
+        final projectChange = engine.optimisticUpdate(projectQuery, (state) {
+          final items = state.data ?? const <AxProject>[];
+          if (invite.projectId.isEmpty ||
+              items.any((p) => p.id == invite.projectId)) {
+            return items;
+          }
+          return _put(items, projectLocal, (p) => p.id);
+        });
+        return (inviteChange, projectChange);
+      },
+      isCurrent: (changes) => changes.$1.isCurrent() && changes.$2.isCurrent(),
+      cancel: (changes) {
+        changes.$1.rollback();
+        changes.$2.rollback();
+      },
+      execute: (_) =>
+          source.acceptProjectInvitation(invitationId: invite.id),
+      commit: (_, changes) {
+        changes.$1.commit((state) => List.unmodifiable(
+            (state.data ?? const <AxProjectInvitation>[])
+                .where((i) => i.id != invite.id)));
+        changes.$2.commit((state) {
+          final items = state.data ?? const <AxProject>[];
+          if (invite.projectId.isEmpty ||
+              items.any((p) => p.id == invite.projectId)) {
+            return items;
+          }
+          return _put(items, projectLocal, (p) => p.id);
+        });
+      },
+      rollback: (_, __, changes) {
+        changes.$1.rollback();
+        changes.$2.rollback();
+      },
+      invalidate: (_, __) async {
+        engine.invalidate(inviteQuery.key);
+        engine.invalidate(projectQuery.key);
+        if (invite.projectId.isNotEmpty) {
+          engine.invalidate(AxQueryKey(['project', invite.projectId]),
+              prefix: true);
+        }
+      },
+    ));
+  }
+
+  Future<void> declineInvitation(AxProjectInvitation invite) {
+    final inviteQuery = invitations;
+    return engine.mutations.run(AxMutationOperation<void,
+        AxOptimisticUpdate<List<AxProjectInvitation>>>(
+      key: AxQueryKey(['mutation', 'invitation', 'decline', invite.id]),
+      optimisticUpdate: () => engine.optimisticUpdate(inviteQuery, (state) {
+        final items = state.data ?? const <AxProjectInvitation>[];
+        return List.unmodifiable(items.where((i) => i.id != invite.id));
+      }),
+      isCurrent: (change) => change.isCurrent(),
+      execute: (_) =>
+          source.declineProjectInvitation(invitationId: invite.id),
+      commit: (_, change) {
+        change.commit((state) => List.unmodifiable(
+            (state.data ?? const <AxProjectInvitation>[])
+                .where((i) => i.id != invite.id)));
+      },
+      rollback: (_, __, change) => change.rollback(),
+      invalidate: (_, __) async {
+        engine.invalidate(inviteQuery.key);
       },
     ));
   }

@@ -185,5 +185,35 @@ void main() {
 
       expect(() => store.loadBootstrapState(), throwsA(isA<StateError>()));
     });
+
+    test(
+        'store.acceptInvitation and declineInvitation execute through collaboration mutations',
+        () async {
+      final source = const AxFixtureDataSource();
+      final store = AxStore(source);
+      addTearDown(store.dispose);
+
+      const invite = AxProjectInvitation(
+        id: 'inv-store-1',
+        projectId: 'proj-new-store',
+        projectName: 'New Store Project',
+        email: 'user@example.com',
+        role: 'member',
+        status: 'pending',
+        invitedByUserId: 'u-1',
+        createdAt: '2026-10-07T12:00:00Z',
+      );
+
+      store.invitations.replace([invite]);
+      expect(store.invitations.items.length, 1);
+      expect(store.unreadNotifications.value, 1);
+
+      await store.acceptInvitation(invite);
+
+      expect(store.invitations.items, isEmpty);
+      expect(store.unreadNotifications.value, 0);
+      expect(
+          store.projects.items.any((p) => p.id == 'proj-new-store'), isTrue);
+    });
   });
 }
