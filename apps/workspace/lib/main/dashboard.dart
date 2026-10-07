@@ -122,12 +122,9 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                   children: [
                     ConclaveBrand.logoMark(size: 26),
                     const SizedBox(width: 12),
-                    const Text(
+                    Text(
                       'Conclave Workspace',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
+                      style: ConclaveBrand.wordmark.copyWith(fontSize: 14),
                     ),
                     const SizedBox(width: 10),
                     Container(
