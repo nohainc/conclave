@@ -317,7 +317,7 @@ class SearchPage extends StatelessWidget {
                         child: Text(
                           '${entry.value.length}',
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w600,
                             color: ConclaveColors.textSecondary(isDark),
                           ),

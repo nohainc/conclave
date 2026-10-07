@@ -228,7 +228,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                     const Text(
                       'REPAIR WORKFLOW LADDER',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0.8,
                         color: ProfileLabTheme.primaryAccent,
@@ -384,7 +384,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                       child: Text(
                         'Human Authority Safeguard: AI operates strictly inside the local repair loop sandbox. AI cannot publish, sign, or promote releases. Material draft changes require human confirmation.',
                         style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 11,
                             color: Color(0xFF94A3B8),
                             height: 1.3),
                       ),
@@ -470,7 +470,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                 child: Text(
                   h.ladderResult?.overallResult.toUpperCase() ?? 'TESTING',
                   style: TextStyle(
-                    fontSize: 9,
+                    fontSize: 11,
                     fontWeight: FontWeight.bold,
                     color: h.ladderResult?.overallResult == 'pass'
                         ? ProfileLabTheme.passColor
@@ -482,13 +482,13 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
               if (h.applied)
                 const Text('Revision Applied',
                     style: TextStyle(
-                        fontSize: 10, color: ProfileLabTheme.passColor)),
+                        fontSize: 11, color: ProfileLabTheme.passColor)),
             ],
           ),
           if (h.normalizedFailures.isNotEmpty) ...[
             const SizedBox(height: 6),
             const Text('Normalized Failures:',
-                style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
+                style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
             const SizedBox(height: 4),
             Wrap(
               spacing: 6,
@@ -507,7 +507,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                   child: Text(
                     '${f['displayName']}: ${f['issueCode']}',
                     style:
-                        const TextStyle(fontSize: 10, color: Color(0xFFFCA5A5)),
+                        const TextStyle(fontSize: 11, color: Color(0xFFFCA5A5)),
                   ),
                 );
               }).toList(),
@@ -561,13 +561,13 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                   const Spacer(),
                   Text('${g.changeCount} change(s)',
                       style: const TextStyle(
-                          fontSize: 10, color: Color(0xFF94A3B8))),
+                          fontSize: 11, color: Color(0xFF94A3B8))),
                 ],
               ),
               const SizedBox(height: 4),
               ...changedItems.map((item) => Text(
                     ' • ${item.fieldLabel}: ${item.valueA ?? "null"} → ${item.valueB ?? "null"}',
-                    style: const TextStyle(fontSize: 10, color: Colors.white70),
+                    style: const TextStyle(fontSize: 11, color: Colors.white70),
                   )),
             ],
           ),

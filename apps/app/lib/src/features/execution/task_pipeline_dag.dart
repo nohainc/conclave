@@ -137,7 +137,7 @@ class _StatusLegend extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            fontSize: 10.5,
+            fontSize: 11.5,
             color: Theme.of(context).brightness == Brightness.dark
                 ? ConclaveBrand.darkInkMuted
                 : ConclaveBrand.lightInkMuted,
@@ -256,7 +256,7 @@ class _TaskNodeCard extends StatelessWidget {
                       Text(
                         task.status.label.toUpperCase(),
                         style: TextStyle(
-                          fontSize: 9,
+                          fontSize: 11,
                           fontWeight: FontWeight.w700,
                           color: statusColor,
                         ),
@@ -271,7 +271,7 @@ class _TaskNodeCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 8.5,
+                      fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: isDark
                           ? ConclaveBrand.darkInkMuted
@@ -309,7 +309,7 @@ class _TaskNodeCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 10.5,
+                      fontSize: 11.5,
                       color: isDark
                           ? ConclaveBrand.darkInkMuted
                           : ConclaveBrand.lightInkMuted,

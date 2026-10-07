@@ -299,7 +299,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(label,
                   style:
-                      const TextStyle(color: Color(0xff9997a3), fontSize: 10)),
+                      const TextStyle(color: Color(0xff9997a3), fontSize: 11)),
               Text(value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -428,7 +428,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                 style: const TextStyle(color: Color(0xff777683), fontSize: 11)),
             const SizedBox(height: 4),
             Text('${decision.worker} · ${decision.evidence}',
-                style: const TextStyle(color: Color(0xff9a98a3), fontSize: 10)),
+                style: const TextStyle(color: Color(0xff9a98a3), fontSize: 11)),
           ],
         ],
       ),
@@ -484,7 +484,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                     const SizedBox(height: 3),
                     Text('${task.worker}  ·  ${task.status.name}',
                         style: const TextStyle(
-                            fontSize: 10, color: Color(0xff95939e)))
+                            fontSize: 11, color: Color(0xff95939e)))
                   ])),
               if (task.status == TaskStatus.running)
                 SizedBox(
@@ -671,7 +671,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
         Text(label,
             style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 10)),
+                fontSize: 11)),
         const SizedBox(height: 4),
         Text(value,
             style: TextStyle(
@@ -707,7 +707,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
           Text('${finding.severity.name} · ${finding.status.name}',
               style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 10))
+                  fontSize: 11))
         ]))
       ]));
 
@@ -739,7 +739,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                             const SizedBox(height: 3),
                             Text(subtitle,
                                 style:
-                                    TextStyle(color: mutedColor, fontSize: 10)),
+                                    TextStyle(color: mutedColor, fontSize: 11)),
                           ],
                         ),
                       ),
@@ -769,6 +769,6 @@ extension _AxAppRunDetails on _AxAppStateMixin {
         const SizedBox(width: 6),
         Text(label,
             style: TextStyle(
-                color: color, fontSize: 10, fontWeight: FontWeight.w700))
+                color: color, fontSize: 11, fontWeight: FontWeight.w700))
       ]));
 }

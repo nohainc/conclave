@@ -82,7 +82,7 @@ class DiffViewer extends StatelessWidget {
                     child: Text(
                       '${oldCommit!.substring(0, oldCommit!.length.clamp(0, 7))} → ${newCommit!.substring(0, newCommit!.length.clamp(0, 7))}',
                       style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 11,
                           fontFamily: 'monospace',
                           color: mutedInk),
                     ),

@@ -334,7 +334,7 @@ class _AppTopHudState extends State<AppTopHud> {
                                 '${widget.shellContext.unreadNotificationCount} unread notifications',
                             child: Container(
                               constraints: const BoxConstraints(
-                                  minWidth: 15, minHeight: 15),
+                                  minWidth: 16, minHeight: 16),
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 4),
                               decoration: const BoxDecoration(
@@ -348,7 +348,7 @@ class _AppTopHudState extends State<AppTopHud> {
                                     : '${widget.shellContext.unreadNotificationCount}',
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 9,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),

@@ -166,7 +166,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                     const Text(
                       'INGESTED CONTEXT BOUNDARY (SAFE / NON-CREDENTIAL)',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0.8,
                         color: ProfileLabTheme.primaryAccent,
@@ -260,7 +260,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                 ),
                 subtitle: const Text(
                   'Provider authentication stays in its locally installed CLI. Profile Lab does not store provider credentials.',
-                  style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                  style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
                 ),
               ),
               const SizedBox(height: 6),
@@ -371,7 +371,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                                 Text(
                                   '${group.changeCount} change${group.changeCount > 1 ? "s" : ""}',
                                   style: const TextStyle(
-                                      fontSize: 10, color: Color(0xFF94A3B8)),
+                                      fontSize: 11, color: Color(0xFF94A3B8)),
                                 ),
                               ],
                             ),
@@ -409,7 +409,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                         child: Text(
                           'Human review required: Applying only updates the local Draft editor. Publication remains a separate human action that requires successful local qualification and Cloud signer preflight. Stable promotion requires separate Cloud acceptance evidence.',
                           style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 11,
                               color: Color(0xFF94A3B8),
                               height: 1.3),
                         ),
@@ -480,7 +480,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
           Icon(icon, size: 12, color: ProfileLabTheme.primaryAccent),
           const SizedBox(width: 4),
           Text(label,
-              style: const TextStyle(fontSize: 10, color: Color(0xFFE2E8F0))),
+              style: const TextStyle(fontSize: 11, color: Color(0xFFE2E8F0))),
         ],
       ),
     );

@@ -285,7 +285,7 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
           Text(
             'Exact Digest: ${digest.length > 20 ? "${digest.substring(0, 20)}..." : digest}',
             style: const TextStyle(
-                fontFamily: 'Menlo', fontSize: 10, color: Color(0xFF94A3B8)),
+                fontFamily: 'Menlo', fontSize: 11, color: Color(0xFF94A3B8)),
           ),
         ],
       ),
@@ -323,7 +323,7 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
               // Security Gates Section
               const Text('SECURITY CONSTRAINTS (NON-OVERRIDEABLE)',
                   style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.8,
                       color: ProfileLabTheme.warnColor)),
@@ -337,7 +337,7 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
               // Recommendation Gates Section
               const Text('RECOMMENDATION GATES (REQUIRED FOR BETA)',
                   style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.8,
                       color: Color(0xFF94A3B8))),
@@ -510,7 +510,7 @@ class _GateItemTile extends StatelessWidget {
                                 ? 'SECURITY FAIL'
                                 : 'WARNING'),
                         style: TextStyle(
-                            fontSize: 9,
+                            fontSize: 11,
                             color: statusColor,
                             fontWeight: FontWeight.bold),
                       ),
@@ -520,13 +520,13 @@ class _GateItemTile extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(item.description,
                     style: const TextStyle(
-                        fontSize: 10, color: Color(0xFF94A3B8))),
+                        fontSize: 11, color: Color(0xFF94A3B8))),
                 if (!item.passed && item.failureDetails != null) ...[
                   const SizedBox(height: 4),
                   Text(
                     item.failureDetails!,
                     style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 11,
                         color: statusColor,
                         fontWeight: FontWeight.w500),
                   ),

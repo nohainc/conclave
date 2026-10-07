@@ -755,7 +755,7 @@ class _WorkerDetailsPane extends StatelessWidget {
                                     cap,
                                     style: const TextStyle(
                                         fontFamily: 'Menlo',
-                                        fontSize: 10,
+                                        fontSize: 11,
                                         color: Color(0xFFE2E8F0)),
                                   ),
                                 ),

@@ -464,13 +464,13 @@ class _SummaryRow extends StatelessWidget {
       child: Row(
         children: [
           Text(label,
-              style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
+              style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
           Expanded(
             child: Text(
               value,
               textAlign: TextAlign.right,
               style: const TextStyle(
-                  fontFamily: 'Menlo', fontSize: 10, color: Color(0xFFE2E8F0)),
+                  fontFamily: 'Menlo', fontSize: 11, color: Color(0xFFE2E8F0)),
               overflow: TextOverflow.ellipsis,
             ),
           ),

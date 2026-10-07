@@ -56,7 +56,7 @@ class ProviderVersionMatrixCard extends StatelessWidget {
                   child: const Text(
                     'SUPPORTED ≠ TESTED',
                     style: TextStyle(
-                        fontSize: 9,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFFFBBF24)),
                   ),

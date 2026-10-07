@@ -2018,11 +2018,11 @@ void main() {
     // Verify Conclave system event has Conclave identity, workflow, model, and elapsed time
     expect(find.text('Conclave'), findsOneWidget);
     expect(
-        find.textContaining('Direct Execution · gpt-4o · 5s'), findsOneWidget);
+        find.textContaining('Direct Execution · GPT-4o · 5s'), findsOneWidget);
 
     // Verify Worker completed response has Worker name, official worker icon, workflow, and model
     expect(find.text('Claude 3.7 Sonnet'), findsOneWidget);
-    expect(find.textContaining('Direct Execution · claude-3-7-sonnet · 12s'),
+    expect(find.textContaining('Direct Execution · Claude 3.7 Sonnet · 12s'),
         findsOneWidget);
     expect(find.byIcon(Icons.smart_toy_outlined), findsOneWidget);
 

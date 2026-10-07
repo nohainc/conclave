@@ -52,15 +52,46 @@ void main() {
       expect(darkTheme.colorScheme.outline, ConclaveColors.borderDark);
     });
 
-    test('Typography tokens and scale are valid', () {
+    test('Typography tokens and scale are valid and deterministic', () {
       expect(ConclaveTypography.fontFamily, 'Inter');
       expect(ConclaveTypography.fontFamilyMono, 'JetBrains Mono');
       expect(ConclaveTypography.display.fontSize, 26);
+      expect(ConclaveTypography.displayLarge.fontSize, 26);
       expect(ConclaveTypography.pageTitle.fontSize, 22);
+      expect(ConclaveTypography.titleLarge.fontSize, 22);
       expect(ConclaveTypography.sectionTitle.fontSize, 17);
+      expect(ConclaveTypography.titleMedium.fontSize, 17);
       expect(ConclaveTypography.cardTitle.fontSize, 15);
+      expect(ConclaveTypography.titleSmall.fontSize, 15);
+      expect(ConclaveTypography.bodyLarge.fontSize, 14);
       expect(ConclaveTypography.body.fontSize, 13.5);
+      expect(ConclaveTypography.bodyMedium.fontSize, 13.5);
+      expect(ConclaveTypography.bodySmall.fontSize, 12.5);
       expect(ConclaveTypography.caption.fontSize, 11.5);
+      expect(ConclaveTypography.button.fontSize, 13);
+      expect(ConclaveTypography.mono.fontSize, 12);
+      expect(ConclaveTypography.codeSmall.fontSize, 12);
+      expect(ConclaveTypography.codeBlock.fontSize, 13);
+      expect(ConclaveTypography.monoSmall.fontSize, 11);
+
+      // Verify no typography scale item is below 11px
+      expect(ConclaveTypography.caption.fontSize!, greaterThanOrEqualTo(11.0));
+      expect(ConclaveTypography.monoSmall.fontSize!, greaterThanOrEqualTo(11.0));
+    });
+
+    test('ThemeData TextTheme includes all core typographic levels', () {
+      final theme = ConclaveBrand.darkTheme();
+      expect(theme.textTheme.displayLarge?.fontSize, 26);
+      expect(theme.textTheme.headlineMedium?.fontSize, 24);
+      expect(theme.textTheme.titleLarge?.fontSize, 20);
+      expect(theme.textTheme.titleMedium?.fontSize, 16);
+      expect(theme.textTheme.titleSmall?.fontSize, 14);
+      expect(theme.textTheme.bodyLarge?.fontSize, 14);
+      expect(theme.textTheme.bodyMedium?.fontSize, 13.5);
+      expect(theme.textTheme.bodySmall?.fontSize, 12);
+      expect(theme.textTheme.labelLarge?.fontSize, 13);
+      expect(theme.textTheme.labelSmall?.fontSize, 11.5);
+      expect(theme.textTheme.labelSmall?.fontSize!, greaterThanOrEqualTo(11.0));
     });
 
     test('Contrast ratios meet WCAG AA standards', () {

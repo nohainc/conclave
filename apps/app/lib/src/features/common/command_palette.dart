@@ -260,7 +260,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                       child: Text(
                         'ESC',
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: isDark
                               ? ConclaveBrand.darkInkMuted
@@ -339,7 +339,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                             trailing: Text(
                               action.category,
                               style: TextStyle(
-                                fontSize: 10.5,
+                                fontSize: 11.5,
                                 color: isDark
                                     ? ConclaveBrand.darkInkMuted
                                     : ConclaveBrand.lightInkMuted,

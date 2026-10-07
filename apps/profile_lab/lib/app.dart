@@ -97,7 +97,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                             child: const Text(
                               'Profile Lab',
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.8,
                                 color: ProfileLabTheme.primaryAccent,
@@ -267,7 +267,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                               ? 'Profile Admin'
                                               : 'Signed in',
                                           style: TextStyle(
-                                              fontSize: 9,
+                                              fontSize: 11,
                                               color: c.labAccess
                                                           ?.profilesAdmin ==
                                                       true

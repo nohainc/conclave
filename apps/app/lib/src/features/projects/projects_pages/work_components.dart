@@ -517,7 +517,7 @@ Widget _buildModelBadge(BuildContext context, String badge) {
     ),
     child: Text(
       badge,
-      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: fg),
+      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg),
     ),
   );
 }
@@ -1522,13 +1522,13 @@ class _WorkTimelineCard extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         CircleAvatar(
-                          radius: 11,
+                          radius: 12,
                           backgroundColor:
                               ConclaveColors.primarySoftColor(isDark),
                           child: Text(
                             requesterInitials,
                             style: TextStyle(
-                              fontSize: 9,
+                              fontSize: 11,
                               fontWeight: FontWeight.bold,
                               color: ConclaveColors.primaryForeground(isDark),
                             ),
@@ -2102,13 +2102,13 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     CircleAvatar(
-                      radius: 11,
+                      radius: 12,
                       backgroundColor:
                           ConclaveColors.primarySoftColor(isDark),
                       child: Text(
                         initials,
                         style: TextStyle(
-                          fontSize: 9,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                           color: ConclaveColors.primaryForeground(isDark),
                         ),

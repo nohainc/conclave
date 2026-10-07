@@ -518,7 +518,7 @@ h3 {
 }
 .downloads-card__recommended {
   flex-shrink: 0;
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
   letter-spacing: 0.04em;
   text-transform: none;
 }

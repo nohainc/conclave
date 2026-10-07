@@ -291,14 +291,14 @@ class _DomainDiffGroupCard extends StatelessWidget {
                     child: Text(
                       '${group.changeCount} change(s)',
                       style: const TextStyle(
-                          fontSize: 10,
+                          fontSize: 11,
                           color: ProfileLabTheme.warnColor,
                           fontWeight: FontWeight.bold),
                     ),
                   )
                 else
                   const Text('No changes',
-                      style: TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+                      style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
               ],
             ),
           ),
@@ -376,7 +376,7 @@ class _DomainDiffItemRow extends StatelessWidget {
               Text('(${item.fieldPath})',
                   style: const TextStyle(
                       fontFamily: 'Menlo',
-                      fontSize: 10,
+                      fontSize: 11,
                       color: Color(0xFF64748B))),
               const Spacer(),
               Container(
@@ -387,7 +387,7 @@ class _DomainDiffItemRow extends StatelessWidget {
                 ),
                 child: Text(badgeText,
                     style: TextStyle(
-                        fontSize: 9,
+                        fontSize: 11,
                         color: badgeColor,
                         fontWeight: FontWeight.bold)),
               ),
@@ -411,7 +411,7 @@ class _DomainDiffItemRow extends StatelessWidget {
                       '$titleA:\n${item.valueA ?? "<none>"}',
                       style: const TextStyle(
                           fontFamily: 'Menlo',
-                          fontSize: 10,
+                          fontSize: 11,
                           color: Color(0xFFFCA5A5)),
                     ),
                   ),
@@ -434,7 +434,7 @@ class _DomainDiffItemRow extends StatelessWidget {
                       '$titleB:\n${item.valueB ?? "<none>"}',
                       style: const TextStyle(
                           fontFamily: 'Menlo',
-                          fontSize: 10,
+                          fontSize: 11,
                           color: Color(0xFF86EFAC)),
                     ),
                   ),

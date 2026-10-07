@@ -136,6 +136,39 @@ abstract final class ConclaveTypography {
     height: 1.45,
   );
 
+  /// Primary markdown body, long-form discussion (14px, 400)
+  static const bodyLarge = TextStyle(
+    fontFamily: fontFamily,
+    fontFamilyFallback: fontFamilyFallback,
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    height: 1.45,
+  );
+
+  /// Inline code chips, tokens, digests, arguments (12px, 500 Mono)
+  static const codeSmall = TextStyle(
+    fontFamily: fontFamilyMono,
+    fontFamilyFallback: fontFamilyMonoFallback,
+    fontSize: 12,
+    fontWeight: FontWeight.w500,
+    height: 1.35,
+  );
+
+  /// Code review blocks, execution logs, terminals (13px, 400 Mono)
+  static const codeBlock = TextStyle(
+    fontFamily: fontFamilyMono,
+    fontFamilyFallback: fontFamilyMonoFallback,
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+    height: 1.45,
+  );
+
+  // Spec alias mappings
+  static const displayLarge = display;
+  static const titleLarge = pageTitle;
+  static const titleMedium = sectionTitle;
+  static const titleSmall = cardTitle;
+
   // Backward-compatible aliases
   static const h1 = display;
   static const h2 = pageTitle;

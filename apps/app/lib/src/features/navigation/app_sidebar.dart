@@ -344,7 +344,7 @@ class AppSidebar extends StatelessWidget {
                               child: Text(
                                 shellContext.viewerInitials,
                                 style: const TextStyle(
-                                  fontSize: 9,
+                                  fontSize: 11,
                                   color: ConclaveColors.primaryPressed,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -455,7 +455,7 @@ class AppSidebar extends StatelessWidget {
                 ),
                 child: Text(
                   badge,
-                  style: const TextStyle(color: Colors.white, fontSize: 9.5),
+                  style: const TextStyle(color: Colors.white, fontSize: 11),
                 ),
               ),
           ],
@@ -796,7 +796,7 @@ class AppIconRail extends StatelessWidget {
                   child: Text(
                     shellContext.viewerInitials,
                     style: const TextStyle(
-                      fontSize: 9,
+                      fontSize: 11,
                       color: ConclaveColors.primaryPressed,
                       fontWeight: FontWeight.bold,
                     ),
