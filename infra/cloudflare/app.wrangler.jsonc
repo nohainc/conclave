@@ -29,9 +29,7 @@
     "CONCLAVE_EMAIL_FROM": "auth@auth.earthuc.com",
   },
   "secrets": {
-    "required": [
-      "BETTER_AUTH_SECRET",
-    ],
+    "required": ["BETTER_AUTH_SECRET"],
   },
   "d1_databases": [
     {
