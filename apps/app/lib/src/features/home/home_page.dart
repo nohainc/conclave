@@ -770,6 +770,174 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
+class AxHomeAttentionProjector {
+  static List<AxHomeAttentionItem> project({
+    required List<AxProjectInvitation> invitations,
+    required List<AxHomeAttentionItem> rawAttentionItems,
+    required int openFindingCount,
+    required List<AxProject> projects,
+    ValueChanged<AxProjectInvitation>? onAcceptInvitation,
+    ValueChanged<AxProjectInvitation>? onDeclineInvitation,
+    ValueChanged<String>? onOpenProject,
+    void Function(String projectId, String workstreamId)? onOpenWorkstream,
+    VoidCallback? onOpenWorkspaces,
+  }) {
+    final list = <AxHomeAttentionItem>[];
+
+    // 1. Invitations
+    for (final inv in invitations) {
+      final inviter = inv.invitedByUserName.isNotEmpty
+          ? inv.invitedByUserName
+          : (inv.invitedByUserEmail.isNotEmpty
+              ? inv.invitedByUserEmail
+              : 'A collaborator');
+      list.add(AxHomeAttentionItem(
+        id: 'invite-${inv.id}',
+        type: AxHomeAttentionType.projectInvitation,
+        kind: AxHomeAttentionType.projectInvitation,
+        categoryLabel: 'Project invitation',
+        title: '$inviter invited you to ${inv.projectName}',
+        description:
+            '${inv.role.toUpperCase()} · ${_formatRelativeTime(inv.createdAt)}',
+        timestamp: DateTime.tryParse(inv.createdAt),
+        timestampDisplay: _formatRelativeTime(inv.createdAt),
+        invitation: inv,
+        projectId: inv.projectId,
+        read: false,
+        isUnread: true,
+        isActionable: true,
+        createdAt: DateTime.tryParse(inv.createdAt),
+        primaryAction: AxHomeAttentionAction(
+          label: 'Accept',
+          onPerform: onAcceptInvitation != null
+              ? () => onAcceptInvitation(inv)
+              : () {},
+        ),
+        secondaryAction: AxHomeAttentionAction(
+          label: 'Decline',
+          onPerform: onDeclineInvitation != null
+              ? () => onDeclineInvitation(inv)
+              : () {},
+          isDestructive: true,
+        ),
+      ));
+    }
+
+    // 2. Attention items (derive action closures if not already set)
+    for (final raw in rawAttentionItems) {
+      AxHomeAttentionAction? primary = raw.primaryAction;
+      final secondary = raw.secondaryAction;
+
+      if (primary == null &&
+          raw.actionLabel != null &&
+          raw.actionLabel!.isNotEmpty) {
+        final label = raw.actionLabel!;
+        VoidCallback action = () {};
+        if (raw.effectiveType == AxHomeAttentionType.workspaceProblem) {
+          if (onOpenWorkspaces != null) {
+            action = onOpenWorkspaces;
+          }
+        } else if (raw.projectId != null &&
+            raw.workstreamId != null &&
+            onOpenWorkstream != null) {
+          action = () => onOpenWorkstream(raw.projectId!, raw.workstreamId!);
+        } else if (raw.projectId != null && onOpenProject != null) {
+          action = () => onOpenProject(raw.projectId!);
+        }
+        primary = AxHomeAttentionAction(
+          label: label,
+          onPerform: action,
+        );
+      }
+
+      list.add(AxHomeAttentionItem(
+        id: raw.id,
+        type: raw.type,
+        kind: raw.kind,
+        priority: raw.priority,
+        title: raw.title,
+        description:
+            raw.description.isNotEmpty ? raw.description : raw.subtitle,
+        subtitle: raw.subtitle,
+        projectId: raw.projectId,
+        workstreamId: raw.workstreamId,
+        workerId: raw.workerId,
+        workspaceId: raw.workspaceId,
+        timestamp: raw.timestamp ?? raw.createdAt,
+        timestampDisplay: raw.timestampDisplay,
+        categoryLabel: raw.categoryLabel,
+        invitation: raw.invitation,
+        severity: raw.severity,
+        read: raw.read,
+        isUnread: raw.isUnread,
+        isActionable: raw.isActionable,
+        actionLabel: raw.actionLabel,
+        primaryAction: primary,
+        secondaryAction: secondary,
+        createdAt: raw.createdAt,
+      ));
+    }
+
+    // 3. Open findings
+    if (openFindingCount > 0 &&
+        !list.any((it) => it.effectiveType == AxHomeAttentionType.needsInput)) {
+      final firstProjectId = projects.isNotEmpty ? projects.first.id : null;
+      list.add(AxHomeAttentionItem(
+        id: 'findings-open',
+        type: AxHomeAttentionType.needsInput,
+        kind: AxHomeAttentionType.needsInput,
+        categoryLabel: 'Needs your input',
+        title:
+            '$openFindingCount open finding${openFindingCount == 1 ? '' : 's'} require review',
+        description: 'Review task results and verification evidence',
+        subtitle: 'Review task results and verification evidence',
+        timestampDisplay: 'Needs attention',
+        projectId: firstProjectId,
+        read: false,
+        isUnread: true,
+        isActionable: true,
+        actionLabel: 'Review →',
+        primaryAction: AxHomeAttentionAction(
+          label: 'Review →',
+          onPerform: (firstProjectId != null && onOpenProject != null)
+              ? () => onOpenProject(firstProjectId)
+              : () {},
+        ),
+      ));
+    }
+
+    // Sort by: priority -> unread -> actionability -> recency
+    list.sort((a, b) {
+      final pA = a.priorityOrder;
+      final pB = b.priorityOrder;
+      if (pA != pB) return pA.compareTo(pB);
+
+      if (a.isUnread != b.isUnread) {
+        return a.isUnread ? -1 : 1;
+      }
+
+      if (a.isActionable != b.isActionable) {
+        return a.isActionable ? -1 : 1;
+      }
+
+      final timeA = a.createdAt;
+      final timeB = b.createdAt;
+      if (timeA != null && timeB != null) {
+        final recency = timeB.compareTo(timeA);
+        if (recency != 0) return recency;
+      } else if (timeA != null) {
+        return -1;
+      } else if (timeB != null) {
+        return 1;
+      }
+
+      return a.id.compareTo(b.id);
+    });
+
+    return list.take(5).toList();
+  }
+}
+
 class _ForYouSection extends StatelessWidget {
   const _ForYouSection({
     required this.invitations,
@@ -795,96 +963,21 @@ class _ForYouSection extends StatelessWidget {
   final VoidCallback onOpenWorkspaces;
   final VoidCallback? onOpenNotifications;
 
-  List<AxHomeAttentionItem> _projectItems() {
-    final list = <AxHomeAttentionItem>[];
-
-    // 1. Invitations (kind: AxAttentionKind.invitation)
-    for (final inv in invitations) {
-      final inviter = inv.invitedByUserName.isNotEmpty
-          ? inv.invitedByUserName
-          : (inv.invitedByUserEmail.isNotEmpty
-              ? inv.invitedByUserEmail
-              : 'A collaborator');
-      list.add(AxHomeAttentionItem(
-        id: 'invite-${inv.id}',
-        kind: AxAttentionKind.invitation,
-        categoryLabel: 'Project invitation',
-        title: '$inviter invited you to ${inv.projectName}',
-        subtitle:
-            '${inv.role.toUpperCase()} · ${_formatRelativeTime(inv.createdAt)}',
-        timestampDisplay: _formatRelativeTime(inv.createdAt),
-        invitation: inv,
-        projectId: inv.projectId,
-        isUnread: true,
-        isActionable: true,
-        createdAt: DateTime.tryParse(inv.createdAt),
-      ));
-    }
-
-    // 2. Attention items (prioritized by category)
-    for (final item in attentionItems) {
-      list.add(item);
-    }
-
-    // 3. Open findings (if any, and not already in attention items)
-    if (openFindingCount > 0 &&
-        !list.any((it) => it.kind == AxAttentionKind.finding)) {
-      list.add(AxHomeAttentionItem(
-        id: 'findings-open',
-        kind: AxAttentionKind.finding,
-        categoryLabel: 'Needs your input',
-        title:
-            '$openFindingCount open finding${openFindingCount == 1 ? '' : 's'} require review',
-        subtitle: 'Review task results and verification evidence',
-        timestampDisplay: 'Needs attention',
-        actionLabel: 'Review →',
-        projectId: projects.isNotEmpty ? projects.first.id : null,
-        isUnread: true,
-        isActionable: true,
-      ));
-    }
-
-    // Sort by: priority -> unread -> actionability -> recency
-    list.sort((a, b) {
-      // 1. Priority order (invitation, needsInput, failedExecution, workerProblem, workspaceProblem, completed, finding, general)
-      final pA = a.priorityOrder;
-      final pB = b.priorityOrder;
-      if (pA != pB) return pA.compareTo(pB);
-
-      // 2. Unread status (unread first)
-      if (a.isUnread != b.isUnread) {
-        return a.isUnread ? -1 : 1;
-      }
-
-      // 3. Actionability (actionable first)
-      if (a.isActionable != b.isActionable) {
-        return a.isActionable ? -1 : 1;
-      }
-
-      // 4. Recency (newer first)
-      final timeA = a.createdAt;
-      final timeB = b.createdAt;
-      if (timeA != null && timeB != null) {
-        final recency = timeB.compareTo(timeA);
-        if (recency != 0) return recency;
-      } else if (timeA != null) {
-        return -1;
-      } else if (timeB != null) {
-        return 1;
-      }
-
-      return a.id.compareTo(b.id);
-    });
-
-    // Limit to maximum ~5 items on Home
-    return list.take(5).toList();
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final items = _projectItems();
+    final items = AxHomeAttentionProjector.project(
+      invitations: invitations,
+      rawAttentionItems: attentionItems,
+      openFindingCount: openFindingCount,
+      projects: projects,
+      onAcceptInvitation: onAcceptInvitation,
+      onDeclineInvitation: onDeclineInvitation,
+      onOpenProject: onOpenProject,
+      onOpenWorkstream: onOpenWorkstream,
+      onOpenWorkspaces: onOpenWorkspaces,
+    );
 
     if (items.isEmpty) return const SizedBox.shrink();
 
@@ -953,14 +1046,7 @@ class _ForYouSection extends StatelessWidget {
           child: Column(
             children: [
               for (var i = 0; i < items.length; i++) ...[
-                _ForYouItemTile(
-                  item: items[i],
-                  onAcceptInvitation: onAcceptInvitation,
-                  onDeclineInvitation: onDeclineInvitation,
-                  onOpenProject: onOpenProject,
-                  onOpenWorkstream: onOpenWorkstream,
-                  onOpenWorkspaces: onOpenWorkspaces,
-                ),
+                _ForYouItemTile(item: items[i]),
                 if (i < items.length - 1)
                   Divider(
                     height: 1,
@@ -979,75 +1065,39 @@ class _ForYouSection extends StatelessWidget {
 class _ForYouItemTile extends StatelessWidget {
   const _ForYouItemTile({
     required this.item,
-    this.onAcceptInvitation,
-    this.onDeclineInvitation,
-    required this.onOpenProject,
-    this.onOpenWorkstream,
-    required this.onOpenWorkspaces,
   });
 
   final AxHomeAttentionItem item;
-  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
-  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
-  final ValueChanged<String> onOpenProject;
-  final void Function(String projectId, String workstreamId)? onOpenWorkstream;
-  final VoidCallback onOpenWorkspaces;
-
-  void _handleAction() {
-    if (item.kind == AxAttentionKind.workspaceProblem) {
-      onOpenWorkspaces();
-    } else if (item.projectId != null && item.workstreamId != null) {
-      if (onOpenWorkstream != null) {
-        onOpenWorkstream!(item.projectId!, item.workstreamId!);
-      } else {
-        onOpenProject(item.projectId!);
-      }
-    } else if (item.projectId != null) {
-      onOpenProject(item.projectId!);
-    }
-  }
 
   String _deriveCategory() {
     if (item.categoryLabel != null && item.categoryLabel!.isNotEmpty) {
       return item.categoryLabel!;
     }
-    switch (item.kind) {
-      case AxAttentionKind.invitation:
-        return 'Project invitation';
-      case AxAttentionKind.needsInput:
-        return 'Needs your input';
-      case AxAttentionKind.failedExecution:
-        return 'Failed execution';
-      case AxAttentionKind.workerProblem:
-        return 'Worker needs attention';
-      case AxAttentionKind.workspaceProblem:
-        return 'Workspace offline';
-      case AxAttentionKind.completed:
-        return 'Completed';
-      case AxAttentionKind.finding:
-        return 'Review required';
-      case AxAttentionKind.general:
-        return 'Needs your input';
-    }
+    return switch (item.effectiveType) {
+      AxHomeAttentionType.projectInvitation => 'Project invitation',
+      AxHomeAttentionType.needsInput => 'Needs your input',
+      AxHomeAttentionType.approvalRequired => 'Approval required',
+      AxHomeAttentionType.executionFailed => 'Failed execution',
+      AxHomeAttentionType.workerProblem => 'Worker needs attention',
+      AxHomeAttentionType.workspaceProblem => 'Workspace offline',
+      AxHomeAttentionType.executionCompleted => 'Completed',
+    };
   }
 
   Color _deriveCategoryColor(ColorScheme colorScheme, bool isDark) {
-    switch (item.kind) {
-      case AxAttentionKind.invitation:
-        return ConclaveColors.primaryForeground(isDark);
-      case AxAttentionKind.needsInput:
-        return isDark ? Colors.orangeAccent : Colors.orange.shade800;
-      case AxAttentionKind.failedExecution:
-        return colorScheme.error;
-      case AxAttentionKind.workerProblem:
-      case AxAttentionKind.workspaceProblem:
-        return isDark ? Colors.amberAccent : Colors.amber.shade900;
-      case AxAttentionKind.completed:
-        return isDark ? Colors.greenAccent : Colors.green.shade700;
-      case AxAttentionKind.finding:
-      case AxAttentionKind.general:
-        return isDark ? Colors.orangeAccent : Colors.orange.shade800;
-    }
+    return switch (item.effectiveType) {
+      AxHomeAttentionType.projectInvitation =>
+        ConclaveColors.primaryForeground(isDark),
+      AxHomeAttentionType.needsInput ||
+      AxHomeAttentionType.approvalRequired =>
+        isDark ? Colors.orangeAccent : Colors.orange.shade800,
+      AxHomeAttentionType.executionFailed => colorScheme.error,
+      AxHomeAttentionType.workerProblem ||
+      AxHomeAttentionType.workspaceProblem =>
+        isDark ? Colors.amberAccent : Colors.amber.shade900,
+      AxHomeAttentionType.executionCompleted =>
+        isDark ? Colors.greenAccent : Colors.green.shade700,
+    };
   }
 
   @override
@@ -1057,8 +1107,8 @@ class _ForYouItemTile extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final category = _deriveCategory();
     final categoryColor = _deriveCategoryColor(colorScheme, isDark);
-    final isInvitation =
-        item.kind == AxAttentionKind.invitation && item.invitation != null;
+    final hasActions =
+        item.primaryAction != null || item.secondaryAction != null;
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -1084,9 +1134,10 @@ class _ForYouItemTile extends StatelessWidget {
                   ),
                 ),
               ),
-              if (item.timestampDisplay.isNotEmpty)
+              if (item.timestampDisplay != null &&
+                  item.timestampDisplay!.isNotEmpty)
                 Text(
-                  item.timestampDisplay,
+                  item.timestampDisplay!,
                   style: TextStyle(
                     fontSize: 12,
                     color: colorScheme.onSurfaceVariant,
@@ -1113,50 +1164,33 @@ class _ForYouItemTile extends StatelessWidget {
               ),
             ),
           ],
-          if (isInvitation) ...[
+          if (hasActions) ...[
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                OutlinedButton(
-                  onPressed: onDeclineInvitation != null
-                      ? () => onDeclineInvitation!(item.invitation!)
-                      : null,
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                if (item.secondaryAction != null) ...[
+                  OutlinedButton(
+                    onPressed: item.secondaryAction!.onPerform,
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 6),
+                    ),
+                    child: Text(item.secondaryAction!.label),
                   ),
-                  child: const Text('Decline'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: onAcceptInvitation != null
-                      ? () => onAcceptInvitation!(item.invitation!)
-                      : null,
-                  style: FilledButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  if (item.primaryAction != null) const SizedBox(width: 8),
+                ],
+                if (item.primaryAction != null)
+                  FilledButton(
+                    onPressed: item.primaryAction!.onPerform,
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 6),
+                    ),
+                    child: Text(item.primaryAction!.label),
                   ),
-                  child: const Text('Accept'),
-                ),
-              ],
-            ),
-          ] else if (item.actionLabel != null) ...[
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                FilledButton.tonal(
-                  onPressed: _handleAction,
-                  style: FilledButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                  ),
-                  child: Text(item.actionLabel!),
-                ),
               ],
             ),
           ],

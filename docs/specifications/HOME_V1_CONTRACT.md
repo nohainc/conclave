@@ -151,3 +151,37 @@ HomePage (Dispatcher)
   - **What's New in Conclave**: Official product updates.
   - **AI Updates**: Scoped AI capability news for available worker types.
   - Strictly omits onboarding cards and getting-started tutorials.
+
+---
+
+## Attention Item Domain Abstraction (Phase 7)
+
+To keep `HomePage` and `_ForYouItemTile` decoupled from backend schemas, realtime event shapes, and navigation routing plumbing, Home utilizes a presentation domain abstraction:
+
+```text
+AxHomeAttentionItem
+├── id: String
+├── type: AxHomeAttentionType (projectInvitation, needsInput, approvalRequired, executionFailed, executionCompleted, workerProblem, workspaceProblem)
+├── priority: int? (explicit priority override or derived default order)
+├── title: String
+├── description: String
+├── projectId?: String
+├── workstreamId?: String
+├── workerId?: String
+├── workspaceId?: String
+├── timestamp?: DateTime
+├── timestampDisplay?: String
+├── primaryAction?: AxHomeAttentionAction (label, onPerform closure, isDestructive)
+├── secondaryAction?: AxHomeAttentionAction (label, onPerform closure, isDestructive)
+└── read: bool
+```
+
+### Decoupling Guarantees
+1. **Pure Presentation Tile (`_ForYouItemTile`):**
+   - The tile does not handle routing switches, invitation models, or backend-specific structures.
+   - It exclusively invokes `item.primaryAction?.onPerform()` and `item.secondaryAction?.onPerform()`.
+2. **Projector Projection (`AxHomeAttentionProjector.project(...)`):**
+   - Transforms diverse inputs (invitations, background findings, system notifications) into normalized `AxHomeAttentionItem`s.
+   - Binds concrete callback closures into `AxHomeAttentionAction` instances (`Accept`, `Decline`, `Review →`, `Inspect →`, `Fix →`, `Connect →`, `Open →`).
+   - Applies the 4-factor prioritization algorithm (Priority Category → Unread Status → Actionability → Recency) and truncates to the top 5 items.
+

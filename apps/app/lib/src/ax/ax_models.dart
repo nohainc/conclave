@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'worker_execution_options.dart';
 export 'worker_execution_options.dart';
 import 'dart:convert';
@@ -1205,69 +1206,113 @@ class AxSnapshot {
       );
 }
 
-enum AxAttentionKind {
-  invitation,
+enum AxHomeAttentionType {
+  projectInvitation,
   needsInput,
-  failedExecution,
+  approvalRequired,
+  executionFailed,
+  executionCompleted,
   workerProblem,
-  workspaceProblem,
-  completed,
-  finding,
-  general,
+  workspaceProblem;
+
+  // Backward-compatible aliases
+  static const AxHomeAttentionType invitation = projectInvitation;
+  static const AxHomeAttentionType failedExecution = executionFailed;
+  static const AxHomeAttentionType completed = executionCompleted;
+  static const AxHomeAttentionType finding = needsInput;
+  static const AxHomeAttentionType general = executionCompleted;
+}
+
+typedef AxAttentionKind = AxHomeAttentionType;
+
+class AxHomeAttentionAction {
+  const AxHomeAttentionAction({
+    required this.label,
+    required this.onPerform,
+    this.isDestructive = false,
+  });
+
+  final String label;
+  final VoidCallback onPerform;
+  final bool isDestructive;
 }
 
 class AxHomeAttentionItem {
   const AxHomeAttentionItem({
     required this.id,
+    this.type = AxHomeAttentionType.needsInput,
+    this.priority,
     required this.title,
-    required this.subtitle,
-    required this.timestampDisplay,
-    this.categoryLabel,
-    this.kind = AxAttentionKind.general,
+    String? description,
+    String? subtitle,
     this.projectId,
     this.workstreamId,
-    this.actionLabel,
+    this.workerId,
+    this.workspaceId,
+    this.timestamp,
+    this.timestampDisplay,
+    this.primaryAction,
+    this.secondaryAction,
+    this.read = false,
+    this.categoryLabel,
     this.invitation,
+    this.actionLabel,
+    this.kind,
     this.severity = 'info',
-    this.isUnread = true,
-    this.isActionable = true,
-    this.createdAt,
-  });
+    bool? isUnread,
+    bool? isActionable,
+    DateTime? createdAt,
+  })  : description = description ?? subtitle ?? '',
+        _subtitle = subtitle,
+        _isUnread = isUnread,
+        _isActionable = isActionable,
+        _createdAt = createdAt;
 
   final String id;
+  final AxHomeAttentionType type;
+  final int? priority;
   final String title;
-  final String subtitle;
-  final String timestampDisplay;
-  final String? categoryLabel;
-  final AxAttentionKind kind;
+  final String description;
   final String? projectId;
   final String? workstreamId;
-  final String? actionLabel;
+  final String? workerId;
+  final String? workspaceId;
+  final DateTime? timestamp;
+  final String? timestampDisplay;
+  final AxHomeAttentionAction? primaryAction;
+  final AxHomeAttentionAction? secondaryAction;
+  final bool read;
+  final String? categoryLabel;
   final AxProjectInvitation? invitation;
+  final String? actionLabel;
+  final AxHomeAttentionType? kind;
   final String severity;
-  final bool isUnread;
-  final bool isActionable;
-  final DateTime? createdAt;
+
+  final String? _subtitle;
+  final bool? _isUnread;
+  final bool? _isActionable;
+  final DateTime? _createdAt;
+
+  String get subtitle => _subtitle ?? description;
+  bool get isUnread => _isUnread ?? !read;
+  bool get isActionable =>
+      _isActionable ??
+      (primaryAction != null || secondaryAction != null || actionLabel != null);
+  DateTime? get createdAt => _createdAt ?? timestamp;
+
+  AxHomeAttentionType get effectiveType => kind ?? type;
 
   int get priorityOrder {
-    switch (kind) {
-      case AxAttentionKind.invitation:
-        return 1;
-      case AxAttentionKind.needsInput:
-        return 2;
-      case AxAttentionKind.failedExecution:
-        return 3;
-      case AxAttentionKind.workerProblem:
-        return 4;
-      case AxAttentionKind.workspaceProblem:
-        return 5;
-      case AxAttentionKind.completed:
-        return 6;
-      case AxAttentionKind.finding:
-        return 7;
-      case AxAttentionKind.general:
-        return 8;
-    }
+    if (priority != null) return priority!;
+    return switch (effectiveType) {
+      AxHomeAttentionType.projectInvitation => 1,
+      AxHomeAttentionType.needsInput => 2,
+      AxHomeAttentionType.approvalRequired => 2,
+      AxHomeAttentionType.executionFailed => 3,
+      AxHomeAttentionType.workerProblem => 4,
+      AxHomeAttentionType.workspaceProblem => 5,
+      AxHomeAttentionType.executionCompleted => 6,
+    };
   }
 }
 

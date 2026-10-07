@@ -503,4 +503,104 @@ void main() {
     expect(find.text('Unread Task B'), findsOneWidget);
     expect(find.text('Read Task A'), findsOneWidget);
   });
+
+  testWidgets(
+      'AxHomeAttentionItem abstraction renders and executes decoupled primaryAction and secondaryAction',
+      (tester) async {
+    var primaryExecuted = false;
+    var secondaryExecuted = false;
+
+    final itemWithActions = AxHomeAttentionItem(
+      id: 'custom-action-item',
+      type: AxHomeAttentionType.needsInput,
+      title: 'Decoupled Action Item',
+      description: 'Item with encapsulated primary and secondary closures',
+      timestampDisplay: 'Just now',
+      primaryAction: AxHomeAttentionAction(
+        label: 'Custom Resolve',
+        onPerform: () => primaryExecuted = true,
+      ),
+      secondaryAction: AxHomeAttentionAction(
+        label: 'Custom Dismiss',
+        onPerform: () => secondaryExecuted = true,
+        isDestructive: true,
+      ),
+    );
+
+    await tester.pumpWidget(scaffold(HomePage(
+      projects: const [project],
+      workspaces: const [],
+      workers: const [],
+      invitations: const [],
+      attentionItems: [itemWithActions],
+      run: null,
+      openFindingCount: 0,
+      onOpenWorkspaces: () {},
+      onOpenProject: (_) {},
+      onOpenRun: (_, __) {},
+      onCreateProject: () {},
+    )));
+
+    expect(find.text('Decoupled Action Item'), findsOneWidget);
+    expect(find.text('Item with encapsulated primary and secondary closures'),
+        findsOneWidget);
+    expect(find.text('Custom Resolve'), findsOneWidget);
+    expect(find.text('Custom Dismiss'), findsOneWidget);
+
+    await tester.tap(find.text('Custom Resolve'));
+    expect(primaryExecuted, isTrue);
+
+    await tester.tap(find.text('Custom Dismiss'));
+    expect(secondaryExecuted, isTrue);
+  });
+
+  test('AxHomeAttentionProjector cleanly maps and prioritizes domain items',
+      () {
+    var acceptedInvite = false;
+    var declinedInvite = false;
+    var openedProject = '';
+
+    final projected = AxHomeAttentionProjector.project(
+      invitations: [testInvite1],
+      rawAttentionItems: [
+        const AxHomeAttentionItem(
+          id: 'attn-raw',
+          type: AxHomeAttentionType.executionFailed,
+          title: 'Execution Failed on Worker',
+          description: 'Stack trace error',
+          actionLabel: 'Inspect →',
+          projectId: 'project-1',
+        ),
+      ],
+      openFindingCount: 2,
+      projects: [project],
+      onAcceptInvitation: (_) => acceptedInvite = true,
+      onDeclineInvitation: (_) => declinedInvite = true,
+      onOpenProject: (id) => openedProject = id,
+    );
+
+    expect(projected.length, 3);
+
+    // 1. Invitation (Priority 1)
+    expect(projected[0].type, AxHomeAttentionType.projectInvitation);
+    expect(projected[0].primaryAction?.label, 'Accept');
+    expect(projected[0].secondaryAction?.label, 'Decline');
+    projected[0].primaryAction?.onPerform();
+    expect(acceptedInvite, isTrue);
+    projected[0].secondaryAction?.onPerform();
+    expect(declinedInvite, isTrue);
+
+    // 2. Open findings (Priority 2, needsInput)
+    expect(projected[1].type, AxHomeAttentionType.needsInput);
+    expect(projected[1].primaryAction?.label, 'Review →');
+    projected[1].primaryAction?.onPerform();
+    expect(openedProject, 'project-1');
+
+    // 3. Raw attention item (Priority 3, executionFailed)
+    expect(projected[2].type, AxHomeAttentionType.executionFailed);
+    expect(projected[2].primaryAction?.label, 'Inspect →');
+    openedProject = '';
+    projected[2].primaryAction?.onPerform();
+    expect(openedProject, 'project-1');
+  });
 }
