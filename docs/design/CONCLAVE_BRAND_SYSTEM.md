@@ -149,64 +149,19 @@ Icons must strictly align with the typographic scale and optical sizing:
 ---
 
 ## 8. Brand Mark & Logo Rules
- 
- ### 8.1 Mark Geometry
- The canonical Conclave AX source mark is defined by `assets/branding/conclave_logo.png` (master transparent raster) and `assets/branding/conclave_logo.svg` (canonical vector asset).
- 
- - **Geometry:** Four identical elements positioned with **four-fold rotational symmetry**.
- - **The Sparkle:** The four-point central sparkle is created strictly as **negative space** between the four convergent petals.
- 
- ```
-        ▲ Top Petal
-        │
- Left ◄ ✦ ► Right Petal (Center negative-space sparkle)
- Petal  │
-        ▼ Bottom Petal
- ```
- 
-### 8.2 Product Mark vs. Marketing Artwork Isolation
 
-Conclave AX strictly separates the **official flat vector product identity** from **secondary marketing artwork**:
+The approved transparent artwork supplied on October 7, 2026 is the official
+identity across all product surfaces. `assets/branding/conclave_source.png` is
+preserved at its original resolution. All logo sizes, SVG wrappers, wordmarks,
+favicons, macOS icons, PWA icons and social previews derive from that source.
+SVGs embed the approved raster rather than claiming vector geometry. Existing
+variant filenames preserve the same full-color artwork in both themes.
 
-```
-assets/branding/
-    conclave_mark.svg              ← official product mark
-    conclave_mark_dark.svg         ← official product mark (dark mode)
-    conclave_mark_monochrome.svg   ← official product mark (monochrome)
-    conclave_mark_twotone.svg      ← official product mark (two-tone)
-    conclave_wordmark.svg          ← official horizontal wordmark (light)
-    conclave_wordmark_dark.svg     ← official horizontal wordmark (dark)
-    conclave_logo.svg              ← canonical master vector
-
-marketing/
-    conclave_mark_3d.png           ← optional decorative marketing illustration
-```
-
-**Prohibited Usage for 3D Marketing Artwork:**
-The 3D artwork (`conclave_mark_3d.png`) must **NEVER** be used for:
-- Application sidebar
-- Favicon (`favicon.png`, `favicon.svg`)
-- macOS icon interior mark (`AppIcon.appiconset`)
-- Profile Lab header
-- Workspace header
-- Small UI badges & bot indicators
-- Web PWA icons
-
-The engineered flat vector mark is the sole official product identity across all apps, desktop windows, headers, and UI surfaces.
-
-### 8.3 Single Canonical Source & Synchronization
-1. **Canonical Root:** `assets/branding/` is the single source of truth for all marks, wordmarks, and raster assets across the entire repository.
-2. **No Independent Editing:** Never hand-edit or independently redraw derivative copies located in `apps/`.
-3. **Deterministic Sync Pipeline:** All derivative assets across Flutter apps, web apps, landing site, and macOS runner bundles are deterministically rendered and synchronized via `scripts/branding/build-brand-assets.sh`.
-4. **Drift, Purity & CI Verification:** `pnpm brand:check` (or `node scripts/verify-branding.mjs` / `scripts/branding/build-brand-assets.sh --check`) validates canonical vector purity (no base64 rasters or `<image>` tags), icon completeness, 100% SHA-256 byte-hash synchronization, 3D artwork isolation, and guards against new hardcoded brand colors in application code.
-
-### 8.4 Strict Mark Constraints
-1. **Negative Space Preservation:** The central sparkle must NEVER be drawn or painted as a distinct fifth colored element.
-2. **No Hexagonal Container:** Do not enclose the mark inside an arbitrary hexagonal or faceted polygon.
-3. **No Added Glows / Shadows:** The mark must not have exterior drop shadows, neon glows, or 3D extrusions applied in product surfaces.
-4. **No Letter Overlays on Vector Mark:** Do not superimpose the letter "C" or any typography onto the official logo mark. (The letter "C" is reserved only as an extreme low-level offline fallback when asset loading is completely unavailable).
-5. **Minimum Size:** The standalone mark must not be rendered smaller than **16×16 px** to prevent optical distortion of the central negative space.
-6. **Asset Generation:** Do not manually edit generated PNG files in `assets/`. Updates to the master mark must be executed via `scripts/branding/build-brand-assets.sh`.
+Preserve the central negative space and colors. Do not add glows, letter overlays
+or distort the aspect ratio. Keep clear space around the mark. Maskable icons
+use dedicated padded opaque derivatives. Generate and verify using
+`scripts/branding/build-brand-assets.sh` and its `--check` mode; never hand-edit
+app copies. See [Branding](../BRANDING.md) for prerequisites and output details.
 
 ---
 

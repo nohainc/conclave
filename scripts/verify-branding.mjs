@@ -88,13 +88,17 @@ export function verifyCanonicalSvgMasters(rootDir) {
 
     const content = readFileSync(svgPath, "utf8");
 
-    if (/data:image\/|<image[[:space:]]|xlink:href="data:/i.test(content)) {
+    const sourcePath = join(canonicalDir, "conclave_source.png");
+    const approvedRaster = existsSync(sourcePath)
+      && content.includes(`data:image/png;base64,${readFileSync(sourcePath).toString("base64")}`)
+      && (content.match(/<image\b/g) || []).length === 1;
+    if (/data:image\/|<image\s|xlink:href="data:/i.test(content) && !approvedRaster) {
       violations.push(
         `Vector purity violation in ${relative(rootDir, svgPath)}: embedded raster or base64 data URI detected.`,
       );
     }
 
-    if (!/<path|<defs|<use/i.test(content)) {
+    if (!/<path|<defs|<use/i.test(content) && !approvedRaster) {
       violations.push(
         `Vector geometry missing in ${relative(rootDir, svgPath)}: no path or geometry definitions found.`,
       );
@@ -410,6 +414,6 @@ if (
   }
 
   console.log(
-    "Branding system check passed: canonical SVGs, vector purity, icon completeness, hash synchronization, 3D isolation, and zero hardcoded brand colors verified.",
+    "Branding system check passed: canonical SVGs, approved source artwork, icon completeness, hash synchronization, 3D isolation, and zero hardcoded brand colors verified.",
   );
 }

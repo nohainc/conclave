@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -21,6 +21,24 @@ describe("Repository Branding CI Enforcement", () => {
   });
 
   describe("Canonical Vector Masters Verification", () => {
+    it("accepts only wrappers embedding the exact approved source", () => {
+      const tempDir = join(tmpdir(), `conclave-approved-source-${Date.now()}`);
+      try {
+        mkdirSync(join(tempDir, "assets/branding"), { recursive: true });
+        const source = readFileSync(join(rootDir, "assets/branding/conclave_source.png"));
+        writeFileSync(join(tempDir, "assets/branding/conclave_source.png"), source);
+        for (const svg of CANONICAL_SVG_MASTERS) {
+          writeFileSync(join(tempDir, "assets/branding", svg),
+            `<svg><image href="data:image/png;base64,${source.toString("base64")}"/></svg>`);
+        }
+        expect(verifyCanonicalSvgMasters(tempDir)).toEqual([]);
+        writeFileSync(join(tempDir, "assets/branding/conclave_source.png"), "different source");
+        expect(verifyCanonicalSvgMasters(tempDir).length).toBeGreaterThan(0);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
     it("validates that all canonical SVG masters exist and contain valid vector paths", () => {
       const violations = verifyCanonicalSvgMasters(rootDir);
       expect(violations).toEqual([]);
