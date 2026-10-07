@@ -208,7 +208,8 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                       child: Text(
                         'Experimental local heuristic. No AI model is called; suggestions need human review and real tests, and never count as acceptance evidence.',
                         style: TextStyle(
-                            fontSize: 11, color: ProfileLabTheme.darkForeground),
+                            fontSize: 11,
+                            color: ProfileLabTheme.darkForeground),
                       ),
                     ),
                   ],
@@ -530,8 +531,8 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
           borderRadius: BorderRadius.circular(4),
         ),
         child: const Text('No structural domain changes proposed.',
-            style: TextStyle(
-                fontSize: 11, color: ProfileLabTheme.secondaryText)),
+            style:
+                TextStyle(fontSize: 11, color: ProfileLabTheme.secondaryText)),
       );
     }
 

@@ -153,13 +153,11 @@ for app in app workspace profile_lab; do
     fi
   done
 
-  # Render / sync raster bundles
-  if [ "$CHECK_ONLY" = false ]; then
-    render_png 1024 "$dir/conclave_logo.png"
-    for size in 32 64 128 192 512; do
-      render_png "$size" "$dir/conclave_logo_${size}.png"
-    done
-  fi
+  # Sync raster derivatives
+  sync_file "$CANONICAL_DIR/conclave_logo.png" "$dir/conclave_logo.png"
+  for size in 32 64 128 192 512; do
+    sync_file "$CANONICAL_DIR/conclave_logo_${size}.png" "$dir/conclave_logo_${size}.png"
+  done
 done
 
 # ------------------------------------------------------------------------------
@@ -175,12 +173,10 @@ for svg_file in conclave_mark.svg conclave_mark_dark.svg conclave_mark_monochrom
   fi
 done
 sync_file "$CANONICAL_DIR/conclave_logo.svg" "$site_dir/favicon.svg"
+sync_file "$CANONICAL_DIR/conclave_logo.png" "$site_dir/conclave_logo.png"
+sync_file "$CANONICAL_DIR/conclave_logo_32.png" "$site_dir/favicon.png"
 
 if [ "$CHECK_ONLY" = false ]; then
-  render_png 1024 "$site_dir/conclave_logo.png"
-  render_png 32 "$site_dir/favicon.png"
-  verify_transparency "$site_dir/favicon.png"
-
   if [ -f "$site_dir/social-preview.png" ] && command -v magick >/dev/null 2>&1; then
     magick "$site_dir/social-preview.png" \( "$MASTER_MARK_PNG" -background none -resize 48x48 \) -geometry +72+68 -composite "$site_dir/social-preview.png"
   fi
@@ -208,14 +204,13 @@ echo "==> Processing web application PWA & favicon assets..."
 web_dir="$ROOT/apps/app/web"
 mkdir -p "$web_dir"
 sync_file "$CANONICAL_DIR/conclave_logo.svg" "$web_dir/conclave_logo.svg"
+sync_file "$CANONICAL_DIR/conclave_logo_32.png" "$web_dir/favicon.png"
+sync_file "$CANONICAL_DIR/conclave_logo_192.png" "$web_dir/icons/Icon-192.png"
+sync_file "$CANONICAL_DIR/conclave_logo_512.png" "$web_dir/icons/Icon-512.png"
 
 if [ "$CHECK_ONLY" = false ]; then
-  render_png 192 "$web_dir/icons/Icon-192.png"
-  render_png 512 "$web_dir/icons/Icon-512.png"
   render_png 192 "$web_dir/icons/Icon-maskable-192.png"
   render_png 512 "$web_dir/icons/Icon-maskable-512.png"
-  render_png 32 "$web_dir/favicon.png"
-  verify_transparency "$web_dir/favicon.png"
 fi
 
 # ------------------------------------------------------------------------------

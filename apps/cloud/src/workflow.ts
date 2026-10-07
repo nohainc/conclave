@@ -525,6 +525,22 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     }
     let attempt = 0;
     const startedAt = new Date().toISOString();
+    const workBindingId =
+      definition.id === "direct" ? "direct" : task.step.kind;
+    const workConfig =
+      typeof promptInput.workConfig === "object" &&
+      promptInput.workConfig !== null
+        ? (promptInput.workConfig as Record<string, unknown>)
+        : {};
+    const bindings =
+      typeof workConfig.bindings === "object" && workConfig.bindings !== null
+        ? (workConfig.bindings as Record<string, unknown>)
+        : {};
+    const stepBinding =
+      typeof bindings[workBindingId] === "object" &&
+      bindings[workBindingId] !== null
+        ? (bindings[workBindingId] as Record<string, unknown>)
+        : {};
     while (attempt < 3) {
       attempt += 1;
       await this.persistWorkflowTaskState(
@@ -547,27 +563,10 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             timeout: "1 minute",
           },
           async () => {
-            const workBindingId =
-              definition.id === "direct" ? "direct" : task.step.kind;
             const promptInputs = workStepPromptInputs(
               { ...promptInput, workRequestId: params.workRequestId },
               stepResults,
             );
-            const workConfig =
-              typeof promptInput.workConfig === "object" &&
-              promptInput.workConfig !== null
-                ? (promptInput.workConfig as Record<string, unknown>)
-                : {};
-            const bindings =
-              typeof workConfig.bindings === "object" &&
-              workConfig.bindings !== null
-                ? (workConfig.bindings as Record<string, unknown>)
-                : {};
-            const stepBinding =
-              typeof bindings[workBindingId] === "object" &&
-              bindings[workBindingId] !== null
-                ? (bindings[workBindingId] as Record<string, unknown>)
-                : {};
             const configuredInstructions =
               typeof stepBinding.additionalInstructions === "string"
                 ? stepBinding.additionalInstructions

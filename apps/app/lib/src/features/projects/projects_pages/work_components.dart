@@ -55,7 +55,7 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
 
   if (workerType == 'chatgpt' ||
       profileId.contains('chatgpt') ||
-      profileId.contains('codex') ||
+      profileId.contains('openai') ||
       displayName.contains('chatgpt') ||
       displayName.contains('openai')) {
     return const [
@@ -193,8 +193,8 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         description: 'Continuously updated ChatGPT-4o release',
       ),
       AxModelOption(
-        id: 'codex-mini',
-        name: 'Codex Mini',
+        id: 'gpt-4-mini',
+        name: 'GPT-4 Mini',
         badge: 'Code Specialist',
         description: 'Fast low-latency code generation and refactoring',
       ),
@@ -331,7 +331,7 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
     ];
   } else if (workerType == 'gemini' ||
       profileId.contains('gemini') ||
-      profileId.contains('antigravity') ||
+      profileId.contains('google') ||
       displayName.contains('gemini')) {
     return const [
       AxModelOption(
@@ -894,7 +894,9 @@ class _WorkComposer extends StatelessWidget {
                               ),
                           ],
                         );
-                        if (!workflowBtnContext.mounted || value == null) return;
+                        if (!workflowBtnContext.mounted || value == null) {
+                          return;
+                        }
                         onWorkflowChanged(value);
                       }
                     : null,
@@ -1008,7 +1010,8 @@ class _WorkComposer extends StatelessWidget {
                                 child: SizedBox(
                                   height: 46,
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Row(
@@ -1048,8 +1051,7 @@ class _WorkComposer extends StatelessWidget {
                             inputKey: inputKey,
                             items: menuItems,
                             itemHeight: 52.0,
-                            dividerCount:
-                                availableModels.isNotEmpty ? 1 : 0,
+                            dividerCount: availableModels.isNotEmpty ? 1 : 0,
                           );
                           if (!modelBtnContext.mounted || value == null) return;
                           onModelChanged?.call(stepKind, value);
@@ -1065,8 +1067,8 @@ class _WorkComposer extends StatelessWidget {
                           constraints: const BoxConstraints(maxWidth: 130),
                           child: Text(
                             _modelDisplayName(selectedModel,
-                                    worker: assignedWorker)
-                                .isEmpty
+                                        worker: assignedWorker)
+                                    .isEmpty
                                 ? 'Default model'
                                 : _modelDisplayName(selectedModel,
                                     worker: assignedWorker),
@@ -2099,8 +2101,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                   children: [
                     CircleAvatar(
                       radius: 12,
-                      backgroundColor:
-                          ConclaveColors.primarySoftColor(isDark),
+                      backgroundColor: ConclaveColors.primarySoftColor(isDark),
                       child: Text(
                         initials,
                         style: TextStyle(

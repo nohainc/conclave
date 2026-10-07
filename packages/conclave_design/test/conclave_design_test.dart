@@ -36,19 +36,27 @@ void main() {
       final lightTheme = ConclaveBrand.lightTheme();
       expect(lightTheme.scaffoldBackgroundColor, ConclaveColors.canvasLight);
       expect(lightTheme.colorScheme.surface, ConclaveColors.surfaceLight);
-      expect(lightTheme.colorScheme.surfaceContainerLowest, ConclaveColors.canvasLight);
-      expect(lightTheme.colorScheme.surfaceContainer, ConclaveColors.surfaceLight);
-      expect(lightTheme.colorScheme.surfaceContainerHigh, ConclaveColors.surfaceHoverLight);
-      expect(lightTheme.colorScheme.surfaceContainerHighest, ConclaveColors.codeBackgroundLight);
+      expect(lightTheme.colorScheme.surfaceContainerLowest,
+          ConclaveColors.canvasLight);
+      expect(
+          lightTheme.colorScheme.surfaceContainer, ConclaveColors.surfaceLight);
+      expect(lightTheme.colorScheme.surfaceContainerHigh,
+          ConclaveColors.surfaceHoverLight);
+      expect(lightTheme.colorScheme.surfaceContainerHighest,
+          ConclaveColors.codeBackgroundLight);
       expect(lightTheme.colorScheme.outline, ConclaveColors.borderLight);
 
       final darkTheme = ConclaveBrand.darkTheme();
       expect(darkTheme.scaffoldBackgroundColor, ConclaveColors.canvasDark);
       expect(darkTheme.colorScheme.surface, ConclaveColors.surfaceDark);
-      expect(darkTheme.colorScheme.surfaceContainerLowest, ConclaveColors.canvasDark);
-      expect(darkTheme.colorScheme.surfaceContainer, ConclaveColors.surfaceDark);
-      expect(darkTheme.colorScheme.surfaceContainerHigh, ConclaveColors.surfaceHoverDark);
-      expect(darkTheme.colorScheme.surfaceContainerHighest, ConclaveColors.codeBackgroundDark);
+      expect(darkTheme.colorScheme.surfaceContainerLowest,
+          ConclaveColors.canvasDark);
+      expect(
+          darkTheme.colorScheme.surfaceContainer, ConclaveColors.surfaceDark);
+      expect(darkTheme.colorScheme.surfaceContainerHigh,
+          ConclaveColors.surfaceHoverDark);
+      expect(darkTheme.colorScheme.surfaceContainerHighest,
+          ConclaveColors.codeBackgroundDark);
       expect(darkTheme.colorScheme.outline, ConclaveColors.borderDark);
     });
 
@@ -79,7 +87,8 @@ void main() {
 
       // Verify no typography scale item is below 11px
       expect(ConclaveTypography.caption.fontSize!, greaterThanOrEqualTo(11.0));
-      expect(ConclaveTypography.monoSmall.fontSize!, greaterThanOrEqualTo(11.0));
+      expect(
+          ConclaveTypography.monoSmall.fontSize!, greaterThanOrEqualTo(11.0));
     });
 
     test('ThemeData TextTheme includes all core typographic levels', () {
@@ -108,8 +117,8 @@ void main() {
               ConclaveColors.textPrimaryLight, ConclaveColors.canvasLight),
           greaterThanOrEqualTo(4.5));
       expect(
-          _contrastRatio(
-              ConclaveColors.textPrimaryLight, ConclaveColors.surfaceHoverLight),
+          _contrastRatio(ConclaveColors.textPrimaryLight,
+              ConclaveColors.surfaceHoverLight),
           greaterThanOrEqualTo(4.5));
 
       // 2. Muted text in Light mode
@@ -156,57 +165,66 @@ void main() {
               ConclaveColors.primaryForegroundDark, ConclaveColors.canvasDark),
           greaterThanOrEqualTo(4.5));
       expect(
-          _contrastRatio(
-              ConclaveColors.primaryForegroundDark, ConclaveColors.navigationBackgroundDark),
+          _contrastRatio(ConclaveColors.primaryForegroundDark,
+              ConclaveColors.navigationBackgroundDark),
           greaterThanOrEqualTo(4.5));
 
       // 6. Button text on primary & pressed backgrounds
-      expect(
-          _contrastRatio(Colors.white, ConclaveColors.primary),
+      expect(_contrastRatio(Colors.white, ConclaveColors.primary),
           greaterThanOrEqualTo(4.5));
-      expect(
-          _contrastRatio(Colors.white, ConclaveColors.primaryPressed),
+      expect(_contrastRatio(Colors.white, ConclaveColors.primaryPressed),
           greaterThanOrEqualTo(4.5));
 
       // 7. Selected sidebar item
       expect(
-          _contrastRatio(ConclaveColors.textPrimaryDark, ConclaveColors.navigationSelected),
+          _contrastRatio(ConclaveColors.textPrimaryDark,
+              ConclaveColors.navigationSelected),
           greaterThanOrEqualTo(4.5));
       expect(
-          _contrastRatio(ConclaveColors.primaryForegroundDark, ConclaveColors.navigationSelected),
+          _contrastRatio(ConclaveColors.primaryForegroundDark,
+              ConclaveColors.navigationSelected),
           greaterThanOrEqualTo(4.5));
 
       // 8. Links and Markdown links
       expect(
-          _contrastRatio(ConclaveColors.primaryForegroundLight, ConclaveColors.surfaceLight),
+          _contrastRatio(ConclaveColors.primaryForegroundLight,
+              ConclaveColors.surfaceLight),
           greaterThanOrEqualTo(4.5));
       expect(
-          _contrastRatio(ConclaveColors.primaryForegroundLight, ConclaveColors.canvasLight),
+          _contrastRatio(ConclaveColors.primaryForegroundLight,
+              ConclaveColors.canvasLight),
           greaterThanOrEqualTo(4.5));
       expect(
-          _contrastRatio(ConclaveColors.primaryForegroundDark, ConclaveColors.surfaceDark),
+          _contrastRatio(
+              ConclaveColors.primaryForegroundDark, ConclaveColors.surfaceDark),
           greaterThanOrEqualTo(4.5));
       expect(
-          _contrastRatio(ConclaveColors.primaryForegroundDark, ConclaveColors.canvasDark),
+          _contrastRatio(
+              ConclaveColors.primaryForegroundDark, ConclaveColors.canvasDark),
           greaterThanOrEqualTo(4.5));
 
       // 9. Code blocks and terminal surfaces
       expect(
-          _contrastRatio(ConclaveColors.textPrimaryLight, ConclaveColors.codeBackgroundLight),
+          _contrastRatio(ConclaveColors.textPrimaryLight,
+              ConclaveColors.codeBackgroundLight),
           greaterThanOrEqualTo(4.5));
       expect(
-          _contrastRatio(ConclaveColors.textPrimaryDark, ConclaveColors.codeBackgroundDark),
+          _contrastRatio(ConclaveColors.textPrimaryDark,
+              ConclaveColors.codeBackgroundDark),
           greaterThanOrEqualTo(4.5));
 
       // 10. Status badge foreground & wash pairings
       expect(
-          _contrastRatio(const Color(0xff14532d), ConclaveColors.successSoftLight),
+          _contrastRatio(
+              const Color(0xff14532d), ConclaveColors.successSoftLight),
           greaterThanOrEqualTo(4.5));
       expect(
-          _contrastRatio(const Color(0xff78350f), ConclaveColors.warningSoftLight),
+          _contrastRatio(
+              const Color(0xff78350f), ConclaveColors.warningSoftLight),
           greaterThanOrEqualTo(4.5));
       expect(
-          _contrastRatio(const Color(0xff7f1d1d), ConclaveColors.errorSoftLight),
+          _contrastRatio(
+              const Color(0xff7f1d1d), ConclaveColors.errorSoftLight),
           greaterThanOrEqualTo(4.5));
       expect(
           _contrastRatio(const Color(0xff1e3a8a), ConclaveColors.infoSoftLight),
@@ -214,39 +232,53 @@ void main() {
 
       // 11. Disabled control indicators
       expect(
-          _contrastRatio(ConclaveColors.textSecondaryLight, ConclaveColors.surfaceHoverLight),
+          _contrastRatio(ConclaveColors.textSecondaryLight,
+              ConclaveColors.surfaceHoverLight),
           greaterThanOrEqualTo(3.0));
       expect(
-          _contrastRatio(ConclaveColors.textSecondaryDark, ConclaveColors.surfaceHoverDark),
+          _contrastRatio(ConclaveColors.textSecondaryDark,
+              ConclaveColors.surfaceHoverDark),
           greaterThanOrEqualTo(3.0));
     });
 
-    test('Component theme data (Buttons, Cards, Inputs, Dialogs) is configured with theme tokens', () {
-      for (final theme in [ConclaveBrand.lightTheme(), ConclaveBrand.darkTheme()]) {
+    test(
+        'Component theme data (Buttons, Cards, Inputs, Dialogs) is configured with theme tokens',
+        () {
+      for (final theme in [
+        ConclaveBrand.lightTheme(),
+        ConclaveBrand.darkTheme()
+      ]) {
         final isDark = theme.brightness == Brightness.dark;
-        
+
         // Component Theme Properties
         expect(theme.cardTheme.elevation, 0);
-        expect(theme.cardTheme.color, isDark ? ConclaveColors.surfaceDark : ConclaveColors.surfaceLight);
+        expect(theme.cardTheme.color,
+            isDark ? ConclaveColors.surfaceDark : ConclaveColors.surfaceLight);
 
         // Input Decoration Theme
         expect(theme.inputDecorationTheme.filled, isTrue);
-        expect(theme.inputDecorationTheme.fillColor, isDark ? ConclaveColors.surfaceDark : ConclaveColors.surfaceLight);
+        expect(theme.inputDecorationTheme.fillColor,
+            isDark ? ConclaveColors.surfaceDark : ConclaveColors.surfaceLight);
 
         // Button Themes
-        expect(theme.filledButtonTheme.style?.shape?.resolve({}), isA<OutlinedBorder>());
-        expect(theme.outlinedButtonTheme.style?.shape?.resolve({}), isA<OutlinedBorder>());
+        expect(theme.filledButtonTheme.style?.shape?.resolve({}),
+            isA<OutlinedBorder>());
+        expect(theme.outlinedButtonTheme.style?.shape?.resolve({}),
+            isA<OutlinedBorder>());
 
         // AppBar Theme
         expect(theme.appBarTheme.elevation, 0);
-        expect(theme.appBarTheme.backgroundColor, isDark ? ConclaveColors.surfaceDark : ConclaveColors.surfaceLight);
+        expect(theme.appBarTheme.backgroundColor,
+            isDark ? ConclaveColors.surfaceDark : ConclaveColors.surfaceLight);
 
         // SnackBar Theme
         expect(theme.snackBarTheme.behavior, SnackBarBehavior.floating);
       }
     });
 
-    test('Geometry tokens (Radius, Spacing, Assets) are deterministic and immutable', () {
+    test(
+        'Geometry tokens (Radius, Spacing, Assets) are deterministic and immutable',
+        () {
       expect(ConclaveRadius.xs, 4.0);
       expect(ConclaveRadius.sm, 6.0);
       expect(ConclaveRadius.md, 10.0);

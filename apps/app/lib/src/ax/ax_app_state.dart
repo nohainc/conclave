@@ -99,7 +99,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           action: SnackBarAction(
             label: 'Copy',
-            textColor: const Color(0xffb8a9fe),
+            textColor: ConclaveColors.primaryForegroundDark,
             onPressed: () {
               Clipboard.setData(ClipboardData(text: message));
               messengerKey.currentState?.hideCurrentSnackBar();

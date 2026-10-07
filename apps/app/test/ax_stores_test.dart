@@ -8,10 +8,12 @@ class _BootstrapSource extends AxFixtureDataSource {
   const _BootstrapSource();
 
   @override
-  Future<AxSnapshot> loadBootstrapState({String? projectId, String? workspaceId}) async {
+  Future<AxSnapshot> loadBootstrapState(
+      {String? projectId, String? workspaceId}) async {
     final base = axFixtureSnapshot();
     return AxSnapshot(
-      viewer: const AxViewer(id: 'user-1', displayName: 'User One', email: 'user@example.test'),
+      viewer: const AxViewer(
+          id: 'user-1', displayName: 'User One', email: 'user@example.test'),
       projects: base.projects,
       workspaces: base.workspaces,
       tasks: base.tasks,
@@ -27,7 +29,9 @@ class _BootstrapSource extends AxFixtureDataSource {
 
 void main() {
   group('AxStore Phase 23 facade removal and projection isolation', () {
-    test('loadBootstrapState initializes independent stores and strips nested workstreams', () async {
+    test(
+        'loadBootstrapState initializes independent stores and strips nested workstreams',
+        () async {
       final source = const _BootstrapSource();
       final store = AxStore(source);
       addTearDown(store.dispose);
@@ -40,7 +44,8 @@ void main() {
       expect(bootstrap.projects, isNotEmpty);
       for (final project in bootstrap.projects) {
         expect(project.workstreams, isEmpty,
-            reason: 'Bootstrap snapshot projects must discard nested workstreams');
+            reason:
+                'Bootstrap snapshot projects must discard nested workstreams');
       }
 
       expect(store.projects.items, isNotEmpty);
@@ -84,12 +89,16 @@ void main() {
             throwsA(isA<UnsupportedError>()));
       }
       if (exec.candidateOutputs.isNotEmpty) {
-        expect(() => (exec.candidateOutputs as dynamic).add(exec.candidateOutputs.first),
+        expect(
+            () => (exec.candidateOutputs as dynamic)
+                .add(exec.candidateOutputs.first),
             throwsA(isA<UnsupportedError>()));
       }
     });
 
-    test('replaceExecution notifies executionChanges without touching queries or session', () {
+    test(
+        'replaceExecution notifies executionChanges without touching queries or session',
+        () {
       final source = const AxFixtureDataSource();
       final store = AxStore(source);
       addTearDown(store.dispose);
@@ -110,7 +119,9 @@ void main() {
           reason: 'replaceExecution must not write workspace queries');
     });
 
-    test('collaboration mutations and query updates do not trigger executionChanges', () {
+    test(
+        'collaboration mutations and query updates do not trigger executionChanges',
+        () {
       final source = const AxFixtureDataSource();
       final store = AxStore(source);
       addTearDown(store.dispose);
@@ -140,12 +151,15 @@ void main() {
       ]);
 
       expect(executionSignals, 0,
-          reason: 'Query updates must not trigger execution projection signals');
+          reason:
+              'Query updates must not trigger execution projection signals');
       expect(store.projects.items.length, 1);
       expect(store.workspaces.items.length, 1);
     });
 
-    test('clearServerState resets queries, auth, security, and execution projection', () async {
+    test(
+        'clearServerState resets queries, auth, security, and execution projection',
+        () async {
       final source = const AxFixtureDataSource();
       final store = AxStore(source);
       addTearDown(store.dispose);
@@ -169,8 +183,7 @@ void main() {
       final store = AxStore(source);
       store.dispose();
 
-      expect(() => store.loadBootstrapState(),
-          throwsA(isA<StateError>()));
+      expect(() => store.loadBootstrapState(), throwsA(isA<StateError>()));
     });
   });
 }

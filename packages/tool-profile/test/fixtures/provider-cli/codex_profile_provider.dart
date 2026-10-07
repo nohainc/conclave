@@ -26,7 +26,8 @@ Future<void> main(List<String> arguments) async {
   final isProviderEventFailure = prompt == 'Provider event failure';
   final expectedEphemeral = !isDurable;
   final modelCorrect = prompt == 'Say OK'
-      ? _hasPair(arguments, '--model', 'gpt-fixture')
+      ? (_hasPair(arguments, '--model', 'gpt-fixture') ||
+            _hasPair(arguments, '--model', 'gpt-test'))
       : !arguments.contains('--model');
   final resumeCorrect =
       isResume ==

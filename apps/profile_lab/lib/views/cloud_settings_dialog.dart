@@ -99,8 +99,8 @@ class _CloudSettingsDialogState extends State<CloudSettingsDialog> {
             const SizedBox(height: 8),
             const Text(
               'HTTPS is required for remote Cloud. Development builds may use HTTP on localhost or loopback. Changing the origin clears the current local sign-in.',
-              style: TextStyle(
-                  fontSize: 12, color: ProfileLabTheme.secondaryText),
+              style:
+                  TextStyle(fontSize: 12, color: ProfileLabTheme.secondaryText),
             ),
             if (_error != null) ...[
               const SizedBox(height: 10),

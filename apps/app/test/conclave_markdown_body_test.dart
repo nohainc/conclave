@@ -223,9 +223,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  test('ConclaveMarkdownStyleSheet uses accessible brand tokens for light and dark modes', () {
-    final lightSheet = ConclaveMarkdownStyleSheet.fromTheme(ConclaveBrand.lightTheme());
-    final darkSheet = ConclaveMarkdownStyleSheet.fromTheme(ConclaveBrand.darkTheme());
+  test(
+      'ConclaveMarkdownStyleSheet uses accessible brand tokens for light and dark modes',
+      () {
+    final lightSheet =
+        ConclaveMarkdownStyleSheet.fromTheme(ConclaveBrand.lightTheme());
+    final darkSheet =
+        ConclaveMarkdownStyleSheet.fromTheme(ConclaveBrand.darkTheme());
 
     expect(lightSheet.a?.color, ConclaveColors.primaryForegroundLight);
     expect(darkSheet.a?.color, ConclaveColors.primaryForegroundDark);

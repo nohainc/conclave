@@ -92,40 +92,42 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
     return 'Draft v${c.currentDraft!.releaseVersion} · $local · $cloud';
   }
 
-  Widget _panes(ProfileLabController c) =>
-      LayoutBuilder(builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 1000;
-        final both = _showEditor && _showTests;
-        final extent = wide ? constraints.maxWidth : constraints.maxHeight;
-        final available = extent - (both ? 12 : 0);
-        final editorExtent = both ? available * _editorFraction : extent;
-        final testsExtent = both ? available - editorExtent : extent;
-        return Stack(children: [
-          Positioned(
-              left: 0,
-              top: 0,
-              width: wide ? editorExtent : constraints.maxWidth,
-              height: wide ? constraints.maxHeight : editorExtent,
-              child: Offstage(
-                  offstage: !_showEditor,
-                  child: ProfileDraftEditor(
-                      controller: c, showInspector: _showInspector))),
-          Positioned(
-              left: wide && both ? editorExtent + 12 : 0,
-              top: !wide && both ? editorExtent + 12 : 0,
-              width: wide ? testsExtent : constraints.maxWidth,
-              height: wide ? constraints.maxHeight : testsExtent,
-              child: Offstage(
-                  offstage: !_showTests, child: TestBenchView(controller: c))),
-          if (both)
-            Positioned(
-              left: wide ? editorExtent : 0,
-              top: wide ? 0 : editorExtent,
-              width: wide ? 12 : constraints.maxWidth,
-              height: wide ? constraints.maxHeight : 12,
-              child: Semantics(
-                  label: 'Resize editor and tests',
-                  child: MouseRegion(
+  Widget _panes(ProfileLabController c) => LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 1000;
+          final both = _showEditor && _showTests;
+          final extent = wide ? constraints.maxWidth : constraints.maxHeight;
+          final available = extent - (both ? 12 : 0);
+          final editorExtent = both ? available * _editorFraction : extent;
+          final testsExtent = both ? available - editorExtent : extent;
+          return Stack(
+            children: [
+              Positioned(
+                  left: 0,
+                  top: 0,
+                  width: wide ? editorExtent : constraints.maxWidth,
+                  height: wide ? constraints.maxHeight : editorExtent,
+                  child: Offstage(
+                      offstage: !_showEditor,
+                      child: ProfileDraftEditor(
+                          controller: c, showInspector: _showInspector))),
+              Positioned(
+                  left: wide && both ? editorExtent + 12 : 0,
+                  top: !wide && both ? editorExtent + 12 : 0,
+                  width: wide ? testsExtent : constraints.maxWidth,
+                  height: wide ? constraints.maxHeight : testsExtent,
+                  child: Offstage(
+                      offstage: !_showTests,
+                      child: TestBenchView(controller: c))),
+              if (both)
+                Positioned(
+                  left: wide ? editorExtent : 0,
+                  top: wide ? 0 : editorExtent,
+                  width: wide ? 12 : constraints.maxWidth,
+                  height: wide ? constraints.maxHeight : 12,
+                  child: Semantics(
+                    label: 'Resize editor and tests',
+                    child: MouseRegion(
                       cursor: wide
                           ? SystemMouseCursors.resizeColumn
                           : SystemMouseCursors.resizeRow,

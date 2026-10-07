@@ -198,7 +198,7 @@ The engineered flat vector mark is the sole official product identity across all
 1. **Canonical Root:** `assets/branding/` is the single source of truth for all marks, wordmarks, and raster assets across the entire repository.
 2. **No Independent Editing:** Never hand-edit or independently redraw derivative copies located in `apps/`.
 3. **Deterministic Sync Pipeline:** All derivative assets across Flutter apps, web apps, landing site, and macOS runner bundles are deterministically rendered and synchronized via `scripts/branding/build-brand-assets.sh`.
-4. **Drift & Vector Purity Verification:** `scripts/branding/build-brand-assets.sh --check` verifies vector purity (no base64 rasters or `<image>` tags), background transparency, and 100% file synchronization.
+4. **Drift, Purity & CI Verification:** `pnpm brand:check` (or `node scripts/verify-branding.mjs` / `scripts/branding/build-brand-assets.sh --check`) validates canonical vector purity (no base64 rasters or `<image>` tags), icon completeness, 100% SHA-256 byte-hash synchronization, 3D artwork isolation, and guards against new hardcoded brand colors in application code.
 
 ### 8.4 Strict Mark Constraints
 1. **Negative Space Preservation:** The central sparkle must NEVER be drawn or painted as a distinct fifth colored element.

@@ -206,7 +206,8 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
+            style:
+                FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
             child: const Text('Revoke'),
           ),
         ],
@@ -378,7 +379,8 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
+            style:
+                FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
             child: const Text('Delete'),
           ),
         ],
@@ -487,7 +489,7 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
           ),
           action: SnackBarAction(
             label: 'Copy',
-            textColor: const Color(0xffb8a9fe),
+            textColor: ConclaveColors.primaryForegroundDark,
             onPressed: () {
               Clipboard.setData(ClipboardData(text: message));
               ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -628,7 +630,8 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
+            style:
+                FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
             child: const Text('Remove'),
           ),
         ],
@@ -654,7 +657,8 @@ extension _ProjectWorkspaceActions on _ProjectWorkspaceState {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
+            style:
+                FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
             child: const Text('Revoke'),
           ),
         ],

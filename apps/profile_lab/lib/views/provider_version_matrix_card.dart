@@ -52,7 +52,8 @@ class ProviderVersionMatrixCard extends StatelessWidget {
                     color: ProfileLabTheme.warnColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(
-                        color: ProfileLabTheme.warnColor.withValues(alpha: 0.4)),
+                        color:
+                            ProfileLabTheme.warnColor.withValues(alpha: 0.4)),
                   ),
                   child: const Text(
                     'SUPPORTED ≠ TESTED',
@@ -168,8 +169,8 @@ class ProviderVersionMatrixCard extends StatelessWidget {
                                     const SizedBox(width: 4),
                                     Text(
                                       entry.version,
-                                      style: ConclaveTypography.monoSmall
-                                          .copyWith(
+                                      style:
+                                          ConclaveTypography.monoSmall.copyWith(
                                         fontWeight: FontWeight.bold,
                                         color: isPass
                                             ? ProfileLabTheme.passColor

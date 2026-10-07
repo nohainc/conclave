@@ -25,6 +25,8 @@ jobs:
           channel: stable
           cache: true
       - run: pnpm install --frozen-lockfile
+      - name: Verify Conclave AX branding invariants, vector purity, and asset synchronization
+        run: pnpm brand:check
       - name: Validate v8 architecture, Cloud, protocol, Engine, Workspace, AX, and fixture E2E
         run: pnpm check
 

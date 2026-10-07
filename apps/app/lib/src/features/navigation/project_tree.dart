@@ -217,7 +217,8 @@ class ProjectTree extends StatelessWidget {
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: ConclaveColors.primaryForegroundDark.withValues(alpha: 0.4),
+                color:
+                    ConclaveColors.primaryForegroundDark.withValues(alpha: 0.4),
                 blurRadius: 4,
                 spreadRadius: 1,
               ),

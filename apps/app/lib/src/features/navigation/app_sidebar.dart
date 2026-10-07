@@ -318,8 +318,7 @@ class AppSidebar extends StatelessWidget {
                           Scaffold.maybeOf(sidebarContext)?.closeDrawer();
                         }
                       },
-                      borderRadius:
-                          BorderRadius.circular(ConclaveRadius.sm),
+                      borderRadius: BorderRadius.circular(ConclaveRadius.sm),
                       hoverColor: ConclaveColors.navigationHoverDark,
                       focusColor: ConclaveColors.navigationSelected,
                       child: Container(
@@ -783,8 +782,7 @@ class AppIconRail extends StatelessWidget {
                   border: shellContext
                           .isNavActive(const AxNavigation.profileSecurity())
                       ? Border.all(
-                          color: ConclaveColors.primaryForegroundDark,
-                          width: 2)
+                          color: ConclaveColors.primaryForegroundDark, width: 2)
                       : null,
                 ),
                 child: CircleAvatar(

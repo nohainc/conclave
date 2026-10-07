@@ -146,7 +146,8 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                       child: Text(
                         'A signed Stable Worker Profile runs through the local generic Engine. The model proposes a Draft edit only. Review the diff, apply it yourself, and run the real test ladder; model output is never evidence.',
                         style: TextStyle(
-                            fontSize: 11, color: ProfileLabTheme.darkForeground),
+                            fontSize: 11,
+                            color: ProfileLabTheme.darkForeground),
                       ),
                     ),
                   ],

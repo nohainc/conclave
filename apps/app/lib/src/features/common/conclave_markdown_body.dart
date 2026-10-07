@@ -157,9 +157,11 @@ abstract final class ConclaveMarkdownStyleSheet {
       blockquotePadding:
           const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       blockquoteDecoration: BoxDecoration(
-        color: isDark ? ConclaveColors.surfaceDark : ConclaveColors.surfaceHoverLight,
-        border:
-            Border(left: BorderSide(color: ConclaveColors.border(isDark), width: 3)),
+        color: isDark
+            ? ConclaveColors.surfaceDark
+            : ConclaveColors.surfaceHoverLight,
+        border: Border(
+            left: BorderSide(color: ConclaveColors.border(isDark), width: 3)),
       ),
       codeblockPadding: const EdgeInsets.all(12),
       codeblockDecoration: BoxDecoration(

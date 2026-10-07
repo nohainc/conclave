@@ -73,13 +73,20 @@ scripts/branding/build-brand-assets.sh
 To verify vector purity (no base64 rasters or `<image>` elements), alpha transparency, and asset synchronization in CI:
 
 ```bash
+pnpm brand:check
+# or
+node scripts/verify-branding.mjs
+# or
 scripts/branding/build-brand-assets.sh --check
 ```
 
-### Deterministic Pipeline Guarantees
+### Deterministic Pipeline & CI Enforcement Guarantees
 1. **Vector Purity Verification:** Confirms all master SVGs consist of 100% pure mathematical vector paths with zero embedded rasters (`data:image/*`, `<image>`).
-2. **Transparency Verification:** Tests master renders to guarantee 100% transparent backgrounds with 0 alpha in edge/corner pixels.
-3. **Automated Multi-Scale Rasterization:** Generates pixel-crisp PNGs at standard sizes: `32px`, `64px`, `128px`, `192px`, `512px`, `1024px`.
+2. **Deterministic Hash Synchronization:** Asserts that all client vector and raster assets match 100% SHA-256 byte hashes with canonical masters (zero drift).
+3. **Transparency Verification:** Tests master renders to guarantee 100% transparent backgrounds with 0 alpha in edge/corner pixels.
+4. **Hardcoded Brand Color Guard:** Flags new raw hardcoded brand colors in application code, enforcing token usage (`ConclaveColors.*`, `Theme.of(context).*`).
+5. **3D Artwork Isolation:** Guarantees 3D marketing artwork is strictly isolated in `marketing/` and absent from production runtime asset directories.
+6. **Automated Multi-Scale Rasterization:** Generates pixel-crisp PNGs at standard sizes: `32px`, `64px`, `128px`, `192px`, `512px`, `1024px`.
 4. **App Synchronization:** Distributes vector masters and raster iconsets across:
    - **Web App (`apps/app`):** vector marks, raster bundles, `web/favicon.png`, `web/conclave_logo.svg`, and PWA `Icon-*.png`
    - **Workspace (`apps/workspace`):** vector marks, raster bundles, and macOS `AppIcon.appiconset` (16–1024px)

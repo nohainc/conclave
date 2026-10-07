@@ -1011,10 +1011,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Add files'), findsOneWidget);
     expect(find.text('Add link'), findsOneWidget);
-    expect(
-        tester.getBottomLeft(find.text('Add files')).dy,
-        lessThan(
-            tester.getTopLeft(find.byTooltip('Add attachments')).dy));
+    expect(tester.getBottomLeft(find.text('Add files')).dy,
+        lessThan(tester.getTopLeft(find.byTooltip('Add attachments')).dy));
     final menu = find
         .ancestor(of: find.text('Add files'), matching: find.byType(Material))
         .first;
@@ -1047,11 +1045,8 @@ void main() {
     await tester.enterText(find.byType(TextField).first, markdownPrompt);
     await tester.tap(find.byTooltip('Show Markdown controls'));
     await tester.pump();
-    expect(
-        tester.getCenter(find.byTooltip('Bold')).dy,
-        lessThan(tester
-            .getTopLeft(find.byTooltip('Add attachments'))
-            .dy));
+    expect(tester.getCenter(find.byTooltip('Bold')).dy,
+        lessThan(tester.getTopLeft(find.byTooltip('Add attachments')).dy));
     expect(
         tester.getTopLeft(find.byTooltip('Bold')).dy,
         greaterThanOrEqualTo(
@@ -2678,4 +2673,3 @@ class _ModelSelectionTestDataSource extends _GenericWorkerConfigDataSource {
         ),
       ];
 }
-

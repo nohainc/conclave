@@ -6,7 +6,8 @@ import 'colors.dart';
 abstract final class ConclaveBrandAssets {
   static const markSvg = 'assets/branding/conclave_mark.svg';
   static const markDarkSvg = 'assets/branding/conclave_mark_dark.svg';
-  static const markMonochromeSvg = 'assets/branding/conclave_mark_monochrome.svg';
+  static const markMonochromeSvg =
+      'assets/branding/conclave_mark_monochrome.svg';
   static const markTwotoneSvg = 'assets/branding/conclave_mark_twotone.svg';
   static const wordmarkSvg = 'assets/branding/conclave_wordmark.svg';
   static const wordmarkDarkSvg = 'assets/branding/conclave_wordmark_dark.svg';

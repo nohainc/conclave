@@ -17,7 +17,8 @@ import 'ax_fixture_data.dart';
 void main() {
   group('Phase 24 — Design Regression & Theme Token Tests', () {
     // 1. Logo Header
-    testWidgets('logo header renders wordmark and logo mark using theme typography and assets',
+    testWidgets(
+        'logo header renders wordmark and logo mark using theme typography and assets',
         (WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -48,7 +49,8 @@ void main() {
     });
 
     // 2. Sidebar Selected / Unselected State
-    testWidgets('sidebar applies distinct styling for selected vs unselected navigation items',
+    testWidgets(
+        'sidebar applies distinct styling for selected vs unselected navigation items',
         (WidgetTester tester) async {
       AxNavigation? navigatedTo;
       const shellContext = AxShellContext(
@@ -100,21 +102,25 @@ void main() {
 
       // Verify unselected profile row container has transparent background
       final profileContainer = tester.widget<Container>(
-        find.ancestor(
-          of: find.text('Vitalii Noha'),
-          matching: find.byType(Container),
-        ).first,
+        find
+            .ancestor(
+              of: find.text('Vitalii Noha'),
+              matching: find.byType(Container),
+            )
+            .first,
       );
       final profileDecoration = profileContainer.decoration as BoxDecoration?;
       expect(profileDecoration?.color, Colors.transparent,
-          reason: 'Unselected navigation item must have transparent background');
+          reason:
+              'Unselected navigation item must have transparent background');
 
       // Tap on profile to navigate
       await tester.tap(find.text('Vitalii Noha'));
       expect(navigatedTo, const AxNavigation.profileSecurity());
     });
 
-    testWidgets('sidebar selected navigation item highlights with active selection token',
+    testWidgets(
+        'sidebar selected navigation item highlights with active selection token',
         (WidgetTester tester) async {
       const shellContext = AxShellContext(
         navigation: AxNavigation.profileSecurity(),
@@ -143,14 +149,17 @@ void main() {
       await tester.pumpAndSettle();
 
       final profileContainer = tester.widget<Container>(
-        find.ancestor(
-          of: find.text('Vitalii Noha'),
-          matching: find.byType(Container),
-        ).first,
+        find
+            .ancestor(
+              of: find.text('Vitalii Noha'),
+              matching: find.byType(Container),
+            )
+            .first,
       );
       final profileDecoration = profileContainer.decoration as BoxDecoration?;
       expect(profileDecoration?.color, ConclaveColors.navigationSelected,
-          reason: 'Selected navigation item must highlight with ConclaveColors.navigationSelected');
+          reason:
+              'Selected navigation item must highlight with ConclaveColors.navigationSelected');
 
       final profileText = tester.widget<Text>(find.text('Vitalii Noha'));
       expect(profileText.style?.fontWeight, FontWeight.w600);
@@ -158,7 +167,8 @@ void main() {
     });
 
     // 3. Status Badges & Semantic Tokens
-    testWidgets('status badges use semantic tokens rather than hardcoded ad-hoc hex values',
+    testWidgets(
+        'status badges use semantic tokens rather than hardcoded ad-hoc hex values',
         (WidgetTester tester) async {
       // Test semantic status colors defined in design tokens
       expect(ConclaveBrand.success, ConclaveColors.success);
@@ -183,7 +193,8 @@ void main() {
                 decoration: BoxDecoration(
                   color: ConclaveBrand.success.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(ConclaveRadius.sm),
-                  border: Border.all(color: ConclaveBrand.success.withValues(alpha: 0.3)),
+                  border: Border.all(
+                      color: ConclaveBrand.success.withValues(alpha: 0.3)),
                 ),
                 child: const Text(
                   'Ready',
@@ -207,7 +218,8 @@ void main() {
     });
 
     // 4. Buttons
-    testWidgets('buttons consume theme tokens for primary, outline, danger, and disabled states',
+    testWidgets(
+        'buttons consume theme tokens for primary, outline, danger, and disabled states',
         (WidgetTester tester) async {
       bool primaryClicked = false;
       bool dangerClicked = false;
@@ -264,7 +276,8 @@ void main() {
     });
 
     // 5. Markdown Rendering
-    testWidgets('ConclaveMarkdownBody renders headings, body, and inline code with theme tokens',
+    testWidgets(
+        'ConclaveMarkdownBody renders headings, body, and inline code with theme tokens',
         (WidgetTester tester) async {
       const markdownContent = '''
 # Heading 1
@@ -294,14 +307,16 @@ This is standard body paragraph text with **bold** and `inline_code`.
       expect(find.textContaining('Heading 1'), findsOneWidget);
       expect(find.textContaining('Heading 2'), findsOneWidget);
       expect(find.textContaining('Heading 3'), findsOneWidget);
-      expect(find.textContaining('This is standard body paragraph text'), findsOneWidget);
+      expect(find.textContaining('This is standard body paragraph text'),
+          findsOneWidget);
       expect(find.textContaining('Blockquote context'), findsOneWidget);
       expect(find.textContaining('Item 1'), findsOneWidget);
       expect(find.textContaining('inline_code'), findsOneWidget);
     });
 
     // 6. Code Block
-    testWidgets('ConclaveCodeBlock renders syntax container, monospace font, and copy button',
+    testWidgets(
+        'ConclaveCodeBlock renders syntax container, monospace font, and copy button',
         (WidgetTester tester) async {
       String? copiedText;
       tester.binding.defaultBinaryMessenger
@@ -330,7 +345,8 @@ This is standard body paragraph text with **bold** and `inline_code`.
       await tester.pumpAndSettle();
 
       expect(find.text('javascript'), findsOneWidget);
-      expect(find.textContaining('const apiKey = "conclave-v8";'), findsOneWidget);
+      expect(
+          find.textContaining('const apiKey = "conclave-v8";'), findsOneWidget);
       expect(find.byTooltip('Copy code'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Copy code'));
@@ -340,7 +356,8 @@ This is standard body paragraph text with **bold** and `inline_code`.
     });
 
     // 7. Work Response Card
-    testWidgets('WorkstreamPage renders prompt bubble and AI response card with theme tokens',
+    testWidgets(
+        'WorkstreamPage renders prompt bubble and AI response card with theme tokens',
         (WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -382,7 +399,8 @@ This is standard body paragraph text with **bold** and `inline_code`.
     });
 
     // 8. Worker Card
-    testWidgets('WorkspacesPage renders worker list with readiness badge and theme tokens',
+    testWidgets(
+        'WorkspacesPage renders worker list with readiness badge and theme tokens',
         (WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -426,11 +444,13 @@ This is standard body paragraph text with **bold** and `inline_code`.
 
       expect(find.text('MacBook Pro M3'), findsOneWidget);
       expect(find.text('Ready locally'), findsOneWidget);
-      expect(find.byKey(const Key('workspace-worker-row-worker-codex')), findsOneWidget);
+      expect(find.byKey(const Key('workspace-worker-row-worker-codex')),
+          findsOneWidget);
     });
 
     // 9. Key Shared Components Use Theme Tokens (No Hardcoded Breakages)
-    testWidgets('dynamic theme switching from light to dark updates shared components',
+    testWidgets(
+        'dynamic theme switching from light to dark updates shared components',
         (WidgetTester tester) async {
       ThemeMode currentMode = ThemeMode.light;
 
@@ -464,14 +484,16 @@ This is standard body paragraph text with **bold** and `inline_code`.
       await tester.pumpAndSettle();
 
       // Light theme active
-      expect(Theme.of(tester.element(find.text('Conclave AX'))).brightness, Brightness.light);
+      expect(Theme.of(tester.element(find.text('Conclave AX'))).brightness,
+          Brightness.light);
 
       // Toggle theme to dark
       await tester.tap(find.text('Toggle Theme'));
       await tester.pumpAndSettle();
 
       // Dark theme active
-      expect(Theme.of(tester.element(find.text('Conclave AX'))).brightness, Brightness.dark);
+      expect(Theme.of(tester.element(find.text('Conclave AX'))).brightness,
+          Brightness.dark);
     });
   });
 }

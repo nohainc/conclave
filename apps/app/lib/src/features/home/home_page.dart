@@ -140,8 +140,7 @@ class _SetupStep extends StatelessWidget {
             ),
           ),
         ),
-        title:
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Text(detail),
         trailing: OutlinedButton(onPressed: onPressed, child: Text(action)),
       ),

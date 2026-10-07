@@ -163,7 +163,7 @@ void main() {
         requestId: 'codex-profile-stateless',
         assignmentId: 'codex-stateless',
         prompt: 'Say OK',
-        model: 'gpt-fixture',
+        model: 'gpt-test',
         timeoutMs: 10000,
         sessionPolicy: WorkerSessionPolicy.stateless,
       ),

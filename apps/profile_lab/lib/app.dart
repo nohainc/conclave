@@ -158,13 +158,14 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                               decoration: BoxDecoration(
                                 color: ProfileLabTheme.darkBackground,
                                 borderRadius: BorderRadius.circular(6),
-                                border:
-                                    Border.all(color: ProfileLabTheme.borderColor),
+                                border: Border.all(
+                                    color: ProfileLabTheme.borderColor),
                               ),
                               child: Row(
                                 children: [
                                   const Icon(Icons.description,
-                                      size: 14, color: ProfileLabTheme.secondaryText),
+                                      size: 14,
+                                      color: ProfileLabTheme.secondaryText),
                                   const SizedBox(width: 6),
                                   Text(
                                     c.selectedDefinitionId!,
@@ -226,8 +227,8 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                               decoration: BoxDecoration(
                                 color: ProfileLabTheme.darkSurface,
                                 borderRadius: BorderRadius.circular(6),
-                                border:
-                                    Border.all(color: ProfileLabTheme.borderColor),
+                                border: Border.all(
+                                    color: ProfileLabTheme.borderColor),
                               ),
                               child: Row(
                                 children: [
@@ -292,8 +293,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                       message: 'Sign Out',
                                       child: Icon(Icons.logout,
                                           size: 14,
-                                          color:
-                                              ProfileLabTheme.secondaryText),
+                                          color: ProfileLabTheme.secondaryText),
                                     ),
                                   ),
                                 ],
