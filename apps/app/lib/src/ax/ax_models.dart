@@ -1204,3 +1204,85 @@ class AxSnapshot {
                 Map<String, dynamic>.from(json['synthesisDecision'] as Map)),
       );
 }
+
+class AxHomeAttentionItem {
+  const AxHomeAttentionItem({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.timestampDisplay,
+    this.projectId,
+    this.workstreamId,
+    this.actionLabel,
+    this.invitation,
+    this.severity = 'info',
+  });
+
+  final String id;
+  final String title;
+  final String subtitle;
+  final String timestampDisplay;
+  final String? projectId;
+  final String? workstreamId;
+  final String? actionLabel;
+  final AxProjectInvitation? invitation;
+  final String severity;
+}
+
+class AxContinueWorkItem {
+  const AxContinueWorkItem({
+    required this.projectId,
+    required this.projectName,
+    required this.workstreamId,
+    required this.workstreamTitle,
+    required this.collaboratorsDisplay,
+    required this.lastMessageSnippet,
+    required this.lastActivityDisplay,
+  });
+
+  final String projectId;
+  final String projectName;
+  final String workstreamId;
+  final String workstreamTitle;
+  final String collaboratorsDisplay;
+  final String lastMessageSnippet;
+  final String lastActivityDisplay;
+}
+
+class AxProductUpdate {
+  const AxProductUpdate({
+    required this.id,
+    required this.title,
+    required this.summary,
+    required this.publishedAt,
+    required this.dateDisplay,
+    this.actionUrl,
+    this.learnMoreUrl,
+  });
+
+  final String id;
+  final String title;
+  final String summary;
+  final String publishedAt;
+  final String dateDisplay;
+  final String? actionUrl;
+  final String? learnMoreUrl;
+}
+
+class AxAiUpdate {
+  const AxAiUpdate({
+    required this.id,
+    required this.workerTypeId,
+    required this.workerDisplayName,
+    required this.title,
+    required this.detail,
+    this.actionLabel,
+  });
+
+  final String id;
+  final String workerTypeId;
+  final String workerDisplayName;
+  final String title;
+  final String detail;
+  final String? actionLabel;
+}

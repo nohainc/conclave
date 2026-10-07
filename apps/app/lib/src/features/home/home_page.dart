@@ -15,10 +15,15 @@ class HomePage extends StatelessWidget {
     required this.onOpenProject,
     required this.onOpenRun,
     required this.onCreateProject,
-    required this.onOpenArchivedProjects,
+    this.onOpenArchivedProjects,
     this.invitations = const [],
+    this.attentionItems = const [],
+    this.continueWorkItems = const [],
+    this.productUpdates = const [],
+    this.aiUpdates = const [],
     this.onAcceptInvitation,
     this.onDeclineInvitation,
+    this.onOpenWorkstream,
   });
 
   final List<AxProject> projects;
@@ -30,10 +35,15 @@ class HomePage extends StatelessWidget {
   final ValueChanged<String> onOpenProject;
   final void Function(String projectId, String runId) onOpenRun;
   final VoidCallback onCreateProject;
-  final VoidCallback onOpenArchivedProjects;
+  final VoidCallback? onOpenArchivedProjects;
   final List<AxProjectInvitation> invitations;
+  final List<AxHomeAttentionItem> attentionItems;
+  final List<AxContinueWorkItem> continueWorkItems;
+  final List<AxProductUpdate> productUpdates;
+  final List<AxAiUpdate> aiUpdates;
   final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
   final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
+  final void Function(String projectId, String workstreamId)? onOpenWorkstream;
 
   bool get isNewWorkspace => projects.isEmpty;
 
@@ -51,6 +61,10 @@ class HomePage extends StatelessWidget {
           workspaces: workspaces,
           workers: workers,
           invitations: invitations,
+          attentionItems: attentionItems,
+          continueWorkItems: continueWorkItems,
+          productUpdates: productUpdates,
+          aiUpdates: aiUpdates,
           onAcceptInvitation: onAcceptInvitation,
           onDeclineInvitation: onDeclineInvitation,
           run: run,
@@ -58,7 +72,7 @@ class HomePage extends StatelessWidget {
           onOpenWorkspaces: onOpenWorkspaces,
           onOpenProject: onOpenProject,
           onOpenRun: onOpenRun,
-          onOpenArchivedProjects: onOpenArchivedProjects,
+          onOpenWorkstream: onOpenWorkstream,
         );
 }
 
@@ -81,118 +95,75 @@ class _GettingStarted extends StatelessWidget {
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text(
+            'Welcome to Conclave AX',
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            invitations.isNotEmpty
+                ? 'You have pending project invitations. Join an existing project or create your own.'
+                : 'A shared workspace to collaborate with people and AI together.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 14,
+            ),
+          ),
           if (invitations.isNotEmpty) ...[
-            const Text('Welcome to Conclave AX',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            Text(
-                'You have pending project invitations. Join an existing project or set up your workspace.',
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 14)),
             const SizedBox(height: 20),
             _PendingInvitationsSection(
               invitations: invitations,
               onAccept: onAcceptInvitation,
               onDecline: onDeclineInvitation,
             ),
-            const SizedBox(height: 28),
-            const Divider(height: 1),
-            const SizedBox(height: 28),
-            const Text('Getting started',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            Text(
-                'Set up the pieces Conclave AX needs, then make your first request.',
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 14)),
-            const SizedBox(height: 20),
-          ] else ...[
-            const Text('Getting started',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            Text(
-                'Set up the pieces Conclave AX needs, then make your first request.',
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 14)),
-            const SizedBox(height: 28),
           ],
-          _SetupStep(
-              number: '1',
-              title: 'Connect a Workspace',
-              detail:
-                  'Pair Conclave Workspace on the computer where Workers run.',
-              action: 'Connect Workspace',
-              onPressed: onOpenWorkspaces),
-          _SetupStep(
-              number: '2',
-              title: 'Set up Engine and Profiles in Conclave Workspace',
-              detail:
-                  'Install provider CLIs, configure Profiles, and confirm readiness in Workspace.',
-              action: 'Open Workspaces',
-              onPressed: onOpenWorkspaces),
-          _SetupStep(
-              number: '3',
-              title: 'Create Project',
-              detail: 'Create a Project to organize your work.',
-              action: 'Create project',
-              onPressed: onCreateProject),
+          const SizedBox(height: 24),
           Card(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            child: ListTile(
-              leading: Icon(Icons.play_circle_outline,
-                  color: Theme.of(context).colorScheme.primary),
-              title: const Text('First request',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: const Text(
-                  'Once your Project is ready, create a Workstream and describe what you want to accomplish.'),
-              trailing: const Icon(Icons.arrow_forward_rounded),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'What would you like to do?',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    leading: const Icon(Icons.add_circle_outline, size: 28),
+                    title: const Text(
+                      'Create a Project',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: const Text(
+                      'Start a shared project, invite teammates or family, and collaborate with AI.',
+                    ),
+                    trailing: FilledButton(
+                      onPressed: onCreateProject,
+                      child: const Text('Create project'),
+                    ),
+                  ),
+                  const Divider(height: 24),
+                  ListTile(
+                    leading: const Icon(Icons.computer_outlined, size: 28),
+                    title: const Text(
+                      'Connect AI / Workspace',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: const Text(
+                      'Advanced: Pair Conclave Workspace to contribute local CLI Workers or local codebases.',
+                    ),
+                    trailing: OutlinedButton(
+                      onPressed: onOpenWorkspaces,
+                      child: const Text('Connect Workspace'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
       );
-}
-
-class _SetupStep extends StatelessWidget {
-  const _SetupStep({
-    required this.number,
-    required this.title,
-    required this.detail,
-    required this.action,
-    required this.onPressed,
-  });
-
-  final String number;
-  final String title;
-  final String detail;
-  final String action;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: CircleAvatar(
-          radius: 16,
-          backgroundColor: ConclaveColors.primarySoftColor(isDark),
-          child: Text(
-            number,
-            style: TextStyle(
-              color: ConclaveColors.primaryForeground(isDark),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(detail),
-        trailing: OutlinedButton(onPressed: onPressed, child: Text(action)),
-      ),
-    );
-  }
 }
 
 class _EstablishedHome extends StatelessWidget {
@@ -200,195 +171,500 @@ class _EstablishedHome extends StatelessWidget {
     required this.projects,
     required this.workspaces,
     required this.workers,
+    required this.invitations,
+    required this.attentionItems,
+    required this.continueWorkItems,
+    required this.productUpdates,
+    required this.aiUpdates,
+    required this.onAcceptInvitation,
+    required this.onDeclineInvitation,
     required this.run,
     required this.openFindingCount,
     required this.onOpenWorkspaces,
     required this.onOpenProject,
     required this.onOpenRun,
-    required this.onOpenArchivedProjects,
-    this.invitations = const [],
-    this.onAcceptInvitation,
-    this.onDeclineInvitation,
+    this.onOpenWorkstream,
   });
 
   final List<AxProject> projects;
   final List<AxWorkspace> workspaces;
   final List<AxWorker> workers;
+  final List<AxProjectInvitation> invitations;
+  final List<AxHomeAttentionItem> attentionItems;
+  final List<AxContinueWorkItem> continueWorkItems;
+  final List<AxProductUpdate> productUpdates;
+  final List<AxAiUpdate> aiUpdates;
+  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
+  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
   final AxRun? run;
   final int openFindingCount;
   final VoidCallback onOpenWorkspaces;
   final ValueChanged<String> onOpenProject;
   final void Function(String projectId, String runId) onOpenRun;
-  final VoidCallback onOpenArchivedProjects;
-  final List<AxProjectInvitation> invitations;
-  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
-  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
+  final void Function(String projectId, String workstreamId)? onOpenWorkstream;
+
+  List<AxProductUpdate> get _effectiveProductUpdates =>
+      productUpdates.isNotEmpty ? productUpdates : _defaultProductUpdates;
+
+  List<AxAiUpdate> get _effectiveAiUpdates {
+    if (aiUpdates.isNotEmpty) return aiUpdates;
+    // Derive relevant AI updates based on available worker types in the workspace/projects
+    final availableWorkerTypes = workers.map((w) => w.workerTypeId).toSet();
+    return _defaultAiUpdates.where((update) {
+      if (availableWorkerTypes.isEmpty) return true;
+      return availableWorkerTypes.contains(update.workerTypeId);
+    }).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final recentProjects = projects.take(3);
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Home',
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
-      const SizedBox(height: 8),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: OutlinedButton.icon(
-          onPressed: onOpenArchivedProjects,
-          icon: const Icon(Icons.archive_outlined, size: 16),
-          label: const Text('Archived Projects'),
-        ),
-      ),
-      if (invitations.isNotEmpty) ...[
-        const SizedBox(height: 16),
-        _PendingInvitationsSection(
-          invitations: invitations,
-          onAccept: onAcceptInvitation,
-          onDecline: onDeclineInvitation,
-        ),
-      ],
-      const SizedBox(height: 12),
-      Text('Your execution capacity at a glance.',
-          style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 14)),
-      const SizedBox(height: 24),
-      LayoutBuilder(builder: (context, constraints) {
-        final narrow = constraints.maxWidth < 620;
-        final cards = [
-          _HomeCard(
-            title: 'Active Runs',
-            icon: Icons.play_circle_outline,
-            child: run == null
-                ? const Text('No active Runs')
-                : ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(run!.objective),
-                    subtitle: Text(
-                        '${run!.completedTaskCount}/${run!.taskCount} tasks complete'),
-                    trailing: OutlinedButton(
-                      onPressed: () => onOpenRun(projects.first.id, run!.id),
-                      child: const Text('Open run details'),
-                    ),
+    final hasPendingInvitations = invitations.isNotEmpty;
+    final hasAttention = hasPendingInvitations ||
+        attentionItems.isNotEmpty ||
+        openFindingCount > 0;
+    final hasActiveRun = run != null;
+    final hasContinueWork = continueWorkItems.isNotEmpty || projects.isNotEmpty;
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Home',
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 20),
+
+          // 1. FOR YOU (Actionable Items requiring attention)
+          if (hasAttention) ...[
+            _SectionHeader(
+              title: 'For you',
+              badgeCount: invitations.length +
+                  attentionItems.length +
+                  (openFindingCount > 0 ? 1 : 0),
+            ),
+            const SizedBox(height: 12),
+            if (hasPendingInvitations)
+              _PendingInvitationsSection(
+                invitations: invitations,
+                onAccept: onAcceptInvitation,
+                onDecline: onDeclineInvitation,
+              ),
+            if (hasPendingInvitations &&
+                (attentionItems.isNotEmpty || openFindingCount > 0))
+              const SizedBox(height: 12),
+            for (final item in attentionItems) ...[
+              _AttentionCard(
+                item: item,
+                onTap: () {
+                  if (item.projectId != null) {
+                    onOpenProject(item.projectId!);
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (openFindingCount > 0 && attentionItems.isEmpty) ...[
+              _AttentionCard(
+                item: AxHomeAttentionItem(
+                  id: 'findings-open',
+                  title:
+                      '$openFindingCount open finding${openFindingCount == 1 ? '' : 's'} require review',
+                  subtitle: 'Review task results and verification evidence',
+                  timestampDisplay: 'Needs attention',
+                  actionLabel: 'Review',
+                  severity: 'action',
+                  projectId: projects.isNotEmpty ? projects.first.id : null,
+                ),
+                onTap: () {
+                  if (projects.isNotEmpty) {
+                    onOpenProject(projects.first.id);
+                  }
+                },
+              ),
+            ],
+            const SizedBox(height: 24),
+          ],
+
+          // Running Now (Conditional active execution)
+          if (hasActiveRun) ...[
+            const _SectionHeader(title: 'Running now'),
+            const SizedBox(height: 12),
+            Card(
+              child: ListTile(
+                leading: Icon(
+                  Icons.play_circle_fill,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                title: Text(
+                  run!.objective,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  '${run!.completedTaskCount}/${run!.taskCount} tasks completed',
+                ),
+                trailing: FilledButton.tonal(
+                  onPressed: () => onOpenRun(projects.first.id, run!.id),
+                  child: const Text('Open run details'),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+
+          // 2. CONTINUE WORKING (Recent relevant Workstreams)
+          if (hasContinueWork) ...[
+            const _SectionHeader(title: 'Continue working'),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth > 700;
+                final items = continueWorkItems.isNotEmpty
+                    ? continueWorkItems
+                    : projects
+                        .take(3)
+                        .map((p) => AxContinueWorkItem(
+                              projectId: p.id,
+                              projectName: p.name,
+                              workstreamId: 'default',
+                              workstreamTitle: 'Main Workstream',
+                              collaboratorsDisplay: 'You and team AI',
+                              lastMessageSnippet:
+                                  'Continue conversation and work in context',
+                              lastActivityDisplay: p.lastActivity,
+                            ))
+                        .toList();
+
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: isWide ? 2 : 1,
+                    mainAxisExtent: 130,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
                   ),
-          ),
-          _HomeCard(
-            title: 'Attention required',
-            icon: Icons.flag_outlined,
-            child: Text(openFindingCount == 0
-                ? 'Nothing needs your attention.'
-                : '$openFindingCount open finding${openFindingCount == 1 ? '' : 's'}'),
-          ),
-        ];
-        return narrow
-            ? Column(children: [cards[0], const SizedBox(height: 12), cards[1]])
-            : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(flex: 2, child: cards[0]),
-                const SizedBox(width: 16),
-                Expanded(child: cards[1]),
-              ]);
-      }),
-      const SizedBox(height: 16),
-      LayoutBuilder(builder: (context, constraints) {
-        final cards = [
-          _MetricCard('Projects', '${projects.length}',
-              () => onOpenProject(projects.first.id)),
-          _MetricCard('Workspaces', '${workspaces.length}', onOpenWorkspaces),
-          _MetricCard(
-            'Ready Workers',
-            '${workers.where((worker) => worker.isReady).length}',
-            onOpenWorkspaces,
-          ),
-        ];
-        return constraints.maxWidth < 620
-            ? Wrap(spacing: 12, runSpacing: 12, children: cards)
-            : Row(children: [
-                for (var index = 0; index < cards.length; index++) ...[
-                  Expanded(child: cards[index]),
-                  if (index < cards.length - 1) const SizedBox(width: 12),
+                  itemCount: items.length,
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    return _ContinueWorkCard(
+                      item: item,
+                      onTap: () {
+                        if (onOpenWorkstream != null) {
+                          onOpenWorkstream!(item.projectId, item.workstreamId);
+                        } else {
+                          onOpenProject(item.projectId);
+                        }
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 28),
+          ],
+
+          // 3. WHAT'S NEW (Product Updates)
+          const _SectionHeader(title: "What's new in Conclave"),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                children: [
+                  for (var i = 0; i < _effectiveProductUpdates.length; i++) ...[
+                    _ProductUpdateTile(update: _effectiveProductUpdates[i]),
+                    if (i < _effectiveProductUpdates.length - 1)
+                      const Divider(height: 1),
+                  ],
                 ],
-              ]);
-      }),
-      const SizedBox(height: 24),
-      _HomeCard(
-        title: 'Recent Projects',
-        icon: Icons.folder_outlined,
-        child: Column(
-          children: recentProjects
-              .map((project) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(project.name),
-                    subtitle: Text(project.lastActivity),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => onOpenProject(project.id),
-                  ))
-              .toList(),
-        ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+
+          // 4. AI UPDATES (Changes relevant to available Workers/models)
+          if (_effectiveAiUpdates.isNotEmpty) ...[
+            const _SectionHeader(title: 'AI updates'),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth > 700;
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: isWide ? 2 : 1,
+                    mainAxisExtent: 110,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: _effectiveAiUpdates.length,
+                  itemBuilder: (context, index) {
+                    final update = _effectiveAiUpdates[index];
+                    return _AiUpdateCard(update: update);
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 24),
+          ],
+        ],
       ),
-      const SizedBox(height: 16),
-    ]);
+    );
   }
 }
 
-class _HomeCard extends StatelessWidget {
-  const _HomeCard(
-      {required this.title, required this.icon, required this.child});
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, this.badgeCount});
 
   final String title;
-  final IconData icon;
-  final Widget child;
+  final int? badgeCount;
 
   @override
-  Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Icon(icon,
-                  size: 18, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
-              ),
-            ]),
-            const SizedBox(height: 12),
-            child,
-          ]),
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          title,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         ),
-      );
+        if (badgeCount != null && badgeCount! > 0) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '$badgeCount',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
-class _MetricCard extends StatelessWidget {
-  const _MetricCard(this.title, this.value, this.onTap);
+class _AttentionCard extends StatelessWidget {
+  const _AttentionCard({required this.item, required this.onTap});
 
-  final String title;
-  final String value;
+  final AxHomeAttentionItem item;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => InkWell(
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        onTap: onTap,
+        leading: Icon(
+          Icons.notifications_active_outlined,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        title: Text(
+          item.title,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+        ),
+        subtitle: Text('${item.subtitle} · ${item.timestampDisplay}'),
+        trailing: item.actionLabel != null
+            ? FilledButton.tonal(
+                onPressed: onTap,
+                child: Text(item.actionLabel!),
+              )
+            : const Icon(Icons.chevron_right_rounded),
+      ),
+    );
+  }
+}
+
+class _ContinueWorkCard extends StatelessWidget {
+  const _ContinueWorkCard({required this.item, required this.onTap});
+
+  final AxContinueWorkItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title,
-                  style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              const SizedBox(height: 6),
-              Text(value,
-                  style: const TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.w700)),
-            ]),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.projectName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    item.lastActivityDisplay,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                item.workstreamTitle,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.collaboratorsDisplay,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const Text(
+                    'Continue →',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
+}
+
+class _ProductUpdateTile extends StatelessWidget {
+  const _ProductUpdateTile({required this.update});
+
+  final AxProductUpdate update;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              update.dateDisplay,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              update.title,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(update.summary),
+      ),
+      trailing: const Icon(Icons.arrow_forward_rounded, size: 16),
+    );
+  }
+}
+
+class _AiUpdateCard extends StatelessWidget {
+  const _AiUpdateCard({required this.update});
+
+  final AxAiUpdate update;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                _aiDot(update.workerTypeId),
+                const SizedBox(width: 6),
+                Text(
+                  update.workerDisplayName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              update.title,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              update.detail,
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _aiDot(String typeId) {
+    final color = switch (typeId) {
+      'chatgpt' => const Color(0xFF10A37F),
+      'gemini' => const Color(0xFF3B82F6),
+      'claude' => const Color(0xFFD97706),
+      _ => Colors.purpleAccent,
+    };
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+      ),
+    );
+  }
 }
 
 class _PendingInvitationsSection extends StatelessWidget {
@@ -522,3 +798,49 @@ class _InvitationItem extends StatelessWidget {
     );
   }
 }
+
+const _defaultProductUpdates = [
+  AxProductUpdate(
+    id: 'update-invitations',
+    title: 'Project Invitations',
+    summary:
+        'Invite family, friends, and teammates to shared projects and accept invitations directly in AX.',
+    publishedAt: '2026-10-07T00:00:00Z',
+    dateDisplay: 'Oct 7',
+  ),
+  AxProductUpdate(
+    id: 'update-continuity',
+    title: 'Conversation Continuity',
+    summary:
+        'Switch Workers while keeping your Workstream conversation in context without losing turn history.',
+    publishedAt: '2026-10-06T00:00:00Z',
+    dateDisplay: 'Oct 6',
+  ),
+  AxProductUpdate(
+    id: 'update-profiles',
+    title: 'Tool Profiles',
+    summary:
+        'Workers now load provider capabilities dynamically from signed Tool Profiles with strict credential isolation.',
+    publishedAt: '2026-10-04T00:00:00Z',
+    dateDisplay: 'Oct 4',
+  ),
+];
+
+const _defaultAiUpdates = [
+  AxAiUpdate(
+    id: 'ai-chatgpt-models',
+    workerTypeId: 'chatgpt',
+    workerDisplayName: 'ChatGPT Worker',
+    title: 'Supported model catalog updated',
+    detail:
+        'Auto model and latest reasoning models are selectable for your requests.',
+  ),
+  AxAiUpdate(
+    id: 'ai-gemini-models',
+    workerTypeId: 'gemini',
+    workerDisplayName: 'Gemini Worker',
+    title: 'Multi-modal search & tools',
+    detail:
+        'Gemini Worker supports grounded web search and structured outputs.',
+  ),
+];
