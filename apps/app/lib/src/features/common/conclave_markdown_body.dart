@@ -107,15 +107,13 @@ abstract final class ConclaveMessageTypography {
         fontSize: 16,
         fontWeight: FontWeight.w400,
         height: 1.6,
-        color: theme.brightness == Brightness.dark
-            ? const Color(0xfff3f3f3)
-            : const Color(0xff202020),
+        color: ConclaveColors.textPrimary(theme.brightness == Brightness.dark),
       );
 }
 
 abstract final class ConclaveMarkdownStyleSheet {
   static MarkdownStyleSheet fromTheme(ThemeData theme) {
-    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final body = ConclaveMessageTypography.fromTheme(theme);
     TextStyle heading(double size) => body.copyWith(
           fontSize: size,
@@ -126,11 +124,13 @@ abstract final class ConclaveMarkdownStyleSheet {
       fontFamily: ConclaveTypography.fontFamilyMono,
       fontFamilyFallback: ConclaveTypography.fontFamilyMonoFallback,
       fontSize: (body.fontSize ?? 14) * 0.9,
-      backgroundColor: colors.surfaceContainerHighest,
+      backgroundColor: ConclaveColors.codeBackground(isDark),
     );
     return MarkdownStyleSheet.fromTheme(theme).copyWith(
       p: body,
-      a: TextStyle(color: colors.primary, decoration: TextDecoration.underline),
+      a: TextStyle(
+          color: ConclaveColors.primaryForeground(isDark),
+          decoration: TextDecoration.underline),
       h1: heading(26),
       h2: heading(22),
       h3: heading(19),
@@ -144,31 +144,31 @@ abstract final class ConclaveMarkdownStyleSheet {
       listBullet: body,
       listIndent: 24,
       blockSpacing: 10,
-      checkbox: body.copyWith(color: colors.primary),
+      checkbox: body.copyWith(color: ConclaveColors.primary),
       tableHead: body.copyWith(fontWeight: FontWeight.w600),
       tableBody: body,
-      tableBorder: TableBorder.all(color: colors.outlineVariant),
+      tableBorder: TableBorder.all(color: ConclaveColors.border(isDark)),
       tableCellsPadding:
           const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       tableHeadCellsDecoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
+        color: ConclaveColors.codeBackground(isDark),
       ),
-      blockquote: body.copyWith(color: colors.onSurfaceVariant),
+      blockquote: body.copyWith(color: ConclaveColors.textSecondary(isDark)),
       blockquotePadding:
           const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       blockquoteDecoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
+        color: isDark ? ConclaveColors.surfaceDark : ConclaveColors.surfaceHoverLight,
         border:
-            Border(left: BorderSide(color: colors.outlineVariant, width: 3)),
+            Border(left: BorderSide(color: ConclaveColors.border(isDark), width: 3)),
       ),
       codeblockPadding: const EdgeInsets.all(12),
       codeblockDecoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
-        border: Border.all(color: colors.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
+        color: ConclaveColors.codeBackground(isDark),
+        border: Border.all(color: ConclaveColors.border(isDark)),
+        borderRadius: BorderRadius.circular(ConclaveRadius.md),
       ),
       horizontalRuleDecoration: BoxDecoration(
-        border: Border(top: BorderSide(color: colors.outlineVariant)),
+        border: Border(top: BorderSide(color: ConclaveColors.border(isDark))),
       ),
     );
   }

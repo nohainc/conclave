@@ -1,3 +1,4 @@
+import 'package:conclave_app/src/brand.dart';
 import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -220,5 +221,15 @@ void main() {
     expect(find.byIcon(Icons.image_outlined), findsNWidgets(2));
     expect(find.byType(Image), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  test('ConclaveMarkdownStyleSheet uses accessible brand tokens for light and dark modes', () {
+    final lightSheet = ConclaveMarkdownStyleSheet.fromTheme(ConclaveBrand.lightTheme());
+    final darkSheet = ConclaveMarkdownStyleSheet.fromTheme(ConclaveBrand.darkTheme());
+
+    expect(lightSheet.a?.color, ConclaveColors.primaryForegroundLight);
+    expect(darkSheet.a?.color, ConclaveColors.primaryForegroundDark);
+    expect(lightSheet.codeblockDecoration, isNotNull);
+    expect(darkSheet.codeblockDecoration, isNotNull);
   });
 }

@@ -110,11 +110,12 @@ class ConclaveCodeBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: theme.colorScheme.outlineVariant)),
+          color: ConclaveColors.codeBackground(isDark),
+          borderRadius: BorderRadius.circular(ConclaveRadius.md),
+          border: Border.all(color: ConclaveColors.border(isDark))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         SelectionContainer.disabled(
             child: Padding(
