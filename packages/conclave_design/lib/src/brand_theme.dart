@@ -58,7 +58,7 @@ abstract final class ConclaveBrand {
   static const paper = lightPaper;
   static const surface = lightSurface;
   static const line = lightLine;
-  static const navigation = ConclaveColors.textPrimaryLight;
+  static const navigation = ConclaveColors.navigationBackgroundDark;
 
   static const brandMark = BoxDecoration(
     color: accent,

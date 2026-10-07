@@ -38,7 +38,7 @@ class GlobalAppMenu extends StatelessWidget {
 
     final menuStyle = MenuStyle(
       backgroundColor: WidgetStatePropertyAll(
-        isDark ? const Color(0xff181726) : Colors.white,
+        ConclaveColors.navigationRaised(isDark),
       ),
       surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
       elevation: const WidgetStatePropertyAll(12),
@@ -49,7 +49,7 @@ class GlobalAppMenu extends StatelessWidget {
         RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(
-            color: isDark ? const Color(0xff2d2b42) : const Color(0xffe5e3f0),
+            color: ConclaveColors.navigationBorder(isDark),
             width: 1,
           ),
         ),
@@ -72,9 +72,9 @@ class GlobalAppMenu extends StatelessWidget {
           if (states.contains(WidgetState.hovered) ||
               states.contains(WidgetState.focused)) {
             if (isDestructive) {
-              return const Color(0xffef4444).withValues(alpha: 0.12);
+              return ConclaveColors.error.withValues(alpha: 0.12);
             }
-            return isDark ? const Color(0xff2a2840) : const Color(0xfff0effa);
+            return ConclaveColors.navigationHover(isDark);
           }
           return null;
         }),
@@ -86,7 +86,7 @@ class GlobalAppMenu extends StatelessWidget {
           child: Divider(
             height: 1,
             thickness: 1,
-            color: isDark ? const Color(0xff28263c) : const Color(0xffeceaf4),
+            color: ConclaveColors.navigationBorder(isDark),
           ),
         );
 
@@ -275,7 +275,7 @@ class GlobalAppMenu extends StatelessWidget {
           leadingIcon: const Icon(
             Icons.logout_rounded,
             size: 16,
-            color: Color(0xffef4444),
+            color: ConclaveColors.error,
           ),
           onPressed: onLogout,
           child: const Text(
@@ -283,7 +283,7 @@ class GlobalAppMenu extends StatelessWidget {
             style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w500,
-              color: Color(0xffef4444),
+              color: ConclaveColors.error,
             ),
           ),
         ),

@@ -303,9 +303,7 @@ class SearchPage extends StatelessWidget {
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.8,
-                          color: isDark
-                              ? const Color(0xff94a3b8)
-                              : const Color(0xff64748b),
+                          color: ConclaveColors.textSecondary(isDark),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -313,9 +311,7 @@ class SearchPage extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xff29283c)
-                              : const Color(0xfff1f5f9),
+                          color: ConclaveColors.surfaceHover(isDark),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
@@ -323,9 +319,7 @@ class SearchPage extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? Colors.white60
-                                : const Color(0xff64748b),
+                            color: ConclaveColors.textSecondary(isDark),
                           ),
                         ),
                       ),
@@ -368,15 +362,14 @@ class _SearchResultTile extends StatelessWidget {
     return InkWell(
       onTap: action.onSelect,
       borderRadius: BorderRadius.circular(10),
-      hoverColor: isDark ? const Color(0xff252438) : const Color(0xfff8fafc),
+      hoverColor: ConclaveColors.surfaceHover(isDark),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color:
-              isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
+          color: ConclaveColors.surface(isDark),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine,
+            color: ConclaveColors.border(isDark),
           ),
         ),
         child: Row(
@@ -385,18 +378,16 @@ class _SearchResultTile extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color:
-                    isDark ? const Color(0xff201f30) : const Color(0xfff1f5f9),
+                color: ConclaveColors.surfaceHover(isDark),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color:
-                      isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine,
+                  color: ConclaveColors.border(isDark),
                 ),
               ),
               child: Icon(
                 action.icon,
                 size: 18,
-                color: isDark ? Colors.white70 : const Color(0xff475569),
+                color: ConclaveColors.textSecondary(isDark),
               ),
             ),
             const SizedBox(width: 14),
@@ -409,7 +400,7 @@ class _SearchResultTile extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : const Color(0xff0f172a),
+                      color: ConclaveColors.textPrimary(isDark),
                     ),
                   ),
                   if (action.subtitle != null &&
@@ -419,8 +410,7 @@ class _SearchResultTile extends StatelessWidget {
                       action.subtitle!,
                       style: TextStyle(
                         fontSize: 12,
-                        color:
-                            isDark ? Colors.white54 : const Color(0xff64748b),
+                        color: ConclaveColors.textSecondary(isDark),
                       ),
                     ),
                   ],
@@ -431,8 +421,7 @@ class _SearchResultTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color:
-                    isDark ? const Color(0xff252438) : const Color(0xfff1f5f9),
+                color: ConclaveColors.surfaceHover(isDark),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -440,7 +429,7 @@ class _SearchResultTile extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.white60 : const Color(0xff64748b),
+                  color: ConclaveColors.textSecondary(isDark),
                 ),
               ),
             ),
@@ -448,7 +437,7 @@ class _SearchResultTile extends StatelessWidget {
             Icon(
               Icons.chevron_right_rounded,
               size: 18,
-              color: isDark ? Colors.white30 : const Color(0xff94a3b8),
+              color: ConclaveColors.textSecondary(isDark),
             ),
           ],
         ),

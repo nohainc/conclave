@@ -141,14 +141,10 @@ class _AppTopHudState extends State<AppTopHud> {
                     height: 34,
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
-                      color: isDark
-                          ? const Color(0xff181724)
-                          : const Color(0xfff0effa),
+                      color: ConclaveColors.navigationRaised(isDark),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: isDark
-                            ? const Color(0xff2d2b40)
-                            : const Color(0xffdcd9ee),
+                        color: ConclaveColors.navigationBorder(isDark),
                       ),
                     ),
                     child: Row(
