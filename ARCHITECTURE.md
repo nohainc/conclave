@@ -85,6 +85,24 @@ prerequisite results. Signed Profiles also project versioned, generic Worker exe
 options for model selection, session model switching, and model-specific effort;
 provider argument mapping stays local to the Engine. See [Conversation Continuity v1](docs/specifications/CONVERSATION_CONTINUITY_V1.md).
 
+## Workflow and execution boundaries
+
+Workflow planning determines the Steps and their dependencies. Cloud's Workflow
+runner owns scheduling and lifecycle, and delegates selected Worker/model/effort,
+execution policy and generic result attribution to `execution-engine.ts`.
+The assignment dispatcher owns authorization, Profile admission and D1 access.
+It supplies canonical context through the provider-independent Core Context Engine.
+
+Core's Conversation Router defines continuity policy. The local Engine's
+`ConversationExecutionRouter` prepares continuation, delta synchronization,
+bootstrap, reconstruction or stateless prompts from validated local session state
+and the frozen canonical envelope. The generic CLI Worker Engine owns native
+session validation, locking and persistence, signed Profile interpretation and
+provider process execution. Reconstruction stays inside the Worker step; the
+Workflow receives a generic result and does not manage native provider handles.
+These are responsibilities within the existing v8 path, not additional services.
+See [Conversation Continuity v1](docs/specifications/CONVERSATION_CONTINUITY_V1.md#phase-28--workflow-and-execution-boundaries).
+
 ## Runtime and protocol boundaries
 
 ~~~text

@@ -1,6 +1,6 @@
 # Multi-Worker Conversation Continuity v1
 
-**Status:** implemented through Phase 27, including context/revision evidence and concurrency guards.
+**Status:** implemented through Phase 28, including context/revision evidence, concurrency guards and execution boundaries.
 **Boundary:** Conclave Core and Human Product Protocol. **Contract version:** 1.
 
 Project → Workstream → Conversation → Work Requests is the product ownership
@@ -1130,3 +1130,45 @@ enabled by this phase.
 Public/runtime and local session schemas are unchanged. Local `.session-locks`
 files are created automatically. Existing databases need the new snapshot guard
 installed for matching enforcement; no remote schema deployment was performed.
+
+## Phase 28 — Workflow and execution boundaries
+
+The existing v8 execution path now separates planning, execution configuration,
+continuity preparation, context construction and provider invocation explicitly.
+
+| Boundary | Responsibility | Implementation |
+| --- | --- | --- |
+| Workflow Engine | Determine Steps, dependencies, prompts and lifecycle | Core Workflow planner; Cloud `workflow.ts` |
+| Execution Engine | Snapshot selected Worker/model/effort and execution policy; return generic Step results | Cloud `execution-engine.ts` |
+| Conversation Router | Choose continuity action and prepare full/delta/new-request context | Core `conversation-router.ts`; local `conversation_execution_router.dart` |
+| Context Engine | Assemble canonical conversation and receiving-step workflow context | Core Context Engine, supplied by Cloud-owned context loading |
+| Worker Engine | Validate local native state and Profile capabilities; supervise CLI, reconstruct and persist | Generic CLI Worker Engine and signed Tool Profiles |
+
+The Workflow runner calls `prepareWorkerStepExecution` rather than deriving
+session keys, runtime policy or Worker options itself. It calls
+`completeWorkerStepExecution` to translate admitted execution evidence into a
+provider-independent StepResult. Graph scheduling, cancellation, retry policy
+and request lifecycle remain Workflow responsibilities. Assignment dispatch
+retains authorization, Profile admission, frozen context evidence and D1 access.
+
+The local ConversationExecutionRouter receives validated native-session state
+and the immutable context envelope. It returns a continuity action and prepared
+prompt without reading persistence, resolving Profiles or starting processes.
+Current-session execution sends only the new request; behind sessions receive a
+delta; bootstrap, reconstruction and stateless execution receive full context.
+Model-switch capability and unavailable-handle validation remain generic Worker
+Engine concerns. Reconstruction reuses the same prompt-preparation boundary
+within the original Worker step and WorkflowRun.
+
+Cloud never owns native session handles. Workspace retains session files, locks
+and local diagnostics. The existing Core Router remains the provider-independent
+policy boundary; the Dart adapter projects that policy onto validated local state
+and the existing runtime envelope. No provider-specific execution path, new
+workflow UI, orchestration service or public compatibility API is introduced.
+
+Tests cover execution-option snapshots, stable session scope, generic result
+attribution, all five runtime continuity actions and missing-context rejection.
+Existing execution, reconstruction, concurrency and Profile acceptance fixtures
+continue to exercise the integrated path. Public/runtime contracts, local session
+schemas and database schemas are unchanged; this phase requires no migration.
+Live provider and remote deployment validation remain separate release gates.

@@ -249,3 +249,55 @@ it("effort changes preserve Conversation and Worker Session while freezing each 
   ).toEqual({ n: 1 });
   f.sqlite.close();
 });
+
+it("next-request defaults do not rewrite completed turn attribution or create extra Chat steps", async () => {
+  const f = await conversationFixture();
+  try {
+    f.assign("original", "model-x", "medium");
+    await recordAssignmentResult(f.db as unknown as D1Database, "original", {
+      assignmentId: "original",
+      status: "completed",
+      output: { text: "Original answer" },
+      artifactIds: [],
+      completedAt: "now",
+    });
+    const before = (await f.turns())[0];
+    f.sqlite
+      .prepare(
+        "INSERT INTO workstream_work_configs(workstream_id,config_json,updated_at) VALUES('W',?,'later')",
+      )
+      .run(
+        JSON.stringify({
+          bindings: {
+            chat: {
+              workerId: "gemini",
+              model: "model-y",
+              reasoningEffort: "high",
+            },
+          },
+        }),
+      );
+    expect((await f.turns())[0]).toEqual(before);
+    expect(before).toMatchObject({
+      modelId: "model-x",
+      effort: "medium",
+      status: "completed",
+    });
+    expect(
+      f.sqlite
+        .prepare(
+          "SELECT count(*) AS n FROM conversation_workflow_runs WHERE work_request_id='R'",
+        )
+        .get(),
+    ).toEqual({ n: 1 });
+    expect(
+      f.sqlite
+        .prepare(
+          "SELECT count(*) AS n FROM conversation_workflow_step_runs WHERE workflow_run_id='workflow-run-R'",
+        )
+        .get(),
+    ).toEqual({ n: 1 });
+  } finally {
+    f.sqlite.close();
+  }
+});

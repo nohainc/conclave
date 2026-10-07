@@ -66,6 +66,108 @@ const request: ConversationRouteRequest = {
 };
 
 describe("Conversation Router", () => {
+  it.each([
+    {
+      name: "same worker/model/effort",
+      modelId: "a",
+      effort: "low",
+      action: "CONTINUE_SESSION",
+      modelAction: "UNCHANGED_MODEL",
+    },
+    {
+      name: "effort-only change",
+      modelId: "a",
+      effort: "high",
+      action: "CONTINUE_SESSION",
+      modelAction: "UNCHANGED_MODEL",
+    },
+    {
+      name: "supported model switch",
+      modelId: "b",
+      effort: "high",
+      action: "CONTINUE_SESSION",
+      modelAction: "KEEP_SESSION_WITH_NEW_MODEL",
+    },
+    {
+      name: "unsupported model switch",
+      modelId: "b",
+      effort: "low",
+      modelSwitch: false,
+      action: "RECONSTRUCT_SESSION",
+      modelAction: "NEW_SESSION_FOR_MODEL",
+    },
+    {
+      name: "lost native session",
+      modelId: "a",
+      effort: "low",
+      available: false,
+      action: "RECONSTRUCT_SESSION",
+      modelAction: "UNCHANGED_MODEL",
+    },
+  ])("Phase 29 matrix: $name preserves historical choices", (scenario) => {
+    const before = JSON.stringify(request);
+    const next = {
+      ...request,
+      turn: {
+        ...request.turn,
+        modelId: scenario.modelId,
+        effort: scenario.effort,
+      },
+      executionOptions: {
+        ...request.executionOptions,
+        modelSwitch: { supported: scenario.modelSwitch ?? true },
+      },
+      sessions: [
+        { ...session, nativeSessionAvailable: scenario.available ?? true },
+      ],
+    };
+    expect(routeConversation(next)).toMatchObject({
+      action: scenario.action,
+      modelAction: scenario.modelAction,
+    });
+    expect(JSON.stringify(request)).toBe(before);
+    expect(next.turn.effort).toBe(scenario.effort);
+  });
+
+  it("switches workers and returns to the original session with delta synchronization", () => {
+    const geminiTurn = {
+      ...request.turn,
+      workerId: "gemini",
+      profileId: "gemini-profile",
+    };
+    expect(routeConversation({ ...request, turn: geminiTurn })).toMatchObject({
+      action: "BOOTSTRAP_SESSION",
+      workerSessionId: null,
+    });
+    const geminiSession = {
+      ...session,
+      id: "gemini-session",
+      workerId: "gemini",
+      profileId: "gemini-profile",
+    };
+    const sessions = [session, geminiSession];
+    expect(
+      routeConversation({ ...request, turn: geminiTurn, sessions })
+        .workerSessionId,
+    ).toBe("gemini-session");
+    const returning = {
+      ...request,
+      conversation: {
+        ...request.conversation,
+        conversationRevision: 4,
+        contextRevision: 3,
+      },
+      contextRevision: 3,
+      sessions,
+    };
+    const before = JSON.stringify(returning);
+    expect(routeConversation(returning)).toMatchObject({
+      action: "SYNC_AND_CONTINUE",
+      workerSessionId: "session",
+      context: { transfer: "delta", fromRevision: 2, toRevision: 3 },
+    });
+    expect(JSON.stringify(returning)).toBe(before);
+  });
   it("continues synchronized sessions without changing input", () => {
     const before = JSON.stringify(request);
     expect(routeConversation(request)).toMatchObject({

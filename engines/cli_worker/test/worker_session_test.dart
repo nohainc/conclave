@@ -229,14 +229,17 @@ void main() {
         modelId: model,
         effort: effort,
       );
-      Future<String?> read({WorkerSessionContext? scope}) => store.read(
-        sessionKey: 'scope-A',
-        workerTypeId: 'chatgpt',
-        profileDefinitionId: 'chatgpt-codex',
-        providerToolIdentity: 'Codex CLI',
-        compatibleFormatIds: ['format-v1'],
-        workerSession: scope ?? context,
-      );
+      // A new store instance models Workspace/Engine restart: no in-memory
+      // continuity state may be required to restore this native handle.
+      Future<String?> read({WorkerSessionContext? scope}) =>
+          EngineSessionStore(root).read(
+            sessionKey: 'scope-A',
+            workerTypeId: 'chatgpt',
+            profileDefinitionId: 'chatgpt-codex',
+            providerToolIdentity: 'Codex CLI',
+            compatibleFormatIds: ['format-v1'],
+            workerSession: scope ?? context,
+          );
       await write();
       final file = root.listSync().whereType<File>().single;
       final initial = jsonDecode(await file.readAsString()) as Map;

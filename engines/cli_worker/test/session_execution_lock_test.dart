@@ -1,3 +1,6 @@
+@Timeout(Duration(minutes: 2))
+library;
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:conclave_cli_worker_engine/src/engine_session_store.dart';

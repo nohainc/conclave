@@ -44,6 +44,13 @@ it("one Work StepRun snapshots pending choices and projects actual provider defa
       ])
     ).get("WORK")!;
     expect(pending.stepRuns).toHaveLength(1);
+    expect(
+      f.sqlite
+        .prepare(
+          "SELECT count(*) AS n FROM conversation_workflow_runs WHERE work_request_id='WORK'",
+        )
+        .get(),
+    ).toEqual({ n: 1 });
     expect(pending.stepRuns[0]).toMatchObject({
       id: "step-run-IMPLEMENT",
       stepId: "implement",

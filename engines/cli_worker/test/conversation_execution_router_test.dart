@@ -79,7 +79,7 @@ void main() {
         storedSession: stored(0, 0),
       );
       expect(sync.action, ConversationExecutionAction.syncAndContinue);
-      expect(sync.prompt, contains('DeltaContext'));
+      expect(sync.prompt, contains('Canonical Conclave conversation context'));
       expect(sync.prompt, contains('Prior answer'));
       expect(
         router.prepare(request()).action,
