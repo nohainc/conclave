@@ -1205,12 +1205,25 @@ class AxSnapshot {
       );
 }
 
+enum AxAttentionKind {
+  invitation,
+  needsInput,
+  failedExecution,
+  workerProblem,
+  workspaceProblem,
+  completed,
+  finding,
+  general,
+}
+
 class AxHomeAttentionItem {
   const AxHomeAttentionItem({
     required this.id,
     required this.title,
     required this.subtitle,
     required this.timestampDisplay,
+    this.categoryLabel,
+    this.kind = AxAttentionKind.general,
     this.projectId,
     this.workstreamId,
     this.actionLabel,
@@ -1222,11 +1235,34 @@ class AxHomeAttentionItem {
   final String title;
   final String subtitle;
   final String timestampDisplay;
+  final String? categoryLabel;
+  final AxAttentionKind kind;
   final String? projectId;
   final String? workstreamId;
   final String? actionLabel;
   final AxProjectInvitation? invitation;
   final String severity;
+
+  int get priorityOrder {
+    switch (kind) {
+      case AxAttentionKind.invitation:
+        return 1;
+      case AxAttentionKind.needsInput:
+        return 2;
+      case AxAttentionKind.failedExecution:
+        return 3;
+      case AxAttentionKind.workerProblem:
+        return 4;
+      case AxAttentionKind.workspaceProblem:
+        return 5;
+      case AxAttentionKind.completed:
+        return 6;
+      case AxAttentionKind.finding:
+        return 7;
+      case AxAttentionKind.general:
+        return 8;
+    }
+  }
 }
 
 class AxContinueWorkItem {

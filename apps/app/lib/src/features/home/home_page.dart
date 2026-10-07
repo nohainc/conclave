@@ -24,6 +24,7 @@ class HomePage extends StatelessWidget {
     this.onAcceptInvitation,
     this.onDeclineInvitation,
     this.onOpenWorkstream,
+    this.onOpenNotifications,
   });
 
   final List<AxProject> projects;
@@ -44,6 +45,7 @@ class HomePage extends StatelessWidget {
   final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
   final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
   final void Function(String projectId, String workstreamId)? onOpenWorkstream;
+  final VoidCallback? onOpenNotifications;
 
   /// New-user experience is active when user has zero projects.
   bool get isNewUser => projects.isEmpty;
@@ -74,6 +76,7 @@ class HomePage extends StatelessWidget {
           onOpenProject: onOpenProject,
           onOpenRun: onOpenRun,
           onOpenWorkstream: onOpenWorkstream,
+          onOpenNotifications: onOpenNotifications,
         );
 }
 
@@ -561,6 +564,7 @@ class EstablishedUserHome extends StatelessWidget {
     required this.onOpenProject,
     required this.onOpenRun,
     this.onOpenWorkstream,
+    this.onOpenNotifications,
   });
 
   final List<AxProject> projects;
@@ -579,6 +583,7 @@ class EstablishedUserHome extends StatelessWidget {
   final ValueChanged<String> onOpenProject;
   final void Function(String projectId, String runId) onOpenRun;
   final void Function(String projectId, String workstreamId)? onOpenWorkstream;
+  final VoidCallback? onOpenNotifications;
 
   List<AxProductUpdate> get _effectiveProductUpdates =>
       productUpdates.isNotEmpty ? productUpdates : _defaultProductUpdates;
@@ -595,10 +600,6 @@ class EstablishedUserHome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasPendingInvitations = invitations.isNotEmpty;
-    final hasAttention = hasPendingInvitations ||
-        attentionItems.isNotEmpty ||
-        openFindingCount > 0;
     final hasActiveRun = run != null;
     final hasContinueWork = continueWorkItems.isNotEmpty || projects.isNotEmpty;
 
@@ -612,56 +613,19 @@ class EstablishedUserHome extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // 1. FOR YOU (Actionable Items requiring attention)
-          if (hasAttention) ...[
-            _SectionHeader(
-              title: 'For you',
-              badgeCount: invitations.length +
-                  attentionItems.length +
-                  (openFindingCount > 0 ? 1 : 0),
-            ),
-            const SizedBox(height: 12),
-            if (hasPendingInvitations)
-              _PendingInvitationsSection(
-                invitations: invitations,
-                onAccept: onAcceptInvitation,
-                onDecline: onDeclineInvitation,
-              ),
-            if (hasPendingInvitations &&
-                (attentionItems.isNotEmpty || openFindingCount > 0))
-              const SizedBox(height: 12),
-            for (final item in attentionItems) ...[
-              _AttentionCard(
-                item: item,
-                onTap: () {
-                  if (item.projectId != null) {
-                    onOpenProject(item.projectId!);
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-            if (openFindingCount > 0 && attentionItems.isEmpty) ...[
-              _AttentionCard(
-                item: AxHomeAttentionItem(
-                  id: 'findings-open',
-                  title:
-                      '$openFindingCount open finding${openFindingCount == 1 ? '' : 's'} require review',
-                  subtitle: 'Review task results and verification evidence',
-                  timestampDisplay: 'Needs attention',
-                  actionLabel: 'Review',
-                  severity: 'action',
-                  projectId: projects.isNotEmpty ? projects.first.id : null,
-                ),
-                onTap: () {
-                  if (projects.isNotEmpty) {
-                    onOpenProject(projects.first.id);
-                  }
-                },
-              ),
-            ],
-            const SizedBox(height: 24),
-          ],
+          // 1. FOR YOU (Actionable Items requiring attention: invitations, inputs, failed runs, worker/workspace problems, completed work)
+          _ForYouSection(
+            invitations: invitations,
+            attentionItems: attentionItems,
+            openFindingCount: openFindingCount,
+            projects: projects,
+            onAcceptInvitation: onAcceptInvitation,
+            onDeclineInvitation: onDeclineInvitation,
+            onOpenProject: onOpenProject,
+            onOpenWorkstream: onOpenWorkstream,
+            onOpenWorkspaces: onOpenWorkspaces,
+            onOpenNotifications: onOpenNotifications,
+          ),
 
           // Running Now (Conditional active execution)
           if (hasActiveRun) ...[
@@ -793,70 +757,394 @@ class EstablishedUserHome extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, this.badgeCount});
+  const _SectionHeader({required this.title});
 
   final String title;
-  final int? badgeCount;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Text(
+      title,
+      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+    );
+  }
+}
+
+class _ForYouSection extends StatelessWidget {
+  const _ForYouSection({
+    required this.invitations,
+    required this.attentionItems,
+    required this.openFindingCount,
+    required this.projects,
+    this.onAcceptInvitation,
+    this.onDeclineInvitation,
+    required this.onOpenProject,
+    this.onOpenWorkstream,
+    required this.onOpenWorkspaces,
+    this.onOpenNotifications,
+  });
+
+  final List<AxProjectInvitation> invitations;
+  final List<AxHomeAttentionItem> attentionItems;
+  final int openFindingCount;
+  final List<AxProject> projects;
+  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
+  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
+  final ValueChanged<String> onOpenProject;
+  final void Function(String projectId, String workstreamId)? onOpenWorkstream;
+  final VoidCallback onOpenWorkspaces;
+  final VoidCallback? onOpenNotifications;
+
+  List<AxHomeAttentionItem> _projectItems() {
+    final list = <AxHomeAttentionItem>[];
+
+    // 1. Invitations (kind: AxAttentionKind.invitation)
+    for (final inv in invitations) {
+      final inviter = inv.invitedByUserName.isNotEmpty
+          ? inv.invitedByUserName
+          : (inv.invitedByUserEmail.isNotEmpty
+              ? inv.invitedByUserEmail
+              : 'A collaborator');
+      list.add(AxHomeAttentionItem(
+        id: 'invite-${inv.id}',
+        kind: AxAttentionKind.invitation,
+        categoryLabel: 'Project invitation',
+        title: '$inviter invited you to ${inv.projectName}',
+        subtitle:
+            '${inv.role.toUpperCase()} · ${_formatRelativeTime(inv.createdAt)}',
+        timestampDisplay: _formatRelativeTime(inv.createdAt),
+        invitation: inv,
+        projectId: inv.projectId,
+      ));
+    }
+
+    // 2. Attention items (prioritized by category)
+    for (final item in attentionItems) {
+      list.add(item);
+    }
+
+    // 3. Open findings (if any, and not already in attention items)
+    if (openFindingCount > 0 &&
+        !list.any((it) => it.kind == AxAttentionKind.finding)) {
+      list.add(AxHomeAttentionItem(
+        id: 'findings-open',
+        kind: AxAttentionKind.finding,
+        categoryLabel: 'Needs your input',
+        title:
+            '$openFindingCount open finding${openFindingCount == 1 ? '' : 's'} require review',
+        subtitle: 'Review task results and verification evidence',
+        timestampDisplay: 'Needs attention',
+        actionLabel: 'Review →',
+        projectId: projects.isNotEmpty ? projects.first.id : null,
+      ));
+    }
+
+    // Sort by priority order:
+    // 1. Invitation requiring decision
+    // 2. Approval/input required
+    // 3. Failed execution
+    // 4. Worker/account problem
+    // 5. Workspace problem
+    // 6. Completed work worth reviewing
+    // 7. Findings / general
+    list.sort((a, b) => a.priorityOrder.compareTo(b.priorityOrder));
+
+    // Limit to 3-5 highest-priority items on Home
+    return list.take(5).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final items = _projectItems();
+
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    final totalCount = invitations.length +
+        attentionItems.length +
+        (openFindingCount > 0 ? 1 : 0);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-        ),
-        if (badgeCount != null && badgeCount! > 0) ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'For you',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                if (totalCount > 0) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '$totalCount',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
-            child: Text(
-              '$badgeCount',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.primary,
+            if (onOpenNotifications != null)
+              TextButton(
+                onPressed: onOpenNotifications,
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: const Text('View all'),
               ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            side: BorderSide(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.5),
             ),
+            borderRadius: BorderRadius.circular(12),
           ),
-        ],
+          child: Column(
+            children: [
+              for (var i = 0; i < items.length; i++) ...[
+                _ForYouItemTile(
+                  item: items[i],
+                  onAcceptInvitation: onAcceptInvitation,
+                  onDeclineInvitation: onDeclineInvitation,
+                  onOpenProject: onOpenProject,
+                  onOpenWorkstream: onOpenWorkstream,
+                  onOpenWorkspaces: onOpenWorkspaces,
+                ),
+                if (i < items.length - 1)
+                  Divider(
+                    height: 1,
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                  ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
       ],
     );
   }
 }
 
-class _AttentionCard extends StatelessWidget {
-  const _AttentionCard({required this.item, required this.onTap});
+class _ForYouItemTile extends StatelessWidget {
+  const _ForYouItemTile({
+    required this.item,
+    this.onAcceptInvitation,
+    this.onDeclineInvitation,
+    required this.onOpenProject,
+    this.onOpenWorkstream,
+    required this.onOpenWorkspaces,
+  });
 
   final AxHomeAttentionItem item;
-  final VoidCallback onTap;
+  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
+  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
+  final ValueChanged<String> onOpenProject;
+  final void Function(String projectId, String workstreamId)? onOpenWorkstream;
+  final VoidCallback onOpenWorkspaces;
+
+  void _handleAction() {
+    if (item.kind == AxAttentionKind.workspaceProblem) {
+      onOpenWorkspaces();
+    } else if (item.projectId != null && item.workstreamId != null) {
+      if (onOpenWorkstream != null) {
+        onOpenWorkstream!(item.projectId!, item.workstreamId!);
+      } else {
+        onOpenProject(item.projectId!);
+      }
+    } else if (item.projectId != null) {
+      onOpenProject(item.projectId!);
+    }
+  }
+
+  String _deriveCategory() {
+    if (item.categoryLabel != null && item.categoryLabel!.isNotEmpty) {
+      return item.categoryLabel!;
+    }
+    switch (item.kind) {
+      case AxAttentionKind.invitation:
+        return 'Project invitation';
+      case AxAttentionKind.needsInput:
+        return 'Needs your input';
+      case AxAttentionKind.failedExecution:
+        return 'Failed execution';
+      case AxAttentionKind.workerProblem:
+        return 'Worker needs attention';
+      case AxAttentionKind.workspaceProblem:
+        return 'Workspace offline';
+      case AxAttentionKind.completed:
+        return 'Completed';
+      case AxAttentionKind.finding:
+        return 'Review required';
+      case AxAttentionKind.general:
+        return 'Needs your input';
+    }
+  }
+
+  Color _deriveCategoryColor(ColorScheme colorScheme, bool isDark) {
+    switch (item.kind) {
+      case AxAttentionKind.invitation:
+        return ConclaveColors.primaryForeground(isDark);
+      case AxAttentionKind.needsInput:
+        return isDark ? Colors.orangeAccent : Colors.orange.shade800;
+      case AxAttentionKind.failedExecution:
+        return colorScheme.error;
+      case AxAttentionKind.workerProblem:
+      case AxAttentionKind.workspaceProblem:
+        return isDark ? Colors.amberAccent : Colors.amber.shade900;
+      case AxAttentionKind.completed:
+        return isDark ? Colors.greenAccent : Colors.green.shade700;
+      case AxAttentionKind.finding:
+      case AxAttentionKind.general:
+        return isDark ? Colors.orangeAccent : Colors.orange.shade800;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        onTap: onTap,
-        leading: Icon(
-          Icons.notifications_active_outlined,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        title: Text(
-          item.title,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-        ),
-        subtitle: Text('${item.subtitle} · ${item.timestampDisplay}'),
-        trailing: item.actionLabel != null
-            ? FilledButton.tonal(
-                onPressed: onTap,
-                child: Text(item.actionLabel!),
-              )
-            : const Icon(Icons.chevron_right_rounded),
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final category = _deriveCategory();
+    final categoryColor = _deriveCategoryColor(colorScheme, isDark);
+    final isInvitation =
+        item.kind == AxAttentionKind.invitation && item.invitation != null;
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: categoryColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  category,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: categoryColor,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              if (item.timestampDisplay.isNotEmpty)
+                Text(
+                  item.timestampDisplay,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            item.title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (item.subtitle.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              item.subtitle,
+              style: TextStyle(
+                fontSize: 13,
+                color: colorScheme.onSurfaceVariant,
+                height: 1.3,
+              ),
+            ),
+          ],
+          if (isInvitation) ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton(
+                  onPressed: onDeclineInvitation != null
+                      ? () => onDeclineInvitation!(item.invitation!)
+                      : null,
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  ),
+                  child: const Text('Decline'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: onAcceptInvitation != null
+                      ? () => onAcceptInvitation!(item.invitation!)
+                      : null,
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  ),
+                  child: const Text('Accept'),
+                ),
+              ],
+            ),
+          ] else if (item.actionLabel != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                FilledButton.tonal(
+                  onPressed: _handleAction,
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  ),
+                  child: Text(item.actionLabel!),
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
+  }
+}
+
+String _formatRelativeTime(String? raw) {
+  if (raw == null || raw.isEmpty) return 'Recently';
+  try {
+    final dt = DateTime.parse(raw);
+    final diff = DateTime.now().difference(dt);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} minutes ago';
+    if (diff.inHours < 24) return '${diff.inHours} hours ago';
+    if (diff.inDays < 7) return '${diff.inDays} days ago';
+    return '${dt.month}/${dt.day}/${dt.year}';
+  } catch (_) {
+    return raw;
   }
 }
 
@@ -1039,61 +1327,6 @@ class _AiUpdateCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color,
         shape: BoxShape.circle,
-      ),
-    );
-  }
-}
-
-class _PendingInvitationsSection extends StatelessWidget {
-  const _PendingInvitationsSection({
-    required this.invitations,
-    this.onAccept,
-    this.onDecline,
-  });
-
-  final List<AxProjectInvitation> invitations;
-  final ValueChanged<AxProjectInvitation>? onAccept;
-  final ValueChanged<AxProjectInvitation>? onDecline;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Card(
-      color: ConclaveColors.primarySoftColor(isDark),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.mail_outline,
-                  size: 20,
-                  color: ConclaveColors.primaryForeground(isDark),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Pending invitations (${invitations.length})',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                    color: ConclaveColors.primaryForeground(isDark),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            for (final invite in invitations) ...[
-              _InvitationItem(
-                invitation: invite,
-                onAccept: onAccept != null ? () => onAccept!(invite) : null,
-                onDecline: onDecline != null ? () => onDecline!(invite) : null,
-              ),
-              if (invite != invitations.last) const SizedBox(height: 8),
-            ],
-          ],
-        ),
       ),
     );
   }

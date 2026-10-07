@@ -235,15 +235,21 @@ void main() {
         openedProject = pId;
         openedWorkstream = wsId;
       },
+      onOpenNotifications: () {},
     )));
 
-    // 1. FOR YOU (both attention items and invitations)
+    // 1. FOR YOU (unified prioritized card projection)
     expect(find.text('For you'), findsOneWidget);
+    expect(find.text('View all'), findsOneWidget);
+    expect(find.text('Project invitation'), findsOneWidget);
+    expect(find.text('Julia invited you to Family Travel'), findsOneWidget);
+    expect(find.text('Decline'), findsOneWidget);
+    expect(find.text('Accept'), findsOneWidget);
+
+    expect(find.text('Needs your input'), findsOneWidget);
     expect(find.text('Authentication workstream needs your input'),
         findsOneWidget);
     expect(find.text('Open'), findsOneWidget);
-    expect(find.text('Pending invitations (1)'), findsOneWidget);
-    expect(find.text('Family Travel'), findsOneWidget);
 
     // 2. CONTINUE WORKING
     expect(find.text('Continue working'), findsOneWidget);
@@ -278,5 +284,131 @@ void main() {
 
     await tester.tap(find.text('Accept'));
     expect(acceptedInvite?.id, 'inv-1');
+  });
+
+  testWidgets(
+      'For you section correctly prioritizes items and respects 5-item limit',
+      (tester) async {
+    var notificationsOpened = false;
+    var openedProject = '';
+    var openedWorkstream = '';
+
+    final manyAttentionItems = [
+      const AxHomeAttentionItem(
+        id: 'completed-1',
+        kind: AxAttentionKind.completed,
+        categoryLabel: 'Completed',
+        title: 'Gemini finished reviewing Landing Page',
+        subtitle: 'Website Redesign',
+        timestampDisplay: '1 hour ago',
+        actionLabel: 'Review →',
+        projectId: 'proj-1',
+        workstreamId: 'ws-landing',
+      ),
+      const AxHomeAttentionItem(
+        id: 'failed-1',
+        kind: AxAttentionKind.failedExecution,
+        categoryLabel: 'Failed execution',
+        title: 'Build task failed on CI Worker',
+        subtitle: 'Project One',
+        timestampDisplay: '15 min ago',
+        actionLabel: 'Inspect →',
+        projectId: 'proj-1',
+      ),
+      const AxHomeAttentionItem(
+        id: 'worker-prob-1',
+        kind: AxAttentionKind.workerProblem,
+        categoryLabel: 'Worker needs attention',
+        title: 'ChatGPT Worker authentication expired',
+        subtitle: 'Workspace: MacBook',
+        timestampDisplay: '30 min ago',
+        actionLabel: 'Fix →',
+      ),
+      const AxHomeAttentionItem(
+        id: 'input-1',
+        kind: AxAttentionKind.needsInput,
+        categoryLabel: 'Needs your input',
+        title: 'Authentication workstream needs your input',
+        subtitle: 'Conclave',
+        timestampDisplay: '24 min ago',
+        actionLabel: 'Open',
+        projectId: 'proj-1',
+        workstreamId: 'ws-auth',
+      ),
+      const AxHomeAttentionItem(
+        id: 'workspace-prob-1',
+        kind: AxAttentionKind.workspaceProblem,
+        categoryLabel: 'Workspace offline',
+        title: "Workspace Mac-Mini went offline",
+        subtitle: 'Re-connect to enable workers',
+        timestampDisplay: '45 min ago',
+        actionLabel: 'Connect →',
+      ),
+      const AxHomeAttentionItem(
+        id: 'general-extra',
+        kind: AxAttentionKind.general,
+        categoryLabel: 'Info',
+        title: 'Lower priority extra notification',
+        subtitle: 'Should be cut off past top 5',
+        timestampDisplay: '2 hours ago',
+      ),
+    ];
+
+    await tester.pumpWidget(scaffold(HomePage(
+      projects: const [project],
+      workspaces: const [],
+      workers: const [],
+      invitations: const [testInvite1], // Priority 1: invitation
+      attentionItems: manyAttentionItems,
+      run: null,
+      openFindingCount: 0,
+      onOpenWorkspaces: () {},
+      onOpenProject: (id) => openedProject = id,
+      onOpenRun: (_, __) {},
+      onCreateProject: () {},
+      onOpenWorkstream: (pId, wsId) {
+        openedProject = pId;
+        openedWorkstream = wsId;
+      },
+      onOpenNotifications: () => notificationsOpened = true,
+    )));
+
+    expect(find.text('For you'), findsOneWidget);
+    expect(find.text('View all'), findsOneWidget);
+
+    // Priority 1: Invitation (present)
+    expect(find.text('Project invitation'), findsOneWidget);
+    expect(find.text('Julia invited you to Family Travel'), findsOneWidget);
+
+    // Priority 2: Needs your input (present)
+    expect(find.text('Needs your input'), findsOneWidget);
+    expect(find.text('Authentication workstream needs your input'),
+        findsOneWidget);
+
+    // Priority 3: Failed execution (present)
+    expect(find.text('Failed execution'), findsOneWidget);
+    expect(find.text('Build task failed on CI Worker'), findsOneWidget);
+
+    // Priority 4: Worker needs attention (present)
+    expect(find.text('Worker needs attention'), findsOneWidget);
+    expect(find.text('ChatGPT Worker authentication expired'), findsOneWidget);
+
+    // Priority 5: Workspace offline (present - total 5 items reached)
+    expect(find.text('Workspace offline'), findsOneWidget);
+    expect(find.text("Workspace Mac-Mini went offline"), findsOneWidget);
+
+    // Priority 6 & lower items past limit of 5:
+    // 'Gemini finished reviewing Landing Page' (Priority 6) and 'Lower priority extra notification' (Priority 7) should be cut off
+    expect(find.text('Gemini finished reviewing Landing Page'), findsNothing);
+    expect(find.text('Lower priority extra notification'), findsNothing);
+
+    // Test View all trigger
+    await tester.tap(find.text('View all'));
+    expect(notificationsOpened, isTrue);
+
+    // Test action navigation on attention item
+    await tester.tap(find.text('Open'));
+    expect(openedProject, 'proj-1');
+    expect(openedWorkstream, 'ws-auth');
   });
 }

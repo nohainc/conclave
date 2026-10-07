@@ -255,6 +255,6 @@ void main() {
 
     // Bell icon badge and sidebar show Pending invitations (1)
     expect(find.text('Pending invitations (1)'), findsWidgets);
-    expect(find.text('Live Shared Project'), findsWidgets);
+    expect(find.textContaining('Live Shared Project'), findsWidgets);
   });
 }

@@ -32,15 +32,22 @@ HOME
 ## The Four Core Responsibilities
 
 ### 1. For You
-- **Purpose:** Triage actionable items that block progress, require decisions, or demand attention.
-- **Max Items:** 3–5 highest-priority items on Home (full history remains in the dedicated Notification Center).
-- **Semantics Included:**
-  - Project invitations (with direct `Accept` / `Decline` actions)
-  - Workstream input/decision requests (e.g., questions posed to the user)
-  - Completed worker reviews or task outcomes ready for human inspection
-  - Worker/credential attention warnings (e.g., sign-in required, missing API keys)
-  - Workspace connectivity interruptions
-- **Absence Behavior:** If nothing requires attention, the section omits empty filler text (`"Nothing needs your attention"`) to preserve a clean, focused surface.
+- **Purpose:** Triage actionable items that block progress, require decisions, or demand attention across all projects.
+- **Max Items:** 3–5 highest-priority items projected on Home (full triage and history remain in the dedicated Notification Center via the `View all` link).
+- **Priority Hierarchy (Top to Bottom):**
+  1. **Project invitation requiring decision** (`AxAttentionKind.invitation`) — with direct `Decline` / `Accept` actions.
+  2. **Approval / input required** (`AxAttentionKind.needsInput`) — e.g. question/decision needed in a workstream, findings requiring review.
+  3. **Failed execution** (`AxAttentionKind.failedExecution`) — run or task failures requiring triage or rerun.
+  4. **Worker / account problems** (`AxAttentionKind.workerProblem`) — e.g. expired credentials, authentication errors.
+  5. **Workspace connectivity problems** (`AxAttentionKind.workspaceProblem`) — e.g. local workspace offline.
+  6. **Completed work worth reviewing** (`AxAttentionKind.completed`) — e.g. AI worker finished review or artifact.
+  7. **General info / other** (`AxAttentionKind.finding`, `AxAttentionKind.general`).
+- **Card Structure:**
+  - Semantic category chip (e.g. `Project invitation`, `Needs your input`, `Failed execution`, `Worker needs attention`, `Workspace offline`, `Completed`).
+  - Relative timestamp (e.g. `8 minutes ago`, `24 min ago`).
+  - Item Title and contextual Subtitle (e.g. `Julia invited you to "Family Travel"`, `Owner · 8 minutes ago`).
+  - Contextual action buttons (`Decline` / `Accept`, `Review →`, `Open →`, `Inspect →`, `Fix →`, `Connect →`).
+- **Absence Behavior:** If nothing requires attention, the section renders nothing (omits empty filler text like `"Nothing needs your attention"`) to preserve a clean, focused surface.
 
 ### 2. Continue Working
 - **Purpose:** Fast resumption of ongoing collaborative work in context.

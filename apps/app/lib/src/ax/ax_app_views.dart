@@ -43,6 +43,7 @@ extension _AxAppViews on _AxAppStateMixin {
                     _navigateTo(AxNavigation.run(projectId, runId)),
                 onCreateProject: _createProject,
                 onOpenArchivedProjects: _showArchivedProjects,
+                onOpenNotifications: _showNotifications,
               )));
   Future<void> _showArchivedProjects() async {
     try {
