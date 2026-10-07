@@ -3,16 +3,16 @@ import 'package:flutter/material.dart';
 
 /// Profile Lab styling and visual identity.
 abstract final class ProfileLabTheme {
-  static const interactionText = Color(0xFFA5B4FC);
-  static const secondaryText = Color(0xFFCBD5E1);
-  static const borderColor = Color(0xFF475569);
-  static const primaryAccent = Color(0xFF6366F1); // Indigo
-  static const darkBackground = Color(0xFF0F172A); // Slate 900
-  static const darkSurface = Color(0xFF1E293B); // Slate 800
-  static const darkCard = Color(0xFF334155); // Slate 700
-  static const passColor = Color(0xFF10B981); // Emerald
-  static const warnColor = Color(0xFFF59E0B); // Amber
-  static const failColor = Color(0xFFF87171); // Rose/Red
+  static const interactionText = ConclaveColors.primaryForegroundDark;
+  static const secondaryText = ConclaveColors.textSecondaryDark;
+  static const borderColor = ConclaveColors.borderDark;
+  static const primaryAccent = ConclaveColors.primary;
+  static const darkBackground = ConclaveColors.canvasDark;
+  static const darkSurface = ConclaveColors.surfaceDark;
+  static const darkCard = ConclaveColors.surfaceHoverDark;
+  static const passColor = ConclaveColors.success;
+  static const warnColor = ConclaveColors.warning;
+  static const failColor = ConclaveColors.error;
 
   static ThemeData get darkTheme {
     return ThemeData(
@@ -45,7 +45,7 @@ abstract final class ProfileLabTheme {
       textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(
               minimumSize: const Size(48, 40),
-              foregroundColor: const Color(0xFFA5B4FC))),
+              foregroundColor: interactionText)),
       iconButtonTheme: IconButtonThemeData(
           style: IconButton.styleFrom(minimumSize: const Size(40, 40))),
       dataTableTheme: const DataTableThemeData(

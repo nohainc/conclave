@@ -207,7 +207,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                       child: Text(
                         'Experimental local heuristic. No AI model is called; suggestions need human review and real tests, and never count as acceptance evidence.',
                         style:
-                            TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
+                            TextStyle(fontSize: 11, color: Colors.white),
                       ),
                     ),
                   ],
@@ -218,9 +218,9 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
+                  color: ProfileLabTheme.darkBackground,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFF334155)),
+                  border: Border.all(color: ProfileLabTheme.borderColor),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -237,7 +237,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                     const SizedBox(height: 6),
                     const Text(
                       'Candidate → Validate & Test Ladder → Normalize Failures → AI Revision → Domain Diff → Retest',
-                      style: TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
+                      style: TextStyle(fontSize: 11, color: Colors.white),
                     ),
                     const SizedBox(height: 10),
                     Row(
@@ -304,7 +304,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                         ? ProfileLabTheme.passColor
                         : _isRunning
                             ? ProfileLabTheme.primaryAccent
-                            : const Color(0xFF334155),
+                            : ProfileLabTheme.borderColor,
                   ),
                 ),
                 child: Row(
@@ -320,7 +320,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                           ? ProfileLabTheme.passColor
                           : _isRunning
                               ? ProfileLabTheme.primaryAccent
-                              : const Color(0xFF94A3B8),
+                              : ProfileLabTheme.secondaryText,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -346,7 +346,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                     style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF94A3B8))),
+                        color: ProfileLabTheme.secondaryText)),
                 const SizedBox(height: 6),
                 Column(
                   children:
@@ -361,7 +361,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                     style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF94A3B8))),
+                        color: ProfileLabTheme.secondaryText)),
                 const SizedBox(height: 6),
                 _buildDiffPreview(record.diffGroups),
                 const SizedBox(height: 12),
@@ -371,9 +371,9 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
+                  color: ProfileLabTheme.darkSurface,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFF334155)),
+                  border: Border.all(color: ProfileLabTheme.borderColor),
                 ),
                 child: const Row(
                   children: [
@@ -385,7 +385,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                         'Human Authority Safeguard: AI operates strictly inside the local repair loop sandbox. AI cannot publish, sign, or promote releases. Material draft changes require human confirmation.',
                         style: TextStyle(
                             fontSize: 11,
-                            color: Color(0xFF94A3B8),
+                            color: ProfileLabTheme.secondaryText,
                             height: 1.3),
                       ),
                     ),
@@ -443,7 +443,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
         border: Border.all(
           color: isLatest
               ? ProfileLabTheme.primaryAccent
-              : const Color(0xFF334155),
+              : ProfileLabTheme.borderColor,
         ),
       ),
       child: Column(
@@ -488,7 +488,8 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
           if (h.normalizedFailures.isNotEmpty) ...[
             const SizedBox(height: 6),
             const Text('Normalized Failures:',
-                style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+                style: TextStyle(
+                    fontSize: 11, color: ProfileLabTheme.secondaryText)),
             const SizedBox(height: 4),
             Wrap(
               spacing: 6,
@@ -498,7 +499,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF450A0A),
+                    color: ProfileLabTheme.failColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(
                         color:
@@ -506,8 +507,8 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                   ),
                   child: Text(
                     '${f['displayName']}: ${f['issueCode']}',
-                    style:
-                        const TextStyle(fontSize: 11, color: Color(0xFFFCA5A5)),
+                    style: const TextStyle(
+                        fontSize: 11, color: ProfileLabTheme.failColor),
                   ),
                 );
               }).toList(),
@@ -528,7 +529,8 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
           borderRadius: BorderRadius.circular(4),
         ),
         child: const Text('No structural domain changes proposed.',
-            style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+            style: TextStyle(
+                fontSize: 11, color: ProfileLabTheme.secondaryText)),
       );
     }
 
@@ -561,7 +563,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                   const Spacer(),
                   Text('${g.changeCount} change(s)',
                       style: const TextStyle(
-                          fontSize: 11, color: Color(0xFF94A3B8))),
+                          fontSize: 11, color: ProfileLabTheme.secondaryText)),
                 ],
               ),
               const SizedBox(height: 4),

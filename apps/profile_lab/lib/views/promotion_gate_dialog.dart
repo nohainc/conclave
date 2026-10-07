@@ -286,7 +286,7 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
           Text(
             'Exact Digest: ${digest.length > 20 ? "${digest.substring(0, 20)}..." : digest}',
             style: ConclaveTypography.monoSmall
-                .copyWith(color: const Color(0xFF94A3B8)),
+                .copyWith(color: ProfileLabTheme.secondaryText),
           ),
         ],
       ),
@@ -313,7 +313,7 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
                         child: Text(
                           'Stable promotion requires current acceptance evidence already stored and validated by Cloud. Submit the complete sandbox evidence from the Evidence view.',
                           style:
-                              TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
+                              TextStyle(fontSize: 11, color: Colors.white),
                         ),
                       ),
                     ],
@@ -341,7 +341,7 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.8,
-                      color: Color(0xFF94A3B8))),
+                      color: ProfileLabTheme.secondaryText)),
               const SizedBox(height: 6),
               ...items
                   .where((i) => !i.isSecurityGate)
@@ -391,7 +391,7 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
                         child: Text(
                           'Promotion is blocked until all listed checks pass. Stable promotion additionally requires current evidence already validated and stored by Cloud.',
                           style:
-                              TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
+                              TextStyle(fontSize: 11, color: Colors.white),
                         ),
                       ),
                     ],
@@ -521,7 +521,7 @@ class _GateItemTile extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(item.description,
                     style: const TextStyle(
-                        fontSize: 11, color: Color(0xFF94A3B8))),
+                        fontSize: 11, color: ProfileLabTheme.secondaryText)),
                 if (!item.passed && item.failureDetails != null) ...[
                   const SizedBox(height: 4),
                   Text(

@@ -43,23 +43,23 @@ class ProviderVersionMatrixCard extends StatelessWidget {
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.8,
-                      color: Color(0xFF94A3B8)),
+                      color: ProfileLabTheme.secondaryText),
                 ),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                    color: ProfileLabTheme.warnColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(
-                        color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                        color: ProfileLabTheme.warnColor.withValues(alpha: 0.4)),
                   ),
                   child: const Text(
                     'SUPPORTED ≠ TESTED',
                     style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFFBBF24)),
+                        color: ProfileLabTheme.warnColor),
                   ),
                 ),
               ],
@@ -76,7 +76,7 @@ class ProviderVersionMatrixCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: ProfileLabTheme.darkSurface,
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: const Color(0xFF334155)),
+                      border: Border.all(color: ProfileLabTheme.borderColor),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -86,7 +86,7 @@ class ProviderVersionMatrixCard extends StatelessWidget {
                           style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF94A3B8)),
+                              color: ProfileLabTheme.secondaryText),
                         ),
                         const SizedBox(height: 6),
                         Container(
@@ -118,7 +118,7 @@ class ProviderVersionMatrixCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: ProfileLabTheme.darkSurface,
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: const Color(0xFF334155)),
+                      border: Border.all(color: ProfileLabTheme.borderColor),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -128,7 +128,7 @@ class ProviderVersionMatrixCard extends StatelessWidget {
                           style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF94A3B8)),
+                              color: ProfileLabTheme.secondaryText),
                         ),
                         const SizedBox(height: 6),
                         if (matrix.hasTestedVersions)
@@ -212,13 +212,13 @@ class ProviderVersionMatrixCard extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
+                color: ProfileLabTheme.darkSurface,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: const Color(0xFF334155)),
+                border: Border.all(color: ProfileLabTheme.borderColor),
               ),
               child: Text(
                 '${matrix.distinctionNotice} Physical test evidence guarantees runtime stability on evaluated provider versions.',
-                style: const TextStyle(fontSize: 11, color: Color(0xFFCBD5E1)),
+                style: const TextStyle(fontSize: 11, color: Colors.white),
               ),
             ),
           ],

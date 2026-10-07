@@ -154,10 +154,14 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                                           ? Icons.drag_indicator
                                           : Icons.drag_handle,
                                       size: 12,
-                                      color: const Color(0xFF94A3B8))))))),
-            ),
-        ]);
-      });
+                                      color: ProfileLabTheme.secondaryText)))),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      );
 
   @override
   Widget build(BuildContext context) {

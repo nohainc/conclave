@@ -170,7 +170,7 @@ class _ProfileReleaseDiffDialogState extends State<ProfileReleaseDiffDialog> {
                                     style: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.amber)),
+                                        color: ProfileLabTheme.warnColor)),
                               ),
                               Expanded(
                                 child: Container(
@@ -187,7 +187,7 @@ class _ProfileReleaseDiffDialogState extends State<ProfileReleaseDiffDialog> {
                           ),
                         ),
                         const VerticalDivider(
-                            width: 1, color: Color(0xFF334155)),
+                            width: 1, color: ProfileLabTheme.borderColor),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -247,7 +247,7 @@ class _DomainDiffGroupCard extends StatelessWidget {
         border: Border.all(
           color: group.hasChanges
               ? ProfileLabTheme.warnColor.withValues(alpha: 0.6)
-              : const Color(0xFF334155),
+              : ProfileLabTheme.borderColor,
         ),
       ),
       child: Column(
@@ -258,7 +258,7 @@ class _DomainDiffGroupCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: group.hasChanges
                   ? ProfileLabTheme.warnColor.withValues(alpha: 0.1)
-                  : const Color(0xFF1E293B),
+                  : ProfileLabTheme.darkSurface,
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(5)),
             ),
@@ -268,7 +268,7 @@ class _DomainDiffGroupCard extends StatelessWidget {
                     size: 16,
                     color: group.hasChanges
                         ? ProfileLabTheme.warnColor
-                        : const Color(0xFF94A3B8)),
+                        : ProfileLabTheme.secondaryText),
                 const SizedBox(width: 8),
                 Text(
                   group.domainName,
@@ -277,7 +277,7 @@ class _DomainDiffGroupCard extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     color: group.hasChanges
                         ? Colors.white
-                        : const Color(0xFF94A3B8),
+                        : ProfileLabTheme.secondaryText,
                   ),
                 ),
                 const Spacer(),
@@ -299,7 +299,8 @@ class _DomainDiffGroupCard extends StatelessWidget {
                   )
                 else
                   const Text('No changes',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                      style: TextStyle(
+                          fontSize: 11, color: ProfileLabTheme.secondaryText)),
               ],
             ),
           ),
@@ -347,7 +348,7 @@ class _DomainDiffItemRow extends StatelessWidget {
         badgeText = 'MODIFIED';
         break;
       case DiffChangeType.unchanged:
-        badgeColor = const Color(0xFF64748B);
+        badgeColor = ProfileLabTheme.secondaryText;
         badgeText = 'UNCHANGED';
         break;
     }
@@ -372,11 +373,11 @@ class _DomainDiffItemRow extends StatelessWidget {
                   style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFFE2E8F0))),
+                      color: Colors.white)),
               const SizedBox(width: 8),
               Text('(${item.fieldPath})',
                   style: ConclaveTypography.monoSmall
-                      .copyWith(color: const Color(0xFF64748B))),
+                      .copyWith(color: ProfileLabTheme.secondaryText)),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -400,7 +401,7 @@ class _DomainDiffItemRow extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: ProfileLabTheme.darkSurface,
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
                           color:
@@ -409,19 +410,19 @@ class _DomainDiffItemRow extends StatelessWidget {
                     child: Text(
                       '$titleA:\n${item.valueA ?? "<none>"}',
                       style: ConclaveTypography.monoSmall
-                          .copyWith(color: const Color(0xFFFCA5A5)),
+                          .copyWith(color: ProfileLabTheme.failColor),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 const Icon(Icons.arrow_forward,
-                    size: 14, color: Color(0xFF64748B)),
+                    size: 14, color: ProfileLabTheme.secondaryText),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: ProfileLabTheme.darkSurface,
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
                           color:
@@ -430,7 +431,7 @@ class _DomainDiffItemRow extends StatelessWidget {
                     child: Text(
                       '$titleB:\n${item.valueB ?? "<none>"}',
                       style: ConclaveTypography.monoSmall
-                          .copyWith(color: const Color(0xFF86EFAC)),
+                          .copyWith(color: ProfileLabTheme.passColor),
                     ),
                   ),
                 ),

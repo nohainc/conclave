@@ -63,7 +63,8 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                       decoration: const BoxDecoration(
                         color: ProfileLabTheme.darkSurface,
                         border: Border(
-                            bottom: BorderSide(color: Color(0xFF334155))),
+                            bottom:
+                                BorderSide(color: ProfileLabTheme.borderColor)),
                       ),
                       child: Row(
                         children: [
@@ -158,12 +159,12 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                 color: ProfileLabTheme.darkBackground,
                                 borderRadius: BorderRadius.circular(6),
                                 border:
-                                    Border.all(color: const Color(0xFF334155)),
+                                    Border.all(color: ProfileLabTheme.borderColor),
                               ),
                               child: Row(
                                 children: [
                                   const Icon(Icons.description,
-                                      size: 14, color: Color(0xFF94A3B8)),
+                                      size: 14, color: ProfileLabTheme.secondaryText),
                                   const SizedBox(width: 6),
                                   Text(
                                     c.selectedDefinitionId!,
@@ -187,7 +188,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1E293B),
+                                color: ProfileLabTheme.darkSurface,
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
                                     color: ProfileLabTheme.warnColor),
@@ -212,7 +213,8 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                   InkWell(
                                     onTap: c.cancelSignIn,
                                     child: const Icon(Icons.close,
-                                        size: 14, color: Color(0xFF94A3B8)),
+                                        size: 14,
+                                        color: ProfileLabTheme.secondaryText),
                                   ),
                                 ],
                               ),
@@ -222,10 +224,10 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1E293B),
+                                color: ProfileLabTheme.darkSurface,
                                 borderRadius: BorderRadius.circular(6),
                                 border:
-                                    Border.all(color: const Color(0xFF334155)),
+                                    Border.all(color: ProfileLabTheme.borderColor),
                               ),
                               child: Row(
                                 children: [
@@ -289,7 +291,9 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                     child: const Tooltip(
                                       message: 'Sign Out',
                                       child: Icon(Icons.logout,
-                                          size: 14, color: Color(0xFF94A3B8)),
+                                          size: 14,
+                                          color:
+                                              ProfileLabTheme.secondaryText),
                                     ),
                                   ),
                                 ],
@@ -354,22 +358,23 @@ class _ProfileLabSignInError extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
-        color: const Color(0xFF4A1F27),
+        color: ProfileLabTheme.failColor.withValues(alpha: 0.2),
         child: Row(
           children: [
-            const Icon(Icons.error_outline, size: 18, color: Color(0xFFFF8A80)),
+            const Icon(Icons.error_outline,
+                size: 18, color: ProfileLabTheme.failColor),
             const SizedBox(width: 8),
             Expanded(
               child: SelectableText(
                 message,
-                style: const TextStyle(color: Color(0xFFFFCDD2), fontSize: 12),
+                style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
             ),
             IconButton(
               tooltip: 'Copy error message',
               visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.copy, size: 18),
-              color: const Color(0xFFFFCDD2),
+              color: Colors.white,
               onPressed: () async {
                 await Clipboard.setData(ClipboardData(text: message));
                 if (!context.mounted) return;

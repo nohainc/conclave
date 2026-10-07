@@ -145,7 +145,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                       child: Text(
                         'A signed Stable Worker Profile runs through the local generic Engine. The model proposes a Draft edit only. Review the diff, apply it yourself, and run the real test ladder; model output is never evidence.',
                         style:
-                            TextStyle(fontSize: 11, color: Color(0xFFE2E8F0)),
+                            TextStyle(fontSize: 11, color: Colors.white),
                       ),
                     ),
                   ],
@@ -156,9 +156,9 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
+                  color: ProfileLabTheme.darkBackground,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFF334155)),
+                  border: Border.all(color: ProfileLabTheme.borderColor),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,7 +260,8 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                 ),
                 subtitle: const Text(
                   'Provider authentication stays in its locally installed CLI. Profile Lab does not store provider credentials.',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                  style: TextStyle(
+                      fontSize: 11, color: ProfileLabTheme.secondaryText),
                 ),
               ),
               const SizedBox(height: 6),
@@ -314,13 +315,13 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                 ),
 
               if (_proposedPayload != null) ...[
-                const Divider(color: Color(0xFF334155)),
+                const Divider(color: ProfileLabTheme.borderColor),
                 const SizedBox(height: 8),
                 const Text('PROPOSED DOMAIN DIFF PREVIEW:',
                     style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF94A3B8))),
+                        color: ProfileLabTheme.secondaryText)),
                 const SizedBox(height: 8),
 
                 if (!_proposedDiffs.any((g) => g.hasChanges))
@@ -331,8 +332,9 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Text('No structural domain changes proposed.',
-                        style:
-                            TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: ProfileLabTheme.secondaryText)),
                   )
                 else
                   Column(
@@ -343,14 +345,14 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                               (i) => i.changeType != DiffChangeType.unchanged)
                           .toList();
                       return Container(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        padding: const EdgeInsets.all(10),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: ProfileLabTheme.darkSurface,
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
                               color: ProfileLabTheme.warnColor
-                                  .withValues(alpha: 0.4)),
+                                  .withValues(alpha: 0.3)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,7 +373,8 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                                 Text(
                                   '${group.changeCount} change${group.changeCount > 1 ? "s" : ""}',
                                   style: const TextStyle(
-                                      fontSize: 11, color: Color(0xFF94A3B8)),
+                                      fontSize: 11,
+                                      color: ProfileLabTheme.secondaryText),
                                 ),
                               ],
                             ),
@@ -396,9 +399,9 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B),
+                    color: ProfileLabTheme.darkSurface,
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: const Color(0xFF334155)),
+                    border: Border.all(color: ProfileLabTheme.borderColor),
                   ),
                   child: const Row(
                     children: [
@@ -410,7 +413,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                           'Human review required: Applying only updates the local Draft editor. Publication remains a separate human action that requires successful local qualification and Cloud signer preflight. Stable promotion requires separate Cloud acceptance evidence.',
                           style: TextStyle(
                               fontSize: 11,
-                              color: Color(0xFF94A3B8),
+                              color: ProfileLabTheme.secondaryText,
                               height: 1.3),
                         ),
                       ),
@@ -472,7 +475,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
       decoration: BoxDecoration(
         color: ProfileLabTheme.darkSurface,
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: const Color(0xFF334155)),
+        border: Border.all(color: ProfileLabTheme.borderColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -480,7 +483,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
           Icon(icon, size: 12, color: ProfileLabTheme.primaryAccent),
           const SizedBox(width: 4),
           Text(label,
-              style: const TextStyle(fontSize: 11, color: Color(0xFFE2E8F0))),
+              style: const TextStyle(fontSize: 11, color: Colors.white)),
         ],
       ),
     );

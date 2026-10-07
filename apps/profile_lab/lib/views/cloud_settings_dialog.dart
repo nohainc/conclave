@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../controllers/profile_lab_controller.dart';
 import '../profile_lab_cloud_config.dart';
+import '../theme/profile_lab_theme.dart';
 
 class CloudSettingsDialog extends StatefulWidget {
   const CloudSettingsDialog({super.key, required this.controller});
@@ -92,18 +93,21 @@ class _CloudSettingsDialogState extends State<CloudSettingsDialog> {
             const SizedBox(height: 10),
             Text(
               'Build default: ${ProfileLabCloudConfig.buildDefaultOrigin}',
-              style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+              style: const TextStyle(
+                  fontSize: 12, color: ProfileLabTheme.secondaryText),
             ),
             const SizedBox(height: 8),
             const Text(
               'HTTPS is required for remote Cloud. Development builds may use HTTP on localhost or loopback. Changing the origin clears the current local sign-in.',
-              style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+              style: TextStyle(
+                  fontSize: 12, color: ProfileLabTheme.secondaryText),
             ),
             if (_error != null) ...[
               const SizedBox(height: 10),
               Text(
                 _error!,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                style: const TextStyle(
+                    color: ProfileLabTheme.failColor, fontSize: 12),
               ),
             ],
           ],

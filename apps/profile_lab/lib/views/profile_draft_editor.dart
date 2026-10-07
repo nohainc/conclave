@@ -55,7 +55,8 @@ class _ProfileDraftEditorState extends State<ProfileDraftEditor> {
           child: c.currentDraft == null
               ? const Center(
                   child: Text('Select or create a draft to begin authoring.',
-                      style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8))))
+                      style: TextStyle(
+                          fontSize: 13, color: ProfileLabTheme.secondaryText)))
               : LayoutBuilder(
                   builder: (context, layout) => Column(
                         children: [
@@ -331,7 +332,7 @@ class _StructuredSummaryPanel extends StatelessWidget {
               style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF94A3B8))),
+                  color: ProfileLabTheme.secondaryText)),
           const SizedBox(height: 8),
 
           // Identity Card
@@ -426,7 +427,7 @@ class _SummaryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: ProfileLabTheme.darkBackground,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFF334155)),
+        border: Border.all(color: ProfileLabTheme.borderColor),
       ),
       padding: const EdgeInsets.all(10),
       child: Column(
@@ -444,7 +445,7 @@ class _SummaryCard extends StatelessWidget {
                           color: Colors.white))),
             ],
           ),
-          const Divider(height: 12, color: Color(0xFF334155)),
+          const Divider(height: 12, color: ProfileLabTheme.borderColor),
           ...children,
         ],
       ),
@@ -465,13 +466,14 @@ class _SummaryRow extends StatelessWidget {
       child: Row(
         children: [
           Text(label,
-              style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+              style: const TextStyle(
+                  fontSize: 11, color: ProfileLabTheme.secondaryText)),
           Expanded(
             child: Text(
               value,
               textAlign: TextAlign.right,
               style: ConclaveTypography.monoSmall
-                  .copyWith(color: const Color(0xFFE2E8F0)),
+                  .copyWith(color: ConclaveColors.textPrimaryDark),
               overflow: TextOverflow.ellipsis,
             ),
           ),

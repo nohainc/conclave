@@ -359,7 +359,7 @@ class _PreflightRow extends StatelessWidget {
                 ? ProfileLabTheme.passColor
                 : passed == false
                     ? ProfileLabTheme.failColor
-                    : const Color(0xFF94A3B8)),
+                    : ProfileLabTheme.secondaryText),
         const SizedBox(width: 8),
         Expanded(
             child:
@@ -391,7 +391,7 @@ class _StageResult extends StatelessWidget {
                 ? ProfileLabTheme.failColor
                 : stage.status == 'passed'
                     ? ProfileLabTheme.passColor
-                    : const Color(0xFF94A3B8)),
+                    : ProfileLabTheme.secondaryText),
         const SizedBox(width: 8),
         Expanded(
             child:

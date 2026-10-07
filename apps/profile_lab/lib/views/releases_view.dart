@@ -78,7 +78,7 @@ class _ReleasesViewState extends State<ReleasesView> {
                         'Rollback shifts the target channel pointer (e.g. STABLE from v19 to v18) back to a prior published release. Target release v18 remains published and valid. Later releases (v19) remain in release history and are NOT revoked.',
                         style: TextStyle(
                             fontSize: 11,
-                            color: Color(0xFFE2E8F0),
+                            color: Colors.white,
                             height: 1.4),
                       ),
                     ],
@@ -241,7 +241,7 @@ class _ReleasesViewState extends State<ReleasesView> {
                           'Revoking a release permanently bans it across all channels, gateways, and worker engines. It can NEVER be selected or executed again by any workspace. Do not use revocation to shift a channel pointer; use Channel Rollback instead.',
                           style: TextStyle(
                               fontSize: 11,
-                              color: Color(0xFFE2E8F0),
+                              color: Colors.white,
                               height: 1.4),
                         ),
                       ],
@@ -263,7 +263,7 @@ class _ReleasesViewState extends State<ReleasesView> {
                     style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF94A3B8)),
+                        color: ProfileLabTheme.secondaryText),
                   ),
                   const SizedBox(height: 6),
                   TextField(
@@ -615,7 +615,8 @@ class _PropertyRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+              style: const TextStyle(
+                  fontSize: 11, color: ProfileLabTheme.secondaryText)),
           Flexible(
             child: Text(
               value,

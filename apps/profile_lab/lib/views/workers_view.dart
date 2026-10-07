@@ -77,7 +77,8 @@ class _WorkersViewState extends State<WorkersView> {
                 children: [
                   const Text(
                     'Registers a new logical Worker identity and initial Profile Definition atomically in Cloud.',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                    style: TextStyle(
+                        fontSize: 12, color: ProfileLabTheme.secondaryText),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -155,7 +156,8 @@ class _WorkersViewState extends State<WorkersView> {
                           children: [
                             const Text('Release Stage:',
                                 style: TextStyle(
-                                    fontSize: 11, color: Color(0xFF94A3B8))),
+                                    fontSize: 11,
+                                    color: ProfileLabTheme.secondaryText)),
                             DropdownButton<String>(
                               value: releaseStage,
                               isExpanded: true,
@@ -295,7 +297,8 @@ class _WorkersViewState extends State<WorkersView> {
                   height: constraints.maxWidth < 1000 ? 240 : null,
                   decoration: const BoxDecoration(
                     color: ProfileLabTheme.darkSurface,
-                    border: Border(right: BorderSide(color: Color(0xFF334155))),
+                    border: Border(
+                        right: BorderSide(color: ProfileLabTheme.borderColor)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -312,9 +315,11 @@ class _WorkersViewState extends State<WorkersView> {
                                 decoration: InputDecoration(
                                   hintText: 'Filter workers...',
                                   hintStyle: const TextStyle(
-                                      fontSize: 12, color: Color(0xFF64748B)),
+                                      fontSize: 12,
+                                      color: ProfileLabTheme.secondaryText),
                                   prefixIcon: const Icon(Icons.search,
-                                      size: 16, color: Color(0xFF94A3B8)),
+                                      size: 16,
+                                      color: ProfileLabTheme.secondaryText),
                                   isDense: true,
                                   contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 10, vertical: 8),
@@ -323,12 +328,12 @@ class _WorkersViewState extends State<WorkersView> {
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(6),
                                     borderSide: const BorderSide(
-                                        color: Color(0xFF334155)),
+                                        color: ProfileLabTheme.borderColor),
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(6),
                                     borderSide: const BorderSide(
-                                        color: Color(0xFF334155)),
+                                        color: ProfileLabTheme.borderColor),
                                   ),
                                 ),
                               ),
@@ -366,9 +371,10 @@ class _WorkersViewState extends State<WorkersView> {
                               horizontal: 12, vertical: 4),
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1E293B),
+                            color: ProfileLabTheme.darkSurface,
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: const Color(0xFF334155)),
+                            border:
+                                Border.all(color: ProfileLabTheme.borderColor),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -384,7 +390,8 @@ class _WorkersViewState extends State<WorkersView> {
                               const Text(
                                 'Sign in with Profile Lab credentials to query the dynamic Cloud catalog.',
                                 style: TextStyle(
-                                    fontSize: 11, color: Color(0xFF94A3B8)),
+                                    fontSize: 11,
+                                    color: ProfileLabTheme.secondaryText),
                               ),
                               const SizedBox(height: 8),
                               ElevatedButton.icon(
@@ -435,7 +442,8 @@ class _WorkersViewState extends State<WorkersView> {
                                                       : 'No matching workers.')
                                                   : 'Catalog has not been loaded.'),
                                   style: const TextStyle(
-                                      fontSize: 12, color: Color(0xFF94A3B8)),
+                                      fontSize: 12,
+                                      color: ProfileLabTheme.secondaryText),
                                 ),
                               )
                             : ListView.builder(
@@ -645,7 +653,7 @@ class _WorkerDetailsPane extends StatelessWidget {
             style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF94A3B8)),
+                color: ProfileLabTheme.secondaryText),
           ),
           const SizedBox(height: 8),
           Row(
@@ -689,45 +697,45 @@ class _WorkerDetailsPane extends StatelessWidget {
                   label: 'Worker Type ID',
                   value: workerState.workerTypeId,
                   isMonospace: true),
-              const Divider(color: Color(0xFF334155)),
+              const Divider(color: ProfileLabTheme.borderColor),
               _PropertyRow(
                   label: 'Profile Definition ID',
                   value: workerState.profileDefinitionId ?? 'Not configured',
                   isMonospace: true),
-              const Divider(color: Color(0xFF334155)),
+              const Divider(color: ProfileLabTheme.borderColor),
               _PropertyRow(
                   label: 'Provider CLI Name',
                   value: workerState.providerToolName.isNotEmpty
                       ? workerState.providerToolName
                       : 'Unknown'),
-              const Divider(color: Color(0xFF334155)),
+              const Divider(color: ProfileLabTheme.borderColor),
               _PropertyRow(
                   label: 'Provider Detection',
                   value: workerState.isProviderDetected
                       ? 'Detected (${workerState.providerDetectedPath})'
                       : 'Not detected on PATH'),
-              const Divider(color: Color(0xFF334155)),
+              const Divider(color: ProfileLabTheme.borderColor),
               _PropertyRow(
                   label: 'Catalog Release Stage',
                   value: 'Catalog stage: ${workerState.catalogReleaseStage}'),
-              const Divider(color: Color(0xFF334155)),
+              const Divider(color: ProfileLabTheme.borderColor),
               _PropertyRow(
                   label: 'Worker Lifecycle State',
                   value: workerState.lifecycleState.toUpperCase()),
-              const Divider(color: Color(0xFF334155)),
+              const Divider(color: ProfileLabTheme.borderColor),
               _PropertyRow(
                   label: 'Visibility State',
                   value: workerState.visibilityState.toUpperCase()),
-              const Divider(color: Color(0xFF334155)),
+              const Divider(color: ProfileLabTheme.borderColor),
               _PropertyRow(
                   label: 'Engine Family', value: 'cli (generic worker engine)'),
-              const Divider(color: Color(0xFF334155)),
+              const Divider(color: ProfileLabTheme.borderColor),
               _PropertyRow(label: 'Schema Version', value: 'v1'),
-              const Divider(color: Color(0xFF334155)),
+              const Divider(color: ProfileLabTheme.borderColor),
               _PropertyRow(
                   label: 'Sort Order', value: workerState.sortOrder.toString()),
               if (workerState.capabilities.isNotEmpty) ...[
-                const Divider(color: Color(0xFF334155)),
+                const Divider(color: ProfileLabTheme.borderColor),
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
@@ -736,7 +744,8 @@ class _WorkerDetailsPane extends StatelessWidget {
                     children: [
                       const Text('Capabilities',
                           style: TextStyle(
-                              fontSize: 12, color: Color(0xFF94A3B8))),
+                              fontSize: 12,
+                              color: ProfileLabTheme.secondaryText)),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Wrap(
@@ -749,13 +758,13 @@ class _WorkerDetailsPane extends StatelessWidget {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF334155),
+                                    color: ProfileLabTheme.darkCard,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
                                     cap,
                                     style: ConclaveTypography.monoSmall
-                                        .copyWith(color: const Color(0xFFE2E8F0)),
+                                        .copyWith(color: Colors.white),
                                   ),
                                 ),
                               )
@@ -793,7 +802,7 @@ class _WorkerDetailsPane extends StatelessWidget {
                 label: const Text('Inspect Releases'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
-                  side: const BorderSide(color: Color(0xFF475569)),
+                  side: const BorderSide(color: ProfileLabTheme.borderColor),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
@@ -806,7 +815,7 @@ class _WorkerDetailsPane extends StatelessWidget {
                 label: const Text('View Activity Log'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
-                  side: const BorderSide(color: Color(0xFF475569)),
+                  side: const BorderSide(color: ProfileLabTheme.borderColor),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
@@ -841,7 +850,8 @@ class _PropertyRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+              style: const TextStyle(
+                  fontSize: 12, color: ProfileLabTheme.secondaryText)),
           Text(
             value,
             style: TextStyle(
