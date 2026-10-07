@@ -44,6 +44,7 @@ class AxShellContext {
     List<AxWorkspace> workspaces = const [],
     int unreadNotificationCount = 0,
     this.unreadNotifications,
+    this.invitationsListenable,
     this.isDarkTheme = true,
     this.themeMode = ThemeMode.system,
     bool realtimeStale = false,
@@ -72,6 +73,9 @@ class AxShellContext {
   List<AxWorkspace> get workspaces => workspaceListenable?.value ?? _workspaces;
   final int _unreadNotificationCount;
   final ValueListenable<int>? unreadNotifications;
+  final ValueListenable<List<AxProjectInvitation>>? invitationsListenable;
+  List<AxProjectInvitation> get invitations =>
+      invitationsListenable?.value ?? const [];
   int get unreadNotificationCount =>
       unreadNotifications?.value ?? _unreadNotificationCount;
   Widget watchNotifications(Widget Function() build) {
@@ -79,6 +83,14 @@ class AxShellContext {
     return listenable == null
         ? build()
         : ValueListenableBuilder<int>(
+            valueListenable: listenable, builder: (context, _, __) => build());
+  }
+
+  Widget watchInvitations(Widget Function() build) {
+    final listenable = invitationsListenable;
+    return listenable == null
+        ? build()
+        : ValueListenableBuilder<List<AxProjectInvitation>>(
             valueListenable: listenable, builder: (context, _, __) => build());
   }
 

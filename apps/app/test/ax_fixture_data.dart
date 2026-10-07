@@ -16,6 +16,7 @@ class AxFixtureDataSource implements AxDataSource {
     required String prompt,
     List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
+    AxTurnExecutionSelection? executionSelection,
   }) async =>
       throw UnimplementedError('Work Request fixture is not configured');
 
@@ -24,9 +25,24 @@ class AxFixtureDataSource implements AxDataSource {
     required String workstreamId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
+    AxTurnExecutionSelection? executionSelection,
   }) async =>
       const [];
 
+  @override
+  Future<AxConversationHistoryPage> loadConversationHistory(
+          {required String workstreamId,
+          required String conversationId,
+          int afterSequence = 0,
+          int? throughSequence,
+          int limit = 50}) async =>
+      AxConversationHistoryPage.fromJson({
+        'conversationId': conversationId,
+        'historyRevision': 0,
+        'throughSequence': 0,
+        'entries': [],
+        'nextCursor': null
+      });
   @override
   Future<AxWorkRequestStatus> loadWorkRequest({
     required String workRequestId,
@@ -476,6 +492,20 @@ class AxFixtureDataSource implements AxDataSource {
 
   @override
   Future<void> revokeWorkspace({required String workspaceId}) async {}
+
+  @override
+  Future<List<AxProjectInvitation>> loadCurrentUserInvitations() async =>
+      const [];
+
+  @override
+  Future<void> acceptProjectInvitation({
+    required String invitationId,
+  }) async {}
+
+  @override
+  Future<void> declineProjectInvitation({
+    required String invitationId,
+  }) async {}
 }
 
 /// Stateful fixture used by the empty-workspace onboarding test. It mirrors

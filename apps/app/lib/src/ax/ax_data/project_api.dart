@@ -252,4 +252,26 @@ mixin _ProjectApi on _AxApiClientCore {
               '$baseUrl/projects/$projectId/invitations/$invitationId/expire'),
           {},
           method: 'POST');
+
+  @override
+  Future<List<AxProjectInvitation>> loadCurrentUserInvitations() async {
+    final body = await _projectJson(Uri.parse('$baseUrl/me/invitations'));
+    return (body['invitations'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) =>
+            AxProjectInvitation.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  @override
+  Future<void> acceptProjectInvitation({required String invitationId}) =>
+      _projectMutation(
+          Uri.parse('$baseUrl/invitations/$invitationId/accept'), {},
+          method: 'POST');
+
+  @override
+  Future<void> declineProjectInvitation({required String invitationId}) =>
+      _projectMutation(
+          Uri.parse('$baseUrl/invitations/$invitationId/decline'), {},
+          method: 'POST');
 }

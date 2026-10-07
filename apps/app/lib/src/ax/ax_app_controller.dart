@@ -388,13 +388,14 @@ extension _AxAppController on _AxAppStateMixin {
         // The cache router owns invalidation; the shared query updates consumers.
         return;
       }
-      if (type == 'project_workspace_grant.updated') {
-        await _refreshWorkspaceGrantSummary();
-        return;
-      }
-      if (type.startsWith('project.') ||
+      if (type.startsWith('project.invitation.') ||
+          type.startsWith('invitation.') ||
+          type.startsWith('project.') ||
           type == 'project_workspace_grant.updated') {
-        await store.projects.refresh();
+        await Future.wait([
+          store.projects.refresh(),
+          store.invitations.refresh(),
+        ]);
         if (!mounted) return;
         unawaited(_refreshWorkspaceGrantSummary());
         return;
@@ -426,6 +427,37 @@ extension _AxAppController on _AxAppStateMixin {
     });
   }
 
+  Future<void> _acceptInvitation(AxProjectInvitation invite) async {
+    try {
+      await store.acceptInvitation(invite);
+      if (!mounted) return;
+      _showSnackBar(
+          'Joined ${invite.projectName.isNotEmpty ? invite.projectName : "Project"}.');
+      if (invite.projectId.isNotEmpty) {
+        _navigateTo(AxNavigation.project(invite.projectId));
+      }
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar('Failed to accept invitation: $error',
+            type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _declineInvitation(AxProjectInvitation invite) async {
+    try {
+      await store.declineInvitation(invite);
+      if (mounted) {
+        _showSnackBar('Invitation declined.');
+      }
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar('Failed to decline invitation: $error',
+            type: ToastType.error);
+      }
+    }
+  }
+
   Future<void> _showNotifications() async {
     final dialogContext = navigatorKey.currentState?.context ?? context;
     final orderedNotifications = [...notifications]..sort((a, b) {
@@ -434,58 +466,207 @@ extension _AxAppController on _AxAppStateMixin {
       });
     final selected = await showDialog<AxNotification>(
       context: dialogContext,
-      builder: (context) => AlertDialog(
-        title: const Text('Attention center'),
-        content: SizedBox(
-          width: 420,
-          child: notifications.isEmpty
-              ? const Text('You are all caught up.')
-              : ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: orderedNotifications.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final notification = orderedNotifications[index];
-                    return ListTile(
-                      leading: Icon(
-                        switch (notification.kind) {
-                          AxNotificationKind.completed =>
-                            Icons.check_circle_outline,
-                          AxNotificationKind.failed => Icons.error_outline,
-                          AxNotificationKind.approvalRequired =>
-                            Icons.help_outline,
-                          AxNotificationKind.workspaceOffline =>
-                            Icons.cloud_off_outlined,
-                          AxNotificationKind.workerCredentialProblem =>
-                            Icons.key_off_outlined,
-                          AxNotificationKind.workerInstallFailed =>
-                            Icons.download_for_offline_outlined,
-                          AxNotificationKind.invitationReceived =>
-                            Icons.mail_outline,
-                        },
-                        color: notification.read
-                            ? const Color(0xff8e8e9a)
-                            : notification.priority ==
-                                    AxNotificationPriority.high
-                                ? const Color(0xffc64b4b)
-                                : Theme.of(context).colorScheme.primary,
+      builder: (context) => ListenableBuilder(
+        listenable: store.invitations,
+        builder: (context, _) {
+          final pendingInvitations = store.invitations.items;
+          final isEmpty = pendingInvitations.isEmpty && notifications.isEmpty;
+          return AlertDialog(
+            title: const Text('Inbox'),
+            content: SizedBox(
+              width: 440,
+              child: isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Text('You are all caught up.'),
+                    )
+                  : SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (pendingInvitations.isNotEmpty) ...[
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 8),
+                              child: Text(
+                                'Pending invitations',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xff8e8e9a),
+                                ),
+                              ),
+                            ),
+                            for (final invite in pendingInvitations)
+                              Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.mail_outline,
+                                              size: 18),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              invite.projectName.isNotEmpty
+                                                  ? invite.projectName
+                                                  : 'Project Invitation',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .primary
+                                                  .withValues(alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              invite.role.toUpperCase(),
+                                              style: TextStyle(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Invited by ${invite.invitedByDisplay}',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
+                                        children: [
+                                          OutlinedButton(
+                                            onPressed: () => unawaited(
+                                                _declineInvitation(invite)),
+                                            style: OutlinedButton.styleFrom(
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 12),
+                                            ),
+                                            child: const Text('Decline'),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          FilledButton(
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                              unawaited(
+                                                  _acceptInvitation(invite));
+                                            },
+                                            style: FilledButton.styleFrom(
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 12),
+                                            ),
+                                            child: const Text('Accept'),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            if (notifications.isNotEmpty)
+                              const Divider(height: 24),
+                          ],
+                          if (notifications.isNotEmpty) ...[
+                            if (pendingInvitations.isNotEmpty)
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                  'Activity',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xff8e8e9a),
+                                  ),
+                                ),
+                              ),
+                            ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: orderedNotifications.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final notification =
+                                    orderedNotifications[index];
+                                return ListTile(
+                                  leading: Icon(
+                                    switch (notification.kind) {
+                                      AxNotificationKind.completed =>
+                                        Icons.check_circle_outline,
+                                      AxNotificationKind.failed =>
+                                        Icons.error_outline,
+                                      AxNotificationKind.approvalRequired =>
+                                        Icons.help_outline,
+                                      AxNotificationKind.workspaceOffline =>
+                                        Icons.cloud_off_outlined,
+                                      AxNotificationKind
+                                            .workerCredentialProblem =>
+                                        Icons.key_off_outlined,
+                                      AxNotificationKind.workerInstallFailed =>
+                                        Icons.download_for_offline_outlined,
+                                      AxNotificationKind.invitationReceived =>
+                                        Icons.mail_outline,
+                                    },
+                                    color: notification.read
+                                        ? const Color(0xff8e8e9a)
+                                        : notification.priority ==
+                                                AxNotificationPriority.high
+                                            ? const Color(0xffc64b4b)
+                                            : Theme.of(context)
+                                                .colorScheme
+                                                .primary,
+                                  ),
+                                  title: Text(notification.title),
+                                  subtitle: Text(
+                                      '${notification.message} · ${notification.priority.name} priority'),
+                                  trailing: notification.read
+                                      ? null
+                                      : const Icon(Icons.circle, size: 9),
+                                  onTap: () =>
+                                      Navigator.of(context).pop(notification),
+                                );
+                              },
+                            ),
+                          ],
+                        ],
                       ),
-                      title: Text(notification.title),
-                      subtitle: Text(
-                          '${notification.message} · ${notification.priority.name} priority'),
-                      trailing: notification.read
-                          ? null
-                          : const Icon(Icons.circle, size: 9),
-                      onTap: () => Navigator.of(context).pop(notification),
-                    );
-                  },
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: notifications.isEmpty
-                ? null
-                : () {
+                    ),
+            ),
+            actions: [
+              if (notifications.isNotEmpty)
+                TextButton(
+                  onPressed: () {
                     _updateNotifications(() {
                       for (var index = 0;
                           index < notifications.length;
@@ -495,13 +676,15 @@ extension _AxAppController on _AxAppStateMixin {
                     });
                     Navigator.of(context).pop();
                   },
-            child: const Text('Mark all as read'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
+                  child: const Text('Mark all as read'),
+                ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
       ),
     );
     if (!mounted || selected == null) return;
@@ -690,6 +873,7 @@ extension _AxAppController on _AxAppStateMixin {
       final loaded = await store.loadBootstrapState(
           projectId: projectId, workspaceId: workspaceId);
       if (!mounted) return;
+      unawaited(store.invitations.refresh());
       optimisticRunStatus = null;
       if (showSpinner) {
         _updateState(() {

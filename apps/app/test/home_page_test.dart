@@ -101,4 +101,83 @@ void main() {
     await tester.tap(find.text('Ready Workers'));
     expect(workspaceOpens, 2);
   });
+
+  testWidgets('Pending invitations appear on zero-project screen with actions',
+      (tester) async {
+    var accepted = false;
+    var declined = false;
+    const invite = AxProjectInvitation(
+      id: 'inv-1',
+      projectId: 'proj-123',
+      projectName: 'Conclave AX Development',
+      email: 'ulikossnokia@gmail.com',
+      role: 'member',
+      status: 'pending',
+      invitedByUserId: 'user-1',
+      invitedByUserEmail: 'vitalii@nohainc.com',
+      invitedByUserName: 'Vitalii Noha',
+      createdAt: '2026-10-07T12:00:00Z',
+    );
+
+    await tester.pumpWidget(scaffold(HomePage(
+      projects: const [],
+      workspaces: const [],
+      workers: const [],
+      invitations: const [invite],
+      onAcceptInvitation: (_) => accepted = true,
+      onDeclineInvitation: (_) => declined = true,
+      run: null,
+      openFindingCount: 0,
+      onOpenWorkspaces: () {},
+      onOpenProject: (_) {},
+      onOpenRun: (_, __) {},
+      onCreateProject: () {},
+      onOpenArchivedProjects: () {},
+    )));
+
+    expect(find.text('Pending invitations (1)'), findsOneWidget);
+    expect(find.text('Conclave AX Development'), findsOneWidget);
+    expect(find.text('Invited by Vitalii Noha · MEMBER'), findsOneWidget);
+    expect(find.text('Accept'), findsOneWidget);
+    expect(find.text('Decline'), findsOneWidget);
+
+    await tester.tap(find.text('Accept'));
+    expect(accepted, isTrue);
+
+    await tester.tap(find.text('Decline'));
+    expect(declined, isTrue);
+  });
+
+  testWidgets('Pending invitations appear on established home screen',
+      (tester) async {
+    const invite = AxProjectInvitation(
+      id: 'inv-1',
+      projectId: 'proj-123',
+      projectName: 'Conclave AX Development',
+      email: 'ulikossnokia@gmail.com',
+      role: 'member',
+      status: 'pending',
+      invitedByUserId: 'user-1',
+      invitedByUserEmail: 'vitalii@nohainc.com',
+      createdAt: '2026-10-07T12:00:00Z',
+    );
+
+    await tester.pumpWidget(scaffold(HomePage(
+      projects: const [project],
+      workspaces: const [],
+      workers: const [],
+      invitations: const [invite],
+      run: null,
+      openFindingCount: 0,
+      onOpenWorkspaces: () {},
+      onOpenProject: (_) {},
+      onOpenRun: (_, __) {},
+      onCreateProject: () {},
+      onOpenArchivedProjects: () {},
+    )));
+
+    expect(find.text('Pending invitations (1)'), findsOneWidget);
+    expect(find.text('Conclave AX Development'), findsOneWidget);
+    expect(find.text('Invited by vitalii@nohainc.com · MEMBER'), findsOneWidget);
+  });
 }

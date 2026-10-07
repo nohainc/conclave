@@ -199,6 +199,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
         workspaces: store.workspaces.items,
         unreadNotificationCount: unreadNotificationCount,
         unreadNotifications: store.unreadNotifications,
+        invitationsListenable: store.invitations,
         isDarkTheme: _themeMode == ThemeMode.dark ||
             (_themeMode == ThemeMode.system &&
                 Theme.of(context).brightness == Brightness.dark),

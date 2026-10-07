@@ -16,7 +16,7 @@ extension _AxAppViews on _AxAppStateMixin {
 
   Widget _homeView() => ListenableBuilder(
       listenable: Listenable.merge(
-          [store.projects, store.workspaces, store.executionChanges]),
+          [store.projects, store.workspaces, store.executionChanges, store.invitations]),
       builder: (context, _) => AxQueryBuilder<List<AxWorker>>(
           engine: store.syncEngine,
           query: store.catalogs.workers,
@@ -24,6 +24,9 @@ extension _AxAppViews on _AxAppStateMixin {
                 projects: store.projects.items,
                 workspaces: store.workspaces.items,
                 workers: workers.data ?? const [],
+                invitations: store.invitations.items,
+                onAcceptInvitation: _acceptInvitation,
+                onDeclineInvitation: _declineInvitation,
                 run: executionSnapshot.run,
                 openFindingCount: executionSnapshot.findings
                     .where((finding) => finding.status == FindingStatus.open)
@@ -204,13 +207,15 @@ extension _AxAppViews on _AxAppStateMixin {
               if (mounted) _showSnackBar(error.toString());
             }
           },
-          onRunWork: (prompt, workflowId, attachments, idempotencyKey) =>
+          onRunWork: (prompt, workflowId, attachments, idempotencyKey,
+                  executionSelection) =>
               widget.dataSource.createWorkRequest(
             workstreamId: workstream.id,
             workflowId: workflowId,
             prompt: prompt,
             attachments: attachments,
             idempotencyKey: idempotencyKey,
+            executionSelection: executionSelection,
           ),
         );
       },

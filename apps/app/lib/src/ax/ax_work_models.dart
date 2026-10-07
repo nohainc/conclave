@@ -1,5 +1,175 @@
 import 'ax_models.dart';
 
+class AxTurnExecutionSelection {
+  const AxTurnExecutionSelection(
+      {required this.workerId,
+      required this.workflowVersion,
+      this.profileId,
+      this.profileReleaseVersion,
+      this.modelId,
+      this.effort});
+  final String workerId;
+  final int workflowVersion;
+  final String? profileId;
+  final int? profileReleaseVersion;
+  final String? modelId;
+  final String? effort;
+  Map<String, dynamic> toJson() => {
+        'workerId': workerId,
+        'profileId': profileId,
+        'profileReleaseVersion': profileReleaseVersion,
+        'modelId': modelId,
+        'effort': effort,
+      };
+}
+
+class AxTurnExecutionConfig {
+  AxTurnExecutionConfig.fromJson(Map<String, dynamic> json)
+      : schemaVersion = json['schemaVersion'] as int,
+        workerId = json['workerId'] as String,
+        profileId = json['profileId'] as String,
+        profileReleaseVersion = json['profileReleaseVersion'] as int,
+        modelId = json['modelId'] as String?,
+        effort = json['effort'] as String?,
+        workflowId = json['workflowId'] as String,
+        workflowVersion = json['workflowVersion'] as int;
+  final int schemaVersion;
+  final String workerId;
+  final String profileId;
+  final int profileReleaseVersion;
+  final String? modelId;
+  final String? effort;
+  final String workflowId;
+  final int workflowVersion;
+  Map<String, dynamic> toJson() => {
+        'schemaVersion': schemaVersion,
+        'workerId': workerId,
+        'profileId': profileId,
+        'profileReleaseVersion': profileReleaseVersion,
+        'modelId': modelId,
+        'effort': effort,
+        'workflowId': workflowId,
+        'workflowVersion': workflowVersion,
+      };
+}
+
+class AxConversationTurn {
+  AxConversationTurn.fromJson(Map<String, dynamic> json)
+      : id = json['id'] as String,
+        conversationId = json['conversationId'] as String,
+        workflowId = json['workflowId'] as String,
+        workflowVersion = json['workflowVersion'] as int,
+        userMessageId = json['userMessageId'] as String,
+        workRequestId = json['workRequestId'] as String,
+        assignmentId = json['assignmentId'] as String,
+        taskId = json['taskId'] as String,
+        stepKind = json['stepKind'] as String,
+        workerId = json['workerId'] as String,
+        workerTypeId = json['workerTypeId'] as String,
+        workerDisplayName = json['workerDisplayName'] as String,
+        profileId = json['profileId'] as String,
+        profileVersion = json['profileVersion'] as int,
+        modelId = json['modelId'] as String?,
+        effort = json['effort'] as String?,
+        workerSessionId = json['workerSessionId'] as String?,
+        baseContextRevision = json['baseContextRevision'] as int,
+        status = json['status'] as String,
+        startedAt = json['startedAt'] as String?,
+        completedAt = json['completedAt'] as String?,
+        resultText = json['resultText'] as String?,
+        createdAt = json['createdAt'] as String;
+  final String id;
+  final String conversationId;
+  final String workflowId;
+  final int workflowVersion;
+  final String userMessageId;
+  final String workRequestId;
+  final String assignmentId;
+  final String taskId;
+  final String stepKind;
+  final String workerId;
+  final String workerTypeId;
+  final String workerDisplayName;
+  final String profileId;
+  final int profileVersion;
+  final String? modelId;
+  final String? effort;
+  final String? workerSessionId;
+  final int baseContextRevision;
+  final String status;
+  final String? startedAt;
+  final String? completedAt;
+  final String? resultText;
+  final String createdAt;
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'conversationId': conversationId,
+        'workflowId': workflowId,
+        'workflowVersion': workflowVersion,
+        'userMessageId': userMessageId,
+        'workRequestId': workRequestId,
+        'assignmentId': assignmentId,
+        'taskId': taskId,
+        'stepKind': stepKind,
+        'workerId': workerId,
+        'workerTypeId': workerTypeId,
+        'workerDisplayName': workerDisplayName,
+        'profileId': profileId,
+        'profileVersion': profileVersion,
+        'modelId': modelId,
+        'effort': effort,
+        'workerSessionId': workerSessionId,
+        'baseContextRevision': baseContextRevision,
+        'status': status,
+        'startedAt': startedAt,
+        'completedAt': completedAt,
+        'resultText': resultText,
+        'createdAt': createdAt,
+      };
+}
+
+class AxConversationHistoryEntry {
+  AxConversationHistoryEntry.fromJson(Map<String, dynamic> json)
+      : id = json['id'] as String,
+        conversationId = json['conversationId'] as String,
+        sequence = json['sequence'] as int,
+        kind = json['kind'] as String,
+        eventType = json['eventType'] as String,
+        text = json['text'] as String?,
+        metadata = Map.unmodifiable(
+            Map<String, dynamic>.from(json['metadata'] as Map)),
+        occurredAt = json['occurredAt'] as String,
+        recordedAt = json['recordedAt'] as String;
+  final String id;
+  final String conversationId;
+  final int sequence;
+  final String kind;
+  final String eventType;
+  final String? text;
+  final Map<String, dynamic> metadata;
+  final String occurredAt;
+  final String recordedAt;
+}
+
+class AxConversationHistoryPage {
+  AxConversationHistoryPage.fromJson(Map<String, dynamic> json)
+      : conversationId = json['conversationId'] as String,
+        historyRevision = json['historyRevision'] as int,
+        throughSequence = json['throughSequence'] as int,
+        entries = List.unmodifiable((json['entries'] as List).map((item) =>
+            AxConversationHistoryEntry.fromJson(
+                Map<String, dynamic>.from(item as Map)))),
+        nextCursor = json['nextCursor'] is Map
+            ? Map<String, int>.unmodifiable(
+                Map<String, int>.from(json['nextCursor'] as Map))
+            : null;
+  final String conversationId;
+  final int historyRevision;
+  final int throughSequence;
+  final List<AxConversationHistoryEntry> entries;
+  final Map<String, int>? nextCursor;
+}
+
 class AxWorkRequestCursor {
   const AxWorkRequestCursor({required this.createdAt, required this.id});
   final String createdAt;
@@ -24,6 +194,9 @@ class AxWorkRequestPage {
 class AxWorkRequestStatus {
   const AxWorkRequestStatus({
     this.id,
+    this.conversationId,
+    this.executionConfig,
+    this.turns = const [],
     this.workstreamId,
     required this.status,
     this.text,
@@ -41,6 +214,9 @@ class AxWorkRequestStatus {
   });
 
   final String? id;
+  final String? conversationId;
+  final AxTurnExecutionConfig? executionConfig;
+  final List<AxConversationTurn> turns;
   final String? workstreamId;
   final String status;
   final String? text;
@@ -164,6 +340,9 @@ class AxWorkRequestStep {
 class AxWorkRequest {
   const AxWorkRequest({
     required this.id,
+    this.conversationId,
+    this.executionConfig,
+    this.turns = const [],
     required this.requestedByName,
     this.requestedByUserId,
     required this.prompt,
@@ -178,6 +357,9 @@ class AxWorkRequest {
   });
 
   final String id;
+  final String? conversationId;
+  final AxTurnExecutionConfig? executionConfig;
+  final List<AxConversationTurn> turns;
   final String requestedByName;
   final String? requestedByUserId;
   final String prompt;
@@ -193,6 +375,9 @@ class AxWorkRequest {
   AxWorkRequest copyWith({String? status, List<AxWorkRequestStep>? steps}) =>
       AxWorkRequest(
           id: id,
+          conversationId: conversationId,
+          executionConfig: executionConfig,
+          turns: turns,
           requestedByName: requestedByName,
           requestedByUserId: requestedByUserId,
           prompt: prompt,
@@ -229,6 +414,15 @@ class AxWorkRequest {
         .toList();
     return AxWorkRequest(
       id: json['id']?.toString() ?? '',
+      conversationId: json['conversationId']?.toString(),
+      turns: List.unmodifiable((json['turns'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) =>
+              AxConversationTurn.fromJson(Map<String, dynamic>.from(item)))),
+      executionConfig: json['executionConfig'] is Map
+          ? AxTurnExecutionConfig.fromJson(
+              Map<String, dynamic>.from(json['executionConfig'] as Map))
+          : null,
       requestedByName: json['requestedByName']?.toString() ?? 'Team member',
       requestedByUserId:
           (json['requestedByUserId'] ?? json['requested_by_user_id'])
@@ -362,6 +556,16 @@ abstract interface class AxDataSource {
     required String invitationId,
   }) async =>
       throw UnimplementedError('Project collaboration is not available');
+  Future<List<AxProjectInvitation>> loadCurrentUserInvitations() async =>
+      const [];
+  Future<void> acceptProjectInvitation({
+    required String invitationId,
+  }) async =>
+      throw UnimplementedError('Project collaboration is not available');
+  Future<void> declineProjectInvitation({
+    required String invitationId,
+  }) async =>
+      throw UnimplementedError('Project collaboration is not available');
   Future<AxAccountSecurity> loadAccountSecurity();
   Future<void> revokeAccountSession(String token);
   Future<Uri> beginAccountLink(String provider, Uri returnTo);
@@ -413,14 +617,23 @@ abstract interface class AxDataSource {
     required String prompt,
     List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
+    AxTurnExecutionSelection? executionSelection,
   }) async =>
       throw UnimplementedError('Work Request execution is not available');
   Future<List<String>> validateWorkRequestEligibility({
     required String workstreamId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
+    AxTurnExecutionSelection? executionSelection,
   }) async =>
       const [];
+  Future<AxConversationHistoryPage> loadConversationHistory(
+          {required String workstreamId,
+          required String conversationId,
+          int afterSequence = 0,
+          int? throughSequence,
+          int limit = 50}) async =>
+      throw UnimplementedError('Conversation history is not available');
   Future<AxWorkRequestStatus> loadWorkRequest({
     required String workRequestId,
   }) async =>

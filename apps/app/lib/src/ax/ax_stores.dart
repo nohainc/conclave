@@ -24,10 +24,12 @@ class AxStore {
       bool persistReadCache = const bool.fromEnvironment(
           'AX_PERSIST_READ_CACHE',
           defaultValue: true)})
-      : _readCacheBackend = readCacheBackend,
+      :    _readCacheBackend = readCacheBackend,
         _persistReadCache = persistReadCache,
         auth = AuthStore(dataSource),
-        runs = RunStore(dataSource);
+        runs = RunStore(dataSource) {
+    invitations.addListener(_updateUnreadNotifications);
+  }
 
   final AxReadCacheBackend? _readCacheBackend;
   final bool _persistReadCache;
@@ -103,7 +105,30 @@ class AxStore {
     }
   }
 
+  void _updateUnreadNotifications() {
+    unreadNotifications.value = notifications.where((n) => !n.read).length +
+        invitations.items.length;
+  }
+
+  Future<void> acceptInvitation(AxProjectInvitation invite) async {
+    await dataSource.acceptProjectInvitation(invitationId: invite.id);
+    await Future.wait([
+      invitations.refresh(),
+      projects.refresh(),
+    ]);
+    if (invite.projectId.isNotEmpty) {
+      projectTabs.refreshMembers(invite.projectId);
+    }
+  }
+
+  Future<void> declineInvitation(AxProjectInvitation invite) async {
+    await dataSource.declineProjectInvitation(invitationId: invite.id);
+    await invitations.refresh();
+  }
+
   void dispose() {
+    invitations.removeListener(_updateUnreadNotifications);
+    invitations.dispose();
     lifecycle.dispose();
     lifecycleNotice.dispose();
     persistence.dispose();
@@ -122,6 +147,8 @@ class AxStore {
 
   final AxDataSource dataSource;
   final AxSyncEngine syncEngine = AxSyncEngine();
+  late final UserInvitationsStore invitations =
+      UserInvitationsStore(dataSource, engine: syncEngine);
   late final AxSessionCatalogs catalogs =
       AxSessionCatalogs(dataSource, engine: syncEngine);
   late final AxProjectTabQueries projectTabs =
@@ -387,4 +414,38 @@ class AuthStore {
 /// Explicit notification boundary for retained execution projections.
 class AxViewSignal extends ChangeNotifier {
   void bump() => notifyListeners();
+}
+
+class UserInvitationsStore extends ValueNotifier<List<AxProjectInvitation>> {
+  UserInvitationsStore(this.source, {AxSyncEngine? engine})
+      : engine = engine ?? AxSyncEngine(),
+        super(const []) {
+    _cancel = this.engine.watch(
+        query, (state) => value = state.data ?? const [],
+        fireImmediately: true);
+  }
+  final AxDataSource source;
+  final AxSyncEngine engine;
+  late final void Function() _cancel;
+  late final query = AxQuery<List<AxProjectInvitation>>(
+      key: AxQueryKey(['me', 'invitations']),
+      load: source.loadCurrentUserInvitations);
+
+  List<AxProjectInvitation> get items => value;
+  void clear() => engine.remove(query.key);
+
+  @override
+  void dispose() {
+    _cancel();
+    engine.remove(query.key);
+    super.dispose();
+  }
+
+  void replace(List<AxProjectInvitation> items) {
+    if (listEquals(value, items)) return;
+    engine.update(query, (_) => List.unmodifiable(items));
+  }
+
+  Future<List<AxProjectInvitation>> refresh() =>
+      engine.refresh(query, supersede: true);
 }

@@ -16,6 +16,9 @@ class HomePage extends StatelessWidget {
     required this.onOpenRun,
     required this.onCreateProject,
     required this.onOpenArchivedProjects,
+    this.invitations = const [],
+    this.onAcceptInvitation,
+    this.onDeclineInvitation,
   });
 
   final List<AxProject> projects;
@@ -28,12 +31,18 @@ class HomePage extends StatelessWidget {
   final void Function(String projectId, String runId) onOpenRun;
   final VoidCallback onCreateProject;
   final VoidCallback onOpenArchivedProjects;
+  final List<AxProjectInvitation> invitations;
+  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
+  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
 
   bool get isNewWorkspace => projects.isEmpty;
 
   @override
   Widget build(BuildContext context) => isNewWorkspace
       ? _GettingStarted(
+          invitations: invitations,
+          onAcceptInvitation: onAcceptInvitation,
+          onDeclineInvitation: onDeclineInvitation,
           onOpenWorkspaces: onOpenWorkspaces,
           onCreateProject: onCreateProject,
         )
@@ -41,6 +50,9 @@ class HomePage extends StatelessWidget {
           projects: projects,
           workspaces: workspaces,
           workers: workers,
+          invitations: invitations,
+          onAcceptInvitation: onAcceptInvitation,
+          onDeclineInvitation: onDeclineInvitation,
           run: run,
           openFindingCount: openFindingCount,
           onOpenWorkspaces: onOpenWorkspaces,
@@ -54,15 +66,29 @@ class _GettingStarted extends StatelessWidget {
   const _GettingStarted({
     required this.onOpenWorkspaces,
     required this.onCreateProject,
+    this.invitations = const [],
+    this.onAcceptInvitation,
+    this.onDeclineInvitation,
   });
 
   final VoidCallback onOpenWorkspaces;
   final VoidCallback onCreateProject;
+  final List<AxProjectInvitation> invitations;
+  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
+  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
 
   @override
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (invitations.isNotEmpty) ...[
+            _PendingInvitationsSection(
+              invitations: invitations,
+              onAccept: onAcceptInvitation,
+              onDecline: onDeclineInvitation,
+            ),
+            const SizedBox(height: 24),
+          ],
           const Text('Getting started',
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
@@ -159,6 +185,9 @@ class _EstablishedHome extends StatelessWidget {
     required this.onOpenProject,
     required this.onOpenRun,
     required this.onOpenArchivedProjects,
+    this.invitations = const [],
+    this.onAcceptInvitation,
+    this.onDeclineInvitation,
   });
 
   final List<AxProject> projects;
@@ -170,6 +199,9 @@ class _EstablishedHome extends StatelessWidget {
   final ValueChanged<String> onOpenProject;
   final void Function(String projectId, String runId) onOpenRun;
   final VoidCallback onOpenArchivedProjects;
+  final List<AxProjectInvitation> invitations;
+  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
+  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
 
   @override
   Widget build(BuildContext context) {
@@ -186,6 +218,14 @@ class _EstablishedHome extends StatelessWidget {
           label: const Text('Archived Projects'),
         ),
       ),
+      if (invitations.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        _PendingInvitationsSection(
+          invitations: invitations,
+          onAccept: onAcceptInvitation,
+          onDecline: onDeclineInvitation,
+        ),
+      ],
       const SizedBox(height: 12),
       Text('Your execution capacity at a glance.',
           style: TextStyle(
@@ -328,4 +368,133 @@ class _MetricCard extends StatelessWidget {
           ),
         ),
       );
+}
+
+class _PendingInvitationsSection extends StatelessWidget {
+  const _PendingInvitationsSection({
+    required this.invitations,
+    this.onAccept,
+    this.onDecline,
+  });
+
+  final List<AxProjectInvitation> invitations;
+  final ValueChanged<AxProjectInvitation>? onAccept;
+  final ValueChanged<AxProjectInvitation>? onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Card(
+      color: ConclaveColors.primarySoftColor(isDark),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.mail_outline,
+                  size: 20,
+                  color: ConclaveColors.primaryForeground(isDark),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Pending invitations (${invitations.length})',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: ConclaveColors.primaryForeground(isDark),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            for (final invite in invitations) ...[
+              _InvitationItem(
+                invitation: invite,
+                onAccept: onAccept != null ? () => onAccept!(invite) : null,
+                onDecline: onDecline != null ? () => onDecline!(invite) : null,
+              ),
+              if (invite != invitations.last) const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InvitationItem extends StatelessWidget {
+  const _InvitationItem({
+    required this.invitation,
+    this.onAccept,
+    this.onDecline,
+  });
+
+  final AxProjectInvitation invitation;
+  final VoidCallback? onAccept;
+  final VoidCallback? onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    invitation.projectName.isNotEmpty
+                        ? invitation.projectName
+                        : 'Project Invitation',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Invited by ${invitation.invitedByDisplay} · ${invitation.role.toUpperCase()}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (onDecline != null)
+              OutlinedButton(
+                onPressed: onDecline,
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: const Text('Decline'),
+              ),
+            if (onAccept != null) ...[
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: onAccept,
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: const Text('Accept'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

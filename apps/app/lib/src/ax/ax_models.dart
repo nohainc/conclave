@@ -106,6 +106,38 @@ String _string(Map<String, dynamic> json, String key, [String fallback = '—'])
   return value == null ? fallback : value.toString();
 }
 
+class AxWorkflowCapabilities {
+  const AxWorkflowCapabilities({
+    this.userSelectsWorker = false,
+    this.userSelectsModel = false,
+    this.userSelectsEffort = false,
+    this.multiStep = false,
+    this.multiWorker = false,
+    this.automaticContinuation = false,
+    this.requiresApprovalBetweenSteps = false,
+  });
+
+  final bool userSelectsWorker;
+  final bool userSelectsModel;
+  final bool userSelectsEffort;
+  final bool multiStep;
+  final bool multiWorker;
+  final bool automaticContinuation;
+  final bool requiresApprovalBetweenSteps;
+
+  factory AxWorkflowCapabilities.fromJson(Map<String, dynamic> json) =>
+      AxWorkflowCapabilities(
+        userSelectsWorker: json['userSelectsWorker'] == true,
+        userSelectsModel: json['userSelectsModel'] == true,
+        userSelectsEffort: json['userSelectsEffort'] == true,
+        multiStep: json['multiStep'] == true,
+        multiWorker: json['multiWorker'] == true,
+        automaticContinuation: json['automaticContinuation'] == true,
+        requiresApprovalBetweenSteps:
+            json['requiresApprovalBetweenSteps'] == true,
+      );
+}
+
 class AxBuiltinWorkflow {
   const AxBuiltinWorkflow({
     required this.id,
@@ -114,6 +146,8 @@ class AxBuiltinWorkflow {
     required this.description,
     required this.steps,
     required this.snapshot,
+    this.executionPolicy = const AxWorkflowCapabilities(),
+    this.composerBindingId,
   });
 
   final String id;
@@ -122,6 +156,8 @@ class AxBuiltinWorkflow {
   final String description;
   final List<AxBuiltinWorkflowStep> steps;
   final Map<String, dynamic> snapshot;
+  final AxWorkflowCapabilities executionPolicy;
+  final String? composerBindingId;
   String get reference => '$id:v$version';
 
   factory AxBuiltinWorkflow.fromJson(Map<String, dynamic> json) =>
@@ -135,7 +171,15 @@ class AxBuiltinWorkflow {
             .map((step) =>
                 AxBuiltinWorkflowStep.fromJson(Map<String, dynamic>.from(step)))
             .toList(),
-        snapshot: Map<String, dynamic>.from(json),
+        executionPolicy: AxWorkflowCapabilities.fromJson(
+          json['executionPolicy'] is Map
+              ? Map<String, dynamic>.from(json['executionPolicy'] as Map)
+              : const {},
+        ),
+        composerBindingId: json['composerBindingId'] as String?,
+        snapshot: Map<String, dynamic>.from(json)
+          ..remove('executionPolicy')
+          ..remove('composerBindingId'),
       );
 }
 
@@ -981,26 +1025,48 @@ class AxProjectMember {
 class AxProjectInvitation {
   const AxProjectInvitation({
     required this.id,
+    this.projectId = '',
+    this.projectName = '',
     required this.email,
     required this.role,
     required this.status,
-    required this.expiresAt,
+    this.invitedByUserId = '',
+    this.invitedByUserName = '',
+    this.invitedByUserEmail = '',
+    this.expiresAt = '',
     required this.createdAt,
   });
 
   final String id;
+  final String projectId;
+  final String projectName;
   final String email;
   final String role;
   final String status;
+  final String invitedByUserId;
+  final String invitedByUserName;
+  final String invitedByUserEmail;
   final String expiresAt;
   final String createdAt;
+
+  String get invitedByDisplay {
+    if (invitedByUserName.isNotEmpty) return invitedByUserName;
+    if (invitedByUserEmail.isNotEmpty) return invitedByUserEmail;
+    if (invitedByUserId.isNotEmpty) return invitedByUserId;
+    return 'Unknown';
+  }
 
   factory AxProjectInvitation.fromJson(Map<String, dynamic> json) =>
       AxProjectInvitation(
         id: _string(json, 'id'),
+        projectId: _string(json, 'projectId'),
+        projectName: _string(json, 'projectName'),
         email: _string(json, 'email'),
         role: _string(json, 'role', 'viewer'),
         status: _string(json, 'status', 'pending'),
+        invitedByUserId: _string(json, 'invitedByUserId'),
+        invitedByUserName: _string(json, 'invitedByUserName'),
+        invitedByUserEmail: _string(json, 'invitedByUserEmail'),
         expiresAt: _string(json, 'expiresAt'),
         createdAt: _string(json, 'createdAt'),
       );
