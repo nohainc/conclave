@@ -98,35 +98,55 @@ void main() {
     });
 
     test('Contrast ratios meet WCAG AA standards', () {
-      // Light mode
+      // 1. Normal text in Light mode
       expect(
           _contrastRatio(
               ConclaveColors.textPrimaryLight, ConclaveColors.surfaceLight),
           greaterThanOrEqualTo(4.5));
       expect(
           _contrastRatio(
+              ConclaveColors.textPrimaryLight, ConclaveColors.canvasLight),
+          greaterThanOrEqualTo(4.5));
+      expect(
+          _contrastRatio(
+              ConclaveColors.textPrimaryLight, ConclaveColors.surfaceHoverLight),
+          greaterThanOrEqualTo(4.5));
+
+      // 2. Muted text in Light mode
+      expect(
+          _contrastRatio(
               ConclaveColors.textSecondaryLight, ConclaveColors.surfaceLight),
           greaterThanOrEqualTo(4.5));
       expect(
           _contrastRatio(
-              ConclaveColors.textPrimaryLight, ConclaveColors.canvasLight),
+              ConclaveColors.textSecondaryLight, ConclaveColors.canvasLight),
           greaterThanOrEqualTo(4.5));
 
-      // Dark mode
+      // 3. Normal text in Dark mode
       expect(
           _contrastRatio(
               ConclaveColors.textPrimaryDark, ConclaveColors.surfaceDark),
           greaterThanOrEqualTo(4.5));
       expect(
           _contrastRatio(
+              ConclaveColors.textPrimaryDark, ConclaveColors.canvasDark),
+          greaterThanOrEqualTo(4.5));
+      expect(
+          _contrastRatio(
+              ConclaveColors.textPrimaryDark, ConclaveColors.surfaceHoverDark),
+          greaterThanOrEqualTo(4.5));
+
+      // 4. Muted text in Dark mode
+      expect(
+          _contrastRatio(
               ConclaveColors.textSecondaryDark, ConclaveColors.surfaceDark),
           greaterThanOrEqualTo(4.5));
       expect(
           _contrastRatio(
-              ConclaveColors.textPrimaryDark, ConclaveColors.canvasDark),
+              ConclaveColors.textSecondaryDark, ConclaveColors.canvasDark),
           greaterThanOrEqualTo(4.5));
 
-      // Dark mode foreground accent (#B8A9FE) on dark surfaces
+      // 5. Accent foreground in dark mode (#B8A9FE) vs dark backgrounds
       expect(
           _contrastRatio(
               ConclaveColors.primaryForegroundDark, ConclaveColors.surfaceDark),
@@ -134,6 +154,48 @@ void main() {
       expect(
           _contrastRatio(
               ConclaveColors.primaryForegroundDark, ConclaveColors.canvasDark),
+          greaterThanOrEqualTo(4.5));
+      expect(
+          _contrastRatio(
+              ConclaveColors.primaryForegroundDark, ConclaveColors.navigationBackgroundDark),
+          greaterThanOrEqualTo(4.5));
+
+      // 6. Button text on primary & pressed backgrounds
+      expect(
+          _contrastRatio(Colors.white, ConclaveColors.primary),
+          greaterThanOrEqualTo(4.5));
+      expect(
+          _contrastRatio(Colors.white, ConclaveColors.primaryPressed),
+          greaterThanOrEqualTo(4.5));
+
+      // 7. Selected sidebar item
+      expect(
+          _contrastRatio(ConclaveColors.textPrimaryDark, ConclaveColors.navigationSelected),
+          greaterThanOrEqualTo(4.5));
+      expect(
+          _contrastRatio(ConclaveColors.primaryForegroundDark, ConclaveColors.navigationSelected),
+          greaterThanOrEqualTo(4.5));
+
+      // 8. Links and Markdown links
+      expect(
+          _contrastRatio(ConclaveColors.primaryForegroundLight, ConclaveColors.surfaceLight),
+          greaterThanOrEqualTo(4.5));
+      expect(
+          _contrastRatio(ConclaveColors.primaryForegroundLight, ConclaveColors.canvasLight),
+          greaterThanOrEqualTo(4.5));
+      expect(
+          _contrastRatio(ConclaveColors.primaryForegroundDark, ConclaveColors.surfaceDark),
+          greaterThanOrEqualTo(4.5));
+      expect(
+          _contrastRatio(ConclaveColors.primaryForegroundDark, ConclaveColors.canvasDark),
+          greaterThanOrEqualTo(4.5));
+
+      // 9. Code blocks and terminal surfaces
+      expect(
+          _contrastRatio(ConclaveColors.textPrimaryLight, ConclaveColors.codeBackgroundLight),
+          greaterThanOrEqualTo(4.5));
+      expect(
+          _contrastRatio(ConclaveColors.textPrimaryDark, ConclaveColors.codeBackgroundDark),
           greaterThanOrEqualTo(4.5));
     });
   });
