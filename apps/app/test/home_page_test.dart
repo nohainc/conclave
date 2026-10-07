@@ -240,7 +240,7 @@ void main() {
 
     // 1. FOR YOU (unified prioritized card projection)
     expect(find.text('For you'), findsOneWidget);
-    expect(find.text('View all'), findsOneWidget);
+    expect(find.text('View all notifications →'), findsOneWidget);
     expect(find.text('Project invitation'), findsOneWidget);
     expect(find.text('Julia invited you to Family Travel'), findsOneWidget);
     expect(find.text('Decline'), findsOneWidget);
@@ -374,7 +374,7 @@ void main() {
     )));
 
     expect(find.text('For you'), findsOneWidget);
-    expect(find.text('View all'), findsOneWidget);
+    expect(find.text('View all notifications →'), findsOneWidget);
 
     // Priority 1: Invitation (present)
     expect(find.text('Project invitation'), findsOneWidget);
@@ -402,13 +402,105 @@ void main() {
     expect(find.text('Gemini finished reviewing Landing Page'), findsNothing);
     expect(find.text('Lower priority extra notification'), findsNothing);
 
-    // Test View all trigger
-    await tester.tap(find.text('View all'));
+    // Test View all notifications trigger
+    await tester.tap(find.text('View all notifications →'));
     expect(notificationsOpened, isTrue);
 
     // Test action navigation on attention item
     await tester.tap(find.text('Open'));
     expect(openedProject, 'proj-1');
     expect(openedWorkstream, 'ws-auth');
+  });
+
+  testWidgets(
+      'For you selection ranks by priority, unread status, actionability, and recency',
+      (tester) async {
+    final now = DateTime.now();
+    final items = [
+      // Same category (completed) but unread vs read:
+      AxHomeAttentionItem(
+        id: 'comp-read',
+        kind: AxAttentionKind.completed,
+        categoryLabel: 'Completed',
+        title: 'Read Task A',
+        subtitle: 'Done',
+        timestampDisplay: '10 min ago',
+        isUnread: false,
+        isActionable: false,
+        createdAt: now.subtract(const Duration(minutes: 10)),
+      ),
+      AxHomeAttentionItem(
+        id: 'comp-unread',
+        kind: AxAttentionKind.completed,
+        categoryLabel: 'Completed',
+        title: 'Unread Task B',
+        subtitle: 'Done',
+        timestampDisplay: '12 min ago',
+        isUnread: true,
+        isActionable: false,
+        createdAt: now.subtract(const Duration(minutes: 12)),
+      ),
+      // Same category (needsInput), actionable
+      AxHomeAttentionItem(
+        id: 'input-actionable',
+        kind: AxAttentionKind.needsInput,
+        categoryLabel: 'Needs your input',
+        title: 'Actionable input needed',
+        subtitle: 'Decision required',
+        timestampDisplay: '5 min ago',
+        actionLabel: 'Review →',
+        isUnread: true,
+        isActionable: true,
+        createdAt: now.subtract(const Duration(minutes: 5)),
+      ),
+      // Same category (failedExecution), newer vs older:
+      AxHomeAttentionItem(
+        id: 'fail-newer',
+        kind: AxAttentionKind.failedExecution,
+        categoryLabel: 'Failed execution',
+        title: 'Newer Failure',
+        subtitle: 'Just failed',
+        timestampDisplay: '1 min ago',
+        actionLabel: 'Inspect →',
+        isUnread: true,
+        isActionable: true,
+        createdAt: now.subtract(const Duration(minutes: 1)),
+      ),
+      AxHomeAttentionItem(
+        id: 'fail-older',
+        kind: AxAttentionKind.failedExecution,
+        categoryLabel: 'Failed execution',
+        title: 'Older Failure',
+        subtitle: 'Failed earlier',
+        timestampDisplay: '20 min ago',
+        actionLabel: 'Inspect →',
+        isUnread: true,
+        isActionable: true,
+        createdAt: now.subtract(const Duration(minutes: 20)),
+      ),
+    ];
+
+    await tester.pumpWidget(scaffold(HomePage(
+      projects: const [project],
+      workspaces: const [],
+      workers: const [],
+      invitations: const [],
+      attentionItems: items,
+      run: null,
+      openFindingCount: 0,
+      onOpenWorkspaces: () {},
+      onOpenProject: (_) {},
+      onOpenRun: (_, __) {},
+      onCreateProject: () {},
+    )));
+
+    // Expect input-actionable (Priority 2) first
+    expect(find.text('Actionable input needed'), findsOneWidget);
+    // Expect fail-newer & fail-older (Priority 3)
+    expect(find.text('Newer Failure'), findsOneWidget);
+    expect(find.text('Older Failure'), findsOneWidget);
+    // Expect unread completed (Priority 6, unread) before read completed (Priority 6, read)
+    expect(find.text('Unread Task B'), findsOneWidget);
+    expect(find.text('Read Task A'), findsOneWidget);
   });
 }

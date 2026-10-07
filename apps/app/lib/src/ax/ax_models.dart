@@ -1229,6 +1229,9 @@ class AxHomeAttentionItem {
     this.actionLabel,
     this.invitation,
     this.severity = 'info',
+    this.isUnread = true,
+    this.isActionable = true,
+    this.createdAt,
   });
 
   final String id;
@@ -1242,6 +1245,9 @@ class AxHomeAttentionItem {
   final String? actionLabel;
   final AxProjectInvitation? invitation;
   final String severity;
+  final bool isUnread;
+  final bool isActionable;
+  final DateTime? createdAt;
 
   int get priorityOrder {
     switch (kind) {

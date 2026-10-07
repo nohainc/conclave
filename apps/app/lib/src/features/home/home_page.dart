@@ -815,6 +815,9 @@ class _ForYouSection extends StatelessWidget {
         timestampDisplay: _formatRelativeTime(inv.createdAt),
         invitation: inv,
         projectId: inv.projectId,
+        isUnread: true,
+        isActionable: true,
+        createdAt: DateTime.tryParse(inv.createdAt),
       ));
     }
 
@@ -836,20 +839,44 @@ class _ForYouSection extends StatelessWidget {
         timestampDisplay: 'Needs attention',
         actionLabel: 'Review →',
         projectId: projects.isNotEmpty ? projects.first.id : null,
+        isUnread: true,
+        isActionable: true,
       ));
     }
 
-    // Sort by priority order:
-    // 1. Invitation requiring decision
-    // 2. Approval/input required
-    // 3. Failed execution
-    // 4. Worker/account problem
-    // 5. Workspace problem
-    // 6. Completed work worth reviewing
-    // 7. Findings / general
-    list.sort((a, b) => a.priorityOrder.compareTo(b.priorityOrder));
+    // Sort by: priority -> unread -> actionability -> recency
+    list.sort((a, b) {
+      // 1. Priority order (invitation, needsInput, failedExecution, workerProblem, workspaceProblem, completed, finding, general)
+      final pA = a.priorityOrder;
+      final pB = b.priorityOrder;
+      if (pA != pB) return pA.compareTo(pB);
 
-    // Limit to 3-5 highest-priority items on Home
+      // 2. Unread status (unread first)
+      if (a.isUnread != b.isUnread) {
+        return a.isUnread ? -1 : 1;
+      }
+
+      // 3. Actionability (actionable first)
+      if (a.isActionable != b.isActionable) {
+        return a.isActionable ? -1 : 1;
+      }
+
+      // 4. Recency (newer first)
+      final timeA = a.createdAt;
+      final timeB = b.createdAt;
+      if (timeA != null && timeB != null) {
+        final recency = timeB.compareTo(timeA);
+        if (recency != 0) return recency;
+      } else if (timeA != null) {
+        return -1;
+      } else if (timeB != null) {
+        return 1;
+      }
+
+      return a.id.compareTo(b.id);
+    });
+
+    // Limit to maximum ~5 items on Home
     return list.take(5).toList();
   }
 
@@ -872,6 +899,7 @@ class _ForYouSection extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
                   'For you',
@@ -899,12 +927,17 @@ class _ForYouSection extends StatelessWidget {
               ],
             ),
             if (onOpenNotifications != null)
-              TextButton(
-                onPressed: onOpenNotifications,
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
+              Flexible(
+                child: TextButton(
+                  onPressed: onOpenNotifications,
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text(
+                    'View all notifications →',
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                child: const Text('View all'),
               ),
           ],
         ),

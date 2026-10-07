@@ -31,23 +31,24 @@ HOME
 
 ## The Four Core Responsibilities
 
-### 1. For You
-- **Purpose:** Triage actionable items that block progress, require decisions, or demand attention across all projects.
-- **Max Items:** 3–5 highest-priority items projected on Home (full triage and history remain in the dedicated Notification Center via the `View all` link).
-- **Priority Hierarchy (Top to Bottom):**
-  1. **Project invitation requiring decision** (`AxAttentionKind.invitation`) — with direct `Decline` / `Accept` actions.
-  2. **Approval / input required** (`AxAttentionKind.needsInput`) — e.g. question/decision needed in a workstream, findings requiring review.
-  3. **Failed execution** (`AxAttentionKind.failedExecution`) — run or task failures requiring triage or rerun.
-  4. **Worker / account problems** (`AxAttentionKind.workerProblem`) — e.g. expired credentials, authentication errors.
-  5. **Workspace connectivity problems** (`AxAttentionKind.workspaceProblem`) — e.g. local workspace offline.
-  6. **Completed work worth reviewing** (`AxAttentionKind.completed`) — e.g. AI worker finished review or artifact.
-  7. **General info / other** (`AxAttentionKind.finding`, `AxAttentionKind.general`).
+### 1. For You (Triage Surface vs Notification Center)
+- **Distinct Responsibilities:**
+  - **Notification Center:** Answers *"What happened?"* Full chronological timeline of events, reads/unreads, and historic notifications.
+  - **Home ("For You"):** Answers *"What should I care about?"* A strictly bounded (max ~5 items) triage surface displaying only items that demand the user's active attention or decision.
+- **Home Selection & Multi-Factor Ranking Algorithm:**
+  1. **Priority category** (Project invitations → Input/Approval required → Failed executions → Worker/credential issues → Workspace connectivity → Completed reviews → General findings/info).
+  2. **Unread state** (Unread items are prioritized over already-viewed items).
+  3. **Actionability** (Items requiring human action/decision e.g. Accept/Decline, Review, Fix rank ahead of passive informative items).
+  4. **Recency** (Newer items rank ahead of older items when category, unread state, and actionability are identical).
+- **Navigation & CTA:**
+  - Explicit header CTA: `View all notifications →` opening the full Notification Center.
+  - Category badge count showing the total number of attention items.
 - **Card Structure:**
   - Semantic category chip (e.g. `Project invitation`, `Needs your input`, `Failed execution`, `Worker needs attention`, `Workspace offline`, `Completed`).
   - Relative timestamp (e.g. `8 minutes ago`, `24 min ago`).
   - Item Title and contextual Subtitle (e.g. `Julia invited you to "Family Travel"`, `Owner · 8 minutes ago`).
   - Contextual action buttons (`Decline` / `Accept`, `Review →`, `Open →`, `Inspect →`, `Fix →`, `Connect →`).
-- **Absence Behavior:** If nothing requires attention, the section renders nothing (omits empty filler text like `"Nothing needs your attention"`) to preserve a clean, focused surface.
+- **Absence Behavior:** If nothing requires attention, the section renders `const SizedBox.shrink()` (zero filler/empty placeholder text like `"Nothing needs your attention"`).
 
 ### 2. Continue Working
 - **Purpose:** Fast resumption of ongoing collaborative work in context.

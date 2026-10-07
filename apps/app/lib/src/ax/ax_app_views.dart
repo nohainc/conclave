@@ -29,6 +29,56 @@ extension _AxAppViews on _AxAppStateMixin {
                 workspaces: store.workspaces.items,
                 workers: workers.data ?? const [],
                 invitations: store.invitations.items,
+                attentionItems: notifications.map((n) {
+                  final kind = switch (n.kind) {
+                    AxNotificationKind.approvalRequired =>
+                      AxAttentionKind.needsInput,
+                    AxNotificationKind.failed =>
+                      AxAttentionKind.failedExecution,
+                    AxNotificationKind.workerCredentialProblem ||
+                    AxNotificationKind.workerInstallFailed =>
+                      AxAttentionKind.workerProblem,
+                    AxNotificationKind.workspaceOffline =>
+                      AxAttentionKind.workspaceProblem,
+                    AxNotificationKind.completed => AxAttentionKind.completed,
+                    AxNotificationKind.invitationReceived =>
+                      AxAttentionKind.invitation,
+                  };
+                  final categoryLabel = switch (n.kind) {
+                    AxNotificationKind.approvalRequired => 'Needs your input',
+                    AxNotificationKind.failed => 'Failed execution',
+                    AxNotificationKind.workerCredentialProblem =>
+                      'Worker needs attention',
+                    AxNotificationKind.workerInstallFailed =>
+                      'Worker install failed',
+                    AxNotificationKind.workspaceOffline => 'Workspace offline',
+                    AxNotificationKind.completed => 'Completed',
+                    AxNotificationKind.invitationReceived =>
+                      'Project invitation',
+                  };
+                  final actionLabel = switch (n.kind) {
+                    AxNotificationKind.approvalRequired => 'Review →',
+                    AxNotificationKind.failed => 'Inspect →',
+                    AxNotificationKind.workerCredentialProblem => 'Fix →',
+                    AxNotificationKind.workerInstallFailed => 'Fix →',
+                    AxNotificationKind.workspaceOffline => 'Connect →',
+                    AxNotificationKind.completed => 'Open →',
+                    AxNotificationKind.invitationReceived => 'View →',
+                  };
+                  return AxHomeAttentionItem(
+                    id: n.id,
+                    kind: kind,
+                    categoryLabel: categoryLabel,
+                    title: n.title,
+                    subtitle: n.message,
+                    timestampDisplay: _formatNotificationTime(n.createdAt),
+                    actionLabel: actionLabel,
+                    projectId: n.projectId,
+                    isUnread: !n.read,
+                    isActionable: n.kind != AxNotificationKind.completed,
+                    createdAt: n.createdAt,
+                  );
+                }).toList(),
                 onAcceptInvitation: _acceptInvitation,
                 onDeclineInvitation: _declineInvitation,
                 run: executionSnapshot.run,
@@ -477,5 +527,14 @@ extension _AxAppViews on _AxAppStateMixin {
   String _formatAccountDate(String value) {
     if (value.isEmpty || value == '—') return 'unknown';
     return value.replaceFirst('T', ' ').replaceFirst('Z', ' UTC');
+  }
+
+  String _formatNotificationTime(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours} hr ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${dt.month}/${dt.day}/${dt.year}';
   }
 }
