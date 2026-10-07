@@ -3,8 +3,8 @@
   "short_name": "Conclave AX",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#f8f7f3",
-  "theme_color": "#f8f7f3",
+  "background_color": "#121217",
+  "theme_color": "#121217",
   "description": "Conclave AX coordinates AI Workers across models and machines.",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
@@ -13,7 +13,36 @@
       "src": "conclave_logo.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "icons/Icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/Icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/Icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/Icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "favicon.png",
+      "sizes": "32x32",
+      "type": "image/png"
     }
   ]
 }
