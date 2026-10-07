@@ -299,7 +299,7 @@ CREATE TABLE project_invitations (
   token_hash TEXT NOT NULL UNIQUE,
   invited_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (
-    status IN ('pending', 'accepted', 'expired', 'revoked')
+    status IN ('pending', 'accepted', 'declined', 'expired', 'revoked')
   ),
   expires_at TEXT NOT NULL,
   accepted_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,

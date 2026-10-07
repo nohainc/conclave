@@ -4,3 +4,6 @@ export * from "./execution-permissions.js";
 export * from "./workstream.js";
 export * from "./worker-inventory.js";
 export * from "./workflow-runner.js";
+export * from "./conversation.js";
+export * from "./workflow-policy.js";
+export * from "./invitation.js";

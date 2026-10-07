@@ -250,6 +250,50 @@ export async function authorizeProjectOwner(
   if (!owner) throw new AuthorizationError(permission, projectId);
 }
 
+export interface InvitationAuthorizationTarget {
+  readonly id: string;
+  readonly projectId: string;
+  readonly email: string;
+  readonly status: string;
+  readonly expiresAt: string;
+}
+
+export function authorizeProjectInvitationResponse(
+  context: Pick<SecurityContext, "userId" | "user">,
+  invitation: InvitationAuthorizationTarget,
+  now = new Date().toISOString(),
+): void {
+  if (context.user.status !== "active") {
+    throw new AuthorizationError("projects:write", invitation.projectId);
+  }
+  if (
+    context.user.email.trim().toLowerCase() !==
+    invitation.email.trim().toLowerCase()
+  ) {
+    throw new AuthorizationError("projects:write", invitation.projectId);
+  }
+  if (invitation.status !== "pending") {
+    throw new AuthorizationError("projects:write", invitation.projectId);
+  }
+  const expiryTime = new Date(invitation.expiresAt).getTime();
+  const currentTime = new Date(now).getTime();
+  if (Number.isNaN(expiryTime) || expiryTime <= currentTime) {
+    throw new AuthorizationError("projects:write", invitation.projectId);
+  }
+}
+
+export function canAccessProjectInvitation(
+  context: SecurityContext,
+  invitation: InvitationAuthorizationTarget,
+): boolean {
+  if (context.user.status !== "active") return false;
+  const isOwner = context.projectRoles[invitation.projectId] === "owner";
+  const isRecipient =
+    context.user.email.trim().toLowerCase() ===
+    invitation.email.trim().toLowerCase();
+  return isOwner || isRecipient;
+}
+
 export function authorizeProfileAdmin(
   context: Pick<SecurityContext, "userId" | "user"> & {
     audience?: string;

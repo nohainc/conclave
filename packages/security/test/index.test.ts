@@ -5,6 +5,8 @@ import {
   authorizeProfileAdmin,
   authorizeProjectMembership,
   authorizeProjectOwner,
+  authorizeProjectInvitationResponse,
+  canAccessProjectInvitation,
   authorizeWorkspaceOwner,
   computePackageDigest,
   extractBearerToken,
@@ -193,5 +195,81 @@ describe("security token utilities", () => {
     expect(
       extractBearerToken(new Headers({ authorization: "Basic abc" })),
     ).toBeNull();
+  });
+});
+
+describe("invitation authorization", () => {
+  const invitation = {
+    id: "inv-1",
+    projectId: "project-1",
+    email: "one@example.test",
+    status: "pending",
+    expiresAt: new Date(Date.now() + 60000).toISOString(),
+  };
+
+  it("authorizes invitation response when email matches and status is pending", () => {
+    expect(() =>
+      authorizeProjectInvitationResponse(context, invitation),
+    ).not.toThrow();
+  });
+
+  it("rejects invitation response when email does not match", () => {
+    const wrongUser = {
+      ...context,
+      user: { ...context.user, email: "other@example.test" },
+    };
+    expect(() =>
+      authorizeProjectInvitationResponse(wrongUser, invitation),
+    ).toThrow(AuthorizationError);
+  });
+
+  it("rejects invitation response when invitation is not pending", () => {
+    expect(() =>
+      authorizeProjectInvitationResponse(context, {
+        ...invitation,
+        status: "accepted",
+      }),
+    ).toThrow(AuthorizationError);
+  });
+
+  it("rejects invitation response when invitation has expired", () => {
+    expect(() =>
+      authorizeProjectInvitationResponse(context, {
+        ...invitation,
+        expiresAt: new Date(Date.now() - 60000).toISOString(),
+      }),
+    ).toThrow(AuthorizationError);
+  });
+
+  it("allows access to project owners or matching recipients", () => {
+    expect(canAccessProjectInvitation(context, invitation)).toBe(true);
+
+    const ownerContext: SecurityContext = {
+      userId: "owner-id",
+      user: {
+        id: "owner-id",
+        email: "owner@nohainc.com",
+        displayName: "Owner",
+        status: "active",
+      },
+      projectRoles: { "project-1": "owner" },
+      sessionId: "s2",
+      clientType: "web",
+    };
+    expect(canAccessProjectInvitation(ownerContext, invitation)).toBe(true);
+
+    const unrelatedContext: SecurityContext = {
+      userId: "other-id",
+      user: {
+        id: "other-id",
+        email: "unrelated@example.test",
+        displayName: "Other",
+        status: "active",
+      },
+      projectRoles: {},
+      sessionId: "s3",
+      clientType: "web",
+    };
+    expect(canAccessProjectInvitation(unrelatedContext, invitation)).toBe(false);
   });
 });
