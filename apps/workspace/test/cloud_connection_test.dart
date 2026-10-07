@@ -197,6 +197,7 @@ void main() {
   test('hands fallback back to WSS only after sync reconciliation', () async {
     final fallback = FakeSocket();
     final recovered = FakeSocket();
+    final pendingUpgrade = Completer<WorkspaceTransport>();
     var socketAttempts = 0;
     final connection = WorkspaceCloudConnection(
       uri: Uri.parse(
@@ -206,7 +207,7 @@ void main() {
       factory: (_) async {
         socketAttempts++;
         if (socketAttempts <= 2) throw const SocketException('offline');
-        return recovered;
+        return pendingUpgrade.future;
       },
       fallbackFactory: (_) async => fallback,
       workerInventoryProvider: () async => const [],
@@ -258,13 +259,156 @@ void main() {
     expect(connection.activeTransportMode, 'http_long_poll');
     await acknowledge(fallback, 'fallback');
     await waitFor(() => socketAttempts == 3);
-    expect(fallback.controller.isClosed, isTrue);
+    expect(fallback.controller.isClosed, isFalse);
+    expect(connection.activeTransportMode, 'http_long_poll');
+    pendingUpgrade.complete(recovered);
+    await waitFor(() => fallback.controller.isClosed);
     await waitFor(
         () => connection.activeTransportMode == 'switching_to_websocket');
     expect(connection.connectionStage, WorkspaceConnectionStage.authenticating);
     await acknowledge(recovered, 'recovered');
     expect(connection.activeTransportMode, 'websocket');
     await connection.close();
+  });
+
+  test('failed background probes preserve HTTPS and back off to an hour',
+      () async {
+    final fallback = FakeSocket();
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
+      workspaceRuntimeId: 'runtime-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => throw const SocketException('WSS unavailable'),
+      fallbackFactory: (_) async => fallback,
+      heartbeat: const Duration(hours: 1),
+      webSocketProbeInterval: const Duration(minutes: 5),
+      webSocketFailureLimit: 1,
+    );
+    await connection.connect();
+    await completeHandshake(connection, fallback);
+    final session = connection.sessionId;
+    expect(connection.nextWebSocketProbeDelay, const Duration(minutes: 5));
+    // Immediate wake retry resets backoff, then a failure doubles it.
+    await connection.retryWebSocketNow();
+    expect(connection.nextWebSocketProbeDelay, const Duration(minutes: 10));
+    expect(connection.sessionId, session);
+    expect(connection.connectionStage, WorkspaceConnectionStage.ready);
+    expect(connection.activeTransportMode, 'http_long_poll');
+    expect(fallback.controller.isClosed, isFalse);
+    await connection.close();
+  });
+
+  test('a fresh network client keeps an upgraded WebSocket usable', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final upgraded = Completer<WebSocket>();
+    final listener = server.listen((request) async {
+      upgraded.complete(await WebSocketTransformer.upgrade(request));
+    });
+    final transport = await connectWebSocketWorkspaceTransport(
+      Uri.parse('ws://127.0.0.1:${server.port}/'),
+    );
+    final socket = await upgraded.future;
+    final response = transport.messages.first;
+    socket.add('alive');
+    expect(await response, 'alive');
+    await transport.close();
+    await socket.close();
+    await listener.cancel();
+    await server.close(force: true);
+  });
+
+  test('timed-out probe leaves HTTPS ready and disposes a late result',
+      () async {
+    final fallback = FakeSocket();
+    final lateSocket = FakeSocket();
+    final pending = Completer<WorkspaceTransport>();
+    var attempts = 0;
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
+      workspaceRuntimeId: 'runtime-1',
+      workspaceId: 'workspace-1',
+      factory: (_) {
+        attempts++;
+        if (attempts == 1) throw const SocketException('offline');
+        return pending.future;
+      },
+      fallbackFactory: (_) async => fallback,
+      protocolHandshakeTimeout: const Duration(milliseconds: 100),
+      heartbeat: const Duration(hours: 1),
+      webSocketProbeInterval: const Duration(hours: 1),
+      webSocketFailureLimit: 1,
+    );
+    await connection.connect();
+    await completeHandshake(connection, fallback);
+    await connection.retryWebSocketNow();
+    expect(connection.connectionStage, WorkspaceConnectionStage.ready);
+    expect(fallback.controller.isClosed, isFalse);
+    pending.complete(lateSocket);
+    await waitFor(() => lateSocket.controller.isClosed);
+    expect(lateSocket.sent, isEmpty);
+    await connection.close();
+  });
+
+  test('periodic failures reach the maximum retry interval', () async {
+    final fallback = FakeSocket();
+    var attempts = 0;
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
+      workspaceRuntimeId: 'runtime-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async {
+        attempts++;
+        throw const SocketException('offline');
+      },
+      fallbackFactory: (_) async => fallback,
+      heartbeat: const Duration(hours: 1),
+      webSocketProbeInterval: const Duration(milliseconds: 10),
+      webSocketProbeMaxInterval: const Duration(milliseconds: 40),
+      webSocketFailureLimit: 1,
+    );
+    await connection.connect();
+    await completeHandshake(connection, fallback);
+    await waitFor(() => attempts >= 4);
+    expect(
+        connection.nextWebSocketProbeDelay, const Duration(milliseconds: 40));
+    expect(fallback.controller.isClosed, isFalse);
+    await connection.close();
+  });
+
+  test('disconnect fences a pending probe and closes its late socket',
+      () async {
+    final fallback = FakeSocket();
+    final candidate = FakeSocket();
+    final pending = Completer<WorkspaceTransport>();
+    var attempts = 0;
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
+      workspaceRuntimeId: 'runtime-1',
+      workspaceId: 'workspace-1',
+      factory: (_) {
+        attempts++;
+        if (attempts == 1) throw const SocketException('offline');
+        return pending.future;
+      },
+      fallbackFactory: (_) async => fallback,
+      heartbeat: const Duration(hours: 1),
+      webSocketProbeInterval: const Duration(hours: 1),
+      webSocketFailureLimit: 1,
+    );
+    await connection.connect();
+    await completeHandshake(connection, fallback);
+    final probe = connection.retryWebSocketNow();
+    expect(fallback.controller.isClosed, isFalse);
+    await connection.close();
+    pending.complete(candidate);
+    await probe;
+    await waitFor(() => candidate.controller.isClosed);
+    expect(connection.connectionStage, WorkspaceConnectionStage.offline);
+    expect(candidate.sent, isEmpty);
   });
 
   test('reports Workstream readiness without a local path', () async {

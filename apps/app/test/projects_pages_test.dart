@@ -434,6 +434,23 @@ void main() {
               'Checking that everything is ready…'),
           isTrue);
       expect(sends, 0);
+      final pendingInput =
+          tester.widget<TextField>(find.byType(TextField).first);
+      expect(pendingInput.enabled, isTrue);
+      await tester.tap(find.byType(TextField).first);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.enterText(find.byType(TextField).first, 'Next draft');
+      expect(pendingInput.controller!.text, 'Next draft');
+      expect(
+          tester
+              .widget<IconButton>(
+                  find.widgetWithIcon(IconButton, Icons.send_rounded))
+              .onPressed,
+          isNull);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(sends, 0);
+      // Leave the input empty so validation failure restores the original.
+      await tester.enterText(find.byType(TextField).first, '');
       await tester.tap(find.byTooltip('Refresh Work history'));
       await tester.pumpAndSettle();
       expect(
@@ -455,6 +472,10 @@ void main() {
             '**Immediate request**');
       } else {
         expect(sends, 1);
+        expect(tester.widget<TextField>(find.byType(TextField).first).enabled,
+            isTrue);
+        await tester.enterText(
+            find.byType(TextField).first, 'Draft while sending');
         expect(
             find.byType(ConclaveMarkdownBody).evaluate().any((element) =>
                 (element.widget as ConclaveMarkdownBody).data ==
@@ -475,7 +496,19 @@ void main() {
         ];
         submitted.complete('saved-1');
         await tester.pumpAndSettle();
+        expect(
+            tester
+                .widget<TextField>(find.byType(TextField).first)
+                .controller!
+                .text,
+            'Draft while sending');
         await tester.enterText(find.byType(TextField).first, 'Next request');
+        expect(
+            tester
+                .widget<TextField>(find.byType(TextField).first)
+                .controller!
+                .text,
+            'Next request');
         expect(
             tester
                 .widget<IconButton>(
@@ -1950,11 +1983,31 @@ void main() {
         steps: [
           AxWorkRequestStep(
             kind: 'implement',
-            status: 'running',
+            status: 'waiting',
             workerId: 'w-1',
+            workerTypeId: 'chatgpt',
+            workerDisplayName: 'ChatGPT',
             model: 'gpt-4o',
             elapsedMs: 5000,
           )
+        ],
+      ),
+      const AxWorkRequest(
+        id: 'req-running',
+        requestedByName: 'Vitalii',
+        prompt: 'Work is underway',
+        workflowId: 'direct',
+        workflowVersion: 1,
+        workflowName: 'Direct Execution',
+        status: 'running',
+        createdAt: '2026-10-06T10:00:30Z',
+        steps: [
+          AxWorkRequestStep(
+              kind: 'implement',
+              status: 'running',
+              workerId: 'w-1',
+              workerTypeId: 'chatgpt',
+              workerDisplayName: 'ChatGPT')
         ],
       ),
       const AxWorkRequest(
@@ -1973,6 +2026,7 @@ void main() {
             status: 'completed',
             workerId: 'w-1',
             workerDisplayName: 'Claude 3.7 Sonnet',
+            workerTypeId: 'claude',
             model: 'claude-3-7-sonnet',
             elapsedMs: 12000,
             resultText: 'Feature implementation complete.',
@@ -2013,13 +2067,22 @@ void main() {
     // Verify Conclave system event has Conclave identity, workflow, model, and elapsed time
     expect(find.text('Conclave'), findsOneWidget);
     expect(
-        find.textContaining('Direct Execution · GPT-4o · 5s'), findsOneWidget);
+        find.textContaining('Direct Execution · gpt-4o · 5s'), findsOneWidget);
 
     // Verify Worker completed response has Worker name, official worker icon, workflow, and model
     expect(find.text('Claude 3.7 Sonnet'), findsOneWidget);
-    expect(find.textContaining('Direct Execution · Claude 3.7 Sonnet · 12s'),
+    expect(find.textContaining('Direct Execution · claude-3-7-sonnet · 12s'),
         findsOneWidget);
-    expect(find.byIcon(Icons.smart_toy_outlined), findsOneWidget);
+    // A running response has worker attribution before any result text exists.
+    expect(find.text('ChatGPT'), findsOneWidget);
+    final assetImages = tester
+        .widgetList<Image>(find.byType(Image))
+        .map((image) => image.image)
+        .whereType<AssetImage>()
+        .map((asset) => asset.assetName);
+    expect(assetImages, contains('assets/worker_icons/chatgpt.png'));
+    expect(assetImages, contains('assets/worker_icons/claude.png'));
+    expect(assetImages, contains('assets/branding/conclave_logo_32.png'));
 
     await tester.binding.setSurfaceSize(null);
   });
@@ -2051,7 +2114,7 @@ void main() {
             queueStatus: 'idle',
             workConfig: {
               'bindings': {
-                'implement': {
+                'direct': {
                   'worker_id': 'w-chatgpt',
                   'model': 'gpt-4o',
                 },
@@ -2087,8 +2150,8 @@ void main() {
     // Verify chatgpt models are present
     expect(find.text('Default model'), findsOneWidget);
     expect(find.text('o3'), findsWidgets);
-    expect(find.text('o3-mini'), findsOneWidget);
-    expect(find.text('GPT-4.5'), findsOneWidget);
+    expect(find.text('o3-mini'), findsNothing);
+    expect(find.text('GPT-4.5'), findsNothing);
 
     // Select 'o3'
     final o3Option = find.descendant(
@@ -2104,8 +2167,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('o3'), findsWidgets);
-    expect(
-        dataSource.savedWorkConfig?['bindings']?['implement']?['model'], 'o3');
+    expect(dataSource.savedWorkConfig?['bindings']?['direct']?['model'], 'o3');
 
     // Dismiss SnackBar if present
     ScaffoldMessenger.of(tester.element(find.byType(Scaffold).first))
@@ -2670,6 +2732,20 @@ class _ModelSelectionTestDataSource extends _GenericWorkerConfigDataSource {
           readinessState: 'ready',
           localConcurrencyLimit: 1,
           capabilities: [],
+          modelOptions: {
+            'catalog': [
+              {
+                'id': 'gpt-4o',
+                'name': 'GPT-4o',
+                'supportedReasoningEfforts': []
+              },
+              {
+                'id': 'o3',
+                'name': 'o3',
+                'supportedReasoningEfforts': ['low', 'high']
+              },
+            ]
+          },
         ),
       ];
 }

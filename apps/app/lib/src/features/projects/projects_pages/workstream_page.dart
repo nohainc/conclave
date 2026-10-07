@@ -760,6 +760,8 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         ? Map<String, dynamic>.from(rawBinding)
         : <String, dynamic>{};
     final updated = Map<String, dynamic>.from(binding);
+    updated.remove('reasoningEffort');
+    updated.remove('reasoning_effort');
     if (model.trim().isEmpty) {
       updated.remove('model');
     } else {

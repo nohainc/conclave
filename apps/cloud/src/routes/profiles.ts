@@ -56,11 +56,18 @@ export async function handleListWorkspaceWorkerInventory(
             catalog.display_name AS catalog_display_name,
             catalog.description AS catalog_description,
             catalog.lifecycle_state AS catalog_lifecycle_state,
-            catalog.visibility_state AS catalog_visibility_state
+            catalog.visibility_state AS catalog_visibility_state,
+            release.payload_json AS model_profile_json
        FROM workspace_worker_inventory i
        JOIN execution_workspaces ew ON ew.id = i.workspace_id
        LEFT JOIN worker_catalog catalog
          ON catalog.worker_type_id = i.worker_type_id
+       LEFT JOIN tool_profile_releases release
+         ON release.profile_definition_id = i.profile_definition_id
+        AND release.release_version = i.profile_release_version
+        AND release.worker_type_id = i.worker_type_id
+        AND release.published_at IS NOT NULL
+        AND release.lifecycle_state <> 'revoked'
       WHERE i.owner_user_id = ?1
         AND (?2 IS NULL OR i.workspace_id = ?2)
       ORDER BY i.workspace_id, i.worker_type_id, i.worker_id`,
@@ -77,6 +84,10 @@ export async function handleListWorkspaceWorkerInventory(
   };
   return json({
     workers: (rows.results ?? []).map((row) => ({
+      modelOptions: projectModelOptions(
+        row.model_profile_json,
+        row.provider_tool_version,
+      ),
       id: String(row.worker_id),
       workspaceId: String(row.workspace_id),
       workspaceName: String(row.workspace_name),
@@ -813,4 +824,79 @@ export async function handleListGlobalToolProfileAudit(
 ): Promise<Response> {
   await authorizeToolProfileAdmin(request, env, ctx);
   return json(await listToolProfileAudit(env.CONCLAVE_DB));
+}
+
+/** Expose selection metadata only, never CLI commands or credential configuration. */
+export function projectModelOptions(
+  payload: unknown,
+  providerVersion?: unknown,
+) {
+  let profile: Record<string, unknown>;
+  try {
+    profile = JSON.parse(String(payload));
+  } catch {
+    return null;
+  }
+  const model = profile?.model as Record<string, unknown> | undefined;
+  if (!model || model.supported !== true) return null;
+  const efforts = (value: unknown) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [];
+  const version = (value: unknown) =>
+    typeof value === "string" && /^\d+\.\d+\.\d+(?:[-+].*)?$/.test(value)
+      ? value.split(/[.+-]/).slice(0, 3).map(Number)
+      : null;
+  const installed = version(providerVersion);
+  const compatible = (entry: Record<string, unknown>) => {
+    for (const key of ["minProviderVersion", "maxProviderVersion"] as const) {
+      if (entry[key] === undefined) continue;
+      const bound = version(entry[key]);
+      if (!installed || !bound) return false;
+      let comparison = 0;
+      for (let i = 0; i < 3; i++) {
+        if (installed[i] !== bound[i]) {
+          comparison = installed[i]! - bound[i]!;
+          break;
+        }
+      }
+      if (
+        (key === "minProviderVersion" && comparison < 0) ||
+        (key === "maxProviderVersion" && comparison > 0)
+      )
+        return false;
+    }
+    return true;
+  };
+  const allowlist = efforts(model.allowlist);
+  const catalog = Array.isArray(model.catalog) ? model.catalog : [];
+  return {
+    supportedReasoningEfforts: efforts(model.supportedReasoningEfforts),
+    defaultReasoningEffort:
+      typeof model.defaultReasoningEffort === "string"
+        ? model.defaultReasoningEffort
+        : null,
+    catalog: catalog
+      .filter(
+        (entry) =>
+          entry &&
+          typeof entry.id === "string" &&
+          compatible(entry) &&
+          (model.unknownModelPolicy !== "profile_allowlist" ||
+            allowlist.includes(entry.id)),
+      )
+      .map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        badge: entry.badge,
+        description: entry.description,
+        minProviderVersion: entry.minProviderVersion,
+        maxProviderVersion: entry.maxProviderVersion,
+        defaultReasoningEffort: entry.defaultReasoningEffort,
+        supportedReasoningEfforts:
+          entry.supportedReasoningEfforts === undefined
+            ? efforts(model.supportedReasoningEfforts)
+            : efforts(entry.supportedReasoningEfforts),
+      })),
+  };
 }

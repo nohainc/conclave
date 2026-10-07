@@ -86,6 +86,7 @@ export function normalizeWorkstreamWorkConfig(value: unknown): {
             "workerId",
             "workerLabel",
             "model",
+            "reasoningEffort",
             "fallbackWorkerId",
             "fallbackWorkerLabel",
             "additionalInstructions",
@@ -126,9 +127,15 @@ export function normalizeWorkstreamWorkConfig(value: unknown): {
         workspaceName: label.workspaceName.trim(),
       };
     }
-    for (const key of ["workerId", "model", "fallbackWorkerId"] as const) {
+    for (const key of [
+      "workerId",
+      "model",
+      "reasoningEffort",
+      "fallbackWorkerId",
+    ] as const) {
       if (binding[key] !== undefined) {
-        const max = key === "model" ? 160 : 200;
+        const max =
+          key === "model" ? 160 : key === "reasoningEffort" ? 64 : 200;
         if (
           typeof binding[key] !== "string" ||
           binding[key].length > max ||

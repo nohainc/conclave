@@ -127,8 +127,12 @@ class WorkspaceLifecycleController extends ChangeNotifier {
   Future<void> handleSystemResume() async {
     await checkWorkerReadiness();
     final connection = workspace.cloudConnection;
-    if (connection != null && !connection.isConnected) {
-      unawaited(connection.retryNow().catchError((_) {}));
+    if (connection != null) {
+      if (!connection.isConnected) {
+        unawaited(connection.retryNow().catchError((_) {}));
+      } else if (connection.activeTransportMode == 'http_long_poll') {
+        unawaited(connection.retryWebSocketNow().catchError((_) {}));
+      }
     }
     notifyListeners();
   }

@@ -2,6 +2,10 @@ name: Deploy Conclave AX App
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
 
 concurrency:
   group: conclave-ax-production-deploy
@@ -12,12 +16,15 @@ permissions:
 
 jobs:
   deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/app
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: 11.19.0
@@ -138,10 +145,6 @@ jobs:
                 const configured = new Set(JSON.parse(input).map((secret) => secret.name));
                 const required = [
                   "BETTER_AUTH_SECRET",
-                  "CONCLAVE_AUTH_GITHUB_CLIENT_ID",
-                  "CONCLAVE_AUTH_GITHUB_CLIENT_SECRET",
-                  "CONCLAVE_AUTH_GOOGLE_CLIENT_ID",
-                  "CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET",
                 ];
                 if (process.env.CONCLAVE_RELEASE_PRIVATE_KEY) {
                   required.push(

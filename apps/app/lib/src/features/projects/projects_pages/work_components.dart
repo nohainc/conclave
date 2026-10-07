@@ -49,385 +49,25 @@ class AxModelOption {
 }
 
 List<AxModelOption> _modelsForWorker(AxWorker worker) {
-  final workerType = worker.workerTypeId.toLowerCase();
-  final profileId = (worker.profileDefinitionId ?? '').toLowerCase();
-  final displayName = worker.displayName.toLowerCase();
-
-  if (workerType == 'chatgpt' ||
-      profileId.contains('chatgpt') ||
-      profileId.contains('openai') ||
-      displayName.contains('chatgpt') ||
-      displayName.contains('openai')) {
-    return const [
-      AxModelOption(
-        id: 'gpt-6.1-sol',
-        name: 'GPT-6.1 Sol',
-        badge: 'Workhorse',
-        description: 'Latest workhorse model for coding and everyday work',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-      ),
-      AxModelOption(
-        id: 'gpt-6-astra',
-        name: 'GPT-6 Astra',
-        badge: 'Frontier Reasoning',
-        description: 'Frontier intelligence for the most demanding work',
-        defaultReasoningEffort: 'high',
-        supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-      ),
-      AxModelOption(
-        id: 'gpt-6-sol',
-        name: 'GPT-6 Sol',
-        badge: 'Workhorse',
-        description: 'Previous generation workhorse model',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh'],
-      ),
-      AxModelOption(
-        id: 'gpt-6-luna',
-        name: 'GPT-6 Luna',
-        badge: 'Fast & Affordable',
-        description: 'Fast and affordable model for easier tasks',
-        defaultReasoningEffort: 'low',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'gpt-5.6-sol',
-        name: 'GPT-5.6 Sol',
-        badge: 'Workhorse',
-        description: 'Older generation workhorse model',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'gpt-5.6-terra',
-        name: 'GPT-5.6 Terra',
-        badge: 'Balanced',
-        description: 'Older balanced model for straightforward work',
-        defaultReasoningEffort: 'low',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'gpt-5.6-luna',
-        name: 'GPT-5.6 Luna',
-        badge: 'Fast',
-        description: 'Older fast and efficient model',
-        defaultReasoningEffort: 'low',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'gpt-reserve',
-        name: 'GPT Reserve',
-        badge: 'Agentic',
-        description: 'Fast and affordable agentic coding model',
-        defaultReasoningEffort: 'low',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'o3',
-        name: 'o3',
-        badge: 'Reasoning',
-        description:
-            'Most powerful reasoning model for coding, science, and math',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high', 'max'],
-      ),
-      AxModelOption(
-        id: 'o3-mini',
-        name: 'o3-mini',
-        badge: 'Fast Reasoning',
-        description:
-            'High-speed reasoning specialized for STEM and programming',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'o1',
-        name: 'o1',
-        badge: 'Reasoning',
-        description:
-            'Advanced full-scale reasoning model for deep logic problems',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'o1-mini',
-        name: 'o1-mini',
-        badge: 'Fast Reasoning',
-        description: 'Efficient reasoning model for fast coding tasks',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'o1-preview',
-        name: 'o1-preview',
-        badge: 'Reasoning Preview',
-        description: 'Preview reasoning model for multi-step reasoning',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'gpt-4.5-preview',
-        name: 'GPT-4.5',
-        badge: 'Massive Knowledge',
-        description:
-            'Largest flagship model with broad world knowledge and deep nuance',
-      ),
-      AxModelOption(
-        id: 'gpt-4o',
-        name: 'GPT-4o',
-        badge: 'Flagship',
-        description:
-            'High-intelligence flagship model for complex text, code, and reasoning',
-      ),
-      AxModelOption(
-        id: 'gpt-4o-mini',
-        name: 'GPT-4o mini',
-        badge: 'Fast & Affordable',
-        description: 'Lightweight and fast for everyday coding and tasks',
-      ),
-      AxModelOption(
-        id: 'chatgpt-4o-latest',
-        name: 'ChatGPT-4o',
-        badge: 'Dynamic',
-        description: 'Continuously updated ChatGPT-4o release',
-      ),
-      AxModelOption(
-        id: 'gpt-4-mini',
-        name: 'GPT-4 Mini',
-        badge: 'Code Specialist',
-        description: 'Fast low-latency code generation and refactoring',
-      ),
-      AxModelOption(
-        id: 'gpt-4-turbo',
-        name: 'GPT-4 Turbo',
-        badge: 'Legacy',
-        description: 'High-capacity GPT-4 model with 128k context',
-      ),
-      AxModelOption(
-        id: 'gpt-4',
-        name: 'GPT-4',
-        badge: 'Legacy',
-        description: 'Original GPT-4 instruction following model',
-      ),
-    ];
-  } else if (workerType == 'copilot' ||
-      profileId.contains('copilot') ||
-      displayName.contains('copilot')) {
-    return const [
-      AxModelOption(
-        id: 'claude-3.7-sonnet',
-        name: 'Claude 3.7 Sonnet',
-        badge: 'Hybrid Reasoning',
-        description: 'Claude 3.7 with hybrid standard and extended thinking',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high', 'max'],
-      ),
-      AxModelOption(
-        id: 'claude-3.5-sonnet',
-        name: 'Claude 3.5 Sonnet',
-        badge: 'Flagship Coding',
-        description: 'Frontier code generation and multi-file editing',
-      ),
-      AxModelOption(
-        id: 'gpt-4o',
-        name: 'GPT-4o',
-        badge: 'Flagship',
-        description: 'High-speed intelligence for complex coding tasks',
-      ),
-      AxModelOption(
-        id: 'o3-mini',
-        name: 'o3-mini',
-        badge: 'Fast Reasoning',
-        description: 'High-speed reasoning specialized for STEM and coding',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'o1',
-        name: 'o1',
-        badge: 'Reasoning',
-        description: 'Advanced reasoning for deep architectural tasks',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-    ];
-  } else if (workerType == 'grok' ||
-      profileId.contains('grok') ||
-      profileId.contains('xai') ||
-      displayName.contains('grok')) {
-    return const [
-      AxModelOption(
-        id: 'grok-3',
-        name: 'Grok 3',
-        badge: 'Flagship Reasoning',
-        description:
-            'Frontier reasoning model with state-of-the-art coding and math',
-        defaultReasoningEffort: 'high',
-        supportedReasoningEfforts: ['low', 'medium', 'high', 'max'],
-      ),
-      AxModelOption(
-        id: 'grok-3-mini',
-        name: 'Grok 3 mini',
-        badge: 'Fast Reasoning',
-        description: 'High-throughput lightweight reasoning model',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'grok-2',
-        name: 'Grok 2',
-        badge: 'Flagship',
-        description: 'State-of-the-art language and code generation',
-      ),
-      AxModelOption(
-        id: 'grok-2-vision',
-        name: 'Grok 2 Vision',
-        badge: 'Multimodal',
-        description: 'Visual reasoning and multimodal code synthesis',
-      ),
-      AxModelOption(
-        id: 'grok-beta',
-        name: 'Grok Beta',
-        badge: 'Dynamic',
-        description: 'Latest experimental release of Grok',
-      ),
-    ];
-  } else if (workerType == 'claude' ||
-      profileId.contains('claude') ||
-      profileId.contains('anthropic') ||
-      displayName.contains('claude')) {
-    return const [
-      AxModelOption(
-        id: 'claude-3-7-sonnet',
-        name: 'Claude 3.7 Sonnet',
-        badge: 'Hybrid Reasoning',
-        description:
-            'Hybrid standard and extended thinking for high-level engineering',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high', 'max'],
-      ),
-      AxModelOption(
-        id: 'claude-3-5-sonnet',
-        name: 'Claude 3.5 Sonnet',
-        badge: 'Flagship Coding',
-        description:
-            'Industry-standard model for code generation and refactoring',
-      ),
-      AxModelOption(
-        id: 'claude-3-5-haiku',
-        name: 'Claude 3.5 Haiku',
-        badge: 'Ultra Fast',
-        description: 'Near-instant responsiveness with high coding capability',
-      ),
-      AxModelOption(
-        id: 'claude-3-opus',
-        name: 'Claude 3 Opus',
-        badge: 'Deep Reasoning',
-        description: 'Top-level reasoning for complex open-ended analysis',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-    ];
-  } else if (workerType == 'gemini' ||
-      profileId.contains('gemini') ||
-      profileId.contains('google') ||
-      displayName.contains('gemini')) {
-    return const [
-      AxModelOption(
-        id: 'gemini-2.5-pro',
-        name: 'Gemini 2.5 Pro',
-        badge: 'Flagship Thinking',
-        description: 'Deep thinking, complex reasoning, and 1M+ token context',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'gemini-2.5-flash',
-        name: 'Gemini 2.5 Flash',
-        badge: 'Fast & Smart',
-        description:
-            'Next-generation lightweight model with high speed and low latency',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'gemini-2.0-flash',
-        name: 'Gemini 2.0 Flash',
-        badge: 'Multimodal',
-        description: 'Fast multimodal performance for quick turnarounds',
-      ),
-      AxModelOption(
-        id: 'gemini-1.5-pro',
-        name: 'Gemini 1.5 Pro',
-        badge: 'Long Context',
-        description: '2M context window for massive codebase analysis',
-      ),
-      AxModelOption(
-        id: 'gemini-1.5-flash',
-        name: 'Gemini 1.5 Flash',
-        badge: 'Fast',
-        description: 'Lightweight and fast for general coding',
-      ),
-    ];
-  } else if (workerType == 'deepseek' ||
-      profileId.contains('deepseek') ||
-      displayName.contains('deepseek')) {
-    return const [
-      AxModelOption(
-        id: 'deepseek-reasoner',
-        name: 'DeepSeek-R1',
-        badge: 'Reasoning R1',
-        description: 'Open reasoning model with chain-of-thought verification',
-        defaultReasoningEffort: 'high',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'deepseek-chat',
-        name: 'DeepSeek-V3',
-        badge: 'Flagship V3',
-        description: 'Fast 671B MoE model for general software engineering',
-      ),
-    ];
-  } else if (workerType == 'ollama' ||
-      profileId.contains('ollama') ||
-      displayName.contains('ollama')) {
-    return const [
-      AxModelOption(
-        id: 'llama3.3',
-        name: 'Llama 3.3 70B',
-        badge: 'Flagship Local',
-        description: 'Meta Llama 3.3 70B versatile open model',
-      ),
-      AxModelOption(
-        id: 'qwen2.5-coder',
-        name: 'Qwen 2.5 Coder',
-        badge: 'Code Specialist',
-        description: 'Specialized code generation and fill-in-the-middle model',
-      ),
-      AxModelOption(
-        id: 'deepseek-r1',
-        name: 'DeepSeek-R1 Local',
-        badge: 'Reasoning Local',
-        description: 'Distilled local reasoning model for logic and code',
-        defaultReasoningEffort: 'medium',
-        supportedReasoningEfforts: ['low', 'medium', 'high'],
-      ),
-      AxModelOption(
-        id: 'phi4',
-        name: 'Phi-4',
-        badge: 'Compact & Smart',
-        description: 'Microsoft 14B state-of-the-art small language model',
-      ),
-      AxModelOption(
-        id: 'mistral',
-        name: 'Mistral 7B',
-        badge: 'Fast Local',
-        description: 'Fast lightweight open model for quick completions',
-      ),
-    ];
-  }
-  return const [];
+  final catalog = worker.modelOptions['catalog'];
+  if (catalog is! List) return const [];
+  return catalog
+      .whereType<Map>()
+      .where((entry) => entry['id'] is String)
+      .map((entry) => AxModelOption(
+            id: entry['id'] as String,
+            name: entry['name']?.toString() ?? entry['id'] as String,
+            badge: entry['badge']?.toString() ?? '',
+            description: entry['description']?.toString() ?? '',
+            defaultReasoningEffort: entry['defaultReasoningEffort']?.toString(),
+            supportedReasoningEfforts:
+                entry['supportedReasoningEfforts'] is List
+                    ? (entry['supportedReasoningEfforts'] as List)
+                        .whereType<String>()
+                        .toList()
+                    : const [],
+          ))
+      .toList();
 }
 
 String _modelDisplayName(String? modelId, {AxWorker? worker}) {
@@ -436,29 +76,6 @@ String _modelDisplayName(String? modelId, {AxWorker? worker}) {
       worker != null ? _modelsForWorker(worker) : const <AxModelOption>[];
   final found = list.where((m) => m.id == modelId).firstOrNull;
   if (found != null) return found.name;
-  for (final typeId in [
-    'chatgpt',
-    'copilot',
-    'grok',
-    'claude',
-    'gemini',
-    'deepseek',
-    'ollama',
-  ]) {
-    for (final option in _modelsForWorker(AxWorker(
-      id: '',
-      workspaceId: '',
-      workspaceName: '',
-      workerTypeId: typeId,
-      displayName: '',
-      status: '',
-      readinessState: '',
-      localConcurrencyLimit: 1,
-      capabilities: const [],
-    ))) {
-      if (option.id == modelId) return option.name;
-    }
-  }
   return modelId;
 }
 
@@ -747,8 +364,10 @@ class _WorkComposer extends StatelessWidget {
     final bindings = workConfig['bindings'] is Map
         ? Map<String, dynamic>.from(workConfig['bindings'] as Map)
         : <String, dynamic>{};
-    final stepKind = selectedWorkflow?.steps.firstOrNull?.kind ??
-        (selectedWorkflow?.id == 'chat' ? 'chat' : 'implement');
+    final stepKind = selectedWorkflow?.id == 'direct'
+        ? 'direct'
+        : selectedWorkflow?.steps.firstOrNull?.kind ??
+            (selectedWorkflow?.id == 'chat' ? 'chat' : 'implement');
     final rawBinding = bindings[stepKind] ??
         (selectedWorkflow != null ? bindings[selectedWorkflow.id] : null);
     final binding = rawBinding is Map
@@ -783,8 +402,10 @@ class _WorkComposer extends StatelessWidget {
     final bindings = workConfig['bindings'] is Map
         ? Map<String, dynamic>.from(workConfig['bindings'] as Map)
         : <String, dynamic>{};
-    final stepKind = selectedWorkflow?.steps.firstOrNull?.kind ??
-        (selectedWorkflow?.id == 'chat' ? 'chat' : 'implement');
+    final stepKind = selectedWorkflow?.id == 'direct'
+        ? 'direct'
+        : selectedWorkflow?.steps.firstOrNull?.kind ??
+            (selectedWorkflow?.id == 'chat' ? 'chat' : 'implement');
     final rawBinding = bindings[stepKind] ??
         (selectedWorkflow != null ? bindings[selectedWorkflow.id] : null);
     final binding = rawBinding is Map
@@ -804,12 +425,14 @@ class _WorkComposer extends StatelessWidget {
         : const <AxModelOption>[];
     final currentModelOption =
         availableModels.where((m) => m.id == selectedModel).firstOrNull;
-    final supportedEfforts = currentModelOption != null
-        ? currentModelOption.supportedReasoningEfforts
-        : (availableModels.isNotEmpty &&
-                availableModels
-                    .any((m) => m.supportedReasoningEfforts.isNotEmpty)
-            ? const ['low', 'medium', 'high', 'xhigh', 'max']
+    final supportedEfforts = currentModelOption?.supportedReasoningEfforts ??
+        (selectedModel.isEmpty &&
+                assignedWorker?.modelOptions['supportedReasoningEfforts']
+                    is List
+            ? (assignedWorker!.modelOptions['supportedReasoningEfforts']
+                    as List)
+                .whereType<String>()
+                .toList()
             : const <String>[]);
 
     return SingleChildScrollView(
@@ -1247,10 +870,11 @@ class _WorkComposer extends StatelessWidget {
             chatStyle: true,
             minLines: 2,
             maxLines: 6,
-            enabled: canExecute && !submitting,
+            enabled: canExecute,
             onSend: () => onRun(),
             sendTooltip: 'Run Work',
             sendEnabled: canExecute &&
+                !submitting &&
                 !awaitingResponse &&
                 !loadingWorkflows &&
                 workflowCatalogError == null,
@@ -1424,7 +1048,7 @@ class _WorkTimelineCard extends StatelessWidget {
         .where((step) => step.status == 'running' || step.status == 'waiting')
         .firstOrNull;
     final stepForContext =
-        lastCompletedStep ?? activeStep ?? request.steps.firstOrNull;
+        activeStep ?? lastCompletedStep ?? request.steps.firstOrNull;
     final selectedModel = stepForContext?.model?.trim();
     final selectedReasoningEffort = stepForContext?.reasoningEffort?.trim();
 
@@ -1440,12 +1064,32 @@ class _WorkTimelineCard extends StatelessWidget {
         : failedStep?.errorMessage;
     final isError = error?.isNotEmpty == true;
 
-    final workerDisplayName = lastCompletedStep?.workerDisplayName?.trim() ??
-        stepForContext?.workerDisplayName?.trim();
+    // Waiting/queued messages belong to Conclave. A running Step is the
+    // product's worker execution signal; no final text is required to attribute it.
+    final senderStep = activeStep?.status == 'running'
+        ? activeStep
+        : lastCompletedStep ?? stepForContext;
+    final workerType = senderStep?.workerTypeId?.trim().toLowerCase();
+    final workerDisplayName = senderStep?.workerDisplayName?.trim();
+    final workerName = workerDisplayName?.isNotEmpty == true
+        ? workerDisplayName!
+        : switch (workerType) {
+            'chatgpt' => 'ChatGPT',
+            'claude' => 'Claude',
+            'gemini' => 'Gemini',
+            _ => 'Worker',
+          };
     final isWorkerResponse = !isError &&
-        response?.isNotEmpty == true &&
-        workerDisplayName?.isNotEmpty == true;
-    final senderName = isWorkerResponse ? workerDisplayName! : 'Conclave';
+        (senderStep?.status == 'running' || response?.isNotEmpty == true) &&
+        (workerDisplayName?.isNotEmpty == true ||
+            workerType?.isNotEmpty == true);
+    final senderName = isWorkerResponse ? workerName : 'Conclave';
+    final workerIcon = switch (workerType) {
+      'chatgpt' => 'assets/worker_icons/chatgpt.png',
+      'claude' => 'assets/worker_icons/claude.png',
+      'gemini' => 'assets/worker_icons/gemini.png',
+      _ => null,
+    };
 
     String? formattedModelInfo;
     if (selectedModel != null && selectedModel.isNotEmpty) {
@@ -1473,15 +1117,20 @@ class _WorkTimelineCard extends StatelessWidget {
         metadataSegments.isEmpty ? '' : '· ${metadataSegments.join(' · ')}';
 
     final Widget senderAvatar = isWorkerResponse
-        ? CircleAvatar(
-            radius: 11,
-            backgroundColor: ConclaveColors.primarySoftColor(isDark),
-            child: Icon(
-              Icons.smart_toy_outlined,
-              size: 13,
-              color: ConclaveColors.primaryForeground(isDark),
-            ),
-          )
+        ? (workerIcon != null
+            ? Image.asset(workerIcon,
+                width: 22,
+                height: 22,
+                fit: BoxFit.contain,
+                semanticLabel: '$workerName icon')
+            : CircleAvatar(
+                radius: 11,
+                backgroundColor: ConclaveColors.primarySoftColor(isDark),
+                child: Text(workerName.substring(0, 1).toUpperCase(),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: ConclaveColors.primaryForeground(isDark))),
+              ))
         : Image.asset(
             ConclaveBrandAssets.logoPng32,
             width: 20,

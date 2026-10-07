@@ -63,7 +63,17 @@ required for machine participation.
 **Authentication:** a machine runtime credential bound to one Workspace
 runtime, sent as a Bearer credential in the `Authorization` header. Runtime
 credentials MUST NOT be accepted from WebSocket URL query parameters.
-**Transport:** WSS is primary; HTTPS long-poll is the functional fallback.  
+**Transport:** WSS is primary; HTTPS long-poll is the functional fallback.
+Workspace retries WSS after 5 minutes, doubling the interval after failures
+to a maximum of one hour. Wake/app resume resets the delay and requests a
+fresh WSS attempt while HTTPS is Ready. Each WSS attempt uses a fresh network
+client; timed-out or superseded attempts close late sockets. HTTPS stays active
+during the upgrade attempt. Cloud accepts only one active runtime session, so
+an accepted upgrade fences the HTTPS session; Workspace then tears down its
+old timers, subscription, transport and session state before authenticating and
+synchronizing WSS. WSS is Ready only after synchronization, inventory and
+assignment reconciliation complete; failure restores HTTPS through reconnect.
+Automatic recovery does not invoke the human owner disconnect workflow.
 **Contract ownership:** the versioned Workspace Runtime Protocol schema and
 Cloud Gateway implementation.
 

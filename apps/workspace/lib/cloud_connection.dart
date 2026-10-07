@@ -150,17 +150,29 @@ Future<WorkspaceTransport> connectWebSocketWorkspaceTransport(
 }) async {
   final socketUri =
       uri.hasPort ? uri : uri.replace(port: uri.scheme == 'wss' ? 443 : 80);
-  final socket = await WebSocket.connect(
+  // A fresh client discards stale pooled sockets/DNS state after sleep.
+  final client = HttpClient();
+  var expired = false;
+  final pending = WebSocket.connect(
     socketUri.toString(),
+    customClient: client,
     headers: authToken == null
         ? null
         : <String, String>{'Authorization': 'Bearer $authToken'},
-  ).timeout(
-    connectTimeout,
-    onTimeout: () => throw const SocketException(
-      'WebSocket connection timed out during transport setup',
-    ),
   );
+  unawaited(pending.then<void>((socket) async {
+    if (expired) await socket.close();
+  }, onError: (Object _) {}).catchError((Object _) {}));
+  late final WebSocket socket;
+  try {
+    socket = await pending.timeout(connectTimeout);
+  } on Object {
+    expired = true;
+    rethrow;
+  } finally {
+    client.close(force: true);
+  }
+
   socket.pingInterval = const Duration(seconds: 10);
   return WebSocketWorkspaceTransport(socket);
 }
@@ -191,6 +203,7 @@ class WorkspaceCloudConnection {
     this.protocolHandshakeTimeout = const Duration(seconds: 15),
     this.syncTimeout = const Duration(seconds: 20),
     this.webSocketProbeInterval = const Duration(minutes: 5),
+    this.webSocketProbeMaxInterval = const Duration(hours: 1),
     this.webSocketFailureLimit = 3,
     this.credentialAvailable = true,
   })  : authorizedWorkspaceIds = {
@@ -224,6 +237,9 @@ class WorkspaceCloudConnection {
   final Duration protocolHandshakeTimeout;
   final Duration syncTimeout;
   final Duration webSocketProbeInterval;
+  final Duration webSocketProbeMaxInterval;
+  int _webSocketProbeFailures = 0;
+  int _transportGeneration = 0;
   final int webSocketFailureLimit;
   final bool credentialAvailable;
   WorkspaceTransport? _transport;
@@ -469,6 +485,7 @@ class WorkspaceCloudConnection {
   /// Fully tears down any existing timers, subscriptions, and socket objects
   /// with a timeout guarantee so reconnects can never hang on dead resources.
   Future<void> _cleanCurrentTransport() async {
+    _transportGeneration++;
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
     _heartbeatTimeoutTimer?.cancel();
@@ -517,8 +534,12 @@ class WorkspaceCloudConnection {
     await _open();
   }
 
-  Future<void> _open({bool forceWebSocket = false}) async {
+  Future<void> _open({WorkspaceTransport? preparedWebSocket}) async {
     await _cleanCurrentTransport();
+    if (_closing && preparedWebSocket != null) {
+      await preparedWebSocket.close();
+      return;
+    }
     lastConnectionAttemptAt = DateTime.now().toUtc();
     connectionStage = WorkspaceConnectionStage.connecting;
     lastHelloSentAt = null;
@@ -543,13 +564,8 @@ class WorkspaceCloudConnection {
         query: null,
         fragment: null,
       );
-      if (forceWebSocket) {
-        socket = await factory(uri).timeout(
-          protocolHandshakeTimeout,
-          onTimeout: () => throw const SocketException(
-            'WebSocket connection timed out during transport open',
-          ),
-        );
+      if (preparedWebSocket != null) {
+        socket = preparedWebSocket;
         selectedWebSocket = true;
       } else if (_preferFallbackTransport && fallback != null) {
         try {
@@ -869,6 +885,7 @@ class WorkspaceCloudConnection {
         : fallbackFactory == null
             ? 'not configured'
             : 'standby';
+    if (activeTransportMode == 'websocket') _webSocketProbeFailures = 0;
     lastReadyAt = DateTime.now().toUtc();
     lastConnectionError = null;
     lastHttpStatusCode = null;
@@ -914,9 +931,23 @@ class WorkspaceCloudConnection {
         webSocketProbeInterval <= Duration.zero) {
       return;
     }
-    _webSocketProbeTimer = Timer(webSocketProbeInterval, () {
+    _webSocketProbeTimer = Timer(nextWebSocketProbeDelay, () {
       unawaited(_probeWebSocket());
     });
+  }
+
+  Duration get nextWebSocketProbeDelay => Duration(
+        microseconds: (webSocketProbeInterval.inMicroseconds *
+                (1 << _webSocketProbeFailures.clamp(0, 8)))
+            .clamp(0, webSocketProbeMaxInterval.inMicroseconds),
+      );
+
+  /// Wake/network recovery should not wait for a backed-off periodic retry.
+  Future<void> retryWebSocketNow() async {
+    if (_closing) return;
+    _webSocketProbeFailures = 0;
+    _webSocketProbeTimer?.cancel();
+    await _probeWebSocket();
   }
 
   Future<void> _probeWebSocket() async {
@@ -927,26 +958,36 @@ class WorkspaceCloudConnection {
       return;
     }
     _probingWebSocket = true;
-    connectionStage = WorkspaceConnectionStage.switchingToWebSocket;
-    await _cleanCurrentTransport();
+    _webSocketProbeTimer?.cancel();
+    final generation = _transportGeneration;
+    var expired = false;
+    var handedOver = false;
     try {
-      _preferFallbackTransport = false;
-      await _open(forceWebSocket: true);
-    } on Object catch (error) {
-      lastConnectionError = _describeConnectionError(error);
-      _preferFallbackTransport = true;
-      if (!_closing && !_isTerminalWebSocketFailure(error)) {
-        try {
-          await _open();
-        } on Object {
-          unawaited(_reconnect());
+      // Each factory call creates fresh WSS resources. Keep HTTPS alive until
+      // Cloud accepts the upgrade; its single-session fence then requires handover.
+      final pending = factory(uri);
+      unawaited(pending.then<void>((candidate) async {
+        if (expired || _closing || generation != _transportGeneration) {
+          await candidate.close();
         }
-      } else if (!_closing) {
-        connectionStage = WorkspaceConnectionStage.offline;
+      }, onError: (Object _) {}).catchError((Object _) {}));
+      final candidate = await pending.timeout(protocolHandshakeTimeout);
+      if (_closing || generation != _transportGeneration) return;
+      connectionStage = WorkspaceConnectionStage.switchingToWebSocket;
+      handedOver = true;
+      await _open(preparedWebSocket: candidate);
+    } on Object catch (error) {
+      expired = true;
+      if (!_closing && generation == _transportGeneration) {
+        _recordWebSocketFailure(error);
+        _webSocketProbeFailures++;
+      } else if (!_closing && handedOver) {
+        _preferFallbackTransport = true;
+        unawaited(_reconnect());
       }
     } finally {
       _probingWebSocket = false;
-      if (connectionStage == WorkspaceConnectionStage.ready) {
+      if (!_closing && connectionStage == WorkspaceConnectionStage.ready) {
         _scheduleWebSocketProbe();
       }
     }
@@ -1145,6 +1186,7 @@ class WorkspaceCloudConnection {
   void _handleTransportEnd() {
     if ((_pendingTransportMode ?? activeTransportMode) == 'websocket' &&
         fallbackFactory != null) {
+      if (_pendingTransportMode == 'websocket') _webSocketProbeFailures++;
       _preferFallbackTransport = true;
       fallbackHealthStatus = 'connecting';
     } else if ((_pendingTransportMode ?? activeTransportMode) ==

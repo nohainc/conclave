@@ -25,14 +25,24 @@ describe("Repository Branding CI Enforcement", () => {
       const tempDir = join(tmpdir(), `conclave-approved-source-${Date.now()}`);
       try {
         mkdirSync(join(tempDir, "assets/branding"), { recursive: true });
-        const source = readFileSync(join(rootDir, "assets/branding/conclave_source.png"));
-        writeFileSync(join(tempDir, "assets/branding/conclave_source.png"), source);
+        const source = readFileSync(
+          join(rootDir, "assets/branding/conclave_source.png"),
+        );
+        writeFileSync(
+          join(tempDir, "assets/branding/conclave_source.png"),
+          source,
+        );
         for (const svg of CANONICAL_SVG_MASTERS) {
-          writeFileSync(join(tempDir, "assets/branding", svg),
-            `<svg><image href="data:image/png;base64,${source.toString("base64")}"/></svg>`);
+          writeFileSync(
+            join(tempDir, "assets/branding", svg),
+            `<svg><image href="data:image/png;base64,${source.toString("base64")}"/></svg>`,
+          );
         }
         expect(verifyCanonicalSvgMasters(tempDir)).toEqual([]);
-        writeFileSync(join(tempDir, "assets/branding/conclave_source.png"), "different source");
+        writeFileSync(
+          join(tempDir, "assets/branding/conclave_source.png"),
+          "different source",
+        );
         expect(verifyCanonicalSvgMasters(tempDir).length).toBeGreaterThan(0);
       } finally {
         rmSync(tempDir, { recursive: true, force: true });

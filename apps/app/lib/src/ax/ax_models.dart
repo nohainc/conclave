@@ -454,6 +454,7 @@ class AxWorker {
     this.profileReleaseVersion,
     this.providerToolName,
     this.providerToolVersion,
+    this.modelOptions = const {},
   });
 
   final String id;
@@ -479,10 +480,14 @@ class AxWorker {
   final int? profileReleaseVersion;
   final String? providerToolName;
   final String? providerToolVersion;
+  final Map<String, dynamic> modelOptions;
   final List<String> capabilities;
   final List<String> inputCapabilities;
 
   factory AxWorker.fromJson(Map<String, dynamic> json) => AxWorker(
+        modelOptions: json['modelOptions'] is Map
+            ? Map<String, dynamic>.from(json['modelOptions'] as Map)
+            : const {},
         id: _string(json, 'id'),
         workspaceId: _string(json, 'workspaceId'),
         workspaceName: _string(json, 'workspaceName'),

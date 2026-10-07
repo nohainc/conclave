@@ -19,6 +19,18 @@ const canonicalIndexes = Object.fromEntries(
 );
 
 describe("production Workspace Gateway smoke schema gate", () => {
+  it("rejects deployments missing Work mutation receipts", () => {
+    expect(
+      productionSmokeSchemaIssues(
+        Object.keys(requiredProductionSmokeColumns).filter(
+          (table) => table !== "mutation_receipts",
+        ),
+        requiredProductionSmokeColumns,
+        canonicalDefinitions,
+        canonicalIndexes,
+      ).join("; "),
+    ).toContain("mutation_receipts");
+  });
   it("accepts the required production schema contract", () => {
     const tables = Object.keys(requiredProductionSmokeColumns);
     const columns = Object.fromEntries(
@@ -175,7 +187,7 @@ describe("production Workspace Gateway smoke schema gate", () => {
     const definitions = Object.fromEntries(
       database
         .prepare(
-          "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?, ?, ?)",
+          "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?, ?, ?, ?)",
         )
         .all(
           "execution_workspaces",
@@ -183,6 +195,7 @@ describe("production Workspace Gateway smoke schema gate", () => {
           "workspace_runtime_identities",
           "desktop_auth_intents",
           "desktop_human_sessions",
+          "mutation_receipts",
         )
         .map((row) => [row.name, row.sql]),
     );

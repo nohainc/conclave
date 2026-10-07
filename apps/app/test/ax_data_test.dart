@@ -49,6 +49,34 @@ class _ApiResponseClient extends http.BaseClient {
 }
 
 void main() {
+  test(
+      'Chat defaults omit model and effort overrides and send the plain workflow ID',
+      () async {
+    final client = _JsonClient({
+      'workRequest': {'id': 'request-default'}
+    });
+    final api =
+        AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+    await api.createWorkRequest(
+        workstreamId: 'stream', workflowId: 'chat', prompt: 'Hello');
+    final body = jsonDecode(client.lastBody!) as Map;
+    expect(body['workflowId'], 'chat');
+    expect(body.containsKey('model'), false);
+    expect(body.containsKey('reasoningEffort'), false);
+    expect((body['input'] as Map)['originalRequest'], 'Hello');
+  });
+  test('Work submission exposes the server reason for a 400', () async {
+    final client =
+        _JsonClient({'error': 'Unsupported workflowId'}, statusCode: 400);
+    final api =
+        AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+    expect(
+        () => api.createWorkRequest(
+            workstreamId: 'stream', workflowId: 'chat', prompt: 'Hello'),
+        throwsA(isA<AxApiException>().having(
+            (e) => e.message, 'reason', contains('Unsupported workflowId'))));
+  });
+
   test('Workspace list reads aggregate grant counts with one HTTP request',
       () async {
     final client = _ApiResponseClient({

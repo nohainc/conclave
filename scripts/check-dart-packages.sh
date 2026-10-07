@@ -14,7 +14,9 @@ dart_packages=(
 )
 
 flutter_packages=(
+  packages/conclave_design
   apps/workspace
+  apps/profile_lab
   apps/app
 )
 
@@ -48,7 +50,7 @@ done
 # Profile Lab and Workspace path; build it before Flutter starts those tests.
 bash "$ROOT/scripts/build-cli-worker-engine.sh"
 
-dart format --output=none --set-exit-if-changed apps/app apps/workspace engines packages
+dart format --output=none --set-exit-if-changed apps engines packages
 
 check_dart_package() {
   local package_path="$1"

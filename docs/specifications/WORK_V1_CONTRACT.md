@@ -19,6 +19,8 @@ Chat and Work history open at the latest message and follow updates while the
 reader is at the bottom. Scrolling up pauses following until the reader returns
 to the bottom. Work sending (including keyboard submission) stays disabled while
 a request is preparing or awaiting completion, failure or cancellation.
+The input remains editable throughout preparation, submission, and execution so
+the user can draft the next request while sending stays disabled.
 
 Workstream content is capped at 800 logical pixels per pane. At available widths
 of 1000 pixels or more, Chat and Work appear side by side with a vertical divider;
@@ -721,3 +723,31 @@ single-request endpoint. Healthy realtime performs no Work polling. During
 outages, visible Workstreams use a fifteen-second active-entity fallback; restored
 connections discover a bounded recent page and resynchronize known active IDs.
 Immutable older history remains cached.
+
+### Work timeline sender attribution
+
+Preparation and queued/waiting execution notices display Conclave with its logo.
+Once the current Step is running, its worker display name and worker-type icon
+replace Conclave on the same response row, before final result text arrives.
+Completed result rows retain their worker identity. System error notices retain
+Conclave attribution. Icons use locally bundled provider assets for known worker
+types; unknown types use the worker initial. Identity comes from immutable Step
+metadata, never inferred from model names or response text.
+
+### Profile-owned model and effort selection
+
+AX obtains `modelOptions` from the human Worker inventory projection. Cloud
+projects only model catalog and effort metadata from the published, non-revoked
+Tool Profile release matching the installed worker, profile identity and version.
+There are no provider/model lists hardcoded in AX. A missing catalog offers only
+Default model. Effort options follow the selected model's declared supported
+efforts, with profile-level efforts used only where the model inherits them.
+Default model and Default effort omit overrides and let the provider CLI's local
+configuration apply; catalog default effort is descriptive, not injected. Changing
+model clears the prior effort override. Work uses the dedicated `direct` binding
+for both picker updates and API execution; Chat uses `chat`. Workstream bindings accept bounded
+`reasoningEffort` strings, alongside model. Failed submissions retain the API's
+specific error message so validation failures can be diagnosed.
+This is an additive human API projection; no runtime schema or D1 migration is
+required. Existing published profiles remain immutable; adding model catalogs
+requires authoring and publishing a new signed release through Profile Lab.

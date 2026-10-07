@@ -5,6 +5,15 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 export const requiredProductionSmokeColumns = Object.freeze({
+  mutation_receipts: [
+    "user_id",
+    "scope",
+    "idempotency_key",
+    "request_hash",
+    "response_json",
+    "response_status",
+    "created_at",
+  ],
   users: [
     "id",
     "email",
@@ -86,6 +95,10 @@ export const requiredProductionSmokeColumns = Object.freeze({
 });
 
 const tableDefinitionSources = Object.freeze({
+  mutation_receipts: [
+    "apps/cloud/migrations-v8/0001_conclave_v8.sql",
+    "mutation_receipts",
+  ],
   execution_workspaces: [
     "apps/cloud/migrations-v8/0001_conclave_v8.sql",
     "execution_workspaces",
@@ -270,8 +283,14 @@ export function productionSmokeSchemaIssues(
       continue;
     }
 
-    const normalizedActual = normalizeTableDefinition(actualDefinition);
-    const normalizedExpected = normalizeTableDefinition(expectedDefinition);
+    const normalize = (definition) => {
+      const normalized = normalizeTableDefinition(definition);
+      return table === "mutation_receipts"
+        ? normalized.replace(/\s*([(),])\s*/g, "$1")
+        : normalized;
+    };
+    const normalizedActual = normalize(actualDefinition);
+    const normalizedExpected = normalize(expectedDefinition);
 
     if (table === "execution_workspaces") {
       const isClean = normalizedActual === normalizedExpected;

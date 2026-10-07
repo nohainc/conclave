@@ -147,8 +147,17 @@ mixin _WorkstreamApi on _AxApiClientCore {
           // Fall through to the status-only error below.
         }
       }
+      String detail = '';
+      try {
+        final body = jsonDecode(response.body);
+        if (body is Map && body['error'] is String) {
+          detail = ': ${body['error']}';
+        }
+      } on FormatException {
+        /* Preserve status when the server returns no JSON. */
+      }
       throw AxApiException(
-        'Work request failed (${response.statusCode})',
+        'Work request failed (${response.statusCode})$detail',
         statusCode: response.statusCode,
       );
     }

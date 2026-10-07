@@ -142,3 +142,30 @@ describe("Workstream Worker label snapshots", () => {
     ).toEqual(["worker-unknown"]);
   });
 });
+
+describe("profile reasoning configuration", () => {
+  it("preserves effort while omission remains the default", () => {
+    const result = normalizeWorkstreamWorkConfig({
+      defaultWorkflowId: "chat",
+      bindings: {
+        chat: { workerId: "worker", reasoningEffort: " high " },
+        direct: { workerId: "worker" },
+      },
+    });
+    expect(result.config.bindings).toEqual({
+      chat: { workerId: "worker", reasoningEffort: "high" },
+      direct: { workerId: "worker" },
+    });
+  });
+  it.each(["", " ", 123, "x".repeat(65)])(
+    "rejects malformed effort %s",
+    (reasoningEffort) => {
+      expect(() =>
+        normalizeWorkstreamWorkConfig({
+          defaultWorkflowId: "chat",
+          bindings: { chat: { workerId: "worker", reasoningEffort } },
+        }),
+      ).toThrow();
+    },
+  );
+});

@@ -89,10 +89,16 @@ export function verifyCanonicalSvgMasters(rootDir) {
     const content = readFileSync(svgPath, "utf8");
 
     const sourcePath = join(canonicalDir, "conclave_source.png");
-    const approvedRaster = existsSync(sourcePath)
-      && content.includes(`data:image/png;base64,${readFileSync(sourcePath).toString("base64")}`)
-      && (content.match(/<image\b/g) || []).length === 1;
-    if (/data:image\/|<image\s|xlink:href="data:/i.test(content) && !approvedRaster) {
+    const approvedRaster =
+      existsSync(sourcePath) &&
+      content.includes(
+        `data:image/png;base64,${readFileSync(sourcePath).toString("base64")}`,
+      ) &&
+      (content.match(/<image\b/g) || []).length === 1;
+    if (
+      /data:image\/|<image\s|xlink:href="data:/i.test(content) &&
+      !approvedRaster
+    ) {
       violations.push(
         `Vector purity violation in ${relative(rootDir, svgPath)}: embedded raster or base64 data URI detected.`,
       );
