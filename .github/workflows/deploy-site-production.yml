@@ -36,6 +36,22 @@ jobs:
         run: pnpm install --frozen-lockfile
       - run: ./node_modules/.bin/astro check
       - run: ./node_modules/.bin/astro build
+      - run: node scripts/check-performance.mjs
+      - run: node scripts/check-accessibility.mjs
+      - run: node scripts/check-responsive.mjs
+      - run: node scripts/check-analytics-privacy.mjs
+      - run: node scripts/check-security.mjs
+      - run: node scripts/check-content.mjs
+      - run: node scripts/check-release.mjs
+      - run: ./node_modules/.bin/vitest run test
+      - name: Verify static routes
+        run: |
+          test -f dist/index.html
+          test -f dist/how-it-works/index.html
+          test -f dist/workers/index.html
+          test -f dist/use-cases/index.html
+          test -f dist/security/index.html
+          test -f dist/downloads/index.html
       - name: Deploy public domains
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
