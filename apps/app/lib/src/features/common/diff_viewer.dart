@@ -1,3 +1,4 @@
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../brand.dart';
@@ -62,7 +63,9 @@ class DiffViewer extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
-                      fontFamily: 'monospace',
+                      fontFamily: ConclaveTypography.fontFamilyMono,
+                      fontFamilyFallback:
+                          ConclaveTypography.fontFamilyMonoFallback,
                       color: inkColor,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -83,7 +86,9 @@ class DiffViewer extends StatelessWidget {
                       '${oldCommit!.substring(0, oldCommit!.length.clamp(0, 7))} → ${newCommit!.substring(0, newCommit!.length.clamp(0, 7))}',
                       style: TextStyle(
                           fontSize: 11,
-                          fontFamily: 'monospace',
+                          fontFamily: ConclaveTypography.fontFamilyMono,
+                          fontFamilyFallback:
+                              ConclaveTypography.fontFamilyMonoFallback,
                           color: mutedInk),
                     ),
                   ),
@@ -157,7 +162,8 @@ class DiffViewer extends StatelessWidget {
       child: Text(
         line.isEmpty ? ' ' : line,
         style: TextStyle(
-          fontFamily: 'monospace',
+          fontFamily: ConclaveTypography.fontFamilyMono,
+          fontFamilyFallback: ConclaveTypography.fontFamilyMonoFallback,
           fontSize: 12,
           height: 1.4,
           color: textColor,

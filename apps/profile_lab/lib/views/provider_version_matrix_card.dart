@@ -1,3 +1,4 @@
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/profile_lab_theme.dart';
@@ -98,9 +99,7 @@ class ProviderVersionMatrixCard extends StatelessWidget {
                           ),
                           child: Text(
                             matrix.declaredRangeSummary,
-                            style: const TextStyle(
-                              fontFamily: 'Menlo',
-                              fontSize: 12,
+                            style: ConclaveTypography.mono.copyWith(
                               fontWeight: FontWeight.bold,
                               color: ProfileLabTheme.primaryAccent,
                             ),
@@ -169,9 +168,8 @@ class ProviderVersionMatrixCard extends StatelessWidget {
                                     const SizedBox(width: 4),
                                     Text(
                                       entry.version,
-                                      style: TextStyle(
-                                        fontFamily: 'Menlo',
-                                        fontSize: 11,
+                                      style: ConclaveTypography.monoSmall
+                                          .copyWith(
                                         fontWeight: FontWeight.bold,
                                         color: isPass
                                             ? ProfileLabTheme.passColor
@@ -195,7 +193,6 @@ class ProviderVersionMatrixCard extends StatelessWidget {
                             child: const Text(
                               'None tested locally',
                               style: TextStyle(
-                                fontFamily: 'Menlo',
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
                                 color: ProfileLabTheme.warnColor,

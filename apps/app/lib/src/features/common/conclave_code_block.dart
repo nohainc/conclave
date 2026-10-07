@@ -1,3 +1,4 @@
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -56,7 +57,8 @@ class ConclaveSyntaxHighlighter extends SyntaxHighlighter {
       'css'
     };
     final base = TextStyle(
-        fontFamily: 'monospace',
+        fontFamily: ConclaveTypography.fontFamilyMono,
+        fontFamilyFallback: ConclaveTypography.fontFamilyMonoFallback,
         fontSize: 12.5,
         height: 1.45,
         color: theme.colorScheme.onSurface);

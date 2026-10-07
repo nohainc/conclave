@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 
 import '../controllers/profile_lab_controller.dart';
@@ -469,8 +470,8 @@ class _SummaryRow extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                  fontFamily: 'Menlo', fontSize: 11, color: Color(0xFFE2E8F0)),
+              style: ConclaveTypography.monoSmall
+                  .copyWith(color: const Color(0xFFE2E8F0)),
               overflow: TextOverflow.ellipsis,
             ),
           ),

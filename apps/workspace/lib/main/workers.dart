@@ -670,11 +670,7 @@ class _CopyableDetailRow extends StatelessWidget {
             child: Text(
               value,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
+              style: ConclaveTypography.monoMedium,
             ),
           ),
           IconButton(

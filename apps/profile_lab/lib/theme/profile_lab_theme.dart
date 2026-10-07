@@ -1,3 +1,4 @@
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 
 /// Profile Lab styling and visual identity.
@@ -62,7 +63,7 @@ abstract final class ProfileLabTheme {
           side: BorderSide(color: borderColor, width: 1),
         ),
       ),
-      fontFamily: '-apple-system',
+      fontFamily: ConclaveTypography.fontFamily,
       textTheme: const TextTheme(
         headlineMedium:
             TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
@@ -74,9 +75,5 @@ abstract final class ProfileLabTheme {
     );
   }
 
-  static TextStyle get monoStyle => const TextStyle(
-        fontFamily: 'Menlo',
-        fontSize: 12,
-        height: 1.5,
-      );
+  static TextStyle get monoStyle => ConclaveTypography.mono;
 }

@@ -1,5 +1,6 @@
 import '../widgets/lab_components.dart';
 import 'dart:convert';
+import 'package:conclave_design/conclave_design.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:flutter/material.dart';
 
@@ -284,8 +285,8 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
           const SizedBox(height: 4),
           Text(
             'Exact Digest: ${digest.length > 20 ? "${digest.substring(0, 20)}..." : digest}',
-            style: const TextStyle(
-                fontFamily: 'Menlo', fontSize: 11, color: Color(0xFF94A3B8)),
+            style: ConclaveTypography.monoSmall
+                .copyWith(color: const Color(0xFF94A3B8)),
           ),
         ],
       ),

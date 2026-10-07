@@ -797,9 +797,7 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
               for (final id in snapshot.activeAssignmentIds)
                 Padding(
                   padding: const EdgeInsets.only(left: 138, bottom: 2),
-                  child: Text(id,
-                      style: const TextStyle(
-                          fontFamily: 'monospace', fontSize: 11)),
+                  child: Text(id, style: ConclaveTypography.monoSmall),
                 ),
             ],
             const SizedBox(height: 12),
@@ -872,8 +870,7 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
                 Expanded(
                   child: Text(
                     snapshot.logsPath ?? 'Not available',
-                    style:
-                        const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                    style: ConclaveTypography.monoSmall,
                   ),
                 ),
                 if (snapshot.logsPath != null)

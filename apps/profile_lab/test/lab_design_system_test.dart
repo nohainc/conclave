@@ -69,7 +69,9 @@ void main() {
       await icons.load();
       for (final entry in {
         '-apple-system': '/System/Library/Fonts/SFNS.ttf',
-        'Menlo': '/System/Library/Fonts/Menlo.ttc'
+        'Inter': '/System/Library/Fonts/SFNS.ttf',
+        'Menlo': '/System/Library/Fonts/Menlo.ttc',
+        'JetBrains Mono': '/System/Library/Fonts/Menlo.ttc',
       }.entries) {
         if (!File(entry.value).existsSync()) continue;
         final loader = FontLoader(entry.key)

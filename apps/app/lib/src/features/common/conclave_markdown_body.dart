@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -101,13 +102,8 @@ class ConclaveMarkdownBody extends StatelessWidget {
 /// One light/dark theme-derived style sheet for every AX Markdown surface.
 abstract final class ConclaveMessageTypography {
   static TextStyle fromTheme(ThemeData theme) => TextStyle(
-        fontFamily: '-apple-system',
-        fontFamilyFallback: const [
-          'BlinkMacSystemFont',
-          'Segoe UI',
-          'Arial',
-          'sans-serif'
-        ],
+        fontFamily: ConclaveTypography.fontFamily,
+        fontFamilyFallback: ConclaveTypography.fontFamilyFallback,
         fontSize: 16,
         fontWeight: FontWeight.w400,
         height: 1.6,
@@ -127,7 +123,8 @@ abstract final class ConclaveMarkdownStyleSheet {
           height: 1.3,
         );
     final code = body.copyWith(
-      fontFamily: 'monospace',
+      fontFamily: ConclaveTypography.fontFamilyMono,
+      fontFamilyFallback: ConclaveTypography.fontFamilyMonoFallback,
       fontSize: (body.fontSize ?? 14) * 0.9,
       backgroundColor: colors.surfaceContainerHighest,
     );

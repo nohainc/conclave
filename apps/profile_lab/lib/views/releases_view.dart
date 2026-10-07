@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:conclave_design/conclave_design.dart';
 import '../utils/profile_domain_diff.dart';
 import 'package:flutter/material.dart';
 import '../widgets/lab_components.dart';
@@ -589,8 +590,7 @@ class _ReleaseInspectorPane extends StatelessWidget {
                         isMonospace: true),
                     SelectableText(
                         const JsonEncoder.withIndent('  ').convert(profile),
-                        style:
-                            const TextStyle(fontFamily: 'Menlo', fontSize: 11))
+                        style: ConclaveTypography.monoSmall)
                   ]),
                 ])));
   }
@@ -624,7 +624,11 @@ class _PropertyRow extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                fontFamily: isMonospace ? 'Menlo' : null,
+                fontFamily:
+                    isMonospace ? ConclaveTypography.fontFamilyMono : null,
+                fontFamilyFallback: isMonospace
+                    ? ConclaveTypography.fontFamilyMonoFallback
+                    : null,
                 color: Colors.white,
               ),
             ),

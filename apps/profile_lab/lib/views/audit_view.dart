@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import '../widgets/lab_components.dart';
 import '../controllers/profile_lab_controller.dart';
@@ -108,9 +109,8 @@ class AuditView extends StatelessWidget {
                                                 const JsonEncoder.withIndent(
                                                         '  ')
                                                     .convert(event),
-                                                style: const TextStyle(
-                                                    fontFamily: 'Menlo',
-                                                    fontSize: 11))
+                                                style: ConclaveTypography
+                                                    .monoSmall)
                                           ]))
                                 ]));
                           }))

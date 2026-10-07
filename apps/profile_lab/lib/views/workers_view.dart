@@ -1,3 +1,4 @@
+import 'package:conclave_design/conclave_design.dart';
 import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:flutter/material.dart';
 import '../widgets/lab_components.dart';
@@ -753,10 +754,8 @@ class _WorkerDetailsPane extends StatelessWidget {
                                   ),
                                   child: Text(
                                     cap,
-                                    style: const TextStyle(
-                                        fontFamily: 'Menlo',
-                                        fontSize: 11,
-                                        color: Color(0xFFE2E8F0)),
+                                    style: ConclaveTypography.monoSmall
+                                        .copyWith(color: const Color(0xFFE2E8F0)),
                                   ),
                                 ),
                               )
@@ -848,7 +847,11 @@ class _PropertyRow extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              fontFamily: isMonospace ? 'Menlo' : null,
+              fontFamily:
+                  isMonospace ? ConclaveTypography.fontFamilyMono : null,
+              fontFamilyFallback: isMonospace
+                  ? ConclaveTypography.fontFamilyMonoFallback
+                  : null,
               color: Colors.white,
             ),
           ),

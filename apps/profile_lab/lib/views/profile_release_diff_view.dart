@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/profile_lab_theme.dart';
@@ -374,10 +375,8 @@ class _DomainDiffItemRow extends StatelessWidget {
                       color: Color(0xFFE2E8F0))),
               const SizedBox(width: 8),
               Text('(${item.fieldPath})',
-                  style: const TextStyle(
-                      fontFamily: 'Menlo',
-                      fontSize: 11,
-                      color: Color(0xFF64748B))),
+                  style: ConclaveTypography.monoSmall
+                      .copyWith(color: const Color(0xFF64748B))),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -409,10 +408,8 @@ class _DomainDiffItemRow extends StatelessWidget {
                     ),
                     child: Text(
                       '$titleA:\n${item.valueA ?? "<none>"}',
-                      style: const TextStyle(
-                          fontFamily: 'Menlo',
-                          fontSize: 11,
-                          color: Color(0xFFFCA5A5)),
+                      style: ConclaveTypography.monoSmall
+                          .copyWith(color: const Color(0xFFFCA5A5)),
                     ),
                   ),
                 ),
@@ -432,10 +429,8 @@ class _DomainDiffItemRow extends StatelessWidget {
                     ),
                     child: Text(
                       '$titleB:\n${item.valueB ?? "<none>"}',
-                      style: const TextStyle(
-                          fontFamily: 'Menlo',
-                          fontSize: 11,
-                          color: Color(0xFF86EFAC)),
+                      style: ConclaveTypography.monoSmall
+                          .copyWith(color: const Color(0xFF86EFAC)),
                     ),
                   ),
                 ),

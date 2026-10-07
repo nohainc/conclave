@@ -1,3 +1,4 @@
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'controllers/profile_lab_controller.dart';
@@ -167,7 +168,10 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                   Text(
                                     c.selectedDefinitionId!,
                                     style: const TextStyle(
-                                        fontFamily: 'Menlo',
+                                        fontFamily:
+                                            ConclaveTypography.fontFamilyMono,
+                                        fontFamilyFallback: ConclaveTypography
+                                            .fontFamilyMonoFallback,
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600),
                                   ),
