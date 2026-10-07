@@ -7,6 +7,7 @@ const requiredFiles = [
   "404.html",
   "how-it-works/index.html",
   "workers/index.html",
+  "use-cases/index.html",
   "security/index.html",
   "privacy/index.html",
   "terms/index.html",
@@ -19,7 +20,7 @@ const requiredFiles = [
   "sitemap.xml",
 ];
 
-const forbiddenLegacy = /\b(?:studio|plugin|agent)\b/i;
+const forbiddenLegacy = /\b(?:studio|plugin)\b/i;
 const forbiddenPublicArchitectureVersion = /\b(?:architecture\s+)?v\d+\b/i;
 const errors = [];
 
@@ -65,19 +66,15 @@ for (const file of await htmlFiles(dist)) {
   if (githubLinks.length > 0 && !approvedDownloads) {
     errors.push(`${relative}: public GitHub repository link found`);
   }
-  if (/shared workspace/i.test(source)) {
-    errors.push(`${relative}: collaborative Workspace terminology found`);
-  }
 }
 
 const home = await readFile(join(dist, "index.html"), "utf8");
 const requiredHomepageContent = [
-  "Turn team decisions into verified AI work.",
+  "Bring your people and AI together.",
+  "SHARED AI WORKSPACE",
   "Workstreams",
-  "Talk first. Run AI when the team is ready.",
-  "Safe parallel work",
-  "Workspaces",
-  "Accounts and privacy",
+  "Share access. Keep credentials private.",
+  "One conversation. Everyone stays in context.",
   "Open Conclave AX",
 ];
 for (const content of requiredHomepageContent) {
@@ -87,9 +84,9 @@ for (const content of requiredHomepageContent) {
 if ((home.match(/href="https:\/\/app\.conclaveax\.com/g) ?? []).length < 3) {
   errors.push("homepage: expected direct app CTA links");
 }
-for (const link of ["/privacy/", "/terms/", "/security/"]) {
+for (const link of ["/privacy/", "/terms/", "/security/", "/use-cases/"]) {
   if (!home.includes(`href="${link}"`))
-    errors.push(`homepage: missing footer link ${link}`);
+    errors.push(`homepage: missing footer/nav link ${link}`);
 }
 
 const workerSource = await readFile(
@@ -110,5 +107,5 @@ if (errors.length)
   throw new Error(`Landing-page release gate failed:\n${errors.join("\n")}`);
 
 console.log(
-  "Landing-page release gate passed: routes, Workstream product model, repository privacy posture, terminology, metadata artifacts, and domain redirect contract verified.",
+  "Landing-page release gate passed: routes, Shared AI Workspace product model, repository privacy posture, terminology, metadata artifacts, and domain redirect contract verified.",
 );

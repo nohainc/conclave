@@ -52,6 +52,8 @@ export interface ExecutionTarget {
   readonly readOnly: boolean;
   readonly workstreamId?: string;
   readonly workRequestId?: string;
+  readonly conversationId?: string;
+  readonly baseContextRevision?: number;
   readonly leaseId?: string;
   readonly fencingToken?: number;
 }
@@ -229,9 +231,12 @@ export async function selectProjectExecutionTarget(
             ep.allowed_models_json,
             usage.config_json AS workstream_work_config_json,
             wr.snapshot_json AS work_request_snapshot_json,
+            (SELECT conversation_id FROM conversation_work_requests WHERE work_request_id = wr.id) AS conversation_id,
+            (SELECT cr.conversation_revision - 1 FROM conversation_work_requests cr WHERE cr.work_request_id = wr.id) AS base_context_revision,
             ew.name AS workspace_name, ew.owner_user_id, ew.status AS workspace_status,
             wri.id AS runtime_identity_id,
             i.worker_id, i.worker_type_id,
+            catalog.display_name AS worker_display_name,
             catalog.lifecycle_state AS worker_catalog_lifecycle_state,
             catalog.visibility_state AS worker_catalog_visibility_state,
             catalog.release_stage AS worker_catalog_release_stage,
@@ -339,6 +344,25 @@ export async function selectProjectExecutionTarget(
     const workerId = String(row.worker_id);
     const workerTypeId = String(row.worker_type_id);
     const binding = bindingFor(row);
+    const turnConfig = request.workRequestId
+      ? (object(row.work_request_snapshot_json).turnExecutionConfig as
+          Record<string, unknown> | undefined)
+      : undefined;
+    if (
+      turnConfig &&
+      (turnConfig.schemaVersion !== 1 ||
+        turnConfig.workerId !== workerId ||
+        turnConfig.profileId !== row.profile_definition_id ||
+        turnConfig.profileReleaseVersion !==
+          Number(row.profile_release_version))
+    ) {
+      rejected.push({
+        workspaceId,
+        workerId,
+        reason: "turn_configuration_unavailable",
+      });
+      continue;
+    }
     const hasBinding = Object.keys(binding).length > 0;
     const preferredWorkerIds = [
       ...(typeof binding.workerId === "string" ? [binding.workerId] : []),
@@ -356,17 +380,23 @@ export async function selectProjectExecutionTarget(
       row.allowed_worker_capabilities_json,
       validateWorkspaceGrantCapabilities,
     );
-    const selectedModel =
-      request.workstreamId &&
-      typeof binding.model === "string" &&
-      binding.model.trim().length > 0
+    const selectedModel = turnConfig
+      ? typeof turnConfig.modelId === "string"
+        ? turnConfig.modelId
+        : null
+      : request.workstreamId &&
+          typeof binding.model === "string" &&
+          binding.model.trim().length > 0
         ? binding.model
         : (request.model ??
           (typeof binding.model === "string" ? binding.model : undefined));
-    const selectedReasoningEffort =
-      request.workstreamId &&
-      typeof binding.reasoningEffort === "string" &&
-      binding.reasoningEffort.trim().length > 0
+    const selectedReasoningEffort = turnConfig
+      ? typeof turnConfig.effort === "string"
+        ? turnConfig.effort
+        : null
+      : request.workstreamId &&
+          typeof binding.reasoningEffort === "string" &&
+          binding.reasoningEffort.trim().length > 0
         ? binding.reasoningEffort
         : (request.reasoningEffort ??
           (typeof binding.reasoningEffort === "string"
@@ -588,6 +618,7 @@ export async function selectProjectExecutionTarget(
       workerId,
       workerTypeId,
       grantId: String(row.grant_id),
+      workerDisplayName: String(row.worker_display_name ?? workerTypeId),
       engineVersion: String(row.engine_version),
       profileDefinitionId: String(row.profile_definition_id),
       profileReleaseVersion: Number(row.profile_release_version),
@@ -675,6 +706,12 @@ export async function selectProjectExecutionTarget(
         ],
         rejectedAlternatives: rejected,
       },
+      ...(typeof row.conversation_id === "string"
+        ? {
+            conversationId: row.conversation_id,
+            baseContextRevision: number(row.base_context_revision),
+          }
+        : {}),
       executionClass,
       readOnly:
         executionClass === "stateless_read" || request.readOnly === true,

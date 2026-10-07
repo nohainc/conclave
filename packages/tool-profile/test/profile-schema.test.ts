@@ -363,3 +363,46 @@ describe("Tool Profile v1 canonical schema", () => {
     ).toThrow(/exceeds/);
   });
 });
+
+describe("versioned generic execution options", () => {
+  const withOptions = () => {
+    const profile = fixture("chatgpt-codex.v1");
+    profile.model.executionOptions = {
+      schemaVersion: 1,
+      discovery: "profile_catalog",
+      modelSwitchSupported: true,
+      effortSupported: true,
+      defaultModelId: "gpt-6.1-sol",
+      effortMapping: { high: "provider-high" },
+    };
+    return profile;
+  };
+  it("accepts declared capabilities and provider-specific effort mapping", () => {
+    expect(toolProfileV1Schema.safeParse(withOptions()).success).toBe(true);
+  });
+  it.each([
+    "unknownVersion",
+    "unsupportedDiscovery",
+    "invalidDefault",
+    "unknownEffort",
+    "disabledEffort",
+    "duplicateModel",
+    "invalidSwitch",
+  ])("rejects %s", (kind) => {
+    const profile = withOptions();
+    const options = profile.model.executionOptions;
+    if (kind === "unknownVersion") options.schemaVersion = 2;
+    if (kind === "unsupportedDiscovery") options.discovery = "dynamic";
+    if (kind === "invalidDefault") options.defaultModelId = "missing";
+    if (kind === "unknownEffort") options.effortMapping.unknown = "value";
+    if (kind === "disabledEffort") options.effortSupported = false;
+    if (kind === "duplicateModel")
+      profile.model.catalog.push(profile.model.catalog[0]);
+    if (kind === "invalidSwitch") {
+      profile.session.supported = false;
+      profile.session.extract = null;
+      profile.session.resumeArguments = [];
+    }
+    expect(toolProfileV1Schema.safeParse(profile).success).toBe(false);
+  });
+});

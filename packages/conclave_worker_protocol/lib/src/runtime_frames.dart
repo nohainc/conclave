@@ -306,6 +306,262 @@ final class ProbeResult extends WorkerFrame {
   }
 }
 
+/// Conclave-owned identity and context target. Native handles are local-only.
+final class ConversationBootstrap {
+  ConversationBootstrap(
+      {required this.conversationId,
+      required this.contextRevision,
+      required this.throughSequence,
+      required this.text,
+      this.turnRevision}) {
+    if (turnRevision != null &&
+        (turnRevision != contextRevision + 1 ||
+            turnRevision! > 9007199254740991)) {
+      throw const FormatException("Invalid bootstrap turn revision");
+    }
+    if (conversationId.isEmpty ||
+        conversationId.length > 128 ||
+        contextRevision < 0 ||
+        contextRevision > 9007199254740991 ||
+        throughSequence < 0 ||
+        throughSequence > 9007199254740991 ||
+        text.isEmpty ||
+        utf8.encode(text).length > 256 * 1024) {
+      throw const FormatException('Invalid canonical Conversation bootstrap');
+    }
+  }
+  String? deltaAfter(int revision, int throughSequenceAlreadyConsumed,
+      {String? knownWorkerSessionId}) {
+    if (turnRevision == null) return null;
+    final decoded = jsonDecode(text);
+    if (decoded is! Map ||
+        decoded['conversationId'] != conversationId ||
+        decoded['throughSequence'] != throughSequence ||
+        decoded['history'] is! List) {
+      throw const FormatException('Invalid canonical history envelope');
+    }
+    final missing = <Map>[];
+    var previousSequence = 0;
+    for (final raw in decoded['history'] as List) {
+      if (raw is! Map ||
+          raw['sequence'] is! int ||
+          raw['contextRevision'] is! int ||
+          (raw['metadata'] != null && raw['metadata'] is! Map) ||
+          (raw['sequence'] as int) <= previousSequence ||
+          raw['sequence'] > throughSequence ||
+          raw['contextRevision'] < 0 ||
+          raw['contextRevision'] > contextRevision) {
+        throw const FormatException('Invalid canonical history entry');
+      }
+      previousSequence = raw['sequence'] as int;
+      // Revision bookkeeping adds no provider context and must not defeat the
+      // current-session fast path on every accepted request.
+      if (raw['eventType'] == 'context.revision_advanced') continue;
+      if (raw['contextRevision'] > revision ||
+          (raw['sequence'] > throughSequenceAlreadyConsumed &&
+              (raw['kind'] == 'context_event' ||
+                  raw['kind'] == 'artifact_event' ||
+                  raw['contextRevision'] == 0 ||
+                  (raw['kind'] == 'worker_response' &&
+                      (knownWorkerSessionId == null ||
+                          (raw['metadata'] as Map?)?['workerSessionId'] !=
+                              knownWorkerSessionId))))) {
+        missing.add(raw);
+      }
+    }
+    final rawContext = decoded['context'];
+    final contextDelta = <String, Object?>{};
+    if (rawContext != null) {
+      if (decoded['schemaVersion'] != 1 ||
+          !const {'BootstrapContext', 'StatelessContext', 'DeltaContext'}
+              .contains(decoded['kind'])) {
+        throw const FormatException('Invalid Context Engine schema');
+      }
+      if (rawContext is! Map)
+        throw const FormatException('Invalid structured context');
+      for (final entry in rawContext.entries) {
+        if (!const {
+          'objective',
+          'importantDecisions',
+          'constraints',
+          'currentState',
+          'openIssues',
+          'artifacts',
+          'workflowState',
+          'summary'
+        }.contains(entry.key)) {
+          throw const FormatException('Unknown structured context section');
+        }
+        final value = entry.value;
+        bool fresh(Object? fact) {
+          if (fact is! Map ||
+              fact['revision'] is! int ||
+              fact['sequence'] is! int ||
+              fact['revision'] < 0 ||
+              fact['revision'] > contextRevision ||
+              fact['sequence'] < 0 ||
+              fact['sequence'] > throughSequence) {
+            throw const FormatException('Invalid structured context fact');
+          }
+          return fact['revision'] > revision ||
+              fact['sequence'] > throughSequenceAlreadyConsumed;
+        }
+
+        if (const {
+          'importantDecisions',
+          'constraints',
+          'openIssues',
+          'artifacts'
+        }.contains(entry.key)) {
+          if (value is! Map)
+            throw const FormatException('Invalid structured context records');
+          final selected =
+              Map.fromEntries(value.entries.where((item) => fresh(item.value)));
+          if (selected.isNotEmpty) contextDelta[entry.key as String] = selected;
+        } else if (value != null && fresh(value)) {
+          contextDelta[entry.key as String] = value;
+        }
+      }
+    }
+    final workflow = decoded['workflowExecutionContext'];
+    if (workflow != null &&
+        (workflow is! Map ||
+            workflow['schemaVersion'] != 1 ||
+            workflow['workRequestId'] is! String ||
+            workflow['activeStepId'] is! String ||
+            workflow['steps'] is! List ||
+            (workflow['steps'] as List).length > 1000 ||
+            !(workflow['steps'] as List).any((step) =>
+                step is Map && step['id'] == workflow['activeStepId']))) {
+      throw const FormatException('Invalid Workflow execution context');
+    }
+    // Execution state is request/step-scoped, independently of Conversation
+    // revision. Work and multi-step handoffs must refresh it on every execution.
+    final includeWorkflow = workflow is Map &&
+        (workflow['workflowId'] != 'chat' ||
+            (workflow['steps'] as List).length > 1 ||
+            missing.isNotEmpty ||
+            contextDelta.isNotEmpty);
+    return missing.isEmpty && contextDelta.isEmpty && !includeWorkflow
+        ? null
+        : jsonEncode({
+            if (rawContext != null) ...{
+              'schemaVersion': 1,
+              'kind': 'DeltaContext',
+              'contextRevision': contextRevision,
+              'fromRevision': revision,
+              'afterSequence': throughSequenceAlreadyConsumed,
+            },
+            'conversationId': conversationId,
+            'throughSequence': throughSequence,
+            'history': missing,
+            if (contextDelta.isNotEmpty) 'context': contextDelta,
+            if (decoded.containsKey('conversationContext'))
+              'conversationContext': Map.fromEntries(contextDelta.entries
+                  .where((entry) => entry.key != 'workflowState')),
+            if (includeWorkflow) 'workflowExecutionContext': workflow,
+          });
+  }
+
+  final String conversationId;
+  final int? turnRevision;
+  final int contextRevision;
+  final int throughSequence;
+  final String text;
+  Map<String, Object?> toJson() => {
+        'schemaVersion': 1,
+        'conversationId': conversationId,
+        'contextRevision': contextRevision,
+        'throughSequence': throughSequence,
+        'text': text,
+        if (turnRevision != null) 'turnRevision': turnRevision,
+      };
+  factory ConversationBootstrap.fromJson(Map<String, Object?> json) {
+    _expectKeys(json, const {
+      'schemaVersion',
+      'conversationId',
+      'contextRevision',
+      'throughSequence',
+      'text',
+      'turnRevision',
+    });
+    if ((json['turnRevision'] != null && json['turnRevision'] is! int) ||
+        json['schemaVersion'] != 1 ||
+        json['contextRevision'] is! int ||
+        json['throughSequence'] is! int) {
+      throw const FormatException('Invalid Conversation bootstrap schema');
+    }
+    return ConversationBootstrap(
+        conversationId: _requiredString(json, 'conversationId'),
+        contextRevision: json['contextRevision'] as int,
+        throughSequence: json['throughSequence'] as int,
+        text: _requiredString(json, 'text'),
+        turnRevision: json['turnRevision'] as int?);
+  }
+}
+
+final class WorkerSessionContext {
+  WorkerSessionContext(
+      {required this.id,
+      required this.conversationId,
+      required this.workerId,
+      required this.baseContextRevision,
+      this.bootstrap}) {
+    for (final value in [id, conversationId, workerId]) {
+      if (value.isEmpty ||
+          value.length > 128 ||
+          !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]*$').hasMatch(value)) {
+        throw const FormatException('Invalid Worker Session scope');
+      }
+    }
+    if (bootstrap != null &&
+        (bootstrap!.conversationId != conversationId ||
+            bootstrap!.contextRevision != baseContextRevision)) {
+      throw const FormatException('Conversation bootstrap scope mismatch');
+    }
+    if (baseContextRevision < 0 || baseContextRevision > 9007199254740991) {
+      throw const FormatException('Invalid Worker Session context revision');
+    }
+  }
+  final ConversationBootstrap? bootstrap;
+  final String id;
+  final String conversationId;
+  final String workerId;
+  final int baseContextRevision;
+  Map<String, Object?> toJson() => {
+        'schemaVersion': 1,
+        'id': id,
+        'conversationId': conversationId,
+        'workerId': workerId,
+        'baseContextRevision': baseContextRevision,
+        if (bootstrap != null) 'bootstrap': bootstrap!.toJson(),
+      };
+  factory WorkerSessionContext.fromJson(Map<String, Object?> json) {
+    _expectKeys(json, const {
+      'schemaVersion',
+      'id',
+      'conversationId',
+      'workerId',
+      'baseContextRevision',
+      'bootstrap',
+    });
+    if (json['bootstrap'] != null && json['bootstrap'] is! Map) {
+      throw const FormatException('Invalid Conversation bootstrap object');
+    }
+    if (json['schemaVersion'] != 1 || json['baseContextRevision'] is! int)
+      throw const FormatException('Invalid Worker Session context schema');
+    return WorkerSessionContext(
+        id: _requiredString(json, 'id'),
+        conversationId: _requiredString(json, 'conversationId'),
+        workerId: _requiredString(json, 'workerId'),
+        baseContextRevision: json['baseContextRevision'] as int,
+        bootstrap: json['bootstrap'] == null
+            ? null
+            : ConversationBootstrap.fromJson(
+                (json['bootstrap'] as Map).cast<String, Object?>()));
+  }
+}
+
 final class ExecuteRequest extends WorkerFrame {
   ExecuteRequest({
     required super.requestId,
@@ -317,6 +573,8 @@ final class ExecuteRequest extends WorkerFrame {
     this.model,
     this.reasoningEffort,
     this.sessionKey,
+    this.workerSession,
+    this.statelessContext,
     this.protocolVersion = localWorkerProtocolVersion,
   }) {
     _validateProtocol(protocolVersion);
@@ -349,6 +607,16 @@ final class ExecuteRequest extends WorkerFrame {
         WorkerProtocolLimits.maxModelLength,
       );
     }
+    if (statelessContext != null &&
+        sessionPolicy != WorkerSessionPolicy.stateless) {
+      throw const FormatException(
+          'Stateless context requires stateless execution');
+    }
+    if (workerSession != null &&
+        sessionPolicy != WorkerSessionPolicy.durableSession) {
+      throw const FormatException(
+          'Worker Session metadata requires durable execution');
+    }
     if (sessionPolicy == WorkerSessionPolicy.durableSession) {
       if (sessionKey == null)
         throw const FormatException('durable sessions require sessionKey');
@@ -378,6 +646,8 @@ final class ExecuteRequest extends WorkerFrame {
   final WorkerSessionPolicy sessionPolicy;
   final WorkerExecutionPolicy executionPolicy;
   final String? sessionKey;
+  final WorkerSessionContext? workerSession;
+  final ConversationBootstrap? statelessContext;
 
   @override
   String get type => 'execute.request';
@@ -397,6 +667,9 @@ final class ExecuteRequest extends WorkerFrame {
             : 'stateless',
         'executionPolicy': executionPolicy.wireValue,
         if (sessionKey != null) 'sessionKey': sessionKey,
+        if (workerSession != null) 'workerSession': workerSession!.toJson(),
+        if (statelessContext != null)
+          'statelessContext': statelessContext!.toJson(),
       };
 
   factory ExecuteRequest.fromJson(Map<String, Object?> json) {
@@ -412,6 +685,8 @@ final class ExecuteRequest extends WorkerFrame {
       'sessionPolicy',
       'executionPolicy',
       'sessionKey',
+      'workerSession',
+      'statelessContext',
     });
     _expectType(json, 'execute.request');
     final model = json['model'];
@@ -420,6 +695,12 @@ final class ExecuteRequest extends WorkerFrame {
     final reasoningEffort = json['reasoningEffort'];
     if (reasoningEffort != null && reasoningEffort is! String) {
       throw const FormatException('reasoningEffort must be a string or null');
+    }
+    if (json['statelessContext'] != null && json['statelessContext'] is! Map) {
+      throw const FormatException('Invalid stateless context object');
+    }
+    if (json['workerSession'] != null && json['workerSession'] is! Map) {
+      throw const FormatException('workerSession must be an object');
     }
     final timeout = json['timeoutMs'];
     if (timeout is! int)
@@ -456,6 +737,14 @@ final class ExecuteRequest extends WorkerFrame {
       sessionPolicy: parsedPolicy,
       executionPolicy: parsedExecutionPolicy,
       sessionKey: _optionalString(json, 'sessionKey'),
+      statelessContext: json['statelessContext'] == null
+          ? null
+          : ConversationBootstrap.fromJson(
+              (json['statelessContext'] as Map).cast<String, Object?>()),
+      workerSession: json['workerSession'] == null
+          ? null
+          : WorkerSessionContext.fromJson(
+              Map<String, Object?>.from(json['workerSession'] as Map)),
     );
   }
 }

@@ -88,7 +88,9 @@ class MarkdownComposer extends StatefulWidget {
       this.onSend,
       this.onSubmit,
       this.additionalControlsBuilder,
+      this.executionControlsBuilder,
       this.sendEnabled = true,
+      this.sendInToolbar = false,
       this.sendTooltip = 'Send message',
       this.compact = false,
       this.chatStyle = false,
@@ -103,7 +105,9 @@ class MarkdownComposer extends StatefulWidget {
   final VoidCallback? onSend;
   final VoidCallback? onSubmit;
   final Widget Function(GlobalKey inputKey)? additionalControlsBuilder;
+  final Widget Function(GlobalKey inputKey)? executionControlsBuilder;
   final bool sendEnabled;
+  final bool sendInToolbar;
   final String sendTooltip;
   final bool compact;
   final bool chatStyle;
@@ -200,7 +204,10 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
             onPressed: () => setState(() => _preview = !_preview),
             child: Text(_preview ? 'Write' : 'Preview'),
           ),
-        if (widget.chatStyle && _preview && widget.onSend != null)
+        if (widget.chatStyle &&
+            _preview &&
+            widget.onSend != null &&
+            !widget.sendInToolbar)
           Tooltip(
               message: widget.sendTooltip,
               child: TextButton(
@@ -298,7 +305,8 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                                   icon: const Icon(Icons.text_format, size: 18),
                                   onPressed: () => setState(() =>
                                       _showFormatting = !_showFormatting)),
-                              if (widget.onSend != null)
+                              if (widget.onSend != null &&
+                                  !widget.sendInToolbar)
                                 IconButton(
                                     tooltip: widget.sendTooltip,
                                     onPressed:
@@ -333,7 +341,30 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
             ),
           if (widget.chatStyle && (_showFormatting || _preview))
             _formattingToolbar(),
-          if (widget.additionalControlsBuilder != null)
+          if (widget.chatStyle &&
+              widget.sendInToolbar &&
+              widget.executionControlsBuilder != null &&
+              widget.additionalControlsBuilder != null)
+            widget.additionalControlsBuilder!(_inputKey),
+          if (widget.chatStyle && widget.sendInToolbar)
+            Row(children: [
+              if (widget.executionControlsBuilder != null)
+                Expanded(child: widget.executionControlsBuilder!(_inputKey))
+              else if (widget.additionalControlsBuilder != null)
+                Expanded(child: widget.additionalControlsBuilder!(_inputKey))
+              else
+                const Spacer(),
+              if (widget.onSend != null)
+                IconButton(
+                  tooltip: widget.sendTooltip,
+                  onPressed: widget.enabled && widget.sendEnabled
+                      ? widget.onSend
+                      : null,
+                  color: Theme.of(context).colorScheme.primary,
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                ),
+            ])
+          else if (widget.additionalControlsBuilder != null)
             widget.additionalControlsBuilder!(_inputKey),
           if (!widget.chatStyle &&
               (widget.onSend != null || widget.onSubmit != null))

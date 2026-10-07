@@ -1,5 +1,7 @@
+import { projectWorkerExecutionOptions } from "../worker-execution-options.js";
 import { type Permission, type SecurityContext } from "@conclave/security";
 import {
+  validateWorkerExecutionSelection,
   canDiscussWorkstream,
   canExecuteWorkstream,
   canManageWorkstream,
@@ -424,13 +426,24 @@ export async function validateWorkflowWorkerEligibility(
   projectId: string,
   workstreamId: string,
   workflow: BuiltinWorkflowDefinition,
-  bindings: Record<string, { workerId?: string; model?: string }>,
+  bindings: Record<
+    string,
+    { workerId?: string; model?: string; reasoningEffort?: string }
+  >,
   attachments: readonly unknown[] = [],
 ): Promise<{
   issues: WorkEligibilityIssue[];
   primaryWorkspaceId: string | null;
+  workerProfiles: Record<
+    string,
+    { profileId: string; profileReleaseVersion: number }
+  >;
 }> {
   const issues: WorkEligibilityIssue[] = [];
+  const workerProfiles: Record<
+    string,
+    { profileId: string; profileReleaseVersion: number }
+  > = {};
   let primaryWorkspaceId: string | null = null;
   const now = new Date().toISOString();
   for (const step of workflow.steps) {
@@ -452,6 +465,8 @@ export async function validateWorkflowWorkerEligibility(
               i.engine_version AS engineVersion,
               i.profile_definition_id AS profileDefinitionId,
               i.profile_release_version AS profileReleaseVersion,
+              i.provider_tool_version AS providerToolVersion,
+              release.payload_json AS executionProfileJson,
               catalog.lifecycle_state AS workerCatalogLifecycleState,
               catalog.visibility_state AS workerCatalogVisibilityState,
               catalog.release_stage AS workerCatalogReleaseStage,
@@ -477,6 +492,12 @@ export async function validateWorkflowWorkerEligibility(
            ON definition.worker_type_id = i.worker_type_id
           AND definition.profile_definition_id = i.profile_definition_id
           AND definition.lifecycle_state = 'active'
+         LEFT JOIN tool_profile_releases release
+           ON release.profile_definition_id = i.profile_definition_id
+          AND release.release_version = i.profile_release_version
+          AND release.worker_type_id = i.worker_type_id
+          AND release.published_at IS NOT NULL
+          AND release.lifecycle_state <> 'revoked'
          LEFT JOIN worker_scheduling vs ON vs.worker_id = i.worker_id
          LEFT JOIN workspace_project_grants g
            ON g.workspace_id = i.workspace_id AND g.project_id = ?2
@@ -683,6 +704,24 @@ export async function validateWorkflowWorkerEligibility(
       !allowedWorkstreamTypes.includes(workerTypeId)
     )
       push("worker_type_not_allowed_by_workstream");
+    const executionOptions = projectWorkerExecutionOptions(
+      row.executionProfileJson,
+      row.providerToolVersion,
+    );
+    if (executionOptions) {
+      const error = validateWorkerExecutionSelection(
+        executionOptions,
+        binding.model ?? null,
+        binding.reasoningEffort ?? null,
+      );
+      if (error)
+        issues.push({
+          stepKind: step.kind,
+          workerTypeId,
+          code: "profile_execution_option_unavailable",
+          message: `${step.kind}: ${error}.`,
+        });
+    }
     const allowedModels = parseJson<unknown[]>(
       row.allowedModelsJson,
       [],
@@ -695,6 +734,15 @@ export async function validateWorkflowWorkerEligibility(
       !allowedModels.includes(binding.model)
     )
       push("model_not_allowed");
+    if (
+      typeof row.profileDefinitionId === "string" &&
+      Number.isSafeInteger(Number(row.profileReleaseVersion))
+    ) {
+      workerProfiles[bindingId] = {
+        profileId: row.profileDefinitionId,
+        profileReleaseVersion: Number(row.profileReleaseVersion),
+      };
+    }
     if (primaryWorkspaceId == null)
       primaryWorkspaceId = String(row.workspaceId);
     else if (primaryWorkspaceId !== String(row.workspaceId))
@@ -705,7 +753,7 @@ export async function validateWorkflowWorkerEligibility(
     )
       push("workspace_not_primary");
   }
-  return { issues, primaryWorkspaceId };
+  return { issues, primaryWorkspaceId, workerProfiles };
 }
 
 export function attachmentRequiredCapabilities(

@@ -50,3 +50,85 @@ it("filters profile models against the installed CLI version", () => {
   ).toEqual(["new"]);
   expect(projectModelOptions(payload)?.catalog).toEqual([]);
 });
+
+it("projects normalized capabilities without provider instructions or fake Defaults", async () => {
+  const { projectWorkerExecutionOptions } =
+    await import("../src/worker-execution-options.js");
+  const result = projectWorkerExecutionOptions(
+    JSON.stringify({
+      session: { supported: true },
+      model: {
+        supported: true,
+        arguments: ["--private-flag"],
+        unknownModelPolicy: "profile_allowlist",
+        allowlist: ["a", "b"],
+        supportedReasoningEfforts: ["brief", "deep"],
+        defaultReasoningEffort: "brief",
+        executionOptions: {
+          schemaVersion: 1,
+          discovery: "profile_catalog",
+          modelSwitchSupported: false,
+          effortSupported: true,
+          defaultModelId: "a",
+          effortMapping: { deep: "provider-private-value" },
+        },
+        catalog: [
+          { id: "a", name: "A", supportedReasoningEfforts: [] },
+          {
+            id: "b",
+            name: "B",
+            supportedReasoningEfforts: ["deep"],
+            defaultReasoningEffort: "deep",
+          },
+        ],
+      },
+    }),
+  );
+  expect(result?.schemaVersion).toBe(1);
+  expect(result?.modelSwitch.supported).toBe(false);
+  expect(result?.models.defaultModelId).toBe("a");
+  expect(result?.models.options[0]?.effort).toEqual({
+    supported: false,
+    values: [],
+    defaultValue: null,
+  });
+  expect(result?.models.options[1]?.effort.defaultValue).toBe("deep");
+  expect(JSON.stringify(result)).not.toContain("private");
+});
+it("supports fixed-model effort and filters unavailable CLI-version models", async () => {
+  const { projectWorkerExecutionOptions } =
+    await import("../src/worker-execution-options.js");
+  const fixed = projectWorkerExecutionOptions(
+    JSON.stringify({
+      model: {
+        supported: false,
+        supportedReasoningEfforts: ["deep"],
+        defaultReasoningEffort: "deep",
+      },
+    }),
+  );
+  expect(fixed?.models.supported).toBe(false);
+  expect(fixed?.effort.values).toEqual(["deep"]);
+  const result = projectWorkerExecutionOptions(
+    JSON.stringify({
+      session: { supported: true },
+      model: {
+        supported: true,
+        unknownModelPolicy: "profile_allowlist",
+        allowlist: ["new"],
+        catalog: [{ id: "new", name: "New", minProviderVersion: "2.0.0" }],
+        executionOptions: {
+          schemaVersion: 1,
+          discovery: "profile_catalog",
+          modelSwitchSupported: true,
+          effortSupported: false,
+          defaultModelId: "new",
+        },
+      },
+    }),
+    "1.0.0",
+  );
+  expect(result?.models.allowedModelIds).toEqual([]);
+  expect(result?.models.defaultModelId).toBeNull();
+  expect(result?.models.options).toEqual([]);
+});

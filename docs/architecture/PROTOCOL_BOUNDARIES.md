@@ -145,6 +145,13 @@ Tool Profiles are not protocol peers. They are signed immutable behavior configu
 
 Provider credentials, provider session IDs, arbitrary Cloud executable paths, shell commands, and raw provider output are not Local Worker Protocol fields.
 
+Durable execute requests may carry version 1 `workerSession` metadata: Conclave
+session, Conversation, and Worker IDs plus a frozen context target revision.
+Workspace validates ownership before forwarding it; the Engine retains native
+handles in Workspace-local state only. Model and effort changes do not partition
+sessions. See [Conversation Continuity Phase 6](../specifications/CONVERSATION_CONTINUITY_V1.md#phase-6--workspace-owned-worker-sessions)
+for local file upgrades, context synchronization limits, and coordinated rollout.
+
 Local Worker Protocol 4.0 is the sole Workspace-to-Engine protocol contract.
 Provider identity, release state, and executable paths do not cross this
 boundary as caller-controlled values.
@@ -230,3 +237,55 @@ Workspace Project grant collections and the additive aggregate count in
 [read model contract 1.1](../specifications/WORKSPACE_PROJECT_GRANTS.md) preserves
 existing mutation endpoints and authorization. Runtime inventory and grant
 admission still belong to their existing Cloud/Workspace boundaries.
+
+
+For model replacement, version 1 `workerSession` may also contain optional version
+1 `bootstrap`: Conclave Conversation/context IDs, a frozen canonical history
+sequence, and bounded canonical history text. Cloud route modules build this
+snapshot from Conclave history; Workspace validates its scope and forwards it to
+the generic Engine. The Engine consumes it only for a new native session. Provider
+handles remain local. Strict older readers reject the additive field, requiring
+Workspace/Engine rollout before Cloud emits it. See
+[Conversation Continuity Phase 14](../specifications/CONVERSATION_CONTINUITY_V1.md#phase-14--same-worker-different-model).
+
+
+Phase 15 supplies bootstrap context for every manual durable Conversation Worker.
+An optional version 1 bootstrap `turnRevision` freezes the accepted request; each
+history entry carries `contextRevision`, and `throughSequence` freezes dispatch-time
+facts. Updated Workspace/Engine readers must precede Cloud rollout. The generic
+Engine forwards full context for new sessions or missed context alongside a resumed
+turn, and records synchronization only after success. Worker switching remains a
+next-turn product selection. See
+[Phase 15](../specifications/CONVERSATION_CONTINUITY_V1.md#phase-15--different-worker-continuity).
+
+
+Phase 16 adds version 1 structured Bootstrap/Delta/Stateless context documents
+inside bounded canonical context text. Stateless assignments and ExecuteRequest
+may include optional `statelessContext`, rejected for durable execution. Workflow
+state is explicit and provider independent. Workspace/Engine updates must precede
+Cloud emission. See [Context Engine](../specifications/CONVERSATION_CONTINUITY_V1.md#phase-16--provider-independent-context-engine).
+
+
+Phase 17 Context Engine documents distinguish persistent `conversationContext`
+from request/receiving-step `workflowExecutionContext` (version 1). Work and
+multi-step execution context is preserved in resumed deltas independently of
+Conversation history changes. Provider CLI transport remains Profile-defined.
+See [workflow-aware context](../specifications/CONVERSATION_CONTINUITY_V1.md#phase-17--workflow-aware-context).
+
+
+Phase 18 Human Product Work history/request detail adds version 1 `workflowRun`,
+separate from the existing `turns` list. Worker turns expose `workflowRunId` and
+optional runtime-attempt association `runtimeRunId` (null without an attempt).
+Workflow execution context includes the stable logical WorkflowRun identity.
+Native sessions remain local and Local Worker Protocol framing is unchanged.
+Deploy Cloud only after the ownership schema update. See
+[Phase 18](../specifications/CONVERSATION_CONTINUITY_V1.md#phase-18--workflowrun-and-workerturn-ownership).
+
+
+Phase 19 version 1 WorkflowRun read models add trigger-message identity, persisted
+start/completion evidence and nested version 1 `stepRuns`. Turns add immutable
+`workflowStepRunId`; context steps include StepRun identity and role. Step results
+use the existing bounded Human Product text projection. Native Session handles
+remain local; Local Worker Protocol framing is unchanged. Apply schema migration
+0016 before Cloud deployment. See
+[Phase 19](../specifications/CONVERSATION_CONTINUITY_V1.md#phase-19--workflowrun-and-workflowsteprun-data-model).

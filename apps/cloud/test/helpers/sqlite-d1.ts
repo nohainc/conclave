@@ -42,6 +42,24 @@ export function sqliteD1() {
     ),
   );
   sqlite.exec("PRAGMA foreign_keys = ON");
+  for (const migration of [
+    "0006_chat_workflow_admission.sql",
+    "0009_realtime_stream_alignment.sql",
+    "0010_conversation_workflows.sql",
+    "0011_conversation_turns.sql",
+    "0012_canonical_conversation_history.sql",
+    "0013_worker_session_context.sql",
+    "0014_exact_history_context.sql",
+    "0015_conversation_workflow_runs.sql",
+    "0016_workflow_step_runs.sql",
+  ]) {
+    sqlite.exec(
+      readFileSync(
+        new URL(`../../migrations-v8/${migration}`, import.meta.url),
+        "utf8",
+      ),
+    );
+  }
   let pendingBatch: Promise<unknown> = Promise.resolve();
   const adapter = {
     prepare(sql: string) {

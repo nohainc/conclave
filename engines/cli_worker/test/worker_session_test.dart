@@ -1,0 +1,264 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:test/test.dart';
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:conclave_cli_worker_engine/src/engine_session_store.dart';
+
+void main() {
+  test(
+    'fast path requires exact synchronized context and active native state',
+    () async {
+      final root = await Directory.systemTemp.createTemp('session-fast-path-');
+      addTearDown(() => root.delete(recursive: true));
+      final store = EngineSessionStore(root);
+      final scope = WorkerSessionContext(
+        id: 'session',
+        conversationId: 'conversation',
+        workerId: 'worker',
+        baseContextRevision: 0,
+      );
+      await store.write(
+        sessionKey: 'scope',
+        workerTypeId: 'chatgpt',
+        profileDefinitionId: 'chatgpt-codex',
+        providerToolIdentity: 'Codex CLI',
+        profileReleaseVersion: 1,
+        sessionFormatId: 'format-v1',
+        sessionId: 'native-handle',
+        workerSession: scope,
+        modelId: 'model-A',
+        effort: 'medium',
+      );
+      final file = root.listSync().whereType<File>().single;
+      final state =
+          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final metadata = state['workerSession'] as Map;
+      // Simulate context already ingested by the future synchronization executor.
+      metadata['synchronizedContextRevision'] = 2;
+      Future<String?> read(int revision) => store.read(
+        sessionKey: 'scope',
+        workerTypeId: 'chatgpt',
+        profileDefinitionId: 'chatgpt-codex',
+        providerToolIdentity: 'Codex CLI',
+        compatibleFormatIds: ['format-v1'],
+        modelSwitchSupported: false,
+        requestedModelId: 'model-A',
+        workerSession: WorkerSessionContext(
+          id: 'session',
+          conversationId: 'conversation',
+          workerId: 'worker',
+          baseContextRevision: revision,
+        ),
+      );
+      await file.writeAsString(jsonEncode(state));
+      expect(await read(2), 'native-handle');
+      await expectLater(read(1), throwsFormatException);
+      await expectLater(read(3), throwsFormatException);
+      metadata['status'] = 'requires_synchronization';
+      await file.writeAsString(jsonEncode(state));
+      await expectLater(read(2), throwsFormatException);
+    },
+  );
+
+  test(
+    'Conversation WorkerSession survives model/effort changes and compatible Profile releases',
+    () async {
+      final root = await Directory.systemTemp.createTemp('worker-session-');
+      addTearDown(() => root.delete(recursive: true));
+      final store = EngineSessionStore(root);
+      final context = WorkerSessionContext(
+        id: 'session-A',
+        conversationId: 'conversation-A',
+        workerId: 'worker-A',
+        baseContextRevision: 0,
+      );
+      Future<void> write({
+        String? model = 'model-A',
+        String? effort = 'medium',
+        int version = 1,
+      }) => store.write(
+        sessionKey: 'scope-A',
+        workerTypeId: 'chatgpt',
+        profileDefinitionId: 'chatgpt-codex',
+        providerToolIdentity: 'Codex CLI',
+        profileReleaseVersion: version,
+        sessionFormatId: 'format-v1',
+        sessionId: 'native-private-handle',
+        workerSession: context,
+        modelId: model,
+        effort: effort,
+      );
+      Future<String?> read({WorkerSessionContext? scope}) => store.read(
+        sessionKey: 'scope-A',
+        workerTypeId: 'chatgpt',
+        profileDefinitionId: 'chatgpt-codex',
+        providerToolIdentity: 'Codex CLI',
+        compatibleFormatIds: ['format-v1'],
+        workerSession: scope ?? context,
+      );
+      await write();
+      final file = root.listSync().whereType<File>().single;
+      final initial = jsonDecode(await file.readAsString()) as Map;
+      final created = (initial['workerSession'] as Map)['createdAt'];
+      expect(await read(), 'native-private-handle');
+      await write(model: 'model-B', effort: 'high', version: 2);
+      expect(root.listSync().whereType<File>(), hasLength(1));
+      expect(await read(), 'native-private-handle');
+      await expectLater(
+        store.read(
+          sessionKey: 'scope-A',
+          workerTypeId: 'chatgpt',
+          profileDefinitionId: 'chatgpt-codex',
+          providerToolIdentity: 'Codex CLI',
+          compatibleFormatIds: ['format-v1'],
+          workerSession: context,
+          modelSwitchSupported: false,
+          requestedModelId: 'model-A',
+        ),
+        throwsFormatException,
+      );
+      expect(
+        await store.read(
+          sessionKey: 'scope-A',
+          workerTypeId: 'chatgpt',
+          profileDefinitionId: 'chatgpt-codex',
+          providerToolIdentity: 'Codex CLI',
+          compatibleFormatIds: ['format-v1'],
+          workerSession: context,
+          modelSwitchSupported: false,
+          requestedModelId: 'model-B',
+        ),
+        'native-private-handle',
+      );
+      final after = jsonDecode(await file.readAsString()) as Map;
+      expect(after['workerSession'], containsPair('id', 'session-A'));
+      expect(after['workerSession'], containsPair('profileVersion', 2));
+      expect(after['workerSession'], containsPair('lastModelId', 'model-B'));
+      expect(after['workerSession'], containsPair('lastEffort', 'high'));
+      expect(after['workerSession'], containsPair('createdAt', created));
+      expect(
+        after['workerSession'],
+        containsPair('synchronizedContextRevision', 0),
+      );
+      await write(model: null, effort: null);
+      final defaults =
+          (jsonDecode(await file.readAsString()) as Map)['workerSession']
+              as Map;
+      expect(defaults['lastModelId'], isNull);
+      expect(defaults['lastEffort'], isNull);
+      expect(
+        await EngineSessionStore(root).read(
+          sessionKey: 'scope-A',
+          workerTypeId: 'chatgpt',
+          profileDefinitionId: 'chatgpt-codex',
+          providerToolIdentity: 'Codex CLI',
+          compatibleFormatIds: ['format-v1'],
+          workerSession: context,
+        ),
+        'native-private-handle',
+      );
+      await expectLater(
+        read(
+          scope: WorkerSessionContext(
+            id: 'session-B',
+            conversationId: 'conversation-B',
+            workerId: 'worker-A',
+            baseContextRevision: 0,
+          ),
+        ),
+        throwsFormatException,
+      );
+      await expectLater(
+        read(
+          scope: WorkerSessionContext(
+            id: 'session-A',
+            conversationId: 'conversation-A',
+            workerId: 'worker-B',
+            baseContextRevision: 0,
+          ),
+        ),
+        throwsFormatException,
+      );
+      await expectLater(
+        read(
+          scope: WorkerSessionContext(
+            id: 'session-A',
+            conversationId: 'conversation-A',
+            workerId: 'worker-A',
+            baseContextRevision: 1,
+          ),
+        ),
+        throwsFormatException,
+      );
+      expect(
+        await store.read(
+          sessionKey: 'scope-A',
+          workerTypeId: 'chatgpt',
+          profileDefinitionId: 'other-profile',
+          providerToolIdentity: 'Codex CLI',
+          compatibleFormatIds: ['format-v1'],
+          workerSession: context,
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test(
+    'existing local session mapping gains explicit ownership after successful use',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'worker-session-upgrade-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final store = EngineSessionStore(root);
+      await store.write(
+        sessionKey: 'scope',
+        workerTypeId: 'chatgpt',
+        profileDefinitionId: 'chatgpt-codex',
+        providerToolIdentity: 'Codex CLI',
+        profileReleaseVersion: 1,
+        sessionFormatId: 'format-v1',
+        sessionId: 'native-existing',
+      );
+      final context = WorkerSessionContext(
+        id: 'session-A',
+        conversationId: 'conversation-A',
+        workerId: 'worker-A',
+        baseContextRevision: 0,
+      );
+      expect(
+        await store.read(
+          sessionKey: 'scope',
+          workerTypeId: 'chatgpt',
+          profileDefinitionId: 'chatgpt-codex',
+          providerToolIdentity: 'Codex CLI',
+          compatibleFormatIds: ['format-v1'],
+          workerSession: context,
+        ),
+        'native-existing',
+      );
+      await store.write(
+        sessionKey: 'scope',
+        workerTypeId: 'chatgpt',
+        profileDefinitionId: 'chatgpt-codex',
+        providerToolIdentity: 'Codex CLI',
+        profileReleaseVersion: 1,
+        sessionFormatId: 'format-v1',
+        sessionId: 'native-existing',
+        workerSession: context,
+        modelId: 'model-A',
+      );
+      final data =
+          jsonDecode(
+                await root.listSync().whereType<File>().single.readAsString(),
+              )
+              as Map;
+      expect(data['version'], 2);
+      expect(
+        data['workerSession'],
+        containsPair('nativeSessionId', 'native-existing'),
+      );
+    },
+  );
+}

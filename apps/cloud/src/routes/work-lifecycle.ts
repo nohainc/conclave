@@ -1,3 +1,8 @@
+import { loadConversationWorkflowRuns } from "./conversation-workflow-runs.js";
+import {
+  loadConversationTurns,
+  withConversationTurn,
+} from "./conversation-turns.js";
 import {
   cancelTaskAssignment,
   type AssignmentDispatcherEnv,
@@ -71,7 +76,7 @@ export async function handleRetryWorkRequest(
     `SELECT wr.workstream_id AS workstreamId, wr.mode, wr.status,
             wr.workflow_id AS workflowId, wr.workflow_version AS workflowVersion,
             wr.workflow_snapshot_json AS workflowSnapshotJson,
-            wr.snapshot_json AS snapshotJson, wr.input_json AS inputJson,
+            wr.snapshot_json AS snapshotJson, (SELECT text FROM conversation_history_entries h WHERE h.work_request_id = wr.id AND h.kind = 'user_message' LIMIT 1) AS canonicalUserText, wr.input_json AS inputJson,
             wr.primary_workspace_id AS primaryWorkspaceId,
             ws.project_id AS projectId
        FROM work_requests wr JOIN workstreams ws ON ws.id = wr.workstream_id
@@ -282,10 +287,11 @@ export async function handleGetWorkRequest(
   const row = await env.CONCLAVE_DB.prepare(
     `SELECT wr.id, wr.workstream_id AS workstreamId,
             wr.requested_by_user_id AS requestedByUserId,
+            (SELECT conversation_id FROM conversation_work_requests WHERE work_request_id = wr.id) AS conversationId,
             u.display_name AS requestedByName,
             wr.workflow_id AS workflowId, wr.workflow_version AS workflowVersion,
             wr.workflow_snapshot_json AS workflowSnapshotJson,
-            wr.input_json AS inputJson, wr.snapshot_json AS snapshotJson,
+            (SELECT text FROM conversation_history_entries h WHERE h.work_request_id = wr.id AND h.kind = 'user_message' LIMIT 1) AS canonicalUserText, wr.input_json AS inputJson, wr.snapshot_json AS snapshotJson,
             wr.status, wr.created_at AS createdAt, wr.updated_at AS updatedAt
        FROM work_requests wr JOIN users u ON u.id = wr.requested_by_user_id
       WHERE wr.id = ?1`,
@@ -385,145 +391,162 @@ export async function handleGetWorkRequest(
   const taskByKind = new Map(
     (taskRows.results ?? []).map((value) => [String(value.kind), value]),
   );
+  const turns =
+    (await loadConversationTurns(env.CONCLAVE_DB, [workRequestId])).get(
+      workRequestId,
+    ) ?? [];
   const workflowSteps = Array.isArray(workflow.steps) ? workflow.steps : [];
-  const steps = workflowSteps.flatMap((value) => {
-    if (!value || typeof value !== "object") return [];
-    const definition = value as Record<string, unknown>;
-    const kind = String(definition.kind ?? "implement");
-    const task = taskByKind.get(kind);
-    const bindingId = row.workflowId === "direct" ? "direct" : kind;
-    const bindingValue = bindings[bindingId];
-    const binding =
-      typeof bindingValue === "object" && bindingValue !== null
-        ? (bindingValue as Record<string, unknown>)
-        : {};
-    const output = parseJson<Record<string, unknown>>(
-      typeof task?.outputJson === "string" ? task.outputJson : null,
-      {},
-    );
-    const permissionSnapshot = parseJson<Record<string, unknown>>(
-      typeof task?.permissionSnapshotJson === "string"
-        ? task.permissionSnapshotJson
-        : null,
-      {},
-    );
-    const hasAssignment = typeof task?.assignmentId === "string";
-    const assignmentError = parseJson<Record<string, unknown>>(
-      typeof task?.assignmentErrorJson === "string"
-        ? task.assignmentErrorJson
-        : null,
-      {},
-    );
-    const assignmentErrorValue = assignmentError.error;
-    const assignmentErrorObject =
-      typeof assignmentErrorValue === "object" && assignmentErrorValue !== null
-        ? (assignmentErrorValue as Record<string, unknown>)
-        : {};
-    const rawErrorCode =
-      typeof assignmentErrorObject.code === "string"
-        ? assignmentErrorObject.code
-        : typeof task?.error === "string"
-          ? task.error
-          : null;
-    const errorCode = rawErrorCode
-      ? canonicalExecutionErrorCode(rawErrorCode)
-      : null;
-    const startedAt =
-      (typeof task?.startedAt === "string" ? task.startedAt : null) ??
-      (typeof output.startedAt === "string" ? output.startedAt : null) ??
-      (typeof task?.assignmentCreatedAt === "string"
-        ? task.assignmentCreatedAt
-        : null);
-    const finishedAt =
-      (typeof task?.finishedAt === "string" ? task.finishedAt : null) ??
-      (typeof output.completedAt === "string" ? output.completedAt : null) ??
-      (typeof task?.assignmentUpdatedAt === "string" &&
-      ["completed", "failed", "cancelled"].includes(String(task.status))
-        ? task.assignmentUpdatedAt
-        : null);
-    const startMs = startedAt ? Date.parse(startedAt) : NaN;
-    const endMs = finishedAt ? Date.parse(finishedAt) : Date.now();
-    const elapsedMs = Number.isFinite(startMs)
-      ? Math.max(0, endMs - startMs)
-      : null;
-    const resolvedWorkerId =
-      typeof binding.workerId === "string" ? binding.workerId : null;
-    return [
-      {
-        kind,
-        status: String(
-          task?.status ?? (row.status === "queued" ? "queued" : "waiting"),
-        ),
-        workerId: task?.workerId ?? resolvedWorkerId,
-        workerTypeId: hasAssignment
-          ? (task?.logicalWorkerTypeId ?? null)
-          : (task?.inventoryWorkerTypeId ?? null),
-        workerDisplayName:
-          typeof task?.workerDisplayName === "string"
-            ? task.workerDisplayName
-            : null,
-        engineVersion: hasAssignment
-          ? typeof permissionSnapshot.profileDefinitionId === "string"
-            ? (task?.engineVersion ?? null)
-            : null
-          : typeof output.engineVersion === "string"
-            ? output.engineVersion
-            : null,
-        profileDefinitionId: hasAssignment
-          ? typeof permissionSnapshot.profileDefinitionId === "string"
-            ? permissionSnapshot.profileDefinitionId
-            : null
+  const steps = workflowSteps
+    .flatMap((value) => {
+      if (!value || typeof value !== "object") return [];
+      const definition = value as Record<string, unknown>;
+      const kind = String(definition.kind ?? "implement");
+      const task = taskByKind.get(kind);
+      const bindingId = row.workflowId === "direct" ? "direct" : kind;
+      const bindingValue = bindings[bindingId];
+      const binding =
+        typeof bindingValue === "object" && bindingValue !== null
+          ? (bindingValue as Record<string, unknown>)
+          : {};
+      const output = parseJson<Record<string, unknown>>(
+        typeof task?.outputJson === "string" ? task.outputJson : null,
+        {},
+      );
+      const permissionSnapshot = parseJson<Record<string, unknown>>(
+        typeof task?.permissionSnapshotJson === "string"
+          ? task.permissionSnapshotJson
           : null,
-        profileReleaseVersion: hasAssignment
-          ? Number.isSafeInteger(permissionSnapshot.profileReleaseVersion)
-            ? permissionSnapshot.profileReleaseVersion
-            : null
+        {},
+      );
+      const hasAssignment = typeof task?.assignmentId === "string";
+      const assignmentError = parseJson<Record<string, unknown>>(
+        typeof task?.assignmentErrorJson === "string"
+          ? task.assignmentErrorJson
           : null,
-        model: hasAssignment
-          ? (task?.assignedModel ?? null)
-          : typeof binding.model === "string"
-            ? binding.model
+        {},
+      );
+      const assignmentErrorValue = assignmentError.error;
+      const assignmentErrorObject =
+        typeof assignmentErrorValue === "object" &&
+        assignmentErrorValue !== null
+          ? (assignmentErrorValue as Record<string, unknown>)
+          : {};
+      const rawErrorCode =
+        typeof assignmentErrorObject.code === "string"
+          ? assignmentErrorObject.code
+          : typeof task?.error === "string"
+            ? task.error
+            : null;
+      const errorCode = rawErrorCode
+        ? canonicalExecutionErrorCode(rawErrorCode)
+        : null;
+      const startedAt =
+        (typeof task?.startedAt === "string" ? task.startedAt : null) ??
+        (typeof output.startedAt === "string" ? output.startedAt : null) ??
+        (typeof task?.assignmentCreatedAt === "string"
+          ? task.assignmentCreatedAt
+          : null);
+      const finishedAt =
+        (typeof task?.finishedAt === "string" ? task.finishedAt : null) ??
+        (typeof output.completedAt === "string" ? output.completedAt : null) ??
+        (typeof task?.assignmentUpdatedAt === "string" &&
+        ["completed", "failed", "cancelled"].includes(String(task.status))
+          ? task.assignmentUpdatedAt
+          : null);
+      const startMs = startedAt ? Date.parse(startedAt) : NaN;
+      const endMs = finishedAt ? Date.parse(finishedAt) : Date.now();
+      const elapsedMs = Number.isFinite(startMs)
+        ? Math.max(0, endMs - startMs)
+        : null;
+      const resolvedWorkerId =
+        typeof binding.workerId === "string" ? binding.workerId : null;
+      return [
+        {
+          kind,
+          status: String(
+            task?.status ?? (row.status === "queued" ? "queued" : "waiting"),
+          ),
+          workerId: task?.workerId ?? resolvedWorkerId,
+          workerTypeId: hasAssignment
+            ? (task?.logicalWorkerTypeId ?? null)
+            : (task?.inventoryWorkerTypeId ?? null),
+          workerDisplayName:
+            typeof task?.workerDisplayName === "string"
+              ? task.workerDisplayName
+              : null,
+          engineVersion: hasAssignment
+            ? typeof permissionSnapshot.profileDefinitionId === "string"
+              ? (task?.engineVersion ?? null)
+              : null
+            : typeof output.engineVersion === "string"
+              ? output.engineVersion
+              : null,
+          profileDefinitionId: hasAssignment
+            ? typeof permissionSnapshot.profileDefinitionId === "string"
+              ? permissionSnapshot.profileDefinitionId
+              : null
             : null,
-        providerToolName:
-          (typeof permissionSnapshot.providerToolName === "string"
-            ? permissionSnapshot.providerToolName
-            : null) ??
-          (hasAssignment ? null : task?.configuredProviderToolName) ??
-          null,
-        providerToolVersion:
-          (typeof permissionSnapshot.providerToolVersion === "string"
-            ? permissionSnapshot.providerToolVersion
-            : null) ??
-          (hasAssignment ? null : task?.configuredProviderToolVersion) ??
-          (typeof output.providerToolVersion === "string"
-            ? output.providerToolVersion
-            : null),
-        startedAt,
-        completedAt: finishedAt,
-        elapsedMs,
-        resultText:
-          typeof output.text === "string" ? output.text.slice(0, 24_000) : null,
-        assignmentId:
-          typeof task?.assignmentId === "string" ? task.assignmentId : null,
-        sessionPolicy:
-          typeof task?.sessionPolicy === "string" ? task.sessionPolicy : null,
-        errorCode,
-        errorMessage: errorCode ? executionErrorMessage(errorCode) : null,
-        ...(manualRetry.stepKind === kind &&
-        (manualRetry.sessionStrategy === "resume" ||
-          manualRetry.sessionStrategy === "fresh")
-          ? { retrySessionStrategy: manualRetry.sessionStrategy }
-          : {}),
-      },
-    ];
-  });
+          profileReleaseVersion: hasAssignment
+            ? Number.isSafeInteger(permissionSnapshot.profileReleaseVersion)
+              ? permissionSnapshot.profileReleaseVersion
+              : null
+            : null,
+          model: hasAssignment
+            ? (task?.assignedModel ?? null)
+            : typeof binding.model === "string"
+              ? binding.model
+              : null,
+          providerToolName:
+            (typeof permissionSnapshot.providerToolName === "string"
+              ? permissionSnapshot.providerToolName
+              : null) ??
+            (hasAssignment ? null : task?.configuredProviderToolName) ??
+            null,
+          providerToolVersion:
+            (typeof permissionSnapshot.providerToolVersion === "string"
+              ? permissionSnapshot.providerToolVersion
+              : null) ??
+            (hasAssignment ? null : task?.configuredProviderToolVersion) ??
+            (typeof output.providerToolVersion === "string"
+              ? output.providerToolVersion
+              : null),
+          startedAt,
+          completedAt: finishedAt,
+          elapsedMs,
+          resultText:
+            typeof output.text === "string"
+              ? output.text.slice(0, 24_000)
+              : null,
+          assignmentId:
+            typeof task?.assignmentId === "string" ? task.assignmentId : null,
+          sessionPolicy:
+            typeof task?.sessionPolicy === "string" ? task.sessionPolicy : null,
+          errorCode,
+          errorMessage: errorCode ? executionErrorMessage(errorCode) : null,
+          ...(manualRetry.stepKind === kind &&
+          (manualRetry.sessionStrategy === "resume" ||
+            manualRetry.sessionStrategy === "fresh")
+            ? { retrySessionStrategy: manualRetry.sessionStrategy }
+            : {}),
+        },
+      ];
+    })
+    .map((step) => withConversationTurn(step, turns));
   const errorCode =
     [...steps]
       .reverse()
       .map((step) => step.errorCode)
       .find((code) => code !== null) ?? null;
+  const workflowRun =
+    (await loadConversationWorkflowRuns(env.CONCLAVE_DB, [workRequestId])).get(
+      workRequestId,
+    ) ?? null;
   return json({
     workRequest: {
+      workflowRun,
+      turns,
+      executionConfig: snapshot.turnExecutionConfig ?? null,
+      conversationId: row.conversationId ?? null,
       id: String(row.id),
       requestedByUserId: String(row.requestedByUserId),
       requestedByName: String(row.requestedByName ?? "Team member"),
@@ -535,7 +558,9 @@ export async function handleGetWorkRequest(
         row.workflowId,
         row.workflowVersion,
       ),
-      originalRequest: String(input.originalRequest ?? input.request ?? ""),
+      originalRequest: String(
+        row.canonicalUserText ?? input.originalRequest ?? input.request ?? "",
+      ),
       createdAt: String(row.createdAt),
       updatedAt: String(row.updatedAt),
     },
@@ -571,10 +596,11 @@ export async function handleListWorkRequests(
   const recentCutoff = new Date(Date.now() - 15 * 60_000).toISOString();
   const page = await env.CONCLAVE_DB.prepare(
     `SELECT wr.id, wr.requested_by_user_id AS requestedByUserId,
+            (SELECT conversation_id FROM conversation_work_requests WHERE work_request_id = wr.id) AS conversationId,
             u.display_name AS requestedByName, wr.workflow_id AS workflowId,
             wr.workflow_version AS workflowVersion,
             wr.workflow_snapshot_json AS workflowSnapshotJson,
-            wr.snapshot_json AS snapshotJson, wr.input_json AS inputJson,
+            wr.snapshot_json AS snapshotJson, (SELECT text FROM conversation_history_entries h WHERE h.work_request_id = wr.id AND h.kind = 'user_message' LIMIT 1) AS canonicalUserText, wr.input_json AS inputJson,
             wr.status, wr.created_at AS createdAt, wr.updated_at AS updatedAt
        FROM work_requests wr
        JOIN users u ON u.id = wr.requested_by_user_id
@@ -596,6 +622,11 @@ export async function handleListWorkRequests(
   if (requests.length === 0)
     return json({ workRequests: [], nextCursor: null });
   const ids = requests.map((row) => String(row.id));
+  const turnsByRequest = await loadConversationTurns(env.CONCLAVE_DB, ids);
+  const workflowRunsByRequest = await loadConversationWorkflowRuns(
+    env.CONCLAVE_DB,
+    ids,
+  );
   const placeholders = ids.map((_, index) => `?${index + 1}`).join(", ");
   const desiredWorkerIds = new Set<string>();
   for (const row of requests) {
@@ -644,7 +675,7 @@ export async function handleListWorkRequests(
             COALESCE(wt.started_at, wt.created_at) AS startedAt,
             COALESCE(wt.finished_at, wt.updated_at) AS updatedAt,
             wa.error_json AS assignmentErrorJson,
-            wa.workspace_worker_id AS workerId,
+            wa.id AS assignmentId, wa.workspace_worker_id AS workerId,
             wa.worker_type_id AS logicalWorkerTypeId,
             wa.model AS assignedModel,
             wa.engine_version AS engineVersion,
@@ -697,124 +728,128 @@ export async function handleListWorkRequests(
       persistedTasks.map((task) => [String(task.kind), task]),
     );
     const workflowSteps = Array.isArray(workflow.steps) ? workflow.steps : [];
-    const steps = workflowSteps.flatMap((value) => {
-      if (!value || typeof value !== "object") return [];
-      const definition = value as Record<string, unknown>;
-      const kind = String(definition.kind ?? "implement");
-      const task = taskByKind.get(kind);
-      const bindingId = row.workflowId === "direct" ? "direct" : kind;
-      const bindingValue = bindings[bindingId];
-      const binding =
-        typeof bindingValue === "object" && bindingValue !== null
-          ? (bindingValue as Record<string, unknown>)
-          : {};
-      const desiredWorker =
-        typeof binding.workerId === "string"
-          ? desiredWorkers.get(binding.workerId)
-          : undefined;
-      const output =
-        typeof task?.outputJson === "string"
-          ? parseJson<Record<string, unknown>>(task.outputJson, {})
-          : {};
-      const permissionSnapshot = parseJson<Record<string, unknown>>(
-        typeof task?.permissionSnapshotJson === "string"
-          ? task.permissionSnapshotJson
-          : null,
-        {},
-      );
-      const hasAssignment = typeof task?.workerId === "string";
-      const testSummary =
-        kind === "test" && typeof output.text === "string"
-          ? summarizeTestCounts(output.text)
-          : null;
-      const assignmentError = parseJson<Record<string, unknown>>(
-        typeof task?.assignmentErrorJson === "string"
-          ? task.assignmentErrorJson
-          : null,
-        {},
-      );
-      const assignmentErrorValue = assignmentError.error;
-      const assignmentErrorDetail =
-        typeof assignmentErrorValue === "object" &&
-        assignmentErrorValue !== null
-          ? (assignmentErrorValue as Record<string, unknown>)
-          : {};
-      const stableErrorCode =
-        typeof assignmentErrorDetail.code === "string"
-          ? canonicalExecutionErrorCode(assignmentErrorDetail.code)
-          : typeof task?.error === "string"
-            ? canonicalExecutionErrorCode(task.error)
+    const steps = workflowSteps
+      .flatMap((value) => {
+        if (!value || typeof value !== "object") return [];
+        const definition = value as Record<string, unknown>;
+        const kind = String(definition.kind ?? "implement");
+        const task = taskByKind.get(kind);
+        const bindingId = row.workflowId === "direct" ? "direct" : kind;
+        const bindingValue = bindings[bindingId];
+        const binding =
+          typeof bindingValue === "object" && bindingValue !== null
+            ? (bindingValue as Record<string, unknown>)
+            : {};
+        const desiredWorker =
+          typeof binding.workerId === "string"
+            ? desiredWorkers.get(binding.workerId)
+            : undefined;
+        const output =
+          typeof task?.outputJson === "string"
+            ? parseJson<Record<string, unknown>>(task.outputJson, {})
+            : {};
+        const permissionSnapshot = parseJson<Record<string, unknown>>(
+          typeof task?.permissionSnapshotJson === "string"
+            ? task.permissionSnapshotJson
+            : null,
+          {},
+        );
+        const hasAssignment = typeof task?.workerId === "string";
+        const testSummary =
+          kind === "test" && typeof output.text === "string"
+            ? summarizeTestCounts(output.text)
             : null;
-      const created = task?.startedAt
-        ? Date.parse(String(task.startedAt))
-        : NaN;
-      const updated = task?.updatedAt
-        ? Date.parse(String(task.updatedAt))
-        : Date.now();
-      const finished = ["completed", "failed", "cancelled"].includes(
-        String(task?.status),
-      );
-      return [
-        {
-          kind,
-          status: String(
-            task?.status ?? (row.status === "queued" ? "queued" : "waiting"),
-          ),
-          workerId: task?.workerId ?? binding.workerId ?? null,
-          workerTypeId: hasAssignment
-            ? (task?.logicalWorkerTypeId ?? null)
-            : (task?.inventoryWorkerTypeId ??
-              desiredWorker?.workerTypeId ??
-              null),
-          engineVersion: hasAssignment
-            ? typeof permissionSnapshot.profileDefinitionId === "string"
-              ? (task?.engineVersion ?? null)
-              : null
-            : (desiredWorker?.engineVersion ?? null),
-          profileDefinitionId: hasAssignment
-            ? typeof permissionSnapshot.profileDefinitionId === "string"
-              ? permissionSnapshot.profileDefinitionId
-              : null
-            : (desiredWorker?.profileDefinitionId ?? null),
-          profileReleaseVersion: hasAssignment
-            ? Number.isSafeInteger(permissionSnapshot.profileReleaseVersion)
-              ? permissionSnapshot.profileReleaseVersion
-              : null
-            : (desiredWorker?.profileReleaseVersion ?? null),
-          model: hasAssignment
-            ? (task?.assignedModel ?? null)
-            : typeof binding.model === "string"
-              ? binding.model
+        const assignmentError = parseJson<Record<string, unknown>>(
+          typeof task?.assignmentErrorJson === "string"
+            ? task.assignmentErrorJson
+            : null,
+          {},
+        );
+        const assignmentErrorValue = assignmentError.error;
+        const assignmentErrorDetail =
+          typeof assignmentErrorValue === "object" &&
+          assignmentErrorValue !== null
+            ? (assignmentErrorValue as Record<string, unknown>)
+            : {};
+        const stableErrorCode =
+          typeof assignmentErrorDetail.code === "string"
+            ? canonicalExecutionErrorCode(assignmentErrorDetail.code)
+            : typeof task?.error === "string"
+              ? canonicalExecutionErrorCode(task.error)
+              : null;
+        const created = task?.startedAt
+          ? Date.parse(String(task.startedAt))
+          : NaN;
+        const updated = task?.updatedAt
+          ? Date.parse(String(task.updatedAt))
+          : Date.now();
+        const finished = ["completed", "failed", "cancelled"].includes(
+          String(task?.status),
+        );
+        return [
+          {
+            kind,
+            assignmentId:
+              typeof task?.assignmentId === "string" ? task.assignmentId : null,
+            status: String(
+              task?.status ?? (row.status === "queued" ? "queued" : "waiting"),
+            ),
+            workerId: task?.workerId ?? binding.workerId ?? null,
+            workerTypeId: hasAssignment
+              ? (task?.logicalWorkerTypeId ?? null)
+              : (task?.inventoryWorkerTypeId ??
+                desiredWorker?.workerTypeId ??
+                null),
+            engineVersion: hasAssignment
+              ? typeof permissionSnapshot.profileDefinitionId === "string"
+                ? (task?.engineVersion ?? null)
+                : null
+              : (desiredWorker?.engineVersion ?? null),
+            profileDefinitionId: hasAssignment
+              ? typeof permissionSnapshot.profileDefinitionId === "string"
+                ? permissionSnapshot.profileDefinitionId
+                : null
+              : (desiredWorker?.profileDefinitionId ?? null),
+            profileReleaseVersion: hasAssignment
+              ? Number.isSafeInteger(permissionSnapshot.profileReleaseVersion)
+                ? permissionSnapshot.profileReleaseVersion
+                : null
+              : (desiredWorker?.profileReleaseVersion ?? null),
+            model: hasAssignment
+              ? (task?.assignedModel ?? null)
+              : typeof binding.model === "string"
+                ? binding.model
+                : null,
+            providerToolName:
+              (typeof permissionSnapshot.providerToolName === "string"
+                ? permissionSnapshot.providerToolName
+                : null) ??
+              (hasAssignment ? null : task?.configuredProviderToolName) ??
+              desiredWorker?.providerToolName ??
+              null,
+            providerToolVersion:
+              (typeof permissionSnapshot.providerToolVersion === "string"
+                ? permissionSnapshot.providerToolVersion
+                : null) ??
+              (hasAssignment ? null : task?.configuredProviderToolVersion) ??
+              desiredWorker?.providerToolVersion ??
+              null,
+            startedAt: task?.startedAt ?? null,
+            updatedAt: task?.updatedAt ?? null,
+            elapsedMs: Number.isFinite(created)
+              ? Math.max(0, (finished ? updated : Date.now()) - created)
               : null,
-          providerToolName:
-            (typeof permissionSnapshot.providerToolName === "string"
-              ? permissionSnapshot.providerToolName
-              : null) ??
-            (hasAssignment ? null : task?.configuredProviderToolName) ??
-            desiredWorker?.providerToolName ??
-            null,
-          providerToolVersion:
-            (typeof permissionSnapshot.providerToolVersion === "string"
-              ? permissionSnapshot.providerToolVersion
-              : null) ??
-            (hasAssignment ? null : task?.configuredProviderToolVersion) ??
-            desiredWorker?.providerToolVersion ??
-            null,
-          startedAt: task?.startedAt ?? null,
-          updatedAt: task?.updatedAt ?? null,
-          elapsedMs: Number.isFinite(created)
-            ? Math.max(0, (finished ? updated : Date.now()) - created)
-            : null,
-          finalText: typeof output.text === "string" ? output.text : null,
-          ...(testSummary ? { testSummary } : {}),
-          errorCode: stableErrorCode,
-          errorMessage: stableErrorCode
-            ? executionErrorMessage(stableErrorCode)
-            : null,
-          error: typeof task?.error === "string" ? task.error : null,
-        },
-      ];
-    });
+            finalText: typeof output.text === "string" ? output.text : null,
+            ...(testSummary ? { testSummary } : {}),
+            errorCode: stableErrorCode,
+            errorMessage: stableErrorCode
+              ? executionErrorMessage(stableErrorCode)
+              : null,
+            error: typeof task?.error === "string" ? task.error : null,
+          },
+        ];
+      })
+      .map((step) => withConversationTurn(step, turnsByRequest.get(id) ?? []));
     const terminalStep = steps.at(-1);
     const finalText =
       row.status === "completed" && terminalStep?.status === "completed"
@@ -830,8 +865,14 @@ export async function handleListWorkRequests(
     const errorCode = stepError ? canonicalExecutionErrorCode(stepError) : null;
     return {
       id,
+      conversationId: row.conversationId ?? null,
       requestedByName: String(row.requestedByName ?? "Team member"),
-      prompt: String(input.originalRequest ?? input.request ?? ""),
+      turns: turnsByRequest.get(id) ?? [],
+      workflowRun: workflowRunsByRequest.get(id) ?? null,
+      executionConfig: snapshot.turnExecutionConfig ?? null,
+      prompt: String(
+        row.canonicalUserText ?? input.originalRequest ?? input.request ?? "",
+      ),
       workflowId: String(row.workflowId),
       workflowVersion: Number(row.workflowVersion),
       workflowName: historicalWorkflowName(

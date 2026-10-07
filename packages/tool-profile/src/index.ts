@@ -358,14 +358,17 @@ const errorMapping = z
   })
   .strict();
 
+const modelId = shortString.max(160);
+const effortValue = shortString.max(64);
+
 const modelCatalogEntry = z
   .object({
-    id: shortString,
+    id: modelId,
     name: shortString,
     badge: shortString.optional(),
     description: shortString.optional(),
-    defaultReasoningEffort: shortString.optional(),
-    supportedReasoningEfforts: z.array(shortString).max(16).optional(),
+    defaultReasoningEffort: effortValue.optional(),
+    supportedReasoningEfforts: z.array(effortValue).max(16).optional(),
     minProviderVersion: semver.optional(),
     maxProviderVersion: semver.optional(),
   })
@@ -514,10 +517,27 @@ const profileSchema = z
         supported: z.boolean(),
         arguments: z.array(templatedString).max(TOOL_PROFILE_LIMITS.arguments),
         unknownModelPolicy: z.enum(["pass_through", "profile_allowlist"]),
-        allowlist: z.array(shortString).max(128).optional(),
+        allowlist: z.array(modelId).max(128).optional(),
         catalog: z.array(modelCatalogEntry).max(128).optional(),
-        defaultReasoningEffort: shortString.optional(),
-        supportedReasoningEfforts: z.array(shortString).max(16).optional(),
+        executionOptions: z
+          .object({
+            schemaVersion: z.literal(1),
+            discovery: z.literal("profile_catalog"),
+            modelSwitchSupported: z.boolean(),
+            effortSupported: z.boolean(),
+            defaultModelId: modelId.nullable().optional(),
+            effortMapping: z
+              .record(effortValue, shortString)
+              .refine(
+                (mapping) => Object.keys(mapping).length <= 128,
+                "Too many effort mappings",
+              )
+              .optional(),
+          })
+          .strict()
+          .optional(),
+        defaultReasoningEffort: effortValue.optional(),
+        supportedReasoningEfforts: z.array(effortValue).max(16).optional(),
       })
       .strict(),
     timeout: z
@@ -664,6 +684,80 @@ export const toolProfileV1Schema = profileSchema.superRefine((profile, ctx) => {
       code: "custom",
       message: `Tool Profile payload exceeds ${TOOL_PROFILE_LIMITS.payloadBytes} bytes`,
     });
+  const model = profile.model;
+  const optionIssue = (message: string) =>
+    ctx.addIssue({ code: "custom", path: ["model"], message });
+  const entries = model.catalog ?? [];
+  if (new Set(entries.map((entry) => entry.id)).size !== entries.length)
+    optionIssue("Model catalog IDs must be unique");
+  for (const entry of [model, ...entries]) {
+    const values =
+      entry.supportedReasoningEfforts ?? model.supportedReasoningEfforts ?? [];
+    const defaultEffort =
+      entry.defaultReasoningEffort ?? model.defaultReasoningEffort;
+    if (new Set(values).size !== values.length)
+      optionIssue("Effort values must be unique");
+    // An explicit empty list disables effort and does not inherit its default.
+    if (defaultEffort && values.length > 0 && !values.includes(defaultEffort))
+      optionIssue("Default effort must be supported");
+  }
+  const declared = model.executionOptions;
+  if (declared) {
+    if (
+      declared.modelSwitchSupported &&
+      (!model.supported || !profile.session.supported)
+    )
+      optionIssue(
+        "Model switching requires model selection and durable sessions",
+      );
+    if (
+      declared.defaultModelId &&
+      (!model.supported ||
+        !entries.some((entry) => entry.id === declared.defaultModelId))
+    )
+      optionIssue("Default model must be in the catalog");
+    if (
+      declared.defaultModelId &&
+      model.unknownModelPolicy === "profile_allowlist" &&
+      !model.allowlist?.includes(declared.defaultModelId)
+    )
+      optionIssue("Default model must be allowed");
+    if (
+      declared.effortSupported &&
+      [
+        profile.execution.arguments,
+        ...profile.compatibilityOverrides.flatMap((override) =>
+          override.executionArguments ? [override.executionArguments] : [],
+        ),
+      ].some(
+        (arguments_) =>
+          !JSON.stringify([arguments_, profile.execution.stdin]).includes(
+            "{{reasoningEffort}}",
+          ),
+      )
+    )
+      optionIssue("Supported effort requires a provider invocation mapping");
+    const supported = new Set([
+      ...(model.supportedReasoningEfforts ?? []),
+      ...entries.flatMap((entry) => entry.supportedReasoningEfforts ?? []),
+    ]);
+    if (
+      !declared.effortSupported &&
+      (supported.size > 0 ||
+        Object.keys(declared.effortMapping ?? {}).length > 0)
+    )
+      optionIssue(
+        "Disabled effort must not declare selectable values or mappings",
+      );
+    if (declared.effortSupported && supported.size === 0)
+      optionIssue("Supported effort requires declared values");
+    if (
+      Object.keys(declared.effortMapping ?? {}).some(
+        (value) => !supported.has(value),
+      )
+    )
+      optionIssue("Effort mapping keys must be declared values");
+  }
   const validateArgumentSlots = (
     args: ToolProfileV1["execution"]["arguments"],
     path: (string | number)[],

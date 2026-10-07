@@ -1,41 +1,64 @@
 ---
+import Button from "../components/Button.astro";
 import Container from "../components/Container.astro";
 import FeatureCard from "../components/FeatureCard.astro";
 import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
+import CredentialPrivacyDiagram from "../components/CredentialPrivacyDiagram.astro";
 ---
 
-<SiteLayout title="Workers — Conclave AX" description="Workers connect Conclave AX to AI models, coding tools, local capabilities, and verification systems.">
+<SiteLayout
+  title="AI & Workers — Conclave AX"
+  description="Connect ChatGPT, Claude, Gemini, DeepSeek, local LLMs, and coding agents to your shared Conclave projects."
+>
   <Section>
     <Container>
-      <SectionHeader eyebrow="Workers" title="Treat models and tools as capabilities, not as the whole workflow." description="Workers let Conclave AX use AI models, coding tools, CLIs, test tools, and other integrations. A workflow asks for the role and capability it needs; Conclave resolves an eligible Worker at execution time." headingLevel={1} />
+      <SectionHeader
+        eyebrow="AI & Workers"
+        title="Connect and share your favorite AI models."
+        description="Conclave AX lets team members contribute their preferred AI models and tools to shared projects. Use any model directly in team conversations or orchestrate them across automated workflows."
+        headingLevel={1}
+      />
 
       <div class="cards worker-catalog" data-site-event="section.workers_reached">
-        <FeatureCard title="Codex" headingLevel={2}><p>Repository-aware implementation and coding work through a Workspace-managed Worker.</p></FeatureCard>
-        <FeatureCard title="Claude Code" headingLevel={2}><p>Implementation, analysis, review, and codebase investigation through a specialized Worker.</p></FeatureCard>
-        <FeatureCard title="OpenAI" headingLevel={2}><p>API-backed model execution for research, synthesis, structured reasoning, and workflow tasks.</p></FeatureCard>
-        <FeatureCard title="Anthropic" headingLevel={2}><p>API-backed model execution for analysis, research, review, and structured assignments.</p></FeatureCard>
+        <FeatureCard title="ChatGPT & OpenAI" headingLevel={2}>
+          <p>Connect your OpenAI account or ChatGPT subscription for structured reasoning, synthesis, brainstorming, and general knowledge tasks.</p>
+        </FeatureCard>
+
+        <FeatureCard title="Claude & Anthropic" headingLevel={2}>
+          <p>Connect Anthropic accounts for deep document analysis, long-form writing, strategic nuance, and comprehensive code review.</p>
+        </FeatureCard>
+
+        <FeatureCard title="Google Gemini" headingLevel={2}>
+          <p>Connect Google AI accounts for massive context window analysis, high-speed research synthesis, and multimodal processing.</p>
+        </FeatureCard>
+
+        <FeatureCard title="DeepSeek & Open Models" headingLevel={2}>
+          <p>Integrate DeepSeek and open weights models for math, logic, rapid prototyping, and specialized coding benchmarks.</p>
+        </FeatureCard>
+
+        <FeatureCard title="Coding Agents (CLI)" headingLevel={2}>
+          <p>Run Codex and Claude Code CLI through your connected Workspace for direct repository implementation and automated testing.</p>
+        </FeatureCard>
+
+        <FeatureCard title="Local & Private LLMs" headingLevel={2}>
+          <p>Connect Ollama or local LLM instances running on your own hardware for private, offline, zero-cloud-telemetry execution.</p>
+        </FeatureCard>
       </div>
 
-      <div class="worker-account-model">
-        <div>
-          <SectionHeader eyebrow="Worker lifecycle" title="Install capability once. Authorize use separately." description="Workers belong to a Workspace runtime. AI Accounts belong to people and are authorized independently for Project work." />
-          <ul class="privacy-points">
-            <li>Workspace owners control which Workers are installed and enabled.</li>
-            <li>Projects can use only Workers permitted by their Workspace grants.</li>
-            <li>AI Account authorization remains independent from Worker availability.</li>
-            <li>Assignments snapshot the Worker, Account, permissions, and execution context used.</li>
-          </ul>
-        </div>
-        <div class="account-tree" aria-label="Worker and Account separation">
-          <strong>Implementation workflow</strong>
-          <span class="account-tree__line" aria-hidden="true">│</span>
-          <span>├── Role: implement</span>
-          <span>├── Worker: eligible coding capability</span>
-          <span>├── Workspace: authorized execution environment</span>
-          <span>└── Account: independently authorized identity</span>
-        </div>
+      <div style="margin-top: var(--space-16);">
+        <SectionHeader
+          eyebrow="Security & Sharing"
+          title="Share AI access without sharing your secrets."
+          description="Every AI account remains owned and controlled by the person who connected it. When you share an AI worker with a project, collaborators can prompt the model, but they can never view your API keys or passwords."
+        />
+        <CredentialPrivacyDiagram />
+      </div>
+
+      <div class="actions" style="justify-content: center; margin-top: var(--space-16);">
+        <Button href="https://app.conclaveax.com" label="Open Conclave AX" />
+        <Button href="/downloads/" label="Download Workspace for local tools" variant="secondary" />
       </div>
     </Container>
   </Section>

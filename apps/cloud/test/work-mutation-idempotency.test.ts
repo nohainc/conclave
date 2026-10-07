@@ -10,6 +10,10 @@ vi.mock("../src/routes/handlers.js", async (original) => ({
   validateWorkflowWorkerEligibility: async () => ({
     issues: [],
     primaryWorkspaceId: "workspace",
+    workerProfiles: {
+      direct: { profileId: "chatgpt-codex", profileReleaseVersion: 1 },
+      chat: { profileId: "chatgpt-codex", profileReleaseVersion: 1 },
+    },
   }),
 }));
 vi.mock("../src/event-publisher.js", () => ({
@@ -23,6 +27,9 @@ function fixture() {
     INSERT INTO project_memberships(id,project_id,user_id,role,created_at,updated_at) VALUES('member','P','owner','owner','now','now');
     INSERT INTO workstreams(id,project_id,name,status,lead_user_id,created_at,updated_at) VALUES('W','P','Stream','active','owner','now','now');
     INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('workspace','owner','Workspace','now','now');`);
+  sqlite.exec(
+    `INSERT INTO workstream_work_configs(workstream_id,config_json,updated_at) VALUES('W','{"bindings":{"direct":{"workerId":"worker-a"},"chat":{"workerId":"worker-a"}}}','now')`,
+  );
   const instances = new Set<string>();
   let failDispatch = false;
   const enqueue = vi.fn(async () => new Response("{}"));
@@ -44,20 +51,22 @@ function fixture() {
   const request = (
     prompt = "Implement this",
     key = "work-operation-000000001",
+    workflowId = "direct",
   ) =>
     new Request("https://cloud.test/workstreams/W/work-requests", {
       method: "POST",
       headers: { "Idempotency-Key": key },
       body: JSON.stringify({
-        workflowId: "direct",
+        workflowId,
         input: { originalRequest: prompt },
       }),
     });
-  const submit = (prompt?: string, key?: string) =>
-    handleCreateWorkRequest(request(prompt, key), env, "W");
+  const submit = (prompt?: string, key?: string, workflowId?: string) =>
+    handleCreateWorkRequest(request(prompt, key, workflowId), env, "W");
   return {
     sqlite,
     db,
+    env,
     instances,
     create,
     get,
@@ -68,7 +77,141 @@ function fixture() {
     },
   };
 }
+it.each(["chat", "direct"])(
+  "accepts %s with one StepRun before scheduling and preserves it on replay",
+  async (workflowId) => {
+    const f = fixture();
+    try {
+      const first = await f.submit(
+        "Request",
+        "phase19-operation-000001",
+        workflowId,
+      );
+      expect(first.status).toBe(202);
+      const body = (await first.json()) as { workRequest: { id: string } };
+      const step = f.sqlite
+        .prepare(
+          `SELECT s.id,s.step_id,s.role,t.status FROM conversation_workflow_step_runs s
+    JOIN conversation_workflow_runs r ON r.id=s.workflow_run_id JOIN workflow_tasks t ON t.id=s.task_id WHERE r.work_request_id=?`,
+        )
+        .all(body.workRequest.id);
+      expect(step).toHaveLength(1);
+      expect(step[0]).toMatchObject({
+        step_id: workflowId === "chat" ? "chat" : "implement",
+        role: workflowId === "chat" ? "chat" : "implement",
+        status: "queued",
+      });
+      await f.submit("Request", "phase19-operation-000001", workflowId);
+      expect(
+        f.sqlite
+          .prepare(
+            "SELECT COUNT(*) AS count FROM conversation_workflow_step_runs",
+          )
+          .get()?.count,
+      ).toBe(1);
+    } finally {
+      f.sqlite.close();
+    }
+  },
+);
+
 describe("Work mutation identity through response loss", () => {
+  it("rejects another Conversation scope without accepting a request", async () => {
+    const f = fixture();
+    await expect(
+      handleCreateWorkRequest(
+        new Request("https://cloud.test/workstreams/W/work-requests", {
+          method: "POST",
+          body: JSON.stringify({
+            workflowId: "direct",
+            conversationId: "another-conversation",
+            input: { originalRequest: "Follow up" },
+          }),
+        }),
+        f.env,
+        "W",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(
+      f.sqlite.prepare("SELECT count(*) AS n FROM conversations").get(),
+    ).toEqual({ n: 0 });
+    expect(
+      f.sqlite.prepare("SELECT count(*) AS n FROM work_requests").get(),
+    ).toEqual({ n: 0 });
+    f.sqlite.close();
+  });
+  it("separates Chat and Work Conversations through request creation", async () => {
+    const f = fixture();
+    const work = (await (await f.submit()).json()) as {
+      workRequest: { conversationId: string };
+    };
+    const chat = (await (
+      await f.submit("Discuss", "chat-operation-000000001", "chat")
+    ).json()) as typeof work;
+    expect(chat.workRequest.conversationId).not.toBe(
+      work.workRequest.conversationId,
+    );
+    expect(
+      f.sqlite
+        .prepare(
+          "SELECT workflow_id, conversation_revision FROM conversations ORDER BY workflow_id",
+        )
+        .all(),
+    ).toEqual([
+      { workflow_id: "chat", conversation_revision: 1 },
+      { workflow_id: "work", conversation_revision: 1 },
+    ]);
+    f.sqlite.close();
+  });
+  it("explicit next-turn selection overrides saved defaults and remains pinned", async () => {
+    const f = fixture();
+    f.sqlite.exec(
+      `UPDATE workstream_work_configs SET config_json = '{"bindings":{"direct":{"workerId":"old-worker","model":"old-model","reasoningEffort":"high"}}}'`,
+    );
+    await handleCreateWorkRequest(
+      new Request("https://cloud.test/workstreams/W/work-requests", {
+        method: "POST",
+        body: JSON.stringify({
+          workflowId: "direct",
+          input: { originalRequest: "Test" },
+          executionSelection: {
+            workerId: "worker-a",
+            modelId: null,
+            effort: null,
+          },
+        }),
+      }),
+      f.env,
+      "W",
+    );
+    const read = () =>
+      JSON.parse(
+        String(
+          f.sqlite.prepare("SELECT snapshot_json FROM work_requests").get()!
+            .snapshot_json,
+        ),
+      );
+    const before = read();
+    expect(before.turnExecutionConfig).toEqual({
+      schemaVersion: 1,
+      workerId: "worker-a",
+      profileId: "chatgpt-codex",
+      profileReleaseVersion: 1,
+      modelId: null,
+      effort: null,
+      workflowId: "direct",
+      workflowVersion: 2,
+    });
+    expect(before.resolvedBindings.direct).toEqual({ workerId: "worker-a" });
+    f.sqlite.exec(
+      `UPDATE workstream_work_configs SET config_json = '{"bindings":{"direct":{"workerId":"new-worker","model":"new-model"}}}'`,
+    );
+    expect(read()).toEqual(before);
+    expect(() =>
+      f.sqlite.exec("UPDATE work_requests SET snapshot_json = '{}'"),
+    ).toThrow("snapshots are immutable");
+    f.sqlite.close();
+  });
   it("concurrent and later explicit retries create one request, Run, audit record and runtime instance", async () => {
     const f = fixture();
     const responses = await Promise.all(
@@ -86,6 +229,8 @@ describe("Work mutation identity through response loss", () => {
       "runs",
       "project_audit_log",
       "mutation_receipts",
+      "conversations",
+      "conversation_work_requests",
     ]) {
       expect(
         f.sqlite.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.n,
@@ -93,9 +238,58 @@ describe("Work mutation identity through response loss", () => {
     }
     expect(await (await f.submit()).json()).toEqual(values[0]);
     expect(f.instances.size).toBe(1);
+    expect(
+      f.sqlite
+        .prepare(
+          "SELECT conversation_revision, context_revision FROM conversations",
+        )
+        .get(),
+    ).toEqual({ conversation_revision: 1, context_revision: 1 });
     await expect(f.submit("Different prompt")).rejects.toMatchObject({
       status: 409,
     });
+    f.sqlite.close();
+  });
+  it("keeps a Work Conversation across new requests and selection changes", async () => {
+    const f = fixture();
+    const first = (await (await f.submit()).json()) as {
+      workRequest: { id: string; conversationId: string };
+    };
+    f.sqlite.exec(
+      `UPDATE workstream_work_configs SET config_json = '{"bindings":{"direct":{"workerId":"another-worker","model":"another-model","reasoningEffort":"high"}}}' WHERE workstream_id = 'W'`,
+    );
+    const second = (await (
+      await f.submit("Follow up", "work-operation-000000002")
+    ).json()) as typeof first;
+    expect(second.workRequest.id).not.toBe(first.workRequest.id);
+    expect(second.workRequest.conversationId).toBe(
+      first.workRequest.conversationId,
+    );
+    expect(
+      f.sqlite
+        .prepare(
+          "SELECT workflow_id, workflow_version, conversation_revision, context_revision FROM conversations",
+        )
+        .get(),
+    ).toEqual({
+      workflow_id: "work",
+      workflow_version: 1,
+      conversation_revision: 2,
+      context_revision: 2,
+    });
+    expect(
+      f.sqlite
+        .prepare(
+          "SELECT conversation_revision FROM conversation_work_requests ORDER BY conversation_revision",
+        )
+        .all(),
+    ).toEqual([{ conversation_revision: 1 }, { conversation_revision: 2 }]);
+    const snapshot = f.sqlite
+      .prepare("SELECT snapshot_json FROM work_requests WHERE id = ?")
+      .get(first.workRequest.id)!;
+    expect(
+      JSON.parse(String(snapshot.snapshot_json)).resolvedBindings.direct,
+    ).toEqual({ workerId: "worker-a" });
     f.sqlite.close();
   });
   it("a retry resumes interrupted dispatch with the same committed identities", async () => {

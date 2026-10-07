@@ -19,20 +19,32 @@ Future<void> main(List<String> arguments) async {
   final isDurable =
       prompt == 'Start durable' ||
       prompt == 'Continue durable' ||
-      prompt == 'Continue safely';
+      prompt == 'Continue safely' ||
+      prompt == 'Start medium effort' ||
+      prompt == 'Continue high effort';
   final isResume = arguments.contains('resume');
   final isMismatch = prompt == 'Continue safely';
   final isPermissionFailure = prompt == 'Permission failure';
   final isProviderEventFailure = prompt == 'Provider event failure';
   final expectedEphemeral = !isDurable;
-  final modelCorrect = prompt == 'Say OK'
+  final modelCorrect =
+      prompt == 'Say OK' ||
+          prompt == 'Start medium effort' ||
+          prompt == 'Continue high effort'
       ? (_hasPair(arguments, '--model', 'gpt-fixture') ||
             _hasPair(arguments, '--model', 'gpt-test'))
       : !arguments.contains('--model');
   final resumeCorrect =
       isResume ==
-          (prompt == 'Continue durable' || prompt == 'Continue safely') &&
+          (prompt == 'Continue durable' ||
+              prompt == 'Continue safely' ||
+              prompt == 'Continue high effort') &&
       (!isResume || _hasPair(arguments, 'resume', 'fake-session-1'));
+  final effortCorrect = prompt == 'Start medium effort'
+      ? _hasPair(arguments, '-c', 'model_reasoning_effort="medium"')
+      : prompt == 'Continue high effort'
+      ? _hasPair(arguments, '-c', 'model_reasoning_effort="high"')
+      : true;
   final argumentsCorrect =
       _hasPair(arguments, '--ask-for-approval', 'never') &&
       _hasPair(arguments, '--sandbox', 'workspace-write') &&
@@ -44,6 +56,7 @@ Future<void> main(List<String> arguments) async {
       arguments.last == '-' &&
       arguments.contains('--ephemeral') == expectedEphemeral &&
       modelCorrect &&
+      effortCorrect &&
       resumeCorrect &&
       (!isDurable || !arguments.contains('--ephemeral'));
   final environmentCorrect =

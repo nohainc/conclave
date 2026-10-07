@@ -53,6 +53,113 @@ class AxTurnExecutionConfig {
       };
 }
 
+class AxWorkflowStepRun {
+  AxWorkflowStepRun.fromJson(Map<String, dynamic> json)
+      : schemaVersion = json['schemaVersion'] as int,
+        id = json['id'] as String,
+        workflowRunId = json['workflowRunId'] as String,
+        taskId = json['taskId'] as String,
+        stepId = json['stepId'] as String,
+        role = json['role'] as String,
+        workerId = json['workerId'] as String?,
+        modelId = json['modelId'] as String?,
+        effort = json['effort'] as String?,
+        workerSessionId = json['workerSessionId'] as String?,
+        baseContextRevision = json['baseContextRevision'] as int,
+        status = json['status'] as String,
+        result = json['result'] as String?,
+        startedAt = json['startedAt'] as String?,
+        completedAt = json['completedAt'] as String?,
+        workerTurnIds = List.unmodifiable(
+            (json['workerTurnIds'] as List? ?? const []).cast<String>());
+  final int schemaVersion, baseContextRevision;
+  final String id, workflowRunId, taskId, stepId, role, status;
+  final String? workerId,
+      modelId,
+      effort,
+      workerSessionId,
+      result,
+      startedAt,
+      completedAt;
+  final List<String> workerTurnIds;
+  Map<String, dynamic> toJson() => {
+        'schemaVersion': schemaVersion,
+        'id': id,
+        'workflowRunId': workflowRunId,
+        'taskId': taskId,
+        'stepId': stepId,
+        'role': role,
+        'workerId': workerId,
+        'modelId': modelId,
+        'effort': effort,
+        'workerSessionId': workerSessionId,
+        'baseContextRevision': baseContextRevision,
+        'status': status,
+        'result': result,
+        'startedAt': startedAt,
+        'completedAt': completedAt,
+        'workerTurnIds': workerTurnIds
+      };
+}
+
+class AxWorkflowRun {
+  AxWorkflowRun.fromJson(Map<String, dynamic> json)
+      : schemaVersion = json['schemaVersion'] as int,
+        id = json['id'] as String,
+        conversationId = json['conversationId'] as String,
+        userMessageId = json['userMessageId'] as String,
+        triggerMessageId =
+            (json['triggerMessageId'] ?? json['userMessageId']) as String,
+        startedAt = json['startedAt'] as String?,
+        completedAt = json['completedAt'] as String?,
+        stepRuns = List.unmodifiable((json['stepRuns'] as List? ?? const [])
+            .whereType<Map>()
+            .map((item) =>
+                AxWorkflowStepRun.fromJson(Map<String, dynamic>.from(item)))),
+        workRequestId = json['workRequestId'] as String,
+        workflowId = json['workflowId'] as String,
+        workflowVersion = json['workflowVersion'] as int,
+        status = json['status'] as String,
+        runtimeRunIds =
+            List.unmodifiable((json['runtimeRunIds'] as List).cast<String>()),
+        workerTurnIds =
+            List.unmodifiable((json['workerTurnIds'] as List).cast<String>()),
+        createdAt = json['createdAt'] as String,
+        updatedAt = json['updatedAt'] as String;
+  final int schemaVersion;
+  final String id,
+      conversationId,
+      userMessageId,
+      workRequestId,
+      workflowId,
+      status,
+      createdAt,
+      updatedAt;
+  final int workflowVersion;
+  final String triggerMessageId;
+  final String? startedAt, completedAt;
+  final List<AxWorkflowStepRun> stepRuns;
+  final List<String> runtimeRunIds, workerTurnIds;
+  Map<String, dynamic> toJson() => {
+        'schemaVersion': schemaVersion,
+        'id': id,
+        'conversationId': conversationId,
+        'userMessageId': userMessageId,
+        'workRequestId': workRequestId,
+        'workflowId': workflowId,
+        'workflowVersion': workflowVersion,
+        'status': status,
+        'triggerMessageId': triggerMessageId,
+        'startedAt': startedAt,
+        'completedAt': completedAt,
+        'stepRuns': stepRuns.map((step) => step.toJson()).toList(),
+        'runtimeRunIds': runtimeRunIds,
+        'workerTurnIds': workerTurnIds,
+        'createdAt': createdAt,
+        'updatedAt': updatedAt
+      };
+}
+
 class AxConversationTurn {
   AxConversationTurn.fromJson(Map<String, dynamic> json)
       : id = json['id'] as String,
@@ -61,6 +168,9 @@ class AxConversationTurn {
         workflowVersion = json['workflowVersion'] as int,
         userMessageId = json['userMessageId'] as String,
         workRequestId = json['workRequestId'] as String,
+        workflowRunId = json['workflowRunId'] as String?,
+        workflowStepRunId = json['workflowStepRunId'] as String?,
+        runtimeRunId = json['runtimeRunId'] as String?,
         assignmentId = json['assignmentId'] as String,
         taskId = json['taskId'] as String,
         stepKind = json['stepKind'] as String,
@@ -84,6 +194,9 @@ class AxConversationTurn {
   final int workflowVersion;
   final String userMessageId;
   final String workRequestId;
+  final String? workflowRunId;
+  final String? workflowStepRunId;
+  final String? runtimeRunId;
   final String assignmentId;
   final String taskId;
   final String stepKind;
@@ -108,6 +221,9 @@ class AxConversationTurn {
         'workflowVersion': workflowVersion,
         'userMessageId': userMessageId,
         'workRequestId': workRequestId,
+        'workflowRunId': workflowRunId,
+        'workflowStepRunId': workflowStepRunId,
+        'runtimeRunId': runtimeRunId,
         'assignmentId': assignmentId,
         'taskId': taskId,
         'stepKind': stepKind,
@@ -197,6 +313,7 @@ class AxWorkRequestStatus {
     this.conversationId,
     this.executionConfig,
     this.turns = const [],
+    this.workflowRun,
     this.workstreamId,
     required this.status,
     this.text,
@@ -217,6 +334,7 @@ class AxWorkRequestStatus {
   final String? conversationId;
   final AxTurnExecutionConfig? executionConfig;
   final List<AxConversationTurn> turns;
+  final AxWorkflowRun? workflowRun;
   final String? workstreamId;
   final String status;
   final String? text;
@@ -343,6 +461,7 @@ class AxWorkRequest {
     this.conversationId,
     this.executionConfig,
     this.turns = const [],
+    this.workflowRun,
     required this.requestedByName,
     this.requestedByUserId,
     required this.prompt,
@@ -360,6 +479,7 @@ class AxWorkRequest {
   final String? conversationId;
   final AxTurnExecutionConfig? executionConfig;
   final List<AxConversationTurn> turns;
+  final AxWorkflowRun? workflowRun;
   final String requestedByName;
   final String? requestedByUserId;
   final String prompt;
@@ -378,6 +498,7 @@ class AxWorkRequest {
           conversationId: conversationId,
           executionConfig: executionConfig,
           turns: turns,
+          workflowRun: workflowRun,
           requestedByName: requestedByName,
           requestedByUserId: requestedByUserId,
           prompt: prompt,
@@ -415,6 +536,10 @@ class AxWorkRequest {
     return AxWorkRequest(
       id: json['id']?.toString() ?? '',
       conversationId: json['conversationId']?.toString(),
+      workflowRun: json['workflowRun'] is Map
+          ? AxWorkflowRun.fromJson(
+              Map<String, dynamic>.from(json['workflowRun'] as Map))
+          : null,
       turns: List.unmodifiable((json['turns'] as List? ?? const [])
           .whereType<Map>()
           .map((item) =>

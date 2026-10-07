@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
+import {
+  BUILTIN_WORKFLOW_CATALOG,
+  CONVERSATION_WORKFLOWS,
+  workflowCatalogEntry,
+} from "@conclave/core";
 import { handleGetReleaseTrustState } from "../src/routes/releases.js";
 import {
   routeWorkerRequest,
@@ -29,6 +33,44 @@ function request(path: string, method = "GET"): Request {
 }
 
 describe("Worker API routes", () => {
+  it("routes canonical history reads to the Conversation-scoped handler", async () => {
+    const handler = vi.fn(async () => new Response("{}"));
+    const req = request("/api/workstreams/W/conversations/C/history");
+    const env = {} as Env;
+    await routeWorkerRequest(
+      req,
+      env,
+      undefined,
+      { handleListConversationHistory: handler },
+      dependencies,
+    );
+    expect(handler).toHaveBeenCalledWith(req, env, "W", "C", undefined);
+  });
+  it("exposes manual Workflow definitions separately from execution graphs", async () => {
+    const response = await routeWorkerRequest(
+      request("/api/workflows/definitions"),
+      {} as Env,
+      undefined,
+      {},
+      dependencies,
+    );
+    expect(await response.json()).toEqual({
+      workflows: Object.values(CONVERSATION_WORKFLOWS),
+    });
+  });
+  it("routes Conversation reads through scoped authorization", async () => {
+    const handler = vi.fn(async () => new Response("{}"));
+    const req = request("/api/workstreams/W/conversations");
+    const env = {} as Env;
+    await routeWorkerRequest(
+      req,
+      env,
+      undefined,
+      { handleListConversations: handler },
+      dependencies,
+    );
+    expect(handler).toHaveBeenCalledWith(req, env, "W", undefined);
+  });
   it("serves the shared core Workflow catalog to AX", async () => {
     const response = await routeWorkerRequest(
       request("/api/workflows/catalog"),
@@ -40,7 +82,9 @@ describe("Worker API routes", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      workflows: Object.values(BUILTIN_WORKFLOW_CATALOG),
+      workflows: Object.values(BUILTIN_WORKFLOW_CATALOG).map(
+        workflowCatalogEntry,
+      ),
     });
   });
 

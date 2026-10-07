@@ -1382,6 +1382,123 @@ void main() {
     await connection.close();
   });
 
+  test('rejects cross-worker Worker Session metadata', () async {
+    final socket = FakeSocket();
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentHandler: (_) async {
+        fail('malformed assignment reached the handler');
+      },
+    );
+    await connection.connect();
+    await completeHandshake(connection, socket);
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'server-assignment-3',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'workspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'workspace-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
+      'assignmentId': 'assignment-3',
+      'idempotencyKey': 'idem-3',
+      'payload': {
+        'workerId': 'worker-1',
+        'objective': 'Hello',
+        'role': 'assistant',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
+        'input': <String, Object?>{},
+        'contextArtifactIds': <String>[],
+        'timeoutMs': 1000,
+        'sessionPolicy': 'durable_session',
+        'sessionKey': 'scope-A',
+        'workerSession': {
+          'schemaVersion': 1,
+          'id': 'session-A',
+          'conversationId': 'conversation-A',
+          'workerId': 'worker-B',
+          'baseContextRevision': 0,
+        },
+      },
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    final error = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'assignment.error');
+    expect((error['payload'] as Map<String, dynamic>)['error']['code'],
+        'execution_failed');
+    await connection.close();
+  });
+
+  test('rejects provider-native Worker Session metadata', () async {
+    final socket = FakeSocket();
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentHandler: (_) async {
+        fail('malformed assignment reached the handler');
+      },
+    );
+    await connection.connect();
+    await completeHandshake(connection, socket);
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'server-assignment-3',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'workspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'workspace-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
+      'assignmentId': 'assignment-3',
+      'idempotencyKey': 'idem-3',
+      'payload': {
+        'workerId': 'worker-1',
+        'objective': 'Hello',
+        'role': 'assistant',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
+        'input': <String, Object?>{},
+        'contextArtifactIds': <String>[],
+        'timeoutMs': 1000,
+        'sessionPolicy': 'durable_session',
+        'sessionKey': 'scope-A',
+        'workerSession': {
+          'schemaVersion': 1,
+          'id': 'session-A',
+          'conversationId': 'conversation-A',
+          'workerId': 'worker-1',
+          'nativeSessionId': 'private-handle',
+          'baseContextRevision': 0,
+        },
+      },
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    final error = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'assignment.error');
+    expect((error['payload'] as Map<String, dynamic>)['error']['code'],
+        'execution_failed');
+    await connection.close();
+  });
+
   test('replays a completed assignment without rerunning the handler',
       () async {
     final socket = FakeSocket();

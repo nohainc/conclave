@@ -51,6 +51,30 @@ The runtime implementation stays below the logical Worker boundary:
 Workstream binding -> logical Worker -> Profile resolution -> CLI Worker Engine -> provider CLI
 ~~~
 
+## Conversation Workflow ownership
+
+Current manual Chat and Work requests belong to persistent, Workflow-owned
+Conversations within their Workstream. Conversation revisions count accepted
+requests; context revisions track accepted-request context boundaries.
+User messages link to stable logical WorkflowRuns; each run owns multiple Worker
+turns grouped by stable WorkflowStepRuns, plus existing scheduler Run attempts,
+including retries. Run timestamps record first-start and terminal evidence. Work Request remains
+the single lifecycle/configuration owner. Run/step orchestration remains internal;
+ordinary Chat and Work retain conversation presentation and request-based controls.
+A future step-list presentation adapter requires explicit enablement and a matching
+versioned multi-step workflow; backend record counts alone never enable it.
+Per-assignment turns preserve immutable
+execution attribution, and lifecycle evidence; retries retain separate records.
+Versioned product Workflow definitions pin existing execution graphs, with
+Work (`work:v1`) mapped to `direct:v2`. Native provider continuity remains local to Workspace/Engine. Conclave owns an append-only canonical history of messages,
+responses, workflow/execution events, artifact events, and context events; provider
+sessions remain execution state. The provider-independent Context Engine assembles canonical bootstrap, delta and
+stateless context. Persistent conversation facts are distinct from receiving-step
+workflow execution context, including scoped environment, artifacts and completed
+prerequisite results. Signed Profiles also project versioned, generic Worker execution
+options for model selection, session model switching, and model-specific effort;
+provider argument mapping stays local to the Engine. See [Conversation Continuity v1](docs/specifications/CONVERSATION_CONTINUITY_V1.md).
+
 ## Runtime and protocol boundaries
 
 ~~~text
@@ -79,6 +103,7 @@ The repository has converged on the v8 assignment path and clean v8 schema. The 
 - [Architecture v8](docs/architecture/ARCHITECTURE_V8.md)
 - [ADR-018: Generic CLI Worker Engine and Tool Profiles](docs/decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md)
 - [ADR-019: Conclave Profile Lab Architecture Contract](docs/decisions/ADR-019-conclave-profile-lab.md)
+- [Conversation Continuity Phase 0 audit](docs/architecture/CONVERSATION_CONTINUITY_PHASE_0_AUDIT.md)
 - [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md)
 - [First-Party Worker Catalog v1](docs/specifications/FIRST_PARTY_WORKER_CATALOG_V1.md)
 - [Tool Profile v1](docs/specifications/TOOL_PROFILE_V1.md)

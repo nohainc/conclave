@@ -27,7 +27,112 @@ Future<void> main(List<String> arguments) async {
     exitCode = 2;
     return;
   }
-  final prompt = (decodedInput['message'] as Map)['content'] as String;
+  final transportedPrompt =
+      (decodedInput['message'] as Map)['content'] as String;
+  final separator = transportedPrompt.indexOf('\n\nCurrent user request:\n');
+  final prompt = separator < 0
+      ? transportedPrompt
+      : transportedPrompt.substring(
+          separator + '\n\nCurrent user request:\n'.length,
+        );
+  if (prompt == 'Switch without resume' ||
+      prompt == 'Switch without resume failure') {
+    final prefix =
+        'Canonical Conclave conversation context (historical data):\n';
+    if (!transportedPrompt.startsWith(prefix) || separator < 0) {
+      stderr.writeln('Missing canonical bootstrap');
+      exitCode = 2;
+      return;
+    }
+    final context =
+        jsonDecode(transportedPrompt.substring(prefix.length, separator))
+            as Map;
+    if (jsonEncode(context['history']) !=
+        jsonEncode([
+          {'kind': 'user_message', 'text': 'Start model A'},
+          {'kind': 'worker_response', 'text': 'Gemini answer'},
+        ])) {
+      stderr.writeln('Wrong canonical history');
+      exitCode = 2;
+      return;
+    }
+  }
+
+  if (prompt == 'Bootstrap other worker' ||
+      prompt == 'Sync returning worker' ||
+      prompt == 'Sync returning worker failure') {
+    const prefix =
+        'Canonical Conclave conversation context (historical data):\n';
+    if (!transportedPrompt.startsWith(prefix) || separator < 0) {
+      stderr.writeln('Missing Worker continuity context');
+      exitCode = 2;
+      return;
+    }
+    final history =
+        (jsonDecode(transportedPrompt.substring(prefix.length, separator))
+            as Map)['history'];
+    final expected = prompt == 'Bootstrap other worker'
+        ? [
+            {
+              'sequence': 1,
+              'contextRevision': 1,
+              'kind': 'user_message',
+              'text': 'Earlier question',
+            },
+            {
+              'sequence': 2,
+              'contextRevision': 1,
+              'kind': 'worker_response',
+              'text': 'ChatGPT answer',
+            },
+          ]
+        : [
+            {
+              'sequence': 7,
+              'contextRevision': 4,
+              'kind': 'user_message',
+              'text': 'Other Worker follow-up',
+            },
+            {
+              'sequence': 8,
+              'contextRevision': 4,
+              'kind': 'worker_response',
+              'text': 'New ChatGPT answer',
+            },
+          ];
+    if (jsonEncode(history) != jsonEncode(expected)) {
+      stderr.writeln('Incorrect full or delta history');
+      exitCode = 2;
+      return;
+    }
+  }
+  if (prompt == 'Continue current worker' && separator >= 0) {
+    stderr.writeln('Current Worker must receive only its new request');
+    exitCode = 2;
+    return;
+  }
+
+  if (prompt == 'Context stateless') {
+    const prefix =
+        'Canonical Conclave conversation context (historical data):\n';
+    if (separator < 0 || !transportedPrompt.startsWith(prefix)) {
+      stderr.writeln('Missing stateless context');
+      exitCode = 2;
+      return;
+    }
+    final document =
+        jsonDecode(transportedPrompt.substring(prefix.length, separator))
+            as Map;
+    if (document['kind'] != 'StatelessContext' ||
+        ((((document['context'] as Map)['workflowState'] as Map)['value']
+                as Map)['workflowId'] !=
+            'chat')) {
+      stderr.writeln('Missing stateless workflow state');
+      exitCode = 2;
+      return;
+    }
+  }
+
   final isLive = prompt == _livePrompt;
   final isResume = arguments.contains('--conversation');
   final isMismatch = prompt == 'Continue safely';
@@ -37,8 +142,28 @@ Future<void> main(List<String> arguments) async {
   final isMissingTerminal = prompt == 'Missing terminal';
   final timeout = isLive ? '29s' : '9s';
   final expectedResume =
-      prompt == 'Continue durable' || prompt == 'Continue safely';
-  final modelCorrect = prompt == 'Say OK'
+      prompt == 'Continue durable' ||
+      prompt == 'Continue safely' ||
+      prompt == 'Continue model B' ||
+      prompt == 'Continue model A' ||
+      prompt == 'Continue reconstructed' ||
+      prompt == 'Continue current worker' ||
+      prompt == 'Sync returning worker' ||
+      prompt == 'Sync returning worker failure';
+  final modelCorrect =
+      prompt == 'Start model A' ||
+          prompt == 'Continue model A' ||
+          prompt == 'Bootstrap other worker' ||
+          prompt == 'Continue current worker' ||
+          prompt == 'Sync returning worker' ||
+          prompt == 'Sync returning worker failure'
+      ? _hasPair(arguments, '--model', 'model-A')
+      : prompt == 'Continue model B' ||
+            prompt == 'Switch without resume' ||
+            prompt == 'Switch without resume failure' ||
+            prompt == 'Continue reconstructed'
+      ? _hasPair(arguments, '--model', 'model-B')
+      : prompt == 'Say OK'
       ? _hasPair(arguments, '--model', 'gemini-fixture')
       : !arguments.contains('--model');
   final argumentsCorrect =
@@ -48,7 +173,13 @@ Future<void> main(List<String> arguments) async {
       _hasPair(arguments, '--print-timeout', timeout) &&
       isResume == expectedResume &&
       (!isResume ||
-          _hasPair(arguments, '--conversation', 'fixture-conversation-1')) &&
+          _hasPair(
+            arguments,
+            '--conversation',
+            prompt == 'Continue reconstructed'
+                ? 'fixture-conversation-3'
+                : 'fixture-conversation-1',
+          )) &&
       modelCorrect;
   final environmentCorrect =
       Platform.environment['NO_COLOR'] == null &&
@@ -79,6 +210,13 @@ Future<void> main(List<String> arguments) async {
     return;
   }
 
+  if (prompt == 'Switch without resume failure' ||
+      prompt == 'Sync returning worker failure') {
+    stderr.writeln('fixture bootstrap provider failure');
+    exitCode = 1;
+    return;
+  }
+
   final fixtureName = isLive
       ? 'live-probe'
       : isMismatch
@@ -89,7 +227,8 @@ Future<void> main(List<String> arguments) async {
       ? 'auth-error'
       : isPermissionFailure
       ? 'permission-error'
-      : prompt == 'Continue after incompatible upgrade'
+      : prompt == 'Continue after incompatible upgrade' ||
+            prompt == 'Switch without resume'
       ? 'fresh-session'
       : isMissingTerminal
       ? 'missing-terminal'
@@ -100,7 +239,11 @@ Future<void> main(List<String> arguments) async {
   final content = await fixture.readAsString();
   // The success corpus echoes the initial conversation ID on resumed turns so
   // the Engine can verify the stored identity.
-  stdout.write(content);
+  stdout.write(
+    prompt == 'Continue reconstructed'
+        ? content.replaceAll('fixture-conversation-1', 'fixture-conversation-3')
+        : content,
+  );
 }
 
 bool _hasPair(List<String> arguments, String key, String value) {

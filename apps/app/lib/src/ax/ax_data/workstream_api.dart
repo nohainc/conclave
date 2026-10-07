@@ -111,6 +111,7 @@ mixin _WorkstreamApi on _AxApiClientCore {
     required String prompt,
     List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
+    AxTurnExecutionSelection? executionSelection,
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/workstreams/$workstreamId/work-requests'),
@@ -120,6 +121,10 @@ mixin _WorkstreamApi on _AxApiClientCore {
       },
       body: jsonEncode({
         'workflowId': workflowId,
+        if (executionSelection != null)
+          'workflowVersion': executionSelection.workflowVersion,
+        if (executionSelection != null)
+          'executionSelection': executionSelection.toJson(),
         'input': {'originalRequest': prompt, 'attachments': attachments},
       }),
     );
@@ -174,12 +179,17 @@ mixin _WorkstreamApi on _AxApiClientCore {
     required String workstreamId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
+    AxTurnExecutionSelection? executionSelection,
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/workstreams/$workstreamId/work-requests/validate'),
       headers: _headers(contentType: 'application/json'),
       body: jsonEncode({
         'workflowId': workflowId,
+        if (executionSelection != null)
+          'workflowVersion': executionSelection.workflowVersion,
+        if (executionSelection != null)
+          'executionSelection': executionSelection.toJson(),
         'attachments': attachments
             .map((attachment) => {
                   'kind': attachment['kind'],
@@ -213,6 +223,28 @@ mixin _WorkstreamApi on _AxApiClientCore {
   }
 
   @override
+  Future<AxConversationHistoryPage> loadConversationHistory(
+      {required String workstreamId,
+      required String conversationId,
+      int afterSequence = 0,
+      int? throughSequence,
+      int limit = 50}) async {
+    final uri = Uri.parse(
+            '$baseUrl/workstreams/${Uri.encodeComponent(workstreamId)}/conversations/${Uri.encodeComponent(conversationId)}/history')
+        .replace(queryParameters: {
+      'afterSequence': '$afterSequence',
+      'limit': '$limit',
+      if (throughSequence != null) 'throughSequence': '$throughSequence',
+    });
+    final body = await _getJson(uri);
+    final page = AxConversationHistoryPage.fromJson(body);
+    if (page.conversationId != conversationId) {
+      throw const AxApiException('Malformed Conversation history scope');
+    }
+    return page;
+  }
+
+  @override
   Future<AxWorkRequestStatus> loadWorkRequest({
     required String workRequestId,
   }) async {
@@ -237,6 +269,19 @@ mixin _WorkstreamApi on _AxApiClientCore {
     }
     return AxWorkRequestStatus(
       id: requestMap['id'] as String,
+      conversationId: requestMap['conversationId'] as String?,
+      workflowRun: requestMap['workflowRun'] is Map
+          ? AxWorkflowRun.fromJson(
+              Map<String, dynamic>.from(requestMap['workflowRun'] as Map))
+          : null,
+      turns: List.unmodifiable((requestMap['turns'] as List? ?? const [])
+          .whereType<Map>()
+          .map((item) =>
+              AxConversationTurn.fromJson(Map<String, dynamic>.from(item)))),
+      executionConfig: requestMap['executionConfig'] is Map
+          ? AxTurnExecutionConfig.fromJson(
+              Map<String, dynamic>.from(requestMap['executionConfig'] as Map))
+          : null,
       workstreamId: requestMap['workstreamId'] as String?,
       status: requestMap['status']?.toString() ?? 'unknown',
       text: resultMap['text']?.toString(),

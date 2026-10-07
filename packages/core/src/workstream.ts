@@ -5,6 +5,7 @@
  * module intentionally contains no UI, D1, transport, or provider types.
  */
 
+import type { TurnExecutionConfig } from "./conversation.js";
 import { DomainInvariantError } from "./domain-error.js";
 import type { ProjectMembership, ProjectRole } from "./project.js";
 
@@ -64,6 +65,8 @@ export type WorkRequestMode = "stateless" | "stateful";
 
 export interface WorkRequest {
   readonly id: string;
+  readonly conversationId?: string;
+  readonly executionConfig?: TurnExecutionConfig;
   readonly workstreamId: string;
   readonly requestedByUserId: string;
   readonly mode: WorkRequestMode;
@@ -81,6 +84,7 @@ export interface WorkRequest {
 }
 
 export interface WorkRequestSnapshot {
+  readonly turnExecutionConfig?: TurnExecutionConfig;
   readonly schemaVersion: 1;
   readonly originalRequest: string;
   readonly attachmentReferences: readonly unknown[];

@@ -211,6 +211,54 @@ void main() {
     );
     expect((durableResume.terminal as WorkerResult).output, 'Codex answer');
 
+    final effortScope = WorkerSessionContext(
+      id: 'effort-session',
+      conversationId: 'effort-conversation',
+      workerId: 'effort-worker',
+      baseContextRevision: 0,
+    );
+    for (final effort in ['medium', 'high']) {
+      final changedEffort = await exchange(
+        ExecuteRequest(
+          requestId: 'effort-$effort',
+          assignmentId: 'effort-$effort',
+          prompt: effort == 'medium'
+              ? 'Start medium effort'
+              : 'Continue high effort',
+          model: 'gpt-test',
+          reasoningEffort: effort,
+          timeoutMs: 10000,
+          sessionPolicy: WorkerSessionPolicy.durableSession,
+          sessionKey: 'effort-logical-session',
+          workerSession: effortScope,
+        ),
+      );
+      expect(
+        changedEffort.terminal,
+        isA<WorkerResult>(),
+        reason: '${changedEffort.terminal.toJson()} stderr=$engineStderr',
+      );
+      final metadata = stateDirectory
+          .listSync()
+          .whereType<File>()
+          .where((file) => file.uri.pathSegments.last.startsWith('session-'))
+          .map((file) => jsonDecode(file.readAsStringSync()) as Map)
+          .singleWhere(
+            (state) => state['sessionKey'] == 'effort-logical-session',
+          );
+      expect(metadata['sessionId'], 'fake-session-1');
+      expect(metadata['workerSession'], containsPair('id', 'effort-session'));
+      expect(
+        metadata['workerSession'],
+        containsPair('conversationId', 'effort-conversation'),
+      );
+      expect(
+        metadata['workerSession'],
+        containsPair('lastModelId', 'gpt-test'),
+      );
+      expect(metadata['workerSession'], containsPair('lastEffort', effort));
+    }
+
     final rejectedResume = await exchange(
       ExecuteRequest(
         requestId: 'codex-profile-durable-mismatch',

@@ -162,6 +162,8 @@ final class CliWorkerEngineSupervisor {
     required Duration timeout,
     WorkerSessionPolicy sessionPolicy = WorkerSessionPolicy.stateless,
     String? sessionKey,
+    WorkerSessionContext? workerSession,
+    ConversationBootstrap? statelessContext,
     String? model,
     String? reasoningEffort,
     WorkerExecutionPolicy executionPolicy = WorkerExecutionPolicy.restricted,
@@ -169,6 +171,11 @@ final class CliWorkerEngineSupervisor {
     void Function()? onExecutionStarted,
     void Function(WorkerProgress progress)? onProgress,
   }) async {
+    if (workerSession != null && workerSession.workerId != workerId) {
+      throw const FormatException(
+        'Worker Session does not belong to this Worker',
+      );
+    }
     final boundedTimeout =
         timeout >
             const Duration(milliseconds: WorkerProtocolLimits.maxTimeoutMs)
@@ -259,6 +266,8 @@ final class CliWorkerEngineSupervisor {
           timeoutMs: boundedEngineTimeout.inMilliseconds,
           sessionPolicy: sessionPolicy,
           sessionKey: sessionKey,
+          workerSession: workerSession,
+          statelessContext: statelessContext,
           model: model,
           reasoningEffort: reasoningEffort,
           executionPolicy: executionPolicy,

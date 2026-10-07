@@ -1,3 +1,4 @@
+import 'package:conclave_app/src/features/common/markdown_composer.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -6,12 +7,164 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/features/projects/projects_pages.dart';
 import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:conclave_app/src/ax/sync/ax_session_catalogs.dart';
 
 import 'ax_fixture_data.dart';
 import 'conversation_turn_fixture.dart';
 import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
 
 void main() {
+  for (final workflow in [
+    ('chat', 1, 'chat', 0),
+    ('direct', 2, 'implement', 1)
+  ]) {
+    testWidgets('${workflow.$1} keeps run and step metadata internal',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final turn = {
+        ...turnFixture().toJson(),
+        'workflowId': workflow.$1,
+        'workflowVersion': workflow.$2,
+        'stepKind': workflow.$3
+      };
+      final request = AxWorkRequest.fromJson({
+        'id': 'R',
+        'conversationId': 'conversation-C',
+        'requestedByName': 'You',
+        'requestedByUserId': 'user-owner',
+        'prompt': 'Hello from the user',
+        'workflowId': workflow.$1,
+        'workflowVersion': workflow.$2,
+        'status': 'completed',
+        'createdAt': '2026-10-07T10:00:00Z',
+        'turns': [turn],
+        'workflowRun': {
+          'schemaVersion': 1,
+          'id': 'internal-workflow-run',
+          'conversationId': 'conversation-C',
+          'userMessageId': 'message-user-R',
+          'triggerMessageId': 'message-user-R',
+          'workRequestId': 'R',
+          'workflowId': workflow.$1,
+          'workflowVersion': workflow.$2,
+          'status': 'completed',
+          'startedAt': '2026-10-07T10:00:00Z',
+          'completedAt': '2026-10-07T10:01:00Z',
+          'runtimeRunIds': ['internal-runtime-run'],
+          'workerTurnIds': [turn['id']],
+          'createdAt': 'now',
+          'updatedAt': 'now',
+          'stepRuns': [
+            {
+              'schemaVersion': 1,
+              'id': 'internal-step-run',
+              'workflowRunId': 'internal-workflow-run',
+              'taskId': 'task-R',
+              'stepId': workflow.$3,
+              'role': workflow.$3,
+              'workerId': 'worker-a',
+              'modelId': 'model-x',
+              'effort': 'medium',
+              'workerSessionId': 'internal-session',
+              'baseContextRevision': 0,
+              'status': 'completed',
+              'result': '**Recorded answer**',
+              'workerTurnIds': [turn['id']]
+            },
+            for (final role in ['verify', 'correct'])
+              {
+                'schemaVersion': 1,
+                'id': 'internal-$role-step',
+                'workflowRunId': 'internal-workflow-run',
+                'taskId': 'task-$role',
+                'stepId': role,
+                'role': role,
+                'workerId': 'future-worker',
+                'modelId': 'future-model',
+                'effort': 'high',
+                'workerSessionId': null,
+                'baseContextRevision': 0,
+                'status': 'queued',
+                'result': null,
+                'workerTurnIds': []
+              }
+          ]
+        },
+        'steps': [
+          {
+            'kind': workflow.$3,
+            'status': 'completed',
+            'workerId': 'worker-a',
+            'workerTypeId': 'chatgpt',
+            'workerDisplayName': 'ChatGPT',
+            'assignmentId': turn['assignmentId'],
+            'model': 'model-x',
+            'reasoningEffort': 'medium'
+          }
+        ],
+      });
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: WorkstreamPage(
+                  project: const AxProject(
+                      id: 'project-1',
+                      name: 'Project',
+                      branch: '',
+                      lastActivity: '',
+                      role: 'owner'),
+                  workstream: const AxWorkstream(
+                      id: 'workstream-1',
+                      projectId: 'project-1',
+                      name: 'Stream',
+                      lead: '',
+                      status: 'active',
+                      brief: '',
+                      primaryWorkspace: '',
+                      queueStatus: ''),
+                  dataSource: _SimpleConversationDataSource(request),
+                  currentUserId: 'user-owner',
+                  currentUserName: 'You',
+                  initialTab: workflow.$4,
+                  onBackToProject: _noop,
+                  onArchive: _noop))));
+      await tester.pumpAndSettle();
+      expect(find.text('Hello from the user'), findsOneWidget);
+      expect(find.text('ChatGPT'), findsWidgets);
+      expect(
+          find.byWidgetPredicate((widget) =>
+              widget is Image && widget.semanticLabel == 'ChatGPT icon'),
+          findsWidgets);
+      expect(
+          tester
+              .widgetList<ConclaveMarkdownBody>(
+                  find.byType(ConclaveMarkdownBody))
+              .map((body) => body.data),
+          contains('**Recorded answer**'));
+      for (final label in [
+        'Workflow run',
+        'Step 1/1',
+        'Execution graph',
+        'Agent orchestration',
+        'internal-workflow-run',
+        'internal-step-run',
+        'internal-runtime-run',
+        'internal-session',
+        'Implement'
+      ]) {
+        expect(find.textContaining(label), findsNothing);
+      }
+      await tester.tap(find.byTooltip('View request details'));
+      await tester.pumpAndSettle();
+      expect(find.text('Request details'), findsOneWidget);
+      expect(find.text('Run details'), findsNothing);
+      expect(find.text('Implement'), findsNothing);
+      expect(find.text('Step 1/1'), findsNothing);
+      expect(find.textContaining('internal-workflow-run'), findsNothing);
+      expect(find.text('ChatGPT'), findsWidgets);
+    });
+  }
+
   testWidgets('history uses immutable turns for each response model and effort',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1400));
@@ -238,7 +391,7 @@ void main() {
     await tester.pumpAndSettle();
     const source = '## Question\n\n**Explain** this `code`.';
     await tester.enterText(find.byType(TextField).first, source);
-    await tester.tap(find.byTooltip('Run Work'));
+    await tester.tap(find.byTooltip('Send request'));
     await tester.pumpAndSettle();
     expect(sentWorkflow, 'chat');
     expect(sentSource, source);
@@ -410,7 +563,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.close).last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'New work');
-    await tester.tap(find.byTooltip('Run Work'));
+    await tester.tap(find.byTooltip('Send request'));
     await tester.pumpAndSettle();
     expect(sentWorkflow, 'direct');
     expect(find.text('· Work'), findsOneWidget);
@@ -490,8 +643,13 @@ void main() {
             find.widgetWithIcon(IconButton, Icons.send_rounded).first;
         final workSend =
             find.widgetWithIcon(IconButton, Icons.send_rounded).last;
-        expect(tester.getCenter(chatSend).dy,
-            closeTo(tester.getCenter(workSend).dy, 1));
+        // Work's Send now sits beside next-turn choices below the input.
+        // Both message inputs remain aligned in the two-pane layout.
+        final fields = find.byType(TextField);
+        expect(tester.getBottomLeft(fields.first).dy,
+            closeTo(tester.getBottomLeft(fields.last).dy, 1));
+        expect(tester.getCenter(workSend).dy,
+            greaterThan(tester.getCenter(chatSend).dy));
       }
       expect(tester.takeException(), isNull);
     }
@@ -535,7 +693,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(
           find.byType(TextField).first, '**Immediate request**');
-      await tester.tap(find.byTooltip('Run Work'));
+      await tester.tap(find.byTooltip('Send request'));
       await tester.pump();
       expect(
           tester
@@ -742,7 +900,7 @@ void main() {
       expect(tester.getRect(field), before);
       expect(find.ancestor(of: field, matching: history), findsNothing);
       if (tab == 1) {
-        expect(find.byTooltip('Run Work').hitTestable(), findsOneWidget);
+        expect(find.byTooltip('Send request').hitTestable(), findsOneWidget);
       }
       expect(tester.takeException(), isNull);
     }
@@ -884,7 +1042,7 @@ void main() {
     final timestamps = find.byWidgetPredicate((widget) =>
         widget is Text && widget.data?.startsWith('2026-10-01 ·') == true);
     expect(timestamps, findsNWidgets(2));
-    final info = find.byTooltip('View run details');
+    final info = find.byTooltip('View request details');
     expect(tester.getTopLeft(timestamps.last).dx,
         closeTo(tester.getTopRight(info).dx + 8, 1));
   });
@@ -935,8 +1093,8 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Implement the change');
-    await tester.ensureVisible(find.byTooltip('Run Work'));
-    await tester.tap(find.byTooltip('Run Work'));
+    await tester.ensureVisible(find.byTooltip('Send request'));
+    await tester.tap(find.byTooltip('Send request'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byTooltip('Copy error'));
     await tester.tap(find.byTooltip('Copy error'));
@@ -1115,7 +1273,7 @@ void main() {
     expect(
         find.text('Viewer access can read the workstream but cannot run Work.'),
         findsOneWidget);
-    expect(find.byTooltip('Run Work'), findsOneWidget);
+    expect(find.byTooltip('Send request'), findsOneWidget);
   });
 
   testWidgets('collaborator can explicitly run Work', (tester) async {
@@ -1207,8 +1365,8 @@ void main() {
     await tester.tap(find.text('Preview'));
     await tester.pumpAndSettle();
     expect(submittedWork, isNull);
-    await tester.ensureVisible(find.byTooltip('Run Work'));
-    await tester.tap(find.byTooltip('Run Work'));
+    await tester.ensureVisible(find.byTooltip('Send request'));
+    await tester.tap(find.byTooltip('Send request'));
     await tester.pumpAndSettle();
 
     expect(submittedWork, markdownPrompt);
@@ -1446,7 +1604,7 @@ void main() {
     expect(find.text('The requested change is complete.'), findsOneWidget);
     expect(find.text('Implement'), findsNothing);
     expect(find.text('Conclave'), findsOneWidget);
-    expect(find.byTooltip('View run details'), findsOneWidget);
+    expect(find.byTooltip('View request details'), findsOneWidget);
     expect(
       tester
           .widgetList<ConclaveMarkdownBody>(find.byType(ConclaveMarkdownBody))
@@ -2373,7 +2531,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('o3'), findsWidgets);
-    expect(dataSource.savedWorkConfig?['bindings']?['direct']?['model'], 'o3');
+    expect(dataSource.savedWorkConfig, isNull);
+    expect(find.byTooltip('Choose worker'), findsOneWidget);
 
     // Dismiss SnackBar if present
     ScaffoldMessenger.of(tester.element(find.byType(Scaffold).first))
@@ -2402,13 +2561,153 @@ void main() {
         tester.widget<Text>(find.text('No worker assigned'));
     expect(errorTextWidget.style?.color, isNotNull);
 
-    // Tap 'No worker assigned' opens Work settings dialog
+    // An unassigned workflow can select its Worker directly beside Send.
     await tester.tap(find.text('No worker assigned'));
     await tester.pumpAndSettle();
-    expect(find.text('Work settings'), findsOneWidget);
-    expect(find.text('Save Work settings'), findsOneWidget);
+    expect(find.text('ChatGPT'), findsOneWidget);
+    expect(find.text('Save Work settings'), findsNothing);
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is CheckedPopupMenuItem<String> && widget.value == 'w-chatgpt'));
+    await tester.pumpAndSettle();
+    expect(find.text('No worker assigned'), findsNothing);
+    expect(dataSource.savedWorkConfig, isNull);
 
     await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets(
+      'composer uses normalized capabilities and snapshots local next-turn choices',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final data = _ComposerOptionsDataSource();
+    AxTurnExecutionSelection? sent;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: WorkstreamPage(
+      initialTab: 1,
+      project: const AxProject(
+          id: 'project-1',
+          name: 'Project',
+          branch: '',
+          lastActivity: '',
+          role: 'collaborator'),
+      workstream: const AxWorkstream(
+          id: 'stream-1',
+          projectId: 'project-1',
+          name: 'Stream',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: '',
+          canExecuteWork: true,
+          workConfig: {
+            'bindings': {
+              'direct': {'workerId': 'w-chatgpt', 'model': 'typed-model'}
+            }
+          }),
+      dataSource: data,
+      onBackToProject: _noop,
+      onArchive: _noop,
+      onRunWork: (_, __, ___, key, selection) async {
+        sent = selection;
+        return 'phase8-request';
+      },
+    ))));
+    await tester.pumpAndSettle();
+    expect(find.text('Profile model'), findsOneWidget);
+    expect(find.text('Legacy model'), findsNothing);
+    expect(tester.getCenter(find.byTooltip('Choose worker')).dy,
+        tester.getCenter(find.byTooltip('Send request')).dy);
+    await tester.tap(find.byTooltip('Choose reasoning effort'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is CheckedPopupMenuItem<String> && widget.value == 'deep'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Choose model'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is CheckedPopupMenuItem<String> &&
+        widget.value == 'simple-model'));
+    await tester.pumpAndSettle();
+    expect(find.text('Simple model'), findsOneWidget);
+    expect(find.byTooltip('Choose reasoning effort'), findsNothing);
+    await tester.tap(find.byTooltip('Choose model'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is CheckedPopupMenuItem<String> &&
+        widget.value == 'typed-model'));
+    await tester.pumpAndSettle();
+    expect(find.text('Default effort'), findsOneWidget);
+    await tester.tap(find.byTooltip('Choose reasoning effort'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is CheckedPopupMenuItem<String> && widget.value == 'deep'));
+    await tester.pumpAndSettle();
+    final composer = find.byType(MarkdownComposer).last;
+    final field =
+        find.descendant(of: composer, matching: find.byType(TextField));
+    await tester.enterText(field, 'Use the selected configuration');
+    await tester.tap(find.byTooltip('Send request'));
+    await tester.pumpAndSettle();
+    expect(sent?.workerId, 'w-chatgpt');
+    expect(sent?.modelId, 'typed-model');
+    expect(sent?.effort, 'deep');
+    expect(data.savedWorkConfig, isNull);
+    await tester.tap(find.byTooltip('Choose worker'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is CheckedPopupMenuItem<String> && widget.value == 'w-second'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Choose model'), findsNothing);
+    expect(find.byTooltip('Choose reasoning effort'), findsNothing);
+    expect(find.text('Second Worker'), findsOneWidget);
+    await tester.tap(find.byTooltip('Choose worker'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is CheckedPopupMenuItem<String> && widget.value == 'w-chatgpt'));
+    await tester.pumpAndSettle();
+    expect(find.text('Profile model'), findsOneWidget);
+    expect(find.text('deep effort'), findsOneWidget);
+    // An explicit Default also replaces the remembered effort.
+    await tester.tap(find.byTooltip('Choose reasoning effort'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is CheckedPopupMenuItem<String> && widget.value == ''));
+    await tester.pumpAndSettle();
+    for (final workerId in ['w-second', 'w-chatgpt']) {
+      await tester.tap(find.byTooltip('Choose worker'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byWidgetPredicate((widget) =>
+          widget is CheckedPopupMenuItem<String> && widget.value == workerId));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('Profile model'), findsOneWidget);
+    expect(find.text('Default effort'), findsOneWidget);
+    await tester.tap(find.byTooltip('Choose reasoning effort'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is CheckedPopupMenuItem<String> && widget.value == 'deep'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Choose worker'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is CheckedPopupMenuItem<String> && widget.value == 'w-second'));
+    await tester.pumpAndSettle();
+    data.supportsDeep = false;
+    await AxSessionCatalogs.forSource(data).refreshWorkers();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Choose worker'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is CheckedPopupMenuItem<String> && widget.value == 'w-chatgpt'));
+    await tester.pumpAndSettle();
+    expect(find.text('Profile model'), findsOneWidget);
+    expect(find.text('Default effort'), findsOneWidget);
+    expect(sent?.workerId, 'w-chatgpt');
+    expect(sent?.effort, 'deep');
+    expect(data.savedWorkConfig, isNull);
   });
 }
 
@@ -3063,4 +3362,89 @@ class _MembersTabTestDataSource extends AxFixtureDataSource {
       createdAt: DateTime.now().toIso8601String(),
     );
   }
+}
+
+class _ComposerOptionsDataSource extends _ModelSelectionTestDataSource {
+  bool supportsDeep = true;
+  @override
+  Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => [
+        for (final first in [true, false])
+          AxWorker.fromJson({
+            'id': first ? 'w-chatgpt' : 'w-second',
+            'workspaceId': 'workspace-1',
+            'workspaceName': 'MacBook Pro',
+            'workerTypeId': first ? 'chatgpt' : 'gemini',
+            'displayName': first ? 'ChatGPT' : 'Second Worker',
+            'status': 'ready',
+            'readinessState': 'ready',
+            'localConcurrencyLimit': 1,
+            'modelOptions': {
+              'catalog': [
+                {'id': 'legacy', 'name': 'Legacy model'}
+              ]
+            },
+            'executionOptions': {
+              'schemaVersion': 1,
+              'models': {
+                'supported': first,
+                'discovery': 'profile_catalog',
+                'allowsCustomModel': false,
+                'allowedModelIds':
+                    first ? ['typed-model', 'simple-model'] : <String>[],
+                'defaultModelId': null,
+                'options': first
+                    ? [
+                        {
+                          'id': 'typed-model',
+                          'name': 'Profile model',
+                          'effort': {
+                            'supported': true,
+                            'values': ['brief', if (supportsDeep) 'deep'],
+                            'defaultValue': 'brief'
+                          }
+                        },
+                        {
+                          'id': 'simple-model',
+                          'name': 'Simple model',
+                          'effort': {
+                            'supported': false,
+                            'values': <String>[],
+                            'defaultValue': null
+                          }
+                        }
+                      ]
+                    : <Map>[]
+              },
+              'modelSwitch': {'supported': true},
+              'effort': {
+                'supported': first,
+                'values':
+                    first ? ['brief', if (supportsDeep) 'deep'] : <String>[],
+                'defaultValue': first ? 'brief' : null
+              },
+            },
+          }),
+      ];
+}
+
+class _SimpleConversationDataSource extends _WorkHistoryDataSource {
+  _SimpleConversationDataSource(this.request) : super([request]);
+  final AxWorkRequest request;
+  @override
+  Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() =>
+      _CurrentWorkflowUiDataSource().loadBuiltinWorkflowCatalog();
+  @override
+  Future<AxWorkRequestStatus> loadWorkRequest(
+          {required String workRequestId}) async =>
+      AxWorkRequestStatus(
+          id: request.id,
+          conversationId: request.conversationId,
+          workflowRun: request.workflowRun,
+          turns: request.turns,
+          status: request.status,
+          originalRequest: request.prompt,
+          workflowId: request.workflowId,
+          workflowVersion: request.workflowVersion,
+          steps: request.steps,
+          requestedByName: request.requestedByName);
 }

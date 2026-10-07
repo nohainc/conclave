@@ -1,36 +1,64 @@
 ---
+import Button from "../components/Button.astro";
 import Container from "../components/Container.astro";
 import FeatureCard from "../components/FeatureCard.astro";
 import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
-import SecurityTopology from "../components/SecurityTopology.astro";
+import CredentialPrivacyDiagram from "../components/CredentialPrivacyDiagram.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 ---
 
-<SiteLayout title="Security — Conclave AX" description="Conclave AX separates Project collaboration, Workspace execution, Worker capability, and AI Account authorization.">
+<SiteLayout
+  title="Security — Conclave AX"
+  description="Conclave AX separates Project collaboration, AI Account authorization, and Workspace execution to keep your secrets private."
+>
   <Section>
     <Container>
-      <SectionHeader eyebrow="Security" title="Share the project without sharing the whole machine." description="Conclave AX uses separate authorization boundaries for people, Projects, Workstreams, Workspaces, Workers, and AI Accounts." headingLevel={1} />
+      <SectionHeader
+        eyebrow="Security & Privacy"
+        title="Share AI access without sharing your secrets."
+        description="Conclave AX is architected so people can collaborate with AI together without exposing API keys, personal login credentials, or unrestricted machine access."
+        headingLevel={1}
+      />
 
-      <div class="security-overview">
-        <SecurityTopology />
-        <div class="security-boundaries">
-          <FeatureCard title="Project" headingLevel={2}><p>Defines who can collaborate, discuss, inspect results, and request work. Project membership does not grant machine access.</p></FeatureCard>
-          <FeatureCard title="Workspace" headingLevel={2}><p>Represents one execution environment. Projects use it only through an explicit, scoped Workspace grant.</p></FeatureCard>
-          <FeatureCard title="Worker" headingLevel={2}><p>Provides a model, tool, CLI, or other capability behind the Workspace runtime. Workers do not authenticate directly as Conclave users.</p></FeatureCard>
-          <FeatureCard title="AI Account" headingLevel={2}><p>Determines which external AI identity may be used. Workspace access never implies Account access.</p></FeatureCard>
+      <div class="security-overview" style="margin-top: var(--space-8);">
+        <CredentialPrivacyDiagram />
+      </div>
+
+      <div style="margin-top: var(--space-16);">
+        <SectionHeader
+          eyebrow="Authorization Boundaries"
+          title="Strict separation between people, projects, and AI."
+          description="Every layer in Conclave has an independent permission boundary so access can only get narrower."
+        />
+
+        <div class="cards security-detail-cards">
+          <FeatureCard title="Project Membership" headingLevel={2}>
+            <p>Defines who can collaborate, participate in workstream chats, and trigger AI runs. Joining a project never automatically grants access to anyone's personal AI accounts or local machines.</p>
+          </FeatureCard>
+
+          <FeatureCard title="AI Account Privacy" headingLevel={2}>
+            <p>API keys and credentials remain encrypted in Conclave's secure vault. Sharing an AI account authorizes eligible project members to run queries; it never reveals the underlying secret.</p>
+          </FeatureCard>
+
+          <FeatureCard title="Workspace Isolation" headingLevel={2}>
+            <p>For technical teams running code or CLI tools, each workstream executes in an isolated, ID-derived directory on the authorized host machine with runtime lease serialization.</p>
+          </FeatureCard>
+
+          <FeatureCard title="Audit & Attribution" headingLevel={2}>
+            <p>Every conversation turn and workflow step records who requested work, which model answered, and token usage, giving owners total visibility over AI resource consumption.</p>
+          </FeatureCard>
         </div>
       </div>
 
-      <div class="security-callout">
-        <strong>Effective execution permissions can only get narrower.</strong>
-        <span>Project role, Workspace grant, Worker permissions, local Workspace policy, and Project policy are intersected before an Assignment is dispatched.</span>
+      <div class="security-callout" style="margin-top: var(--space-12);">
+        <strong>Instant revocation with zero password churn.</strong>
+        <span>Revoking an AI account grant or removing a project collaborator immediately cuts off AI access without requiring you to regenerate API keys or reset passwords.</span>
       </div>
 
-      <div class="cards security-detail-cards">
-        <FeatureCard title="Workspace grants"><p>A Project can use a Workspace only after its owner grants access. Work runs in an isolated Workstream directory under Workspace runtime controls.</p></FeatureCard>
-        <FeatureCard title="Isolated Workstreams"><p>Stateful Workstreams use ID-derived directories and runtime leases to serialize mutations while allowing separate Workstreams to run in parallel.</p></FeatureCard>
-        <FeatureCard title="Credential isolation"><p>Secrets stay behind the Workspace boundary and are not exposed merely because another person can execute authorized Project work.</p></FeatureCard>
+      <div class="actions" style="justify-content: center; margin-top: var(--space-12);">
+        <Button href="https://app.conclaveax.com" label="Open Conclave AX" />
+        <Button href="/privacy/" label="Read privacy policy" variant="secondary" />
       </div>
     </Container>
   </Section>

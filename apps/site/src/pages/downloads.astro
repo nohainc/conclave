@@ -6,17 +6,27 @@ import SiteLayout from "../layouts/SiteLayout.astro";
 import { workspaceRelease } from "../data/workspace-release";
 ---
 
-<SiteLayout title="Downloads — Conclave AX" description="Download Conclave Workspace for macOS, Windows, or Linux.">
+<SiteLayout
+  title="Downloads — Conclave AX"
+  description="Download Conclave Workspace for macOS, Windows, or Linux to connect local tools and machines."
+>
   <Section>
     <Container>
       <SectionHeader
         eyebrow="Downloads"
         title="Run Conclave Workers on your computer."
-        description={`Download ${workspaceRelease.productName} for the machine you want to connect to your execution Workspace.`}
+        description="Conclave AX runs directly in your web browser. If you want to connect your local development environment, repositories, and command-line coding agents, install Conclave Workspace on your machine."
         headingLevel={1}
       />
 
-      <div class="downloads-grid" data-downloads-platforms>
+      <div class="downloads-intro-note">
+        <div class="note-pill">Web App</div>
+        <p>
+          For general team chat, shared projects, and API-backed AI models, you don't need to install anything. Simply <a href="https://app.conclaveax.com" class="link-inline">open Conclave AX in your browser →</a>
+        </p>
+      </div>
+
+      <div class="downloads-grid" data-downloads-platforms style="margin-top: var(--space-8);">
         {workspaceRelease.targets.map((target) => (
           <article class="downloads-card" data-platform={target.platform}>
             <div class="downloads-card__header">

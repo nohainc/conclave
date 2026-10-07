@@ -1,0 +1,140 @@
+---
+import Button from "../components/Button.astro";
+import Container from "../components/Container.astro";
+import Section from "../components/Section.astro";
+import SectionHeader from "../components/SectionHeader.astro";
+import SiteLayout from "../layouts/SiteLayout.astro";
+---
+
+<SiteLayout
+  title="Use Cases — Conclave AX"
+  description="See how families, collaborative teams, and software engineers use Conclave AX to bring people and AI together."
+>
+  <Section>
+    <Container>
+      <SectionHeader
+        eyebrow="Use cases"
+        title="AI is better when you can use it together."
+        description="Whether you're planning a family trip, analyzing market data with your team, or orchestrating complex code implementations, Conclave AX brings people and AI into one shared workspace."
+        headingLevel={1}
+      />
+
+      <!-- Section 1: Friends & Family -->
+      <div id="family" class="usecase-detail-section">
+        <div class="usecase-detail-header">
+          <span class="usecase-badge usecase-badge--family">Friends & Family</span>
+          <h2>Think, plan, and decide together.</h2>
+          <p class="usecase-intro">
+            Stop sending screenshots of ChatGPT answers back and forth in messaging apps. Create a shared project for your family or friend group where everyone has access to AI and stays in context.
+          </p>
+        </div>
+
+        <div class="usecase-grid">
+          <div class="usecase-card">
+            <span class="usecase-card-icon">✈️</span>
+            <h3>Vacation & Travel Planning</h3>
+            <p>Gather flight options, compare boutique hotels and Airbnbs, build day-by-day itineraries, and ask AI to calculate transit times between attractions.</p>
+          </div>
+
+          <div class="usecase-card">
+            <span class="usecase-card-icon">🏡</span>
+            <h3>Home & Renovation Projects</h3>
+            <p>Upload contractor quotes, compare material specifications, estimate budget trade-offs, and track decisions across separate workstreams.</p>
+          </div>
+
+          <div class="usecase-card">
+            <span class="usecase-card-icon">🎓</span>
+            <h3>Major Life & Purchasing Decisions</h3>
+            <p>Research schools, compare car models, analyze warranties, and brainstorm ideas together with multiple AI models providing diverse perspectives.</p>
+          </div>
+
+          <div class="usecase-card">
+            <span class="usecase-card-icon">🔑</span>
+            <h3>Share AI Subscriptions Safely</h3>
+            <p>If one member has an active ChatGPT Plus or Claude Pro subscription, they can share AI access with the project without revealing passwords or credentials.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Teams & Companies -->
+      <div id="teams" class="usecase-detail-section">
+        <div class="usecase-detail-header">
+          <span class="usecase-badge usecase-badge--teams">Teams & Companies</span>
+          <h2>Collaborative intelligence for knowledge work.</h2>
+          <p class="usecase-intro">
+            Give your marketing, product, operations, and leadership teams a transparent AI workspace. Keep discussions, prompts, AI responses, and documents organized in one place.
+          </p>
+        </div>
+
+        <div class="usecase-grid">
+          <div class="usecase-card">
+            <span class="usecase-card-icon">📊</span>
+            <h3>Market & Competitive Research</h3>
+            <p>Have one AI extract facts from public reports while another builds a comparison matrix and a third drafts executive takeaways.</p>
+          </div>
+
+          <div class="usecase-card">
+            <span class="usecase-card-icon">✍️</span>
+            <h3>Strategy & Content Collaboration</h3>
+            <p>Draft customer proposals, marketing campaigns, product specs, and board memos with team feedback and AI critique in the exact same thread.</p>
+          </div>
+
+          <div class="usecase-card">
+            <span class="usecase-card-icon">🔄</span>
+            <h3>Multi-Model Deliberation</h3>
+            <p>Switch seamlessly between GPT-4o, Claude 3.5 Sonnet, and Gemini Pro without losing conversation history or context.</p>
+          </div>
+
+          <div class="usecase-card">
+            <span class="usecase-card-icon">🛡️</span>
+            <h3>Controlled Corporate Access</h3>
+            <p>Grant project-specific AI capabilities to contractors or cross-functional team members with instant revocation and audit logging.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Software & Engineering -->
+      <div id="engineering" class="usecase-detail-section">
+        <div class="usecase-detail-header">
+          <span class="usecase-badge usecase-badge--dev">Software & Engineering Teams</span>
+          <h2>Turn discussions into verified code.</h2>
+          <p class="usecase-intro">
+            Connect your local repositories and command-line coding agents. Run parallel workstreams with isolated directories, runtime leases, and automated test verification.
+          </p>
+        </div>
+
+        <div class="usecase-grid">
+          <div class="usecase-card">
+            <span class="usecase-card-icon">💻</span>
+            <h3>Coding Agent Orchestration</h3>
+            <p>Dispatch complex programming tasks to Codex or Claude Code CLI running on your local machine with full tool and filesystem access.</p>
+          </div>
+
+          <div class="usecase-card">
+            <span class="usecase-card-icon">📦</span>
+            <h3>Isolated Parallel Workstreams</h3>
+            <p>Run multiple bug investigations or feature implementations concurrently without worrying about mutable folder collisions.</p>
+          </div>
+
+          <div class="usecase-card">
+            <span class="usecase-card-icon">🧪</span>
+            <h3>Automated Verification & Evidence</h3>
+            <p>Collect test execution output, compiler errors, code diffs, and independent AI reviews before accepting proposed changes.</p>
+          </div>
+
+          <div class="usecase-card">
+            <span class="usecase-card-icon">🖥️</span>
+            <h3>Self-Hosted Execution</h3>
+            <p>Keep your source code and execution strictly on your own hardware using the lightweight Conclave Workspace host.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Action -->
+      <div class="actions" style="justify-content: center; margin-top: var(--space-16);">
+        <Button href="https://app.conclaveax.com" label="Open Conclave AX" />
+        <Button href="/how-it-works/" label="See how it works" variant="secondary" />
+      </div>
+    </Container>
+  </Section>
+</SiteLayout>

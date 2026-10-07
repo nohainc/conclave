@@ -602,6 +602,12 @@ signed compatibility declaration. Session files written by the unpartitioned
 development Engine are ignored by this format and will begin a fresh provider
 session on first use.
 
+Conversation-associated mappings also record explicit Conversation/Worker ownership,
+last successful model/effort, and synchronized context revision. Model/effort are
+not part of the session partition. Native handles stay in local state and are never
+returned in protocol results. See [Worker Sessions](CONVERSATION_CONTINUITY_V1.md#phase-6--workspace-owned-worker-sessions)
+for format versions, Profile compatibility, and synchronization limits.
+
 ## 19. Model mapping
 
 Conceptual:
@@ -621,6 +627,17 @@ v1 may support:
 - `profile_allowlist`.
 
 No silent model substitution is permitted.
+
+Optional `model.executionOptions` declares version 1 generic capabilities:
+`discovery: "profile_catalog"`, `modelSwitchSupported`, `effortSupported`, optional
+nullable `defaultModelId`, and optional `effortMapping`. Catalog and global/model
+reasoning values remain in their existing fields. Provider-specific effort names
+are mapped into `{{reasoningEffort}}` locally while persisted selection metadata
+retains the requested value. Explicitly unsupported model switches fail resume;
+they do not silently replace the native session. See
+[Worker execution options](CONVERSATION_CONTINUITY_V1.md#phase-7--generic-worker-execution-options)
+for normalization, validation, discovery limits, and rollout.
+
 
 ## 20. Timeouts
 
@@ -901,3 +918,12 @@ the action from the first matching progress rule only. Stable failure mappings
 are ordered; the Engine uses the first matching mapping. An Engine may still
 report its own hard deadline or protocol-integrity failure regardless of
 Profile mappings.
+
+
+When `model.executionOptions.modelSwitchSupported` is false, a different selected
+model requires a new native session bootstrapped from bounded canonical Conclave
+history. The generic Engine uses the Profile's existing first-invocation argument
+layout, without resume arguments; successful execution replaces the local native
+mapping while retaining the Conversation scope. Failure preserves the previous
+mapping. No provider-specific executable or Profile schema addition is introduced.
+See [Conversation Continuity Phase 14](CONVERSATION_CONTINUITY_V1.md#phase-14--same-worker-different-model).

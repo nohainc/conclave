@@ -6,6 +6,46 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets(
+      'toolbar Send stays visible on narrow screens while typing remains enabled',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: MarkdownComposer(
+      controller: controller,
+      chatStyle: true,
+      sendInToolbar: true,
+      sendEnabled: false,
+      onSend: () {},
+      additionalControlsBuilder: (_) => const SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child:
+              Row(children: [Text('Worker · Model · Effort · extra options')])),
+    ))));
+    expect(find.byTooltip('Send message'), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byType(TextField),
+            matching: find.byTooltip('Send message')),
+        findsNothing);
+    expect(tester.getRect(find.byTooltip('Send message')).right,
+        lessThanOrEqualTo(360));
+    expect(
+        tester
+            .widget<IconButton>(find.ancestor(
+                of: find.byIcon(Icons.send_rounded),
+                matching: find.byType(IconButton)))
+            .onPressed,
+        isNull);
+    await tester.enterText(find.byType(TextField), 'Draft next request');
+    expect(controller.text, 'Draft next request');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
       'Chat restores compact send controls and hides formatting by default',
       (tester) async {
     final controller = TextEditingController();

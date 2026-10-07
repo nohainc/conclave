@@ -207,6 +207,11 @@ Future<Workspace> buildWorkspaceRuntime(
           ),
         );
       }
+      final workerSessionValue = payload['workerSession'];
+      final workerSession = workerSessionValue == null
+          ? null
+          : WorkerSessionContext.fromJson(
+              Map<String, Object?>.from(workerSessionValue as Map));
       final input = payload['input'];
       final modelValue =
           payload['model'] ?? (input is Map ? input['model'] : null);
@@ -264,6 +269,11 @@ Future<Workspace> buildWorkspaceRuntime(
             ? WorkerSessionPolicy.durableSession
             : WorkerSessionPolicy.stateless,
         sessionKey: sessionKeyValue as String?,
+        workerSession: workerSession,
+        statelessContext: payload["statelessContext"] == null
+            ? null
+            : ConversationBootstrap.fromJson(
+                Map<String, Object?>.from(payload["statelessContext"] as Map)),
         model: modelValue is String && modelValue.trim().isNotEmpty
             ? modelValue.trim()
             : null,

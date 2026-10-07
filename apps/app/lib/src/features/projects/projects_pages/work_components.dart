@@ -49,6 +49,21 @@ class AxModelOption {
 }
 
 List<AxModelOption> _modelsForWorker(AxWorker worker) {
+  final options = worker.executionOptions;
+  if (options != null) {
+    return options.models
+        .map((model) => AxModelOption(
+              id: model.id,
+              name: model.name,
+              badge: '',
+              description: '',
+              defaultReasoningEffort: model.effort.defaultValue,
+              supportedReasoningEfforts:
+                  model.effort.supported ? model.effort.values : const [],
+            ))
+        .toList();
+  }
+
   final catalog = worker.modelOptions['catalog'];
   if (catalog is! List) return const [];
   return catalog
@@ -172,6 +187,25 @@ Future<T?> _showAnchoredMenu<T>({
   );
 }
 
+Widget _workerIcon(BuildContext context, AxWorker worker) {
+  final asset = switch (worker.workerTypeId) {
+    'chatgpt' => 'assets/worker_icons/chatgpt.png',
+    'gemini' => 'assets/worker_icons/gemini.png',
+    'claude' => 'assets/worker_icons/claude.png',
+    _ => null,
+  };
+  return SizedBox(
+      width: 18,
+      height: 18,
+      child: asset != null
+          ? Image.asset(asset,
+              fit: BoxFit.contain, semanticLabel: '${worker.displayName} icon')
+          : CircleAvatar(
+              child: Text(
+                  worker.displayName.isEmpty ? '?' : worker.displayName[0],
+                  style: const TextStyle(fontSize: 10))));
+}
+
 class _WorkComposer extends StatelessWidget {
   const _WorkComposer({
     required this.requestController,
@@ -207,6 +241,7 @@ class _WorkComposer extends StatelessWidget {
     required this.onRetryStep,
     required this.onCancelRun,
     required this.onWorkflowChanged,
+    this.onWorkerChanged,
     this.onModelChanged,
     this.onReasoningEffortChanged,
     this.onOpenSettings,
@@ -246,6 +281,7 @@ class _WorkComposer extends StatelessWidget {
   final Future<void> Function(String, AxWorkRequestStep)? onRetryStep;
   final Future<void> Function(String)? onCancelRun;
   final ValueChanged<String> onWorkflowChanged;
+  final void Function(String stepKind, String workerId)? onWorkerChanged;
   final void Function(String stepKind, String model)? onModelChanged;
   final void Function(String stepKind, String reasoningEffort)?
       onReasoningEffortChanged;
@@ -364,12 +400,8 @@ class _WorkComposer extends StatelessWidget {
     final bindings = workConfig['bindings'] is Map
         ? Map<String, dynamic>.from(workConfig['bindings'] as Map)
         : <String, dynamic>{};
-    final stepKind = selectedWorkflow?.id == 'direct'
-        ? 'direct'
-        : selectedWorkflow?.steps.firstOrNull?.kind ??
-            (selectedWorkflow?.id == 'chat' ? 'chat' : 'implement');
-    final rawBinding = bindings[stepKind] ??
-        (selectedWorkflow != null ? bindings[selectedWorkflow.id] : null);
+    final stepKind = selectedWorkflow?.composerBindingId;
+    final rawBinding = stepKind == null ? null : bindings[stepKind];
     final binding = rawBinding is Map
         ? Map<String, dynamic>.from(rawBinding)
         : <String, dynamic>{};
@@ -390,7 +422,8 @@ class _WorkComposer extends StatelessWidget {
       Theme.of(context).brightness == Brightness.dark,
       Theme.of(context).colorScheme);
 
-  Widget _additionalControls(BuildContext context, GlobalKey inputKey) {
+  Widget _additionalControls(BuildContext context, GlobalKey inputKey,
+      {bool executionChoices = false}) {
     final colors = Theme.of(context).colorScheme;
     final selectedWorkflow = workflowCatalog
             .where((item) => item.reference == workflow)
@@ -402,17 +435,15 @@ class _WorkComposer extends StatelessWidget {
     final bindings = workConfig['bindings'] is Map
         ? Map<String, dynamic>.from(workConfig['bindings'] as Map)
         : <String, dynamic>{};
-    final stepKind = selectedWorkflow?.id == 'direct'
-        ? 'direct'
-        : selectedWorkflow?.steps.firstOrNull?.kind ??
-            (selectedWorkflow?.id == 'chat' ? 'chat' : 'implement');
-    final rawBinding = bindings[stepKind] ??
-        (selectedWorkflow != null ? bindings[selectedWorkflow.id] : null);
+    final stepKind = selectedWorkflow?.composerBindingId;
+    final rawBinding = stepKind == null ? null : bindings[stepKind];
     final binding = rawBinding is Map
         ? Map<String, dynamic>.from(rawBinding)
         : <String, dynamic>{};
     final assignedWorker = _assignedWorker;
     final isWorkerAssigned = _isWorkerAssigned;
+    final policy =
+        selectedWorkflow?.executionPolicy ?? const AxWorkflowCapabilities();
     final selectedModel = binding['model']?.toString().trim() ?? '';
     final selectedReasoningEffort =
         (binding['reasoningEffort'] ?? binding['reasoning_effort'])
@@ -425,7 +456,14 @@ class _WorkComposer extends StatelessWidget {
         : const <AxModelOption>[];
     final currentModelOption =
         availableModels.where((m) => m.id == selectedModel).firstOrNull;
-    final supportedEfforts = currentModelOption?.supportedReasoningEfforts ??
+    final normalizedEffort = assignedWorker?.executionOptions
+        ?.effortsForModel(selectedModel.isEmpty ? null : selectedModel);
+    final supportedEfforts = (normalizedEffort == null
+            ? null
+            : normalizedEffort.supported
+                ? normalizedEffort.values
+                : const <String>[]) ??
+        currentModelOption?.supportedReasoningEfforts ??
         (selectedModel.isEmpty &&
                 assignedWorker?.modelOptions['supportedReasoningEfforts']
                     is List
@@ -440,244 +478,88 @@ class _WorkComposer extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Builder(
-            builder: (buttonContext) => IconButton(
-              tooltip: 'Add attachments',
-              icon: const Icon(Icons.add, size: 18),
-              onPressed: () async {
-                final value = await _showAnchoredMenu<String>(
-                  buttonContext: buttonContext,
-                  inputKey: inputKey,
-                  itemHeight: 48.0,
-                  items: [
-                    PopupMenuItem(
-                      value: 'files',
-                      enabled: canExecute && !submitting,
-                      child: const ListTile(
-                        dense: true,
-                        leading: Icon(Icons.attach_file, size: 18),
-                        title: Text('Add files'),
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'link',
-                      enabled: canExecute && !submitting,
-                      child: const ListTile(
-                        dense: true,
-                        leading: Icon(Icons.link, size: 18),
-                        title: Text('Add link'),
-                      ),
-                    ),
-                  ],
-                );
-                if (!buttonContext.mounted || value == null) return;
-                if (value == 'files') {
-                  onAddFiles();
-                } else if (value == 'link') {
-                  onAddReference();
-                }
-              },
-            ),
-          ),
-          IconButton(
-            tooltip: 'Refresh Work history',
-            onPressed: () => onRefresh(),
-            icon: const Icon(Icons.refresh, size: 18),
-          ),
-          if (onOpenSettings != null)
-            IconButton(
-              tooltip: 'Work settings',
-              onPressed: onOpenSettings,
-              icon: const Icon(Icons.tune_rounded, size: 18),
-            ),
-          const SizedBox(width: 4),
-          Builder(
-            builder: (workflowBtnContext) => Tooltip(
-              message: 'Choose workflow',
-              child: InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: canExecute && !submitting && workflowCatalog.isNotEmpty
-                    ? () async {
-                        final versions =
-                            _currentWorkflowVersions(workflowCatalog);
-                        final value = await _showAnchoredMenu<String>(
-                          buttonContext: workflowBtnContext,
-                          inputKey: inputKey,
-                          itemHeight: 48.0,
-                          items: [
-                            for (final item in versions)
-                              CheckedPopupMenuItem(
-                                value: item.reference,
-                                checked: item.reference == workflow,
-                                enabled: canExecute && !submitting,
-                                child: Tooltip(
-                                  message: item.description,
-                                  child: Text(item.name),
-                                ),
-                              ),
-                          ],
-                        );
-                        if (!workflowBtnContext.mounted || value == null) {
-                          return;
-                        }
-                        onWorkflowChanged(value);
-                      }
-                    : null,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 130),
-                        child: Text(
-                          selectedWorkflow?.name ?? 'Choose workflow',
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      const Icon(Icons.keyboard_arrow_down, size: 14),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          if (!isWorkerAssigned)
-            Tooltip(
-              message: onOpenSettings != null
-                  ? 'No worker assigned for this workflow. Click to configure in Work settings.'
-                  : 'No worker assigned for this workflow.',
-              child: InkWell(
-                onTap: onOpenSettings,
-                borderRadius: BorderRadius.circular(6),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.error_outline_rounded,
-                          size: 14, color: colors.error),
-                      const SizedBox(width: 4),
-                      Text(
-                        'No worker assigned',
-                        style: TextStyle(
-                          color: colors.error,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else ...[
+          if (!executionChoices) ...[
             Builder(
-              builder: (modelBtnContext) => Tooltip(
-                message: 'Choose model',
+              builder: (buttonContext) => IconButton(
+                tooltip: 'Add attachments',
+                icon: const Icon(Icons.add, size: 18),
+                onPressed: () async {
+                  final value = await _showAnchoredMenu<String>(
+                    buttonContext: buttonContext,
+                    inputKey: inputKey,
+                    itemHeight: 48.0,
+                    items: [
+                      PopupMenuItem(
+                        value: 'files',
+                        enabled: canExecute && !submitting,
+                        child: const ListTile(
+                          dense: true,
+                          leading: Icon(Icons.attach_file, size: 18),
+                          title: Text('Add files'),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'link',
+                        enabled: canExecute && !submitting,
+                        child: const ListTile(
+                          dense: true,
+                          leading: Icon(Icons.link, size: 18),
+                          title: Text('Add link'),
+                        ),
+                      ),
+                    ],
+                  );
+                  if (!buttonContext.mounted || value == null) return;
+                  if (value == 'files') {
+                    onAddFiles();
+                  } else if (value == 'link') {
+                    onAddReference();
+                  }
+                },
+              ),
+            ),
+            IconButton(
+              tooltip: 'Refresh Work history',
+              onPressed: () => onRefresh(),
+              icon: const Icon(Icons.refresh, size: 18),
+            ),
+            if (onOpenSettings != null)
+              IconButton(
+                tooltip: 'Work settings',
+                onPressed: onOpenSettings,
+                icon: const Icon(Icons.tune_rounded, size: 18),
+              ),
+            const SizedBox(width: 4),
+            Builder(
+              builder: (workflowBtnContext) => Tooltip(
+                message: 'Choose workflow',
                 child: InkWell(
                   borderRadius: BorderRadius.circular(8),
-                  onTap: canExecute && !submitting && onModelChanged != null
+                  onTap: canExecute && !submitting && workflowCatalog.isNotEmpty
                       ? () async {
-                          final menuItems = <PopupMenuEntry<String>>[
-                            CheckedPopupMenuItem<String>(
-                              value: '',
-                              checked: selectedModel.isEmpty,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
-                              child: SizedBox(
-                                height: 46,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Text(
-                                      'Default model',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Uses the worker’s configured model',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: isDark
-                                            ? Colors.white60
-                                            : Colors.black54,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            if (availableModels.isNotEmpty)
-                              const PopupMenuDivider(),
-                            for (final model in availableModels)
-                              CheckedPopupMenuItem<String>(
-                                value: model.id,
-                                checked: selectedModel == model.id,
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 12),
-                                child: SizedBox(
-                                  height: 46,
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            model.name,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          _buildModelBadge(
-                                              context, model.badge),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        model.description,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: isDark
-                                              ? Colors.white60
-                                              : Colors.black54,
-                                        ),
-                                      ),
-                                    ],
+                          final versions =
+                              _currentWorkflowVersions(workflowCatalog);
+                          final value = await _showAnchoredMenu<String>(
+                            buttonContext: workflowBtnContext,
+                            inputKey: inputKey,
+                            itemHeight: 48.0,
+                            items: [
+                              for (final item in versions)
+                                CheckedPopupMenuItem(
+                                  value: item.reference,
+                                  checked: item.reference == workflow,
+                                  enabled: canExecute && !submitting,
+                                  child: Tooltip(
+                                    message: item.description,
+                                    child: Text(item.name),
                                   ),
                                 ),
-                              ),
-                          ];
-                          final value = await _showAnchoredMenu<String>(
-                            buttonContext: modelBtnContext,
-                            inputKey: inputKey,
-                            items: menuItems,
-                            itemHeight: 52.0,
-                            dividerCount: availableModels.isNotEmpty ? 1 : 0,
+                            ],
                           );
-                          if (!modelBtnContext.mounted || value == null) return;
-                          onModelChanged?.call(stepKind, value);
+                          if (!workflowBtnContext.mounted || value == null) {
+                            return;
+                          }
+                          onWorkflowChanged(value);
                         }
                       : null,
                   child: Padding(
@@ -689,12 +571,7 @@ class _WorkComposer extends StatelessWidget {
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 130),
                           child: Text(
-                            _modelDisplayName(selectedModel,
-                                        worker: assignedWorker)
-                                    .isEmpty
-                                ? 'Default model'
-                                : _modelDisplayName(selectedModel,
-                                    worker: assignedWorker),
+                            selectedWorkflow?.name ?? 'Choose workflow',
                             overflow: TextOverflow.ellipsis,
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -710,58 +587,110 @@ class _WorkComposer extends StatelessWidget {
                 ),
               ),
             ),
-            if (supportedEfforts.isNotEmpty) ...[
-              const SizedBox(width: 4),
+            const SizedBox(width: 4),
+          ],
+          if (executionChoices) ...[
+            if (stepKind != null && policy.userSelectsWorker)
               Builder(
-                builder: (reasoningBtnContext) => Tooltip(
-                  message: 'Choose reasoning effort',
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: canExecute &&
-                            !submitting &&
-                            onReasoningEffortChanged != null
-                        ? () async {
-                            final menuItems = <PopupMenuEntry<String>>[
-                              CheckedPopupMenuItem<String>(
-                                value: '',
-                                checked: selectedReasoningEffort.isEmpty,
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 12),
-                                child: SizedBox(
-                                  height: 46,
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Text(
-                                        'Default effort',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
+                  builder: (workerContext) => Tooltip(
+                        message: 'Choose worker',
+                        child: InkWell(
+                          key: const ValueKey('work-composer-worker'),
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: canExecute &&
+                                  !submitting &&
+                                  onWorkerChanged != null
+                              ? () async {
+                                  final value = await _showAnchoredMenu<String>(
+                                    buttonContext: workerContext,
+                                    inputKey: inputKey,
+                                    itemHeight: 52,
+                                    items: [
+                                      if (eligibleWorkers.isEmpty)
+                                        const PopupMenuItem<String>(
+                                            enabled: false,
+                                            child: Text('No eligible workers')),
+                                      for (final worker in eligibleWorkers)
+                                        CheckedPopupMenuItem<String>(
+                                          value: worker.id,
+                                          checked:
+                                              worker.id == assignedWorker?.id,
+                                          child: Row(children: [
+                                            _workerIcon(context, worker),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                                child: Column(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                  Text(worker.displayName,
+                                                      overflow: TextOverflow
+                                                          .ellipsis),
+                                                  Text(worker.workspaceName,
+                                                      style: Theme.of(context)
+                                                          .textTheme
+                                                          .bodySmall,
+                                                      overflow: TextOverflow
+                                                          .ellipsis),
+                                                ])),
+                                          ]),
                                         ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'Uses the model’s default reasoning effort',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: isDark
-                                              ? Colors.white60
-                                              : Colors.black54,
-                                        ),
-                                      ),
                                     ],
-                                  ),
-                                ),
-                              ),
-                              const PopupMenuDivider(),
-                              for (final effort in supportedEfforts)
+                                  );
+                                  if (workerContext.mounted && value != null) {
+                                    onWorkerChanged?.call(stepKind, value);
+                                  }
+                                }
+                              : null,
+                          child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 4),
+                              child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (assignedWorker != null) ...[
+                                      _workerIcon(context, assignedWorker),
+                                      const SizedBox(width: 4)
+                                    ],
+                                    ConstrainedBox(
+                                        constraints:
+                                            const BoxConstraints(maxWidth: 140),
+                                        child: Text(
+                                          assignedWorker?.displayName ??
+                                              'No worker assigned',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isWorkerAssigned
+                                                      ? null
+                                                      : colors.error),
+                                        )),
+                                    const Icon(Icons.keyboard_arrow_down,
+                                        size: 14),
+                                  ])),
+                        ),
+                      )),
+            if (stepKind != null && isWorkerAssigned) ...[
+              if (policy.userSelectsModel &&
+                  (assignedWorker?.executionOptions?.modelSelectionSupported ??
+                      true))
+                Builder(
+                  builder: (modelBtnContext) => Tooltip(
+                    message: 'Choose model',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: canExecute && !submitting && onModelChanged != null
+                          ? () async {
+                              final menuItems = <PopupMenuEntry<String>>[
                                 CheckedPopupMenuItem<String>(
-                                  value: effort,
-                                  checked: selectedReasoningEffort == effort,
+                                  value: '',
+                                  checked: selectedModel.isEmpty,
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 12),
                                   child: SizedBox(
@@ -772,25 +701,16 @@ class _WorkComposer extends StatelessWidget {
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: [
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              _reasoningEffortDisplayName(
-                                                  effort),
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            _buildModelBadge(
-                                                context, 'Reasoning'),
-                                          ],
+                                        const Text(
+                                          'Default model',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                         const SizedBox(height: 2),
                                         Text(
-                                          _reasoningEffortDescription(effort),
+                                          'Uses the worker’s configured model',
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
@@ -804,49 +724,240 @@ class _WorkComposer extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                            ];
-                            final value = await _showAnchoredMenu<String>(
-                              buttonContext: reasoningBtnContext,
-                              inputKey: inputKey,
-                              items: menuItems,
-                              itemHeight: 52.0,
-                              dividerCount: 1,
-                            );
-                            if (!reasoningBtnContext.mounted || value == null) {
-                              return;
-                            }
-                            onReasoningEffortChanged?.call(stepKind, value);
-                          }
-                        : null,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 110),
-                            child: Text(
-                              selectedReasoningEffort.isEmpty
-                                  ? 'Default effort'
-                                  : '${_reasoningEffortDisplayName(selectedReasoningEffort)} effort',
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
+                                if (availableModels.isNotEmpty)
+                                  const PopupMenuDivider(),
+                                for (final model in availableModels)
+                                  CheckedPopupMenuItem<String>(
+                                    value: model.id,
+                                    checked: selectedModel == model.id,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12),
+                                    child: SizedBox(
+                                      height: 46,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                model.name,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              _buildModelBadge(
+                                                  context, model.badge),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            model.description,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: isDark
+                                                  ? Colors.white60
+                                                  : Colors.black54,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
+                              ];
+                              final value = await _showAnchoredMenu<String>(
+                                buttonContext: modelBtnContext,
+                                inputKey: inputKey,
+                                items: menuItems,
+                                itemHeight: 52.0,
+                                dividerCount:
+                                    availableModels.isNotEmpty ? 1 : 0,
+                              );
+                              if (!modelBtnContext.mounted || value == null) {
+                                return;
+                              }
+                              onModelChanged?.call(stepKind, value);
+                            }
+                          : null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 130),
+                              child: Text(
+                                _modelDisplayName(selectedModel,
+                                            worker: assignedWorker)
+                                        .isEmpty
+                                    ? 'Default model'
+                                    : _modelDisplayName(selectedModel,
+                                        worker: assignedWorker),
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 2),
-                          const Icon(Icons.keyboard_arrow_down, size: 14),
-                        ],
+                            const SizedBox(width: 2),
+                            const Icon(Icons.keyboard_arrow_down, size: 14),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+              if (policy.userSelectsEffort && supportedEfforts.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Builder(
+                  builder: (reasoningBtnContext) => Tooltip(
+                    message: 'Choose reasoning effort',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: canExecute &&
+                              !submitting &&
+                              onReasoningEffortChanged != null
+                          ? () async {
+                              final menuItems = <PopupMenuEntry<String>>[
+                                CheckedPopupMenuItem<String>(
+                                  value: '',
+                                  checked: selectedReasoningEffort.isEmpty,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12),
+                                  child: SizedBox(
+                                    height: 46,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        const Text(
+                                          'Default effort',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Uses the model’s default reasoning effort',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isDark
+                                                ? Colors.white60
+                                                : Colors.black54,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const PopupMenuDivider(),
+                                for (final effort in supportedEfforts)
+                                  CheckedPopupMenuItem<String>(
+                                    value: effort,
+                                    checked: selectedReasoningEffort == effort,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12),
+                                    child: SizedBox(
+                                      height: 46,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                _reasoningEffortDisplayName(
+                                                    effort),
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              _buildModelBadge(
+                                                  context, 'Reasoning'),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            _reasoningEffortDescription(effort),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: isDark
+                                                  ? Colors.white60
+                                                  : Colors.black54,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                              ];
+                              final value = await _showAnchoredMenu<String>(
+                                buttonContext: reasoningBtnContext,
+                                inputKey: inputKey,
+                                items: menuItems,
+                                itemHeight: 52.0,
+                                dividerCount: 1,
+                              );
+                              if (!reasoningBtnContext.mounted ||
+                                  value == null) {
+                                return;
+                              }
+                              onReasoningEffortChanged?.call(stepKind, value);
+                            }
+                          : null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 110),
+                              child: Text(
+                                selectedReasoningEffort.isEmpty
+                                    ? 'Default effort'
+                                    : '${_reasoningEffortDisplayName(selectedReasoningEffort)} effort',
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            const Icon(Icons.keyboard_arrow_down, size: 14),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ],
         ],
@@ -868,11 +979,12 @@ class _WorkComposer extends StatelessWidget {
           MarkdownComposer(
             controller: requestController,
             chatStyle: true,
+            sendInToolbar: true,
             minLines: 2,
             maxLines: 6,
             enabled: canExecute,
             onSend: () => onRun(),
-            sendTooltip: 'Run Work',
+            sendTooltip: 'Send request',
             sendEnabled: canExecute &&
                 !submitting &&
                 !awaitingResponse &&
@@ -880,6 +992,8 @@ class _WorkComposer extends StatelessWidget {
                 workflowCatalogError == null,
             additionalControlsBuilder: (inputKey) =>
                 _additionalControls(context, inputKey),
+            executionControlsBuilder: (inputKey) =>
+                _additionalControls(context, inputKey, executionChoices: true),
           ),
           if (attachments.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -939,13 +1053,13 @@ class _WorkComposer extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: 'Copy Run error',
+                tooltip: 'Copy request error',
                 icon: const Icon(Icons.copy_outlined, size: 16),
                 onPressed: () async {
                   await Clipboard.setData(ClipboardData(text: submitError!));
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Run error copied')),
+                      const SnackBar(content: Text('Request error copied')),
                     );
                   }
                 },
@@ -1049,16 +1163,30 @@ class _WorkTimelineCard extends StatelessWidget {
         .firstOrNull;
     final stepForContext =
         activeStep ?? lastCompletedStep ?? request.steps.firstOrNull;
-    final selectedModel = stepForContext?.model?.trim();
-    final selectedReasoningEffort = stepForContext?.reasoningEffort?.trim();
+    final contextTurn = request.turns
+        .where((turn) => turn.assignmentId == stepForContext?.assignmentId)
+        .lastOrNull;
+    final selectedModel =
+        (contextTurn != null ? contextTurn.modelId : stepForContext?.model)
+            ?.trim();
+    final selectedReasoningEffort = (contextTurn != null
+            ? contextTurn.effort
+            : stepForContext?.reasoningEffort)
+        ?.trim();
 
     final response = request.finalText?.trim().isNotEmpty == true
         ? request.finalText!
-        : request.steps
-            .map((step) => step.resultText)
-            .whereType<String>()
-            .where((text) => text.trim().isNotEmpty)
-            .firstOrNull;
+        : request.turns
+                .where((turn) =>
+                    turn.status == 'completed' &&
+                    turn.resultText?.trim().isNotEmpty == true)
+                .lastOrNull
+                ?.resultText ??
+            request.steps
+                .map((step) => step.resultText)
+                .whereType<String>()
+                .where((text) => text.trim().isNotEmpty)
+                .firstOrNull;
     final error = request.error?.trim().isNotEmpty == true
         ? request.error!
         : failedStep?.errorMessage;
@@ -1069,8 +1197,15 @@ class _WorkTimelineCard extends StatelessWidget {
     final senderStep = activeStep?.status == 'running'
         ? activeStep
         : lastCompletedStep ?? stepForContext;
-    final workerType = senderStep?.workerTypeId?.trim().toLowerCase();
-    final workerDisplayName = senderStep?.workerDisplayName?.trim();
+    final senderTurn = request.turns
+        .where((turn) => turn.assignmentId == senderStep?.assignmentId)
+        .lastOrNull;
+    final workerType = (senderTurn?.workerTypeId ?? senderStep?.workerTypeId)
+        ?.trim()
+        .toLowerCase();
+    final workerDisplayName =
+        (senderTurn?.workerDisplayName ?? senderStep?.workerDisplayName)
+            ?.trim();
     final workerName = workerDisplayName?.isNotEmpty == true
         ? workerDisplayName!
         : switch (workerType) {
@@ -1107,6 +1242,15 @@ class _WorkTimelineCard extends StatelessWidget {
           'Reasoning: ${_reasoningEffortDisplayName(selectedReasoningEffort).toLowerCase()}';
     }
 
+    if (contextTurn != null) {
+      final modelLabel = selectedModel?.isNotEmpty == true
+          ? _modelDisplayName(selectedModel)
+          : 'Default model';
+      final effortLabel = selectedReasoningEffort?.isNotEmpty == true
+          ? _reasoningEffortDisplayName(selectedReasoningEffort).toLowerCase()
+          : 'default effort';
+      formattedModelInfo = '$modelLabel ($effortLabel)';
+    }
     final metadataSegments = [
       if (_workflowName.isNotEmpty) _workflowName,
       if (formattedModelInfo != null && formattedModelInfo.isNotEmpty)
@@ -1283,27 +1427,16 @@ class _WorkTimelineCard extends StatelessWidget {
                     final failedStep = request.steps
                         .where((step) => step.status == 'failed')
                         .firstOrNull;
-                    final response =
-                        request.finalText?.trim().isNotEmpty == true
-                            ? request.finalText!
-                            : request.steps
-                                .map((step) => step.resultText)
-                                .whereType<String>()
-                                .where((text) => text.trim().isNotEmpty)
-                                .firstOrNull;
-                    final error = request.error?.trim().isNotEmpty == true
-                        ? request.error!
-                        : failedStep?.errorMessage;
                     final message = error?.isNotEmpty == true
                         ? error!
                         : response?.isNotEmpty == true
                             ? response!
                             : request.status == 'cancelled'
-                                ? 'Run cancelled.'
+                                ? 'Request cancelled.'
                                 : progressText ??
                                     switch (request.status) {
                                       'running' => 'Working on your request…',
-                                      'waiting' => 'Waiting for the next step…',
+                                      'waiting' => 'Waiting to continue…',
                                       'completed' => 'Request completed.',
                                       'failed' =>
                                         'Your request could not be completed.',
@@ -1360,7 +1493,7 @@ class _WorkTimelineCard extends StatelessWidget {
                               ),
                             if (onShowRunDetails != null)
                               compactAction(
-                                tooltip: 'View run details',
+                                tooltip: 'View request details',
                                 icon: Icons.info_outline,
                                 onPressed: () => onShowRunDetails!(request.id),
                               ),
@@ -1368,7 +1501,7 @@ class _WorkTimelineCard extends StatelessWidget {
                                 failedStep != null &&
                                 onRetryStep != null)
                               compactAction(
-                                tooltip: 'Retry failed Step',
+                                tooltip: 'Retry request',
                                 icon: Icons.refresh,
                                 onPressed: () =>
                                     onRetryStep!(request.id, failedStep),
@@ -1377,7 +1510,7 @@ class _WorkTimelineCard extends StatelessWidget {
                                     request.status == 'running') &&
                                 onCancelRun != null)
                               compactAction(
-                                tooltip: 'Cancel run',
+                                tooltip: 'Cancel request',
                                 icon: Icons.cancel_outlined,
                                 onPressed: () => onCancelRun!(request.id),
                               ),
@@ -1416,15 +1549,6 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
   final Future<void> Function(AxWorkRequestStep step) onRetryStep;
   final Future<void> Function() onCancelRun;
 
-  String _stepName(String kind) => switch (kind) {
-        'research' => 'Research',
-        'plan' => 'Plan',
-        'implement' => 'Implement',
-        'test' => 'Test',
-        'verify' => 'Verify',
-        _ => kind,
-      };
-
   String _workerName(AxWorkRequestStep step) =>
       step.workerDisplayName ?? 'Worker';
 
@@ -1447,8 +1571,6 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final workflow = details.workflowName ?? details.workflowId ?? 'Workflow';
-    final version = details.workflowVersion;
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * 0.88,
       child: Column(
@@ -1459,7 +1581,7 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: Text('Run details',
+                  child: Text('Request details',
                       style: Theme.of(context).textTheme.titleLarge),
                 ),
                 IconButton(
@@ -1475,7 +1597,7 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
               children: [
                 Text(
-                  '$workflow${version == null ? '' : ' · v$version'} · ${details.status}',
+                  'Status · ${details.status}',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 if (details.requestedByName?.isNotEmpty == true) ...[
@@ -1491,6 +1613,28 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                         ? details.originalRequest!
                         : 'No request text was recorded.'),
                 const SizedBox(height: 20),
+                for (final turn in details.turns.where((turn) => !details.steps
+                    .any(
+                        (step) => step.assignmentId == turn.assignmentId))) ...[
+                  Card(
+                      child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                  'Earlier attempt · ${turn.workerDisplayName}',
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium),
+                              Text(
+                                  '${turn.modelId == null ? 'Default model' : _modelDisplayName(turn.modelId)} · ${turn.effort == null ? 'Default effort' : _reasoningEffortDisplayName(turn.effort)} · ${turn.status}'),
+                              if (turn.resultText?.isNotEmpty == true) ...[
+                                const SizedBox(height: 8),
+                                ConclaveMarkdownBody(data: turn.resultText!),
+                              ],
+                            ],
+                          ))),
+                ],
                 for (final step in details.steps) ...[
                   Card(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -1502,7 +1646,7 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                           Row(
                             children: [
                               Expanded(
-                                child: Text(_stepName(step.kind),
+                                child: Text(_workerName(step),
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleMedium),
@@ -1513,21 +1657,12 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                           const SizedBox(height: 6),
                           Text(
                             [
-                              _workerName(step),
                               if (step.model?.isNotEmpty == true)
                                 step.reasoningEffort?.isNotEmpty == true
                                     ? '${_modelDisplayName(step.model)} (${_reasoningEffortDisplayName(step.reasoningEffort).toLowerCase()})'
                                     : _modelDisplayName(step.model)
                               else if (step.reasoningEffort?.isNotEmpty == true)
                                 'Reasoning: ${_reasoningEffortDisplayName(step.reasoningEffort).toLowerCase()}',
-                              if (step.engineVersion != null)
-                                'Engine ${step.engineVersion}',
-                              if (step.providerToolName != null &&
-                                  step.providerToolVersion != null)
-                                '${step.providerToolName} ${step.providerToolVersion}',
-                              if (step.providerToolName != null &&
-                                  step.providerToolVersion == null)
-                                step.providerToolName!,
                             ].join(' · '),
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
@@ -1551,7 +1686,7 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                             const Divider(height: 24),
                             SelectableText(
                               step.errorMessage ??
-                                  'This Step did not produce a result.',
+                                  'This request did not produce a response.',
                               style: ConclaveMessageTypography.fromTheme(
                                       Theme.of(context))
                                   .copyWith(color: colors.error),
@@ -1561,7 +1696,7 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                               FilledButton.icon(
                                 onPressed: () => onRetryStep(step),
                                 icon: const Icon(Icons.refresh),
-                                label: const Text('Retry step'),
+                                label: const Text('Retry request'),
                               ),
                             ],
                           ],
@@ -1614,7 +1749,7 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                 ],
                 if (details.errorCode != null &&
                     details.steps.every((step) => step.errorCode == null))
-                  SelectableText('Run error code: ${details.errorCode}'),
+                  SelectableText('Request error code: ${details.errorCode}'),
                 if (details.status == 'failed' ||
                     details.status == 'queued' ||
                     details.status == 'running') ...[
@@ -1622,7 +1757,7 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                   OutlinedButton.icon(
                     onPressed: onCancelRun,
                     icon: const Icon(Icons.cancel_outlined),
-                    label: const Text('Cancel run'),
+                    label: const Text('Cancel request'),
                   ),
                 ],
               ],

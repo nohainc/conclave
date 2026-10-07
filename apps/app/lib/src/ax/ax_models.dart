@@ -1,3 +1,5 @@
+import 'worker_execution_options.dart';
+export 'worker_execution_options.dart';
 import 'dart:convert';
 
 enum RunStatus {
@@ -499,6 +501,7 @@ class AxWorker {
     this.providerToolName,
     this.providerToolVersion,
     this.modelOptions = const {},
+    this.executionOptions,
   });
 
   final String id;
@@ -525,10 +528,15 @@ class AxWorker {
   final String? providerToolName;
   final String? providerToolVersion;
   final Map<String, dynamic> modelOptions;
+  final AxWorkerExecutionOptions? executionOptions;
   final List<String> capabilities;
   final List<String> inputCapabilities;
 
   factory AxWorker.fromJson(Map<String, dynamic> json) => AxWorker(
+        executionOptions: json['executionOptions'] is Map
+            ? AxWorkerExecutionOptions.fromJson(
+                Map<String, dynamic>.from(json['executionOptions'] as Map))
+            : null,
         modelOptions: json['modelOptions'] is Map
             ? Map<String, dynamic>.from(json['modelOptions'] as Map)
             : const {},

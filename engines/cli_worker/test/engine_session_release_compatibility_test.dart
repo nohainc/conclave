@@ -20,12 +20,18 @@ void main() {
       ).create();
       addTearDown(() => root.delete(recursive: true));
 
-      Future<WorkerResult> executeRelease({
+      Future<WorkerResult?> executeRelease({
         required int releaseVersion,
         required String sessionFormatId,
         required List<String> compatibleFormatIds,
         required String requestId,
         required String prompt,
+        String? model,
+        bool modelSwitchSupported = true,
+        String sessionKey = 'direct-and-work-session',
+        ConversationBootstrap? bootstrap,
+        bool expectFailure = false,
+        String workerId = "worker-fixture",
       }) async {
         final profile =
             jsonDecode(
@@ -35,6 +41,12 @@ void main() {
                 )
                 as Map<String, Object?>;
         profile['releaseVersion'] = releaseVersion;
+        (profile['model'] as Map)['executionOptions'] = {
+          'schemaVersion': 1,
+          'discovery': 'profile_catalog',
+          'modelSwitchSupported': modelSwitchSupported,
+          'effortSupported': false,
+        };
         final session = profile['session']! as Map<String, Object?>;
         session['formatId'] = sessionFormatId;
         session['compatibleFormatIds'] = compatibleFormatIds;
@@ -141,14 +153,60 @@ void main() {
               prompt: prompt,
               timeoutMs: 10000,
               sessionPolicy: WorkerSessionPolicy.durableSession,
-              sessionKey: 'direct-and-work-session',
+              sessionKey: sessionKey,
+              model: model,
+              workerSession: WorkerSessionContext(
+                id: 'worker-session-fixture',
+                conversationId: 'conversation-fixture',
+                workerId: workerId,
+                baseContextRevision: bootstrap?.contextRevision ?? 0,
+                bootstrap: bootstrap,
+              ),
             ),
           );
+          if (expectFailure) {
+            expect(result, isA<WorkerErrorFrame>());
+            return null;
+          }
           expect(
             result,
             isA<WorkerResult>(),
             reason: '${result.toJson()} stderr=$engineStderr',
           );
+          // A stored native handle does not authorize another Conversation or
+          // certify ingestion of a newer canonical context revision.
+          for (final invalidScope in [
+            WorkerSessionContext(
+              id: 'worker-session-fixture',
+              conversationId: 'conversation-other',
+              workerId: 'worker-fixture',
+              baseContextRevision: 0,
+            ),
+            WorkerSessionContext(
+              id: 'worker-session-fixture',
+              conversationId: 'conversation-fixture',
+              workerId: 'worker-fixture',
+              baseContextRevision: (bootstrap?.turnRevision ?? 0) + 1,
+            ),
+          ]) {
+            final rejected = await exchange(
+              ExecuteRequest(
+                requestId:
+                    '$requestId-rejected-${invalidScope.baseContextRevision}',
+                assignmentId: requestId,
+                prompt: 'Must not reach provider',
+                timeoutMs: 10000,
+                sessionPolicy: WorkerSessionPolicy.durableSession,
+                sessionKey: sessionKey,
+                workerSession: invalidScope,
+              ),
+            );
+            expect(rejected, isA<WorkerErrorFrame>());
+            expect(
+              (rejected as WorkerErrorFrame).code,
+              WorkerIssueCode.sessionResumeFailed,
+            );
+          }
           return result as WorkerResult;
         } finally {
           await process.stdin.close();
@@ -163,9 +221,22 @@ void main() {
         sessionFormatId: 'antigravity-conversation-v1',
         compatibleFormatIds: const ['antigravity-conversation-v1'],
         requestId: 'release-1-start',
-        prompt: 'Start durable',
+        prompt: 'Start model A',
+        model: 'model-A',
       );
-      expect(first.output, 'Gemini answer');
+      expect(first!.output, 'Gemini answer');
+
+      // The fixture requires the exact new prompt, same model argument, and
+      // original native resume handle. Replayed history would fail its checks.
+      final continued = await executeRelease(
+        releaseVersion: 1,
+        sessionFormatId: 'antigravity-conversation-v1',
+        compatibleFormatIds: const ['antigravity-conversation-v1'],
+        requestId: 'release-1-next-turn',
+        prompt: 'Continue model A',
+        model: 'model-A',
+      );
+      expect(continued!.output, 'Gemini answer');
 
       final compatible = await executeRelease(
         releaseVersion: 2,
@@ -175,9 +246,10 @@ void main() {
           'antigravity-conversation-v2',
         ],
         requestId: 'release-2-resume',
-        prompt: 'Continue durable',
+        prompt: 'Continue model B',
+        model: 'model-B',
       );
-      expect(compatible.output, 'Gemini answer');
+      expect(compatible!.output, 'Gemini answer');
       final compatibleStateFile = stateDirectory
           .listSync()
           .whereType<File>()
@@ -188,6 +260,18 @@ void main() {
           jsonDecode(await compatibleStateFile.readAsString()) as Map;
       expect(compatibleState['profileReleaseVersion'], 2);
       expect(compatibleState['sessionFormatId'], 'antigravity-conversation-v2');
+      expect(
+        (compatibleState['workerSession'] as Map)['lastModelId'],
+        'model-B',
+      );
+      expect(
+        (compatibleState['workerSession'] as Map)['id'],
+        'worker-session-fixture',
+      );
+      expect(
+        (compatibleState['workerSession'] as Map)['nativeSessionId'],
+        'fixture-conversation-1',
+      );
 
       final incompatible = await executeRelease(
         releaseVersion: 3,
@@ -196,7 +280,7 @@ void main() {
         requestId: 'release-3-fresh-session',
         prompt: 'Continue after incompatible upgrade',
       );
-      expect(incompatible.output, 'Gemini answer');
+      expect(incompatible!.output, 'Gemini answer');
       final sessionFiles = stateDirectory.listSync().whereType<File>().where(
         (file) => file.uri.pathSegments.last.startsWith('session-'),
       );
@@ -204,6 +288,254 @@ void main() {
       expect(
         jsonDecode(await sessionFiles.single.readAsString())['sessionId'],
         'fixture-conversation-3',
+      );
+
+      await executeRelease(
+        releaseVersion: 4,
+        sessionFormatId: 'antigravity-conversation-v1',
+        compatibleFormatIds: ['antigravity-conversation-v1'],
+        requestId: 'no-switch-start',
+        prompt: 'Start model A',
+        model: 'model-A',
+        modelSwitchSupported: false,
+        sessionKey: 'no-switch-scope',
+      );
+      await executeRelease(
+        releaseVersion: 4,
+        sessionFormatId: 'antigravity-conversation-v1',
+        compatibleFormatIds: ['antigravity-conversation-v1'],
+        requestId: 'no-switch-failed',
+        prompt: 'Switch without resume failure',
+        model: 'model-B',
+        modelSwitchSupported: false,
+        sessionKey: 'no-switch-scope',
+        expectFailure: true,
+        bootstrap: ConversationBootstrap(
+          conversationId: 'conversation-fixture',
+          contextRevision: 0,
+          throughSequence: 2,
+          text: jsonEncode({
+            'history': [
+              {'kind': 'user_message', 'text': 'Start model A'},
+              {'kind': 'worker_response', 'text': 'Gemini answer'},
+            ],
+          }),
+        ),
+      );
+      final preserved = stateDirectory
+          .listSync()
+          .whereType<File>()
+          .where((file) => file.uri.pathSegments.last.startsWith('session-'))
+          .map((file) => jsonDecode(file.readAsStringSync()) as Map)
+          .singleWhere((state) => state['sessionKey'] == 'no-switch-scope');
+      expect(preserved['sessionId'], 'fixture-conversation-1');
+      expect(
+        preserved['workerSession'],
+        containsPair('lastModelId', 'model-A'),
+      );
+      final reconstructed = await executeRelease(
+        releaseVersion: 4,
+        sessionFormatId: 'antigravity-conversation-v1',
+        compatibleFormatIds: ['antigravity-conversation-v1'],
+        requestId: 'no-switch-reconstruct',
+        prompt: 'Switch without resume',
+        model: 'model-B',
+        modelSwitchSupported: false,
+        sessionKey: 'no-switch-scope',
+        bootstrap: ConversationBootstrap(
+          conversationId: 'conversation-fixture',
+          contextRevision: 0,
+          throughSequence: 2,
+          text: jsonEncode({
+            'history': [
+              {'kind': 'user_message', 'text': 'Start model A'},
+              {'kind': 'worker_response', 'text': 'Gemini answer'},
+            ],
+          }),
+        ),
+      );
+      expect(reconstructed!.output, 'Gemini answer');
+      final replacement = stateDirectory
+          .listSync()
+          .whereType<File>()
+          .where((file) => file.uri.pathSegments.last.startsWith('session-'))
+          .map((file) => jsonDecode(file.readAsStringSync()) as Map)
+          .singleWhere((state) => state['sessionKey'] == 'no-switch-scope');
+      expect(replacement['sessionId'], 'fixture-conversation-3');
+      expect(
+        replacement['workerSession'],
+        containsPair('conversationId', 'conversation-fixture'),
+      );
+      expect(
+        replacement['workerSession'],
+        containsPair('lastModelId', 'model-B'),
+      );
+      final next = await executeRelease(
+        releaseVersion: 4,
+        sessionFormatId: 'antigravity-conversation-v1',
+        compatibleFormatIds: ['antigravity-conversation-v1'],
+        requestId: 'no-switch-next',
+        prompt: 'Continue reconstructed',
+        model: 'model-B',
+        modelSwitchSupported: false,
+        sessionKey: 'no-switch-scope',
+        bootstrap: ConversationBootstrap(
+          conversationId: 'conversation-fixture',
+          contextRevision: 0,
+          throughSequence: 3,
+          text: '{"history":["This must not be replayed"]}',
+        ),
+      );
+      expect(next!.output, 'Gemini answer');
+
+      final priorHistory = <Map<String, Object?>>[
+        {
+          'sequence': 1,
+          'contextRevision': 1,
+          'kind': 'user_message',
+          'text': 'Earlier question',
+        },
+        {
+          'sequence': 2,
+          'contextRevision': 1,
+          'kind': 'worker_response',
+          'text': 'ChatGPT answer',
+        },
+      ];
+      ConversationBootstrap contextSnapshot(
+        int revision,
+        List<Map<String, Object?>> history,
+      ) => ConversationBootstrap(
+        conversationId: 'conversation-fixture',
+        contextRevision: revision,
+        turnRevision: revision + 1,
+        throughSequence: history.last['sequence'] as int,
+        text: jsonEncode({
+          'conversationId': 'conversation-fixture',
+          'throughSequence': history.last['sequence'],
+          'history': history,
+        }),
+      );
+      final bootstrappedWorker = await executeRelease(
+        releaseVersion: 4,
+        sessionFormatId: 'antigravity-conversation-v1',
+        compatibleFormatIds: ['antigravity-conversation-v1'],
+        requestId: 'other-worker-bootstrap',
+        prompt: 'Bootstrap other worker',
+        model: 'model-A',
+        sessionKey: 'other-worker-scope',
+        workerId: 'worker-gemini',
+        bootstrap: contextSnapshot(1, priorHistory),
+      );
+      expect(bootstrappedWorker!.output, 'Gemini answer');
+      final ownHistory = [
+        ...priorHistory,
+        {
+          'sequence': 3,
+          'contextRevision': 2,
+          'kind': 'user_message',
+          'text': 'Bootstrap other worker',
+        },
+        {
+          'sequence': 4,
+          'contextRevision': 2,
+          'metadata': {'workerSessionId': 'worker-session-fixture'},
+          'kind': 'worker_response',
+          'text': 'Gemini answer',
+        },
+      ];
+      final currentWorker = await executeRelease(
+        releaseVersion: 4,
+        sessionFormatId: 'antigravity-conversation-v1',
+        compatibleFormatIds: ['antigravity-conversation-v1'],
+        requestId: 'other-worker-current',
+        prompt: 'Continue current worker',
+        model: 'model-A',
+        sessionKey: 'other-worker-scope',
+        workerId: 'worker-gemini',
+        bootstrap: contextSnapshot(2, ownHistory),
+      );
+      expect(currentWorker!.output, 'Gemini answer');
+      final expandedHistory = [
+        ...ownHistory,
+        {
+          'sequence': 5,
+          'contextRevision': 3,
+          'kind': 'user_message',
+          'text': 'Continue current worker',
+        },
+        {
+          'sequence': 6,
+          'contextRevision': 3,
+          'metadata': {'workerSessionId': 'worker-session-fixture'},
+          'kind': 'worker_response',
+          'text': 'Gemini answer',
+        },
+        {
+          'sequence': 7,
+          'contextRevision': 4,
+          'kind': 'user_message',
+          'text': 'Other Worker follow-up',
+        },
+        {
+          'sequence': 8,
+          'contextRevision': 4,
+          'kind': 'worker_response',
+          'text': 'New ChatGPT answer',
+        },
+      ];
+      await executeRelease(
+        releaseVersion: 4,
+        sessionFormatId: 'antigravity-conversation-v1',
+        compatibleFormatIds: ['antigravity-conversation-v1'],
+        requestId: 'other-worker-failed-sync',
+        prompt: 'Sync returning worker failure',
+        model: 'model-A',
+        sessionKey: 'other-worker-scope',
+        workerId: 'worker-gemini',
+        bootstrap: contextSnapshot(4, expandedHistory),
+        expectFailure: true,
+      );
+      final stillBehind = stateDirectory
+          .listSync()
+          .whereType<File>()
+          .where((file) => file.uri.pathSegments.last.startsWith('session-'))
+          .map((file) => jsonDecode(file.readAsStringSync()) as Map)
+          .singleWhere((state) => state['sessionKey'] == 'other-worker-scope');
+      expect(
+        stillBehind['workerSession'],
+        containsPair('synchronizedContextRevision', 3),
+      );
+      expect(
+        stillBehind['workerSession'],
+        containsPair('synchronizedHistorySequence', 4),
+      );
+      final returningWorker = await executeRelease(
+        releaseVersion: 4,
+        sessionFormatId: 'antigravity-conversation-v1',
+        compatibleFormatIds: ['antigravity-conversation-v1'],
+        requestId: 'other-worker-sync',
+        prompt: 'Sync returning worker',
+        model: 'model-A',
+        sessionKey: 'other-worker-scope',
+        workerId: 'worker-gemini',
+        bootstrap: contextSnapshot(4, expandedHistory),
+      );
+      expect(returningWorker!.output, 'Gemini answer');
+      final synchronized = stateDirectory
+          .listSync()
+          .whereType<File>()
+          .where((file) => file.uri.pathSegments.last.startsWith('session-'))
+          .map((file) => jsonDecode(file.readAsStringSync()) as Map)
+          .singleWhere((state) => state['sessionKey'] == 'other-worker-scope');
+      expect(synchronized['sessionId'], 'fixture-conversation-1');
+      expect(
+        synchronized['workerSession'],
+        containsPair('synchronizedContextRevision', 5),
+      );
+      expect(
+        synchronized['workerSession'],
+        containsPair('synchronizedHistorySequence', 8),
       );
     },
   );

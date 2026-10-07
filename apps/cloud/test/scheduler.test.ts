@@ -728,3 +728,61 @@ describe("Project execution scheduler", () => {
     ).resolves.toBeNull();
   });
 });
+
+it("refuses silently replacing an accepted turn Profile release", async () => {
+  const target = await selectProjectExecutionTarget(
+    db([
+      candidate({
+        work_request_snapshot_json: JSON.stringify({
+          turnExecutionConfig: {
+            schemaVersion: 1,
+            workerId: "worker-a",
+            profileId: "chatgpt-codex",
+            profileReleaseVersion: 2,
+            modelId: null,
+            effort: null,
+          },
+        }),
+      }),
+    ]),
+    {
+      projectId: "project-a",
+      requesterUserId: "user-a",
+      role: "collaborator",
+      capabilities: ["repository"],
+      workRequestId: "request-a",
+    },
+  );
+  expect(target).toBeNull();
+});
+
+it("dispatches accepted Default model and effort even when later defaults differ", async () => {
+  const target = await selectProjectExecutionTarget(
+    db([
+      candidate({
+        work_request_snapshot_json: JSON.stringify({
+          turnExecutionConfig: {
+            schemaVersion: 1,
+            workerId: "worker-a",
+            profileId: "chatgpt-codex",
+            profileReleaseVersion: 3,
+            modelId: null,
+            effort: null,
+          },
+        }),
+      }),
+    ]),
+    {
+      projectId: "project-a",
+      requesterUserId: "user-a",
+      role: "collaborator",
+      capabilities: ["repository"],
+      workRequestId: "request-a",
+      model: "later-model",
+      reasoningEffort: "high",
+    },
+  );
+  expect(target).not.toBeNull();
+  expect(target!.model).toBeNull();
+  expect(target!.reasoningEffort).toBeNull();
+});

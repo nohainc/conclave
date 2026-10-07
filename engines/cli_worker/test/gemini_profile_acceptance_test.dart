@@ -232,6 +232,49 @@ void main() {
         containsAll(['provider_response_received', 'provider_working']),
       );
 
+      final statelessWithContext = await exchange(
+        ExecuteRequest(
+          requestId: 'gemini-stateless-context',
+          assignmentId: 'gemini-stateless-context',
+          prompt: 'Context stateless',
+          timeoutMs: 10000,
+          sessionPolicy: WorkerSessionPolicy.stateless,
+          statelessContext: ConversationBootstrap(
+            conversationId: 'C',
+            contextRevision: 0,
+            turnRevision: 1,
+            throughSequence: 0,
+            text: jsonEncode({
+              'schemaVersion': 1,
+              'kind': 'StatelessContext',
+              'conversationId': 'C',
+              'throughSequence': 0,
+              'history': [],
+              'context': {
+                'workflowState': {
+                  'revision': 0,
+                  'sequence': 0,
+                  'value': {
+                    'workflowId': 'chat',
+                    'workflowVersion': 1,
+                    'status': 'running',
+                  },
+                },
+              },
+            }),
+          ),
+        ),
+      );
+      expect(
+        statelessWithContext.terminal,
+        isA<WorkerResult>(),
+        reason: '${statelessWithContext.terminal.toJson()}',
+      );
+      expect(
+        (statelessWithContext.terminal as WorkerResult).output,
+        'Gemini answer',
+      );
+
       final durableStart = await exchange(
         ExecuteRequest(
           requestId: 'gemini-profile-durable-start',

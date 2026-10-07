@@ -297,6 +297,33 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         (sessionPolicy == 'durable_session' && sessionKey == null)) {
       return 'Assignment session policy is invalid';
     }
+    final statelessContext = rawPayload['statelessContext'];
+    if (statelessContext != null) {
+      if (sessionPolicy != 'stateless' || statelessContext is! Map)
+        return 'Invalid stateless Conversation context';
+      try {
+        ConversationBootstrap.fromJson(
+            Map<String, Object?>.from(statelessContext));
+      } on FormatException {
+        return 'Invalid stateless Conversation context';
+      }
+    }
+    final sessionContext = rawPayload['workerSession'];
+    if (sessionContext != null) {
+      try {
+        if (sessionContext is! Map || sessionPolicy != 'durable_session') {
+          return 'Assignment Worker Session is invalid';
+        }
+        final context = WorkerSessionContext.fromJson(
+          Map<String, Object?>.from(sessionContext),
+        );
+        if (context.workerId != rawPayload['workerId']) {
+          return 'Assignment Worker Session belongs to another Worker';
+        }
+      } on FormatException {
+        return 'Assignment Worker Session is invalid';
+      }
+    }
     if (rawPayload['snapshot'] == null &&
         rawPayload['objective'] == null &&
         rawPayload['role'] == null) {

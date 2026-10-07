@@ -422,6 +422,8 @@ extension _WorkstreamConfiguration on _WorkstreamPageState {
   }
 
   void _setStepBinding(String bindingId, Map<String, dynamic> binding) {
+    _composerBindings.remove(bindingId);
+    _workerPreferences.remove(bindingId);
     final bindings = _workConfig['bindings'] is Map
         ? Map<String, dynamic>.from(_workConfig['bindings'] as Map)
         : <String, dynamic>{};

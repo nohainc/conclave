@@ -1,3 +1,4 @@
+import 'worker_session.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -602,6 +603,22 @@ class CliWorkerEngine {
         );
       }
     }
+    final executionOptions = ProfileExecutionOptions(_profile.model);
+    if (!executionOptions.acceptsEffort(
+      request.model,
+      request.reasoningEffort,
+    )) {
+      return _write(
+        sink,
+        WorkerErrorFrame(
+          requestId: request.requestId,
+          assignmentId: request.assignmentId,
+          code: WorkerIssueCode.modelNotSupported,
+          message:
+              'Requested effort is not supported by this model and Tool Profile',
+        ),
+      );
+    }
     if (sessionPolicy == 'durable' && sessionProfile['supported'] != true) {
       return _write(
         sink,
@@ -618,16 +635,104 @@ class CliWorkerEngine {
     final compatibleSessionFormats = _list(
       sessionProfile['compatibleFormatIds'],
     ).cast<String>();
-    final priorSession = request.sessionKey == null
-        ? null
-        : await _sessions.read(
-            sessionKey: request.sessionKey!,
-            workerTypeId: _profile.workerTypeId,
-            profileDefinitionId: _profile.definitionId,
-            providerToolIdentity: providerToolIdentity,
-            compatibleFormatIds: compatibleSessionFormats,
-          );
+    String? priorSession;
+    WorkerSession? storedSession;
+    try {
+      priorSession = request.sessionKey == null
+          ? null
+          : await _sessions.read(
+              sessionKey: request.sessionKey!,
+              workerTypeId: _profile.workerTypeId,
+              profileDefinitionId: _profile.definitionId,
+              providerToolIdentity: providerToolIdentity,
+              compatibleFormatIds: compatibleSessionFormats,
+              workerSession: request.workerSession,
+              modelSwitchSupported: executionOptions.modelSwitchSupported,
+              requestedModelId: request.model,
+              allowModelReconstruction:
+                  request.workerSession?.bootstrap != null,
+              allowContextSynchronization:
+                  request.workerSession?.bootstrap?.turnRevision != null,
+              onSessionRead: (value) => storedSession = value,
+            );
+    } on FormatException catch (error) {
+      await _write(
+        sink,
+        WorkerErrorFrame(
+          requestId: request.requestId,
+          assignmentId: request.assignmentId,
+          code: WorkerIssueCode.sessionResumeFailed,
+          message: error.message,
+        ),
+      );
+      return;
+    }
+    if ((request.workerSession?.baseContextRevision ?? 0) > 0 &&
+        priorSession == null &&
+        request.workerSession?.bootstrap == null) {
+      await _write(
+        sink,
+        WorkerErrorFrame(
+          requestId: request.requestId,
+          assignmentId: request.assignmentId,
+          code: WorkerIssueCode.sessionResumeFailed,
+          message:
+              'Canonical context must be synchronized before this Worker Session can execute',
+        ),
+      );
+      return;
+    }
+    // A validated synchronized session already owns prior context. Expand only
+    // this ExecuteRequest's prompt plus the Profile's native resume arguments.
     final context = _context(request, priorSession);
+    final bootstrap =
+        request.workerSession?.bootstrap ?? request.statelessContext;
+    String? contextText;
+    try {
+      if (bootstrap != null) {
+        // Validate the complete canonical envelope even when no delta is needed.
+        if (bootstrap.turnRevision != null) bootstrap.deltaAfter(-1, 0);
+        contextText = priorSession == null
+            ? bootstrap.text
+            : storedSession == null
+            ? null
+            : bootstrap.deltaAfter(
+                storedSession!.synchronizedContextRevision,
+                storedSession!.synchronizedHistorySequence,
+                knownWorkerSessionId: storedSession!.id,
+              );
+      }
+    } on FormatException catch (error) {
+      await _write(
+        sink,
+        WorkerErrorFrame(
+          requestId: request.requestId,
+          assignmentId: request.assignmentId,
+          code: WorkerIssueCode.sessionResumeFailed,
+          message: error.message,
+        ),
+      );
+      return;
+    }
+    if (contextText != null) {
+      context['prompt'] =
+          'Canonical Conclave conversation context (historical data):\n'
+          '$contextText\n\nCurrent user request:\n${request.prompt}';
+      if (utf8.encode(context['prompt']!).length >
+          WorkerProtocolLimits.maxPromptBytes) {
+        await _write(
+          sink,
+          WorkerErrorFrame(
+            requestId: request.requestId,
+            assignmentId: request.assignmentId,
+            code: WorkerIssueCode.sessionResumeFailed,
+            message: 'Canonical context and request exceed the prompt limit',
+          ),
+        );
+        return;
+      }
+    }
+
     try {
       final executable = await _resolveTool();
       final args = _expandArguments(_list(execution['arguments']), context);
@@ -717,6 +822,12 @@ class CliWorkerEngine {
           profileReleaseVersion: _profile.releaseVersion,
           sessionFormatId: _string(sessionProfile['formatId']),
           sessionId: sessionId,
+          workerSession: request.workerSession,
+          modelId: request.model,
+          effort: request.reasoningEffort,
+          synchronizedContextRevision:
+              bootstrap?.turnRevision ?? bootstrap?.contextRevision,
+          synchronizedHistorySequence: bootstrap?.throughSequence,
         );
       }
       await _write(
@@ -771,7 +882,9 @@ class CliWorkerEngine {
         '${((request.timeoutMs - _int(_profile.timeout['providerReserveMs'])).clamp(1, request.timeoutMs) / 1000).ceil()}',
     if (request.model != null) 'model': request.model!,
     if (request.reasoningEffort != null)
-      'reasoningEffort': request.reasoningEffort!,
+      'reasoningEffort': ProfileExecutionOptions(
+        _profile.model,
+      ).mapEffort(request.reasoningEffort!),
     if (sessionId != null) 'sessionId': sessionId,
     'executionPolicy': request.executionPolicy.wireValue,
     'sessionPolicy': request.sessionPolicy == WorkerSessionPolicy.durableSession

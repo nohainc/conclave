@@ -1,0 +1,105 @@
+---
+// Component: WorkflowShowcase
+// Visualizes multi-step AI orchestration pipelines for research/knowledge and engineering
+---
+
+<div class="workflow-showcase-container" aria-label="Workflow execution pipelines">
+  <div class="workflow-tabs-header">
+    <div class="workflow-intro-text">
+      <strong>Orchestrate multiple steps with automated verification</strong>
+      <span>Move seamlessly from simple conversations to structured multi-step execution whenever a problem demands deep rigor.</span>
+    </div>
+  </div>
+
+  <div class="workflow-pipeline-grid">
+    <!-- Pipeline 1: Knowledge & Strategy Workflow -->
+    <div class="pipeline-card">
+      <div class="pipeline-card-header">
+        <span class="pipeline-tag pipeline-tag--general">Strategy & Research Pipeline</span>
+        <h3>Competitive Product Assessment</h3>
+      </div>
+      <div class="pipeline-steps">
+        <div class="pipe-step">
+          <div class="pipe-step-number">01</div>
+          <div class="pipe-step-content">
+            <strong>Deep Research & Extraction</strong>
+            <span class="pipe-worker">Worker: Claude 3.5 Sonnet</span>
+            <p>Scans competitor whitepapers, pricing tiers, and public API specs.</p>
+          </div>
+        </div>
+
+        <div class="pipe-connector" aria-hidden="true">↓</div>
+
+        <div class="pipe-step">
+          <div class="pipe-step-number">02</div>
+          <div class="pipe-step-content">
+            <strong>Data Synthesis & Matrix Creation</strong>
+            <span class="pipe-worker">Worker: Gemini Pro</span>
+            <p>Constructs structured comparison matrices and highlights feature trade-offs.</p>
+          </div>
+        </div>
+
+        <div class="pipe-connector" aria-hidden="true">↓</div>
+
+        <div class="pipe-step">
+          <div class="pipe-step-number">03</div>
+          <div class="pipe-step-content">
+            <strong>Executive Review & Recommendations</strong>
+            <span class="pipe-worker">Worker: GPT-4o</span>
+            <p>Delivers strategic action items with verified citations and team takeaways.</p>
+          </div>
+        </div>
+      </div>
+      <div class="pipe-summary-footer">
+        <span>✓ 14 sources analyzed</span>
+        <span>✓ 0 manual copy-pastes</span>
+        <span>✓ Verified artifact saved</span>
+      </div>
+    </div>
+
+    <!-- Pipeline 2: Technical & Engineering Workflow -->
+    <div class="pipeline-card">
+      <div class="pipeline-card-header">
+        <span class="pipeline-tag pipeline-tag--dev">Engineering & Quality Pipeline</span>
+        <h3>Feature Implementation & Verification</h3>
+      </div>
+      <div class="pipeline-steps">
+        <div class="pipe-step">
+          <div class="pipe-step-number">01</div>
+          <div class="pipe-step-content">
+            <strong>Code Implementation</strong>
+            <span class="pipe-worker">Worker: Codex / Claude Code CLI</span>
+            <p>Edits source files in isolated Workstream directory on connected Workspace.</p>
+          </div>
+        </div>
+
+        <div class="pipe-connector" aria-hidden="true">↓</div>
+
+        <div class="pipe-step">
+          <div class="pipe-step-number">02</div>
+          <div class="pipe-step-content">
+            <strong>Automated Test Execution</strong>
+            <span class="pipe-worker">Worker: Local Workspace Runtime</span>
+            <p>Executes integration test suite and collects exit codes and stack traces.</p>
+          </div>
+        </div>
+
+        <div class="pipe-connector" aria-hidden="true">↓</div>
+
+        <div class="pipe-step">
+          <div class="pipe-step-number">03</div>
+          <div class="pipe-step-content">
+            <strong>Independent Security & Quality Review</strong>
+            <span class="pipe-worker">Worker: Review Specialist Model</span>
+            <p>Validates regression safety, boundary conditions, and code quality before merge.</p>
+          </div>
+        </div>
+      </div>
+      <div class="pipe-summary-footer">
+        <span>✓ 42 tests passing</span>
+        <span>✓ 0 regressions</span>
+        <span>✓ Inspectable diff artifact</span>
+      </div>
+    </div>
+  </div>
+</div>

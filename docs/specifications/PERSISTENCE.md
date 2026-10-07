@@ -6,6 +6,24 @@ modules. The v8 schema in
 the clean development baseline. Workspace owns its local registry, Profiles,
 Engines, session state, logs, and Work Root in the local data directory.
 
+## Conversation persistence
+
+[0010_conversation_workflows.sql](../../apps/cloud/migrations-v8/0010_conversation_workflows.sql)
+adds Workflow-owned `conversations` and immutable `conversation_work_requests`
+associations. Accepted-request revisions advance atomically with Work creation
+and idempotency receipts; context revisions remain zero until materialization
+exists. No historical backfill or provider-session storage is introduced in Cloud.
+See [Conversation Continuity v1](CONVERSATION_CONTINUITY_V1.md).
+
+[0011_conversation_turns.sql](../../apps/cloud/migrations-v8/0011_conversation_turns.sql)
+adds immutable Conversation user messages and per-assignment worker turns.
+Assignment creation and status transitions produce/update turn records atomically
+through D1 triggers. Attribution is frozen from selection evidence; retries have
+separate records. Cloud stores only opaque logical session-scope references,
+never native CLI handles. Existing associated user messages are seeded from their
+immutable request inputs; historical assignments are not guessed/backfilled.
+See the Phase 4 lifecycle and release requirements in the continuity contract.
+
 ## D1 schema lifecycle
 
 `0001_conclave_v8.sql` has been applied to production and is now immutable,
@@ -65,6 +83,17 @@ stored in D1.
 ## Row and payload split
 
 D1 stores identifiers, relationships, statuses, compact JSON contracts, provenance, digests, and R2 references. Artifact content that is large or unstructured is written to R2 and represented by an immutable reference containing bucket, key, size, media type, and digest. Small content may use an inline form under the same artifact contract.
+
+## Canonical Conversation history
+
+Conclave D1 owns the append-only Conversation history: original user messages,
+completed Worker responses, workflow/execution facts, important artifact events,
+and context revision events. Transactional triggers record these facts alongside
+source changes. Source execution cleanup preserves history; deleting its owning
+Conversation is the retention boundary. Full recorded text is available through
+an authorized, bounded-cursor history API; provider-native sessions stay local to
+Workspace. See [Conversation Continuity v1](CONVERSATION_CONTINUITY_V1.md#phase-5--canonical-conversation-history)
+for the versioned contract, import limits, and ordered migration requirements.
 
 ## Work v1 state
 
@@ -164,3 +193,53 @@ deletion cascades receipts; authorization is rechecked before every replay.
 See [Mutation idempotency v1](MUTATION_IDEMPOTENCY.md). Existing deployed databases
 need this table created before deploying the updated routes; no migration chain
 is introduced for the unreleased v8 baseline.
+
+
+Phase 15 exact-history context versions follow accepted Conversation request
+revisions. Snapshot base context is the owning request revision minus one; history
+sequence separately freezes dispatch-time canonical facts. Migration
+[0014_exact_history_context.sql](../../apps/cloud/migrations-v8/0014_exact_history_context.sql)
+initializes existing context counters and updates implicit turn attribution without
+rewriting historical snapshots. Workspace-local sessions separately track the
+successfully consumed request revision and history sequence. See
+[Conversation Continuity Phase 15](CONVERSATION_CONTINUITY_V1.md#phase-15--different-worker-continuity).
+
+
+### Structured context assembly
+
+The provider-independent Context Engine materializes versioned context facts from
+Conclave's canonical history and immutable Work Request configuration. Workflow
+state comes from the scoped Work Request and its tasks at dispatch. No additional
+table or Phase 16 migration is introduced; native sessions remain Workspace-owned.
+See [Phase 16](CONVERSATION_CONTINUITY_V1.md#phase-16--provider-independent-context-engine).
+
+
+Workflow-aware context reads the scoped Work Request task/dependency graph,
+completed prerequisite outputs, immutable instructions and scoped artifact
+identity/digests. Core separates execution context from persistent Conversation
+facts and rejects invalid graphs. No Phase 17 tables or migration are introduced.
+See [Phase 17](CONVERSATION_CONTINUITY_V1.md#phase-17--workflow-aware-context).
+
+
+### Logical WorkflowRun ownership
+
+`conversation_workflow_runs` holds immutable Conversation/user-message/Work Request
+ownership and pinned workflow identity; Work Request remains the single lifecycle
+owner. `conversation_turns.workflow_run_id` links each actual invocation to that
+logical execution. Existing `runs` are runtime attempts, including explicit retry
+attempts. Migration `0015_conversation_workflow_runs.sql` backfills ownership without
+rewriting historical turn evidence or canonical history. See
+[Phase 18](CONVERSATION_CONTINUITY_V1.md#phase-18--workflowrun-and-workerturn-ownership).
+
+
+### WorkflowStepRun identity and run lifecycle evidence
+
+`conversation_workflow_step_runs` stores stable per-task identity, WorkflowRun
+ownership, definition step ID and role. `workflow_tasks` own step lifecycle/results;
+immutable Worker turns own actual selection and link via `workflow_step_run_id`.
+Work Requests own run status and drive persisted WorkflowRun `started_at` and
+`completed_at` evidence. Migration `0016_workflow_step_runs.sql` backfills these
+associations/timestamps without rewriting turn evidence or canonical history.
+Accepted Chat/Work requests create queued tasks and StepRuns in the acceptance
+transaction, before scheduling. See
+[Phase 19](CONVERSATION_CONTINUITY_V1.md#phase-19--workflowrun-and-workflowsteprun-data-model).

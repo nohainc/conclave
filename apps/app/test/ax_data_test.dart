@@ -49,6 +49,94 @@ class _ApiResponseClient extends http.BaseClient {
 }
 
 void main() {
+  test('canonical history loader preserves complete text and scoped pagination',
+      () async {
+    final text = 'x' * 26000;
+    final client = _JsonClient({
+      'conversationId': 'C',
+      'historyRevision': 5,
+      'throughSequence': 4,
+      'nextCursor': {'afterSequence': 3, 'throughSequence': 4},
+      'entries': [
+        {
+          'id': 'H',
+          'conversationId': 'C',
+          'sequence': 3,
+          'kind': 'worker_response',
+          'eventType': 'message.worker_created',
+          'text': text,
+          'metadata': {'modelId': 'model-x'},
+          'occurredAt': 'now',
+          'recordedAt': 'now'
+        }
+      ]
+    }, statusCode: 200);
+    final source =
+        AxApiClient(baseUrl: 'https://cloud.test/api', client: client);
+    final page = await source.loadConversationHistory(
+        workstreamId: 'W',
+        conversationId: 'C',
+        afterSequence: 2,
+        throughSequence: 4,
+        limit: 1);
+    expect(page.entries.single.text, text);
+    expect(page.nextCursor!['throughSequence'], 4);
+    expect(client.lastRequest!.url.path,
+        '/api/workstreams/W/conversations/C/history');
+    expect(client.lastRequest!.url.queryParameters['afterSequence'], '2');
+  });
+
+  test(
+      'accepted execution configuration survives history copies and cache projection',
+      () {
+    final config = {
+      'schemaVersion': 1,
+      'workerId': 'worker-a',
+      'profileId': 'profile-a',
+      'profileReleaseVersion': 3,
+      'modelId': null,
+      'effort': null,
+      'workflowId': 'chat',
+      'workflowVersion': 1
+    };
+    final request =
+        AxWorkRequest.fromJson({'id': 'turn-a', 'executionConfig': config});
+    expect(request.executionConfig!.toJson(), config);
+    expect(request.copyWith(status: 'completed').executionConfig!.toJson(),
+        config);
+    expect(
+        AxWorkRequest.fromJson({'id': 'historical'}).executionConfig, isNull);
+  });
+
+  test(
+      'workflow policy metadata fails closed and stays outside execution snapshots',
+      () {
+    final unknown = AxBuiltinWorkflow.fromJson({'id': 'future', 'steps': []});
+    expect(unknown.executionPolicy.userSelectsModel, isFalse);
+    expect(unknown.composerBindingId, isNull);
+    final workflow = AxBuiltinWorkflow.fromJson({
+      'id': 'future',
+      'steps': [],
+      'executionPolicy': {
+        'userSelectsWorker': false,
+        'userSelectsModel': true,
+        'userSelectsEffort': false,
+        'multiStep': true,
+        'multiWorker': true,
+        'automaticContinuation': true,
+        'requiresApprovalBetweenSteps': true,
+      },
+      'composerBindingId': null,
+    });
+    expect(workflow.executionPolicy.userSelectsModel, isTrue);
+    expect(workflow.executionPolicy.userSelectsEffort, isFalse);
+    expect(workflow.executionPolicy.multiStep, isTrue);
+    expect(workflow.executionPolicy.multiWorker, isTrue);
+    expect(workflow.executionPolicy.automaticContinuation, isTrue);
+    expect(workflow.executionPolicy.requiresApprovalBetweenSteps, isTrue);
+    expect(workflow.snapshot.containsKey('executionPolicy'), isFalse);
+    expect(workflow.snapshot.containsKey('composerBindingId'), isFalse);
+  });
   test(
       'Chat defaults omit model and effort overrides and send the plain workflow ID',
       () async {
@@ -99,6 +187,7 @@ void main() {
     final client = _JsonClient({
       'workRequest': {
         'id': 'r',
+        'conversationId': 'conversation-r',
         'status': 'completed',
         'originalRequest': '# Prompt',
         'workflowId': 'direct',
@@ -112,6 +201,7 @@ void main() {
     final result = await api.loadWorkRequest(workRequestId: 'r');
     expect(client.lastRequest!.url.path, '/work-requests/r');
     expect(result.id, 'r');
+    expect(result.conversationId, 'conversation-r');
     expect(result.text, '# Result');
     expect(result.originalRequest, '# Prompt');
     await expectLater(api.loadWorkRequest(workRequestId: 'other'),

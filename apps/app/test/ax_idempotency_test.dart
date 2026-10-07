@@ -29,12 +29,14 @@ class _Source extends AxFixtureDataSource {
         })
       ];
   @override
-  Future<String> createWorkRequest(
-      {required String workstreamId,
-      required String workflowId,
-      required String prompt,
-      List<Map<String, dynamic>> attachments = const [],
-      String? idempotencyKey}) async {
+  Future<String> createWorkRequest({
+    required String workstreamId,
+    required String workflowId,
+    required String prompt,
+    List<Map<String, dynamic>> attachments = const [],
+    String? idempotencyKey,
+    AxTurnExecutionSelection? executionSelection,
+  }) async {
     workKeys.add(idempotencyKey);
     if (loseResponse) throw StateError('response lost');
     return 'saved-request';
@@ -43,10 +45,12 @@ class _Source extends AxFixtureDataSource {
   bool loseResponse = true;
   int validations = 0;
   @override
-  Future<List<String>> validateWorkRequestEligibility(
-      {required String workstreamId,
-      required String workflowId,
-      List<Map<String, dynamic>> attachments = const []}) async {
+  Future<List<String>> validateWorkRequestEligibility({
+    required String workstreamId,
+    required String workflowId,
+    List<Map<String, dynamic>> attachments = const [],
+    AxTurnExecutionSelection? executionSelection,
+  }) async {
     validations++;
     return [];
   }
@@ -141,16 +145,17 @@ void main() {
       currentUserId: 'human',
       onBackToProject: () {},
       onArchive: () {},
-      onRunWork: (prompt, workflow, inputs, key) => source.createWorkRequest(
-          workstreamId: 'W',
-          workflowId: workflow,
-          prompt: prompt,
-          attachments: inputs,
-          idempotencyKey: key),
+      onRunWork: (prompt, workflow, inputs, key, selection) =>
+          source.createWorkRequest(
+              workstreamId: 'W',
+              workflowId: workflow,
+              prompt: prompt,
+              attachments: inputs,
+              idempotencyKey: key),
     ))));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'Implement this');
-    await tester.tap(find.byTooltip('Run Work'));
+    await tester.tap(find.byTooltip('Send request'));
     await tester.pumpAndSettle();
     expect(source.workKeys, hasLength(1));
     expect(cache.peek('W').requests.single.status, 'failed');
@@ -161,7 +166,7 @@ void main() {
     await tester.pump(const Duration(seconds: 20));
     expect(source.workKeys, hasLength(1));
     source.loseResponse = false;
-    await tester.tap(find.byTooltip('Run Work'));
+    await tester.tap(find.byTooltip('Send request'));
     await tester.pumpAndSettle();
     expect(source.workKeys, hasLength(2));
     expect(source.workKeys[1], source.workKeys[0]);

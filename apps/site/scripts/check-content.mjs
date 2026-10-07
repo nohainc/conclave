@@ -5,47 +5,76 @@ const routes = new Map([
   ["/", "index.html"],
   ["/how-it-works/", "how-it-works/index.html"],
   ["/workers/", "workers/index.html"],
+  ["/use-cases/", "use-cases/index.html"],
   ["/security/", "security/index.html"],
   ["/privacy/", "privacy/index.html"],
   ["/terms/", "terms/index.html"],
   ["/downloads/", "downloads/index.html"],
 ]);
 
+function decodeHtml(str) {
+  if (!str) return "";
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
 /** @type {Record<string, {title: string, heading: string, content: string[]}>} */
 const expected = {
   "/": {
-    title: "Conclave AX — Turn team decisions into verified AI work",
-    heading: "Turn team decisions into verified AI work.",
+    title: "Conclave AX — Bring your people and AI together",
+    heading: "Bring your people and AI together.",
     content: [
+      "SHARED AI WORKSPACE",
       "Workstreams",
-      "Discuss",
-      "Work Request",
-      "Safe parallel work",
-      "Accounts and privacy",
+      "ONE PROJECT. PEOPLE + AI.",
+      "Share access. Keep credentials private.",
+      "One conversation. Everyone stays in context.",
+      "When a chat isn't enough",
+      "Designed for how people actually collaborate.",
+      "Open Conclave AX",
     ],
   },
   "/how-it-works/": {
-    title: "How Conclave AX works",
-    heading: "From team discussion to a verified result.",
+    title: "How Conclave AX works — Shared AI Workspace",
+    heading: "From shared ideas to verified results.",
     content: [
       "Create a Project",
+      "Invite your people",
+      "Connect & share AI",
       "Open a Workstream",
-      "Discuss",
-      "Run a Work Request",
-      "Coordinate",
-      "Verify and continue",
+      "Collaborate in context",
+      "Run Workflows when needed",
     ],
   },
   "/workers/": {
-    title: "Workers — Conclave AX",
-    heading:
-      "Treat models and tools as capabilities, not as the whole workflow.",
-    content: ["Codex", "Claude Code", "OpenAI", "Anthropic"],
+    title: "AI & Workers — Conclave AX",
+    heading: "Connect and share your favorite AI models.",
+    content: ["ChatGPT", "Claude", "Google Gemini", "Coding Agents"],
+  },
+  "/use-cases/": {
+    title: "Use Cases — Conclave AX",
+    heading: "AI is better when you can use it together.",
+    content: [
+      "Friends & Family",
+      "Teams & Companies",
+      "Software & Engineering Teams",
+    ],
   },
   "/security/": {
     title: "Security — Conclave AX",
-    heading: "Share the project without sharing the whole machine.",
-    content: ["Project", "Workspace", "Worker", "AI Account"],
+    heading: "Share AI access without sharing your secrets.",
+    content: [
+      "Project Membership",
+      "AI Account Privacy",
+      "Workspace Isolation",
+      "Audit & Attribution",
+    ],
   },
   "/privacy/": {
     title: "Privacy — Conclave AX",
@@ -79,32 +108,38 @@ for (const [route, file] of routes) {
   const source = await readFile(`${dist}${file}`, "utf8");
   sources.set(route, source);
   const contract = expected[route];
-  const title = source.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim();
-  const description = source.match(
-    /<meta\b[^>]*name="description"[^>]*content="([^"]+)"/i,
-  )?.[1];
+  const rawTitle = source.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim();
+  const title = decodeHtml(rawTitle);
+  const description = decodeHtml(
+    source.match(
+      /<meta\b[^>]*name="description"[^>]*content="([^"]+)"/i,
+    )?.[1],
+  );
   const canonical = source.match(
     /<link\b[^>]*rel="canonical"[^>]*href="([^"]+)"/i,
   )?.[1];
   const ogImage = source.match(
     /<meta\b[^>]*property="og:image"[^>]*content="([^"]+)"/i,
   )?.[1];
-  const heading = source.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1];
-  const visibleText = source
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ");
+  const rawHeading = source.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1];
+  const heading = decodeHtml(rawHeading);
+  const visibleText = decodeHtml(
+    source
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " "),
+  );
 
   if (title !== contract.title)
-    errors.push(`${route}: title changed or missing`);
+    errors.push(`${route}: title changed or missing (found: "${title}", expected: "${contract.title}")`);
   if (!description?.trim()) errors.push(`${route}: description missing`);
   if (!canonical?.startsWith("https://conclaveax.com/"))
     errors.push(`${route}: canonical URL is malformed`);
   if (!ogImage?.startsWith("https://conclaveax.com/"))
     errors.push(`${route}: OpenGraph image URL is malformed`);
   if (!heading?.includes(contract.heading))
-    errors.push(`${route}: critical h1 content changed or missing`);
+    errors.push(`${route}: critical h1 content changed or missing (found: "${heading}", expected to contain: "${contract.heading}")`);
   for (const phrase of contract.content) {
     if (!visibleText.includes(phrase))
       errors.push(`${route}: required content missing: ${phrase}`);
@@ -121,8 +156,6 @@ if (appLinks.length < 3)
   );
 if (!home.includes('href="/#product"'))
   errors.push("homepage: Product navigation anchor is missing");
-if (!home.includes('href="/#workstreams"'))
-  errors.push("homepage: Workstreams navigation anchor is missing");
 
 for (const [route, source] of sources) {
   const githubLinks = [
@@ -139,10 +172,6 @@ for (const [route, source] of sources) {
   if (/\b(?:architecture\s+)?v\d+\b/i.test(source))
     errors.push(
       `${route}: architecture version language must not be public product copy`,
-    );
-  if (/shared workspace/i.test(source))
-    errors.push(
-      `${route}: collaborative Workspace terminology must not return`,
     );
 
   for (const [, href] of source.matchAll(

@@ -32,6 +32,8 @@ export interface ProfileExecutionContext {
   model?: string;
   reasoningEffort?: string;
   sessionId?: string;
+  /** Last successful model for resume capability checks; null means Default. */
+  sessionModel?: string | null;
 }
 
 export interface ProfileExecutionInput {
@@ -166,6 +168,36 @@ function validateContext(
         "Reasoning effort exceeds the Engine limit",
         "model_not_supported",
       );
+  }
+  if (context.reasoningEffort !== undefined) {
+    const selected = profile.model.catalog?.find(
+      (entry) =>
+        entry.id ===
+        (context.model ?? profile.model.executionOptions?.defaultModelId),
+    );
+    const values =
+      selected?.supportedReasoningEfforts ??
+      profile.model.supportedReasoningEfforts ??
+      [];
+    if (
+      profile.model.executionOptions?.effortSupported === false ||
+      !values.includes(context.reasoningEffort)
+    ) {
+      throw new ProfileInterpreterError(
+        "Effort is not supported by the selected model/Profile",
+        "model_not_supported",
+      );
+    }
+  }
+  if (
+    context.sessionId !== undefined &&
+    profile.model.executionOptions?.modelSwitchSupported === false &&
+    (context.model ?? null) !== (context.sessionModel ?? null)
+  ) {
+    throw new ProfileInterpreterError(
+      "Profile cannot change model within this native session",
+      "session_resume_failed",
+    );
   }
   if (context.sessionId !== undefined) {
     requireContextText("sessionId", context.sessionId);
@@ -397,7 +429,12 @@ function expandTemplate(
   const substitutions: Record<string, string | undefined> = {
     prompt: context.prompt,
     model: context.model,
-    reasoningEffort: context.reasoningEffort,
+    reasoningEffort:
+      context.reasoningEffort === undefined
+        ? undefined
+        : (profile.model.executionOptions?.effortMapping?.[
+            context.reasoningEffort
+          ] ?? context.reasoningEffort),
     sessionId: context.sessionId,
     timeoutMs: timeout.timeoutMs,
     timeoutSeconds: timeout.timeoutSeconds,

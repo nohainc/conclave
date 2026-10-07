@@ -548,3 +548,37 @@ describe("Tool Profile v1 pure interpreter", () => {
     expect(args).toContain('model_reasoning_effort="xhigh"');
   });
 });
+
+it("maps generic effort values and rejects invalid model/effort combinations", () => {
+  const profile = loadProfile("chatgpt-codex.v1");
+  profile.model.executionOptions = {
+    schemaVersion: 1,
+    discovery: "profile_catalog",
+    modelSwitchSupported: true,
+    effortSupported: true,
+    effortMapping: { high: "provider-high" },
+  };
+  const args = expandExecutionArguments(
+    profile,
+    context({ model: "gpt-6.1-sol", reasoningEffort: "high" }),
+  );
+  expect(args).toContain('model_reasoning_effort="provider-high"');
+  expect(() =>
+    expandExecutionArguments(
+      profile,
+      context({ model: "o3", reasoningEffort: "ultra" }),
+    ),
+  ).toThrow(/Effort/);
+  profile.model.executionOptions.modelSwitchSupported = false;
+  expect(() =>
+    expandExecutionArguments(
+      profile,
+      context({
+        model: "o3",
+        sessionPolicy: "durable",
+        sessionId: "native",
+        sessionModel: "gpt-6.1-sol",
+      }),
+    ),
+  ).toThrow(/change model/);
+});

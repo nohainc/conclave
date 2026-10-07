@@ -97,6 +97,10 @@ class AxReadCacheCodec {
         'createdAt': value.createdAt,
       };
   Map<String, dynamic> work(AxWorkRequest value) => {
+        'conversationId': value.conversationId,
+        'executionConfig': value.executionConfig?.toJson(),
+        'workflowRun': value.workflowRun?.toJson(),
+        'turns': value.turns.map((turn) => turn.toJson()).toList(),
         'id': value.id,
         'requestedByName': value.requestedByName,
         'requestedByUserId': value.requestedByUserId,
@@ -157,6 +161,17 @@ class AxReadCacheCodec {
           },
       };
   Map<String, dynamic> workflow(AxBuiltinWorkflow value) => {
+        'executionPolicy': {
+          'userSelectsWorker': value.executionPolicy.userSelectsWorker,
+          'userSelectsModel': value.executionPolicy.userSelectsModel,
+          'userSelectsEffort': value.executionPolicy.userSelectsEffort,
+          'multiStep': value.executionPolicy.multiStep,
+          'multiWorker': value.executionPolicy.multiWorker,
+          'automaticContinuation': value.executionPolicy.automaticContinuation,
+          'requiresApprovalBetweenSteps':
+              value.executionPolicy.requiresApprovalBetweenSteps,
+        },
+        'composerBindingId': value.composerBindingId,
         'id': value.id,
         'version': value.version,
         'name': value.name,

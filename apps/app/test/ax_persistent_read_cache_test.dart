@@ -10,6 +10,7 @@ import 'package:conclave_app/src/ax/sync/ax_discussion_cache.dart';
 import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
 import 'package:conclave_app/src/ax/sync/persistence/ax_persistent_read_cache.dart';
 import 'ax_fixture_data.dart';
+import 'conversation_turn_fixture.dart';
 
 AxStore store(MemoryAxReadCacheBackend backend, {String user = 'A'}) {
   final value = AxStore(const AxFixtureDataSource(), readCacheBackend: backend);
@@ -67,6 +68,112 @@ class DelayedBackend extends MemoryAxReadCacheBackend {
 }
 
 void main() {
+  test('per-turn attribution survives authenticated history persistence',
+      () async {
+    final backend = MemoryAxReadCacheBackend();
+    final first = store(backend);
+    await first.hydrateReadCache();
+    final turn = turnFixture();
+    final row = AxWorkRequest.fromJson({
+      'id': 'R',
+      'workflowRun': {
+        'schemaVersion': 1,
+        'id': 'workflow-run-R',
+        'conversationId': 'conversation-C',
+        'userMessageId': 'message-user-R',
+        'workRequestId': 'R',
+        'workflowId': 'direct',
+        'workflowVersion': 2,
+        'status': 'running',
+        'triggerMessageId': 'message-user-R',
+        'startedAt': 'first-start',
+        'completedAt': null,
+        'stepRuns': [
+          {
+            'schemaVersion': 1,
+            'id': 'step-run-task-R',
+            'workflowRunId': 'workflow-run-R',
+            'taskId': 'task-R',
+            'stepId': 'implement',
+            'role': 'implement',
+            'workerId': 'worker-a',
+            'modelId': 'model-x',
+            'effort': 'medium',
+            'workerSessionId': 'worker-session-opaque',
+            'baseContextRevision': 0,
+            'status': 'completed',
+            'result': '**Recorded answer**',
+            'startedAt': 'first-start',
+            'completedAt': 'completed',
+            'workerTurnIds': [turn.id]
+          }
+        ],
+        'runtimeRunIds': ['runtime-1', 'runtime-2'],
+        'workerTurnIds': [turn.id],
+        'createdAt': 'now',
+        'updatedAt': 'now'
+      },
+      'turns': [turn.toJson()]
+    });
+    first.syncEngine.update(first.workHistory.query('W'),
+        (_) => AxWorkHistory(requests: [row], initialLoaded: true));
+    await first.persistence.flush();
+    final second = store(backend);
+    await second.hydrateReadCache();
+    expect(second.workHistory.peek('W').requests.single.turns.single.toJson(),
+        turn.toJson());
+    expect(
+        row.copyWith(status: 'completed').turns.single.toJson(), turn.toJson());
+    expect(second.workHistory.peek('W').requests.single.workflowRun!.toJson(),
+        row.workflowRun!.toJson());
+    expect(row.copyWith(status: 'completed').workflowRun!.id, 'workflow-run-R');
+    final restoredRun =
+        second.workHistory.peek('W').requests.single.workflowRun!;
+    expect(restoredRun.stepRuns.single.result, '**Recorded answer**');
+    expect(restoredRun.triggerMessageId, 'message-user-R');
+    expect(restoredRun.startedAt, 'first-start');
+    expect(restoredRun.stepRuns.single.id, turn.workflowStepRunId);
+    first.dispose();
+    second.dispose();
+  });
+
+  test('workflow control policy survives authenticated read-cache hydration',
+      () async {
+    final backend = MemoryAxReadCacheBackend();
+    final first = store(backend);
+    await first.hydrateReadCache();
+    first.syncEngine.update(
+        first.catalogs.workflows,
+        (_) => [
+              AxBuiltinWorkflow.fromJson({
+                'id': 'future',
+                'version': 1,
+                'steps': [],
+                'name': 'Future',
+                'executionPolicy': {
+                  'userSelectsModel': true,
+                  'userSelectsEffort': false,
+                  'multiStep': true,
+                  'multiWorker': true,
+                  'requiresApprovalBetweenSteps': true
+                },
+                'composerBindingId': 'future-binding',
+              })
+            ]);
+    await first.persistence.flush();
+    final second = store(backend);
+    await second.hydrateReadCache();
+    final restored =
+        second.syncEngine.peek(second.catalogs.workflows).data!.single;
+    expect(restored.executionPolicy.userSelectsModel, isTrue);
+    expect(restored.executionPolicy.userSelectsEffort, isFalse);
+    expect(restored.executionPolicy.multiStep, isTrue);
+    expect(restored.executionPolicy.multiWorker, isTrue);
+    expect(restored.executionPolicy.requiresApprovalBetweenSteps, isTrue);
+    expect(restored.composerBindingId, 'future-binding');
+    first.dispose();
+    second.dispose();
+  });
   test('late authentication cannot reactivate persistence after logout',
       () async {
     final source = SessionSource();

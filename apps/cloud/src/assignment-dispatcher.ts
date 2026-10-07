@@ -1,3 +1,5 @@
+import { loadConversationBootstrap } from "./routes/conversation-bootstrap.js";
+import { createHash } from "node:crypto";
 import {
   type AssignmentResultPayload,
   type AssignmentFailurePayload,
@@ -8,8 +10,39 @@ import {
   canonicalExecutionErrorCode,
   executionErrorMessage,
 } from "@conclave/protocol";
-import { selectProjectExecutionTarget } from "./scheduler.js";
+import {
+  selectProjectExecutionTarget,
+  type ExecutionTarget,
+} from "./scheduler.js";
 import { recordExecutionWorkspaceAudit } from "./workspace-audit.js";
+
+/** Conclave scope reference only; does not expose or certify a native CLI thread. */
+export function conversationWorkerSessionReference(
+  target: Pick<
+    ExecutionTarget,
+    | "workspaceId"
+    | "workerId"
+    | "profileDefinitionId"
+    | "profileReleaseVersion"
+    | "conversationId"
+  >,
+  sessionPolicy: string,
+  sessionKey: unknown,
+): string | null {
+  return sessionPolicy === "durable_session"
+    ? `worker-session-${createHash("sha256")
+        .update(
+          JSON.stringify([
+            target.workspaceId,
+            target.workerId,
+            target.profileDefinitionId,
+            target.conversationId ?? null,
+            sessionKey,
+          ]),
+        )
+        .digest("hex")}`
+    : null;
+}
 
 export interface TaskToDispatch {
   readonly id: string;
@@ -83,6 +116,7 @@ async function dispatchWorkspaceWorkerAssignment(
       workerId: params.explicitWorkerId,
       excludeIndependenceKeys: params.excludeIndependenceKeys,
       model: task.model,
+      reasoningEffort: task.reasoningEffort,
       executionClass: task.executionClass,
       readOnly: task.readOnly,
       workstreamId: task.workstreamId,
@@ -138,9 +172,29 @@ async function dispatchWorkspaceWorkerAssignment(
   const assignmentInput = { ...(task.input ?? {}) };
   delete assignmentInput.sessionPolicy;
   delete assignmentInput.sessionKey;
+  let bootstrap;
+  if (target.conversationId) {
+    const requestId = target.workRequestId ?? task.workRequestId;
+    if (!requestId)
+      throw new Error("Conversation bootstrap requires a Work request");
+    bootstrap = await loadConversationBootstrap(
+      env.CONCLAVE_DB,
+      target.conversationId,
+      requestId,
+      target.baseContextRevision ?? 0,
+      sessionPolicy === "stateless" ? "stateless" : "bootstrap",
+      taskId,
+    );
+  }
   const snapshot = {
     ...target.permissionSnapshot,
     selectionExplanation: target.selectionExplanation,
+    baseContextRevision: target.baseContextRevision ?? 0,
+    workerSessionId: conversationWorkerSessionReference(
+      target,
+      sessionPolicy,
+      sessionKey,
+    ),
   };
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO worker_assignments
@@ -264,6 +318,21 @@ async function dispatchWorkspaceWorkerAssignment(
       timeoutMs,
       sessionPolicy,
       ...(sessionKey !== undefined ? { sessionKey } : {}),
+      ...(target.conversationId && sessionPolicy === "durable_session"
+        ? {
+            workerSession: {
+              schemaVersion: 1,
+              id: snapshot.workerSessionId,
+              conversationId: target.conversationId,
+              workerId: target.workerId,
+              baseContextRevision: target.baseContextRevision ?? 0,
+              ...(bootstrap ? { bootstrap } : {}),
+            },
+          }
+        : {}),
+      ...(bootstrap && sessionPolicy === "stateless"
+        ? { statelessContext: bootstrap }
+        : {}),
       idempotencyKey,
     },
     input: assignmentInput,

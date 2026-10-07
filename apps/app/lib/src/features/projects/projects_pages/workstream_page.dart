@@ -34,8 +34,12 @@ class WorkstreamPage extends StatefulWidget {
   final VoidCallback onBackToProject;
   final VoidCallback onArchive;
   final Future<void> Function(String name)? onRename;
-  final Future<String> Function(String prompt, String workflowId,
-      List<Map<String, dynamic>> attachments, String idempotencyKey)? onRunWork;
+  final Future<String> Function(
+      String prompt,
+      String workflowId,
+      List<Map<String, dynamic>> attachments,
+      String idempotencyKey,
+      AxTurnExecutionSelection? executionSelection)? onRunWork;
   final Stream<Map<String, dynamic>>? realtimeEvents;
   final int initialTab;
 
@@ -142,6 +146,86 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   List<AxWorker> _projectWorkers = const [];
   List<AxWorker> _eligibleWorkers = const [];
   late Map<String, dynamic> _workConfig;
+  final Map<String, Map<String, dynamic>> _composerBindings = {};
+  // Execution preferences are scoped to this form and composer binding, never
+  // persisted as Conversation state or copied into another Workstream.
+  final Map<String, Map<String, Map<String, dynamic>>> _workerPreferences = {};
+
+  void _rememberWorkerSelection(
+      String bindingId, Map<String, dynamic> binding) {
+    final workerId = (binding['workerId'] ?? binding['worker_id'])?.toString();
+    if (workerId == null || workerId.isEmpty) return;
+    final value = _reconcileComposerBinding(binding);
+    (_workerPreferences[bindingId] ??= {})[workerId] = {
+      if (value['model'] != null) 'model': value['model'],
+      if (value['reasoningEffort'] != null)
+        'reasoningEffort': value['reasoningEffort'],
+      if (value['reasoning_effort'] != null && value['reasoningEffort'] == null)
+        'reasoningEffort': value['reasoning_effort'],
+    };
+  }
+
+  Map<String, dynamic> get _composerWorkConfig => {
+        ..._workConfig,
+        'bindings': {
+          if (_workConfig['bindings'] is Map)
+            ...Map<String, dynamic>.from(_workConfig['bindings'] as Map).map(
+                (key, value) => MapEntry(
+                    key,
+                    value is Map
+                        ? _reconcileComposerBinding(
+                            Map<String, dynamic>.from(value))
+                        : value)),
+          ..._composerBindings.map(
+              (key, value) => MapEntry(key, _reconcileComposerBinding(value))),
+        },
+      };
+  Map<String, dynamic> _reconcileComposerBinding(Map<String, dynamic> value) {
+    final binding = Map<String, dynamic>.from(value);
+    final workerId = binding['workerId'] ?? binding['worker_id'];
+    final worker = _projectWorkers.where((w) => w.id == workerId).firstOrNull;
+    final options = worker?.executionOptions;
+    if (options == null) return binding;
+    final selection = options.reconcileSelection(
+      model: binding['model']?.toString(),
+      effort: (binding['reasoningEffort'] ?? binding['reasoning_effort'])
+          ?.toString(),
+    );
+    binding.remove('model');
+    binding.remove('reasoningEffort');
+    binding.remove('reasoning_effort');
+    if (selection.model != null) binding['model'] = selection.model;
+    if (selection.effort != null) binding['reasoningEffort'] = selection.effort;
+    return binding;
+  }
+
+  Map<String, dynamic> _composerBinding(String bindingId) {
+    final bindings = _composerWorkConfig['bindings'] as Map;
+    return Map<String, dynamic>.from(bindings[bindingId] as Map? ?? const {});
+  }
+
+  void _setComposerBinding(String bindingId, Map<String, dynamic> binding) =>
+      _updateWorkSettings(() {
+        final reconciled = _reconcileComposerBinding(binding);
+        _composerBindings[bindingId] = reconciled;
+        _rememberWorkerSelection(bindingId, reconciled);
+      });
+  void _onWorkerChanged(String bindingId, String workerId) {
+    if (!_eligibleWorkers.any((worker) => worker.id == workerId)) return;
+    final current = _composerBinding(bindingId);
+    if ((current['workerId'] ?? current['worker_id']) == workerId) return;
+    _rememberWorkerSelection(bindingId, current);
+    final binding = current
+      ..remove('worker_id')
+      ..remove('model')
+      ..remove('reasoningEffort')
+      ..remove('reasoning_effort')
+      ..remove('fallbackWorkerId')
+      ..['workerId'] = workerId;
+    binding.addAll(_workerPreferences[bindingId]?[workerId] ?? const {});
+    _setComposerBinding(bindingId, binding);
+  }
+
   bool _loadingWorkChoices = true;
   bool _savingWorkConfig = false;
   final _workSettingsChanges = ValueNotifier<int>(0);
@@ -229,6 +313,23 @@ class _WorkstreamPageState extends State<WorkstreamPage>
             worker.catalogLifecycleState == 'active' &&
             worker.catalogVisibilityState == 'visible')
         .toList();
+    for (final entry in _workerPreferences.entries) {
+      for (final workerId in entry.value.keys.toList()) {
+        _rememberWorkerSelection(
+            entry.key, {'workerId': workerId, ...entry.value[workerId]!});
+      }
+    }
+    final bindings = _composerWorkConfig['bindings'] as Map;
+    for (final entry in bindings.entries) {
+      if (entry.value is Map) {
+        final binding = Map<String, dynamic>.from(entry.value as Map);
+        final workerId = binding['workerId'] ?? binding['worker_id'];
+        if (_projectWorkers.any((worker) =>
+            worker.id == workerId && worker.executionOptions != null)) {
+          _composerBindings[entry.key.toString()] = binding;
+        }
+      }
+    }
   }
 
   void _subscribeCatalogs() {
@@ -262,7 +363,9 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     }, fireImmediately: false);
     _cancelWorkers = _catalogs.engine.watch(_catalogs.workers, (state) {
       if (!mounted) return;
-      _updateWorkSettings(() => _applyWorkers(state.data ?? const []));
+      if (state.hasData) {
+        _updateWorkSettings(() => _applyWorkers(state.data!));
+      }
     }, fireImmediately: false);
   }
 
@@ -367,6 +470,14 @@ class _WorkstreamPageState extends State<WorkstreamPage>
   @override
   void didUpdateWidget(WorkstreamPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.workstream.id != widget.workstream.id ||
+        oldWidget.project.id != widget.project.id ||
+        oldWidget.currentUserId != widget.currentUserId ||
+        oldWidget.dataSource != widget.dataSource) {
+      _composerBindings.clear();
+      _workerPreferences.clear();
+      _workConfig = Map<String, dynamic>.from(widget.workstream.workConfig);
+    }
     if (oldWidget.catalogs != widget.catalogs ||
         oldWidget.dataSource != widget.dataSource) {
       _subscribeCatalogs();
@@ -396,6 +507,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       unawaited(_refreshWorkTimeline());
     }
     if (oldWidget.workstream.id != widget.workstream.id) {
+      _composerBindings.clear();
       _discussionController.clear();
       _followWork = _followChat = true;
     }
@@ -752,30 +864,29 @@ class _WorkstreamPageState extends State<WorkstreamPage>
       );
 
   void _onModelChanged(String stepKind, String model) {
-    final bindings = _workConfig['bindings'] is Map
-        ? Map<String, dynamic>.from(_workConfig['bindings'] as Map)
+    if ((_composerBinding(stepKind)['model']?.toString().trim() ?? '') ==
+        model.trim()) {
+      return;
+    }
+    final bindings = _composerWorkConfig['bindings'] is Map
+        ? Map<String, dynamic>.from(_composerWorkConfig['bindings'] as Map)
         : <String, dynamic>{};
     final rawBinding = bindings[stepKind];
     final binding = rawBinding is Map
         ? Map<String, dynamic>.from(rawBinding)
         : <String, dynamic>{};
     final updated = Map<String, dynamic>.from(binding);
-    updated.remove('reasoningEffort');
-    updated.remove('reasoning_effort');
     if (model.trim().isEmpty) {
       updated.remove('model');
     } else {
       updated['model'] = model.trim();
     }
-    _setStepBinding(stepKind, updated);
-    if (_canConfigureWork) {
-      unawaited(_saveWorkConfig(_workConfig));
-    }
+    _setComposerBinding(stepKind, updated);
   }
 
   void _onReasoningEffortChanged(String stepKind, String reasoningEffort) {
-    final bindings = _workConfig['bindings'] is Map
-        ? Map<String, dynamic>.from(_workConfig['bindings'] as Map)
+    final bindings = _composerWorkConfig['bindings'] is Map
+        ? Map<String, dynamic>.from(_composerWorkConfig['bindings'] as Map)
         : <String, dynamic>{};
     final rawBinding = bindings[stepKind];
     final binding = rawBinding is Map
@@ -788,10 +899,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
     } else {
       updated['reasoningEffort'] = reasoningEffort.trim();
     }
-    _setStepBinding(stepKind, updated);
-    if (_canConfigureWork) {
-      unawaited(_saveWorkConfig(_workConfig));
-    }
+    _setComposerBinding(stepKind, updated);
   }
 
   _WorkComposer _workComposer() => _WorkComposer(
@@ -802,7 +910,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
         currentUserName: widget.currentUserName,
         workflow: _workflow,
         workflowCatalog: _workflowCatalog,
-        workConfig: _workConfig,
+        workConfig: _composerWorkConfig,
         projectWorkers: _projectWorkers,
         eligibleWorkers: _eligibleWorkers,
         loadingWorkflows: _loadingWorkflows,
@@ -833,6 +941,7 @@ class _WorkstreamPageState extends State<WorkstreamPage>
             widget.dataSource == null ? null : _cancelFailedWorkRequest,
         onWorkflowChanged: (value) =>
             _updateWorkSettings(() => _workflow = value),
+        onWorkerChanged: _onWorkerChanged,
         onModelChanged: _onModelChanged,
         onReasoningEffortChanged: _onReasoningEffortChanged,
         onOpenSettings: () => _openWorkSettings(context),

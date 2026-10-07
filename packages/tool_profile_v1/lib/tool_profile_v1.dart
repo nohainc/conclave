@@ -1,3 +1,5 @@
+import 'src/worker_execution_options.dart';
+export 'src/worker_execution_options.dart';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -278,6 +280,23 @@ class EngineProfile {
       'session.resumeArguments',
       max: 32,
     );
+    ProfileExecutionOptions(_object(json['model'], 'model'))
+        .validate(durableSessions: session['supported'] == true);
+    final declaredOptions = _object(json['model'], 'model')['executionOptions'];
+    if (declaredOptions is Map &&
+        declaredOptions['effortSupported'] == true &&
+        [
+          execution['arguments'],
+          ...(compatibilityOverrides as List)
+              .whereType<Map>()
+              .where((override) => override['executionArguments'] != null)
+              .map((override) => override['executionArguments'])
+        ].any((arguments) => !jsonEncode([arguments, execution['stdin']])
+            .contains('{{reasoningEffort}}'))) {
+      throw const FormatException(
+          'Supported effort requires a provider invocation mapping');
+    }
+
     _validateArgumentStrings(
       _object(json['model'], 'model')['arguments'],
       'model.arguments',

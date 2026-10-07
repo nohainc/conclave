@@ -169,3 +169,57 @@ describe("profile reasoning configuration", () => {
     },
   );
 });
+
+it("validates selected effort and models against the selected signed Profile", async () => {
+  const { validateWorkflowWorkerEligibility } =
+    await import("../src/routes/workstream-policy.js");
+  const { BUILTIN_WORKFLOWS } = await import("@conclave/core");
+  const row = {
+    workspaceId: "WS",
+    workerTypeId: "generic-worker",
+    activationState: "enabled",
+    readinessState: "ready",
+    executionProfileJson: JSON.stringify({
+      session: { supported: true },
+      model: {
+        supported: true,
+        unknownModelPolicy: "profile_allowlist",
+        allowlist: ["a", "b"],
+        supportedReasoningEfforts: ["brief", "deep"],
+        catalog: [
+          { id: "a", name: "A", supportedReasoningEfforts: ["deep"] },
+          { id: "b", name: "B", supportedReasoningEfforts: [] },
+        ],
+      },
+    }),
+  };
+  const db = { prepare: () => ({ bind: () => ({ first: async () => row }) }) };
+  const env = {
+    CONCLAVE_DB: db,
+  } as unknown as import("../src/routes/http-security.js").SecurityEnv;
+  for (const [model, effort, invalid] of [
+    ["a", "deep", false],
+    ["a", "brief", true],
+    ["b", "deep", true],
+    ["other", null, true],
+  ] as const) {
+    const result = await validateWorkflowWorkerEligibility(
+      env,
+      "P",
+      "W",
+      BUILTIN_WORKFLOWS.chat,
+      {
+        chat: {
+          workerId: "worker",
+          model,
+          ...(effort ? { reasoningEffort: effort } : {}),
+        },
+      },
+    );
+    expect(
+      result.issues.some(
+        (issue) => issue.code === "profile_execution_option_unavailable",
+      ),
+    ).toBe(invalid);
+  }
+});

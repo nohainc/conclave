@@ -53,6 +53,33 @@ extension _WorkstreamActions on _WorkstreamPageState {
     final attachments = List<Map<String, dynamic>>.from(_workAttachments);
     final workflowId = _workflow.split(':').first;
     final workflowVersion = int.tryParse(_workflow.split(':v').last) ?? 1;
+    final selectedWorkflow =
+        _workflowCatalog.where((w) => w.reference == _workflow).firstOrNull;
+    final bindingId = selectedWorkflow?.composerBindingId;
+    final bindings = _composerWorkConfig['bindings'];
+    final rawBinding =
+        bindings is Map && bindingId != null ? bindings[bindingId] : null;
+    final binding = rawBinding is Map
+        ? Map<String, dynamic>.from(rawBinding)
+        : <String, dynamic>{};
+    final workerId = (binding['workerId'] ?? binding['worker_id'])?.toString();
+    final worker = [..._eligibleWorkers, ..._projectWorkers]
+        .where((w) => w.id == workerId)
+        .firstOrNull;
+    String? optional(dynamic value) =>
+        value is String && value.trim().isNotEmpty ? value.trim() : null;
+    final executionSelection =
+        workerId == null || workerId.isEmpty || bindingId == null
+            ? null
+            : AxTurnExecutionSelection(
+                workerId: workerId,
+                workflowVersion: workflowVersion,
+                profileId: worker?.profileDefinitionId,
+                profileReleaseVersion: worker?.profileReleaseVersion,
+                modelId: optional(binding['model']),
+                effort: optional(
+                    binding['reasoningEffort'] ?? binding['reasoning_effort']),
+              );
     final workstreamId = widget.workstream.id;
     final workCache = _workHistoryCache;
     final workflowName = _currentWorkflows
@@ -73,7 +100,9 @@ extension _WorkstreamActions on _WorkstreamPageState {
           workflowName: workflowName,
           requestedByUserId: widget.currentUserId,
           attachments: attachments,
-          execute: submit);
+          executionSelection: executionSelection,
+          execute: (prompt, workflow, inputs, key) =>
+              submit(prompt, workflow, inputs, key, executionSelection));
     } catch (error) {
       if (!mounted ||
           widget.workstream.id != workstreamId ||
@@ -253,7 +282,8 @@ extension _WorkstreamActions on _WorkstreamPageState {
           if (snapshot.hasError) {
             return SizedBox(
               height: height,
-              child: const Center(child: Text('Could not load Run details.')),
+              child:
+                  const Center(child: Text('Could not load request details.')),
             );
           }
           if (!snapshot.hasData) {
@@ -302,9 +332,9 @@ extension _WorkstreamActions on _WorkstreamPageState {
       sessionStrategy = await showDialog<String>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Retry Implement'),
+          title: const Text('Retry request'),
           content: Text(
-            '$recommendation\n\nChoose how the retry should use provider context.',
+            '$recommendation\n\nChoose whether to continue with the previous context or start fresh.',
           ),
           actions: [
             TextButton(
@@ -338,13 +368,14 @@ extension _WorkstreamActions on _WorkstreamPageState {
           .refreshRequest(widget.workstream.id, workRequestId, supersede: true)
           .catchError((Object _) {}));
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Retrying ${step.kind} Step.')),
+        SnackBar(content: Text('Retrying your request.')),
       );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not retry this Step. Check Worker readiness.'),
+          content:
+              Text('Could not retry your request. Check Worker readiness.'),
         ),
       );
     }
@@ -364,12 +395,12 @@ extension _WorkstreamActions on _WorkstreamPageState {
           .refreshRequest(widget.workstream.id, workRequestId, supersede: true)
           .catchError((Object _) {}));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Run cancelled.')),
+        const SnackBar(content: Text('Request cancelled.')),
       );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not cancel this Run.')),
+        const SnackBar(content: Text('Could not cancel this request.')),
       );
     }
   }

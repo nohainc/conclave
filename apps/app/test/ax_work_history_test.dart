@@ -264,8 +264,8 @@ void main() {
   });
 
   Widget page(String id,
-          {Future<String> Function(
-                  String, String, List<Map<String, dynamic>>, String)?
+          {Future<String> Function(String, String, List<Map<String, dynamic>>,
+                  String, AxTurnExecutionSelection?)?
               onRun}) =>
       MaterialApp(
           home: Scaffold(
@@ -345,12 +345,12 @@ void main() {
       (tester) async {
     await size(tester);
     final submit = Completer<String>();
-    await tester
-        .pumpWidget(page('w', onRun: (_, __, ___, key) => submit.future));
+    await tester.pumpWidget(
+        page('w', onRun: (_, __, ___, key, selection) => submit.future));
     source.pending.last.complete(AxWorkRequestPage(requests: []));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Send this Work');
-    await tester.tap(find.byTooltip('Run Work'));
+    await tester.tap(find.byTooltip('Send request'));
     await tester.pump();
     expect(cache.peek('w').requests.single.id, startsWith('local-'));
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));

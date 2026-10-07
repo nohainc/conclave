@@ -5,6 +5,94 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 export const requiredProductionSmokeColumns = Object.freeze({
+  conversation_workflow_step_runs: [
+    "id",
+    "workflow_run_id",
+    "task_id",
+    "step_id",
+    "role",
+    "created_at",
+  ],
+  conversation_workflow_runs: [
+    "started_at",
+    "completed_at",
+    "id",
+    "conversation_id",
+    "user_message_id",
+    "work_request_id",
+    "workflow_id",
+    "workflow_version",
+    "created_at",
+  ],
+  conversation_history_entries: [
+    "id",
+    "conversation_id",
+    "sequence",
+    "schema_version",
+    "kind",
+    "event_type",
+    "actor_type",
+    "actor_id",
+    "work_request_id",
+    "turn_id",
+    "artifact_id",
+    "source_id",
+    "text",
+    "metadata_json",
+    "deduplication_key",
+    "occurred_at",
+    "recorded_at",
+  ],
+  conversation_user_messages: [
+    "id",
+    "conversation_id",
+    "work_request_id",
+    "author_user_id",
+    "text",
+    "created_at",
+  ],
+  conversation_turns: [
+    "workflow_step_run_id",
+    "workflow_run_id",
+    "id",
+    "conversation_id",
+    "user_message_id",
+    "work_request_id",
+    "assignment_id",
+    "task_id",
+    "step_kind",
+    "workflow_id",
+    "workflow_version",
+    "worker_id",
+    "worker_type_id",
+    "worker_display_name",
+    "profile_id",
+    "profile_version",
+    "model_id",
+    "effort",
+    "worker_session_id",
+    "base_context_revision",
+    "status",
+    "started_at",
+    "completed_at",
+    "result_text",
+    "created_at",
+  ],
+  conversations: [
+    "id",
+    "workstream_id",
+    "workflow_id",
+    "workflow_version",
+    "conversation_revision",
+    "context_revision",
+    "created_at",
+    "updated_at",
+  ],
+  conversation_work_requests: [
+    "conversation_id",
+    "work_request_id",
+    "conversation_revision",
+  ],
   mutation_receipts: [
     "user_id",
     "scope",
@@ -95,6 +183,34 @@ export const requiredProductionSmokeColumns = Object.freeze({
 });
 
 const tableDefinitionSources = Object.freeze({
+  conversation_workflow_step_runs: [
+    "apps/cloud/migrations-v8/0016_workflow_step_runs.sql",
+    "conversation_workflow_step_runs",
+  ],
+  conversation_workflow_runs: [
+    "apps/cloud/migrations-v8/0015_conversation_workflow_runs.sql",
+    "conversation_workflow_runs",
+  ],
+  conversation_history_entries: [
+    "apps/cloud/migrations-v8/0012_canonical_conversation_history.sql",
+    "conversation_history_entries",
+  ],
+  conversation_user_messages: [
+    "apps/cloud/migrations-v8/0011_conversation_turns.sql",
+    "conversation_user_messages",
+  ],
+  conversation_turns: [
+    "apps/cloud/migrations-v8/0011_conversation_turns.sql",
+    "conversation_turns",
+  ],
+  conversations: [
+    "apps/cloud/migrations-v8/0010_conversation_workflows.sql",
+    "conversations",
+  ],
+  conversation_work_requests: [
+    "apps/cloud/migrations-v8/0010_conversation_workflows.sql",
+    "conversation_work_requests",
+  ],
   mutation_receipts: [
     "apps/cloud/migrations-v8/0001_conclave_v8.sql",
     "mutation_receipts",
@@ -122,6 +238,22 @@ const tableDefinitionSources = Object.freeze({
 });
 
 const indexDefinitionSources = Object.freeze({
+  idx_conversation_history_request: [
+    "apps/cloud/migrations-v8/0012_canonical_conversation_history.sql",
+    "conversation_history_entries",
+  ],
+  idx_conversation_history_turn: [
+    "apps/cloud/migrations-v8/0012_canonical_conversation_history.sql",
+    "conversation_history_entries",
+  ],
+  idx_conversation_turns_request: [
+    "apps/cloud/migrations-v8/0011_conversation_turns.sql",
+    "conversation_turns",
+  ],
+  idx_conversation_turns_history: [
+    "apps/cloud/migrations-v8/0011_conversation_turns.sql",
+    "conversation_turns",
+  ],
   idx_runtime_installation_active: [
     "apps/cloud/migrations-v8/0001_conclave_v8.sql",
     "workspace_runtime_identities",
@@ -156,12 +288,12 @@ function extractCreateIndexDefinition(sql, indexName) {
   const escapedIndexName = indexName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = sql.match(
     new RegExp(
-      `CREATE UNIQUE INDEX\\s+${escapedIndexName}\\s+ON\\s+[\\w]+\\s*\\([\\s\\S]*?\\)\\s+WHERE\\s+[\\s\\S]*?;`,
+      `CREATE(?: UNIQUE)? INDEX\\s+${escapedIndexName}\\s+ON\\s+[\\w]+\\s*\\([\\s\\S]*?\\)(?:\\s+WHERE\\s+[\\s\\S]*?)?\\s*;`,
       "i",
     ),
   );
   if (!match) {
-    throw new Error(`Missing canonical CREATE UNIQUE INDEX for ${indexName}`);
+    throw new Error(`Missing canonical CREATE INDEX for ${indexName}`);
   }
   return match[0].replace(/;\s*$/, "");
 }
@@ -174,10 +306,33 @@ export const requiredProductionSmokeTableDefinitions = Object.freeze(
           join(repositoryRoot, migrationPath),
           "utf8",
         );
-        const sourceDefinition = extractCreateTableDefinition(
+        let sourceDefinition = extractCreateTableDefinition(
           migrationSql,
           sourceTableName,
         );
+        if (
+          tableName === "conversation_turns" ||
+          tableName === "conversation_workflow_runs"
+        ) {
+          const columns = [
+            "0015_conversation_workflow_runs.sql",
+            "0016_workflow_step_runs.sql",
+          ].flatMap((path) => {
+            const evolution = readFileSync(
+              join(repositoryRoot, "apps/cloud/migrations-v8", path),
+              "utf8",
+            );
+            return [
+              ...evolution.matchAll(
+                new RegExp(`ALTER TABLE ${tableName} ADD COLUMN ([^;]+);`, "g"),
+              ),
+            ].map((match) => match[1]);
+          });
+          sourceDefinition = sourceDefinition.replace(
+            "created_at TEXT NOT NULL,",
+            `created_at TEXT NOT NULL, ${columns.join(", ")},`,
+          );
+        }
         const definition = sourceDefinition.replace(
           new RegExp(`^(CREATE TABLE\\s+)${sourceTableName}\\b`, "i"),
           `$1${tableName}`,

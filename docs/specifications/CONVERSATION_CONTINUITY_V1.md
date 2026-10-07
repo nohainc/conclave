@@ -1,0 +1,948 @@
+# Multi-Worker Conversation Continuity v1
+
+**Status:** implemented through Phase 21, including structured context materialization.
+**Boundary:** Conclave Core and Human Product Protocol. **Contract version:** 1.
+
+Project → Workstream → Conversation → Work Requests is the product ownership
+model for current manual AI interactions. A Conversation identifies the workflow;
+a Workflow defines execution, while bindings select the Worker, model and effort.
+Human team Discussion remains separate.
+
+## Domain model and initial definitions
+
+`Conversation` has `id`, `workstreamId`, `workflowId`, `workflowVersion`,
+`conversationRevision`, `contextRevision`, `createdAt`, and `updatedAt`.
+Identity, Workstream ownership and Workflow version are immutable.
+
+`WorkflowDefinition` has `id`, `type`, `version`, `capabilities`,
+`configurationSchema`, and `execution` (a pinned execution Workflow ID/version).
+Definitions live in provider-independent Core. Capabilities are the union of the
+pinned graph's required Step capabilities. The configuration schema describes
+optional string `workerId`, `model`, and `reasoningEffort` choices and disallows
+other properties. Choices are still stored and validated through existing
+Workstream bindings; Phase 1 does not add a configuration-write endpoint or
+duplicate that state.
+
+| Product Workflow | Type/version | Execution Workflow | Binding |
+| --- | --- | --- | --- |
+| `chat` | `manual`, v1 | `chat:v1` | `chat` |
+| `work` | `manual`, v1 | `direct:v2` | `direct` |
+
+Product definition and execution graph versions are separate. New execution
+graphs must not silently change existing product definitions. Work's stable
+execution ID remains `direct`; snapshots, retries and AX catalog IDs are preserved.
+
+Future graph/custom workflows can use existing Task/dependency/Run infrastructure.
+No new graph IDs, custom editor, provider driver, or single-invocation-per-request
+assumption is introduced. Existing multi-step workflows remain executable but do
+not yet acquire Conversations. Historical `direct:v1` requests remain unassociated.
+
+## Creation and revisions
+
+Initially there is one implicit Conversation per Workstream and current manual
+Workflow. The first eligible Chat/Work request creates it lazily. Its ID is
+`conversation-` plus SHA-256 of the JSON array `[workstreamId, workflowId]`;
+it contains no provider handle. Empty Workstreams return no Conversations until
+a request is accepted. No explicit create/reset/rename/delete/Workflow-switch
+operation exists in this phase.
+
+Acceptance atomically stores the Work Request, creates/increments its Conversation,
+stores an immutable association with the acceptance revision, and commits the Run,
+audit and optional idempotency receipt in the same D1 batch.
+
+`conversationRevision` counts accepted Work Requests, including requests that
+later fail or are cancelled. Provider progress/results do not increment it.
+Validation failure or a rolled-back batch changes nothing. Idempotent replay and
+Step retry do not create new associations or revisions. Concurrent new submissions
+receive distinct revisions through the serialized database transaction.
+
+`contextRevision` starts and remains at zero in Phase 1. It reserves the revision
+of materialized canonical context, not the count of provider messages. Both counters
+are nonnegative and monotonic; context cannot exceed conversation revision.
+Database guards prevent changing identity or existing associations.
+
+## Human API
+
+- `GET /api/workflows/definitions` returns `{ workflows: WorkflowDefinition[] }`
+  for current manual definitions. Like the existing built-in catalog, this is
+  product metadata and supports conditional reads.
+- `GET /api/workstreams/:id/conversations` returns
+  `{ conversations: Conversation[] }` after Workstream `view` authorization.
+  No native provider data is included.
+- Existing create-request routes still use execution IDs (`chat`/`direct`). They
+  automatically associate current manual requests and return `conversationId`
+  in `workRequest`. Optional `conversationId` must match the Workstream and
+  selected manual Workflow; other/incompatible IDs fail 400.
+- Work history/detail reads include nullable `conversationId`. Historical
+  unassociated requests return null. AX retains it in typed history/detail models
+  and history copies.
+
+Existing execution snapshots and catalog responses are unchanged. Historical
+attribution still comes from immutable snapshots and execution evidence.
+
+## Persistence and deployment
+
+[0010_conversation_workflows.sql](../../apps/cloud/migrations-v8/0010_conversation_workflows.sql)
+is an additive feature migration on the fresh-start v8 baseline. Already-applied
+migrations remain unchanged. It creates `conversations` and
+`conversation_work_requests`, constraints and immutable/monotonic guards. It
+neither rewrites historical requests nor backfills guessed context; it adds no
+legacy architecture compatibility layer.
+
+Apply the new ordered migration before deploying updated Cloud routes. Production
+schema preflight checks both tables and definitions. Follow the existing
+[production runbook](../operations/PRODUCTION_PROVISIONING.md) and
+[persistence contract](PERSISTENCE.md). This implementation phase does not perform
+a production migration or deployment.
+
+## Continuity limits for later phases
+
+Native provider session keys and local Engine state remain unchanged. Conversation
+identity does not yet drive session-key derivation, replay history, transfer context,
+summarize messages, or prove which revision a Worker consumed. Model/effort defaults
+remain shared Workstream binding settings; submitted selections remain immutable.
+Switching Workers can resume an older local thread missing intervening turns,
+as recorded in the [Phase 0 audit](../architecture/CONVERSATION_CONTINUITY_PHASE_0_AUDIT.md).
+
+Later phases must define canonical turns/context ownership, applied revisions,
+provider catch-up, multiple Conversations, switching/reset semantics and concurrent
+submission policy. Native handles and credentials remain Workspace/Engine-owned;
+Core remains provider-independent.
+
+## Workflow execution policy (Phase 2)
+
+Every product Workflow definition includes `executionPolicy: WorkflowCapabilities`.
+These product controls are distinct from the existing `capabilities` array of
+required Worker execution capabilities and from access/permission policy.
+
+| Capability | Chat | Work | Meaning |
+| --- | --- | --- | --- |
+| `userSelectsWorker` | true | true | User may configure the logical Worker selection. |
+| `userSelectsModel` | true | true | User may select a supported model or Default. |
+| `userSelectsEffort` | true | true | User may choose an effort supported by the selected model/Profile. |
+| `multiStep` | false | false | One request uses a graph with more than one Step when true. |
+| `multiWorker` | false | false | The workflow supports distinct Worker selections for its Steps when true. |
+| `automaticContinuation` | false | false | The executor advances downstream Steps automatically when true; this does not generate new user requests. |
+| `requiresApprovalBetweenSteps` | false | false | The workflow has human approval gates between Steps when true. |
+
+The execution catalog response adds the same policy plus `composerBindingId`.
+Single-step entries identify their actual binding (`chat`, `direct`, or `research`).
+Current multi-step graphs return null, retain per-Step settings, and advertise
+`multiStep`, `multiWorker`, and `automaticContinuation` as true. Their selection
+flags remain true because users can configure each Step's bindings; they have no
+single global Worker/model/effort selection in the composer. Current graphs do not
+require approval between Steps.
+
+Core declares controls explicitly by versioned Workflow reference. Catalog
+projection requires a declared policy and checks `multiStep` against the graph;
+new Workflow releases cannot silently inherit a guessed policy. Future graph
+workflows can declare different choice flags, but their execution implementation
+must support any advertised continuation/approval behavior before publication.
+Phase 2 does not introduce approval gates or new automatic execution behavior.
+
+AX reads metadata instead of branching on Chat/Work IDs to select composer bindings
+and controls. Model and effort choices are independently gated by policy; effort
+choices additionally intersect the Profile's selected-model options. Worker
+assignment/configuration affordances are only shown for a declared single binding
+with user Worker selection enabled. Shared per-Step settings remain the configuration
+surface for graphs. Missing metadata defaults to no selectable composer choices
+until refreshed, rather than guessing control permissions.
+
+The authenticated read-cache DTO preserves policy and binding metadata. AX strips
+these presentation fields from its executable `snapshot` projection, and Cloud
+never adds them to historical execution snapshots. Profile validation, Project
+permissions, Worker readiness, and server authorization remain independently
+required; UI flags cannot grant execution or filesystem authority.
+
+Phase 2 adds no database migration. Deploy the updated catalog/API with AX so its
+composer receives the metadata. Phase 1's pending migration requirement remains
+unchanged; this phase performs no production deployment.
+
+## Phase 3 — Next-turn defaults and accepted configuration
+
+Composer selections are next-turn defaults. AX captures an immutable
+`executionSelection` before asynchronous readiness checks or submission. Manual
+Chat/Work requests carry Worker, selected model and effort explicitly, including
+null for Default, together with the selected Workflow version. Saved Workstream
+bindings remain defaults for future requests; they do not change accepted turns.
+
+Cloud validates the selection and resolves the authoritative signed Tool Profile
+identity and release. A stale supplied Profile claim returns 409 for refresh.
+The immutable Work Request snapshot contains `turnExecutionConfig` schema version
+1: `workerId`, `profileId`, `profileReleaseVersion`, `modelId`, `effort`,
+`workflowId`, and `workflowVersion`. History list/detail responses expose this as
+`executionConfig`, retained by AX and its authenticated read cache. Profile and
+Workflow versions pin interpretation of the turn. Null model/effort means the CLI
+Default was requested; it does not claim to know which model the provider actually
+used. Assignment evidence continues to record observed execution metadata.
+
+Scheduling honors the accepted Worker/Profile release and model/effort snapshot,
+including explicit Default. If that Worker/Profile release becomes unavailable,
+it cannot silently substitute a fallback Worker or another Profile release.
+Multi-step workflows retain immutable per-Step resolved bindings rather than a
+single global turn configuration. Historical requests without this optional field
+retain their existing snapshots; no invented Profile metadata is backfilled.
+
+Phase 3 adds no database migration or production deployment. Phase 1 migration
+0010 is still required when releasing the Conversation API. Cross-worker canonical
+history replay and session continuity remain future phases.
+
+## Phase 4 — Worker-generated turns
+
+`ConversationTurn` records one actual Worker assignment, rather than assuming one
+user request is always one invocation. Each retry creates a distinct turn and
+retains the preceding attempt. Queued requests with no assignment have no
+Worker-generated turn yet. The existing request remains the user-facing submission.
+
+Each turn stores immutable `id`, `conversationId`, execution `workflowId` and
+`workflowVersion`, `userMessageId`, `workRequestId`, `assignmentId`, `taskId`,
+`stepKind`, `workerId`, `workerTypeId`, snapshotted `workerDisplayName`, `profileId`,
+`profileVersion` (signed release), nullable `modelId` and `effort`, nullable
+`workerSessionId`, `baseContextRevision`, and `createdAt`. The execution Workflow
+ID remains `direct` for Work; its Conversation retains product Workflow `work`.
+Attribution comes from the assignment's authoritative selection evidence, not
+current inventory, composer settings, or later Worker renames.
+
+`status` progresses from queued to running on Workspace acknowledgement (or an
+explicit running assignment status), then completed, failed, or cancelled.
+`startedAt` is the first Cloud-observed acceptance/running timestamp, not a claim
+about the provider's exact process start. It remains null if no start was observed.
+`completedAt` is the Cloud-recorded terminal timestamp; successful `resultText`
+contains the recorded output text. Assignment transitions update the turn in the
+same database operation, including failures outside the normal dispatcher path.
+Repeated completion delivery cannot rewrite terminal evidence. Database guards
+also prevent attribution edits, start-time changes, and lifecycle regressions.
+
+`workerSessionId` is a SHA-256 reference over Workspace, Worker, Profile definition
+and the Conclave logical session key for durable assignments. It is
+null for stateless assignments. It neither contains a native provider handle nor
+proves that a CLI thread resumed successfully. Workspace still owns the actual
+session mapping, reset/generation state, and provider-native IDs. `baseContextRevision`
+records the Conversation revision at assignment creation; it is currently zero
+and does not certify canonical history ingestion. Session synchronization and
+canonical context materialization remain later phases.
+
+The new immutable `conversation_user_messages` record preserves the original
+user text and author, using a deterministic message ID per associated Work Request.
+It is separate from team Discussion. Existing associated request messages can be
+seeded from their authoritative immutable input. Existing assignments are not
+backfilled with guessed turns or session references.
+
+Work history list/detail responses include ordered `turns: ConversationTurn[]`.
+AX retains them in typed history, detail reconciliation, and authenticated read
+cache. Response attribution/model/effort prefer the matching immutable turn;
+requests without turn records retain existing historical evidence. Earlier attempts
+remain available in request details. Null model/effort explicitly denotes Default,
+not a fabricated resolved provider model. History responses cap each recorded
+reply at the same 24,000-character presentation limit used by existing Step output.
+
+[0011_conversation_turns.sql](../../apps/cloud/migrations-v8/0011_conversation_turns.sql)
+adds the message and turn tables, indexes, and atomic lifecycle/immutability
+triggers. Apply 0010 and 0011 in order before deploying Cloud, then update AX.
+Production preflight verifies both new table contracts and turn indexes. Current
+Conversations cover manual Chat/Work; future graph Conversation association can
+reuse the per-assignment/per-Step structure. No production migration or deployment
+is performed by this implementation phase.
+
+
+## Phase 5 — Canonical conversation history
+
+Conclave owns an append-only history ledger for each Conversation. Provider CLI
+sessions remain local execution state and are not the source of conversation
+history. The version 1 entry contract covers `user_message`, `worker_response`,
+`workflow_event`, `execution_event`, `artifact_event`, and `context_event`.
+
+Each entry has a Conversation-local monotonic sequence, actor and source
+references, event type, exact text when applicable, allowlisted metadata, source
+occurrence time, and database recording time. History revision is the latest
+sequence; it is distinct from accepted-request and materialized-context revisions.
+User messages and successful worker responses retain their full recorded text.
+Presentation APIs may still limit displayed replies to 24,000 characters; the
+canonical history endpoint does not truncate them.
+
+Database triggers record authoritative request acceptance and lifecycle changes,
+Run/Task/turn execution events, completed worker replies, artifact creation/removal,
+and context revision advances in the same transaction as their source mutation.
+Repeated delivery cannot duplicate a user message or completed reply. Legitimate
+repeated execution transitions, such as retrying a request, remain separate facts.
+Volatile progress, raw logs, storage keys, credentials, and provider-native session
+handles are excluded. An artifact event records a reference and selected metadata,
+not a durable copy of the artifact's binary contents.
+
+Entries cannot be edited or individually deleted. Source request/assignment
+cleanup does not remove recorded facts. Deleting the owning Conversation is the
+explicit retention boundary and cascades its history. Sequence reflects recording
+order; `occurredAt` preserves source timing, including imported records.
+
+`GET /api/workstreams/:id/conversations/:conversationId/history` requires
+Workstream view access and verifies Conversation ownership. It accepts `limit`
+(1–100, default 50), `afterSequence` (default 0), and optional `throughSequence`.
+The response contains `conversationId`, `historyRevision`, `throughSequence`,
+ordered `entries`, and nullable `nextCursor`. Carry both cursor fields into each
+subsequent request to retain a stable upper bound while new entries are appended.
+Invalid or out-of-range cursors return 400; a Conversation outside the Workstream
+returns 404 after access checking. AX exposes typed history reads and retains its
+existing timeline presentation, using canonical message/reply text where present.
+
+[0012_canonical_conversation_history.sql](../../apps/cloud/migrations-v8/0012_canonical_conversation_history.sql)
+creates the ledger, indexes, immutability guards, and transactional event triggers.
+It imports authoritative existing associated user messages and completed replies,
+and labels other existing request/execution/artifact facts as snapshot imports.
+It does not invent prior transitions or associate older unowned requests. Apply
+0010, 0011, and 0012 in order before deploying Cloud; production schema preflight
+checks the ledger contract. No remote migration or deployment was performed.
+
+This phase establishes canonical storage and reads. It does not replay history
+into workers, summarize context, synchronize native sessions, or advance context
+revision automatically. Cross-worker catch-up requires a later context ingestion
+implementation; possession of a native session is not evidence of synchronization.
+
+
+## Phase 6 — Workspace-owned Worker Sessions
+
+`WorkerSession` is local execution state associated with a Conversation and a
+logical Worker/Profile, rather than a model. Its version 1 record contains `id`,
+`conversationId`, `workerId`, `profileId`, `profileVersion`, `nativeSessionId`,
+`synchronizedContextRevision`, `status`, `lastModelId`, `lastEffort`, `createdAt`,
+and `lastUsedAt`. Only Workspace's Engine state stores native provider handles;
+Cloud stores the opaque Conclave reference on turns, not a Worker Session table.
+Last model/effort describe the last successful execution, and null denotes Default.
+
+Cloud derives the opaque reference from Workspace, logical Worker, Profile
+definition, Conversation, and logical session key. Model, effort, and compatible
+Profile release changes do not change it. Current manual Conversations map one to
+one to the existing Workstream/workflow session keys, preserving native continuity.
+A fresh-session retry changes the logical key and therefore the session generation.
+Future multiple Conversations must allocate distinct logical keys; ownership
+validation rejects using another Conversation's existing mapping.
+
+Durable assignments carry optional `workerSession` metadata with nested
+`schemaVersion: 1`, the Conclave session/Conversation/Worker IDs, and the dispatch
+`baseContextRevision`. Workspace validates ownership and translates this metadata
+into Local Worker Protocol 4.0 execute frames. Native handles are forbidden in that
+metadata. Stateless executions do not carry Worker Session state. The turn records
+the frozen dispatch revision rather than a later mutable Conversation revision.
+
+The local Engine file format advances to version 2 for Conversation executions.
+Existing partitioned version 1 files resume under the same signed Profile format
+compatibility rules and gain explicit ownership after successful use. Compatible
+Profile releases may resume the same native session with different model/effort
+arguments. Incompatible formats start a new native session and replace the mapping
+only after success. Scope mismatches or invalid local records return a session
+resume error; they cannot silently rewrite attribution. Native IDs remain bounded
+and confined to the local state directory.
+
+Context synchronization is not implemented in this phase. Sessions start with
+`synchronizedContextRevision: 0`; successful native resume does not advance it.
+The Engine refuses a nonzero target revision until canonical replay is implemented.
+Statuses reserve `active` and `requires_synchronization` for this distinction.
+Current Conversations retain context revision zero, so normal continuation works.
+
+[0013_worker_session_context.sql](../../apps/cloud/migrations-v8/0013_worker_session_context.sql)
+updates atomic turn creation to retain the frozen dispatch revision. Apply after
+0010–0012. Roll out the updated Workspace and Engine together before enabling the
+Cloud assignment extension: older strict Local Worker Protocol decoders reject
+unknown execute fields. No provider CLI-specific executable, credentials service,
+remote migration, or deployment is introduced.
+
+
+## Phase 7 — Generic Worker execution options
+
+The Human API Worker inventory includes optional `executionOptions` with
+`schemaVersion: 1`. Core defines `WorkerExecutionOptions`, `WorkerModelOption`, and
+`WorkerEffortOptions` independently of provider identity. AX parses a typed safe
+projection, consumed by the Phase 8 composer. Existing `modelOptions` remains
+available as an older-response fallback during that rollout.
+
+The normalized contract contains:
+
+- `models`: `supported`, `discovery`, `allowsCustomModel`, `allowedModelIds`,
+  nullable `defaultModelId`, and catalog `options` with per-model effort choices.
+- `modelSwitch.supported`: whether a compatible native session may change models.
+- `effort`: supported values and nullable default for models without an override.
+
+Values are arbitrary bounded Profile strings; workers need not share reasoning
+levels. An explicit empty per-model effort list disables effort for that model.
+When a known default model is declared, selection validation uses that model's
+options for Default. Null model/effort preserves the provider-default request;
+Conclave does not invent a resolved model or inject the advertised default.
+Catalog entries are filtered by Profile allowlist and installed CLI version.
+An unavailable default becomes null rather than silently selecting another model.
+
+Profiles may add version 1 `model.executionOptions`:
+
+~~~json
+{
+  "schemaVersion": 1,
+  "discovery": "profile_catalog",
+  "modelSwitchSupported": true,
+  "effortSupported": true,
+  "defaultModelId": null,
+  "effortMapping": { "deep": "provider-native-level" }
+}
+~~~
+
+The existing `model.catalog`, `supportedReasoningEfforts`, and
+`defaultReasoningEffort` hold the advertised choices. The signed `effortMapping`
+translates a selected generic value into the existing `{{reasoningEffort}}`
+argument/stdin template. The original selected value stays in turn/session
+metadata. Arguments, mappings, environment, credentials, and native session IDs
+never enter the public execution-options DTO. TypeScript and Dart Profile
+validators reject invalid versions, duplicate choices, unavailable defaults,
+contradictory capability declarations, and mappings for undeclared effort values.
+A declared effort capability also requires an invocation template.
+
+For existing Profiles without the optional declaration, normalized choices use
+existing catalog metadata and preserve established model/session selection
+behavior. No catalog or effort values are invented when absent. New Profile
+releases should declare capabilities explicitly and qualify their provider
+behavior; fixture evidence does not qualify a live provider release.
+
+Cloud validates model/effort choices against the selected published Profile in
+readiness and request creation. The Engine independently rejects unsupported
+model-specific effort before launching the CLI. A Profile that explicitly disables
+model switching rejects a different model on an existing owned native session;
+it does not silently discard history. A fresh-session operation remains explicit.
+Compatible model switches and effort changes retain the Phase 6 session identity.
+
+The current implemented discovery source is `profile_catalog`: options refresh
+from the selected Profile release and observed installed CLI version. Live CLI
+model discovery is not advertised or guessed. A future dynamic source needs a
+signed, bounded discovery invocation and provider qualification before admission;
+`dynamic` declarations are rejected until that execution path exists.
+
+No D1 migration or protocol envelope change is needed. Existing published payloads
+and starter templates remain unchanged. Deploy updated Workspace/Engine validation
+before publishing Profiles using the optional metadata, then update Cloud/AX for
+the safe projection. No remote Profile publication or deployment was performed.
+
+
+## Phase 8 — Dynamic next-turn composer
+
+Manual single-binding workflows display Worker, model, and effort choices beside
+Send, below the message input. Attachment/history/settings controls and the
+Workflow selector use a separate utility row so execution choices remain visible
+in the two-pane layout. Rows can scroll horizontally on narrower screens, while
+Send stays visible. Preview has one Send control. Text input remains editable
+while an execution is active; sending another request stays disabled until it ends.
+
+Workflow capability metadata determines which controls are shown; graph workflows
+retain their per-Step Work settings. The Worker picker lists eligible Project
+Workers with their names, Workspace labels, and existing provider icons or generic
+initials. An unassigned workflow can select its Worker directly in the composer.
+Selectors prefer the typed version 1 `executionOptions` projection from Phase 7.
+Model selection is hidden when unsupported; effort follows the selected model's
+capability and supported values. Older API responses retain the existing
+Profile-owned `modelOptions` fallback. No global provider model list is introduced.
+
+Selections are local next-turn overrides per composer binding, initially seeded
+from shared Workstream settings. Picking Worker/model/effort does not write shared
+Work settings or change the Conversation or historical turn metadata. Users with
+execution permission can choose next-turn options independently of permission to
+edit shared settings. Selecting a different Worker restores its remembered valid choices (Phase 10),
+or starts with Default when it has no remembered choices;
+selecting the same Worker/model preserves them. Settings edits explicitly reseed
+that binding. Submission snapshots the effective local selection before asynchronous
+work, retaining the existing immutable accepted-turn contract. Later composer edits
+cannot mutate the submitted selection.
+
+Local choices survive sending while this Workstream form remains mounted and are
+cleared when it switches Workstreams. Phase 10 adds separate last-used combinations per Worker within this form. Cascading catalog reconciliation is described in Phase 9 below; Cloud and Engine
+remain the authoritative validators for stale selections.
+
+This is an AX-only UI/state change. No database migration or protocol change is
+required; Phase 7's API projection is preferred, with the Profile catalog fallback
+supporting coordinated rollout. No remote build or deployment was performed.
+
+
+## Phase 9 — Cascading capability selection
+
+The next-turn composer reconciles model and effort against the selected Worker's
+versioned execution options, including its model allowlist and model-specific
+effort capabilities. Switching Workers uses remembered valid overrides from Phase 10 or Default; switching
+models retains an effort only when supported by the destination model. Default
+remains an absent override, allowing Profile/Engine defaults to apply.
+
+Inventory refreshes reconcile local overrides and shared-setting seeds without
+writing shared Workstream settings or historical turns. Removed choices revert to
+Default and do not reappear merely because a later catalog includes them again.
+Loading/error notifications without catalog data preserve the last usable catalog.
+Worker picker callbacks recheck eligibility before accepting a selection.
+Submission reads the same reconciled configuration as the composer.
+
+This phase uses the existing Profile catalog projection, rather than live CLI
+model discovery. Older API responses without typed execution options retain the
+Phase 8 catalog fallback; Cloud/Engine validation remains authoritative for them.
+No migration, public API change, or remote deployment is required. Per-Worker
+preference restoration is described in Phase 10 below.
+
+
+## Phase 10 — Remember next-turn selections per Worker
+
+Each mounted Workstream form remembers the last model and effort overrides for
+each Worker, separately per composer binding. Sending preserves the selection.
+Switching away records the current combination, including choices seeded from
+shared Work settings; switching back restores it after capability reconciliation.
+A Worker with no remembered combination starts with Default model and effort.
+Explicitly selecting Default replaces the previous remembered override.
+
+Inventory updates reconcile preferences for inactive selections too, so removed
+model/effort choices do not reappear when returning to a Worker. Transient fetch
+failures retain the existing catalog and preferences. Shared binding edits reset
+that binding's local preferences. Changing Workstream, Project, user identity, or
+data source clears local choices to prevent preferences crossing those boundaries.
+
+Preferences contain only model and effort overrides. They do not determine
+canonical Conversation state, native Worker sessions, or historical turn metadata.
+They remain in memory for the lifetime of the Workstream form; reopening the form
+or restarting the app seeds choices from shared settings again. Cross-device or
+restart persistence is outside this phase. No migration or API change is required.
+
+
+## Phase 11 — Conversation Router
+
+Core exports the provider-independent `routeConversation` planner and versioned
+`ConversationRoutePlan` contract. Input includes Conversation and Workflow
+identities, the immutable turn selection, its frozen context revision, normalized
+Worker execution options, runtime session capabilities, and Workspace-owned session
+metadata. Native provider handles are excluded from routing input and output.
+
+The router returns one of:
+
+| Action | Condition | Required context transfer |
+| --- | --- | --- |
+| CONTINUE_SESSION | Compatible native session synchronized to the turn revision | None |
+| SYNC_AND_CONTINUE | Session is behind and incremental synchronization is supported | Delta from the synchronized revision to the frozen turn revision |
+| BOOTSTRAP_SESSION | No session exists for this Conversation + Worker/Profile | Full context when revision is nonzero |
+| RECONSTRUCT_SESSION | Missing native state, incompatible release, unsupported model switch, unavailable incremental sync, or only future-context sessions | Full context when revision is nonzero |
+| STATELESS_EXECUTION | Turn requests stateless execution or durable sessions are unsupported | Full context when revision is nonzero |
+
+Model handling is separate: unchanged model, KEEP_SESSION_WITH_NEW_MODEL, or
+NEW_SESSION_FOR_MODEL. Effort changes alone do not split sessions. Default is an
+unresolved selection; the router never guesses a provider model. A new session for
+a model change requires reconstruction instead of silently abandoning history.
+
+Matching sessions are scoped by Conversation, Worker, and Profile. Explicit release
+compatibility comes from the local verified Profile adapter, not provider-name
+branches. Compatible candidates are preferred; newest last-used timestamp wins,
+with session ID as a deterministic tie-break. Sessions ahead of the frozen turn
+revision are excluded. Invalid selections, inconsistent Workflow identities, and
+corrupt context/session metadata fail closed. Routing does not mutate any input,
+advance revisions, allocate sessions, or mark synchronization successful.
+
+This phase implements the routing domain contract and decision tests. Runtime
+execution remains on the Phase 6 path: there is no canonical context materializer,
+Profile incremental synchronization transport, or reconstruction executor yet.
+The new planner is not wired into dispatch; its full/delta requirements must be
+satisfied by future execution orchestration before plans can run. Existing Engine
+safeguards for nonzero context revisions and unsupported model switches remain.
+No SQL migration, wire protocol change, Profile schema change, or deployment is
+required. Session capability compatibility must be supplied by the Workspace-local
+adapter when execution integration is implemented.
+
+
+## Phase 12 — Same Worker and model fast path
+
+The generic CLI Engine continues an existing native session for the same
+Conversation + Worker/Profile and model when the signed Profile declares format
+compatibility and the local session is active and synchronized to the frozen turn
+revision. Only the current request prompt is sent through the Profile's declared
+prompt transport; native resume arguments supply the local provider handle.
+Prior user messages and worker responses are not replayed. Effort arguments still
+come from the immutable turn selection and signed Profile mapping.
+
+The Engine now checks synchronized local state before rejecting a nonzero context
+revision: an already synchronized compatible native session can continue. Missing,
+stale, future-context, or inactive local state fails closed instead of executing
+without required context. Legacy local records cannot certify nonzero context.
+The store retains native identity across successful follow-ups and compatible
+releases; failures do not certify synchronization or replace accepted turn data.
+
+Execution tests use a provider fixture that requires the exact follow-up prompt,
+same model argument, and original native resume handle. Separate store tests cover
+exact, stale, future, and inactive context state. Current Conversations still use
+context revision zero; this phase does not create a context materializer or
+synchronization/reconstruction executor, and the Phase 11 Core planner remains a
+separate planning contract. No migration, Profile schema, or protocol change is
+required. Native session handles remain local to Workspace/Engine.
+
+
+## Phase 13 — Same Worker and model, different effort
+
+Reasoning effort is a per-turn execution option transported by the signed Profile.
+Changing it keeps the Conversation, logical Worker Session, and compatible native
+session. Neither session keys nor model-switch checks include effort. The Engine
+validates the new effort against the selected model, expands that value through
+the Profile's effort mapping and invocation template, and records it as the local
+session's last-used effort only after successful execution. Previous turn metadata
+retains its original effort. Unsupported values are rejected rather than causing a
+new Conversation or silently changing an accepted selection.
+
+The acceptance fixture verifies Medium on an initial durable invocation and High
+on the next invocation, with the same model and original native resume handle.
+Cloud persistence tests verify identical Conversation/Worker Session attribution
+and distinct immutable effort snapshots. The existing generic invocation path
+already supports this behavior; this phase adds explicit regression coverage and
+documents the invariant instead of introducing provider-specific session logic.
+
+This applies to Profiles exposing effort as an invocation option for the selected
+model. It does not infer effort support for other providers. Existing format and
+context synchronization requirements still apply. No migration, Profile schema,
+wire protocol change, or deployment is required.
+
+
+## Phase 14 — Same Worker, different model
+
+The generic Engine reads `modelSwitchSupported` from the verified signed Profile.
+When supported, model changes use the existing compatible native handle with the
+new model arguments. When unsupported, the Engine requires a canonical bootstrap
+snapshot, omits resume arguments, and starts a new native session. Conversation
+and logical Worker Session attribution remain unchanged; the replacement native
+mapping and last model are saved only after successful execution. A failed new
+invocation leaves the previous mapping intact. Later turns resume the replacement
+session and send only their new request.
+
+Cloud dispatch supplies a version 1 `bootstrap` inside `workerSession` only for
+manual durable Conversations whose published Profile explicitly disables model
+switching. The snapshot contains Conclave's canonical history through the sequence
+immediately before the current user message, plus Conversation/context attribution.
+It includes user/worker text and canonical event metadata, excluding the current
+request and subsequent events. The Engine combines this historical-data snapshot
+with the current request only when starting a native session; continuation ignores
+it. Missing history boundaries, scope/revision mismatches, excessive history, or
+oversized prompts fail closed. No content is silently truncated.
+
+Snapshot limits are 1,000 canonical entries and 256 KiB of serialized text;
+aggregate size is checked before fetching full rows. The combined prompt obeys the
+existing 512 KiB Engine limit. This is bounded exact-history replay, not model
+summarization, artifact-body loading, or incremental synchronization. Very long
+Conversations require a future context materializer/compaction path. Context
+revision remains zero until that subsystem exists; history sequence separately
+freezes the bootstrap. Profiles permitting model switching keep their existing
+fast path without bootstrap transfer.
+
+This phase supersedes Phase 7's unsupported-model-switch rejection when canonical
+bootstrap data is present, and implements the model replacement execution branch
+planned in Phase 11. The Core router additionally requires full context for model
+replacement at revision zero, since canonical message history can already exist.
+The generic runtime still evaluates local Profile/session state independently of
+the TypeScript Core planner; incremental synchronization remains unimplemented.
+
+No SQL migration or signed Profile schema change is required. Local Worker
+Protocol 4.0 and Workspace assignment metadata gain an optional version 1
+`workerSession.bootstrap` object (`conversationId`, `contextRevision`,
+`throughSequence`, `text`). Native handles never leave local Engine storage.
+Existing payloads continue to work with updated readers; strict older readers
+reject the new field. Update Workspace/Engine before enabling Cloud bootstrap
+emission for Profiles disabling model switching. No remote deployment was done.
+
+
+## Phase 15 — Different Worker continuity
+
+Manual durable Conversations now send a scoped canonical context snapshot to every
+selected Worker, independent of provider or model-switch capability. Workspace
+continues to own each Conversation + Worker/Profile session; the UI selects the
+next Worker without handling bootstrap, synchronization, or native session IDs.
+
+The runtime chooses:
+
+- No compatible local session: bootstrap from full canonical context and execute
+  the new request in a native session.
+- Current local session: retain the native handle and send only the new request.
+- Behind local session: retain the native handle, prepend only missed canonical
+  context to the new request, and invoke the Profile's existing resume transport.
+
+Synchronization and continuation happen in one provider invocation. No standalone
+provider synchronization API, extra worker executable, or model invocation is
+introduced. The ordinary signed Profile prompt transport carries canonical facts
+as historical data. Existing model-switch reconstruction rules remain applicable.
+
+The exact-history context version follows accepted Conversation request revisions.
+Acceptance advances `contextRevision` with `conversationRevision`; dispatch freezes
+`baseContextRevision` at the current request's revision minus one, not the latest
+Conversation value. Snapshot `turnRevision` identifies the accepted current request.
+A successful local execution records that revision as synchronized, because its
+native session consumed prior context plus the new request and produced its reply.
+Failures leave synchronized revisions and history watermarks unchanged.
+
+History sequence remains a separate high-water mark. Cloud captures it at dispatch
+and includes only earlier accepted requests, excluding current/future requests.
+This includes earlier replies recorded after the current request was accepted.
+Each snapshot entry carries its request's context revision (zero for unassociated
+facts). Returning sessions receive entries from missed requests, newly recorded
+artifact/context facts, and late replies from other Worker Sessions after their
+history watermark. Revision-bookkeeping events do not trigger provider synchronization.
+Own replies already produced inside the resumed native session
+are excluded using canonical Worker Session attribution. No provider-native handle
+is exchanged or reconstructed from natural-language claims.
+
+`0014_exact_history_context.sql` initializes existing Conversation context revisions
+from accepted request revisions and freezes implicit turn context to the original
+request rather than current Conversation state. Historical turn snapshots are not
+rewritten. Local Worker Session schema version 1 adds an optional
+`synchronizedHistorySequence` counter (older records default to zero). Bootstrap
+schema version 1 adds optional `turnRevision`; new Cloud snapshots always provide
+it. Old payloads retain their former behavior; updated readers are required before
+Cloud emits the new field. Legacy native records without Worker Session attribution
+are reconstructed from canonical context instead of certifying unknown history.
+
+Exact replay retains Phase 14 limits: 1,000 entries, 256 KiB snapshot, and the
+existing combined prompt limit. Long-history compaction, artifact-body resolution,
+provider token budgeting, and context synchronization through dedicated provider
+APIs remain outside this phase. Stateless executions retain their existing policy.
+The Core router remains the provider-independent planning contract; the Dart
+runtime applies the same bootstrap/current/behind branches to verified local
+Profile/session state. No UI workflow branches or remote deployment were added.
+
+
+## Phase 16 — Provider-independent Context Engine
+
+Core's `ContextEngine` produces version 1 `BootstrapContext`, `DeltaContext`, and
+`StatelessContext` documents. Each includes scoped revisions, canonical evidence,
+recent turns, and explicit structured context: objective, important decisions,
+constraints, current state, open issues, artifact references, workflow state, and
+summary. Facts carry revision and history-sequence provenance; cleared values
+retain tombstones so deltas can communicate removals.
+
+Cloud route modules assemble inputs from canonical history and the frozen Work
+Request snapshot. Workflow state explicitly includes execution workflow identity
+and version, Work Request identity/status, and step identity, kind, status, and
+attempt. Project/Workstream instructions seed constraints. Version 1 committed
+`context.fact_updated` Conclave events materialize scalar or identified string
+facts; worker prose never becomes authoritative decisions or summaries. Missing
+facts remain empty. This phase adds no context-authoring endpoint or automatic
+summary generation. Artifacts carry identity/digest, not bodies or storage secrets.
+
+Durable execution uses full context for bootstrap and changed facts/evidence for
+synchronization; Workspace/Engine preserve structured workflow facts in deltas.
+Stateless assignments carry optional `statelessContext` through the same generic
+Profile prompt transport, without creating native durable sessions. Current
+sessions retain the existing new-request-only fast path. Workflow state is a
+dispatch-time snapshot, not a live status subscription.
+
+Core owns assembly and validation, Cloud owns SQL reads, and Workspace owns native
+session synchronization. Snapshots reject out-of-bound revisions, unordered
+history, more than 1,000 entries, or serialized documents over 256 KiB. Recent
+turns are the last 20 user/worker history entries; exact history is retained.
+The Engine's combined prompt limit still applies. Compaction, generated summaries,
+artifact-body resolution, and provider token budgets remain future work.
+
+No Phase 16 database migration is required. Structured context documents and the
+optional Local Worker Protocol 4.0 `statelessContext` envelope use schema version 1;
+updated Workspace/Engine readers must precede Cloud emission of the new field.
+No deployment is included.
+
+
+## Phase 17 — Workflow-aware context
+
+Version 1 Context Engine documents distinguish `conversationContext` from
+`workflowExecutionContext`. Conversation context holds persistent objective,
+decisions, constraints, state, issues, artifacts and summary. Execution context
+is scoped to one Work Request and receiving `activeStepId`: it includes the
+workflow/version, status, task graph, attempts, Worker attribution, and completed
+transitive prerequisite results. Core validates receiving-step membership, missing
+dependencies, duplicate identities and cycles. Pending, failed, downstream and
+unrelated step results are excluded. Results remain historical data, not trusted
+instructions. Existing `context` and `workflowState` fields remain available in
+version 1 for the current protocol readers.
+
+Chat execution context contains task identity/state but no added environment or
+execution artifact set. Work and other workflows include scoped Project, Workstream
+and Workspace identities, immutable Project/Workstream instructions, and artifact
+identity/digest references from the same Work Request and Project. Local filesystem
+state, paths, credentials and artifact bodies are not read from Cloud. Workspace
+continues to provide authorized Work Root access through the existing execution
+policy. This is a dispatch-time state snapshot, not a filesystem inspection.
+
+Cloud dispatch passes the actual receiving task identity to assembly. Core
+selects prerequisite outputs from the persisted dependency graph. For example,
+VERIFY receives IMPLEMENT's completed result and attributed Worker; FIX can
+receive transitive IMPLEMENT and VERIFY results once its dependencies complete.
+The receiving step may still be queued at dispatch; its explicit identity, not a
+guessed running status, controls selection. Future multi-step Conversation
+workflows can reuse this contract without new provider branches. This phase does
+not add new workflow definitions or attach legacy non-Conversation runs to a
+Conversation.
+
+Work/multi-step execution context is refreshed through resumed-session deltas even
+when Conversation revision/history is unchanged. This distinguishes step-state
+changes from conversation synchronization. Simple Chat retains its current-session
+new-request-only fast path. Stateless and bootstrap transport carry the same
+execution context. Documents retain the existing bounded snapshot limits; graph
+reads additionally reject more than 10,000 dependency edges and 1,000 artifacts.
+
+No database migration is required. New document fields are additive version 1
+contracts; updated Engine/Workspace readers must precede Cloud rollout to preserve
+execution context in resumed deltas. No deployment is included.
+
+
+## Phase 18 — WorkflowRun and WorkerTurn ownership
+
+Execution now has explicit provider-independent identities:
+
+```text
+Conversation
+  UserMessage
+    WorkflowRun (stable logical execution)
+      WorkerTurn (one actual Worker invocation)
+      WorkerTurn (another step or retry invocation)
+      Runtime Run attempts (existing scheduler runs)
+```
+
+A user message is immutable conversation history, not an execution. A version 1
+`WorkflowRun` records Conversation/message/Work Request ownership and the pinned
+execution workflow/version. `ConversationTurn` is also named `WorkerTurn` in Core;
+each turn now has immutable `workflowRunId` ownership and exposes its assignment's
+`runtimeRunId` when present. It retains per-invocation Worker/Profile/model/effort,
+step and lifecycle evidence. There is no uniqueness constraint limiting a logical
+WorkflowRun to one Worker turn.
+
+The existing Work Request remains the authority for logical execution lifecycle,
+immutable configuration, task graph and request authorization.
+`conversation_workflow_runs` stores only the stable identity association, avoiding
+a duplicate lifecycle projection in persistent state. Existing `runs` are scheduler
+attempts: an explicit retry can add a runtime Run and Worker turns to the same
+WorkflowRun without replacing the original message or historical turn evidence.
+The first Chat/Work execution normally has one Worker turn; multi-step workflows
+can use the same ownership structure. No new workflow definition is added here.
+
+Authorized Work history and request-detail responses add `workflowRun` (or null
+for non-Conversation requests), including status, runtime Run IDs and Worker turn
+IDs. The existing flat `turns` projection remains available. AX parses and caches
+this separate entity and preserves it during reconciliation. Legacy cached data
+can omit the additive fields until refreshed; new Cloud turn responses always
+include WorkflowRun ownership. Workflow execution context also carries the stable
+WorkflowRun identity rather than treating a message as the execution.
+
+`0015_conversation_workflow_runs.sql` initializes one stable logical run for each
+associated Work Request and backfills historical turn ownership. It does not
+rewrite user text, prior turn attribution/status/results or canonical history.
+Triggers enforce scope and immutable associations; new assignment-created turns
+receive their owner atomically. Production schema checks include the new table
+and turn ownership column. Apply this schema update before deploying Cloud code.
+The native Worker session contract is unchanged; no remote migration/deployment
+is performed by this implementation.
+
+
+## Phase 19 — WorkflowRun and WorkflowStepRun data model
+
+Version 1 `WorkflowRun` now exposes `triggerMessageId`, `startedAt`, `completedAt`
+and nested `stepRuns`, in addition to identity, Conversation, workflow/version and
+status. `triggerMessageId` names the immutable user message; `userMessageId` remains
+the same association in the existing read contract. Work Request owns status;
+WorkflowRun timestamps persist lifecycle evidence from Work Request transitions.
+First start is retained across retries, completion is cleared on reopening and
+recorded on terminal transition. Unrelated metadata updates do not move completion.
+Historical first starts are recovered from existing task, turn and runtime Run
+evidence; absent evidence stays null.
+
+Each version 1 `WorkflowStepRun` has stable identity and parent `workflowRunId`,
+`taskId`, definition `stepId`, execution `role`, Worker/model/effort, logical Worker
+Session reference, `baseContextRevision`, status, result, step lifecycle timestamps
+and `workerTurnIds`. Current built-in definition IDs and roles use StepKind (e.g.
+chat, implement, verify); the domain fields remain distinct strings. No new custom
+or repeated-role workflow definitions are enabled in this phase.
+
+`conversation_workflow_step_runs` persists immutable step/task/parent identity.
+Existing `workflow_tasks` remain the single owner of step state and output.
+Worker turns receive immutable `workflowStepRunId` ownership; several turns can
+belong to one step across retries. Before dispatch, the StepRun projects the
+immutable resolved binding. Once dispatched, selection/session/context attribution
+comes from its most recent actual Worker turn, including explicit null model/effort
+for provider defaults rather than falling back to configured values. Historical
+Worker turns remain immutable. During a queued retry the last actual selection is
+still visible until the new invocation, but result/completion remain empty.
+
+Results expose completed step text through the existing 24,000-character Human
+Product read limit, not raw provider output JSON. Failed/queued/running steps expose
+no stale result. Workflow context includes StepRun identity/role and prefers actual
+Worker attribution while retaining its separate, bounded context assembly. Logical
+Session references are allowed; provider-native handles remain Workspace-local.
+
+Accepted Conversation Chat/Work requests now atomically materialize their planned
+queued tasks and StepRuns before scheduling. Each initial simple request has one
+StepRun; idempotent submission replay creates no additional step. Existing workflow
+initialization remains idempotent. Existing tasks discovered before association
+also acquire StepRuns through the WorkflowRun insertion trigger.
+
+`0016_workflow_step_runs.sql` backfills logical steps and turn ownership, initializes
+WorkflowRun timestamps, and installs ownership/lifecycle triggers. Historical turn
+selection, status, results and canonical history are preserved. Authorized Work
+read models and AX cache round-trip nested steps and timestamps; older cached
+records can omit the additions until refreshed. Production schema checks cover
+the new table and columns. Apply the schema update before deploying Cloud. No
+Workspace/Engine framing or provider transport change is required, and no remote
+migration/deployment is included.
+
+
+## Phase 20 — Simple Chat/Work presentation
+
+WorkflowRun, WorkflowStepRun, routing and execution graphs remain internal
+execution models. Their presence in a response/cache does not enable orchestration
+UI. Ordinary Chat and Work continue to show the user's message, Conclave's initial
+progress, then the actual Worker name/icon and response. Model/effort selection
+stays near Send and historical attribution remains accurate.
+
+Current controls use request language: Send request, View request details, Retry
+request and Cancel request. Cancellation/waiting messages do not expose run/step
+terminology. Optional request details lead with Worker identity and retain useful
+status, model/effort, timing, responses and recovery actions; they do not label the
+one-step execution Implement, render a workflow version, or show a graph/step
+counter. Existing optional technical troubleshooting details remain explicitly
+expandable rather than being added to the conversation.
+
+Backend `workflowRun` and `stepRuns` stay available for state, synchronization,
+future workflows and diagnostics. UI must not infer an orchestration display from
+these records' presence or counts. A future multi-step presentation requires its
+own product design and explicit enablement. Widget regression tests populate
+these records for both Chat and Work while asserting Worker identity/icon, message
+content, friendly request details, and absence of internal run/step identifiers
+or graph/orchestration labels.
+
+No database, public API, runtime protocol or provider transport change is required.
+
+
+## Phase 21 — Future multi-step presentation capability
+
+AX provides an opt-in `prepareWorkflowRunPresentation` adapter for the future
+step-list UI. It returns no presentation by default. Explicit product enablement
+and a matching versioned workflow with `executionPolicy.multiStep = true` are both
+required. Current Chat/Work screens do not invoke or enable it. Increasing backend
+StepRun or Worker-turn counts does not change their conversation presentation.
+
+The adapter prepares a workflow-name title and ordered rows from the pinned
+definition's step order, independent of database row/invocation order. Each row has
+a user-facing step label, semantic state, Worker name/type, model and effort. A
+future view can present the requested pattern:
+
+```text
+Implement + Verify
+✓ Implement   ChatGPT · Model X · High
+● Verify      Gemini  · Model Y · High
+○ Correct     ChatGPT · Model X · Medium
+```
+
+Completed, active and pending map to those semantic states; waiting, failure and
+cancellation remain distinct and must get accessible status labels rather than
+being mistaken for completion. Caller-supplied definition labels support Correct
+without changing its underlying implementation role. This example is presentation
+preparation, not registration of a new correction/custom execution graph.
+
+Actual Worker identity/model/effort come from the latest scoped immutable Worker
+turn identified by the StepRun, rather than live composer/catalog preferences.
+Provider-default model/effort stay null for the future view to label as defaults.
+Pending steps can use frozen binding labels and configured StepRun choices. If the
+latest invocation is absent from a partial history page, an older invocation is
+never substituted as the current Worker; canonical StepRun selection remains
+available with a generic Worker label.
+
+The adapter rejects foreign workflow versions/scopes, duplicated or unknown steps,
+invalid definition order and unsupported statuses. Incomplete step state produces
+no speculative graph. Ordered row collections are immutable. Tests exercise the
+three-row example, recorded attribution, default selections, non-happy states and
+partial-history behavior; Chat/Work widget tests also carry extra internal StepRun
+records to prove that count alone never enables orchestration UI.
+
+No new UI widget, active product flag, workflow definition, database migration,
+API or runtime protocol change is introduced. Rendering and explicit rollout
+remain deferred until multi-step Conversation workflows are enabled.

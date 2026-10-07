@@ -293,6 +293,22 @@ history and Run Details resolve the member's display name and show who
 requested the Run. The immutable requester identity remains attached to the
 Work Request even if membership or display-name data later changes.
 
+## Conversation Workflow ownership
+
+Current `chat:v1` and `direct:v2` requests acquire a persistent Conversation
+association at acceptance, with separate product Workflow IDs `chat` and `work`.
+Associations and acceptance revisions are separate from immutable execution
+snapshots. Existing multi-step and historical requests are preserved. This
+foundation does not alter native session scopes or add context replay; see
+[Conversation Continuity v1](CONVERSATION_CONTINUITY_V1.md).
+
+Workflow control metadata now declares user Worker/model/effort selection,
+Step/Worker multiplicity, automatic continuation and inter-Step approval behavior.
+The composer consumes the catalog policy and `composerBindingId`, rather than
+inferring a global Worker from Workflow names or the first graph Step. Model
+effort choices remain Profile-constrained. See
+[Workflow execution policy](CONVERSATION_CONTINUITY_V1.md#workflow-execution-policy-phase-2).
+
 ## Step handoff semantics
 
 The renderer passes only these inputs for each step. It does not append prior
@@ -736,6 +752,13 @@ metadata, never inferred from model names or response text.
 
 ### Profile-owned model and effort selection
 
+The inventory additionally exposes version 1 `executionOptions`: generic model
+selection/discovery, model-switch capability, and model-specific effort choices.
+Cloud readiness/creation and the Engine validate selections independently;
+provider-specific effort mappings remain signed Profile instructions. The composer prefers typed `executionOptions` and uses `modelOptions` as an
+older-response fallback. See
+[generic execution options](CONVERSATION_CONTINUITY_V1.md#phase-7--generic-worker-execution-options).
+
 AX obtains `modelOptions` from the human Worker inventory projection. Cloud
 projects only model catalog and effort metadata from the published, non-revoked
 Tool Profile release matching the installed worker, profile identity and version.
@@ -751,3 +774,68 @@ specific error message so validation failures can be diagnosed.
 This is an additive human API projection; no runtime schema or D1 migration is
 required. Existing published profiles remain immutable; adding model catalogs
 requires authoring and publishing a new signed release through Profile Lab.
+
+Manual Chat/Work Worker, model, and effort controls sit beside Send and are local
+next-turn overrides seeded from shared Workstream bindings. Choosing them does not
+save shared Work settings. Workflow policy and Profile capabilities gate controls;
+Workers can be selected directly without opening settings. See
+[dynamic composer](CONVERSATION_CONTINUITY_V1.md#phase-8--dynamic-next-turn-composer).
+
+Manual Chat/Work composer choices are next-turn defaults. Creation accepts
+`executionSelection` and pins authoritative Worker/Profile release, nullable model
+and effort, and Workflow identity/version in `snapshot.turnExecutionConfig`.
+History exposes `executionConfig`; later default changes cannot modify it.
+See [Conversation Continuity V1](CONVERSATION_CONTINUITY_V1.md) Phase 3.
+
+Conversation-associated requests also expose ordered `turns` in history/details.
+Each assignment (including retry attempts) snapshots actual selection evidence,
+original user-message identity, logical session reference, base context revision,
+and lifecycle timestamps. Historical turns never read current bindings/inventory
+for Worker/Profile/model/effort attribution. See Conversation Continuity V1 Phase 4.
+
+
+The Workstream composer remembers model and effort choices per Worker and composer
+binding while the form is mounted. Returning to a Worker restores its last valid
+combination, including explicit Default choices. Catalog refreshes reconcile these
+preferences; shared binding edits and Workstream/Project/user/data-source changes
+reset them. This local preference state does not change canonical Conversations or
+historical turns. See [Conversation Continuity Phase 10](CONVERSATION_CONTINUITY_V1.md#phase-10--remember-next-turn-selections-per-worker).
+
+
+## Conversation execution ownership
+
+A Conversation user message owns a stable WorkflowRun, which groups Worker turns
+across workflow steps and retry invocations. Existing runtime Runs are scheduler
+attempts beneath that logical execution; Work Request owns lifecycle/configuration.
+Chat/Work normally produce one Worker turn per initial execution without imposing
+that cardinality on future workflows. The version 1 Work read model exposes
+`workflowRun` separately from `turns`; see
+[Conversation Continuity Phase 18](CONVERSATION_CONTINUITY_V1.md#phase-18--workflowrun-and-workerturn-ownership).
+
+
+WorkflowRun now owns stable WorkflowStepRuns with distinct step identity/role,
+execution selection, logical Session/context attribution, status and completed
+result. Chat and Work materialize one queued StepRun atomically with acceptance.
+Retries create Worker turns within that StepRun rather than new logical steps.
+Work Request/task records retain lifecycle authority; run timestamps capture
+first start and terminal transition evidence. See
+[Phase 19](CONVERSATION_CONTINUITY_V1.md#phase-19--workflowrun-and-workflowsteprun-data-model).
+
+
+## Simple conversation presentation
+
+Chat and Work show user/Worker messages, Worker identity/icon, relevant progress
+and next-turn selection. Internal WorkflowRun/StepRun records must not introduce
+run headings, one-step counters, execution graphs or orchestration labels. Recovery
+actions use request language; optional details lead with the Worker rather than
+the internal step role. See
+[Phase 20](CONVERSATION_CONTINUITY_V1.md#phase-20--simple-chatwork-presentation).
+
+
+Future multi-step presentation has an explicit opt-in AX adapter, gated by pinned
+workflow identity/version and the multiStep capability. It prepares definition-
+ordered step labels/status, actual Worker/model/effort attribution and pending
+choices from existing WorkflowRun/StepRun records. Current Chat/Work never enable
+this presentation, including when metadata contains several steps. Rendering and
+new workflow definitions remain deferred. See
+[Phase 21](CONVERSATION_CONTINUITY_V1.md#phase-21--future-multi-step-presentation-capability).

@@ -5,32 +5,78 @@ import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 import WorkflowStep from "../components/WorkflowStep.astro";
-import WorkstreamModel from "../components/WorkstreamModel.astro";
+import ProjectWorkstreamShowcase from "../components/ProjectWorkstreamShowcase.astro";
 ---
 
-<SiteLayout title="How Conclave AX works" description="See how Conclave AX turns team discussion into explicit AI Work Requests, coordinated execution, and inspectable results.">
+<SiteLayout
+  title="How Conclave AX works — Shared AI Workspace"
+  description="See how Conclave AX connects people, shared AI accounts, focused workstreams, and advanced workflows in one collaborative workspace."
+>
   <Section>
     <Container>
-      <SectionHeader eyebrow="How it works" title="From team discussion to a verified result." description="Conclave AX keeps collaboration, AI execution, and machine access distinct so complex work stays understandable and controllable." headingLevel={1} />
+      <SectionHeader
+        eyebrow="How it works"
+        title="From shared ideas to verified results."
+        description="Conclave AX makes using AI collaborative, transparent, and secure by giving your group one place to think, decide, and work together."
+        headingLevel={1}
+      />
+
       <div class="workflow-layout">
         <ol class="workflow-steps">
-          <WorkflowStep number="01" title="Create a Project"><p>Bring the people, shared context, repository configuration, execution policy, and history for a body of work into one place.</p></WorkflowStep>
-          <WorkflowStep number="02" title="Open a Workstream"><p>Give one feature, investigation, or delivery thread its own focused context and execution history.</p></WorkflowStep>
-          <WorkflowStep number="03" title="Discuss"><p>People explore the problem and agree on the next step. Discussion never starts AI execution on its own.</p></WorkflowStep>
-          <WorkflowStep number="04" title="Run a Work Request"><p>Choose a workflow and explicitly start AI work. The requester, policy, execution environment, and authorized Accounts are known before execution.</p></WorkflowStep>
-          <WorkflowStep number="05" title="Coordinate"><p>Research, implementation, testing, and review can be assigned to different Workers based on capability and policy.</p></WorkflowStep>
-          <WorkflowStep number="06" title="Verify and continue"><p>Inspect changes, evidence, tests, and findings. Discuss the result, then create the next Work Request when needed.</p></WorkflowStep>
+          <WorkflowStep number="01" title="Create a Project">
+            <p>Set up a shared project for your family, startup, client engagement, or engineering team with customized member permissions and privacy settings.</p>
+          </WorkflowStep>
+
+          <WorkflowStep number="02" title="Invite your people">
+            <p>Invite collaborators via email or direct link. Members gain immediate access to project workstreams and shared AI capabilities.</p>
+          </WorkflowStep>
+
+          <WorkflowStep number="03" title="Connect & share AI">
+            <p>Project members can contribute their own ChatGPT, Claude, Gemini, DeepSeek, or local AI accounts without ever exposing API keys or passwords.</p>
+          </WorkflowStep>
+
+          <WorkflowStep number="04" title="Open a Workstream">
+            <p>Break major goals into focused workstreams—like travel itineraries, competitor research, draft messaging, or feature implementations.</p>
+          </WorkflowStep>
+
+          <WorkflowStep number="05" title="Collaborate in context">
+            <p>Chat together with AI in the loop. Switch AI models on the fly to get different perspectives without losing your discussion history.</p>
+          </WorkflowStep>
+
+          <WorkflowStep number="06" title="Run Workflows when needed">
+            <p>Turn complex questions into multi-step workflows. Coordinate multiple AI models to research, analyze, draft, test, and verify results.</p>
+          </WorkflowStep>
         </ol>
-        <WorkstreamModel />
       </div>
 
       <div class="how-it-works-principles">
-        <div><strong>Human discussion is side-effect free.</strong><span>No hidden execution trigger behind normal team conversation.</span></div>
-        <div><strong>Stateful work is isolated.</strong><span>Each Workstream gets an ID-derived directory on its Primary Workspace.</span></div>
-        <div><strong>Credentials stay separate.</strong><span>Workspace access never automatically grants use of an AI Account.</span></div>
+        <div>
+          <strong>Shared context by default.</strong>
+          <span>Everyone in the project sees the prompts, responses, attachments, and decisions.</span>
+        </div>
+        <div>
+          <strong>Private, zero-knowledge keys.</strong>
+          <span>Sharing an AI account authorizes use for the project; it never reveals your secrets.</span>
+        </div>
+        <div>
+          <strong>Multi-model continuity.</strong>
+          <span>Switch between ChatGPT, Claude, Gemini, and local models in the exact same thread.</span>
+        </div>
       </div>
 
-      <div class="actions"><Button href="https://app.conclaveax.com" label="Open Conclave AX" /></div>
+      <div style="margin-top: var(--space-16);">
+        <SectionHeader
+          eyebrow="Practical examples"
+          title="See how projects and workstreams stay organized"
+          description="Keep your work structured whether you are managing everyday life or building complex software."
+        />
+        <ProjectWorkstreamShowcase />
+      </div>
+
+      <div class="actions" style="justify-content: center; margin-top: var(--space-16);">
+        <Button href="https://app.conclaveax.com" label="Open Conclave AX" />
+        <Button href="/use-cases/" label="Explore use cases" variant="secondary" />
+      </div>
     </Container>
   </Section>
 </SiteLayout>

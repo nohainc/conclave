@@ -38,10 +38,12 @@ class WorkCreationSource extends AxFixtureDataSource {
   int validations = 0, detailReads = 0, pageReads = 0;
   AxWorkRequestStatus details = const AxWorkRequestStatus(status: 'running');
   @override
-  Future<List<String>> validateWorkRequestEligibility(
-      {required String workstreamId,
-      required String workflowId,
-      List<Map<String, dynamic>> attachments = const []}) {
+  Future<List<String>> validateWorkRequestEligibility({
+    required String workstreamId,
+    required String workflowId,
+    List<Map<String, dynamic>> attachments = const [],
+    AxTurnExecutionSelection? executionSelection,
+  }) {
     validations++;
     return validation?.future ?? Future.value([]);
   }
@@ -121,7 +123,7 @@ void main() {
           currentUserId: 'human',
           onBackToProject: () {},
           onArchive: () {},
-          onRunWork: (_, __, ___, key) {
+          onRunWork: (_, __, ___, key, selection) {
             posts++;
             return post.future;
           },
@@ -129,7 +131,7 @@ void main() {
     await tester.pumpWidget(page());
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'Persistent request');
-    await tester.tap(find.byTooltip('Run Work'));
+    await tester.tap(find.byTooltip('Send request'));
     await tester.pump();
     expect(posts, 1);
     expect(cache.submitting('W'), isTrue);

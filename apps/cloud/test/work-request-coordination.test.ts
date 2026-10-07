@@ -9,6 +9,10 @@ vi.mock("../src/routes/handlers.js", async (original) => ({
   validateWorkflowWorkerEligibility: async () => ({
     issues: [],
     primaryWorkspaceId: "workspace",
+    workerProfiles: {
+      direct: { profileId: "chatgpt-codex", profileReleaseVersion: 1 },
+      chat: { profileId: "chatgpt-codex", profileReleaseVersion: 1 },
+    },
   }),
   resolveWorkflowInstanceId: async (_env: unknown, id: string) => id,
 }));
@@ -31,6 +35,15 @@ function fixture(coordinatorAvailable = true) {
             return this;
           },
           async first() {
+            if (sql.includes("SELECT wc.config_json"))
+              return {
+                configJson: JSON.stringify({
+                  bindings: {
+                    direct: { workerId: "worker-a" },
+                    chat: { workerId: "worker-a" },
+                  },
+                }),
+              };
             if (sql.includes("project_memberships")) return { role: "owner" };
             if (sql.includes("config_json"))
               return { configJson: JSON.stringify({ bindings: {} }) };

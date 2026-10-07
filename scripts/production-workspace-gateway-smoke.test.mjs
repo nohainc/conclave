@@ -54,6 +54,14 @@ describe("production Workspace Gateway smoke schema gate", () => {
       "0002_desktop_auth_multi_audience.sql",
       "0003_workspace_installations.sql",
       "0004_workspace_runtime_identity_uniqueness.sql",
+      "0009_realtime_stream_alignment.sql",
+      "0010_conversation_workflows.sql",
+      "0011_conversation_turns.sql",
+      "0012_canonical_conversation_history.sql",
+      "0013_worker_session_context.sql",
+      "0014_exact_history_context.sql",
+      "0015_conversation_workflow_runs.sql",
+      "0016_workflow_step_runs.sql",
     ]) {
       database.exec(
         readFileSync(
@@ -184,10 +192,59 @@ describe("production Workspace Gateway smoke schema gate", () => {
         "utf8",
       ),
     );
+    database.exec(
+      readFileSync(
+        new URL(
+          "../apps/cloud/migrations-v8/0009_realtime_stream_alignment.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    database.exec(
+      readFileSync(
+        new URL(
+          "../apps/cloud/migrations-v8/0010_conversation_workflows.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    database.exec(
+      readFileSync(
+        new URL(
+          "../apps/cloud/migrations-v8/0011_conversation_turns.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    database.exec(
+      readFileSync(
+        new URL(
+          "../apps/cloud/migrations-v8/0012_canonical_conversation_history.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    for (const migration of [
+      "0013_worker_session_context.sql",
+      "0014_exact_history_context.sql",
+      "0015_conversation_workflow_runs.sql",
+      "0016_workflow_step_runs.sql",
+    ]) {
+      database.exec(
+        readFileSync(
+          new URL(`../apps/cloud/migrations-v8/${migration}`, import.meta.url),
+          "utf8",
+        ),
+      );
+    }
     const definitions = Object.fromEntries(
       database
         .prepare(
-          "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?, ?, ?, ?)",
+          "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .all(
           "execution_workspaces",
@@ -196,6 +253,13 @@ describe("production Workspace Gateway smoke schema gate", () => {
           "desktop_auth_intents",
           "desktop_human_sessions",
           "mutation_receipts",
+          "conversations",
+          "conversation_work_requests",
+          "conversation_user_messages",
+          "conversation_turns",
+          "conversation_workflow_runs",
+          "conversation_workflow_step_runs",
+          "conversation_history_entries",
         )
         .map((row) => [row.name, row.sql]),
     );

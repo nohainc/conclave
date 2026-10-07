@@ -289,6 +289,7 @@ class AxWorkHistoryCache {
     String? requestedByUserId,
     String? requestedByName,
     List<Map<String, dynamic>> attachments = const [],
+    AxTurnExecutionSelection? executionSelection,
     required Future<String> Function(
             String, String, List<Map<String, dynamic>>, String)
         execute,
@@ -303,6 +304,9 @@ class AxWorkHistoryCache {
     final scope = 'workstream:$id:create-work-request';
     final input = {
       'workflowId': workflowId,
+      'workflowVersion': workflowVersion,
+      if (executionSelection != null)
+        'executionSelection': executionSelection.toJson(),
       'prompt': prompt,
       'attachments': inputs
     };
@@ -346,7 +350,10 @@ class AxWorkHistoryCache {
           if (source != null && !retrySubmission) {
             progress('Checking that everything is ready…');
             final issues = await source!.validateWorkRequestEligibility(
-                workstreamId: id, workflowId: workflowId, attachments: inputs);
+                workstreamId: id,
+                workflowId: workflowId,
+                attachments: inputs,
+                executionSelection: executionSelection);
             if (!current(context)) throw const AxMutationSuperseded();
             if (issues.isNotEmpty) {
               throw AxApiException(
@@ -583,6 +590,11 @@ class AxWorkHistoryCache {
           }
           final value = AxWorkRequest(
               id: requestId,
+              conversationId: detail.conversationId ?? previous?.conversationId,
+              turns: detail.turns,
+              workflowRun: detail.workflowRun,
+              executionConfig:
+                  detail.executionConfig ?? previous?.executionConfig,
               requestedByName: detail.requestedByName ??
                   previous?.requestedByName ??
                   'Team member',
