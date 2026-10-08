@@ -706,5 +706,34 @@ Realtime Domain Event Flow
 - `_homeView()` registers merged reactive listeners across `store.projects`, `store.workspaces`, `store.executionChanges`, `store.invitations`, `store.unreadNotifications`, `store.productUpdateReadStates`, and `store.productUpdatesNotifier`.
 - Background WebSocket transport messages invoke `_recordNotification(event)` and `_refreshRealtimeFeatures(type, event: event)`, immediately dispatching state updates to in-memory stores and triggering granular widget rebuilds.
 
+---
+
+## Canonical Scenario Testing Matrix (Phase 33)
+
+The Conclave AX Home surface is formally verified against a 20-point canonical test matrix ensuring complete domain correctness, lifecycle handling, authorization guarantees, and responsive rendering across all form factors:
+
+| # | Scenario | Expected Behavior | Verification Status |
+|---|---|---|---|
+| 1 | **Brand-new account** | Renders `NewUserHome` onboarding hero, "Create your first Project", value cards; suppresses dashboard sections | Verified (`home_page_test.dart`) |
+| 2 | **New user with invitation** | "Join a Project" card takes top priority before "Create your first Project" | Verified (`home_page_test.dart`) |
+| 3 | **Project but no Workspace** | Normal Home dashboard renders; no setup warning banner or workspace blocker | Verified (`home_page_test.dart`) |
+| 4 | **Invitation received realtime** | Appears immediately in "For You" with Accept / Decline actions | Verified (`home_page_test.dart`) |
+| 5 | **Invitation accepted** | Invitation item is removed from "For You" and joined Project appears in Continue Working / Projects | Verified (`home_page_test.dart`) |
+| 6 | **Workstream needs input** | Appears in "For You" with direct "Review →" action link to workstream conversation | Verified (`home_page_test.dart`) |
+| 7 | **Work running** | "Running now" section appears with animated progress indicator, objective, task count, and "Open →" | Verified (`home_page_test.dart`) |
+| 8 | **Work completes** | "Running now" card disappears; completion review item appears in "For You" with "Open →" | Verified (`home_page_test.dart`) |
+| 9 | **Recent Workstream** | Active unarchived workstreams render in "Continue working" with project name, title, collaborators, and snippet | Verified (`home_page_test.dart`) |
+| 10 | **Archived Workstream** | Archived workstreams (`archived: true`) and archived projects are filtered out from "Continue working" | Verified (`home_page_test.dart`) |
+| 11 | **Product update** | Published `AxProductUpdate` renders in "What's new in Conclave" and increments unread badge count | Verified (`home_page_test.dart`) |
+| 12 | **Old/read update** | Read updates (`AxUserProductUpdateState.isSeen / isRead`) do not show unread badge count | Verified (`home_page_test.dart`) |
+| 13 | **ChatGPT model added** | Relevant AI Update appears in "AI updates" when user has ChatGPT Worker configured | Verified (`home_page_test.dart`) |
+| 14 | **Gemini update without access** | Gemini update is hidden when user does not have access to Gemini Worker | Verified (`home_page_test.dart`) |
+| 15 | **Worker access revoked** | Related AI update disappears immediately when Worker access is revoked | Verified (`home_page_test.dart`) |
+| 16 | **Empty optional section** | Optional sections ("For you", "Running now", "AI updates") are completely hidden when empty | Verified (`home_page_test.dart`) |
+| 17 | **Offline** | Cached Home survives; displays connectivity indicator pill without replacing page content | Verified (`home_page_test.dart`) |
+| 18 | **Project permission revoked** | Attention items, runs, and recent work tied to revoked projects disappear immediately | Verified (`home_page_test.dart`) |
+| 19 | **Realtime reconnect** | Replay/reconnect duplicate transport events are deduplicated by ID with no duplicate items | Verified (`home_page_test.dart`) |
+| 20 | **Narrow / mobile layout** | Renders cleanly on mobile viewports (e.g. 360px x 640px) with single-column responsive stacking and zero overflow | Verified (`home_page_test.dart`) |
+
 
 

@@ -1219,8 +1219,17 @@ class AxHomeAttentionProjector {
       ));
     }
 
+    // Deduplicate items by ID to handle reconnect / replay scenarios
+    final seenIds = <String>{};
+    final uniqueList = <AxHomeAttentionItem>[];
+    for (final item in list) {
+      if (seenIds.add(item.id)) {
+        uniqueList.add(item);
+      }
+    }
+
     // Sort by: priority -> unread -> actionability -> recency
-    list.sort((a, b) {
+    uniqueList.sort((a, b) {
       final pA = a.priorityOrder;
       final pB = b.priorityOrder;
       if (pA != pB) return pA.compareTo(pB);
@@ -1247,7 +1256,7 @@ class AxHomeAttentionProjector {
       return a.id.compareTo(b.id);
     });
 
-    return list.take(5).toList();
+    return uniqueList.take(5).toList();
   }
 }
 
@@ -1419,8 +1428,11 @@ class _ForYouItemTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -1676,7 +1688,10 @@ class _ProductUpdateTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 4,
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -1695,7 +1710,6 @@ class _ProductUpdateTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
                       Text(
                         update.dateDisplay,
                         style: TextStyle(
@@ -2069,19 +2083,18 @@ class _AiUpdateRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
-                    Flexible(
-                      child: Text(
-                        update.workerDisplayName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                    Text(
+                      update.workerDisplayName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
                       ),
                     ),
-                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 5, vertical: 2),
@@ -2099,7 +2112,6 @@ class _AiUpdateRow extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
                     Text(
                       update.dateDisplay,
                       style: TextStyle(
@@ -2351,8 +2363,11 @@ class _RunningNowCard extends StatelessWidget {
             const SizedBox(height: 16),
             const Divider(height: 1),
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 8,
               children: [
                 Row(
                   mainAxisSize: MainAxisSize.min,
