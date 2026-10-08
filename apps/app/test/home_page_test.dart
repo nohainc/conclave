@@ -1169,11 +1169,34 @@ void main() {
                 archived: false,
                 branch: 'main',
                 lastActivity: 'Just now',
-                workstreams: [],
+                workstreams: [
+                  AxWorkstream(
+                    id: 'ws-1',
+                    projectId: 'p-1',
+                    name: 'AI Stream',
+                    lead: 'Gemini',
+                    status: 'active',
+                    brief: '',
+                    primaryWorkspace: '',
+                    queueStatus: 'idle',
+                  ),
+                ],
               ),
             ],
             workspaces: const [],
-            workers: const [],
+            workers: const [
+              AxWorker(
+                id: 'w-chatgpt',
+                workspaceId: 'ws-local',
+                workspaceName: 'Local',
+                workerTypeId: 'chatgpt',
+                displayName: 'ChatGPT Worker',
+                status: 'ready',
+                readinessState: 'ready',
+                localConcurrencyLimit: 2,
+                capabilities: ['chat'],
+              ),
+            ],
             run: null,
             openFindingCount: 0,
             aiUpdates: aiUpdates,
@@ -1196,5 +1219,132 @@ void main() {
     expect(find.text('CAPABILITY ADDED'), findsOneWidget);
     expect(find.text('Structured Output Mode'), findsOneWidget);
     expect(find.text('Oct 9'), findsOneWidget);
+  });
+
+  test(
+      'Phase 17 — AxAiCapabilityUpdateService filters AI updates by user accessible workers',
+      () {
+    const chatgptWorker = AxWorker(
+      id: 'w-1',
+      workspaceId: 'ws-1',
+      workspaceName: 'Local',
+      workerTypeId: 'chatgpt',
+      displayName: 'ChatGPT Worker',
+      status: 'ready',
+      readinessState: 'ready',
+      localConcurrencyLimit: 1,
+      capabilities: ['chat'],
+    );
+
+    const updates = [
+      AxAiCapabilityUpdate(
+        id: 'up-gpt',
+        workerProfileId: 'chatgpt',
+        provider: 'openai',
+        type: AxAiCapabilityUpdateType.modelAdded,
+        title: 'ChatGPT New Model',
+        summary: 'New o3 model available.',
+      ),
+      AxAiCapabilityUpdate(
+        id: 'up-claude',
+        workerProfileId: 'claude',
+        provider: 'anthropic',
+        type: AxAiCapabilityUpdateType.modelAdded,
+        title: 'Claude 3.7 Sonnet',
+        summary: 'Hybrid reasoning and artifacts.',
+      ),
+      AxAiCapabilityUpdate(
+        id: 'up-gemini',
+        workerProfileId: 'gemini',
+        provider: 'google',
+        type: AxAiCapabilityUpdateType.capabilityAdded,
+        title: 'Gemini Search Grounding',
+        summary: 'Web grounded search outputs.',
+      ),
+    ];
+
+    // Case 1: User has ChatGPT only -> ONLY ChatGPT updates returned
+    final chatgptOnly = AxAiCapabilityUpdateService.getRelevantUpdates(
+      updates: updates,
+      workers: [chatgptWorker],
+      projects: const [],
+    );
+    expect(chatgptOnly.length, 1);
+    expect(chatgptOnly.first.workerProfileId, 'chatgpt');
+    expect(chatgptOnly.first.title, 'ChatGPT New Model');
+
+    // Case 2: User gains access through shared Project Worker (e.g. Gemini lead/config in shared project)
+    const sharedProject = AxProject(
+      id: 'proj-shared',
+      name: 'Shared Project',
+      branch: 'main',
+      lastActivity: 'Now',
+      workstreams: [
+        AxWorkstream(
+          id: 'ws-gemini',
+          projectId: 'proj-shared',
+          name: 'Gemini Analysis',
+          lead: 'Gemini',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: 'idle',
+        ),
+      ],
+    );
+
+    final chatgptAndSharedGemini =
+        AxAiCapabilityUpdateService.getRelevantUpdates(
+      updates: updates,
+      workers: [chatgptWorker],
+      projects: [sharedProject],
+    );
+    expect(chatgptAndSharedGemini.length, 2);
+    final workerIds =
+        chatgptAndSharedGemini.map((u) => u.workerProfileId).toSet();
+    expect(workerIds, containsAll(['chatgpt', 'gemini']));
+    expect(workerIds, isNot(contains('claude')));
+
+    // Case 3: User with 0 accessible workers -> returns empty list (cleanly omitted)
+    final zeroWorkers = AxAiCapabilityUpdateService.getRelevantUpdates(
+      updates: updates,
+      workers: const [],
+      projects: const [],
+    );
+    expect(zeroWorkers, isEmpty);
+  });
+
+  testWidgets(
+      'Phase 17 — EstablishedUserHome omits AI updates when user has no accessible workers',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EstablishedUserHome(
+            projects: const [
+              AxProject(
+                id: 'p-1',
+                name: 'Solo Project',
+                description: 'Solo project',
+                archived: false,
+                branch: 'main',
+                lastActivity: 'Just now',
+                workstreams: [],
+              ),
+            ],
+            workspaces: const [],
+            workers: const [],
+            run: null,
+            openFindingCount: 0,
+            onOpenProject: (_) {},
+            onOpenRun: (_, __) {},
+            onOpenWorkspaces: () {},
+          ),
+        ),
+      ),
+    );
+
+    // AI updates section is omitted cleanly
+    expect(find.text('AI updates'), findsNothing);
   });
 }

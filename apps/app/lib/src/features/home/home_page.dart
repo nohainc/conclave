@@ -617,15 +617,12 @@ class EstablishedUserHome extends StatelessWidget {
         readStates: productUpdateReadStates,
       );
 
-  List<AxAiCapabilityUpdate> get _effectiveAiUpdates {
-    if (aiUpdates.isNotEmpty) return aiUpdates;
-    // Derive relevant AI updates based on available worker types in the workspace/projects
-    final availableWorkerTypes = workers.map((w) => w.workerTypeId).toSet();
-    return _defaultAiUpdates.where((update) {
-      if (availableWorkerTypes.isEmpty) return true;
-      return availableWorkerTypes.contains(update.workerProfileId);
-    }).toList();
-  }
+  List<AxAiCapabilityUpdate> get _effectiveAiUpdates =>
+      AxAiCapabilityUpdateService.getRelevantUpdates(
+        updates: aiUpdates.isNotEmpty ? aiUpdates : defaultAiCapabilityUpdates,
+        workers: workers,
+        projects: projects,
+      );
 
   List<AxContinueWorkItem> _deriveDefaultContinueWorkItems(
       List<AxProject> projects) {
@@ -2079,5 +2076,3 @@ const defaultAiCapabilityUpdates = [
     dateDisplay: 'Oct 2',
   ),
 ];
-
-const _defaultAiUpdates = defaultAiCapabilityUpdates;

@@ -295,5 +295,31 @@ AxAiCapabilityUpdate
 - **Scoped by Active Workers:** When workers are configured in the user's workspace, Home filters AI capability updates to highlight relevant provider/worker capabilities.
 - **Card Presentation (`_AiUpdateCard`):** Displays worker identity dot, worker name, category pill badge (e.g. `[MODEL ADDED]`, `[CAPABILITY ADDED]`), publication date (`Oct 7`), bold title, and concise summary.
 
+---
+
+## User-Relevant Worker Accessibility & Dynamic AI Update Filtering (Phase 17)
+
+Home filters AI updates to show **only** changes for Workers the user can actually access:
+
+### 1. Accessibility Resolution Pipeline (`AxAiCapabilityUpdateService.resolveAccessibleWorkerProfileIds`)
+```text
+Available Worker Profiles
+  ├── User Workspace Workers (e.g., local ChatGPT Worker)
+  ├── Shared Project Workstreams (e.g., project workstream with Gemini Worker lead/config)
+  └── Project Settings Worker Grants (e.g., sharedWorkers / workerGrants)
+        ↓
+AI Capability Updates Catalog
+        ↓
+Strict Accessibility Filter
+        ↓
+Home Surface
+```
+
+### 2. Strict Filtering Guarantees
+- **No Irrelevant Provider News:** If the user has ChatGPT only, Gemini/Claude updates are strictly omitted.
+- **Shared Access Inclusion:** If a collaborator gains access to a Worker profile through a shared Project Workstream or grant, relevant updates for that Worker automatically become visible on Home.
+- **Zero-State Omission:** If the user has zero accessible workers or no updates match their accessible workers, the AI updates section collapses completely (`const SizedBox.shrink()`) without placeholder clutter.
+
+
 
 

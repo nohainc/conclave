@@ -2031,3 +2031,126 @@ class AxAiCapabilityUpdate {
 
 typedef AxAiUpdate = AxAiCapabilityUpdate;
 typedef AiCapabilityUpdate = AxAiCapabilityUpdate;
+
+class AxAiCapabilityUpdateService {
+  /// Resolves the set of worker profile and provider identifiers accessible to the user:
+  /// 1. Directly owned/connected workspace workers (`workerTypeId`, `profileDefinitionId`, `providerToolName`)
+  /// 2. Shared project workers in workstream configurations (`workConfig['worker']`, `workConfig['workerTypeId']`, `ws.lead`)
+  /// 3. Shared project worker grants and settings (`project.settings['sharedWorkers']`, `project.settings['workerGrants']`)
+  static Set<String> resolveAccessibleWorkerProfileIds({
+    required List<AxWorker> workers,
+    List<AxProject> projects = const [],
+  }) {
+    final accessible = <String>{};
+
+    for (final w in workers) {
+      if (w.workerTypeId.isNotEmpty) {
+        accessible.add(w.workerTypeId.toLowerCase());
+      }
+      if (w.profileDefinitionId != null && w.profileDefinitionId!.isNotEmpty) {
+        accessible.add(w.profileDefinitionId!.toLowerCase());
+      }
+      if (w.providerToolName != null && w.providerToolName!.isNotEmpty) {
+        accessible.add(w.providerToolName!.toLowerCase());
+      }
+    }
+
+    for (final p in projects) {
+      if (p.archived) continue;
+      // Project settings / worker grants
+      final settings = p.settings;
+      if (settings['sharedWorkers'] is List) {
+        for (final item in (settings['sharedWorkers'] as List)) {
+          final id = item is Map
+              ? (item['workerTypeId'] ??
+                      item['workerProfileId'] ??
+                      item['id'] ??
+                      item['worker'])
+                  ?.toString()
+              : item?.toString();
+          if (id != null && id.isNotEmpty) accessible.add(id.toLowerCase());
+        }
+      }
+      if (settings['workerGrants'] is List) {
+        for (final item in (settings['workerGrants'] as List)) {
+          final id = item is Map
+              ? (item['workerTypeId'] ??
+                      item['workerProfileId'] ??
+                      item['id'] ??
+                      item['worker'])
+                  ?.toString()
+              : item?.toString();
+          if (id != null && id.isNotEmpty) accessible.add(id.toLowerCase());
+        }
+      }
+
+      for (final ws in p.workstreams) {
+        if (ws.archived) continue;
+        final cfg = ws.workConfig;
+        final workerInConfig = (cfg['workerTypeId'] ??
+                cfg['workerProfileId'] ??
+                cfg['worker'] ??
+                cfg['workerType'])
+            ?.toString();
+        if (workerInConfig != null && workerInConfig.isNotEmpty) {
+          accessible.add(workerInConfig.toLowerCase());
+        }
+        // Check standard worker designations in lead (e.g. 'ChatGPT', 'Gemini', 'Claude', 'Ollama')
+        final lead = ws.lead.toLowerCase();
+        if (lead.contains('chatgpt') || lead.contains('openai')) {
+          accessible.add('chatgpt');
+          accessible.add('openai');
+        }
+        if (lead.contains('gemini') || lead.contains('google')) {
+          accessible.add('gemini');
+          accessible.add('google');
+        }
+        if (lead.contains('claude') || lead.contains('anthropic')) {
+          accessible.add('claude');
+          accessible.add('anthropic');
+        }
+        if (lead.contains('ollama')) {
+          accessible.add('ollama');
+        }
+      }
+    }
+
+    return accessible;
+  }
+
+  /// Filters AI capability updates to only those applicable to the user's accessible workers/profiles.
+  /// If the user has zero accessible workers or projects, returns an empty list (cleanly omitted).
+  /// Irrelevant updates for ungranted/unaccessible models or providers are strictly excluded.
+  static List<AxAiCapabilityUpdate> getRelevantUpdates({
+    required List<AxAiCapabilityUpdate> updates,
+    required List<AxWorker> workers,
+    List<AxProject> projects = const [],
+    int? limit,
+  }) {
+    final accessibleProfileIds = resolveAccessibleWorkerProfileIds(
+      workers: workers,
+      projects: projects,
+    );
+
+    if (accessibleProfileIds.isEmpty) {
+      return const [];
+    }
+
+    final filtered = updates.where((update) {
+      final profileId = update.workerProfileId.toLowerCase();
+      final provider = update.provider?.toLowerCase();
+      final workerTypeId = update.workerTypeId.toLowerCase();
+
+      return accessibleProfileIds.contains(profileId) ||
+          accessibleProfileIds.contains(workerTypeId) ||
+          (provider != null && accessibleProfileIds.contains(provider));
+    }).toList();
+
+    filtered.sort((a, b) => b.publishedDateTime.compareTo(a.publishedDateTime));
+
+    if (limit != null && limit > 0 && filtered.length > limit) {
+      return filtered.sublist(0, limit);
+    }
+    return filtered;
+  }
+}
