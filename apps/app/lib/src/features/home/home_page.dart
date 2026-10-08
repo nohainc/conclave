@@ -20,11 +20,15 @@ class HomePage extends StatelessWidget {
     this.attentionItems = const [],
     this.continueWorkItems = const [],
     this.productUpdates = const [],
+    this.productUpdateReadStates = const {},
     this.aiUpdates = const [],
     this.onAcceptInvitation,
     this.onDeclineInvitation,
     this.onOpenWorkstream,
     this.onOpenNotifications,
+    this.onOpenWhatsNew,
+    this.onOpenUpdateDetail,
+    this.onDismissUpdate,
   });
 
   final List<AxProject> projects;
@@ -41,11 +45,15 @@ class HomePage extends StatelessWidget {
   final List<AxHomeAttentionItem> attentionItems;
   final List<AxContinueWorkItem> continueWorkItems;
   final List<AxProductUpdate> productUpdates;
+  final Map<String, AxUserProductUpdateState> productUpdateReadStates;
   final List<AxAiUpdate> aiUpdates;
   final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
   final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
   final void Function(String projectId, String workstreamId)? onOpenWorkstream;
   final VoidCallback? onOpenNotifications;
+  final VoidCallback? onOpenWhatsNew;
+  final ValueChanged<AxProductUpdate>? onOpenUpdateDetail;
+  final ValueChanged<AxProductUpdate>? onDismissUpdate;
 
   /// New-user experience is active when user has zero projects.
   bool get isNewUser => projects.isEmpty;
@@ -67,6 +75,7 @@ class HomePage extends StatelessWidget {
           attentionItems: attentionItems,
           continueWorkItems: continueWorkItems,
           productUpdates: productUpdates,
+          productUpdateReadStates: productUpdateReadStates,
           aiUpdates: aiUpdates,
           onAcceptInvitation: onAcceptInvitation,
           onDeclineInvitation: onDeclineInvitation,
@@ -77,6 +86,9 @@ class HomePage extends StatelessWidget {
           onOpenRun: onOpenRun,
           onOpenWorkstream: onOpenWorkstream,
           onOpenNotifications: onOpenNotifications,
+          onOpenWhatsNew: onOpenWhatsNew,
+          onOpenUpdateDetail: onOpenUpdateDetail,
+          onDismissUpdate: onDismissUpdate,
         );
 }
 
@@ -551,13 +563,14 @@ class EstablishedUserHome extends StatelessWidget {
     required this.projects,
     required this.workspaces,
     required this.workers,
-    required this.invitations,
-    required this.attentionItems,
-    required this.continueWorkItems,
-    required this.productUpdates,
-    required this.aiUpdates,
-    required this.onAcceptInvitation,
-    required this.onDeclineInvitation,
+    this.invitations = const [],
+    this.attentionItems = const [],
+    this.continueWorkItems = const [],
+    this.productUpdates = const [],
+    this.productUpdateReadStates = const {},
+    this.aiUpdates = const [],
+    this.onAcceptInvitation,
+    this.onDeclineInvitation,
     required this.run,
     required this.openFindingCount,
     required this.onOpenWorkspaces,
@@ -565,6 +578,9 @@ class EstablishedUserHome extends StatelessWidget {
     required this.onOpenRun,
     this.onOpenWorkstream,
     this.onOpenNotifications,
+    this.onOpenWhatsNew,
+    this.onOpenUpdateDetail,
+    this.onDismissUpdate,
   });
 
   final List<AxProject> projects;
@@ -574,6 +590,7 @@ class EstablishedUserHome extends StatelessWidget {
   final List<AxHomeAttentionItem> attentionItems;
   final List<AxContinueWorkItem> continueWorkItems;
   final List<AxProductUpdate> productUpdates;
+  final Map<String, AxUserProductUpdateState> productUpdateReadStates;
   final List<AxAiUpdate> aiUpdates;
   final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
   final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
@@ -584,9 +601,21 @@ class EstablishedUserHome extends StatelessWidget {
   final void Function(String projectId, String runId) onOpenRun;
   final void Function(String projectId, String workstreamId)? onOpenWorkstream;
   final VoidCallback? onOpenNotifications;
+  final VoidCallback? onOpenWhatsNew;
+  final ValueChanged<AxProductUpdate>? onOpenUpdateDetail;
+  final ValueChanged<AxProductUpdate>? onDismissUpdate;
 
   List<AxProductUpdate> get _effectiveProductUpdates =>
-      productUpdates.isNotEmpty ? productUpdates : _defaultProductUpdates;
+      AxProductUpdateService.getHomeUpdates(
+        productUpdates.isNotEmpty ? productUpdates : defaultProductUpdates,
+        readStates: productUpdateReadStates,
+        limit: 3,
+      );
+
+  int get _unreadWhatsNewCount => AxProductUpdateService.computeUnreadCount(
+        productUpdates.isNotEmpty ? productUpdates : defaultProductUpdates,
+        readStates: productUpdateReadStates,
+      );
 
   List<AxAiUpdate> get _effectiveAiUpdates {
     if (aiUpdates.isNotEmpty) return aiUpdates;
@@ -699,11 +728,12 @@ class EstablishedUserHome extends StatelessWidget {
             LayoutBuilder(
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth > 700;
-                final items = (continueWorkItems.isNotEmpty
-                        ? continueWorkItems
-                        : _deriveDefaultContinueWorkItems(projects))
-                    .take(5)
-                    .toList();
+                final items = AxRecentWorkRanker.rank(
+                  continueWorkItems.isNotEmpty
+                      ? continueWorkItems
+                      : _deriveDefaultContinueWorkItems(projects),
+                  limit: 5,
+                );
 
                 return GridView.builder(
                   shrinkWrap: true,
@@ -735,23 +765,95 @@ class EstablishedUserHome extends StatelessWidget {
           ],
 
           // 3. WHAT'S NEW (Product Updates)
-          const _SectionHeader(title: "What's new in Conclave"),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Column(
-                children: [
-                  for (var i = 0; i < _effectiveProductUpdates.length; i++) ...[
-                    _ProductUpdateTile(update: _effectiveProductUpdates[i]),
-                    if (i < _effectiveProductUpdates.length - 1)
-                      const Divider(height: 1),
+          if (_effectiveProductUpdates.isNotEmpty) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      "What's new",
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                    ),
+                    if (_unreadWhatsNewCount > 0) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '$_unreadWhatsNewCount',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
+                TextButton(
+                  onPressed: onOpenWhatsNew ??
+                      () => AxWhatsNewDialog.show(
+                            context,
+                            updates: productUpdates.isNotEmpty
+                                ? productUpdates
+                                : defaultProductUpdates,
+                            readStates: productUpdateReadStates,
+                            onOpenUpdateDetail: onOpenUpdateDetail,
+                            onDismissUpdate: onDismissUpdate,
+                          ),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('See all'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  children: [
+                    for (var i = 0;
+                        i < _effectiveProductUpdates.length;
+                        i++) ...[
+                      _ProductUpdateTile(
+                        update: _effectiveProductUpdates[i],
+                        onTap: () {
+                          if (onOpenUpdateDetail != null) {
+                            onOpenUpdateDetail!(_effectiveProductUpdates[i]);
+                          } else {
+                            AxWhatsNewDialog.show(
+                              context,
+                              updates: productUpdates.isNotEmpty
+                                  ? productUpdates
+                                  : defaultProductUpdates,
+                              readStates: productUpdateReadStates,
+                              initialUpdateId: _effectiveProductUpdates[i].id,
+                              onOpenUpdateDetail: onOpenUpdateDetail,
+                              onDismissUpdate: onDismissUpdate,
+                            );
+                          }
+                        },
+                      ),
+                      if (i < _effectiveProductUpdates.length - 1)
+                        const Divider(height: 1),
+                    ],
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 28),
+            const SizedBox(height: 28),
+          ],
 
           // 4. AI UPDATES (Changes relevant to available Workers/models)
           if (_effectiveAiUpdates.isNotEmpty) ...[
@@ -1368,43 +1470,395 @@ class _ContinueWorkCard extends StatelessWidget {
 }
 
 class _ProductUpdateTile extends StatelessWidget {
-  const _ProductUpdateTile({required this.update});
+  const _ProductUpdateTile({
+    required this.update,
+    this.onTap,
+  });
 
   final AxProductUpdate update;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(6),
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          update.category.label.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        update.dateDisplay,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    update.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    update.summary,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: colorScheme.onSurfaceVariant,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: Text(
-              update.dateDisplay,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+            const SizedBox(width: 12),
+            TextButton(
+              onPressed: onTap,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              ),
+              child: const Text('Learn more →'),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              update.title,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Text(update.summary),
-      ),
-      trailing: const Icon(Icons.arrow_forward_rounded, size: 16),
     );
   }
 }
+
+class AxWhatsNewDialog extends StatelessWidget {
+  const AxWhatsNewDialog({
+    super.key,
+    required this.updates,
+    this.readStates = const {},
+    this.initialUpdateId,
+    this.onOpenUpdateDetail,
+    this.onDismissUpdate,
+  });
+
+  final List<AxProductUpdate> updates;
+  final Map<String, AxUserProductUpdateState> readStates;
+  final String? initialUpdateId;
+  final ValueChanged<AxProductUpdate>? onOpenUpdateDetail;
+  final ValueChanged<AxProductUpdate>? onDismissUpdate;
+
+  static Future<void> show(
+    BuildContext context, {
+    required List<AxProductUpdate> updates,
+    Map<String, AxUserProductUpdateState> readStates = const {},
+    String? initialUpdateId,
+    ValueChanged<AxProductUpdate>? onOpenUpdateDetail,
+    ValueChanged<AxProductUpdate>? onDismissUpdate,
+  }) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AxWhatsNewDialog(
+        updates: updates,
+        readStates: readStates,
+        initialUpdateId: initialUpdateId,
+        onOpenUpdateDetail: onOpenUpdateDetail,
+        onDismissUpdate: onDismissUpdate,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final grouped = AxProductUpdateService.groupUpdatesByMonthYear(updates);
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640, maxHeight: 720),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "What's New",
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Conclave changelog and product updates',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              Expanded(
+                child: grouped.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No product updates available.',
+                          style: TextStyle(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: grouped.keys.length,
+                        itemBuilder: (context, groupIndex) {
+                          final monthYear = grouped.keys.elementAt(groupIndex);
+                          final items = grouped[monthYear]!;
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 10),
+                                  child: Text(
+                                    monthYear,
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: colorScheme.primary,
+                                    ),
+                                  ),
+                                ),
+                                for (final update in items) ...[
+                                  Card(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: colorScheme
+                                                          .surfaceContainerHighest,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                    ),
+                                                    child: Text(
+                                                      update.category.label
+                                                          .toUpperCase(),
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        letterSpacing: 0.5,
+                                                        color: colorScheme
+                                                            .onSurfaceVariant,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    update.dateDisplay,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: colorScheme
+                                                          .onSurfaceVariant,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              if (onDismissUpdate != null)
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons
+                                                        .visibility_off_outlined,
+                                                    size: 18,
+                                                  ),
+                                                  tooltip: 'Hide update',
+                                                  visualDensity:
+                                                      VisualDensity.compact,
+                                                  onPressed: () =>
+                                                      onDismissUpdate!(update),
+                                                ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            update.title,
+                                            style: const TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            update.summary,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                          if (update.details != null &&
+                                              update.details!.isNotEmpty) ...[
+                                            const SizedBox(height: 10),
+                                            Container(
+                                              padding: const EdgeInsets.all(10),
+                                              decoration: BoxDecoration(
+                                                color: colorScheme
+                                                    .surfaceContainerLow,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                update.details!,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: colorScheme.onSurface,
+                                                  height: 1.35,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const defaultProductUpdates = [
+  AxProductUpdate(
+    id: 'update-invitations',
+    slug: 'project-invitations',
+    title: 'Project Invitations',
+    summary:
+        'Invite family, friends, and teammates to shared projects and accept invitations directly in AX.',
+    details:
+        'Project owners and editors can now invite collaborators via email or handle invitation approvals directly within Conclave AX with full role-based access control.',
+    category: AxProductUpdateCategory.collaboration,
+    publishedAt: '2026-10-07T00:00:00Z',
+    dateDisplay: 'Oct 7',
+    status: AxProductUpdateStatus.published,
+  ),
+  AxProductUpdate(
+    id: 'update-continuity',
+    slug: 'conversation-continuity',
+    title: 'Conversation Continuity',
+    summary:
+        'Switch Workers while keeping your Workstream conversation in context without losing turn history.',
+    details:
+        'Transition seamlessly between ChatGPT, Claude, and Gemini workers across conversational turns with preserved contextual memory and synthesis state.',
+    category: AxProductUpdateCategory.workflow,
+    publishedAt: '2026-10-06T00:00:00Z',
+    dateDisplay: 'Oct 6',
+    status: AxProductUpdateStatus.published,
+  ),
+  AxProductUpdate(
+    id: 'update-profiles',
+    slug: 'tool-profiles',
+    title: 'Tool Profiles',
+    summary:
+        'Workers now load provider capabilities dynamically from signed Tool Profiles with strict credential isolation.',
+    details:
+        'Signed cryptographic tool profiles define explicit capabilities, CLI execution constraints, and isolate local model credentials from cloud telemetry.',
+    category: AxProductUpdateCategory.security,
+    publishedAt: '2026-10-04T00:00:00Z',
+    dateDisplay: 'Oct 4',
+    status: AxProductUpdateStatus.published,
+  ),
+  AxProductUpdate(
+    id: 'update-workspace-sync',
+    slug: 'workspace-local-sync',
+    title: 'Workspace Local Sync',
+    summary:
+        'Seamless bidirectional file synchronization and live process execution on your local machine.',
+    details:
+        'Connect your Mac, Linux, or Windows machine as a local execution workspace with isolated work roots and real-time execution telemetry.',
+    category: AxProductUpdateCategory.workspace,
+    publishedAt: '2026-09-28T00:00:00Z',
+    dateDisplay: 'Sep 28',
+    status: AxProductUpdateStatus.published,
+  ),
+];
 
 class _AiUpdateCard extends StatelessWidget {
   const _AiUpdateCard({required this.update});
@@ -1548,33 +2002,6 @@ class _InvitationItem extends StatelessWidget {
     );
   }
 }
-
-const _defaultProductUpdates = [
-  AxProductUpdate(
-    id: 'update-invitations',
-    title: 'Project Invitations',
-    summary:
-        'Invite family, friends, and teammates to shared projects and accept invitations directly in AX.',
-    publishedAt: '2026-10-07T00:00:00Z',
-    dateDisplay: 'Oct 7',
-  ),
-  AxProductUpdate(
-    id: 'update-continuity',
-    title: 'Conversation Continuity',
-    summary:
-        'Switch Workers while keeping your Workstream conversation in context without losing turn history.',
-    publishedAt: '2026-10-06T00:00:00Z',
-    dateDisplay: 'Oct 6',
-  ),
-  AxProductUpdate(
-    id: 'update-profiles',
-    title: 'Tool Profiles',
-    summary:
-        'Workers now load provider capabilities dynamically from signed Tool Profiles with strict credential isolation.',
-    publishedAt: '2026-10-04T00:00:00Z',
-    dateDisplay: 'Oct 4',
-  ),
-];
 
 const _defaultAiUpdates = [
   AxAiUpdate(

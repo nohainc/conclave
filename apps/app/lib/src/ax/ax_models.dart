@@ -1325,6 +1325,12 @@ class AxContinueWorkItem {
     required this.collaboratorsDisplay,
     required this.lastMessageSnippet,
     required this.lastActivityDisplay,
+    this.lastMeaningfulActivityAt,
+    this.hasUserParticipation = false,
+    this.hasRecentWorkerResponse = false,
+    this.hasUnresolvedState = false,
+    this.isDirectMember = true,
+    this.archived = false,
   });
 
   final String projectId;
@@ -1334,26 +1340,497 @@ class AxContinueWorkItem {
   final String collaboratorsDisplay;
   final String lastMessageSnippet;
   final String lastActivityDisplay;
+  final DateTime? lastMeaningfulActivityAt;
+  final bool hasUserParticipation;
+  final bool hasRecentWorkerResponse;
+  final bool hasUnresolvedState;
+  final bool isDirectMember;
+  final bool archived;
+
+  AxContinueWorkItem copyWith({
+    String? projectId,
+    String? projectName,
+    String? workstreamId,
+    String? workstreamTitle,
+    String? collaboratorsDisplay,
+    String? lastMessageSnippet,
+    String? lastActivityDisplay,
+    DateTime? lastMeaningfulActivityAt,
+    bool? hasUserParticipation,
+    bool? hasRecentWorkerResponse,
+    bool? hasUnresolvedState,
+    bool? isDirectMember,
+    bool? archived,
+  }) =>
+      AxContinueWorkItem(
+        projectId: projectId ?? this.projectId,
+        projectName: projectName ?? this.projectName,
+        workstreamId: workstreamId ?? this.workstreamId,
+        workstreamTitle: workstreamTitle ?? this.workstreamTitle,
+        collaboratorsDisplay: collaboratorsDisplay ?? this.collaboratorsDisplay,
+        lastMessageSnippet: lastMessageSnippet ?? this.lastMessageSnippet,
+        lastActivityDisplay: lastActivityDisplay ?? this.lastActivityDisplay,
+        lastMeaningfulActivityAt:
+            lastMeaningfulActivityAt ?? this.lastMeaningfulActivityAt,
+        hasUserParticipation: hasUserParticipation ?? this.hasUserParticipation,
+        hasRecentWorkerResponse:
+            hasRecentWorkerResponse ?? this.hasRecentWorkerResponse,
+        hasUnresolvedState: hasUnresolvedState ?? this.hasUnresolvedState,
+        isDirectMember: isDirectMember ?? this.isDirectMember,
+        archived: archived ?? this.archived,
+      );
+}
+
+class AxRecentWorkRanker {
+  /// Computes a composite ranking score for a Workstream item based on meaningful conversation activity.
+  ///
+  /// Factors:
+  /// - Unresolved state (+1000 pts)
+  /// - Recent user participation (+500 pts)
+  /// - Recent worker response (+250 pts)
+  /// - Direct membership (+100 pts)
+  /// - Time recency decay on meaningful conversation activity (up to +500 pts)
+  ///
+  /// Background metadata / sync updates do NOT inflate the score.
+  static double computeScore(AxContinueWorkItem item, {DateTime? now}) {
+    if (item.archived || !item.isDirectMember) return -1.0;
+
+    final referenceTime = now ?? DateTime.now();
+    double score = 0.0;
+
+    // 1. Unresolved state (pending attention / active run)
+    if (item.hasUnresolvedState) {
+      score += 1000.0;
+    }
+
+    // 2. Direct user participation in discussion
+    if (item.hasUserParticipation) {
+      score += 500.0;
+    }
+
+    // 3. Worker response in discussion
+    if (item.hasRecentWorkerResponse) {
+      score += 250.0;
+    }
+
+    // 4. Direct membership
+    if (item.isDirectMember) {
+      score += 100.0;
+    }
+
+    // 5. Meaningful conversation recency decay
+    if (item.lastMeaningfulActivityAt != null) {
+      final hoursAgo =
+          referenceTime.difference(item.lastMeaningfulActivityAt!).inMinutes /
+              60.0;
+      if (hoursAgo >= 0) {
+        // Continuous decay half-life ~ 12 hours
+        final recencyBoost = 500.0 / (1.0 + (hoursAgo / 12.0));
+        score += recencyBoost;
+      }
+    }
+
+    return score;
+  }
+
+  /// Filters out archived, deleted, and inaccessible workstreams,
+  /// ranks remaining items using meaningful activity scores,
+  /// and returns up to [limit] (default: 5).
+  static List<AxContinueWorkItem> rank(
+    List<AxContinueWorkItem> items, {
+    int limit = 5,
+    DateTime? now,
+  }) {
+    final indexed = <(int index, AxContinueWorkItem item)>[];
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      if (!item.archived && item.isDirectMember) {
+        indexed.add((i, item));
+      }
+    }
+
+    indexed.sort((a, b) {
+      final scoreA = computeScore(a.$2, now: now);
+      final scoreB = computeScore(b.$2, now: now);
+      if (scoreA != scoreB) {
+        return scoreB.compareTo(scoreA); // Highest score first
+      }
+
+      // Tie-breaker: recency of meaningful activity
+      final timeA = a.$2.lastMeaningfulActivityAt;
+      final timeB = b.$2.lastMeaningfulActivityAt;
+      if (timeA != null && timeB != null) {
+        final cmp = timeB.compareTo(timeA);
+        if (cmp != 0) return cmp;
+      } else if (timeA != null) {
+        return -1;
+      } else if (timeB != null) {
+        return 1;
+      }
+
+      // Final stable tie-breaker: preserve original list order
+      return a.$1.compareTo(b.$1);
+    });
+
+    return indexed.map((e) => e.$2).take(limit).toList();
+  }
+}
+
+enum AxProductUpdateCategory {
+  feature,
+  improvement,
+  security,
+  workflow,
+  collaboration,
+  workspace,
+  worker;
+
+  String get label => switch (this) {
+        AxProductUpdateCategory.feature => 'Feature',
+        AxProductUpdateCategory.improvement => 'Improvement',
+        AxProductUpdateCategory.security => 'Security',
+        AxProductUpdateCategory.workflow => 'Workflow',
+        AxProductUpdateCategory.collaboration => 'Collaboration',
+        AxProductUpdateCategory.workspace => 'Workspace',
+        AxProductUpdateCategory.worker => 'Worker',
+      };
+
+  static AxProductUpdateCategory fromString(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return AxProductUpdateCategory.feature;
+    }
+    final normalized = value.trim().toLowerCase();
+    for (final cat in AxProductUpdateCategory.values) {
+      if (cat.name.toLowerCase() == normalized) return cat;
+    }
+    return AxProductUpdateCategory.feature;
+  }
+}
+
+enum AxProductUpdateStatus {
+  draft,
+  published,
+  archived;
+
+  static AxProductUpdateStatus fromString(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return AxProductUpdateStatus.published;
+    }
+    final normalized = value.trim().toLowerCase();
+    for (final s in AxProductUpdateStatus.values) {
+      if (s.name.toLowerCase() == normalized) return s;
+    }
+    return AxProductUpdateStatus.published;
+  }
 }
 
 class AxProductUpdate {
   const AxProductUpdate({
     required this.id,
+    this.slug = '',
     required this.title,
     required this.summary,
+    this.details,
+    this.category = AxProductUpdateCategory.feature,
     required this.publishedAt,
-    required this.dateDisplay,
+    this.minimumAppVersion,
+    this.maximumAppVersion,
+    this.actionType,
+    this.actionTarget,
+    this.imageUrl,
+    this.audience = 'all',
+    this.status = AxProductUpdateStatus.published,
     this.actionUrl,
     this.learnMoreUrl,
-  });
+    String? dateDisplay,
+  }) : _customDateDisplay = dateDisplay;
 
   final String id;
+  final String slug;
   final String title;
   final String summary;
-  final String publishedAt;
-  final String dateDisplay;
+  final String? details;
+  final AxProductUpdateCategory category;
+  final dynamic publishedAt;
+  final String? minimumAppVersion;
+  final String? maximumAppVersion;
+  final String? actionType;
+  final String? actionTarget;
+  final String? imageUrl;
+  final String audience;
+  final AxProductUpdateStatus status;
   final String? actionUrl;
   final String? learnMoreUrl;
+  final String? _customDateDisplay;
+
+  DateTime get publishedDateTime {
+    if (publishedAt is DateTime) {
+      return publishedAt as DateTime;
+    }
+    if (publishedAt is String) {
+      return DateTime.tryParse(publishedAt as String) ?? DateTime(2026, 1, 1);
+    }
+    return DateTime(2026, 1, 1);
+  }
+
+  String get dateDisplay {
+    if (_customDateDisplay != null && _customDateDisplay.isNotEmpty) {
+      return _customDateDisplay;
+    }
+    final dt = publishedDateTime;
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    final monthIndex = (dt.month >= 1 && dt.month <= 12) ? dt.month - 1 : 0;
+    return '${months[monthIndex]} ${dt.day}';
+  }
+
+  String get monthYearGroup {
+    final dt = publishedDateTime;
+    const fullMonths = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
+    ];
+    final monthIndex = (dt.month >= 1 && dt.month <= 12) ? dt.month - 1 : 0;
+    return '${fullMonths[monthIndex]} ${dt.year}';
+  }
+
+  bool isCompatibleWithVersion(String? appVersion) {
+    if (appVersion == null || appVersion.isEmpty) return true;
+    if (minimumAppVersion != null && minimumAppVersion!.isNotEmpty) {
+      if (appVersion.compareTo(minimumAppVersion!) < 0) return false;
+    }
+    if (maximumAppVersion != null && maximumAppVersion!.isNotEmpty) {
+      if (appVersion.compareTo(maximumAppVersion!) > 0) return false;
+    }
+    return true;
+  }
+
+  AxProductUpdate copyWith({
+    String? id,
+    String? slug,
+    String? title,
+    String? summary,
+    String? details,
+    AxProductUpdateCategory? category,
+    dynamic publishedAt,
+    String? minimumAppVersion,
+    String? maximumAppVersion,
+    String? actionType,
+    String? actionTarget,
+    String? imageUrl,
+    String? audience,
+    AxProductUpdateStatus? status,
+    String? actionUrl,
+    String? learnMoreUrl,
+    String? dateDisplay,
+  }) =>
+      AxProductUpdate(
+        id: id ?? this.id,
+        slug: slug ?? this.slug,
+        title: title ?? this.title,
+        summary: summary ?? this.summary,
+        details: details ?? this.details,
+        category: category ?? this.category,
+        publishedAt: publishedAt ?? this.publishedAt,
+        minimumAppVersion: minimumAppVersion ?? this.minimumAppVersion,
+        maximumAppVersion: maximumAppVersion ?? this.maximumAppVersion,
+        actionType: actionType ?? this.actionType,
+        actionTarget: actionTarget ?? this.actionTarget,
+        imageUrl: imageUrl ?? this.imageUrl,
+        audience: audience ?? this.audience,
+        status: status ?? this.status,
+        actionUrl: actionUrl ?? this.actionUrl,
+        learnMoreUrl: learnMoreUrl ?? this.learnMoreUrl,
+        dateDisplay: dateDisplay ?? _customDateDisplay,
+      );
+
+  factory AxProductUpdate.fromJson(Map<String, dynamic> json) =>
+      AxProductUpdate(
+        id: json['id']?.toString() ?? '',
+        slug: json['slug']?.toString() ?? '',
+        title: json['title']?.toString() ?? '',
+        summary: json['summary']?.toString() ?? '',
+        details: json['details']?.toString(),
+        category:
+            AxProductUpdateCategory.fromString(json['category']?.toString()),
+        publishedAt: json['publishedAt']?.toString() ?? '',
+        minimumAppVersion: json['minimumAppVersion']?.toString(),
+        maximumAppVersion: json['maximumAppVersion']?.toString(),
+        actionType: json['actionType']?.toString(),
+        actionTarget: json['actionTarget']?.toString(),
+        imageUrl: json['imageUrl']?.toString(),
+        audience: json['audience']?.toString() ?? 'all',
+        status: AxProductUpdateStatus.fromString(json['status']?.toString()),
+        actionUrl: json['actionUrl']?.toString(),
+        learnMoreUrl: json['learnMoreUrl']?.toString(),
+        dateDisplay: json['dateDisplay']?.toString(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'slug': slug,
+        'title': title,
+        'summary': summary,
+        'details': details,
+        'category': category.name,
+        'publishedAt': publishedAt is DateTime
+            ? (publishedAt as DateTime).toIso8601String()
+            : publishedAt.toString(),
+        'minimumAppVersion': minimumAppVersion,
+        'maximumAppVersion': maximumAppVersion,
+        'actionType': actionType,
+        'actionTarget': actionTarget,
+        'imageUrl': imageUrl,
+        'audience': audience,
+        'status': status.name,
+        'actionUrl': actionUrl,
+        'learnMoreUrl': learnMoreUrl,
+        'dateDisplay': dateDisplay,
+      };
+}
+
+class AxUserProductUpdateState {
+  const AxUserProductUpdateState({
+    required this.userId,
+    required this.updateId,
+    this.seenAt,
+    this.openedAt,
+    this.dismissedAt,
+  });
+
+  final String userId;
+  final String updateId;
+  final DateTime? seenAt;
+  final DateTime? openedAt;
+  final DateTime? dismissedAt;
+
+  bool get isSeen => seenAt != null;
+  bool get isOpened => openedAt != null;
+  bool get isDismissed => dismissedAt != null;
+
+  AxUserProductUpdateState copyWith({
+    String? userId,
+    String? updateId,
+    DateTime? seenAt,
+    DateTime? openedAt,
+    DateTime? dismissedAt,
+  }) =>
+      AxUserProductUpdateState(
+        userId: userId ?? this.userId,
+        updateId: updateId ?? this.updateId,
+        seenAt: seenAt ?? this.seenAt,
+        openedAt: openedAt ?? this.openedAt,
+        dismissedAt: dismissedAt ?? this.dismissedAt,
+      );
+
+  factory AxUserProductUpdateState.fromJson(Map<String, dynamic> json) =>
+      AxUserProductUpdateState(
+        userId: json['userId']?.toString() ?? '',
+        updateId: json['updateId']?.toString() ?? '',
+        seenAt: json['seenAt'] != null
+            ? DateTime.tryParse(json['seenAt'].toString())
+            : null,
+        openedAt: json['openedAt'] != null
+            ? DateTime.tryParse(json['openedAt'].toString())
+            : null,
+        dismissedAt: json['dismissedAt'] != null
+            ? DateTime.tryParse(json['dismissedAt'].toString())
+            : null,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'userId': userId,
+        'updateId': updateId,
+        'seenAt': seenAt?.toIso8601String(),
+        'openedAt': openedAt?.toIso8601String(),
+        'dismissedAt': dismissedAt?.toIso8601String(),
+      };
+}
+
+class AxProductUpdateService {
+  /// Filters updates for established user Home presentation:
+  /// - Status is published (omits draft and archived)
+  /// - Not dismissed by the user
+  /// - Compatible with the app version
+  /// - Sorted by publishedAt DESC
+  /// - Limited to 2–3 items (default limit: 3)
+  static List<AxProductUpdate> getHomeUpdates(
+    List<AxProductUpdate> updates, {
+    Map<String, AxUserProductUpdateState> readStates = const {},
+    String? appVersion,
+    int limit = 3,
+  }) {
+    final filtered = updates.where((u) {
+      if (u.status != AxProductUpdateStatus.published) return false;
+      final state = readStates[u.id];
+      if (state != null && state.isDismissed) return false;
+      if (!u.isCompatibleWithVersion(appVersion)) return false;
+      return true;
+    }).toList();
+
+    filtered.sort((a, b) => b.publishedDateTime.compareTo(a.publishedDateTime));
+    return filtered.take(limit).toList();
+  }
+
+  /// Calculates number of unread/unseen product updates:
+  /// Published updates that are neither seen nor dismissed.
+  static int computeUnreadCount(
+    List<AxProductUpdate> updates, {
+    Map<String, AxUserProductUpdateState> readStates = const {},
+    String? appVersion,
+  }) {
+    return updates.where((u) {
+      if (u.status != AxProductUpdateStatus.published) return false;
+      if (!u.isCompatibleWithVersion(appVersion)) return false;
+      final state = readStates[u.id];
+      if (state != null && (state.isSeen || state.isDismissed)) return false;
+      return true;
+    }).length;
+  }
+
+  /// Groups updates for the full What's New changelog surface by Month Year (e.g. October 2026).
+  static Map<String, List<AxProductUpdate>> groupUpdatesByMonthYear(
+    List<AxProductUpdate> updates, {
+    bool includeDrafts = false,
+  }) {
+    final list = updates.where((u) {
+      if (!includeDrafts && u.status != AxProductUpdateStatus.published) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    list.sort((a, b) => b.publishedDateTime.compareTo(a.publishedDateTime));
+
+    final grouped = <String, List<AxProductUpdate>>{};
+    for (final update in list) {
+      final key = update.monthYearGroup;
+      grouped.putIfAbsent(key, () => []).add(update);
+    }
+    return grouped;
+  }
 }
 
 class AxAiUpdate {

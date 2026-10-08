@@ -75,6 +75,78 @@ class AxStore {
   final pendingRunPrompt = ValueNotifier<String?>(null);
   final securityError = ValueNotifier<String?>(null);
   final securityLoading = ValueNotifier<bool>(false);
+  final productUpdates = <AxProductUpdate>[];
+  final productUpdateReadStates =
+      ValueNotifier<Map<String, AxUserProductUpdateState>>({});
+
+  void markProductUpdatesSeen(List<String> updateIds) {
+    final current = Map<String, AxUserProductUpdateState>.from(
+        productUpdateReadStates.value);
+    final now = DateTime.now();
+    final userId = auth.session?.viewer?.id ?? 'viewer';
+    var changed = false;
+    for (final id in updateIds) {
+      final existing = current[id];
+      if (existing == null) {
+        current[id] = AxUserProductUpdateState(
+          userId: userId,
+          updateId: id,
+          seenAt: now,
+        );
+        changed = true;
+      } else if (existing.seenAt == null) {
+        current[id] = existing.copyWith(seenAt: now);
+        changed = true;
+      }
+    }
+    if (changed) {
+      productUpdateReadStates.value = current;
+    }
+  }
+
+  void markProductUpdateOpened(String updateId) {
+    final current = Map<String, AxUserProductUpdateState>.from(
+        productUpdateReadStates.value);
+    final now = DateTime.now();
+    final userId = auth.session?.viewer?.id ?? 'viewer';
+    final existing = current[updateId];
+    if (existing == null) {
+      current[updateId] = AxUserProductUpdateState(
+        userId: userId,
+        updateId: updateId,
+        seenAt: now,
+        openedAt: now,
+      );
+    } else {
+      current[updateId] = existing.copyWith(
+        seenAt: existing.seenAt ?? now,
+        openedAt: now,
+      );
+    }
+    productUpdateReadStates.value = current;
+  }
+
+  void dismissProductUpdate(String updateId) {
+    final current = Map<String, AxUserProductUpdateState>.from(
+        productUpdateReadStates.value);
+    final now = DateTime.now();
+    final userId = auth.session?.viewer?.id ?? 'viewer';
+    final existing = current[updateId];
+    if (existing == null) {
+      current[updateId] = AxUserProductUpdateState(
+        userId: userId,
+        updateId: updateId,
+        seenAt: now,
+        dismissedAt: now,
+      );
+    } else {
+      current[updateId] = existing.copyWith(
+        seenAt: existing.seenAt ?? now,
+        dismissedAt: now,
+      );
+    }
+    productUpdateReadStates.value = current;
+  }
 
   /// Legacy execution-only projection. Collaboration state belongs to queries.
   AxSnapshot get execution => _execution;
@@ -134,6 +206,7 @@ class AxStore {
     securityLoading.dispose();
     securityError.dispose();
     pendingRunPrompt.dispose();
+    productUpdateReadStates.dispose();
   }
 
   final AxDataSource dataSource;

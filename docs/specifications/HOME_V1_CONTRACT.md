@@ -50,7 +50,7 @@ HOME
   - Contextual action buttons (`Decline` / `Accept`, `Review →`, `Open →`, `Inspect →`, `Fix →`, `Connect →`).
 - **Absence Behavior:** If nothing requires attention, the section renders `const SizedBox.shrink()` (zero filler/empty placeholder text like `"Nothing needs your attention"`).
 
-### 2. Continue Working (Phase 8)
+### 2. Continue Working (Phase 8 & Phase 9: Recent-Work Ranking)
 - **Purpose:** Fast resumption of ongoing collaborative work in context. Projects are broad; the true return destination is the active Workstream/conversation.
 - **Capacity:** Shows 3–5 recent Workstreams.
 - **Card Structure:**
@@ -59,6 +59,19 @@ HOME
   3. **Collaborators + Relative Time:** Context badge indicating who is working together and when (e.g., `ChatGPT · 23 min ago`, `You + Gemini · Yesterday`).
   4. **Last Message / Work Quote:** Italicized discussion snippet or decision quote (e.g., `"We should persist the..."`, `"The hero should..."`).
   5. **Direct CTA:** `Continue →` button navigating straight into the Workstream conversation (`AxNavigation.workstream(projectId, workstreamId)`).
+- **Recent-Work Ranking Engine (`AxRecentWorkRanker`):**
+  - **Does NOT use naive `updatedAt DESC`:** Background synchronization, metadata polls, or entity updates do not push irrelevant workstreams to the top.
+  - **Ranking Factors:**
+    1. **Unresolved state (+1000 pts):** Active runs or workstreams waiting for human decisions.
+    2. **Recent user participation (+500 pts):** User authored messages or direct contributions.
+    3. **Recent worker response (+250 pts):** AI Workers replied to requests in this conversation.
+    4. **Direct membership (+100 pts):** User is an active collaborator/owner on the parent project.
+    5. **Meaningful conversation recency decay (up to +500 pts):** Time decay applied strictly to actual human and worker messages.
+  - **Exclusion Filters:**
+    - ❌ Archived Projects
+    - ❌ Archived Workstreams
+    - ❌ Deleted resources
+    - ❌ Inaccessible / non-member resources
 - **Absence Behavior:** Omitted if no project or workstream history exists.
 
 ### 3. What's New
@@ -185,4 +198,68 @@ AxHomeAttentionItem
    - Transforms diverse inputs (invitations, background findings, system notifications) into normalized `AxHomeAttentionItem`s.
    - Binds concrete callback closures into `AxHomeAttentionAction` instances (`Accept`, `Decline`, `Review →`, `Inspect →`, `Fix →`, `Connect →`, `Open →`).
    - Applies the 4-factor prioritization algorithm (Priority Category → Unread Status → Actionability → Recency) and truncates to the top 5 items.
+
+---
+
+## Cached / Local Read Model Architecture (Phase 10)
+
+Home is designed as a **pure projection** of already synchronized client-side state:
+- **No Reload Storms on Navigation:** Navigating `Project A → Home → Project B → Home` consumes shared in-memory stores (`store.projects`, `store.workspaces`, `store.executionChanges`, `store.invitations`, `store.catalogs.workers`, `store.notifications`, `store.productUpdateReadStates`) via reactive `ListenableBuilder` and `AxQueryBuilder`.
+- **Zero Independent Server Reloads:** Opening Home never triggers independent HTTP fetch bursts for entities that are already managed by Conclave's background sync engine.
+
+---
+
+## What's New & Product Update Lifecycle (Phases 11–15)
+
+### 1. ProductUpdate Domain Model (Phase 11)
+```text
+AxProductUpdate
+├── id: String
+├── slug: String
+├── title: String
+├── summary: String
+├── details?: String
+├── category: AxProductUpdateCategory (feature, improvement, security, workflow, collaboration, workspace, worker)
+├── publishedAt: DateTime / String
+├── minimumAppVersion?: String
+├── maximumAppVersion?: String
+├── actionType?: String
+├── actionTarget?: String
+├── imageUrl?: String
+├── audience: String (e.g. 'all', 'collaborators', 'developers')
+├── status: AxProductUpdateStatus (draft, published, archived)
+├── actionUrl?: String
+└── learnMoreUrl?: String
+```
+
+### 2. Server-Driven Update Lifecycle (Phase 12)
+- **Status Filtering:** Established-user Home only presents `published` updates (draft and archived updates are filtered out in standard production mode).
+- **Version Compatibility:** Respects `minimumAppVersion` and `maximumAppVersion` constraints against the running AX client build.
+
+### 3. Per-User Read State Tracking (Phase 13)
+```text
+AxUserProductUpdateState
+├── userId: String
+├── updateId: String
+├── seenAt?: DateTime     (appeared on Home)
+├── openedAt?: DateTime   (user opened full detail / changelog)
+└── dismissedAt?: DateTime (user explicitly hid / dismissed update)
+```
+- **Unread Badge Calculation:** `AxProductUpdateService.computeUnreadCount(...)` counts published, version-compatible updates where `seenAt == null` and `dismissedAt == null`.
+- **Badge Display:** Displays `What's new • 2` (or counter badge) next to the section title when unread updates exist.
+
+### 4. Home Presentation for What's New (Phase 14)
+- **Capacity:** Shows the top 2–3 newest published, non-dismissed updates (`AxProductUpdateService.getHomeUpdates(..., limit: 3)`).
+- **Tile Elements:**
+  1. Category badge pill (`[COLLABORATION]`, `[WORKFLOW]`, `[SECURITY]`, `[WORKSPACE]`, `[WORKER]`, `[FEATURE]`, `[IMPROVEMENT]`).
+  2. Date format: e.g. `Oct 7`.
+  3. Bold title and multi-line summary.
+  4. `Learn more →` CTA button triggering the detail view or full changelog.
+- **Empty-State Omission:** If no updates exist or all are dismissed, the section collapses completely (`const SizedBox.shrink()`) with **zero** filler text (never displays `"Nothing new."`).
+
+### 5. Full What's New Surface (`AxWhatsNewDialog`, Phase 15)
+- **Entry Point:** Header `See all` action button on Home.
+- **Monthly Grouping:** Groups changelog entries chronologically by month and year (`October 2026`, `September 2026`, etc.).
+- **Rich Changelog Items:** Displays expanded markdown/details, publication dates, category badges, dismissal action, and external/deep-link CTAs.
+
 

@@ -19,7 +19,8 @@ extension _AxAppViews on _AxAppStateMixin {
         store.projects,
         store.workspaces,
         store.executionChanges,
-        store.invitations
+        store.invitations,
+        store.productUpdateReadStates,
       ]),
       builder: (context, _) => AxQueryBuilder<List<AxWorker>>(
           engine: store.syncEngine,
@@ -29,6 +30,8 @@ extension _AxAppViews on _AxAppStateMixin {
                 workspaces: store.workspaces.items,
                 workers: workers.data ?? const [],
                 invitations: store.invitations.items,
+                productUpdates: store.productUpdates,
+                productUpdateReadStates: store.productUpdateReadStates.value,
                 attentionItems: notifications.map((n) {
                   final kind = switch (n.kind) {
                     AxNotificationKind.approvalRequired =>
@@ -98,6 +101,21 @@ extension _AxAppViews on _AxAppStateMixin {
                 onCreateProject: _createProject,
                 onOpenArchivedProjects: _showArchivedProjects,
                 onOpenNotifications: _showNotifications,
+                onOpenWhatsNew: () => AxWhatsNewDialog.show(
+                  context,
+                  updates: store.productUpdates.isNotEmpty
+                      ? store.productUpdates
+                      : defaultProductUpdates,
+                  readStates: store.productUpdateReadStates.value,
+                  onOpenUpdateDetail: (update) =>
+                      store.markProductUpdateOpened(update.id),
+                  onDismissUpdate: (update) =>
+                      store.dismissProductUpdate(update.id),
+                ),
+                onOpenUpdateDetail: (update) =>
+                    store.markProductUpdateOpened(update.id),
+                onDismissUpdate: (update) =>
+                    store.dismissProductUpdate(update.id),
               )));
 
   List<AxContinueWorkItem> _deriveContinueWorkItems(List<AxProject> projects) {

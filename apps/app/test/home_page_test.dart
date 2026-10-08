@@ -260,7 +260,7 @@ void main() {
     expect(find.text('Continue →'), findsOneWidget);
 
     // 3. WHAT'S NEW
-    expect(find.text("What's new in Conclave"), findsOneWidget);
+    expect(find.text("What's new"), findsOneWidget);
     expect(find.text('Project Invitations'), findsOneWidget);
     expect(find.text('Conversation Continuity'), findsOneWidget);
 
@@ -725,5 +725,363 @@ void main() {
     await tester.tap(find.text('Continue →').first);
     expect(openedProject, 'proj-conclave');
     expect(openedWorkstream, 'ws-sessions');
+  });
+
+  test(
+      'AxRecentWorkRanker ranks by meaningful activity factors and excludes archived/inaccessible items',
+      () {
+    final now = DateTime(2026, 10, 8, 12, 0, 0);
+
+    final itemArchived = AxContinueWorkItem(
+      projectId: 'p-archived',
+      projectName: 'Archived Project',
+      workstreamId: 'ws-1',
+      workstreamTitle: 'Old Workstream',
+      collaboratorsDisplay: 'None',
+      lastMessageSnippet: 'Archived',
+      lastActivityDisplay: '1 year ago',
+      archived: true,
+      lastMeaningfulActivityAt: now.subtract(const Duration(minutes: 5)),
+    );
+
+    final itemInaccessible = AxContinueWorkItem(
+      projectId: 'p-inaccessible',
+      projectName: 'Inaccessible Project',
+      workstreamId: 'ws-2',
+      workstreamTitle: 'Restricted',
+      collaboratorsDisplay: 'None',
+      lastMessageSnippet: 'Restricted',
+      lastActivityDisplay: 'Just now',
+      isDirectMember: false,
+      lastMeaningfulActivityAt: now.subtract(const Duration(minutes: 1)),
+    );
+
+    final itemPassiveSyncOnly = AxContinueWorkItem(
+      projectId: 'p-passive',
+      projectName: 'Passive Metadata Updated Project',
+      workstreamId: 'ws-passive',
+      workstreamTitle: 'No Real Messages',
+      collaboratorsDisplay: 'None',
+      lastMessageSnippet: 'Automated background sync ping',
+      lastActivityDisplay: 'Just now',
+      hasUserParticipation: false,
+      hasRecentWorkerResponse: false,
+      hasUnresolvedState: false,
+      // Meaningful conversation was 3 days ago, only metadata was updated now
+      lastMeaningfulActivityAt: now.subtract(const Duration(days: 3)),
+    );
+
+    final itemUserParticipated = AxContinueWorkItem(
+      projectId: 'p-user',
+      projectName: 'User Discussion Project',
+      workstreamId: 'ws-user',
+      workstreamTitle: 'Active Discussion',
+      collaboratorsDisplay: 'You + Team',
+      lastMessageSnippet: 'I responded with the specs.',
+      lastActivityDisplay: '2 hours ago',
+      hasUserParticipation: true,
+      lastMeaningfulActivityAt: now.subtract(const Duration(hours: 2)),
+    );
+
+    final itemWorkerResponded = AxContinueWorkItem(
+      projectId: 'p-worker',
+      projectName: 'AI Assistant Project',
+      workstreamId: 'ws-worker',
+      workstreamTitle: 'Worker Synthesis',
+      collaboratorsDisplay: 'ChatGPT',
+      lastMessageSnippet: 'Synthesis completed with 3 artifacts.',
+      lastActivityDisplay: '1 hour ago',
+      hasRecentWorkerResponse: true,
+      lastMeaningfulActivityAt: now.subtract(const Duration(hours: 1)),
+    );
+
+    final itemUnresolvedState = AxContinueWorkItem(
+      projectId: 'p-unresolved',
+      projectName: 'Execution Project',
+      workstreamId: 'ws-unresolved',
+      workstreamTitle: 'Pending Decisions',
+      collaboratorsDisplay: 'You + Gemini',
+      lastMessageSnippet: 'Waiting for parameter confirmation.',
+      lastActivityDisplay: '4 hours ago',
+      hasUnresolvedState: true,
+      hasUserParticipation: true,
+      lastMeaningfulActivityAt: now.subtract(const Duration(hours: 4)),
+    );
+
+    final ranked = AxRecentWorkRanker.rank(
+      [
+        itemArchived,
+        itemInaccessible,
+        itemPassiveSyncOnly,
+        itemUserParticipated,
+        itemWorkerResponded,
+        itemUnresolvedState,
+      ],
+      now: now,
+    );
+
+    // Assert archived and inaccessible items are completely excluded
+    expect(ranked.any((it) => it.projectId == 'p-archived'), isFalse);
+    expect(ranked.any((it) => it.projectId == 'p-inaccessible'), isFalse);
+
+    // Expected order:
+    // 1. itemUnresolvedState (score ~ 1000 + 500 + 100 + decay) -> Rank 1
+    // 2. itemUserParticipated (score ~ 500 + 100 + decay) -> Rank 2
+    // 3. itemWorkerResponded (score ~ 250 + 100 + decay) -> Rank 3
+    // 4. itemPassiveSyncOnly (score ~ 0 + 100 + decayed 3 days) -> Rank 4 (does NOT beat active conversations despite background metadata)
+    expect(ranked.length, 4);
+    expect(ranked[0].workstreamId, 'ws-unresolved');
+    expect(ranked[1].workstreamId, 'ws-user');
+    expect(ranked[2].workstreamId, 'ws-worker');
+    expect(ranked[3].workstreamId, 'ws-passive');
+  });
+
+  test(
+      'AxProductUpdate domain model and AxProductUpdateService lifecycle & read state filtering',
+      () {
+    final now = DateTime(2026, 10, 8, 12, 0, 0);
+
+    final update1Published = AxProductUpdate(
+      id: 'up-1',
+      slug: 'invitations',
+      title: 'Project Invitations',
+      summary: 'Invite collaborators to projects.',
+      category: AxProductUpdateCategory.collaboration,
+      publishedAt: now.subtract(const Duration(days: 1)),
+      status: AxProductUpdateStatus.published,
+    );
+
+    final update2Draft = AxProductUpdate(
+      id: 'up-2',
+      slug: 'draft-feature',
+      title: 'Unreleased Draft',
+      summary: 'Coming soon.',
+      category: AxProductUpdateCategory.feature,
+      publishedAt: now,
+      status: AxProductUpdateStatus.draft,
+    );
+
+    final update3Archived = AxProductUpdate(
+      id: 'up-3',
+      slug: 'old-feature',
+      title: 'Deprecated System',
+      summary: 'Archived release.',
+      category: AxProductUpdateCategory.improvement,
+      publishedAt: now.subtract(const Duration(days: 60)),
+      status: AxProductUpdateStatus.archived,
+    );
+
+    final update4Dismissed = AxProductUpdate(
+      id: 'up-4',
+      slug: 'workspace-sync',
+      title: 'Workspace Sync',
+      summary: 'Local process execution.',
+      category: AxProductUpdateCategory.workspace,
+      publishedAt: now.subtract(const Duration(days: 2)),
+      status: AxProductUpdateStatus.published,
+    );
+
+    final update5Incompatible = AxProductUpdate(
+      id: 'up-5',
+      slug: 'future-v9',
+      title: 'Future Feature',
+      summary: 'Requires v9.0.0',
+      category: AxProductUpdateCategory.worker,
+      publishedAt: now,
+      minimumAppVersion: '9.0.0',
+      status: AxProductUpdateStatus.published,
+    );
+
+    final readStates = <String, AxUserProductUpdateState>{
+      'up-1': AxUserProductUpdateState(
+        userId: 'u-1',
+        updateId: 'up-1',
+        seenAt: now.subtract(const Duration(hours: 1)),
+      ),
+      'up-4': AxUserProductUpdateState(
+        userId: 'u-1',
+        updateId: 'up-4',
+        dismissedAt: now.subtract(const Duration(minutes: 30)),
+      ),
+    };
+
+    final allUpdates = [
+      update1Published,
+      update2Draft,
+      update3Archived,
+      update4Dismissed,
+      update5Incompatible,
+    ];
+
+    // Test Home filtering: only published, non-dismissed, version-compatible updates
+    final homeUpdates = AxProductUpdateService.getHomeUpdates(
+      allUpdates,
+      readStates: readStates,
+      appVersion: '1.0.0',
+    );
+
+    expect(homeUpdates.length, 1);
+    expect(homeUpdates.first.id, 'up-1');
+
+    // Test unread count: update1 is seen, update4 is dismissed, update2 is draft, update5 incompatible
+    // Only published un-seen un-dismissed compatible items are unread
+    final unreadCount = AxProductUpdateService.computeUnreadCount(
+      allUpdates,
+      readStates: readStates,
+      appVersion: '1.0.0',
+    );
+    expect(unreadCount, 0);
+
+    // If update1 was not seen, unread count should be 1
+    final unreadCountUnseen = AxProductUpdateService.computeUnreadCount(
+      allUpdates,
+      readStates: {},
+      appVersion: '1.0.0',
+    );
+    expect(unreadCountUnseen, 2); // update1 and update4
+
+    // Test Month/Year grouping for full changelog with historical releases
+    final grouped = AxProductUpdateService.groupUpdatesByMonthYear(
+      allUpdates,
+      includeDrafts: true,
+    );
+    expect(grouped.containsKey('October 2026'), isTrue);
+    expect(grouped.containsKey('August 2026'), isTrue);
+  });
+
+  testWidgets(
+      'EstablishedUserHome renders What\'s new with badge, category tags, See all CTA, and AxWhatsNewDialog',
+      (tester) async {
+    final now = DateTime(2026, 10, 8, 12, 0, 0);
+    final updates = [
+      AxProductUpdate(
+        id: 'up-1',
+        slug: 'collab',
+        title: 'Project Invitations',
+        summary: 'Collaborate with your team.',
+        details: 'Full RBAC invitation workflow directly inside AX.',
+        category: AxProductUpdateCategory.collaboration,
+        publishedAt: now,
+        dateDisplay: 'Oct 8',
+      ),
+      AxProductUpdate(
+        id: 'up-2',
+        slug: 'continuity',
+        title: 'Conversation Continuity',
+        summary: 'Keep conversational context across Workers.',
+        category: AxProductUpdateCategory.workflow,
+        publishedAt: now.subtract(const Duration(days: 1)),
+        dateDisplay: 'Oct 7',
+      ),
+    ];
+
+    var seeAllOpened = false;
+    AxProductUpdate? selectedDetailUpdate;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EstablishedUserHome(
+            projects: const [
+              AxProject(
+                id: 'p-1',
+                name: 'Main Project',
+                description: 'Active project',
+                archived: false,
+                branch: 'main',
+                lastActivity: 'Just now',
+                workstreams: [],
+              ),
+            ],
+            workspaces: const [],
+            workers: const [],
+            run: null,
+            openFindingCount: 0,
+            productUpdates: updates,
+            productUpdateReadStates: const {}, // Both updates unread
+            onOpenWorkspaces: () {},
+            onOpenProject: (_) {},
+            onOpenRun: (_, __) {},
+            onOpenWhatsNew: () => seeAllOpened = true,
+            onOpenUpdateDetail: (u) => selectedDetailUpdate = u,
+          ),
+        ),
+      ),
+    );
+
+    // Verify What's new header with unread count badge (2 unread)
+    expect(find.text("What's new"), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('See all'), findsOneWidget);
+
+    // Verify tiles rendered with category pill and CTA
+    expect(find.text('COLLABORATION'), findsOneWidget);
+    expect(find.text('WORKFLOW'), findsOneWidget);
+    expect(find.text('Project Invitations'), findsOneWidget);
+    expect(find.text('Conversation Continuity'), findsOneWidget);
+    expect(find.text('Learn more →'), findsNWidgets(2));
+
+    // Tap See all
+    await tester.tap(find.text('See all'));
+    await tester.pumpAndSettle();
+    expect(seeAllOpened, isTrue);
+
+    // Tap Learn more on first tile
+    await tester.tap(find.text('Learn more →').first);
+    await tester.pumpAndSettle();
+    expect(selectedDetailUpdate?.id, 'up-1');
+  });
+
+  testWidgets('AxWhatsNewDialog displays grouped changelog and details',
+      (tester) async {
+    final now = DateTime(2026, 10, 8, 12, 0, 0);
+    final updates = [
+      AxProductUpdate(
+        id: 'up-oct',
+        title: 'October Feature',
+        summary: 'Launched in October.',
+        details: 'Detailed technical changelog for October release.',
+        category: AxProductUpdateCategory.feature,
+        publishedAt: now,
+      ),
+      AxProductUpdate(
+        id: 'up-sep',
+        title: 'September Feature',
+        summary: 'Launched in September.',
+        details: 'Detailed changelog for September release.',
+        category: AxProductUpdateCategory.workspace,
+        publishedAt: now.subtract(const Duration(days: 35)),
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () => AxWhatsNewDialog.show(
+                  context,
+                  updates: updates,
+                ),
+                child: const Text('Open Dialog'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open Dialog'));
+    await tester.pumpAndSettle();
+
+    // Verify Dialog rendered with Month Year grouping
+    expect(find.text("What's New"), findsOneWidget);
+    expect(find.text('October 2026'), findsOneWidget);
+    expect(find.text('September 2026'), findsOneWidget);
+    expect(find.text('October Feature'), findsOneWidget);
+    expect(find.text('September Feature'), findsOneWidget);
+    expect(find.text('Detailed technical changelog for October release.'),
+        findsOneWidget);
   });
 }
