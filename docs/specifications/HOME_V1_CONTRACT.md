@@ -391,12 +391,31 @@ Home Hierarchy Order
   - Primary call-to-action buttons (`FilledButton` for primary actions like "Review →" or "Accept") ensure direct operational resolution.
 - **Running Now Section:**
   - Positioned immediately below For You when active runs exist, offering real-time visibility and direct jump navigation into active execution trees.
-- **Continue Working Section:**
-  - Serves as the primary operational surface for daily activity, displaying ranked recent workstreams with clear project tags, collaborator metadata, and message previews.
-- **Secondary Discovery (What's New & AI Updates):**
-  - Subordinated below Continue Working.
-  - Uses secondary section typography (`isSecondary: true`, subdued font scale and contrast).
-  - Styled with subtle, low-contrast card outlines and muted category pills so they remain informative without demanding false urgency.
+---
+
+## Row-Based Section Flow & Reduced Card Density (Phase 22)
+
+To prevent Home from feeling like a fragmented admin dashboard, Home replaces arbitrary independent card wrappers with clean section row flows:
+
+```text
+Section Row Composition
+├── For You:        Header -> Row [Item] -> Divider -> Row [Item] ...
+├── What's New:     Header -> Row [Update] -> Divider -> Row [Update] ...
+└── AI Updates:     Header -> Row [Capability] -> Divider -> Row [Capability] ...
+
+Reserved Card Surfaces
+├── Continue Working:   Rich Workstream grid cards (collaboration & snippet context)
+├── Running Now:        Highlighted ephemeral execution card (telemetry & live CTA)
+└── Onboarding:         Welcome & initial value cards (first-time walkthrough)
+```
+
+### 1. Architectural Guidelines
+- **Clean Workspace Flow:** `For You`, `What's New`, and `AI Updates` render items as lightweight list rows directly within their section with subtle hairline dividers, eliminating visual clutter from nesting boxes inside boxes.
+- **Card Purpose Preservation:** Large cards are reserved strictly for rich content containers where multi-dimensional metadata benefits from a bounded spatial enclosure:
+  - **`Continue Working`:** Workstream title, project badge, snippet previews, collaborator identities, and jump actions.
+  - **`Running Now`:** High-priority active execution telemetry, objective, elapsed time, and direct workspace navigation.
+  - **`Onboarding`:** First-turn welcome cards and setup milestones.
+
 
 
 

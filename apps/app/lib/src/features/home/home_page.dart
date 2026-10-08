@@ -824,48 +824,39 @@ class EstablishedUserHome extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                side: BorderSide(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .outlineVariant
-                      .withValues(alpha: 0.35),
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Column(
-                  children: [
-                    for (var i = 0; i < productUpdatesToShow.length; i++) ...[
-                      _ProductUpdateTile(
-                        update: productUpdatesToShow[i],
-                        onTap: () {
-                          if (onOpenUpdateDetail != null) {
-                            onOpenUpdateDetail!(productUpdatesToShow[i]);
-                          } else {
-                            AxWhatsNewDialog.show(
-                              context,
-                              updates: productUpdates.isNotEmpty
-                                  ? productUpdates
-                                  : defaultProductUpdates,
-                              readStates: productUpdateReadStates,
-                              initialUpdateId: productUpdatesToShow[i].id,
-                              onOpenUpdateDetail: onOpenUpdateDetail,
-                              onDismissUpdate: onDismissUpdate,
-                            );
-                          }
-                        },
-                      ),
-                      if (i < productUpdatesToShow.length - 1)
-                        const Divider(height: 1),
-                    ],
-                  ],
-                ),
-              ),
+            const SizedBox(height: 8),
+            Column(
+              children: [
+                for (var i = 0; i < productUpdatesToShow.length; i++) ...[
+                  _ProductUpdateTile(
+                    update: productUpdatesToShow[i],
+                    onTap: () {
+                      if (onOpenUpdateDetail != null) {
+                        onOpenUpdateDetail!(productUpdatesToShow[i]);
+                      } else {
+                        AxWhatsNewDialog.show(
+                          context,
+                          updates: productUpdates.isNotEmpty
+                              ? productUpdates
+                              : defaultProductUpdates,
+                          readStates: productUpdateReadStates,
+                          initialUpdateId: productUpdatesToShow[i].id,
+                          onOpenUpdateDetail: onOpenUpdateDetail,
+                          onDismissUpdate: onDismissUpdate,
+                        );
+                      }
+                    },
+                  ),
+                  if (i < productUpdatesToShow.length - 1)
+                    Divider(
+                      height: 1,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .outlineVariant
+                          .withValues(alpha: 0.25),
+                    ),
+                ],
+              ],
             ),
             const SizedBox(height: 28),
           ],
@@ -873,26 +864,21 @@ class EstablishedUserHome extends StatelessWidget {
           // 5. AI UPDATES (if aiUpdates)
           if (hasAiUpdates) ...[
             const _SectionHeader(title: 'AI updates', isSecondary: true),
-            const SizedBox(height: 12),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth > 700;
-                return GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: isWide ? 2 : 1,
-                    mainAxisExtent: 110,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                  ),
-                  itemCount: aiUpdatesToShow.length,
-                  itemBuilder: (context, index) {
-                    final update = aiUpdatesToShow[index];
-                    return _AiUpdateCard(update: update);
-                  },
-                );
-              },
+            const SizedBox(height: 8),
+            Column(
+              children: [
+                for (var i = 0; i < aiUpdatesToShow.length; i++) ...[
+                  _AiUpdateRow(update: aiUpdatesToShow[i]),
+                  if (i < aiUpdatesToShow.length - 1)
+                    Divider(
+                      height: 1,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .outlineVariant
+                          .withValues(alpha: 0.25),
+                    ),
+                ],
+              ],
             ),
             const SizedBox(height: 24),
           ],
@@ -1191,28 +1177,18 @@ class _ForYouSection extends StatelessWidget {
               ),
           ],
         ),
-        const SizedBox(height: 12),
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            side: BorderSide(
-              color: colorScheme.outlineVariant.withValues(alpha: 0.8),
-              width: 1.2,
-            ),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            children: [
-              for (var i = 0; i < items.length; i++) ...[
-                _ForYouItemTile(item: items[i]),
-                if (i < items.length - 1)
-                  Divider(
-                    height: 1,
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.4),
-                  ),
-              ],
+        const SizedBox(height: 8),
+        Column(
+          children: [
+            for (var i = 0; i < items.length; i++) ...[
+              _ForYouItemTile(item: items[i]),
+              if (i < items.length - 1)
+                Divider(
+                  height: 1,
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+                ),
             ],
-          ),
+          ],
         ),
         const SizedBox(height: 24),
       ],
@@ -1269,7 +1245,7 @@ class _ForYouItemTile extends StatelessWidget {
         item.primaryAction != null || item.secondaryAction != null;
 
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1887,8 +1863,8 @@ const defaultProductUpdates = [
   ),
 ];
 
-class _AiUpdateCard extends StatelessWidget {
-  const _AiUpdateCard({
+class _AiUpdateRow extends StatelessWidget {
+  const _AiUpdateRow({
     required this.update,
   });
 
@@ -1899,83 +1875,82 @@ class _AiUpdateCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: _aiDot(update.workerProfileId),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _aiDot(update.workerProfileId),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    update.workerDisplayName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        update.workerDisplayName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    update.type.label.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4,
-                      color: colorScheme.onSurfaceVariant,
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        update.type.label.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Text(
+                      update.dateDisplay,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(height: 4),
                 Text(
-                  update.dateDisplay,
+                  update.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  update.summary,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w500,
+                    height: 1.35,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              update.title,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              update.summary,
-              style: TextStyle(
-                fontSize: 11,
-                color: colorScheme.onSurfaceVariant,
-                height: 1.3,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -1803,4 +1803,97 @@ void main() {
     expect(continueWorkPos < whatsNewPos, isTrue);
     expect(whatsNewPos < aiUpdatesPos, isTrue);
   });
+
+  testWidgets(
+      'Phase 22 — Avoid excessive cards: For You, What\'s New, and AI Updates render as clean section rows with dividers',
+      (tester) async {
+    const activeRun = AxRun(
+      id: 'run-1',
+      status: RunStatus.running,
+      objective: 'Optimizing database queries',
+      taskCount: 4,
+      completedTaskCount: 2,
+      openFindingCount: 0,
+      verifiedCriterionCount: 1,
+      criterionCount: 4,
+    );
+
+    const testAttentionItem = AxHomeAttentionItem(
+      id: 'att-1',
+      type: AxHomeAttentionType.workspaceProblem,
+      title: 'MacBook Pro is disconnected',
+      description: 'MacBook Pro workspace disconnected',
+      actionLabel: 'Reconnect →',
+    );
+
+    const testWorker = AxWorker(
+      id: 'worker-chatgpt',
+      workspaceId: 'ws-main',
+      workspaceName: 'Local Workspace',
+      workerTypeId: 'chatgpt',
+      displayName: 'ChatGPT Worker',
+      status: 'ready',
+      readinessState: 'ready',
+      localConcurrencyLimit: 1,
+      capabilities: ['chat', 'work'],
+    );
+
+    const testProductUpdate = AxProductUpdate(
+      id: 'update-1',
+      slug: 'realtime-collab',
+      title: 'Real-time Collaboration',
+      summary: 'Collaborate live with teammates.',
+      publishedAt: '2026-10-08T00:00:00Z',
+      status: AxProductUpdateStatus.published,
+    );
+
+    const testAiUpdate = AxAiCapabilityUpdate(
+      id: 'ai-1',
+      workerProfileId: 'chatgpt',
+      provider: 'openai',
+      type: AxAiCapabilityUpdateType.modelAdded,
+      title: 'OpenAI o3-mini',
+      summary: 'Fast reasoning model.',
+      publishedAt: '2026-10-08T00:00:00Z',
+    );
+
+    await tester.pumpWidget(
+      scaffold(
+        EstablishedUserHome(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [testWorker],
+          invitations: const [],
+          attentionItems: const [testAttentionItem],
+          continueWorkItems: const [],
+          productUpdates: const [testProductUpdate],
+          productUpdateReadStates: const {},
+          aiUpdates: const [testAiUpdate],
+          run: activeRun,
+          openFindingCount: 0,
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenRun: (_, __) {},
+        ),
+      ),
+    );
+
+    // Verify For You item tile is present as a row (with category badge and action button)
+    expect(find.text('MacBook Pro is disconnected'), findsOneWidget);
+    expect(find.text('Reconnect →'), findsOneWidget);
+
+    // Verify Running Now card is present
+    expect(find.text('Optimizing database queries'), findsOneWidget);
+
+    // Verify Continue Working card is present
+    expect(find.text('Continue working'), findsOneWidget);
+
+    // Verify What's New tile is present as a row
+    expect(find.text('Real-time Collaboration'), findsOneWidget);
+    expect(find.text('Learn more →'), findsOneWidget);
+
+    // Verify AI Update row is present
+    expect(find.text('OpenAI o3-mini'), findsOneWidget);
+    expect(find.text('Fast reasoning model.'), findsOneWidget);
+  });
 }
