@@ -925,6 +925,22 @@ async function main() {
     removeDisposableRuntime();
     setupAttempted = true;
     await createDisposableWebSession();
+    const webSessionResponse = await fetch(`https://${hostname}/api/session`, {
+      headers: { Cookie: disposableApprovalCookie() },
+    });
+    const webSession = await webSessionResponse.json().catch(() => null);
+    if (
+      webSessionResponse.status !== 200 ||
+      webSession?.authenticated !== true ||
+      webSession?.user?.id !== ownerId
+    ) {
+      throw new Error(
+        `Production web session validation failed with HTTP ${webSessionResponse.status}`,
+      );
+    }
+    console.log(
+      "PASS production web authentication: cookie session resolved through /api/session",
+    );
     workspaceHumanCredential = await verifyWorkspaceAuth();
     await verifyProfileLabAuth(workspaceHumanCredential);
     await registerDisposableWorkspace();

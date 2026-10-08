@@ -436,51 +436,80 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     var name = space.name;
     var description = space.description;
     var instructions = space.instructions;
+    String? errorText;
     final values = await showDialog<(String, String, String)?>(
       context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Space settings'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                initialValue: space.name,
-                onChanged: (value) => name = value,
-                decoration: const InputDecoration(labelText: 'Space name'),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          void submit() {
+            final trimmedName = name.trim();
+            if (trimmedName.isEmpty) {
+              setDialogState(() {
+                errorText = 'Space name cannot be empty.';
+              });
+              return;
+            }
+            Navigator.pop(
+              dialogContext,
+              (trimmedName, description.trim(), instructions.trim()),
+            );
+          }
+
+          return AlertDialog(
+            title: const Text('Edit Space'),
+            content: SizedBox(
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      initialValue: space.name,
+                      autofocus: true,
+                      onChanged: (value) {
+                        name = value;
+                        if (errorText != null) {
+                          setDialogState(() => errorText = null);
+                        }
+                      },
+                      onFieldSubmitted: (_) => submit(),
+                      decoration: InputDecoration(
+                        labelText: 'Space Name',
+                        errorText: errorText,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      initialValue: space.description,
+                      onChanged: (value) => description = value,
+                      decoration:
+                          const InputDecoration(labelText: 'Description'),
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      initialValue: space.instructions,
+                      onChanged: (value) => instructions = value,
+                      decoration:
+                          const InputDecoration(labelText: 'Instructions'),
+                      maxLines: 4,
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                initialValue: space.description,
-                onChanged: (value) => description = value,
-                decoration: const InputDecoration(labelText: 'Description'),
-                maxLines: 2,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                initialValue: space.instructions,
-                onChanged: (value) => instructions = value,
-                decoration:
-                    const InputDecoration(labelText: 'Space instructions'),
-                maxLines: 2,
+              FilledButton(
+                onPressed: submit,
+                child: const Text('Save'),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(
-              dialogContext,
-              (name.trim(), description.trim(), instructions.trim()),
-            ),
-            child: const Text('Save'),
-          ),
-        ],
+          );
+        },
       ),
     );
     if (values == null || values.$1.isEmpty) return;

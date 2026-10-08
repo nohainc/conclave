@@ -34,7 +34,7 @@ jobs:
             echo "Workspace releases must be dispatched from main."
             exit 1
           fi
-          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&per_page=100" > "$RUNNER_TEMP/ci-runs.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/development-guard.yml/runs?head_sha=$GITHUB_SHA&per_page=100" > "$RUNNER_TEMP/ci-runs.json"
           node --input-type=module - "$RUNNER_TEMP/ci-runs.json" <<'NODE'
           import { readFileSync } from 'node:fs';
 

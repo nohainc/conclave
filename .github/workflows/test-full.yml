@@ -1,19 +1,20 @@
-name: CI
+name: Full Repository Validation
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: full-repo-validation-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   repo-static:
+    name: Repository Static Checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +41,7 @@ jobs:
       - run: pnpm check:static
 
   typescript:
+    name: Cloud & TypeScript Packages
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +56,7 @@ jobs:
       - run: pnpm check:typescript
 
   dart-core:
+    name: Dart Packages & Worker Engine
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -72,6 +75,7 @@ jobs:
       - run: bash scripts/check-dart-packages.sh
 
   app-flutter:
+    name: AX Web App
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -92,6 +96,7 @@ jobs:
         working-directory: apps/app
 
   workspace-check:
+    name: Workspace Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -110,6 +115,7 @@ jobs:
       - run: bash scripts/check-flutter-app.sh workspace
 
   workspace-macos-build:
+    name: Workspace macOS Native Build
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -137,6 +143,7 @@ jobs:
         run: bash scripts/build-workspace-macos.sh --prepared
 
   profile-lab-macos:
+    name: Profile Lab macOS Native Build
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -163,6 +170,7 @@ jobs:
         run: bash scripts/build-profile-lab-macos.sh --release --prepared
 
   site-astro:
+    name: Public Site Checks & Build
     runs-on: ubuntu-latest
     defaults:
       run:

@@ -104,13 +104,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   bool executionLoading = true;
   Object? executionError;
   late AxSpaceWorkspaceGrants _grants;
-  bool _savingField = false;
-  String? _editingField;
-
-  late TextEditingController _nameController;
-  late TextEditingController _descriptionController;
-  late TextEditingController _instructionsController;
-
   bool get canManage =>
       widget.space.role == 'owner' || widget.space.role == 'collaborator';
   bool get isOwner => widget.space.role == 'owner';
@@ -119,11 +112,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _nameController = TextEditingController(text: widget.space.name);
-    _descriptionController =
-        TextEditingController(text: widget.space.description);
-    _instructionsController =
-        TextEditingController(text: widget.space.instructions);
     _configureQueries();
     _tabController.addListener(_onTabChanged);
     _onTabChanged();
@@ -223,16 +211,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   void didUpdateWidget(_SpaceWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.space.id != widget.space.id ||
-        oldWidget.space.name != widget.space.name ||
-        oldWidget.space.description != widget.space.description ||
-        oldWidget.space.instructions != widget.space.instructions) {
-      if (_editingField == null) {
-        _nameController.text = widget.space.name;
-        _descriptionController.text = widget.space.description;
-        _instructionsController.text = widget.space.instructions;
-      }
-    }
-    if (oldWidget.space.id != widget.space.id ||
         oldWidget.dataSource != widget.dataSource ||
         oldWidget.spaceThreads != widget.spaceThreads ||
         oldWidget.workspaceGrants != widget.workspaceGrants ||
@@ -249,9 +227,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
     _cancelTab();
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
-    _nameController.dispose();
-    _descriptionController.dispose();
-    _instructionsController.dispose();
     super.dispose();
   }
 
@@ -261,65 +236,112 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Space Data directly without group control card or horizontal lines
           Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Line 1: Space Name
-                _buildEditableField(
-                  label: 'Space Name',
-                  fieldKey: 'name',
-                  value: widget.space.name,
-                  placeholder: 'Untitled Space',
-                  controller: _nameController,
-                  textStyle: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.space.name.isNotEmpty
+                            ? widget.space.name
+                            : 'Untitled Space',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                    ),
+                    if (isOwner)
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert),
+                        tooltip: 'Space actions',
+                        splashRadius: 18,
+                        onSelected: (action) {
+                          if (action == 'edit') {
+                            if (widget.onEdit != null) {
+                              widget.onEdit!();
+                            } else {
+                              _editSpaceDialog();
+                            }
+                          } else if (action == 'archive') {
+                            widget.onArchive();
+                          } else if (action == 'delete') {
+                            widget.onDelete();
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: 'edit',
+                            child: Row(
+                              children: [
+                                Icon(Icons.edit_outlined, size: 18),
+                                SizedBox(width: 8),
+                                Text('Edit'),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'archive',
+                            child: Row(
+                              children: [
+                                Icon(Icons.archive_outlined, size: 18),
+                                SizedBox(width: 8),
+                                Text('Archive'),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete_outline,
+                                    size: 18, color: ConclaveColors.error),
+                                SizedBox(width: 8),
+                                Text('Delete',
+                                    style:
+                                        TextStyle(color: ConclaveColors.error)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
                 ),
-                const SizedBox(height: 6),
-                // Line 2: Description
-                _buildEditableField(
-                  label: 'Description',
-                  fieldKey: 'description',
-                  value: widget.space.description,
-                  placeholder: 'No space description provided.',
-                  controller: _descriptionController,
-                  maxLines: 2,
-                ),
-                if (isOwner || widget.space.instructions.trim().isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  // Space instructions
-                  _buildEditableField(
-                    label: 'Space Instructions',
-                    fieldKey: 'instructions',
-                    value: widget.space.instructions,
-                    placeholder: 'No instructions configured.',
-                    controller: _instructionsController,
-                    maxLines: 3,
+                if (widget.space.description.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.space.description.trim(),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
-                if (isOwner) ...[
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                if (widget.space.instructions.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      OutlinedButton.icon(
-                        onPressed: widget.onArchive,
-                        icon: const Icon(Icons.archive_outlined),
-                        label: const Text('Archive'),
+                      Text(
+                        'Space Instructions',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          letterSpacing: 0.2,
+                        ),
                       ),
-                      TextButton.icon(
-                        onPressed: widget.onDelete,
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Delete'),
-                        style: TextButton.styleFrom(
-                            foregroundColor: ConclaveColors.error),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.space.instructions.trim(),
+                        style: const TextStyle(
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),

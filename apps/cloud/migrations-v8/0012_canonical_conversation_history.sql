@@ -1,4 +1,5 @@
 -- Phase 5: Conclave-owned canonical history. Provider sessions are local execution state.
+-- Snapshot references intentionally survive deletion of source execution rows.
 CREATE TABLE conversation_history_entries (
   id TEXT PRIMARY KEY DEFAULT ('history-' || lower(hex(randomblob(16)))),
   conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
@@ -8,7 +9,6 @@ CREATE TABLE conversation_history_entries (
   event_type TEXT NOT NULL,
   actor_type TEXT NOT NULL CHECK (actor_type IN ('user', 'worker', 'conclave')),
   actor_id TEXT,
-  -- Snapshot references intentionally survive deletion of source execution rows.
   work_request_id TEXT,
   turn_id TEXT,
   artifact_id TEXT,

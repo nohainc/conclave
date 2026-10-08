@@ -1,31 +1,105 @@
 part of '../spaces_pages.dart';
 
 extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
-  Future<void> _saveField(String field) async {
-    final name = _nameController.text.trim();
-    if (name.isEmpty) {
-      _message('Space name cannot be empty.');
-      return;
-    }
-    _updateState(() => _savingField = true);
+  Future<void> _editSpaceDialog() async {
+    var name = widget.space.name;
+    var description = widget.space.description;
+    var instructions = widget.space.instructions;
+    String? errorText;
+
+    final result = await showDialog<(String, String, String)>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          void submit() {
+            final trimmedName = name.trim();
+            if (trimmedName.isEmpty) {
+              setDialogState(() {
+                errorText = 'Space name cannot be empty.';
+              });
+              return;
+            }
+            Navigator.pop(
+              dialogContext,
+              (trimmedName, description.trim(), instructions.trim()),
+            );
+          }
+
+          return AlertDialog(
+            title: const Text('Edit Space'),
+            content: SizedBox(
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      initialValue: name,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        labelText: 'Space Name',
+                        errorText: errorText,
+                      ),
+                      onChanged: (value) {
+                        name = value;
+                        if (errorText != null) {
+                          setDialogState(() => errorText = null);
+                        }
+                      },
+                      onFieldSubmitted: (_) => submit(),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      initialValue: description,
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                      ),
+                      maxLines: 2,
+                      onChanged: (value) => description = value,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      initialValue: instructions,
+                      decoration: const InputDecoration(
+                        labelText: 'Instructions',
+                      ),
+                      maxLines: 4,
+                      onChanged: (value) => instructions = value,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: submit,
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (result == null) return;
     try {
       final updated = await _collaboration.editSpace(
         widget.space,
-        name: name,
-        description: _descriptionController.text.trim(),
-        instructions: _instructionsController.text.trim(),
+        name: result.$1,
+        description: result.$2,
+        instructions: result.$3,
         settings: widget.space.settings,
       );
       if (!mounted) return;
-      _updateState(() {
-        _editingField = null;
-        _savingField = false;
-      });
       _message('Space updated.');
       widget.onSpaceUpdated?.call(updated);
     } catch (error) {
       if (mounted) {
-        _updateState(() => _savingField = false);
         _message(error.toString());
       }
     }
@@ -695,145 +769,5 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
     } catch (error) {
       _message(error.toString());
     }
-  }
-
-  Widget _buildEditableField({
-    required String label,
-    required String fieldKey,
-    required String value,
-    required String placeholder,
-    required TextEditingController controller,
-    int maxLines = 1,
-    TextStyle? textStyle,
-    IconData? prefixIcon,
-    Widget? trailingAction,
-    bool showLabel = false,
-  }) {
-    final isEditing = _editingField == fieldKey;
-    if (isEditing) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                autofocus: true,
-                maxLines: maxLines,
-                textInputAction: maxLines == 1
-                    ? TextInputAction.done
-                    : TextInputAction.newline,
-                onSubmitted: (_) {
-                  if (!_savingField) _saveField(fieldKey);
-                },
-                decoration: InputDecoration(
-                  labelText: label,
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  prefixIcon:
-                      prefixIcon != null ? Icon(prefixIcon, size: 18) : null,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: 'Save',
-              icon: _savingField
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.check, color: ConclaveColors.success),
-              onPressed: _savingField ? null : () => _saveField(fieldKey),
-            ),
-            IconButton(
-              tooltip: 'Cancel',
-              icon: const Icon(Icons.close),
-              onPressed: _savingField
-                  ? null
-                  : () {
-                      _updateState(() {
-                        switch (fieldKey) {
-                          case 'name':
-                            controller.text = widget.space.name;
-                            break;
-                          case 'description':
-                            controller.text = widget.space.description;
-                            break;
-                          case 'instructions':
-                            controller.text = widget.space.instructions;
-                            break;
-                        }
-                        _editingField = null;
-                      });
-                    },
-            ),
-          ],
-        ),
-      );
-    }
-
-    final hasValue = value.trim().isNotEmpty;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          if (prefixIcon != null) ...[
-            Icon(prefixIcon,
-                size: 16,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (showLabel && label.isNotEmpty && fieldKey != 'name')
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                Text(
-                  hasValue ? value.trim() : placeholder,
-                  style: textStyle ??
-                      TextStyle(
-                        fontSize: 14,
-                        color: hasValue
-                            ? null
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontStyle:
-                            hasValue ? FontStyle.normal : FontStyle.italic,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          if (isOwner)
-            IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 16),
-              tooltip: 'Edit $label',
-              splashRadius: 16,
-              visualDensity: VisualDensity.compact,
-              onPressed: () {
-                _updateState(() {
-                  _editingField = fieldKey;
-                });
-              },
-            ),
-          if (trailingAction != null) ...[
-            const SizedBox(width: 4),
-            trailingAction,
-          ],
-        ],
-      ),
-    );
   }
 }

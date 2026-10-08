@@ -12,10 +12,30 @@ These rules are canonical for AI-assisted development in this repository.
 7. Do not trust natural-language claims such as "tests pass". Where possible, collect executable evidence.
 8. Never store API keys or credentials in plaintext application tables.
 
+## Development validation policy
+
+Use the smallest validation scope that provides meaningful executable evidence for the change.
+
+1. **Do not run `pnpm check` or `pnpm validate:full` as routine completion validation.**
+2. **Do not build unrelated applications.** For example:
+   - Do not compile Flutter apps when editing Cloud or Public Site.
+   - Do not run macOS Workspace or Profile Lab `.app` builds (`pnpm workspace:build:macos`, `pnpm profile-lab:build:macos`) unless the change directly affects native embedding, packaging, codesigning, entitlements, or build scripts.
+3. **Use 3-Level Testing Hierarchy:**
+   - **Level 1 (Focused)**: Run targeted unit/widget test files while implementing (e.g., `flutter test test/spaces_pages_test.dart` or `vitest run apps/cloud/test/auth.test.ts`).
+   - **Level 2 (Component)**: Run the dedicated component validation command upon completing a task phase:
+     - AX Web App: `pnpm validate:app`
+     - Workspace: `pnpm validate:workspace`
+     - Profile Lab: `pnpm validate:profile-lab`
+     - Cloud / API: `pnpm validate:cloud`
+     - Public Site: `pnpm validate:site`
+     - Worker Engine: `pnpm validate:engine`
+   - **Level 3 (Full Regression)**: `pnpm validate:full` is reserved for release preparation, shared protocol/schema cutovers affecting all applications, or explicit user requests.
+4. **Dependency-Aware Escalation**: If modifying a shared package (`packages/*` or `engines/*`), escalate validation only to that package and its direct downstream consumers according to the architecture dependency map.
+
 ## Required completion report
 Every implementation task must report:
 - what changed;
-- tests/checks executed and their results;
+- tests/checks executed, their results, and **why that verification scope was sufficient** for the change;
 - documentation changed;
 - remaining risks, assumptions, or unresolved issues;
 - migrations or compatibility impact.

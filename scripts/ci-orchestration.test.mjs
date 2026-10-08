@@ -35,7 +35,7 @@ describe("CI acceptance orchestration", () => {
   });
 
   it("aggregation rejects failed and skipped domains", () => {
-    const workflow = source(".github/workflows/ci.yml");
+    const workflow = source(".github/workflows/test-full.yml");
     const gateSection = workflow.slice(workflow.indexOf("  acceptance-gate:"));
     const dependencies = gateSection
       .match(/needs:\s*\[([\s\S]*?)\]/)[1]

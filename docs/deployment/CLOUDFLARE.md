@@ -355,3 +355,19 @@ and AX. Restore the backup if alignment fails; do not reset execution sequences.
 The repository's fresh-start baseline remains the canonical schema rather than
 an upgrade migration chain. No deployment or hosted-schema changes happen when
 running the SQL generator.
+
+## Space/Thread API cutover and authentication
+
+After the Space/Thread D1 cutover, deploy the matching Cloud API immediately.
+An older API still queries retired Project/Workstream tables during session
+resolution, so sign-in can succeed while `/api/session` reports that the
+authentication service is unavailable. Local development uses the production
+API proxy by default and is affected by the same deployment mismatch.
+
+Before publishing, run the production schema smoke gate. SQL comments are not
+schema differences and must not prevent the matching API from deploying.
+Production Durable Object migration history retains the applied
+`v8-workstream-coordinator` creation. The subsequent
+`v9-thread-coordinator-rename` migration renames that existing namespace to
+`ThreadExecutionCoordinator`; do not rewrite applied history or create a new
+coordinator namespace. The isolated local configuration remains a fresh start.

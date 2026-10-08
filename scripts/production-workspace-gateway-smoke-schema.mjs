@@ -365,6 +365,8 @@ export const requiredProductionSmokeIndexes = Object.freeze(
 
 function normalizeTableDefinition(definition) {
   return definition
+    .replace(/--[^\n\r]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
     .replaceAll('"', "")
     .replaceAll("`", "")
     .replaceAll("[", "")

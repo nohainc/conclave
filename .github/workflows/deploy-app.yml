@@ -1,11 +1,27 @@
 name: Deploy Conclave AX App
 
 on:
-  workflow_dispatch:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
+  push:
     branches: [main]
+    paths:
+      - "apps/app/**"
+      - "apps/cloud/**"
+      - "packages/core/**"
+      - "packages/protocol/**"
+      - "packages/security/**"
+      - "packages/workspace-runtime-protocol/**"
+      - "packages/tool-profile/**"
+      - "packages/dart/protocol/**"
+      - "packages/conclave_design/**"
+      - "infra/cloudflare/app.wrangler.jsonc"
+      - "scripts/production-workspace-gateway-smoke*"
+      - "scripts/migrate-production-d1.sh"
+      - "scripts/verify-production-security.mjs"
+      - "scripts/assert-no-browser-secrets.mjs"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - ".github/workflows/deploy-app.yml"
+  workflow_dispatch:
 
 concurrency:
   group: conclave-ax-production-deploy
@@ -16,15 +32,12 @@ permissions:
 
 jobs:
   deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/app
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: 11.19.0
@@ -42,15 +55,12 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Run repository acceptance gate
+      - name: Validate Cloud contract and TypeScript packages
         working-directory: .
-        run: pnpm check
-      - name: Install Workspace Flutter dependencies
-        run: flutter pub get
-        working-directory: apps/workspace
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
+        run: pnpm validate:cloud && pnpm check:fixture-e2e
+      - name: Validate AX Web App
+        working-directory: .
+        run: pnpm validate:app
       - name: Build Flutter web
         run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
       - name: Verify browser bundle contains no server secrets

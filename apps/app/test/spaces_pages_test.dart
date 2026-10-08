@@ -1199,9 +1199,11 @@ void main() {
     expect(diagnostic.style?.fontSize, body.fontSize);
     expect(diagnostic.style?.height, body.height);
   });
-  testWidgets('Space page exposes editable header, Archive/Delete, and 3 tabs',
+  testWidgets(
+      'Space page exposes 3-dots popup menu, Archive/Delete, and 3 tabs',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
+    var edited = false;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: SingleChildScrollView(
@@ -1216,7 +1218,7 @@ void main() {
             ),
             dataSource: const AxFixtureDataSource(),
             onOpenThread: (_) {},
-            onEdit: () {},
+            onEdit: () => edited = true,
             onArchive: () {},
             onDelete: () {},
           ),
@@ -1229,9 +1231,19 @@ void main() {
     expect(find.text('Space One'), findsOneWidget);
     expect(find.text('Shared space for Space One'), findsOneWidget);
     expect(find.text('Follow standard engineering practices.'), findsOneWidget);
-    expect(find.byIcon(Icons.edit_outlined), findsNWidgets(3));
+    expect(find.byIcon(Icons.edit_outlined), findsNothing);
+    expect(find.byTooltip('Space actions'), findsOneWidget);
+
+    // Open 3-dots popup menu
+    await tester.tap(find.byTooltip('Space actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit'), findsOneWidget);
     expect(find.text('Archive'), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
+
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+    expect(edited, isTrue);
 
     // Verify 3 Tabs
     expect(find.text('Threads'), findsOneWidget);
@@ -2090,7 +2102,8 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets('Space instructions can be edited and saved without error',
+  testWidgets(
+      'Space instructions can be edited and saved via 3-dots Edit dialog',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     AxSpace? updatedSpace;
@@ -2109,7 +2122,6 @@ void main() {
             ),
             dataSource: const AxFixtureDataSource(),
             onOpenThread: (_) {},
-            onEdit: () {},
             onArchive: () {},
             onDelete: () {},
             onSpaceUpdated: (p) => updatedSpace = p,
@@ -2121,29 +2133,63 @@ void main() {
 
     expect(find.text('Initial instructions'), findsOneWidget);
 
-    // Tap edit button for instructions (the 3rd edit icon in header)
-    final editIcons = find.byIcon(Icons.edit_outlined);
-    expect(editIcons, findsNWidgets(3));
-    await tester.tap(editIcons.at(2));
+    // Tap 3-dots popup menu -> Edit
+    await tester.tap(find.byTooltip('Space actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
 
-    // Enter new instructions
-    final textField = find.byType(TextField);
-    expect(textField, findsOneWidget);
-    await tester.enterText(textField, 'Updated engineering guidelines');
+    expect(find.text('Edit Space'), findsOneWidget);
 
-    // Click Save (green check icon)
-    final saveButton = find.byIcon(Icons.check);
-    expect(saveButton, findsOneWidget);
-    await tester.tap(saveButton);
+    // Find the instructions text field in the edit dialog
+    final instructionsField =
+        find.widgetWithText(TextFormField, 'Initial instructions');
+    expect(instructionsField, findsOneWidget);
+    await tester.enterText(instructionsField, 'Updated engineering guidelines');
+
+    // Click Save
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    // Verify update occurred and no LateInitializationError was thrown
+    // Verify update occurred
     expect(find.text('Space updated.'), findsOneWidget);
     expect(updatedSpace, isNotNull);
     expect(updatedSpace!.instructions, 'Updated engineering guidelines');
 
     await tester.pumpAndSettle(const Duration(seconds: 5));
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets(
+      'Space with empty instructions hides instructions section completely',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: SpacePage(
+            space: const AxSpace(
+              id: 'p-1',
+              name: 'Test Space',
+              description: 'Initial description',
+              instructions: '',
+              branch: 'main',
+              lastActivity: 'today',
+            ),
+            dataSource: const AxFixtureDataSource(),
+            onOpenThread: (_) {},
+            onArchive: () {},
+            onDelete: () {},
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Space Instructions'), findsNothing);
+    expect(find.text('No instructions configured.'), findsNothing);
+    expect(find.byIcon(Icons.edit_outlined), findsNothing);
+
     await tester.binding.setSurfaceSize(null);
   });
 

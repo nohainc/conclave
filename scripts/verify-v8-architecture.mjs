@@ -33,7 +33,19 @@ const axData = readRequired("apps/app/lib/src/ax/ax_data.dart");
 const cloudWrangler = readRequired("apps/cloud/wrangler.jsonc");
 const infraWrangler = readRequired("infra/cloudflare/app.wrangler.jsonc");
 const packageJson = JSON.parse(readRequired("package.json") || "{}");
-const ci = readRequired(".github/workflows/ci.yml");
+const testFull = readRequired(".github/workflows/test-full.yml");
+const testComponent = readRequired(".github/workflows/test-component.yml");
+const devApp = readRequired(".github/workflows/development-app.yml");
+const devWorkspace = readRequired(
+  ".github/workflows/development-workspace.yml",
+);
+const devProfileLab = readRequired(
+  ".github/workflows/development-profile-lab.yml",
+);
+const devCloud = readRequired(".github/workflows/development-cloud.yml");
+const devSite = readRequired(".github/workflows/development-site.yml");
+const devEngine = readRequired(".github/workflows/development-engine.yml");
+const devGuard = readRequired(".github/workflows/development-guard.yml");
 const deploy = readRequired(".github/workflows/deploy-app.yml");
 const siteProductionDeploy = readRequired(
   ".github/workflows/deploy-site-production.yml",
@@ -317,29 +329,53 @@ for (const job of [
   "site-astro",
   "acceptance-gate",
 ]) {
-  if (!new RegExp(`^  ${job}:`, "m").test(ci))
-    failures.push(`CI is missing ${job}.`);
+  if (!new RegExp(`^  ${job}:`, "m").test(testFull))
+    failures.push(`Full validation workflow is missing ${job}.`);
 }
 if (
   /engine-tests|profile-fixture-tests|profile-security-tests|workspace-runtime-tests|v8-runtime-e2e|work-v1-e2e|v7-runtime-e2e|worker-adapters:test|v4-architecture-guard/.test(
-    ci,
+    testFull,
   )
 ) {
-  failures.push("CI retains a historical runtime or architecture gate.");
+  failures.push(
+    "Full validation workflow retains a historical runtime or architecture gate.",
+  );
 }
-for (const command of [
-  "pnpm check:static",
-  "pnpm check:typescript",
-  "bash scripts/check-dart-packages.sh",
-  "bash scripts/check-flutter-app.sh app",
-  "bash scripts/check-flutter-app.sh workspace",
-  "bash scripts/check-flutter-app.sh profile_lab",
+for (const [workflowName, workflowContent, command] of [
+  ["test-full", testFull, "pnpm check:static"],
+  ["test-full", testFull, "pnpm check:typescript"],
+  ["test-full", testFull, "bash scripts/check-dart-packages.sh"],
+  ["development-app", devApp, "bash scripts/check-flutter-app.sh app"],
+  [
+    "development-workspace",
+    devWorkspace,
+    "bash scripts/check-flutter-app.sh workspace",
+  ],
+  [
+    "development-profile-lab",
+    devProfileLab,
+    "bash scripts/check-flutter-app.sh profile_lab",
+  ],
+  ["development-engine", devEngine, "bash scripts/validate-engine.sh"],
+  ["development-guard", devGuard, "pnpm check:static"],
+  ["development-cloud", devCloud, "pnpm check:typescript"],
+  ["development-site", devSite, "./node_modules/.bin/astro check"],
 ]) {
-  if (!ci.includes(`run: ${command}`))
-    failures.push(`CI is missing validation owner: ${command}.`);
+  if (!workflowContent.includes(`run: ${command}`))
+    failures.push(
+      `${workflowName} workflow is missing validation owner: ${command}.`,
+    );
 }
-if (!deploy.includes("run: pnpm check")) {
-  failures.push("The production deployment workflow must pass pnpm check.");
+if (!testComponent.includes("workflow_dispatch:")) {
+  failures.push("Component Validation workflow is missing workflow_dispatch.");
+}
+if (
+  !deploy.includes("run: pnpm validate:cloud && pnpm check:fixture-e2e") ||
+  !deploy.includes("run: pnpm validate:app")
+) {
+  failures.push(
+    "The AX App production deployment workflow must validate Cloud and AX Web App.",
+  );
 }
 if (
   !workspaceRelease.includes("needs: ci-gate") ||
@@ -414,7 +450,10 @@ if (!infraWrangler.includes('"class_name": "ThreadExecutionCoordinator"')) {
     "Production Wrangler configuration is missing the Thread coordinator class.",
   );
 }
-if (!infraWrangler.includes('"tag": "v8-thread-coordinator"')) {
+if (
+  !infraWrangler.includes('"tag": "v9-thread-coordinator-rename"') &&
+  !infraWrangler.includes('"tag": "v8-thread-coordinator"')
+) {
   failures.push(
     "Production Wrangler configuration is missing its Thread coordinator migration.",
   );

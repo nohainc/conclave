@@ -3,6 +3,11 @@ name: Deploy Conclave AX Public Site Preview
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    paths:
+      - "apps/site/**"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - ".github/workflows/deploy-site.yml"
 
 permissions:
   contents: read

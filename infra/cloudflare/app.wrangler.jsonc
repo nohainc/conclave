@@ -84,8 +84,18 @@
       "new_sqlite_classes": ["WorkspaceGateway"],
     },
     {
-      "tag": "v8-thread-coordinator",
-      "new_sqlite_classes": ["ThreadExecutionCoordinator"],
+      // Applied production history must retain its original class and tag.
+      "tag": "v8-workstream-coordinator",
+      "new_sqlite_classes": ["WorkstreamExecutionCoordinator"],
+    },
+    {
+      "tag": "v9-thread-coordinator-rename",
+      "renamed_classes": [
+        {
+          "from": "WorkstreamExecutionCoordinator",
+          "to": "ThreadExecutionCoordinator",
+        },
+      ],
     },
   ],
   "routes": [

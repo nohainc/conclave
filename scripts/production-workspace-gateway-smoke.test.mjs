@@ -283,6 +283,28 @@ describe("production Workspace Gateway smoke schema gate", () => {
     database.close();
   });
 
+  it("normalizes table definitions regardless of embedded or stripped SQL comments", () => {
+    const tables = Object.keys(requiredProductionSmokeColumns);
+    const columns = Object.fromEntries(
+      Object.entries(requiredProductionSmokeColumns),
+    );
+    const definitions = { ...canonicalDefinitions };
+    definitions.conversation_history_entries =
+      definitions.conversation_history_entries.replace(
+        "actor_id TEXT,",
+        "actor_id TEXT,\n  -- Snapshot references intentionally survive deletion of source execution rows.",
+      );
+
+    expect(
+      productionSmokeSchemaIssues(
+        tables,
+        columns,
+        definitions,
+        canonicalIndexes,
+      ),
+    ).toEqual([]);
+  });
+
   it("rejects legacy single-audience constraints and table contract drift", () => {
     const tables = Object.keys(requiredProductionSmokeColumns);
     const columns = Object.fromEntries(
