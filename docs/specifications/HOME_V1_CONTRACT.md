@@ -367,10 +367,37 @@ Established Home
 └── if aiUpdates:         -> AI Updates
 ```
 
-### 1. Independent Conditional Composition Guarantees
-- **No Symmetric Monolith:** Two different users within the same workspace or organization can and should experience different Home page layouts based on their current workstream context, accessible AI workers, invitations, executions, and release status.
-- **Zero Empty-State Noise:** No empty placeholder boxes or filler text (e.g. "No attention items", "No runs executing", "No updates to show"). Sections materialize only when relevant content genuinely exists.
-- **Graceful Clean Baseline:** If an established user has resolved all attention items, has no active executions, has no published unread updates, and has no applicable AI updates, Home renders cleanly with standard navigation and continue work surfaces without visual clutter.
+---
+
+## Visual Hierarchy & Attention Emphasis (Phase 21)
+
+Established Home establishes a strict visual hierarchy where actionable and operational signals take precedence over secondary discovery and changelog content:
+
+```text
+Home Hierarchy Order
+├── 1. For You          [Strongest]  (Approvals, Failures, Invitations, Offline issues)
+├── 2. Running Now      [Dynamic]    (Active executions with live telemetry)
+├── 3. Continue Working [Primary]    (Daily workstreams and ranked recent activities)
+├── 4. What's New       [Secondary]  (Subdued product releases & changelog)
+└── 5. AI Updates       [Secondary]  (Subdued model availability & capability changes)
+```
+
+### 1. Hierarchy Rules & Visual Weight Guarantees
+- **Action Signals First:** Product news and AI model changes must never visually compete with, overshadow, or distract from an approval request, execution failure, workspace disconnection, or project invitation.
+- **For You Section Prominence:**
+  - Placed at the very top of Home above all executions and workstreams.
+  - Distinct high-contrast card border and surface styling.
+  - High-visibility semantic category badges (orange for approvals/input, red for execution failures, amber for offline workspaces/workers, primary for invitations).
+  - Primary call-to-action buttons (`FilledButton` for primary actions like "Review →" or "Accept") ensure direct operational resolution.
+- **Running Now Section:**
+  - Positioned immediately below For You when active runs exist, offering real-time visibility and direct jump navigation into active execution trees.
+- **Continue Working Section:**
+  - Serves as the primary operational surface for daily activity, displaying ranked recent workstreams with clear project tags, collaborator metadata, and message previews.
+- **Secondary Discovery (What's New & AI Updates):**
+  - Subordinated below Continue Working.
+  - Uses secondary section typography (`isSecondary: true`, subdued font scale and contrast).
+  - Styled with subtle, low-contrast card outlines and muted category pills so they remain informative without demanding false urgency.
+
 
 
 

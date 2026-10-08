@@ -1696,4 +1696,111 @@ void main() {
     expect(find.text('AI updates'), findsOneWidget);
     expect(find.text('OpenAI o3-mini model'), findsOneWidget);
   });
+
+  testWidgets(
+      'Phase 21 — Establish visual hierarchy renders sections in canonical order with For You strongest',
+      (tester) async {
+    const activeRun = AxRun(
+      id: 'run-urgent',
+      status: RunStatus.running,
+      objective: 'Generating security audit report',
+      taskCount: 3,
+      completedTaskCount: 1,
+      openFindingCount: 0,
+      verifiedCriterionCount: 1,
+      criterionCount: 3,
+    );
+
+    const urgentAttentionItem = AxHomeAttentionItem(
+      id: 'att-approval',
+      type: AxHomeAttentionType.approvalRequired,
+      title: 'Production deployment approval',
+      description: 'Review pending changes before deployment',
+      actionLabel: 'Approve →',
+    );
+
+    const testWorker = AxWorker(
+      id: 'worker-chatgpt',
+      workspaceId: 'ws-main',
+      workspaceName: 'Local Workspace',
+      workerTypeId: 'chatgpt',
+      displayName: 'ChatGPT Worker',
+      status: 'ready',
+      readinessState: 'ready',
+      localConcurrencyLimit: 1,
+      capabilities: ['chat', 'work'],
+    );
+
+    const testPublishedUpdate = AxProductUpdate(
+      id: 'update-sec',
+      slug: 'security-audit',
+      title: 'Enhanced Tool Isolation',
+      summary: 'Strict process containment for CLI tools.',
+      publishedAt: '2026-10-08T00:00:00Z',
+      status: AxProductUpdateStatus.published,
+    );
+
+    const testAiUpdate = AxAiCapabilityUpdate(
+      id: 'ai-gpt-reasoning',
+      workerProfileId: 'chatgpt',
+      provider: 'openai',
+      type: AxAiCapabilityUpdateType.modelAdded,
+      title: 'GPT-4o Reasoning',
+      summary: 'Deep reasoning model for complex code.',
+      publishedAt: '2026-10-08T00:00:00Z',
+    );
+
+    await tester.pumpWidget(
+      scaffold(
+        EstablishedUserHome(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [testWorker],
+          invitations: const [],
+          attentionItems: const [urgentAttentionItem],
+          continueWorkItems: const [],
+          productUpdates: const [testPublishedUpdate],
+          productUpdateReadStates: const {},
+          aiUpdates: const [testAiUpdate],
+          run: activeRun,
+          openFindingCount: 0,
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenRun: (_, __) {},
+        ),
+      ),
+    );
+
+    // 1. For You is rendered at the top (strongest visual weight)
+    expect(find.text('For you'), findsOneWidget);
+    expect(find.text('Production deployment approval'), findsOneWidget);
+    expect(find.text('Approve →'), findsOneWidget);
+
+    // 2. Running Now is present directly below For You
+    expect(find.text('Running now'), findsOneWidget);
+    expect(find.text('Generating security audit report'), findsOneWidget);
+
+    // 3. Continue Working is present as primary daily activity
+    expect(find.text('Continue working'), findsOneWidget);
+
+    // 4. What's New is rendered below Continue Working as secondary editorial content
+    expect(find.text("What's new"), findsOneWidget);
+    expect(find.text('Enhanced Tool Isolation'), findsOneWidget);
+
+    // 5. AI Updates is rendered as secondary capability discovery
+    expect(find.text('AI updates'), findsOneWidget);
+    expect(find.text('GPT-4o Reasoning'), findsOneWidget);
+
+    // Verify ordering in widget tree: For you appears before Running now, before Continue working, before What's new, before AI updates
+    final forYouPos = tester.getTopLeft(find.text('For you')).dy;
+    final runningNowPos = tester.getTopLeft(find.text('Running now')).dy;
+    final continueWorkPos = tester.getTopLeft(find.text('Continue working')).dy;
+    final whatsNewPos = tester.getTopLeft(find.text("What's new")).dy;
+    final aiUpdatesPos = tester.getTopLeft(find.text('AI updates')).dy;
+
+    expect(forYouPos < runningNowPos, isTrue);
+    expect(runningNowPos < continueWorkPos, isTrue);
+    expect(continueWorkPos < whatsNewPos, isTrue);
+    expect(whatsNewPos < aiUpdatesPos, isTrue);
+  });
 }

@@ -772,10 +772,16 @@ class EstablishedUserHome extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Text(
+                    Text(
                       "What's new",
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.85),
+                      ),
                     ),
                     if (_unreadWhatsNewCount > 0) ...[
                       const SizedBox(width: 8),
@@ -820,6 +826,16 @@ class EstablishedUserHome extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                side: BorderSide(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .outlineVariant
+                      .withValues(alpha: 0.35),
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Column(
@@ -856,7 +872,7 @@ class EstablishedUserHome extends StatelessWidget {
 
           // 5. AI UPDATES (if aiUpdates)
           if (hasAiUpdates) ...[
-            const _SectionHeader(title: 'AI updates'),
+            const _SectionHeader(title: 'AI updates', isSecondary: true),
             const SizedBox(height: 12),
             LayoutBuilder(
               builder: (context, constraints) {
@@ -887,15 +903,26 @@ class EstablishedUserHome extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title});
+  const _SectionHeader({
+    required this.title,
+    this.isSecondary = false,
+  });
 
   final String title;
+  final bool isSecondary;
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Text(
       title,
-      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+      style: TextStyle(
+        fontSize: isSecondary ? 16 : 18,
+        fontWeight: FontWeight.w700,
+        color: isSecondary
+            ? colorScheme.onSurface.withValues(alpha: 0.85)
+            : colorScheme.onSurface,
+      ),
     );
   }
 }
@@ -1169,7 +1196,8 @@ class _ForYouSection extends StatelessWidget {
           elevation: 0,
           shape: RoundedRectangleBorder(
             side: BorderSide(
-              color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+              color: colorScheme.outlineVariant.withValues(alpha: 0.8),
+              width: 1.2,
             ),
             borderRadius: BorderRadius.circular(12),
           ),
@@ -1180,7 +1208,7 @@ class _ForYouSection extends StatelessWidget {
                 if (i < items.length - 1)
                   Divider(
                     height: 1,
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.4),
                   ),
               ],
             ],
@@ -1872,6 +1900,13 @@ class _AiUpdateCard extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
