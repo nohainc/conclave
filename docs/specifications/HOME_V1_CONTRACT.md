@@ -352,6 +352,27 @@ Home avoids permanent or static "Active Runs" cards that clutter the screen when
   - **Direct CTA:** `Open →` button navigating directly into the executing Workstream/Run view.
 - **Zero-State Omission:** When nothing is running (`run == null` or run has reached a terminal/non-running state like `completed`, `failed`, `cancelled`), the section is completely omitted (`const SizedBox.shrink()`), preventing empty-state clutter.
 
+---
+
+## Conditional Home Composition & Dynamic User Tailoring (Phase 20)
+
+Established Home composition is completely dynamic and modular, evaluating conditions for each section independently:
+
+```text
+Established Home
+├── if attentionItems:    -> For You
+├── if activeExecutions:  -> Running Now
+├── if recentWork:        -> Continue Working
+├── if productUpdates:    -> What's New
+└── if aiUpdates:         -> AI Updates
+```
+
+### 1. Independent Conditional Composition Guarantees
+- **No Symmetric Monolith:** Two different users within the same workspace or organization can and should experience different Home page layouts based on their current workstream context, accessible AI workers, invitations, executions, and release status.
+- **Zero Empty-State Noise:** No empty placeholder boxes or filler text (e.g. "No attention items", "No runs executing", "No updates to show"). Sections materialize only when relevant content genuinely exists.
+- **Graceful Clean Baseline:** If an established user has resolved all attention items, has no active executions, has no published unread updates, and has no applicable AI updates, Home renders cleanly with standard navigation and continue work surfaces without visual clutter.
+
+
 
 
 

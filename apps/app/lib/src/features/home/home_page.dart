@@ -665,8 +665,30 @@ class EstablishedUserHome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveAttentionItems = AxHomeAttentionProjector.project(
+      invitations: invitations,
+      rawAttentionItems: attentionItems,
+      openFindingCount: openFindingCount,
+      projects: projects,
+      onAcceptInvitation: onAcceptInvitation,
+      onDeclineInvitation: onDeclineInvitation,
+      onOpenProject: onOpenProject,
+      onOpenWorkstream: onOpenWorkstream,
+      onOpenWorkspaces: onOpenWorkspaces,
+    );
+    final hasAttentionItems = effectiveAttentionItems.isNotEmpty;
     final isRunningNow = run != null && run!.isRunning;
-    final hasContinueWork = continueWorkItems.isNotEmpty || projects.isNotEmpty;
+    final effectiveRecentWork = AxRecentWorkRanker.rank(
+      continueWorkItems.isNotEmpty
+          ? continueWorkItems
+          : _deriveDefaultContinueWorkItems(projects),
+      limit: 5,
+    );
+    final hasContinueWork = effectiveRecentWork.isNotEmpty;
+    final productUpdatesToShow = _effectiveProductUpdates;
+    final hasProductUpdates = productUpdatesToShow.isNotEmpty;
+    final aiUpdatesToShow = _effectiveAiUpdates;
+    final hasAiUpdates = aiUpdatesToShow.isNotEmpty;
 
     return SingleChildScrollView(
       child: Column(
@@ -678,21 +700,24 @@ class EstablishedUserHome extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // 1. FOR YOU (Actionable Items requiring attention: invitations, inputs, failed runs, worker/workspace problems, completed work)
-          _ForYouSection(
-            invitations: invitations,
-            attentionItems: attentionItems,
-            openFindingCount: openFindingCount,
-            projects: projects,
-            onAcceptInvitation: onAcceptInvitation,
-            onDeclineInvitation: onDeclineInvitation,
-            onOpenProject: onOpenProject,
-            onOpenWorkstream: onOpenWorkstream,
-            onOpenWorkspaces: onOpenWorkspaces,
-            onOpenNotifications: onOpenNotifications,
-          ),
+          // 1. FOR YOU (if attentionItems)
+          if (hasAttentionItems) ...[
+            _ForYouSection(
+              invitations: invitations,
+              attentionItems: attentionItems,
+              openFindingCount: openFindingCount,
+              projects: projects,
+              onAcceptInvitation: onAcceptInvitation,
+              onDeclineInvitation: onDeclineInvitation,
+              onOpenProject: onOpenProject,
+              onOpenWorkstream: onOpenWorkstream,
+              onOpenWorkspaces: onOpenWorkspaces,
+              onOpenNotifications: onOpenNotifications,
+            ),
+            const SizedBox(height: 28),
+          ],
 
-          // Running Now (Ephemeral active execution)
+          // 2. RUNNING NOW (if activeExecutions)
           if (isRunningNow) ...[
             const _SectionHeader(title: 'Running now'),
             const SizedBox(height: 12),
@@ -701,23 +726,16 @@ class EstablishedUserHome extends StatelessWidget {
               defaultProjectId: projects.isNotEmpty ? projects.first.id : '',
               onOpenRun: onOpenRun,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
           ],
 
-          // 2. CONTINUE WORKING (Recent relevant Workstreams, 3-5 items)
+          // 3. CONTINUE WORKING (if recentWork)
           if (hasContinueWork) ...[
             const _SectionHeader(title: 'Continue working'),
             const SizedBox(height: 12),
             LayoutBuilder(
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth > 700;
-                final items = AxRecentWorkRanker.rank(
-                  continueWorkItems.isNotEmpty
-                      ? continueWorkItems
-                      : _deriveDefaultContinueWorkItems(projects),
-                  limit: 5,
-                );
-
                 return GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -727,9 +745,9 @@ class EstablishedUserHome extends StatelessWidget {
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
                   ),
-                  itemCount: items.length,
+                  itemCount: effectiveRecentWork.length,
                   itemBuilder: (context, index) {
-                    final item = items[index];
+                    final item = effectiveRecentWork[index];
                     return _ContinueWorkCard(
                       item: item,
                       onTap: () {
@@ -747,8 +765,8 @@ class EstablishedUserHome extends StatelessWidget {
             const SizedBox(height: 28),
           ],
 
-          // 3. WHAT'S NEW (Product Updates)
-          if (_effectiveProductUpdates.isNotEmpty) ...[
+          // 4. WHAT'S NEW (if productUpdates)
+          if (hasProductUpdates) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -806,14 +824,12 @@ class EstablishedUserHome extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Column(
                   children: [
-                    for (var i = 0;
-                        i < _effectiveProductUpdates.length;
-                        i++) ...[
+                    for (var i = 0; i < productUpdatesToShow.length; i++) ...[
                       _ProductUpdateTile(
-                        update: _effectiveProductUpdates[i],
+                        update: productUpdatesToShow[i],
                         onTap: () {
                           if (onOpenUpdateDetail != null) {
-                            onOpenUpdateDetail!(_effectiveProductUpdates[i]);
+                            onOpenUpdateDetail!(productUpdatesToShow[i]);
                           } else {
                             AxWhatsNewDialog.show(
                               context,
@@ -821,14 +837,14 @@ class EstablishedUserHome extends StatelessWidget {
                                   ? productUpdates
                                   : defaultProductUpdates,
                               readStates: productUpdateReadStates,
-                              initialUpdateId: _effectiveProductUpdates[i].id,
+                              initialUpdateId: productUpdatesToShow[i].id,
                               onOpenUpdateDetail: onOpenUpdateDetail,
                               onDismissUpdate: onDismissUpdate,
                             );
                           }
                         },
                       ),
-                      if (i < _effectiveProductUpdates.length - 1)
+                      if (i < productUpdatesToShow.length - 1)
                         const Divider(height: 1),
                     ],
                   ],
@@ -838,8 +854,8 @@ class EstablishedUserHome extends StatelessWidget {
             const SizedBox(height: 28),
           ],
 
-          // 4. AI UPDATES (Changes relevant to available Workers/models)
-          if (_effectiveAiUpdates.isNotEmpty) ...[
+          // 5. AI UPDATES (if aiUpdates)
+          if (hasAiUpdates) ...[
             const _SectionHeader(title: 'AI updates'),
             const SizedBox(height: 12),
             LayoutBuilder(
@@ -854,9 +870,9 @@ class EstablishedUserHome extends StatelessWidget {
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
                   ),
-                  itemCount: _effectiveAiUpdates.length,
+                  itemCount: aiUpdatesToShow.length,
                   itemBuilder: (context, index) {
-                    final update = _effectiveAiUpdates[index];
+                    final update = aiUpdatesToShow[index];
                     return _AiUpdateCard(update: update);
                   },
                 );

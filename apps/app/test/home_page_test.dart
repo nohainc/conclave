@@ -1543,4 +1543,157 @@ void main() {
     expect(find.text('Running now'), findsNothing);
     expect(find.text('Completed task review'), findsNothing);
   });
+
+  testWidgets(
+      'Phase 20 — Conditional Home composition renders only active sections (User A: For You + Running Now)',
+      (tester) async {
+    const activeRun = AxRun(
+      id: 'run-1',
+      status: RunStatus.running,
+      objective: 'Optimizing database queries',
+      taskCount: 4,
+      completedTaskCount: 2,
+      openFindingCount: 0,
+      verifiedCriterionCount: 1,
+      criterionCount: 4,
+    );
+
+    const testAttentionItem = AxHomeAttentionItem(
+      id: 'att-1',
+      type: AxHomeAttentionType.workspaceProblem,
+      title: 'MacBook Pro is disconnected',
+      description: 'MacBook Pro workspace disconnected',
+      actionLabel: 'Reconnect →',
+    );
+
+    await tester.pumpWidget(
+      scaffold(
+        EstablishedUserHome(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [],
+          invitations: const [],
+          attentionItems: const [testAttentionItem],
+          continueWorkItems: const [],
+          productUpdates: const [
+            AxProductUpdate(
+              id: 'update-draft',
+              slug: 'draft-feature',
+              title: 'Draft Feature',
+              summary: 'Not yet visible to users',
+              publishedAt: '2026-10-08T00:00:00Z',
+              status: AxProductUpdateStatus.draft,
+            ),
+          ],
+          productUpdateReadStates: const {},
+          aiUpdates: const [
+            AxAiCapabilityUpdate(
+              id: 'ai-claude-inaccessible',
+              workerProfileId: 'claude-unassigned',
+              provider: 'anthropic',
+              type: AxAiCapabilityUpdateType.modelAdded,
+              title: 'Claude 3.7 Sonnet',
+              summary: 'Claude model upgrade for Anthropic users',
+              publishedAt: '2026-10-08T00:00:00Z',
+            ),
+          ],
+          run: activeRun,
+          openFindingCount: 0,
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenRun: (_, __) {},
+        ),
+      ),
+    );
+
+    // Section 1: For You - present
+    expect(find.text('For you'), findsOneWidget);
+    expect(find.text('Workspace offline'), findsOneWidget);
+
+    // Section 2: Running Now - present
+    expect(find.text('Running now'), findsOneWidget);
+    expect(find.text('Optimizing database queries'), findsOneWidget);
+
+    // Section 3: Continue Working - present (fallback derived from project)
+    expect(find.text('Continue working'), findsOneWidget);
+
+    // Section 4: What's New - omitted (only draft update)
+    expect(find.text("What's new"), findsNothing);
+
+    // Section 5: AI Updates - omitted (claude-unassigned not accessible to user)
+    expect(find.text('AI updates'), findsNothing);
+  });
+
+  testWidgets(
+      'Phase 20 — Conditional Home composition renders only active sections (User B: Continue Working + What\'s New + AI Updates)',
+      (tester) async {
+    const testWorker = AxWorker(
+      id: 'worker-chatgpt',
+      workspaceId: 'ws-macbook',
+      workspaceName: 'Local Workspace',
+      workerTypeId: 'chatgpt',
+      displayName: 'ChatGPT Worker',
+      status: 'ready',
+      readinessState: 'ready',
+      localConcurrencyLimit: 1,
+      capabilities: ['chat', 'work'],
+    );
+
+    const testPublishedUpdate = AxProductUpdate(
+      id: 'update-collab',
+      slug: 'realtime-collab',
+      title: 'Real-time Collaboration',
+      summary: 'Collaborate live with teammates.',
+      publishedAt: '2026-10-08T00:00:00Z',
+      status: AxProductUpdateStatus.published,
+    );
+
+    const testAiUpdate = AxAiCapabilityUpdate(
+      id: 'ai-chatgpt-o3',
+      workerProfileId: 'chatgpt',
+      provider: 'openai',
+      type: AxAiCapabilityUpdateType.modelAdded,
+      title: 'OpenAI o3-mini model',
+      summary: 'High-speed reasoning model available.',
+      publishedAt: '2026-10-08T00:00:00Z',
+    );
+
+    await tester.pumpWidget(
+      scaffold(
+        EstablishedUserHome(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [testWorker],
+          invitations: const [],
+          attentionItems: const [],
+          continueWorkItems: const [],
+          productUpdates: const [testPublishedUpdate],
+          productUpdateReadStates: const {},
+          aiUpdates: const [testAiUpdate],
+          run: null, // No active executions
+          openFindingCount: 0, // No attention items
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenRun: (_, __) {},
+        ),
+      ),
+    );
+
+    // Section 1: For You - omitted
+    expect(find.text('For you'), findsNothing);
+
+    // Section 2: Running Now - omitted
+    expect(find.text('Running now'), findsNothing);
+
+    // Section 3: Continue Working - present
+    expect(find.text('Continue working'), findsOneWidget);
+
+    // Section 4: What's New - present
+    expect(find.text("What's new"), findsOneWidget);
+    expect(find.text('Real-time Collaboration'), findsOneWidget);
+
+    // Section 5: AI Updates - present
+    expect(find.text('AI updates'), findsOneWidget);
+    expect(find.text('OpenAI o3-mini model'), findsOneWidget);
+  });
 }
