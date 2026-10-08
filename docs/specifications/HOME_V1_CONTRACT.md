@@ -545,8 +545,31 @@ Offline Home State
 └── Server-Dependent Actions (Gracefully degraded/disabled without disrupting read access)
 ```
 
-### 1. Architectural Rules & Degradation Contract
-- **Never Replace Home with Error Screens:** AX does not display a full-page disconnect banner or modal blocker. The core structure remains intact and immediately usable.
-- **Persistent Local Cache Access:** Cached `Continue Working` workstreams, `What's New` product updates, and `AI Updates` remain fully visible, selectable, and navigable.
-- **Subtle Connectivity Indicator:** A non-intrusive status pill (`Offline · Cached data`) appears in the header to inform the user of offline status.
-- **Natural Server Action Degradation:** Operations requiring server round-trips (such as creating projects or accepting/declining cloud invitations) naturally indicate offline status or disable gracefully, while offline-safe read actions (`Continue →`, `Learn more →`) execute seamlessly.
+---
+
+## Notifications Cleanup & Normalized Domain Terminology (Phase 29)
+
+Home and the Notification Center utilize a normalized domain model structured strictly around the five fundamental Conclave entities:
+
+```text
+Normalized Notification Domain
+├── 1. Workstream   (workstreamNeedsInput, workstreamCompleted, workstreamFailed)
+├── 2. Workflow Run (workflowRunCompleted, workflowRunFailed, workflowRunNeedsApproval)
+├── 3. Worker       (workerCredentialProblem, workerInstallFailed)
+├── 4. Workspace    (workspaceOffline)
+└── 5. Project      (projectInvitationReceived)
+```
+
+### 1. Architectural Rules & Normalization
+- **No Ambiguous "Run" Assumptions:** Notifications distinguish between ongoing Workstream conversational turns and background Workflow Run executions.
+- **Accurate Navigation Target Resolution:**
+  - `AxNotificationTarget.workstream` → Deep-links directly to `AxNavigation.workstream(projectId, workstreamId)`.
+  - `AxNotificationTarget.workflowRun` → Deep-links directly to `AxNavigation.run(projectId, runId)`.
+  - `AxNotificationTarget.workspace` / `workspaces` → Deep-links to `AxNavigation.workspaces(workspaceId: ...)`.
+  - `AxNotificationTarget.project` → Deep-links to `AxNavigation.project(projectId)`.
+- **Actionability & Priority Mapping:**
+  - High priority: `workstreamNeedsInput`, `workstreamFailed`, `workflowRunNeedsApproval`, `workflowRunFailed`, `workerCredentialProblem`.
+  - Normal priority: `workspaceOffline`, `workerInstallFailed`, `projectInvitationReceived`.
+  - Low priority: `workstreamCompleted`, `workflowRunCompleted`.
+- **Home Triage Alignment:** `AxHomeAttentionProjector` maps normalized notification events cleanly into `AxHomeAttentionItem` triage rows with semantic action CTAs (`Review →`, `Inspect →`, `Fix →`, `Connect →`, `Open →`, `View →`).
+

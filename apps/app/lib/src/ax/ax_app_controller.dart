@@ -623,12 +623,19 @@ extension _AxAppController on _AxAppStateMixin {
                                 return ListTile(
                                   leading: Icon(
                                     switch (notification.kind) {
-                                      AxNotificationKind.completed =>
-                                        Icons.check_circle_outline,
-                                      AxNotificationKind.failed =>
-                                        Icons.error_outline,
+                                      AxNotificationKind.workstreamNeedsInput ||
+                                      AxNotificationKind
+                                          .workflowRunNeedsApproval ||
                                       AxNotificationKind.approvalRequired =>
                                         Icons.help_outline,
+                                      AxNotificationKind.workstreamFailed ||
+                                      AxNotificationKind.workflowRunFailed ||
+                                      AxNotificationKind.failed =>
+                                        Icons.error_outline,
+                                      AxNotificationKind.workstreamCompleted ||
+                                      AxNotificationKind.workflowRunCompleted ||
+                                      AxNotificationKind.completed =>
+                                        Icons.check_circle_outline,
                                       AxNotificationKind.workspaceOffline =>
                                         Icons.cloud_off_outlined,
                                       AxNotificationKind
@@ -636,6 +643,8 @@ extension _AxAppController on _AxAppStateMixin {
                                         Icons.key_off_outlined,
                                       AxNotificationKind.workerInstallFailed =>
                                         Icons.download_for_offline_outlined,
+                                      AxNotificationKind
+                                          .projectInvitationReceived ||
                                       AxNotificationKind.invitationReceived =>
                                         Icons.mail_outline,
                                     },
@@ -698,10 +707,25 @@ extension _AxAppController on _AxAppStateMixin {
 
   void _navigateToNotification(AxNotification notification) {
     switch (notification.target) {
+      case AxNotificationTarget.workstream:
+        if (notification.projectId != null &&
+            notification.workstreamId != null) {
+          _navigateTo(AxNavigation.workstream(
+              notification.projectId!, notification.workstreamId!));
+        } else if (notification.projectId != null) {
+          _navigateTo(AxNavigation.project(notification.projectId!));
+        }
+      case AxNotificationTarget.workflowRun:
       case AxNotificationTarget.run:
         if (notification.projectId != null && notification.runId != null) {
           _navigateTo(
               AxNavigation.run(notification.projectId!, notification.runId!));
+        } else if (notification.projectId != null) {
+          _navigateTo(AxNavigation.project(notification.projectId!));
+        }
+      case AxNotificationTarget.project:
+        if (notification.projectId != null) {
+          _navigateTo(AxNavigation.project(notification.projectId!));
         }
       case AxNotificationTarget.workspaces:
       case AxNotificationTarget.workspace:

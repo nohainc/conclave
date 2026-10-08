@@ -34,8 +34,12 @@ extension _AxAppViews on _AxAppStateMixin {
                 productUpdateReadStates: store.productUpdateReadStates.value,
                 attentionItems: notifications.map((n) {
                   final kind = switch (n.kind) {
+                    AxNotificationKind.workstreamNeedsInput ||
+                    AxNotificationKind.workflowRunNeedsApproval ||
                     AxNotificationKind.approvalRequired =>
                       AxAttentionKind.needsInput,
+                    AxNotificationKind.workstreamFailed ||
+                    AxNotificationKind.workflowRunFailed ||
                     AxNotificationKind.failed =>
                       AxAttentionKind.failedExecution,
                     AxNotificationKind.workerCredentialProblem ||
@@ -43,30 +47,55 @@ extension _AxAppViews on _AxAppStateMixin {
                       AxAttentionKind.workerProblem,
                     AxNotificationKind.workspaceOffline =>
                       AxAttentionKind.workspaceProblem,
-                    AxNotificationKind.completed => AxAttentionKind.completed,
+                    AxNotificationKind.workstreamCompleted ||
+                    AxNotificationKind.workflowRunCompleted ||
+                    AxNotificationKind.completed =>
+                      AxAttentionKind.completed,
+                    AxNotificationKind.projectInvitationReceived ||
                     AxNotificationKind.invitationReceived =>
                       AxAttentionKind.invitation,
                   };
                   final categoryLabel = switch (n.kind) {
-                    AxNotificationKind.approvalRequired => 'Needs your input',
-                    AxNotificationKind.failed => 'Failed execution',
+                    AxNotificationKind.workstreamNeedsInput ||
+                    AxNotificationKind.workflowRunNeedsApproval ||
+                    AxNotificationKind.approvalRequired =>
+                      'Needs your input',
+                    AxNotificationKind.workstreamFailed ||
+                    AxNotificationKind.workflowRunFailed ||
+                    AxNotificationKind.failed =>
+                      'Failed execution',
                     AxNotificationKind.workerCredentialProblem =>
                       'Worker needs attention',
                     AxNotificationKind.workerInstallFailed =>
                       'Worker install failed',
                     AxNotificationKind.workspaceOffline => 'Workspace offline',
-                    AxNotificationKind.completed => 'Completed',
+                    AxNotificationKind.workstreamCompleted ||
+                    AxNotificationKind.workflowRunCompleted ||
+                    AxNotificationKind.completed =>
+                      'Completed',
+                    AxNotificationKind.projectInvitationReceived ||
                     AxNotificationKind.invitationReceived =>
                       'Project invitation',
                   };
                   final actionLabel = switch (n.kind) {
-                    AxNotificationKind.approvalRequired => 'Review →',
-                    AxNotificationKind.failed => 'Inspect →',
+                    AxNotificationKind.workstreamNeedsInput ||
+                    AxNotificationKind.workflowRunNeedsApproval ||
+                    AxNotificationKind.approvalRequired =>
+                      'Review →',
+                    AxNotificationKind.workstreamFailed ||
+                    AxNotificationKind.workflowRunFailed ||
+                    AxNotificationKind.failed =>
+                      'Inspect →',
                     AxNotificationKind.workerCredentialProblem => 'Fix →',
                     AxNotificationKind.workerInstallFailed => 'Fix →',
                     AxNotificationKind.workspaceOffline => 'Connect →',
-                    AxNotificationKind.completed => 'Open →',
-                    AxNotificationKind.invitationReceived => 'View →',
+                    AxNotificationKind.workstreamCompleted ||
+                    AxNotificationKind.workflowRunCompleted ||
+                    AxNotificationKind.completed =>
+                      'Open →',
+                    AxNotificationKind.projectInvitationReceived ||
+                    AxNotificationKind.invitationReceived =>
+                      'View →',
                   };
                   return AxHomeAttentionItem(
                     id: n.id,
@@ -77,8 +106,11 @@ extension _AxAppViews on _AxAppStateMixin {
                     timestampDisplay: _formatNotificationTime(n.createdAt),
                     actionLabel: actionLabel,
                     projectId: n.projectId,
+                    workstreamId: n.workstreamId,
                     isUnread: !n.read,
-                    isActionable: n.kind != AxNotificationKind.completed,
+                    isActionable: n.kind != AxNotificationKind.completed &&
+                        n.kind != AxNotificationKind.workstreamCompleted &&
+                        n.kind != AxNotificationKind.workflowRunCompleted,
                     createdAt: n.createdAt,
                   );
                 }).toList(),
