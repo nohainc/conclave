@@ -617,13 +617,13 @@ class EstablishedUserHome extends StatelessWidget {
         readStates: productUpdateReadStates,
       );
 
-  List<AxAiUpdate> get _effectiveAiUpdates {
+  List<AxAiCapabilityUpdate> get _effectiveAiUpdates {
     if (aiUpdates.isNotEmpty) return aiUpdates;
     // Derive relevant AI updates based on available worker types in the workspace/projects
     final availableWorkerTypes = workers.map((w) => w.workerTypeId).toSet();
     return _defaultAiUpdates.where((update) {
       if (availableWorkerTypes.isEmpty) return true;
-      return availableWorkerTypes.contains(update.workerTypeId);
+      return availableWorkerTypes.contains(update.workerProfileId);
     }).toList();
   }
 
@@ -1861,12 +1861,17 @@ const defaultProductUpdates = [
 ];
 
 class _AiUpdateCard extends StatelessWidget {
-  const _AiUpdateCard({required this.update});
+  const _AiUpdateCard({
+    required this.update,
+  });
 
-  final AxAiUpdate update;
+  final AxAiCapabilityUpdate update;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -1876,30 +1881,63 @@ class _AiUpdateCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                _aiDot(update.workerTypeId),
+                _aiDot(update.workerProfileId),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    update.workerDisplayName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    update.type.label.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 6),
                 Text(
-                  update.workerDisplayName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
+                  update.dateDisplay,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 6),
             Text(
               update.title,
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+            const SizedBox(height: 2),
             Text(
-              update.detail,
+              update.summary,
               style: TextStyle(
                 fontSize: 11,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: colorScheme.onSurfaceVariant,
+                height: 1.3,
               ),
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ],
@@ -1909,10 +1947,11 @@ class _AiUpdateCard extends StatelessWidget {
   }
 
   Widget _aiDot(String typeId) {
-    final color = switch (typeId) {
+    final color = switch (typeId.toLowerCase()) {
       'chatgpt' => const Color(0xFF10A37F),
       'gemini' => const Color(0xFF3B82F6),
       'claude' => const Color(0xFFD97706),
+      'ollama' => const Color(0xFF6366F1),
       _ => Colors.purpleAccent,
     };
     return Container(
@@ -2003,21 +2042,42 @@ class _InvitationItem extends StatelessWidget {
   }
 }
 
-const _defaultAiUpdates = [
-  AxAiUpdate(
+const defaultAiCapabilityUpdates = [
+  AxAiCapabilityUpdate(
     id: 'ai-chatgpt-models',
-    workerTypeId: 'chatgpt',
-    workerDisplayName: 'ChatGPT Worker',
+    workerProfileId: 'chatgpt',
+    provider: 'openai',
+    type: AxAiCapabilityUpdateType.modelAdded,
+    modelId: 'gpt-4o',
+    modelDisplayName: 'GPT-4o & Reasoning',
     title: 'Supported model catalog updated',
-    detail:
+    summary:
         'Auto model and latest reasoning models are selectable for your requests.',
+    publishedAt: '2026-10-07T00:00:00Z',
+    dateDisplay: 'Oct 7',
   ),
-  AxAiUpdate(
+  AxAiCapabilityUpdate(
     id: 'ai-gemini-models',
-    workerTypeId: 'gemini',
-    workerDisplayName: 'Gemini Worker',
+    workerProfileId: 'gemini',
+    provider: 'google',
+    type: AxAiCapabilityUpdateType.capabilityAdded,
     title: 'Multi-modal search & tools',
-    detail:
+    summary:
         'Gemini Worker supports grounded web search and structured outputs.',
+    publishedAt: '2026-10-05T00:00:00Z',
+    dateDisplay: 'Oct 5',
+  ),
+  AxAiCapabilityUpdate(
+    id: 'ai-claude-artifacts',
+    workerProfileId: 'claude',
+    provider: 'anthropic',
+    type: AxAiCapabilityUpdateType.capabilityChanged,
+    title: 'Interactive artifact synthesis',
+    summary:
+        'Claude Worker streams interactive artifacts and code snippets directly.',
+    publishedAt: '2026-10-02T00:00:00Z',
+    dateDisplay: 'Oct 2',
   ),
 ];
+
+const _defaultAiUpdates = defaultAiCapabilityUpdates;

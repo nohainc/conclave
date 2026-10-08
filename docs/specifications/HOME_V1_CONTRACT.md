@@ -262,4 +262,38 @@ AxUserProductUpdateState
 - **Monthly Grouping:** Groups changelog entries chronologically by month and year (`October 2026`, `September 2026`, etc.).
 - **Rich Changelog Items:** Displays expanded markdown/details, publication dates, category badges, dismissal action, and external/deep-link CTAs.
 
+---
+
+## AI Capability Updates as Distinct Domain Model (Phase 16)
+
+AI and model capability changes are **distinct** from generic Conclave application releases. Model additions, deprecations, tool profile updates, and provider capability adjustments are modeled independently.
+
+### 1. AiCapabilityUpdate Domain Model
+```text
+AxAiCapabilityUpdate
+├── id: String
+├── workerProfileId: String (e.g. 'chatgpt', 'gemini', 'claude', 'ollama')
+├── provider?: String       (e.g. 'openai', 'google', 'anthropic', 'meta')
+├── type: AxAiCapabilityUpdateType
+│   ├── model_added
+│   ├── model_removed
+│   ├── model_deprecated
+│   ├── capability_added
+│   ├── capability_changed
+│   ├── profile_updated
+│   └── authentication_changed
+├── modelId?: String          (e.g. 'gpt-4o', 'gemini-2.5-pro')
+├── modelDisplayName?: String (e.g. 'GPT-4o', 'Gemini 2.5 Pro')
+├── title: String
+├── summary: String
+├── publishedAt: DateTime / String
+├── actionTarget?: String
+└── minimumProfileVersion?: String
+```
+
+### 2. Presentation & Filtering on Home
+- **Scoped by Active Workers:** When workers are configured in the user's workspace, Home filters AI capability updates to highlight relevant provider/worker capabilities.
+- **Card Presentation (`_AiUpdateCard`):** Displays worker identity dot, worker name, category pill badge (e.g. `[MODEL ADDED]`, `[CAPABILITY ADDED]`), publication date (`Oct 7`), bold title, and concise summary.
+
+
 

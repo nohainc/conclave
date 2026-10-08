@@ -1833,20 +1833,201 @@ class AxProductUpdateService {
   }
 }
 
-class AxAiUpdate {
-  const AxAiUpdate({
+enum AxAiCapabilityUpdateType {
+  modelAdded('model_added', 'Model Added'),
+  modelRemoved('model_removed', 'Model Removed'),
+  modelDeprecated('model_deprecated', 'Model Deprecated'),
+  capabilityAdded('capability_added', 'Capability Added'),
+  capabilityChanged('capability_changed', 'Capability Changed'),
+  profileUpdated('profile_updated', 'Profile Updated'),
+  authenticationChanged('authentication_changed', 'Authentication Changed');
+
+  const AxAiCapabilityUpdateType(this.wireName, this.label);
+
+  final String wireName;
+  final String label;
+
+  static AxAiCapabilityUpdateType fromString(String? value) {
+    if (value == null) return AxAiCapabilityUpdateType.capabilityAdded;
+    return AxAiCapabilityUpdateType.values.firstWhere(
+      (e) => e.wireName == value || e.name == value,
+      orElse: () => AxAiCapabilityUpdateType.capabilityAdded,
+    );
+  }
+
+  bool get isModelUpdate =>
+      this == modelAdded || this == modelRemoved || this == modelDeprecated;
+
+  bool get isCapabilityUpdate =>
+      this == capabilityAdded || this == capabilityChanged;
+}
+
+class AxAiCapabilityUpdate {
+  const AxAiCapabilityUpdate({
     required this.id,
-    required this.workerTypeId,
-    required this.workerDisplayName,
+    required this.workerProfileId,
+    this.provider,
+    this.type = AxAiCapabilityUpdateType.capabilityAdded,
+    this.modelId,
+    this.modelDisplayName,
     required this.title,
-    required this.detail,
+    required this.summary,
+    this.publishedAt,
+    this.actionTarget,
+    this.minimumProfileVersion,
+    String? workerDisplayName,
+    String? dateDisplay,
     this.actionLabel,
-  });
+  })  : _workerDisplayName = workerDisplayName,
+        _customDateDisplay = dateDisplay;
 
   final String id;
-  final String workerTypeId;
-  final String workerDisplayName;
+  final String workerProfileId;
+  final String? provider;
+  final AxAiCapabilityUpdateType type;
+  final String? modelId;
+  final String? modelDisplayName;
   final String title;
-  final String detail;
+  final String summary;
+  final dynamic publishedAt;
+  final String? actionTarget;
+  final String? minimumProfileVersion;
+  final String? _workerDisplayName;
+  final String? _customDateDisplay;
   final String? actionLabel;
+
+  /// Worker type identifier alias for compatibility.
+  String get workerTypeId => workerProfileId;
+
+  /// Worker display name helper.
+  String get workerDisplayName {
+    if (_workerDisplayName != null && _workerDisplayName.isNotEmpty) {
+      return _workerDisplayName;
+    }
+    return switch (workerProfileId.toLowerCase()) {
+      'chatgpt' => 'ChatGPT Worker',
+      'gemini' => 'Gemini Worker',
+      'claude' => 'Claude Worker',
+      'ollama' => 'Ollama Worker',
+      _ =>
+        '${workerProfileId.isEmpty ? "AI" : "${workerProfileId[0].toUpperCase()}${workerProfileId.substring(1)}"} Worker',
+    };
+  }
+
+  /// Detail alias for compatibility with legacy UI properties.
+  String get detail => summary;
+
+  DateTime get publishedDateTime {
+    if (publishedAt is DateTime) {
+      return publishedAt as DateTime;
+    }
+    if (publishedAt is String) {
+      return DateTime.tryParse(publishedAt as String) ?? DateTime(2026, 1, 1);
+    }
+    return DateTime(2026, 1, 1);
+  }
+
+  String get dateDisplay {
+    if (_customDateDisplay != null && _customDateDisplay.isNotEmpty) {
+      return _customDateDisplay;
+    }
+    final dt = publishedDateTime;
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    return '${months[dt.month - 1]} ${dt.day}';
+  }
+
+  bool isCompatibleWithProfileVersion(String? profileVersion) {
+    if (minimumProfileVersion == null || profileVersion == null) return true;
+    return profileVersion.compareTo(minimumProfileVersion!) >= 0;
+  }
+
+  AxAiCapabilityUpdate copyWith({
+    String? id,
+    String? workerProfileId,
+    String? provider,
+    AxAiCapabilityUpdateType? type,
+    String? modelId,
+    String? modelDisplayName,
+    String? title,
+    String? summary,
+    dynamic publishedAt,
+    String? actionTarget,
+    String? minimumProfileVersion,
+    String? workerDisplayName,
+    String? dateDisplay,
+    String? actionLabel,
+  }) =>
+      AxAiCapabilityUpdate(
+        id: id ?? this.id,
+        workerProfileId: workerProfileId ?? this.workerProfileId,
+        provider: provider ?? this.provider,
+        type: type ?? this.type,
+        modelId: modelId ?? this.modelId,
+        modelDisplayName: modelDisplayName ?? this.modelDisplayName,
+        title: title ?? this.title,
+        summary: summary ?? this.summary,
+        publishedAt: publishedAt ?? this.publishedAt,
+        actionTarget: actionTarget ?? this.actionTarget,
+        minimumProfileVersion:
+            minimumProfileVersion ?? this.minimumProfileVersion,
+        workerDisplayName: workerDisplayName ?? _workerDisplayName,
+        dateDisplay: dateDisplay ?? _customDateDisplay,
+        actionLabel: actionLabel ?? this.actionLabel,
+      );
+
+  factory AxAiCapabilityUpdate.fromJson(Map<String, dynamic> json) =>
+      AxAiCapabilityUpdate(
+        id: json['id'] as String? ?? '',
+        workerProfileId: json['workerProfileId'] as String? ??
+            json['workerTypeId'] as String? ??
+            '',
+        provider: json['provider'] as String?,
+        type: AxAiCapabilityUpdateType.fromString(json['type'] as String?),
+        modelId: json['modelId'] as String?,
+        modelDisplayName: json['modelDisplayName'] as String?,
+        title: json['title'] as String? ?? '',
+        summary: json['summary'] as String? ?? json['detail'] as String? ?? '',
+        publishedAt: json['publishedAt'],
+        actionTarget: json['actionTarget'] as String?,
+        minimumProfileVersion: json['minimumProfileVersion'] as String?,
+        workerDisplayName: json['workerDisplayName'] as String?,
+        dateDisplay: json['dateDisplay'] as String?,
+        actionLabel: json['actionLabel'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'workerProfileId': workerProfileId,
+        if (provider != null) 'provider': provider,
+        'type': type.wireName,
+        if (modelId != null) 'modelId': modelId,
+        if (modelDisplayName != null) 'modelDisplayName': modelDisplayName,
+        'title': title,
+        'summary': summary,
+        'publishedAt': publishedAt is DateTime
+            ? (publishedAt as DateTime).toIso8601String()
+            : publishedAt?.toString(),
+        if (actionTarget != null) 'actionTarget': actionTarget,
+        if (minimumProfileVersion != null)
+          'minimumProfileVersion': minimumProfileVersion,
+        if (_workerDisplayName != null) 'workerDisplayName': _workerDisplayName,
+        if (_customDateDisplay != null) 'dateDisplay': _customDateDisplay,
+        if (actionLabel != null) 'actionLabel': actionLabel,
+      };
 }
+
+typedef AxAiUpdate = AxAiCapabilityUpdate;
+typedef AiCapabilityUpdate = AxAiCapabilityUpdate;

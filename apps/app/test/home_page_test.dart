@@ -1084,4 +1084,117 @@ void main() {
     expect(find.text('Detailed technical changelog for October release.'),
         findsOneWidget);
   });
+
+  test('Phase 16 — AxAiCapabilityUpdate domain model and serialization', () {
+    const update = AxAiCapabilityUpdate(
+      id: 'ai-gpt4o-mini',
+      workerProfileId: 'chatgpt',
+      provider: 'openai',
+      type: AxAiCapabilityUpdateType.modelAdded,
+      modelId: 'gpt-4o-mini',
+      modelDisplayName: 'GPT-4o Mini',
+      title: 'Fast lightweight model added',
+      summary: 'GPT-4o Mini is now available for low-latency code tasks.',
+      publishedAt: '2026-10-08T00:00:00Z',
+      dateDisplay: 'Oct 8',
+      minimumProfileVersion: '1.2.0',
+    );
+
+    expect(update.workerTypeId, 'chatgpt');
+    expect(update.workerDisplayName, 'ChatGPT Worker');
+    expect(update.type.isModelUpdate, isTrue);
+    expect(update.type.isCapabilityUpdate, isFalse);
+    expect(update.type.wireName, 'model_added');
+    expect(update.type.label, 'Model Added');
+    expect(update.dateDisplay, 'Oct 8');
+    expect(update.isCompatibleWithProfileVersion('1.3.0'), isTrue);
+    expect(update.isCompatibleWithProfileVersion('1.1.0'), isFalse);
+
+    final json = update.toJson();
+    expect(json['id'], 'ai-gpt4o-mini');
+    expect(json['workerProfileId'], 'chatgpt');
+    expect(json['provider'], 'openai');
+    expect(json['type'], 'model_added');
+    expect(json['modelId'], 'gpt-4o-mini');
+    expect(json['modelDisplayName'], 'GPT-4o Mini');
+    expect(json['title'], 'Fast lightweight model added');
+    expect(json['minimumProfileVersion'], '1.2.0');
+
+    final parsed = AxAiCapabilityUpdate.fromJson(json);
+    expect(parsed.id, update.id);
+    expect(parsed.workerProfileId, update.workerProfileId);
+    expect(parsed.provider, update.provider);
+    expect(parsed.type, update.type);
+    expect(parsed.modelId, update.modelId);
+    expect(parsed.modelDisplayName, update.modelDisplayName);
+    expect(parsed.summary, update.summary);
+    expect(parsed.minimumProfileVersion, update.minimumProfileVersion);
+  });
+
+  testWidgets(
+      'Phase 16 — EstablishedUserHome renders AI capability updates with distinct badges',
+      (tester) async {
+    const aiUpdates = [
+      AxAiCapabilityUpdate(
+        id: 'ai-up-1',
+        workerProfileId: 'chatgpt',
+        provider: 'openai',
+        type: AxAiCapabilityUpdateType.modelAdded,
+        title: 'New Reasoning Model',
+        summary: 'Deep reasoning model enabled for complex code architecture.',
+        publishedAt: '2026-10-08T00:00:00Z',
+        dateDisplay: 'Oct 8',
+      ),
+      AxAiCapabilityUpdate(
+        id: 'ai-up-2',
+        workerProfileId: 'gemini',
+        provider: 'google',
+        type: AxAiCapabilityUpdateType.capabilityAdded,
+        title: 'Structured Output Mode',
+        summary: 'Enforce JSON schema guarantees across multi-turn runs.',
+        publishedAt: '2026-10-09T00:00:00Z',
+        dateDisplay: 'Oct 9',
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EstablishedUserHome(
+            projects: const [
+              AxProject(
+                id: 'p-1',
+                name: 'Active Project',
+                description: 'Project description',
+                archived: false,
+                branch: 'main',
+                lastActivity: 'Just now',
+                workstreams: [],
+              ),
+            ],
+            workspaces: const [],
+            workers: const [],
+            run: null,
+            openFindingCount: 0,
+            aiUpdates: aiUpdates,
+            onOpenProject: (_) {},
+            onOpenRun: (_, __) {},
+            onOpenWorkspaces: () {},
+          ),
+        ),
+      ),
+    );
+
+    // Verify section header and update details
+    expect(find.text('AI updates'), findsOneWidget);
+    expect(find.text('ChatGPT Worker'), findsOneWidget);
+    expect(find.text('MODEL ADDED'), findsOneWidget);
+    expect(find.text('New Reasoning Model'), findsOneWidget);
+    expect(find.text('Oct 8'), findsOneWidget);
+
+    expect(find.text('Gemini Worker'), findsOneWidget);
+    expect(find.text('CAPABILITY ADDED'), findsOneWidget);
+    expect(find.text('Structured Output Mode'), findsOneWidget);
+    expect(find.text('Oct 9'), findsOneWidget);
+  });
 }
