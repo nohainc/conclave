@@ -3598,4 +3598,281 @@ void main() {
       expect(find.text('Continue working'), findsOneWidget);
     });
   });
+
+  group('Phase 34 — Analytics & Product Discovery Telemetry', () {
+    setUp(() {
+      AxHomeAnalytics.reset();
+    });
+
+    testWidgets('Measure Home → Continue Workstream', (tester) async {
+      final events = <AxHomeAnalyticsEvent>[];
+      AxHomeAnalytics.setSink(events.add);
+      addTearDown(() => AxHomeAnalytics.setSink(null));
+
+      var openedWorkstream = '';
+      const activeProject = AxProject(
+        id: 'p-analytics',
+        name: 'Analytics Project',
+        branch: 'main',
+        lastActivity: '1m ago',
+        workstreams: [
+          AxWorkstream(
+            id: 'ws-analytics',
+            projectId: 'p-analytics',
+            name: 'Telemetry Workstream',
+            lead: 'Vitalii',
+            status: 'active',
+            brief: 'Instrumenting product discovery.',
+            primaryWorkspace: 'ws',
+            queueStatus: 'idle',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(scaffold(HomePage(
+        projects: const [activeProject],
+        workspaces: const [],
+        workers: const [],
+        invitations: const [],
+        run: null,
+        openFindingCount: 0,
+        onOpenWorkspaces: () {},
+        onOpenProject: (_) {},
+        onOpenRun: (_, __) {},
+        onCreateProject: () {},
+        onOpenWorkstream: (pId, wsId) => openedWorkstream = '$pId/$wsId',
+      )));
+
+      await tester.tap(find.text('Continue →'));
+      expect(openedWorkstream, 'p-analytics/ws-analytics');
+
+      expect(events, hasLength(1));
+      expect(events.first.action, AxHomeAnalyticsAction.continueWorkstream);
+      expect(events.first.eventName, 'home.continue_workstream');
+      expect(events.first.properties['projectId'], 'p-analytics');
+      expect(events.first.properties['workstreamId'], 'ws-analytics');
+      expect(events.first.properties['projectName'], 'Analytics Project');
+      expect(
+          events.first.properties['workstreamTitle'], 'Telemetry Workstream');
+    });
+
+    testWidgets('Measure Home → Accept invitation', (tester) async {
+      final events = <AxHomeAnalyticsEvent>[];
+      AxHomeAnalytics.setSink(events.add);
+      addTearDown(() => AxHomeAnalytics.setSink(null));
+
+      AxProjectInvitation? accepted;
+      await tester.pumpWidget(scaffold(HomePage(
+        projects: const [project],
+        workspaces: const [],
+        workers: const [],
+        invitations: const [testInvite1],
+        run: null,
+        openFindingCount: 0,
+        onOpenWorkspaces: () {},
+        onOpenProject: (_) {},
+        onOpenRun: (_, __) {},
+        onCreateProject: () {},
+        onAcceptInvitation: (inv) => accepted = inv,
+      )));
+
+      await tester.tap(find.text('Accept'));
+      expect(accepted?.id, 'inv-1');
+
+      expect(
+          events.any((e) => e.action == AxHomeAnalyticsAction.acceptInvitation),
+          isTrue);
+      final event = events.firstWhere(
+          (e) => e.action == AxHomeAnalyticsAction.acceptInvitation);
+      expect(event.eventName, 'home.accept_invitation');
+      expect(event.properties['invitationId'], 'inv-1');
+      expect(event.properties['projectId'], 'proj-123');
+      expect(event.properties['role'], 'owner');
+    });
+
+    testWidgets('Measure Home → resolve attention', (tester) async {
+      final events = <AxHomeAnalyticsEvent>[];
+      AxHomeAnalytics.setSink(events.add);
+      addTearDown(() => AxHomeAnalytics.setSink(null));
+
+      var openedWorkstream = '';
+      final attentionItem = [
+        const AxHomeAttentionItem(
+          id: 'att-resolve-1',
+          type: AxHomeAttentionType.needsInput,
+          title: 'Spec Review Required',
+          subtitle: 'Please check the architecture document',
+          projectId: 'project-1',
+          workstreamId: 'ws-spec',
+          isUnread: true,
+          isActionable: true,
+        ),
+      ];
+
+      await tester.pumpWidget(scaffold(HomePage(
+        projects: const [project],
+        workspaces: const [],
+        workers: const [],
+        invitations: const [],
+        attentionItems: attentionItem,
+        run: null,
+        openFindingCount: 0,
+        onOpenWorkspaces: () {},
+        onOpenProject: (_) {},
+        onOpenRun: (_, __) {},
+        onCreateProject: () {},
+        onOpenWorkstream: (pId, wsId) => openedWorkstream = '$pId/$wsId',
+      )));
+
+      await tester.tap(find.text('Review →'));
+      expect(openedWorkstream, 'project-1/ws-spec');
+
+      expect(
+          events.any((e) => e.action == AxHomeAnalyticsAction.resolveAttention),
+          isTrue);
+      final event = events.firstWhere(
+          (e) => e.action == AxHomeAnalyticsAction.resolveAttention);
+      expect(event.eventName, 'home.resolve_attention');
+      expect(event.properties['itemId'], 'att-resolve-1');
+      expect(event.properties['type'], 'needsInput');
+      expect(event.properties['actionLabel'], 'Review →');
+      expect(event.properties['projectId'], 'project-1');
+      expect(event.properties['workstreamId'], 'ws-spec');
+    });
+
+    testWidgets('Measure Home → open What\'s New', (tester) async {
+      final events = <AxHomeAnalyticsEvent>[];
+      AxHomeAnalytics.setSink(events.add);
+      addTearDown(() => AxHomeAnalytics.setSink(null));
+
+      final updates = [
+        const AxProductUpdate(
+          id: 'up-measure',
+          slug: 'smart-merge',
+          title: 'Smart Branch Merging',
+          summary: 'Merge branches safely.',
+          category: AxProductUpdateCategory.feature,
+          publishedAt: '2026-10-08T00:00:00Z',
+          status: AxProductUpdateStatus.published,
+        ),
+      ];
+
+      var openedWhatsNew = false;
+      await tester.pumpWidget(scaffold(HomePage(
+        projects: const [project],
+        workspaces: const [],
+        workers: const [],
+        invitations: const [],
+        productUpdates: updates,
+        run: null,
+        openFindingCount: 0,
+        onOpenWorkspaces: () {},
+        onOpenProject: (_) {},
+        onOpenRun: (_, __) {},
+        onCreateProject: () {},
+        onOpenWhatsNew: () => openedWhatsNew = true,
+      )));
+
+      await tester.tap(find.text('See all'));
+      expect(openedWhatsNew, isTrue);
+
+      expect(events.any((e) => e.action == AxHomeAnalyticsAction.openWhatsNew),
+          isTrue);
+      final event = events
+          .firstWhere((e) => e.action == AxHomeAnalyticsAction.openWhatsNew);
+      expect(event.eventName, 'home.open_whats_new');
+      expect(event.properties['source'], 'header_see_all');
+      expect(event.properties['unreadCount'], 1);
+    });
+
+    testWidgets('Measure Home → AI Update', (tester) async {
+      final events = <AxHomeAnalyticsEvent>[];
+      AxHomeAnalytics.setSink(events.add);
+      addTearDown(() => AxHomeAnalytics.setSink(null));
+
+      const chatgptWorker = AxWorker(
+        id: 'w-openai',
+        workspaceId: 'ws-local',
+        workspaceName: 'Local Workspace',
+        workerTypeId: 'chatgpt',
+        displayName: 'OpenAI ChatGPT Worker',
+        status: 'ready',
+        readinessState: 'ready',
+        localConcurrencyLimit: 2,
+        capabilities: ['code', 'chat'],
+      );
+
+      final aiUpdates = [
+        const AxAiCapabilityUpdate(
+          id: 'ai-gpt-telemetry',
+          workerProfileId: 'chatgpt',
+          provider: 'openai',
+          type: AxAiCapabilityUpdateType.modelAdded,
+          title: 'GPT-4o Mini and o1 Reasoning Added',
+          summary: 'High-speed reasoning models available.',
+          publishedAt: '2026-10-08T00:00:00Z',
+        ),
+      ];
+
+      AxAiCapabilityUpdate? openedAiUpdate;
+      await tester.pumpWidget(scaffold(HomePage(
+        projects: const [project],
+        workspaces: const [],
+        workers: const [chatgptWorker],
+        invitations: const [],
+        aiUpdates: aiUpdates,
+        run: null,
+        openFindingCount: 0,
+        onOpenWorkspaces: () {},
+        onOpenProject: (_) {},
+        onOpenRun: (_, __) {},
+        onCreateProject: () {},
+        onOpenAiUpdate: (up) => openedAiUpdate = up,
+      )));
+
+      await tester.ensureVisible(find.text('Configure →'));
+      await tester.tap(find.text('Configure →'));
+      expect(openedAiUpdate?.id, 'ai-gpt-telemetry');
+
+      expect(events.any((e) => e.action == AxHomeAnalyticsAction.openAiUpdate),
+          isTrue);
+      final event = events
+          .firstWhere((e) => e.action == AxHomeAnalyticsAction.openAiUpdate);
+      expect(event.eventName, 'home.open_ai_update');
+      expect(event.properties['updateId'], 'ai-gpt-telemetry');
+      expect(event.properties['workerProfileId'], 'chatgpt');
+      expect(event.properties['provider'], 'openai');
+      expect(event.properties['type'], 'modelAdded');
+    });
+
+    testWidgets('Measure Home → create Project', (tester) async {
+      final events = <AxHomeAnalyticsEvent>[];
+      AxHomeAnalytics.setSink(events.add);
+      addTearDown(() => AxHomeAnalytics.setSink(null));
+
+      var projectCreated = false;
+      await tester.pumpWidget(scaffold(HomePage(
+        projects: const [],
+        workspaces: const [],
+        workers: const [],
+        invitations: const [],
+        run: null,
+        openFindingCount: 0,
+        onOpenWorkspaces: () {},
+        onOpenProject: (_) {},
+        onOpenRun: (_, __) {},
+        onCreateProject: () => projectCreated = true,
+      )));
+
+      await tester.tap(find.text('Create Project →'));
+      expect(projectCreated, isTrue);
+
+      expect(events.any((e) => e.action == AxHomeAnalyticsAction.createProject),
+          isTrue);
+      final event = events
+          .firstWhere((e) => e.action == AxHomeAnalyticsAction.createProject);
+      expect(event.eventName, 'home.create_project');
+      expect(event.properties['source'], 'new_user_primary');
+    });
+  });
 }

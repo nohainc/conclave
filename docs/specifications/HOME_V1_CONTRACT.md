@@ -735,5 +735,29 @@ The Conclave AX Home surface is formally verified against a 20-point canonical t
 | 19 | **Realtime reconnect** | Replay/reconnect duplicate transport events are deduplicated by ID with no duplicate items | Verified (`home_page_test.dart`) |
 | 20 | **Narrow / mobile layout** | Renders cleanly on mobile viewports (e.g. 360px x 640px) with single-column responsive stacking and zero overflow | Verified (`home_page_test.dart`) |
 
+---
+
+## Analytics & Product Discovery Telemetry (Phase 34)
+
+Home is a **product-discovery surface**. It is instrumented lightly to measure discovery velocity and navigation effectiveness rather than passive vanity metrics like isolated "Home viewed" impressions.
+
+### 1. Measured Interactions & Events
+
+The following 6 core interaction paths are measured:
+
+| Interaction Path | Telemetry Event Name | Event Payload Properties | Rationale |
+|---|---|---|---|
+| **Home → Continue Workstream** | `home.continue_workstream` | `projectId`, `workstreamId`, `projectName`, `workstreamTitle` | Measures how effectively Home accelerates return to ongoing collaborative work |
+| **Home → Accept invitation** | `home.accept_invitation` | `invitationId`, `projectId`, `role` | Measures successful onboarding and collaboration expansion |
+| **Home → Resolve attention** | `home.resolve_attention` | `itemId`, `type`, `actionLabel`, `projectId`, `workstreamId` | Measures triage efficiency for blocked runs, input requests, and worker issues |
+| **Home → Open What's New** | `home.open_whats_new` | `updateId`, `unreadCount`, `source` | Measures feature awareness and changelog engagement |
+| **Home → AI Update** | `home.open_ai_update` | `updateId`, `workerProfileId`, `provider`, `type` | Measures AI capability discovery and worker configuration velocity |
+| **Home → Create Project** | `home.create_project` | `source` (`new_user_primary`, `new_user_secondary`, `home_cta`) | Measures project creation conversion from onboarding and home surfaces |
+
+### 2. Implementation & Design Principles
+- **Lightweight & Non-Blocking:** Telemetry recording via `AxHomeAnalytics` is fail-safe, non-blocking, and never interferes with UI responsiveness or error states.
+- **Pluggable Sink (`AxHomeAnalytics.setSink`):** Telemetry sinks can be plugged in by client applications or tests to inspect and route events without coupling to third-party vendor SDKs.
+
+
 
 

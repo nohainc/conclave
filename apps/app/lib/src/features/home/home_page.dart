@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
 import '../../brand.dart';
+import 'home_analytics.dart';
+
+export 'home_analytics.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({
@@ -431,7 +434,13 @@ class _CreateFirstProjectCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
-              onPressed: onCreateProject,
+              onPressed: () {
+                AxHomeAnalytics.trackCreateProject(
+                  source:
+                      isSecondary ? 'new_user_secondary' : 'new_user_primary',
+                );
+                onCreateProject();
+              },
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Create Project →'),
             ),
@@ -850,6 +859,12 @@ class EstablishedUserHome extends StatelessWidget {
                     return _ContinueWorkCard(
                       item: item,
                       onTap: () {
+                        AxHomeAnalytics.trackContinueWorkstream(
+                          projectId: item.projectId,
+                          workstreamId: item.workstreamId,
+                          projectName: item.projectName,
+                          workstreamTitle: item.workstreamTitle,
+                        );
                         if (onOpenWorkstream != null) {
                           onOpenWorkstream!(item.projectId, item.workstreamId);
                         } else {
@@ -906,16 +921,25 @@ class EstablishedUserHome extends StatelessWidget {
                   ],
                 ),
                 TextButton(
-                  onPressed: onOpenWhatsNew ??
-                      () => AxWhatsNewDialog.show(
-                            context,
-                            updates: productUpdates.isNotEmpty
-                                ? productUpdates
-                                : defaultProductUpdates,
-                            readStates: productUpdateReadStates,
-                            onOpenUpdateDetail: onOpenUpdateDetail,
-                            onDismissUpdate: onDismissUpdate,
-                          ),
+                  onPressed: () {
+                    AxHomeAnalytics.trackOpenWhatsNew(
+                      unreadCount: _unreadWhatsNewCount,
+                      source: 'header_see_all',
+                    );
+                    if (onOpenWhatsNew != null) {
+                      onOpenWhatsNew!();
+                    } else {
+                      AxWhatsNewDialog.show(
+                        context,
+                        updates: productUpdates.isNotEmpty
+                            ? productUpdates
+                            : defaultProductUpdates,
+                        readStates: productUpdateReadStates,
+                        onOpenUpdateDetail: onOpenUpdateDetail,
+                        onDismissUpdate: onDismissUpdate,
+                      );
+                    }
+                  },
                   style: TextButton.styleFrom(
                     visualDensity: VisualDensity.compact,
                   ),
@@ -930,6 +954,10 @@ class EstablishedUserHome extends StatelessWidget {
                   _ProductUpdateTile(
                     update: productUpdatesToShow[i],
                     onTap: () {
+                      AxHomeAnalytics.trackOpenWhatsNew(
+                        updateId: productUpdatesToShow[i].id,
+                        source: 'product_update_tile',
+                      );
                       if (onOpenUpdateDetail != null) {
                         onOpenUpdateDetail!(productUpdatesToShow[i]);
                       } else {
@@ -970,6 +998,12 @@ class EstablishedUserHome extends StatelessWidget {
                   _AiUpdateRow(
                     update: aiUpdatesToShow[i],
                     onOpen: () {
+                      AxHomeAnalytics.trackOpenAiUpdate(
+                        updateId: aiUpdatesToShow[i].id,
+                        workerProfileId: aiUpdatesToShow[i].workerProfileId,
+                        provider: aiUpdatesToShow[i].provider,
+                        type: aiUpdatesToShow[i].type.name,
+                      );
                       if (onOpenAiUpdate != null) {
                         onOpenAiUpdate!(aiUpdatesToShow[i]);
                       } else {
@@ -1105,15 +1139,28 @@ class AxHomeAttentionProjector {
         createdAt: DateTime.tryParse(inv.createdAt),
         primaryAction: AxHomeAttentionAction(
           label: 'Accept',
-          onPerform: onAcceptInvitation != null
-              ? () => onAcceptInvitation(inv)
-              : () {},
+          onPerform: () {
+            AxHomeAnalytics.trackAcceptInvitation(
+              invitationId: inv.id,
+              projectId: inv.projectId,
+              role: inv.role,
+            );
+            if (onAcceptInvitation != null) {
+              onAcceptInvitation(inv);
+            }
+          },
         ),
         secondaryAction: AxHomeAttentionAction(
           label: 'Decline',
-          onPerform: onDeclineInvitation != null
-              ? () => onDeclineInvitation(inv)
-              : () {},
+          onPerform: () {
+            AxHomeAnalytics.trackDeclineInvitation(
+              invitationId: inv.id,
+              projectId: inv.projectId,
+            );
+            if (onDeclineInvitation != null) {
+              onDeclineInvitation(inv);
+            }
+          },
           isDestructive: true,
         ),
       ));
@@ -1159,7 +1206,16 @@ class AxHomeAttentionProjector {
         }
         primary = AxHomeAttentionAction(
           label: label,
-          onPerform: action,
+          onPerform: () {
+            AxHomeAnalytics.trackResolveAttention(
+              itemId: raw.id,
+              type: raw.effectiveType.name,
+              actionLabel: label,
+              projectId: raw.projectId,
+              workstreamId: raw.workstreamId,
+            );
+            action();
+          },
         );
       }
 
@@ -2232,7 +2288,13 @@ class _InvitationItem extends StatelessWidget {
             ),
             if (onDecline != null)
               OutlinedButton(
-                onPressed: onDecline,
+                onPressed: () {
+                  AxHomeAnalytics.trackDeclineInvitation(
+                    invitationId: invitation.id,
+                    projectId: invitation.projectId,
+                  );
+                  onDecline!();
+                },
                 style: OutlinedButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                 ),
@@ -2241,7 +2303,14 @@ class _InvitationItem extends StatelessWidget {
             if (onAccept != null) ...[
               const SizedBox(width: 8),
               FilledButton(
-                onPressed: onAccept,
+                onPressed: () {
+                  AxHomeAnalytics.trackAcceptInvitation(
+                    invitationId: invitation.id,
+                    projectId: invitation.projectId,
+                    role: invitation.role,
+                  );
+                  onAccept!();
+                },
                 style: FilledButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                 ),
@@ -2389,7 +2458,13 @@ class _RunningNowCard extends StatelessWidget {
                   ],
                 ),
                 FilledButton.tonal(
-                  onPressed: () => onOpenRun(targetProjectId, run.id),
+                  onPressed: () {
+                    AxHomeAnalytics.trackOpenRunningRun(
+                      runId: run.id,
+                      projectId: targetProjectId,
+                    );
+                    onOpenRun(targetProjectId, run.id);
+                  },
                   child: const Text('Open →'),
                 ),
               ],
