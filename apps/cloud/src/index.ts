@@ -170,6 +170,7 @@ export const routeHandlers = {
   handleRollbackToolProfileChannel: handlers.handleRollbackToolProfileChannel,
   handleSubmitToolProfileReleaseEvidence:
     handlers.handleSubmitToolProfileReleaseEvidence,
+  handleGetHomeReadModel: handlers.handleGetHomeReadModel,
 } as unknown as WorkerRouteHandlers;
 
 const routeDependencies = {

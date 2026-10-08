@@ -603,3 +603,88 @@ When a user's access to a Project, Workspace, or Worker is revoked, the user mus
 - **Backend / Read-Model APIs:** Cloud endpoints (`/api/projects`, `/api/projects/:id/workstreams`, `/api/projects/:id/workstreams/:wsId/conversations`) enforce SQL membership joins and `authorizeRequest` checks before returning data. Revoked projects are never returned in listing APIs.
 - **Client Projections:** Client-side projectors (`AxHomeAttentionProjector`, `EstablishedUserHome`, `AxRecentWorkRanker`, `AxAiCapabilityUpdateService`) validate every item against the user's active authorized project set (`projects.map((p) => p.id)`). Any cached or stale item referencing an unauthorized or revoked project ID is immediately filtered out before rendering.
 
+---
+
+## Home API / Read Projection Model (Phase 31)
+
+To provide an efficient startup request for web and client applications while strictly preserving proper domain ownership, Conclave exposes a purpose-built read model endpoint:
+
+```http
+GET /api/home
+GET /home
+```
+
+### 1. Conceptual Read Projection Contract
+
+The response aggregates five focused slices into a single unified JSON payload:
+
+```json
+{
+  "attention": [
+    {
+      "id": "invitation-1",
+      "type": "projectInvitation",
+      "priority": 1,
+      "title": "Invited to Alpha Project",
+      "description": "Owner invited you to join Alpha Project as editor",
+      "projectId": "proj-1",
+      "timestamp": "2026-10-08T06:00:00.000Z",
+      "read": false
+    }
+  ],
+  "running": [
+    {
+      "id": "req-1",
+      "projectId": "proj-1",
+      "workstreamId": "ws-1",
+      "workerId": "codex",
+      "workerType": "claude-code",
+      "status": "running",
+      "title": "Refactoring Home API",
+      "createdAt": "2026-10-08T06:10:00.000Z",
+      "updatedAt": "2026-10-08T06:12:00.000Z"
+    }
+  ],
+  "recentWork": [
+    {
+      "projectId": "proj-1",
+      "projectName": "Alpha Project",
+      "workstreamId": "ws-1",
+      "workstreamTitle": "Feature Implementation",
+      "updatedAt": "2026-10-08T06:12:00.000Z",
+      "activeCollaborators": ["User A"],
+      "latestSnippet": "Latest message preview"
+    }
+  ],
+  "productUpdates": [
+    {
+      "id": "upd-1",
+      "slug": "v8-home",
+      "title": "Home V2 Released",
+      "summary": "Clean section rows and startup hydration",
+      "category": "feature",
+      "publishedAt": "2026-10-08T00:00:00.000Z",
+      "audience": "all",
+      "status": "published"
+    }
+  ],
+  "aiUpdates": [
+    {
+      "id": "ai-1",
+      "title": "Gemini CLI Worker Available",
+      "summary": "Fast reasoning and native tools integration",
+      "type": "model",
+      "publishedAt": "2026-10-08T00:00:00.000Z",
+      "audience": "all",
+      "status": "published"
+    }
+  ]
+}
+```
+
+### 2. Architecture & Domain Integrity Principles
+1. **Not a Canonical Store:** `GET /api/home` does not introduce dedicated D1 tables or shadow stores. It computes a fast, read-only projection on the fly across canonical tables (`projects`, `project_memberships`, `project_invitations`, `work_requests`, `workstreams`, `discussion_messages`, and worker catalogs).
+2. **Strict Authorization Scoping:** Every entity returned in `attention`, `running`, and `recentWork` is strictly joined against the authenticated `user_id`'s active `project_memberships`. Revoked or inaccessible projects are excluded at the database query layer.
+3. **Graceful Degraded / Progressive Rendering:** Web and mobile clients can hydrate their local reactive stores using `AxHomeReadModel.fromJson(data)` upon initial launch while retaining progressive per-section refresh capabilities and offline caching resilience.
+
+

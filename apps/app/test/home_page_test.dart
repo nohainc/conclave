@@ -2519,4 +2519,88 @@ void main() {
     // 3. AI Update tied to inaccessible worker MUST NEVER appear
     expect(find.text('Llama 3.3 Available for Private Server'), findsNothing);
   });
+
+  test(
+      'Phase 31 — AxHomeReadModel deserializes conceptual Home server read projection',
+      () {
+    final serverJson = {
+      'attention': [
+        {
+          'id': 'att-1',
+          'type': 'needsInput',
+          'title': 'Needs Input on Spec',
+          'description': 'Description',
+          'projectId': 'proj-1',
+          'unread': true,
+          'actionable': true,
+        },
+      ],
+      'running': [
+        {
+          'id': 'run-1',
+          'projectId': 'proj-1',
+          'projectName': 'Project 1',
+          'status': 'running',
+          'objective': 'Optimizing DB',
+          'taskCount': 2,
+          'completedTaskCount': 1,
+          'openFindingCount': 0,
+          'verifiedCriterionCount': 1,
+          'criterionCount': 2,
+        },
+      ],
+      'recentWork': [
+        {
+          'projectId': 'proj-1',
+          'projectName': 'Project 1',
+          'workstreamId': 'ws-1',
+          'workstreamTitle': 'Main',
+          'collaboratorsDisplay': 'You + AI',
+          'lastMessageSnippet': 'Ready to ship',
+          'lastActivityDisplay': 'Just now',
+        },
+      ],
+      'productUpdates': [
+        {
+          'id': 'up-1',
+          'slug': 'update-1',
+          'title': 'Update 1',
+          'summary': 'Summary 1',
+          'category': 'workflow',
+          'publishedAt': '2026-10-08T00:00:00Z',
+          'status': 'published',
+        },
+      ],
+      'aiUpdates': [
+        {
+          'id': 'ai-1',
+          'workerProfileId': 'chatgpt',
+          'provider': 'openai',
+          'type': 'model_added',
+          'title': 'GPT-4o Ready',
+          'summary': 'Summary',
+          'publishedAt': '2026-10-08T00:00:00Z',
+        },
+      ],
+    };
+
+    final model = AxHomeReadModel.fromJson(serverJson);
+    expect(model.attention, hasLength(1));
+    expect(model.attention.first.title, 'Needs Input on Spec');
+    expect(model.running, hasLength(1));
+    expect(model.running.first.objective, 'Optimizing DB');
+    expect(model.recentWork, hasLength(1));
+    expect(model.recentWork.first.workstreamTitle, 'Main');
+    expect(model.productUpdates, hasLength(1));
+    expect(model.productUpdates.first.title, 'Update 1');
+    expect(model.aiUpdates, hasLength(1));
+    expect(model.aiUpdates.first.title, 'GPT-4o Ready');
+
+    final jsonMap = model.toJson();
+    expect(jsonMap['attention'], hasLength(1));
+    expect(jsonMap['running'], hasLength(1));
+    expect(jsonMap['recentWork'], hasLength(1));
+    expect(jsonMap['productUpdates'], hasLength(1));
+    expect(jsonMap['aiUpdates'], hasLength(1));
+  });
 }

@@ -1169,6 +1169,20 @@ class AxProjectInvitation {
         expiresAt: _string(json, 'expiresAt'),
         createdAt: _string(json, 'createdAt'),
       );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'projectId': projectId,
+        'projectName': projectName,
+        'email': email,
+        'role': role,
+        'status': status,
+        'invitedByUserId': invitedByUserId,
+        'invitedByUserName': invitedByUserName,
+        'invitedByUserEmail': invitedByUserEmail,
+        'expiresAt': expiresAt,
+        'createdAt': createdAt,
+      };
 }
 
 class AxAuditEntry {
@@ -1404,6 +1418,64 @@ class AxHomeAttentionItem {
       AxHomeAttentionType.executionCompleted => 6,
     };
   }
+
+  factory AxHomeAttentionItem.fromJson(Map<String, dynamic> json) =>
+      AxHomeAttentionItem(
+        id: _string(json, 'id'),
+        type: AxHomeAttentionType.values.firstWhere(
+          (t) => t.name == json['type'],
+          orElse: () => AxHomeAttentionType.needsInput,
+        ),
+        priority:
+            json['priority'] is num ? (json['priority'] as num).toInt() : null,
+        title: _string(json, 'title'),
+        description: json['description']?.toString(),
+        subtitle: json['subtitle']?.toString(),
+        projectId: json['projectId']?.toString(),
+        workstreamId: json['workstreamId']?.toString(),
+        workerId: json['workerId']?.toString(),
+        workspaceId: json['workspaceId']?.toString(),
+        timestamp: json['createdAt'] != null
+            ? DateTime.tryParse(json['createdAt'].toString())
+            : (json['timestamp'] != null
+                ? DateTime.tryParse(json['timestamp'].toString())
+                : null),
+        timestampDisplay: json['timestampDisplay']?.toString(),
+        categoryLabel: json['categoryLabel']?.toString(),
+        actionLabel: json['actionLabel']?.toString(),
+        invitation: json['invitation'] is Map
+            ? AxProjectInvitation.fromJson(
+                Map<String, dynamic>.from(json['invitation'] as Map))
+            : null,
+        read: json['read'] == true,
+        isUnread: json['unread'] == true || json['isUnread'] == true,
+        isActionable:
+            json['actionable'] == true || json['isActionable'] == true,
+        createdAt: json['createdAt'] != null
+            ? DateTime.tryParse(json['createdAt'].toString())
+            : null,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type.name,
+        if (priority != null) 'priority': priority,
+        'title': title,
+        'description': description,
+        if (subtitle.isNotEmpty) 'subtitle': subtitle,
+        if (projectId != null) 'projectId': projectId,
+        if (workstreamId != null) 'workstreamId': workstreamId,
+        if (workerId != null) 'workerId': workerId,
+        if (workspaceId != null) 'workspaceId': workspaceId,
+        if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
+        if (timestampDisplay != null) 'timestampDisplay': timestampDisplay,
+        if (categoryLabel != null) 'categoryLabel': categoryLabel,
+        if (actionLabel != null) 'actionLabel': actionLabel,
+        if (invitation != null) 'invitation': invitation!.toJson(),
+        'read': read,
+        'unread': isUnread,
+        'actionable': isActionable,
+      };
 }
 
 class AxContinueWorkItem {
@@ -1436,6 +1508,45 @@ class AxContinueWorkItem {
   final bool hasUnresolvedState;
   final bool isDirectMember;
   final bool archived;
+
+  factory AxContinueWorkItem.fromJson(Map<String, dynamic> json) =>
+      AxContinueWorkItem(
+        projectId: _string(json, 'projectId'),
+        projectName: _string(json, 'projectName'),
+        workstreamId: _string(json, 'workstreamId'),
+        workstreamTitle: _string(json, 'workstreamTitle'),
+        collaboratorsDisplay: _string(json, 'collaboratorsDisplay'),
+        lastMessageSnippet: _string(json, 'lastMessageSnippet'),
+        lastActivityDisplay: _string(json, 'lastActivityDisplay'),
+        lastMeaningfulActivityAt: json['lastMeaningfulActivityAt'] != null
+            ? DateTime.tryParse(json['lastMeaningfulActivityAt'].toString())
+            : (json['updatedAt'] != null
+                ? DateTime.tryParse(json['updatedAt'].toString())
+                : null),
+        hasUserParticipation: json['hasUserParticipation'] == true,
+        hasRecentWorkerResponse: json['hasRecentWorkerResponse'] == true,
+        hasUnresolvedState: json['hasUnresolvedState'] == true,
+        isDirectMember: json['isDirectMember'] != false,
+        archived: json['archived'] == true,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'projectId': projectId,
+        'projectName': projectName,
+        'workstreamId': workstreamId,
+        'workstreamTitle': workstreamTitle,
+        'collaboratorsDisplay': collaboratorsDisplay,
+        'lastMessageSnippet': lastMessageSnippet,
+        'lastActivityDisplay': lastActivityDisplay,
+        if (lastMeaningfulActivityAt != null)
+          'lastMeaningfulActivityAt':
+              lastMeaningfulActivityAt!.toIso8601String(),
+        'hasUserParticipation': hasUserParticipation,
+        'hasRecentWorkerResponse': hasRecentWorkerResponse,
+        'hasUnresolvedState': hasUnresolvedState,
+        'isDirectMember': isDirectMember,
+        'archived': archived,
+      };
 
   AxContinueWorkItem copyWith({
     String? projectId,
@@ -2373,4 +2484,104 @@ class AxAiCapabilityUpdateService {
     merged.sort((a, b) => b.publishedDateTime.compareTo(a.publishedDateTime));
     return merged;
   }
+}
+
+/// Server read projection of Home aggregation:
+/// GET /api/home -> { attention, running, recentWork, productUpdates, aiUpdates }
+class AxHomeReadModel {
+  const AxHomeReadModel({
+    this.attention = const [],
+    this.running = const [],
+    this.recentWork = const [],
+    this.productUpdates = const [],
+    this.aiUpdates = const [],
+  });
+
+  final List<AxHomeAttentionItem> attention;
+  final List<AxRun> running;
+  final List<AxContinueWorkItem> recentWork;
+  final List<AxProductUpdate> productUpdates;
+  final List<AxAiCapabilityUpdate> aiUpdates;
+
+  factory AxHomeReadModel.fromJson(Map<String, dynamic> json) {
+    final rawAttention = json['attention'];
+    final attentionList = <AxHomeAttentionItem>[];
+    if (rawAttention is List) {
+      for (final it in rawAttention) {
+        if (it is Map<String, dynamic>) {
+          attentionList.add(AxHomeAttentionItem.fromJson(it));
+        } else if (it is Map) {
+          attentionList
+              .add(AxHomeAttentionItem.fromJson(Map<String, dynamic>.from(it)));
+        }
+      }
+    }
+
+    final rawRunning = json['running'];
+    final runningList = <AxRun>[];
+    if (rawRunning is List) {
+      for (final it in rawRunning) {
+        if (it is Map<String, dynamic>) {
+          runningList.add(AxRun.fromJson(it));
+        } else if (it is Map) {
+          runningList.add(AxRun.fromJson(Map<String, dynamic>.from(it)));
+        }
+      }
+    }
+
+    final rawRecentWork = json['recentWork'];
+    final recentWorkList = <AxContinueWorkItem>[];
+    if (rawRecentWork is List) {
+      for (final it in rawRecentWork) {
+        if (it is Map<String, dynamic>) {
+          recentWorkList.add(AxContinueWorkItem.fromJson(it));
+        } else if (it is Map) {
+          recentWorkList
+              .add(AxContinueWorkItem.fromJson(Map<String, dynamic>.from(it)));
+        }
+      }
+    }
+
+    final rawProductUpdates = json['productUpdates'];
+    final productUpdatesList = <AxProductUpdate>[];
+    if (rawProductUpdates is List) {
+      for (final it in rawProductUpdates) {
+        if (it is Map<String, dynamic>) {
+          productUpdatesList.add(AxProductUpdate.fromJson(it));
+        } else if (it is Map) {
+          productUpdatesList
+              .add(AxProductUpdate.fromJson(Map<String, dynamic>.from(it)));
+        }
+      }
+    }
+
+    final rawAiUpdates = json['aiUpdates'];
+    final aiUpdatesList = <AxAiCapabilityUpdate>[];
+    if (rawAiUpdates is List) {
+      for (final it in rawAiUpdates) {
+        if (it is Map<String, dynamic>) {
+          aiUpdatesList.add(AxAiCapabilityUpdate.fromJson(it));
+        } else if (it is Map) {
+          aiUpdatesList.add(
+              AxAiCapabilityUpdate.fromJson(Map<String, dynamic>.from(it)));
+        }
+      }
+    }
+
+    return AxHomeReadModel(
+      attention: attentionList,
+      running: runningList,
+      recentWork: recentWorkList,
+      productUpdates: productUpdatesList,
+      aiUpdates: aiUpdatesList,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'attention': attention.map((it) => it.toJson()).toList(),
+        'running': running.map((it) => it.toJson()).toList(),
+        'recentWork': recentWork.map((it) => it.toJson()).toList(),
+        'productUpdates': productUpdates.map((it) => it.toJson()).toList(),
+        'aiUpdates': aiUpdates.map((it) => it.toJson()).toList(),
+      };
 }

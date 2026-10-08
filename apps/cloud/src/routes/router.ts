@@ -668,6 +668,13 @@ export async function routeWorkerRequest(
       );
     }
 
+    if (
+      request.method === "GET" &&
+      (url.pathname === "/api/home" || url.pathname === "/home")
+    ) {
+      return await handlers.handleGetHomeReadModel!(request, env, ctx);
+    }
+
     if (request.method === "GET" && url.pathname === "/api/projects") {
       return await handlers.handleListProjects!(request, env, ctx);
     }
