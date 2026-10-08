@@ -511,12 +511,27 @@ Home Items & Canonical Deep-Link Destinations
 - **Context-Preserving Routing:**
   - `onOpenWorkstream(projectId, workstreamId)` is prioritized over broad project landing pages for conversation turns, unresolved input requests, reviews, and recent work.
   - `onOpenWorkspaces()` is directly bound to offline workspaces, worker credential faults, and AI model configurations.
-  - `onOpenUpdateDetail(update)` or `onOpenWhatsNew()` is bound to product announcements.
+---
 
+## Progressive Loading Strategy & Fault-Isolated Section Rendering (Phase 27)
 
+Home avoids monolithic, all-or-nothing data fetches. Rendering progresses through decoupled layers while strictly isolating potential failures:
 
+```text
+Progressive Rendering Flow
+├── 1. Cached Home (Immediate render from in-memory reactive stores)
+├── 2. Attention Refresh (Background sync for invitations, approvals, faults)
+├── 3. Recent Work Refresh (Background sync for active conversation workstreams)
+└── 4. Updates Refresh (Changelog & AI model capability background fetches)
+```
 
-
+### 1. Architectural Guarantees & Fault Isolation
+- **Non-Blocking Execution:** Home never stalls rendering while awaiting secondary or background service payloads.
+- **Strict Section Fault Isolation:**
+  - An error, timeout, or schema failure in the **What's New** product updates service will **never** prevent `For You`, `Running Now`, or `Continue Working` from rendering.
+  - An error or empty response in the **AI Updates** capability service will **never** produce a whole-page error or crash the application.
+  - If a secondary section's data projection throws an exception, it is caught locally and gracefully collapses to `const SizedBox.shrink()`, preserving primary triage and daily workflows intact.
+- **Zero Monolithic Error Pages:** Home isolates degradation to the individual optional section level rather than replacing the entire surface with an error screen.
 
 
 

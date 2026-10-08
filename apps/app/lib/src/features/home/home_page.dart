@@ -618,24 +618,40 @@ class EstablishedUserHome extends StatelessWidget {
   final ValueChanged<AxProductUpdate>? onDismissUpdate;
   final ValueChanged<AxAiCapabilityUpdate>? onOpenAiUpdate;
 
-  List<AxProductUpdate> get _effectiveProductUpdates =>
-      AxProductUpdateService.getHomeUpdates(
+  List<AxProductUpdate> get _effectiveProductUpdates {
+    try {
+      return AxProductUpdateService.getHomeUpdates(
         productUpdates.isNotEmpty ? productUpdates : defaultProductUpdates,
         readStates: productUpdateReadStates,
         limit: 3,
       );
+    } catch (_) {
+      return const [];
+    }
+  }
 
-  int get _unreadWhatsNewCount => AxProductUpdateService.computeUnreadCount(
+  int get _unreadWhatsNewCount {
+    try {
+      return AxProductUpdateService.computeUnreadCount(
         productUpdates.isNotEmpty ? productUpdates : defaultProductUpdates,
         readStates: productUpdateReadStates,
       );
+    } catch (_) {
+      return 0;
+    }
+  }
 
-  List<AxAiCapabilityUpdate> get _effectiveAiUpdates =>
-      AxAiCapabilityUpdateService.getRelevantUpdates(
+  List<AxAiCapabilityUpdate> get _effectiveAiUpdates {
+    try {
+      return AxAiCapabilityUpdateService.getRelevantUpdates(
         updates: aiUpdates.isNotEmpty ? aiUpdates : defaultAiCapabilityUpdates,
         workers: workers,
         projects: projects,
       );
+    } catch (_) {
+      return const [];
+    }
+  }
 
   List<AxContinueWorkItem> _deriveDefaultContinueWorkItems(
       List<AxProject> projects) {
@@ -678,25 +694,35 @@ class EstablishedUserHome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveAttentionItems = AxHomeAttentionProjector.project(
-      invitations: invitations,
-      rawAttentionItems: attentionItems,
-      openFindingCount: openFindingCount,
-      projects: projects,
-      onAcceptInvitation: onAcceptInvitation,
-      onDeclineInvitation: onDeclineInvitation,
-      onOpenProject: onOpenProject,
-      onOpenWorkstream: onOpenWorkstream,
-      onOpenWorkspaces: onOpenWorkspaces,
-    );
+    List<AxHomeAttentionItem> effectiveAttentionItems;
+    try {
+      effectiveAttentionItems = AxHomeAttentionProjector.project(
+        invitations: invitations,
+        rawAttentionItems: attentionItems,
+        openFindingCount: openFindingCount,
+        projects: projects,
+        onAcceptInvitation: onAcceptInvitation,
+        onDeclineInvitation: onDeclineInvitation,
+        onOpenProject: onOpenProject,
+        onOpenWorkstream: onOpenWorkstream,
+        onOpenWorkspaces: onOpenWorkspaces,
+      );
+    } catch (_) {
+      effectiveAttentionItems = const [];
+    }
     final hasAttentionItems = effectiveAttentionItems.isNotEmpty;
     final isRunningNow = run != null && run!.isRunning;
-    final effectiveRecentWork = AxRecentWorkRanker.rank(
-      continueWorkItems.isNotEmpty
-          ? continueWorkItems
-          : _deriveDefaultContinueWorkItems(projects),
-      limit: 5,
-    );
+    List<AxContinueWorkItem> effectiveRecentWork;
+    try {
+      effectiveRecentWork = AxRecentWorkRanker.rank(
+        continueWorkItems.isNotEmpty
+            ? continueWorkItems
+            : _deriveDefaultContinueWorkItems(projects),
+        limit: 5,
+      );
+    } catch (_) {
+      effectiveRecentWork = const [];
+    }
     final hasContinueWork = effectiveRecentWork.isNotEmpty;
     final productUpdatesToShow = _effectiveProductUpdates;
     final hasProductUpdates = productUpdatesToShow.isNotEmpty;

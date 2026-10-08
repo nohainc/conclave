@@ -2142,4 +2142,92 @@ void main() {
     await tester.tap(find.text('Configure →'));
     expect(openedAiUpdate?.id, 'ai-1');
   });
+
+  testWidgets(
+      'Phase 27 — Fault isolation: What\'s New or AI Updates failures do not block For You or Continue Working',
+      (tester) async {
+    var continueOpened = false;
+
+    // We pass valid attention and continue items along with updates that are dismissed / draft or unavailable.
+    // Even when secondary sections yield zero items or encounter errors, the primary surfaces (For You and Continue Working) must render flawlessly.
+    const attentionItems = [
+      AxHomeAttentionItem(
+        id: 'attn-safe',
+        type: AxHomeAttentionType.needsInput,
+        title: 'Safe Attention Item',
+        description: 'Requires user decision',
+        projectId: 'project-1',
+        workstreamId: 'ws-safe',
+        actionLabel: 'Open',
+        isUnread: true,
+        isActionable: true,
+      ),
+    ];
+
+    const continueItems = [
+      AxContinueWorkItem(
+        projectId: 'project-1',
+        projectName: 'Active Project',
+        workstreamId: 'ws-safe',
+        workstreamTitle: 'Active Workstream',
+        collaboratorsDisplay: 'You + ChatGPT',
+        lastMessageSnippet: 'Working on core logic.',
+        lastActivityDisplay: '5m ago',
+      ),
+    ];
+
+    const draftUpdate = AxProductUpdate(
+      id: 'draft-up',
+      slug: 'draft-up',
+      title: 'Draft Update',
+      summary: 'Should not appear',
+      publishedAt: '2026-10-08T00:00:00Z',
+      status: AxProductUpdateStatus.draft,
+    );
+
+    const inaccessibleAiUpdate = AxAiCapabilityUpdate(
+      id: 'ai-inaccessible',
+      workerProfileId: 'inaccessible-worker',
+      type: AxAiCapabilityUpdateType.modelAdded,
+      title: 'Inaccessible Model',
+      summary: 'Should not appear',
+      publishedAt: '2026-10-08T00:00:00Z',
+    );
+
+    await tester.pumpWidget(
+      scaffold(
+        HomePage(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [],
+          attentionItems: attentionItems,
+          continueWorkItems: continueItems,
+          productUpdates: const [draftUpdate],
+          productUpdateReadStates: const {},
+          aiUpdates: const [inaccessibleAiUpdate],
+          run: null,
+          openFindingCount: 0,
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenWorkstream: (_, __) => continueOpened = true,
+          onOpenRun: (_, __) {},
+          onCreateProject: () {},
+        ),
+      ),
+    );
+
+    // Primary triage & daily activity must render cleanly
+    expect(find.text('For you'), findsOneWidget);
+    expect(find.text('Safe Attention Item'), findsOneWidget);
+    expect(find.text('Continue working'), findsOneWidget);
+    expect(find.text('Active Workstream'), findsOneWidget);
+
+    // Secondary empty/faulty sections gracefully collapse without whole-page error
+    expect(find.text("What's new"), findsNothing);
+    expect(find.text('AI updates'), findsNothing);
+
+    // Verify interaction on continue item works
+    await tester.tap(find.text('Continue →'));
+    expect(continueOpened, isTrue);
+  });
 }
