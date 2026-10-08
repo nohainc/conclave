@@ -75,7 +75,17 @@ class AxStore {
   final pendingRunPrompt = ValueNotifier<String?>(null);
   final securityError = ValueNotifier<String?>(null);
   final securityLoading = ValueNotifier<bool>(false);
-  final productUpdates = <AxProductUpdate>[];
+  final productUpdatesNotifier = ValueNotifier<List<AxProductUpdate>>([]);
+  List<AxProductUpdate> get productUpdates => productUpdatesNotifier.value;
+  set productUpdates(List<AxProductUpdate> updates) {
+    productUpdatesNotifier.value = updates;
+  }
+
+  void addProductUpdate(AxProductUpdate update) {
+    if (productUpdates.any((u) => u.id == update.id)) return;
+    productUpdatesNotifier.value = [update, ...productUpdatesNotifier.value];
+  }
+
   final productUpdateReadStates =
       ValueNotifier<Map<String, AxUserProductUpdateState>>({});
 
@@ -206,6 +216,7 @@ class AxStore {
     securityLoading.dispose();
     securityError.dispose();
     pendingRunPrompt.dispose();
+    productUpdatesNotifier.dispose();
     productUpdateReadStates.dispose();
   }
 

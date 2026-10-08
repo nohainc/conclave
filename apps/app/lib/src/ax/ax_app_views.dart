@@ -20,7 +20,9 @@ extension _AxAppViews on _AxAppStateMixin {
         store.workspaces,
         store.executionChanges,
         store.invitations,
+        store.unreadNotifications,
         store.productUpdateReadStates,
+        store.productUpdatesNotifier,
       ]),
       builder: (context, _) => AxQueryBuilder<List<AxWorker>>(
           engine: store.syncEngine,

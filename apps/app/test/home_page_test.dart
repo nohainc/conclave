@@ -1,5 +1,6 @@
 import 'package:conclave_app/src/features/home/home_page.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:conclave_app/src/notifications/notification_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -2602,5 +2603,218 @@ void main() {
     expect(jsonMap['recentWork'], hasLength(1));
     expect(jsonMap['productUpdates'], hasLength(1));
     expect(jsonMap['aiUpdates'], hasLength(1));
+  });
+
+  group('Phase 32 — Realtime updates', () {
+    test(
+        'notificationFromRealtimeEvent parses invitation.received into For You invitation item',
+        () {
+      final event = {
+        'type': 'invitation.received',
+        'projectId': 'proj-100',
+        'payload': {
+          'projectId': 'proj-100',
+          'projectName': 'Super Project',
+          'prompt': 'Julia invited you to join Super Project',
+        },
+      };
+
+      final notification = notificationFromRealtimeEvent(event);
+      expect(notification, isNotNull);
+      expect(notification!.kind, AxNotificationKind.projectInvitationReceived);
+      expect(notification.projectId, 'proj-100');
+
+      final items = AxHomeAttentionProjector.project(
+        invitations: [
+          const AxProjectInvitation(
+            id: 'inv-rt',
+            projectId: 'proj-100',
+            projectName: 'Super Project',
+            email: 'user@conclave.dev',
+            role: 'member',
+            status: 'pending',
+            invitedByUserId: 'u-1',
+            invitedByUserEmail: 'julia@conclave.dev',
+            invitedByUserName: 'Julia',
+            createdAt: '2026-10-08T08:00:00Z',
+          ),
+        ],
+        rawAttentionItems: const [],
+        openFindingCount: 0,
+        projects: const [project],
+      );
+
+      expect(items, hasLength(1));
+      expect(items.first.title, contains('Julia invited you to Super Project'));
+      expect(items.first.effectiveType, AxHomeAttentionType.projectInvitation);
+    });
+
+    test(
+        'notificationFromRealtimeEvent parses workstream.needs_input and projects to For You',
+        () {
+      final event = {
+        'type': 'workstream.needs_input',
+        'projectId': 'project-1',
+        'workstreamId': 'ws-1',
+        'payload': {
+          'projectId': 'project-1',
+          'workstreamId': 'ws-1',
+          'prompt': 'Please clarify API endpoints',
+        },
+      };
+
+      final notification = notificationFromRealtimeEvent(event);
+      expect(notification, isNotNull);
+      expect(notification!.kind, AxNotificationKind.workstreamNeedsInput);
+      expect(notification.title, 'Workstream needs input');
+
+      var openedWorkstream = '';
+      final rawItem = AxHomeAttentionItem(
+        id: notification.id,
+        kind: AxHomeAttentionType.needsInput,
+        title: notification.title,
+        subtitle: notification.message,
+        projectId: notification.projectId,
+        workstreamId: notification.workstreamId,
+        isUnread: true,
+        isActionable: true,
+      );
+
+      final items = AxHomeAttentionProjector.project(
+        invitations: const [],
+        rawAttentionItems: [rawItem],
+        openFindingCount: 0,
+        projects: const [project],
+        onOpenWorkstream: (pId, wsId) => openedWorkstream = '$pId/$wsId',
+      );
+
+      expect(items, hasLength(1));
+      expect(items.first.primaryAction?.label, 'Review →');
+      items.first.primaryAction?.onPerform();
+      expect(openedWorkstream, 'project-1/ws-1');
+    });
+
+    test(
+        'workstream.completed triggers For You review item and Running Now suppression',
+        () {
+      final event = {
+        'type': 'workstream.completed',
+        'projectId': 'project-1',
+        'workstreamId': 'ws-1',
+        'payload': {
+          'projectId': 'project-1',
+          'workstreamId': 'ws-1',
+          'summary': 'Backend refactoring completed',
+        },
+      };
+
+      final notification = notificationFromRealtimeEvent(event);
+      expect(notification, isNotNull);
+      expect(notification!.kind, AxNotificationKind.workstreamCompleted);
+
+      final rawItem = AxHomeAttentionItem(
+        id: notification.id,
+        kind: AxHomeAttentionType.executionCompleted,
+        title: notification.title,
+        subtitle: notification.message,
+        projectId: notification.projectId,
+        workstreamId: notification.workstreamId,
+        isUnread: true,
+        isActionable: false,
+      );
+
+      var openedWorkstream = '';
+      final items = AxHomeAttentionProjector.project(
+        invitations: const [],
+        rawAttentionItems: [rawItem],
+        openFindingCount: 0,
+        projects: const [project],
+        onOpenWorkstream: (pId, wsId) => openedWorkstream = '$pId/$wsId',
+      );
+
+      expect(items, hasLength(1));
+      expect(items.first.primaryAction?.label, 'Open →');
+      items.first.primaryAction?.onPerform();
+      expect(openedWorkstream, 'project-1/ws-1');
+    });
+
+    test('worker problem realtime events map to For You with Fix action', () {
+      for (final eventType in [
+        'worker.credential.expired',
+        'worker.problem',
+        'worker.credential.problem',
+        'worker.install.failed',
+        'workspace.offline',
+      ]) {
+        final event = {
+          'type': eventType,
+          'payload': {
+            'error': 'Worker key expired or unreachable',
+          },
+        };
+
+        final notification = notificationFromRealtimeEvent(event);
+        expect(notification, isNotNull, reason: 'Failed to parse $eventType');
+
+        var workspacesOpened = false;
+        final rawItem = AxHomeAttentionItem(
+          id: notification!.id,
+          kind: eventType.contains('workspace')
+              ? AxHomeAttentionType.workspaceProblem
+              : AxHomeAttentionType.workerProblem,
+          title: notification.title,
+          subtitle: notification.message,
+          isUnread: true,
+          isActionable: true,
+        );
+
+        final items = AxHomeAttentionProjector.project(
+          invitations: const [],
+          rawAttentionItems: [rawItem],
+          openFindingCount: 0,
+          projects: const [project],
+          onOpenWorkspaces: () => workspacesOpened = true,
+        );
+
+        expect(items, hasLength(1));
+        expect(items.first.primaryAction?.label, isIn(['Fix →', 'Connect →']));
+        items.first.primaryAction?.onPerform();
+        expect(workspacesOpened, isTrue);
+      }
+    });
+
+    testWidgets('new product update dynamically updates What’s New badge count',
+        (tester) async {
+      final productUpdates = <AxProductUpdate>[
+        const AxProductUpdate(
+          id: 'up-1',
+          slug: 'update-1',
+          title: 'Update 1',
+          summary: 'Summary 1',
+          category: AxProductUpdateCategory.workflow,
+          publishedAt: '2026-10-08T00:00:00Z',
+          status: AxProductUpdateStatus.published,
+        ),
+      ];
+
+      await tester.pumpWidget(scaffold(HomePage(
+        projects: const [project],
+        workspaces: const [],
+        workers: const [],
+        invitations: const [],
+        run: null,
+        openFindingCount: 0,
+        onOpenWorkspaces: () {},
+        onOpenProject: (_) {},
+        onOpenRun: (_, __) {},
+        onCreateProject: () {},
+        productUpdates: productUpdates,
+        productUpdateReadStates: const {},
+      )));
+
+      // Unread count badge should reflect 1 unread update
+      expect(find.text("What's new"), findsOneWidget);
+      expect(find.text('1'), findsOneWidget);
+    });
   });
 }

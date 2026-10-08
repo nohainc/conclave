@@ -687,4 +687,24 @@ The response aggregates five focused slices into a single unified JSON payload:
 2. **Strict Authorization Scoping:** Every entity returned in `attention`, `running`, and `recentWork` is strictly joined against the authenticated `user_id`'s active `project_memberships`. Revoked or inaccessible projects are excluded at the database query layer.
 3. **Graceful Degraded / Progressive Rendering:** Web and mobile clients can hydrate their local reactive stores using `AxHomeReadModel.fromJson(data)` upon initial launch while retaining progressive per-section refresh capabilities and offline caching resilience.
 
+---
+
+## Realtime Updates & Reactive Home Hydration (Phase 32)
+
+Home reacts dynamically and immediately to live Conclave transport and realtime domain events without requiring any manual user refresh:
+
+```text
+Realtime Domain Event Flow
+├── invitation.received        ──► Appears in "For You" (and "Join a Project" card for 0-project users)
+├── workstream.needs_input     ──► Appears in "For You" with direct "Review →" workstream link
+├── workstream.completed       ──► "Running Now" card clears; review item appears in "For You" ("Open →")
+├── worker.problem / offline   ──► Appears in "For You" with direct "Fix →" / "Connect →" action
+└── product.update.published   ──► Live update added to What's New; unread badge counter increments
+```
+
+### 1. Zero-Polling Reactive Architecture
+- `_homeView()` registers merged reactive listeners across `store.projects`, `store.workspaces`, `store.executionChanges`, `store.invitations`, `store.unreadNotifications`, `store.productUpdateReadStates`, and `store.productUpdatesNotifier`.
+- Background WebSocket transport messages invoke `_recordNotification(event)` and `_refreshRealtimeFeatures(type, event: event)`, immediately dispatching state updates to in-memory stores and triggering granular widget rebuilds.
+
+
 

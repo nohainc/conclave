@@ -147,7 +147,11 @@ AxNotification? notificationFromRealtimeEvent(
     'workstream.account.problem' ||
     'account.expired' ||
     'credential.expired' ||
-    'worker.credential.expired' =>
+    'worker.credential.expired' ||
+    'worker.credential.problem' ||
+    'worker.credential.error' ||
+    'worker.problem' ||
+    'worker.error' =>
       AxNotificationKind.workerCredentialProblem,
     'workspace.offline' ||
     'workspace.stale' =>

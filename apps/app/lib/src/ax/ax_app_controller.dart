@@ -336,7 +336,8 @@ extension _AxAppController on _AxAppStateMixin {
       }
     }
     _announceRealtimeProgress(event);
-    unawaited(_refreshRealtimeFeatures(type is String ? type : ''));
+    unawaited(
+        _refreshRealtimeFeatures(type is String ? type : '', event: event));
   }
 
   Future<void> _recoverRealtimeScope(
@@ -371,8 +372,20 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
-  Future<void> _refreshRealtimeFeatures(String type) async {
+  Future<void> _refreshRealtimeFeatures(String type,
+      {Map<String, dynamic>? event}) async {
     final workspaceId = executionWorkspaceId;
+    if (type.startsWith('product.update.') ||
+        type.startsWith('product_update.')) {
+      final payload = event?['payload'];
+      if (payload is Map<String, dynamic>) {
+        try {
+          final update = AxProductUpdate.fromJson(payload);
+          store.addProductUpdate(update);
+        } catch (_) {}
+      }
+      return;
+    }
     if ((workspaceId == null || workspaceId.isEmpty) &&
         !type.startsWith('project.') &&
         type != 'project_workspace_grant.updated') {
