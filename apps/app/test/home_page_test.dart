@@ -1896,4 +1896,87 @@ void main() {
     expect(find.text('OpenAI o3-mini'), findsOneWidget);
     expect(find.text('Fast reasoning model.'), findsOneWidget);
   });
+
+  testWidgets(
+      'Phase 23 — Improve Home header: renders clean Home title, omits marketing subtitle, and supports optional personalized greeting',
+      (tester) async {
+    // 1. Without greeting or userName: renders Home only and zero marketing subtitle
+    await tester.pumpWidget(
+      scaffold(
+        EstablishedUserHome(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [],
+          invitations: const [],
+          attentionItems: const [],
+          continueWorkItems: const [],
+          productUpdates: const [],
+          productUpdateReadStates: const {},
+          aiUpdates: const [],
+          run: null,
+          openFindingCount: 0,
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenRun: (_, __) {},
+        ),
+      ),
+    );
+
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Your execution capacity at a glance.'), findsNothing);
+
+    // 2. With explicit greeting: renders personalized greeting subtitle
+    await tester.pumpWidget(
+      scaffold(
+        EstablishedUserHome(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [],
+          invitations: const [],
+          attentionItems: const [],
+          continueWorkItems: const [],
+          productUpdates: const [],
+          productUpdateReadStates: const {},
+          aiUpdates: const [],
+          greeting: 'Good morning, Vitalii.',
+          run: null,
+          openFindingCount: 0,
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenRun: (_, __) {},
+        ),
+      ),
+    );
+
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Good morning, Vitalii.'), findsOneWidget);
+    expect(find.text('Your execution capacity at a glance.'), findsNothing);
+
+    // 3. With userName: dynamically derives time-based greeting
+    await tester.pumpWidget(
+      scaffold(
+        EstablishedUserHome(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [],
+          invitations: const [],
+          attentionItems: const [],
+          continueWorkItems: const [],
+          productUpdates: const [],
+          productUpdateReadStates: const {},
+          aiUpdates: const [],
+          userName: 'Vitalii',
+          run: null,
+          openFindingCount: 0,
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenRun: (_, __) {},
+        ),
+      ),
+    );
+
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.textContaining('Vitalii.'), findsOneWidget);
+    expect(find.text('Your execution capacity at a glance.'), findsNothing);
+  });
 }

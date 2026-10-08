@@ -416,6 +416,28 @@ Reserved Card Surfaces
   - **`Running Now`:** High-priority active execution telemetry, objective, elapsed time, and direct workspace navigation.
   - **`Onboarding`:** First-turn welcome cards and setup milestones.
 
+---
+
+## Home Header & Contextual Greeting (Phase 23)
+
+Established-user Home strips away generic marketing subtitles to deliver an uncluttered, distraction-free workspace header:
+
+```text
+Established Home Header
+├── Title: "Home" (28px Bold)
+└── Subtitle (Optional): Contextual greeting (e.g. "Good morning, Vitalii.") or explicit custom greeting
+```
+
+### 1. Architectural Rules
+- **No Marketing Subtitles:** Legacy marketing taglines like `"Your execution capacity at a glance."` are permanently eliminated. The workspace content underneath speaks for itself.
+- **Contextual Greeting:**
+  - When `greeting` is explicitly provided, it renders directly beneath `Home`.
+  - When `userName` is provided, Home dynamically derives an appropriate time-of-day greeting:
+    - Hour `< 12`: `Good morning, <userName>.`
+    - Hour `12..17`: `Good afternoon, <userName>.`
+    - Hour `18..23`: `Good evening, <userName>.`
+  - When neither `greeting` nor `userName` is supplied, `Home` renders cleanly as a standalone title without residual spacing or empty subtitle lines.
+
 
 
 

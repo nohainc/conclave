@@ -22,6 +22,8 @@ class HomePage extends StatelessWidget {
     this.productUpdates = const [],
     this.productUpdateReadStates = const {},
     this.aiUpdates = const [],
+    this.userName,
+    this.greeting,
     this.onAcceptInvitation,
     this.onDeclineInvitation,
     this.onOpenWorkstream,
@@ -47,6 +49,8 @@ class HomePage extends StatelessWidget {
   final List<AxProductUpdate> productUpdates;
   final Map<String, AxUserProductUpdateState> productUpdateReadStates;
   final List<AxAiUpdate> aiUpdates;
+  final String? userName;
+  final String? greeting;
   final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
   final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
   final void Function(String projectId, String workstreamId)? onOpenWorkstream;
@@ -77,6 +81,8 @@ class HomePage extends StatelessWidget {
           productUpdates: productUpdates,
           productUpdateReadStates: productUpdateReadStates,
           aiUpdates: aiUpdates,
+          userName: userName,
+          greeting: greeting,
           onAcceptInvitation: onAcceptInvitation,
           onDeclineInvitation: onDeclineInvitation,
           run: run,
@@ -569,6 +575,8 @@ class EstablishedUserHome extends StatelessWidget {
     this.productUpdates = const [],
     this.productUpdateReadStates = const {},
     this.aiUpdates = const [],
+    this.userName,
+    this.greeting,
     this.onAcceptInvitation,
     this.onDeclineInvitation,
     required this.run,
@@ -592,6 +600,8 @@ class EstablishedUserHome extends StatelessWidget {
   final List<AxProductUpdate> productUpdates;
   final Map<String, AxUserProductUpdateState> productUpdateReadStates;
   final List<AxAiUpdate> aiUpdates;
+  final String? userName;
+  final String? greeting;
   final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
   final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
   final AxRun? run;
@@ -690,13 +700,35 @@ class EstablishedUserHome extends StatelessWidget {
     final aiUpdatesToShow = _effectiveAiUpdates;
     final hasAiUpdates = aiUpdatesToShow.isNotEmpty;
 
+    final effectiveGreeting = greeting ??
+        (userName != null && userName!.trim().isNotEmpty
+            ? _deriveGreeting(userName!.trim())
+            : null);
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Home',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Home',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+              ),
+              if (effectiveGreeting != null &&
+                  effectiveGreeting.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  effectiveGreeting,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 20),
 
@@ -1332,6 +1364,14 @@ class _ForYouItemTile extends StatelessWidget {
       ),
     );
   }
+}
+
+String _deriveGreeting(String userName) {
+  final hour = DateTime.now().hour;
+  final timeGreeting = hour < 12
+      ? 'Good morning'
+      : (hour < 18 ? 'Good afternoon' : 'Good evening');
+  return '$timeGreeting, $userName.';
 }
 
 String _formatRelativeTime(String? raw) {
