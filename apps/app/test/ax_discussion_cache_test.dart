@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:conclave_app/src/ax/ax_work_models.dart';
 import 'package:conclave_app/src/ax/sync/ax_discussion_cache.dart';
 import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'ax_fixture_data.dart';
@@ -608,5 +609,111 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Failed Chat'), findsNothing);
     expect(find.textContaining('Failed to save message:'), findsOneWidget);
+  });
+
+  test(
+      'AxDiscussionMessage.fromJson resolves display name and never exposes raw user ID',
+      () {
+    // Case 1: authorName is provided
+    final msg1 = AxDiscussionMessage.fromJson({
+      'id': 'm1',
+      'threadId': 't1',
+      'authorUserId': 'usr_abc123',
+      'authorName': 'Alice Smith',
+      'body': 'Hello world',
+      'createdAt': '2026-10-06T00:00:00.000Z',
+    });
+    expect(msg1.authorName, 'Alice Smith');
+
+    // Case 2: authorName is missing, memberNames map provided
+    final msg2 = AxDiscussionMessage.fromJson({
+      'id': 'm2',
+      'threadId': 't1',
+      'authorUserId': 'usr_abc123',
+      'body': 'Hello world',
+      'createdAt': '2026-10-06T00:00:00.000Z',
+    }, memberNames: {
+      'usr_abc123': 'Alice Smith'
+    });
+    expect(msg2.authorName, 'Alice Smith');
+
+    // Case 3: authorName is missing and not in memberNames -> defaults to 'Member', NOT 'usr_abc123'
+    final msg3 = AxDiscussionMessage.fromJson({
+      'id': 'm3',
+      'threadId': 't1',
+      'authorUserId': 'usr_abc123',
+      'body': 'Hello world',
+      'createdAt': '2026-10-06T00:00:00.000Z',
+    });
+    expect(msg3.authorName, 'Member');
+
+    // Case 4: authorName accidentally sent as user ID -> sanitized to 'Member'
+    final msg4 = AxDiscussionMessage.fromJson({
+      'id': 'm4',
+      'threadId': 't1',
+      'authorUserId': 'usr_abc123',
+      'authorName': 'usr_abc123',
+      'body': 'Hello world',
+      'createdAt': '2026-10-06T00:00:00.000Z',
+    });
+    expect(msg4.authorName, 'Member');
+  });
+
+  test(
+      'AxWorkRequest.fromJson resolves requester name and never exposes raw user ID',
+      () {
+    // Case 1: valid display name
+    final req1 = AxWorkRequest.fromJson({
+      'id': 'r1',
+      'requestedByUserId': 'usr_bob456',
+      'requestedByName': 'Bob Jones',
+      'prompt': 'Write a report',
+      'status': 'queued',
+      'createdAt': '2026-10-06T00:00:00.000Z',
+    });
+    expect(req1.requestedByName, 'Bob Jones');
+
+    // Case 2: raw user ID passed as name -> sanitized to 'Team member'
+    final req2 = AxWorkRequest.fromJson({
+      'id': 'r2',
+      'requestedByUserId': 'usr_bob456',
+      'requestedByName': 'usr_bob456',
+      'prompt': 'Write a report',
+      'status': 'queued',
+      'createdAt': '2026-10-06T00:00:00.000Z',
+    });
+    expect(req2.requestedByName, 'Team member');
+
+    // Case 3: missing name -> defaults to 'Team member'
+    final req3 = AxWorkRequest.fromJson({
+      'id': 'r3',
+      'requestedByUserId': 'usr_bob456',
+      'prompt': 'Write a report',
+      'status': 'queued',
+      'createdAt': '2026-10-06T00:00:00.000Z',
+    });
+    expect(req3.requestedByName, 'Team member');
+  });
+
+  testWidgets(
+      'other user discussion message displays human name instead of user ID',
+      (tester) async {
+    await size(tester);
+    source.server = const [
+      AxDiscussionMessage(
+        id: 'msg-other',
+        threadId: 'w',
+        authorUserId: 'usr_xyz999',
+        authorName: 'Alex River',
+        body: 'Team update on progress',
+        createdAt: '2026-10-06T00:00:00.000Z',
+        isMe: false,
+      ),
+    ];
+    await tester.pumpWidget(page('w'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Alex River'), findsOneWidget);
+    expect(find.text('usr_xyz999'), findsNothing);
   });
 }

@@ -1,3 +1,4 @@
+import { requireWorkflowPermission } from "./space-permissions.js";
 import { initialConversationTaskStatements } from "./conversation-workflow-step-runs.js";
 import { MutationIdempotency } from "./mutation-idempotency.js";
 import {
@@ -67,19 +68,6 @@ export async function handleValidateWorkRequest(
     "execute",
     accessContext,
   );
-  const membership = await env.CONCLAVE_DB.prepare(
-    "SELECT role FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
-  )
-    .bind(spaceId, context.userId)
-    .first<{ role: "owner" | "collaborator" | "viewer" }>();
-  if (
-    !membership ||
-    (membership.role !== "owner" && membership.role !== "collaborator")
-  )
-    throw new HttpError(
-      403,
-      "Only a Space owner or collaborator with Work execution access can submit Work",
-    );
   const row = await env.CONCLAVE_DB.prepare(
     `SELECT wc.config_json AS configJson FROM threads ws
        LEFT JOIN thread_work_configs wc ON wc.thread_id = ws.id WHERE ws.id = ?1`,
@@ -97,6 +85,7 @@ export async function handleValidateWorkRequest(
   ) as WorkflowId;
   const workflow = BUILTIN_WORKFLOWS[workflowId];
   if (!workflow) throw new HttpError(400, "Unsupported workflowId");
+  await requireWorkflowPermission(env, context.userId, spaceId, workflowId);
   if (body.attachments !== undefined && !Array.isArray(body.attachments)) {
     throw new HttpError(400, "attachments must be an array");
   }
@@ -189,19 +178,6 @@ export async function handleCreateWorkRequest(
     "execute",
     accessContext,
   );
-  const membership = await env.CONCLAVE_DB.prepare(
-    "SELECT role FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
-  )
-    .bind(spaceId, context.userId)
-    .first<{ role: "owner" | "collaborator" | "viewer" }>();
-  if (
-    !membership ||
-    (membership.role !== "owner" && membership.role !== "collaborator")
-  )
-    throw new HttpError(
-      403,
-      "Only a Space owner or collaborator with Work execution access can submit Work",
-    );
   const body = (await request.json()) as Record<string, unknown>;
   const receipt = await MutationIdempotency.from(
     request,
@@ -211,7 +187,6 @@ export async function handleCreateWorkRequest(
     body,
   );
   const replay = await receipt?.replay();
-  if (replay) return resumeSubmission(env, replay);
   const requestedMode =
     body.mode === "stateful"
       ? "stateful"
@@ -237,6 +212,8 @@ export async function handleCreateWorkRequest(
   ) as WorkflowId;
   const canonicalWorkflow = BUILTIN_WORKFLOWS[workflowId];
   if (!canonicalWorkflow) throw new HttpError(400, "Unsupported workflowId");
+  await requireWorkflowPermission(env, context.userId, spaceId, workflowId);
+  if (replay) return resumeSubmission(env, replay);
   // Mutation coordination follows the authoritative Steps, independently of
   // durable provider conversation/session state.
   const mode = canonicalWorkflow.steps.some(

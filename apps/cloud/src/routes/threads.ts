@@ -1,3 +1,7 @@
+import {
+  loadSpacePermissions,
+  requireSpaceRight,
+} from "./space-permissions.js";
 import { conditionalJson } from "./conditional-read.js";
 import { MutationIdempotency } from "./mutation-idempotency.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
@@ -48,9 +52,12 @@ export async function handleListSpaceThreads(
             threads.name, threads.status,
             threads.access_policy_json AS accessPolicyJson,
             usage.config_json AS workConfigJson,
-            threads.lead_user_id AS leadUserId,
+            threads.lead_user_id AS leadUserId, creator.email AS creatorEmail,
+            CASE WHEN threads.lead_user_id = space.owner_user_id THEN 1 ELSE 0 END AS creatorIsOwner,
             threads.created_at AS createdAt, threads.updated_at AS updatedAt
      FROM threads
+     JOIN spaces space ON space.id = threads.space_id
+     LEFT JOIN users creator ON creator.id = threads.lead_user_id
      LEFT JOIN thread_work_configs usage ON usage.thread_id = threads.id
      WHERE threads.space_id = ?1 ORDER BY threads.created_at ASC`,
   )
@@ -64,6 +71,10 @@ export async function handleListSpaceThreads(
   )
     .bind(spaceId, context.userId)
     .first<SpaceMembership>();
+  const policy = await loadSpacePermissions(env, context.userId, spaceId);
+  const effectiveMembership = membership
+    ? { ...membership, permissions: policy.rights }
+    : null;
   const raw = (rows.results ?? []).map((row) => {
     const leadUserId = String(row.leadUserId ?? "");
     const createdAt = String(row.createdAt ?? "");
@@ -86,8 +97,16 @@ export async function handleListSpaceThreads(
     };
     return {
       ...threadMetadata(row),
-      canConfigureWork: canManageThread(context.userId, membership, thread),
-      canExecuteWork: canExecuteThread(context.userId, membership, thread),
+      canConfigureWork: canManageThread(
+        context.userId,
+        effectiveMembership,
+        thread,
+      ),
+      canExecuteWork: canExecuteThread(
+        context.userId,
+        effectiveMembership,
+        thread,
+      ),
     };
   });
   const threads = sortThreads(raw, settings.threadOrder);
@@ -107,17 +126,7 @@ export async function handleCreateThread(
     spaceId,
     accessContext,
   );
-  const membership = await env.CONCLAVE_DB.prepare(
-    "SELECT role FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
-  )
-    .bind(spaceId, context.userId)
-    .first<{ role: string }>();
-  const role = membership?.role ?? context.spaceRoles[spaceId];
-  if (role !== "owner" && role !== "collaborator")
-    throw new HttpError(
-      403,
-      "Space collaborator access is required to create a Thread",
-    );
+  await requireSpaceRight(env, context, spaceId, "manageOwnThreads");
   const body = (await request.json().catch(() => ({}))) as Record<
     string,
     unknown
@@ -503,11 +512,14 @@ export async function handleListDiscussionMessages(
   const comparison = forward ? ">" : "<";
   const order = forward ? "ASC" : "DESC";
   const statement = env.CONCLAVE_DB.prepare(
-    `SELECT id, thread_id AS threadId, author_user_id AS authorUserId,
-            body, references_json AS referencesJson, edited_at AS editedAt, created_at AS createdAt
-     FROM discussion_messages WHERE thread_id = ?1
-       ${cursor ? `AND (created_at ${comparison} ?2 OR (created_at = ?2 AND id ${comparison} ?3))` : ""}
-     ORDER BY created_at ${order}, id ${order} LIMIT ${cursor ? "?4" : "?2"}`,
+    `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
+            COALESCE(u.display_name, 'Member') AS authorName,
+            dm.body, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt
+     FROM discussion_messages dm
+     LEFT JOIN users u ON u.id = dm.author_user_id
+     WHERE dm.thread_id = ?1
+       ${cursor ? `AND (dm.created_at ${comparison} ?2 OR (dm.created_at = ?2 AND dm.id ${comparison} ?3))` : ""}
+     ORDER BY dm.created_at ${order}, dm.id ${order} LIMIT ${cursor ? "?4" : "?2"}`,
   );
   const rows = await (
     cursor
@@ -571,6 +583,12 @@ export async function handleCreateDiscussionMessage(
   const references = discussionReferences(body.references);
   const now = new Date().toISOString();
   const id = `discussion-${crypto.randomUUID()}`;
+  const userRow = await env.CONCLAVE_DB.prepare(
+    `SELECT display_name AS displayName FROM users WHERE id = ?1`,
+  )
+    .bind(context.userId)
+    .first<{ displayName: string | null }>();
+  const authorName = userRow?.displayName || "Member";
   const mutations: D1PreparedStatement[] = [];
   mutations.push(
     env.CONCLAVE_DB.prepare(
@@ -605,6 +623,7 @@ export async function handleCreateDiscussionMessage(
       id,
       threadId,
       authorUserId: context.userId,
+      authorName,
       body: content,
       references,
       editedAt: null,
@@ -629,9 +648,12 @@ export async function handleGetDiscussionMessage(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const message = await env.CONCLAVE_DB.prepare(
-    `SELECT id, thread_id AS threadId, author_user_id AS authorUserId,
-      body, references_json AS referencesJson, edited_at AS editedAt, created_at AS createdAt
-     FROM discussion_messages WHERE id = ?1`,
+    `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
+      COALESCE(u.display_name, 'Member') AS authorName,
+      dm.body, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt
+     FROM discussion_messages dm
+     LEFT JOIN users u ON u.id = dm.author_user_id
+     WHERE dm.id = ?1`,
   )
     .bind(messageId)
     .first<Record<string, unknown>>();
@@ -655,9 +677,12 @@ export async function handleEditDiscussionMessage(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const message = await env.CONCLAVE_DB.prepare(
-    `SELECT id, thread_id AS threadId, author_user_id AS authorUserId,
-            body, references_json AS referencesJson, edited_at AS editedAt, created_at AS createdAt
-     FROM discussion_messages WHERE id = ?1`,
+    `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
+            COALESCE(u.display_name, 'Member') AS authorName,
+            dm.body, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt
+     FROM discussion_messages dm
+     LEFT JOIN users u ON u.id = dm.author_user_id
+     WHERE dm.id = ?1`,
   )
     .bind(messageId)
     .first<Record<string, unknown>>();

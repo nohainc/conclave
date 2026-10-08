@@ -1,3 +1,4 @@
+import { loadSpacePermissions } from "./space-permissions.js";
 import { spaceWorkerExecutionOptions } from "../worker-execution-options.js";
 import { type Permission, type SecurityContext } from "@conclave/security";
 import {
@@ -209,6 +210,9 @@ export function threadMetadata(
     spaceId: String(row.spaceId ?? row.space_id),
     name: String(row.name),
     status: String(row.status),
+    createdByUserId: row.leadUserId ?? row.lead_user_id ?? null,
+    creatorEmail: row.creatorEmail ?? null,
+    creatorIsOwner: row.creatorIsOwner === 1,
     lead: row.leadUserId ?? row.lead_user_id ?? null,
     accessPolicy,
     workConfig: parseJson(row.workConfigJson ?? row.configJson, {
@@ -312,6 +316,14 @@ export async function authorizeThreadAccess(
   )
     .bind(String(row.spaceId), context.userId)
     .first<SpaceMembership>();
+  const policy = await loadSpacePermissions(
+    env,
+    context.userId,
+    String(row.spaceId),
+  );
+  const effectiveMembership = membership
+    ? { ...membership, permissions: policy.rights }
+    : null;
   const thread: Thread = {
     id: String(row.id),
     spaceId: String(row.spaceId),
@@ -331,12 +343,12 @@ export async function authorizeThreadAccess(
   };
   const allowed =
     access === "view"
-      ? canViewThread(context.userId, membership, thread)
+      ? canViewThread(context.userId, effectiveMembership, thread)
       : access === "discuss"
-        ? canDiscussThread(context.userId, membership, thread)
+        ? canDiscussThread(context.userId, effectiveMembership, thread)
         : access === "execute"
-          ? canExecuteThread(context.userId, membership, thread)
-          : canManageThread(context.userId, membership, thread);
+          ? canExecuteThread(context.userId, effectiveMembership, thread)
+          : canManageThread(context.userId, effectiveMembership, thread);
   if (!allowed) throw new HttpError(403, `Thread ${access} access is required`);
   return { context, thread, spaceId: String(row.spaceId) };
 }

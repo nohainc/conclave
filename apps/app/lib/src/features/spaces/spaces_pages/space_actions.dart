@@ -1,6 +1,38 @@
 part of '../spaces_pages.dart';
 
 extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
+  Future<void> _setAllowWork(bool value) async {
+    _updateState(() => _savingWorkSetting = true);
+    try {
+      final updated = await _collaboration.editSpace(widget.space,
+          settings: {...widget.space.settings, 'allowWork': value});
+      if (!mounted) return;
+      _updateState(() => _allowWorkOverride = value);
+      widget.onSpaceUpdated?.call(updated);
+    } catch (error) {
+      if (mounted) _message(error.toString());
+    } finally {
+      if (mounted) _updateState(() => _savingWorkSetting = false);
+    }
+  }
+
+  Future<void> _setMemberPermission(
+      AxSpaceMember member, String key, bool value) async {
+    _updateState(() => _savingMembers.add(member.userId));
+    try {
+      final permissions = member.effectivePermissions.toJson()..[key] = value;
+      await widget.dataSource.updateSpaceMemberPermissions(
+          spaceId: widget.space.id,
+          userId: member.userId,
+          permissions: AxSpacePermissions.fromJson(permissions));
+      await _queries.refreshMembers(widget.space.id, includeInvitations: false);
+    } catch (error) {
+      if (mounted) _message(error.toString());
+    } finally {
+      if (mounted) _updateState(() => _savingMembers.remove(member.userId));
+    }
+  }
+
   Future<void> _editSpaceDialog() async {
     var name = widget.space.name;
     var description = widget.space.description;
@@ -149,7 +181,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
                 DropdownButtonFormField<String>(
                   initialValue: selectedId,
                   decoration: InputDecoration(
-                    labelText: 'Workspace',
+                    labelText: 'Your workspace',
                     errorText: errorText,
                   ),
                   items: ownedWorkspaces
@@ -176,7 +208,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
               ),
               FilledButton(
                 onPressed: submit,
-                child: const Text('Connect'),
+                child: const Text('Authorize and connect'),
               ),
             ],
           );
@@ -184,8 +216,11 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
       ),
     );
     if (accepted != true) return;
-    final permissions = await _chooseWorkspaceAccess(const []);
-    if (permissions == null) return;
+    const permissions = [
+      'repository:read',
+      'repository:write',
+      'shell:execute'
+    ];
     try {
       await _grants.create(
         spaceId: widget.space.id,
@@ -199,66 +234,6 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
       _message('Workspace connected to this Space.');
     } catch (error) {
       _message(error.toString());
-    }
-  }
-
-  Future<List<String>?> _chooseWorkspaceAccess(List<String> current) async {
-    final selected = current.toSet();
-    return showDialog<List<String>>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-          builder: (context, update) => AlertDialog(
-                title: const Text('Workspace access'),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Text(
-                      'Choose what Workers may do in this Space. Work needs repository read and write access. Test steps also need command execution.'),
-                  for (final entry in const {
-                    'repository:read': 'Read repository files',
-                    'repository:write': 'Change repository files',
-                    'shell:execute': 'Execute commands and tests',
-                  }.entries)
-                    CheckboxListTile(
-                      title: Text(entry.value),
-                      value: selected.contains(entry.key),
-                      onChanged: (value) => update(() {
-                        if (value == true) {
-                          selected.add(entry.key);
-                        } else {
-                          selected.remove(entry.key);
-                        }
-                      }),
-                    ),
-                ]),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(dialogContext),
-                      child: const Text('Cancel')),
-                  FilledButton(
-                      onPressed: () =>
-                          Navigator.pop(dialogContext, selected.toList()),
-                      child: const Text('Confirm access')),
-                ],
-              )),
-    );
-  }
-
-  Future<void> _editWorkspaceAccess(Map<String, dynamic> workspace) async {
-    final permissions = await _chooseWorkspaceAccess(
-        (workspace['allowedPermissions'] as List? ?? const [])
-            .whereType<String>()
-            .toList());
-    if (permissions == null) return;
-    try {
-      await _grants.updatePermissions(
-        spaceId: widget.space.id,
-        grantId: (workspace['id'] ?? workspace['grantId']).toString(),
-        allowedPermissions: permissions,
-      );
-      if (mounted) {
-        _message('Workspace access updated. Return to the chat and run again.');
-      }
-    } catch (error) {
-      if (mounted) _message(error.toString());
     }
   }
 
@@ -581,9 +556,11 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
 
   Future<void> _share() async {
     var email = '';
-    var role = 'collaborator';
+    final allowed = widget.space.effectivePermissions.toJson();
+    final selected = AxSpacePermissions.forRole('collaborator').toJson()
+      ..updateAll((key, value) => value && allowed[key] == true);
     String? errorText;
-    final result = await showDialog<(String, String)>(
+    final result = await showDialog<(String, AxSpacePermissions)>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
@@ -609,7 +586,8 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
               });
               return;
             }
-            Navigator.pop(dialogContext, (trimmedEmail, role));
+            Navigator.pop(dialogContext,
+                (trimmedEmail, AxSpacePermissions.fromJson(selected)));
           }
 
           return AlertDialog(
@@ -633,17 +611,21 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
                   onSubmitted: (_) => submit(),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: role,
-                  decoration: const InputDecoration(labelText: 'Role'),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'collaborator', child: Text('Collaborator')),
-                    DropdownMenuItem(value: 'viewer', child: Text('Viewer')),
-                  ],
-                  onChanged: (value) =>
-                      setDialogState(() => role = value ?? role),
-                ),
+                for (final entry in const {
+                  'chat': 'Use Chat',
+                  'work': 'Use Work workflows',
+                  'manageOwnThreads': 'Create and manage own threads',
+                  'attachWorkspace': 'Attach own workspace',
+                  'inviteMembers': 'Invite members',
+                }.entries)
+                  CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(entry.value),
+                      value: selected[entry.key],
+                      onChanged: allowed[entry.key] == true
+                          ? (value) => setDialogState(
+                              () => selected[entry.key] = value == true)
+                          : null),
               ],
             ),
             actions: [
@@ -662,32 +644,18 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
     );
     if (result == null || result.$1.isEmpty) return;
     try {
-      await widget.dataSource.inviteSpaceMember(
-          spaceId: widget.space.id, email: result.$1, role: result.$2);
+      await widget.dataSource.inviteSpaceMemberWithPermissions(
+          spaceId: widget.space.id,
+          email: result.$1,
+          role: result.$2.toJson().values.any((value) => value)
+              ? 'collaborator'
+              : 'viewer',
+          permissions: result.$2);
       _message('Space invitation sent.');
       await _queries.refreshMembers(widget.space.id, includeMembers: false);
     } catch (error) {
       _message(error.toString());
     }
-  }
-
-  Future<void> _changeRole(AxSpaceMember member) async {
-    final role = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => SimpleDialog(
-        title: Text('Role for ${member.displayName}'),
-        children: ['collaborator', 'viewer']
-            .map((value) => SimpleDialogOption(
-                  onPressed: () => Navigator.pop(dialogContext, value),
-                  child: Text(value[0].toUpperCase() + value.substring(1)),
-                ))
-            .toList(),
-      ),
-    );
-    if (role == null || role == member.role) return;
-    await widget.dataSource.changeSpaceMemberRole(
-        spaceId: widget.space.id, userId: member.userId, role: role);
-    await _queries.refreshMembers(widget.space.id, includeInvitations: false);
   }
 
   Future<void> _removeMember(AxSpaceMember member) async {

@@ -79,7 +79,10 @@ mixin _SpaceApi on _AxApiClientCore {
         if (instructions != null) 'instructions': instructions,
         if (instructions != null || settings != null)
           'settings': {
-            if (settings != null) ...settings,
+            if (settings != null)
+              ...Map<String, dynamic>.from(settings)
+                ..remove('memberPermissions')
+                ..remove('invitationPermissions'),
             if (instructions != null) 'instructions': instructions,
           },
       }),
@@ -224,6 +227,25 @@ mixin _SpaceApi on _AxApiClientCore {
           required String role}) =>
       _spaceMutation(Uri.parse('$baseUrl/spaces/$spaceId/invitations'),
           {'email': email, 'role': role});
+
+  @override
+  Future<void> updateSpaceMemberPermissions(
+          {required String spaceId,
+          required String userId,
+          required AxSpacePermissions permissions}) =>
+      _spaceMutation(
+          Uri.parse('$baseUrl/spaces/$spaceId/members/$userId/permissions'),
+          {'permissions': permissions.toJson()},
+          method: 'PATCH');
+
+  @override
+  Future<void> inviteSpaceMemberWithPermissions(
+          {required String spaceId,
+          required String email,
+          required String role,
+          required AxSpacePermissions permissions}) =>
+      _spaceMutation(Uri.parse('$baseUrl/spaces/$spaceId/invitations'),
+          {'email': email, 'role': role, 'permissions': permissions.toJson()});
 
   @override
   Future<void> changeSpaceMemberRole(

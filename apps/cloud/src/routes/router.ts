@@ -693,7 +693,7 @@ export async function routeWorkerRequest(
       );
     }
     const spaceMemberRoleMatch = url.pathname.match(
-      /^\/api\/spaces\/([^/]+)\/members\/([^/]+)\/role$/,
+      /^\/api\/spaces\/([^/]+)\/members\/([^/]+)\/(?:role|permissions)$/,
     );
     if (
       request.method === "PATCH" &&

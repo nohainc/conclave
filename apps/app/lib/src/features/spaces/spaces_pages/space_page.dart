@@ -104,8 +104,14 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   bool executionLoading = true;
   Object? executionError;
   late AxSpaceWorkspaceGrants _grants;
-  bool get canManage =>
-      widget.space.role == 'owner' || widget.space.role == 'collaborator';
+  bool get canManage => widget.space.effectivePermissions.manageOwnThreads;
+  bool get canAttachWorkspace =>
+      widget.space.effectivePermissions.attachWorkspace;
+  bool get canInvite => widget.space.effectivePermissions.inviteMembers;
+  bool? _allowWorkOverride;
+  bool _savingWorkSetting = false;
+  final _savingMembers = <String>{};
+  bool get allowWork => _allowWorkOverride ?? widget.space.allowWork;
   bool get isOwner => widget.space.role == 'owner';
 
   @override
@@ -210,6 +216,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   @override
   void didUpdateWidget(_SpaceWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.space != widget.space) _allowWorkOverride = null;
     if (oldWidget.space.id != widget.space.id ||
         oldWidget.dataSource != widget.dataSource ||
         oldWidget.spaceThreads != widget.spaceThreads ||

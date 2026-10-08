@@ -457,7 +457,18 @@ function canAccessThreadPermission(
 ): boolean {
   if (!membership || membership.spaceId !== thread.spaceId) return false;
   if (membership.role === "owner") return true;
-  if (membership.role === "viewer" && permission !== "view") return false;
+  if (permission !== "view") {
+    if (membership.permissions) {
+      if (permission === "discuss" && !membership.permissions.chat)
+        return false;
+      if (
+        permission === "execute" &&
+        !membership.permissions.chat &&
+        !membership.permissions.work
+      )
+        return false;
+    } else if (membership.role === "viewer") return false;
+  }
   if (
     thread.accessPolicy.allowedUserIds.length > 0 &&
     !thread.accessPolicy.allowedUserIds.includes(userId)
@@ -506,7 +517,11 @@ export function canManageThread(
 ): boolean {
   if (!membership || membership.spaceId !== thread.spaceId) return false;
   if (membership.role === "owner") return true;
-  return membership.role === "collaborator" && thread.lead.userId === userId;
+  return (
+    (membership.permissions?.manageOwnThreads ??
+      membership.role === "collaborator") &&
+    thread.lead.userId === userId
+  );
 }
 
 export function validateDiscussionMessage(message: DiscussionMessage): void {

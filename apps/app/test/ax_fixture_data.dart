@@ -505,6 +505,21 @@ class AxFixtureDataSource implements AxDataSource {
   Future<void> declineSpaceInvitation({
     required String invitationId,
   }) async {}
+
+  @override
+  Future<void> updateSpaceMemberPermissions({
+    required String spaceId,
+    required String userId,
+    required AxSpacePermissions permissions,
+  }) async {}
+
+  @override
+  Future<void> inviteSpaceMemberWithPermissions({
+    required String spaceId,
+    required String email,
+    required String role,
+    required AxSpacePermissions permissions,
+  }) async {}
 }
 
 /// Stateful fixture used by the empty-workspace onboarding test. It mirrors

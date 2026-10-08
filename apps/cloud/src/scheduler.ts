@@ -1,3 +1,4 @@
+import { spaceMemberPermissions, spaceWorkAllowed } from "@conclave/security";
 import {
   EXECUTION_PERMISSIONS,
   isWorkspaceSpaceGrantStatus,
@@ -7,7 +8,6 @@ import {
   validateWorkspaceGrantPermissions,
   validateWorkspaceGrantWorkerIds,
   validateWorkspaceNetworkPolicy,
-  type ExecutionPermission,
   type ThreadBindingId,
 } from "@conclave/core";
 
@@ -94,12 +94,6 @@ function number(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function spacePermissions(role: string): ExecutionPermission[] {
-  if (role === "owner") return [...EXECUTION_PERMISSIONS];
-  if (role === "collaborator") return ["repository:read", "repository:write"];
-  return ["repository:read"];
-}
-
 function parsedGrantJson<T>(
   value: unknown,
   validate: (parsed: unknown) => parsed is T,
@@ -130,11 +124,42 @@ export async function selectSpaceExecutionTarget(
 ): Promise<ExecutionTarget | null> {
   const membership = await db
     .prepare(
-      `SELECT role FROM space_memberships WHERE space_id = ?1 AND user_id = ?2`,
+      `SELECT sm.role, s.settings_json AS settingsJson FROM space_memberships sm JOIN spaces s ON s.id = sm.space_id WHERE sm.space_id = ?1 AND sm.user_id = ?2`,
     )
     .bind(request.spaceId, request.requesterUserId)
-    .first<{ role: string }>();
-  if (!membership || membership.role === "viewer") return null;
+    .first<{ role: string; settingsJson: string }>();
+  if (!membership) return null;
+  const rights = spaceMemberPermissions(
+    membership.role,
+    membership.settingsJson,
+    request.requesterUserId,
+  );
+  let workflowId = request.workBindingId === "chat" ? "chat" : "direct";
+  if (request.workRequestId) {
+    const work = await db
+      .prepare(
+        "SELECT workflow_id AS workflowId, requested_by_user_id AS requesterUserId, thread_id AS threadId FROM work_requests WHERE id = ?1",
+      )
+      .bind(request.workRequestId)
+      .first<{
+        workflowId: string;
+        requesterUserId: string;
+        threadId: string;
+      }>();
+    if (
+      !work ||
+      work.requesterUserId !== request.requesterUserId ||
+      work.threadId !== request.threadId
+    )
+      return null;
+    workflowId = work.workflowId;
+  }
+  if (
+    workflowId === "chat"
+      ? !rights.chat
+      : !rights.work || !spaceWorkAllowed(membership.settingsJson)
+  )
+    return null;
 
   if (request.threadId) {
     const thread = await db
@@ -574,7 +599,7 @@ export async function selectSpaceExecutionTarget(
     }
 
     const resolvedPermissions = resolveExecutionPermissions(
-      spacePermissions(membership.role),
+      rights.work ? [...EXECUTION_PERMISSIONS] : ["repository:read"],
       grantPermissions,
     );
     // Read-only steps may keep the active Thread lease so they inspect its

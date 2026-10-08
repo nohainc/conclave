@@ -258,6 +258,35 @@ class AxPhaseItem {
 
 typedef AxRunPhase = AxPhaseItem;
 
+class AxSpacePermissions {
+  const AxSpacePermissions(
+      {this.chat = false,
+      this.work = false,
+      this.manageOwnThreads = false,
+      this.attachWorkspace = false,
+      this.inviteMembers = false});
+  final bool chat, work, manageOwnThreads, attachWorkspace, inviteMembers;
+  factory AxSpacePermissions.forRole(String role) => AxSpacePermissions(
+      chat: role == 'owner' || role == 'collaborator',
+      work: role == 'owner' || role == 'collaborator',
+      manageOwnThreads: role == 'owner' || role == 'collaborator',
+      attachWorkspace: role == 'owner',
+      inviteMembers: role == 'owner');
+  factory AxSpacePermissions.fromJson(Map json) => AxSpacePermissions(
+      chat: json['chat'] == true,
+      work: json['work'] == true,
+      manageOwnThreads: json['manageOwnThreads'] == true,
+      attachWorkspace: json['attachWorkspace'] == true,
+      inviteMembers: json['inviteMembers'] == true);
+  Map<String, bool> toJson() => {
+        'chat': chat,
+        'work': work,
+        'manageOwnThreads': manageOwnThreads,
+        'attachWorkspace': attachWorkspace,
+        'inviteMembers': inviteMembers
+      };
+}
+
 class AxThread {
   const AxThread({
     required this.id,
@@ -272,6 +301,8 @@ class AxThread {
     this.canConfigureWork = false,
     this.canExecuteWork = false,
     this.archived = false,
+    this.creatorEmail = '',
+    this.creatorIsOwner = true,
   });
 
   final String id;
@@ -286,6 +317,8 @@ class AxThread {
   final bool canConfigureWork;
   final bool canExecuteWork;
   final bool archived;
+  final String creatorEmail;
+  final bool creatorIsOwner;
 
   String get title => name;
 
@@ -304,6 +337,8 @@ class AxThread {
           primaryWorkspace: primaryWorkspace,
           queueStatus: queueStatus,
           workConfig: workConfig ?? this.workConfig,
+          creatorEmail: creatorEmail,
+          creatorIsOwner: creatorIsOwner,
           canConfigureWork: canConfigureWork,
           canExecuteWork: canExecuteWork,
           archived: status == null ? archived : status == 'archived');
@@ -323,6 +358,8 @@ class AxThread {
         canConfigureWork: json['canConfigureWork'] == true,
         canExecuteWork: json['canExecuteWork'] == true,
         archived: json['archived'] == true,
+        creatorEmail: _string(json, 'creatorEmail'),
+        creatorIsOwner: json['creatorIsOwner'] != false,
       );
 }
 
@@ -379,11 +416,36 @@ class AxDiscussionMessage {
     Map<String, String>? memberNames,
   }) {
     final authorId =
-        _string(json, 'authorUserId', _string(json, 'author_user_id'));
-    final author = memberNames?[authorId] ??
-        (json['authorName'] as String? ??
-            (json['author_name'] as String? ??
-                (authorId.isNotEmpty ? authorId : 'Member')));
+        _string(json, 'authorUserId', _string(json, 'author_user_id', ''));
+    final isMe = currentUserId != null &&
+        currentUserId.isNotEmpty &&
+        authorId == currentUserId;
+    final rawName = (json['authorName'] as String?)?.trim() ??
+        (json['author_name'] as String?)?.trim() ??
+        (json['authorDisplayName'] as String?)?.trim() ??
+        (json['author_display_name'] as String?)?.trim() ??
+        (json['displayName'] as String?)?.trim() ??
+        (json['display_name'] as String?)?.trim();
+    final memberName = memberNames?[authorId]?.trim();
+
+    String resolveAuthorName() {
+      if (memberName != null &&
+          memberName.isNotEmpty &&
+          memberName != authorId &&
+          !memberName.startsWith('usr_')) {
+        return memberName;
+      }
+      if (rawName != null &&
+          rawName.isNotEmpty &&
+          rawName != authorId &&
+          !rawName.startsWith('usr_')) {
+        return rawName;
+      }
+      if (isMe) return 'You';
+      return 'Member';
+    }
+
+    final author = resolveAuthorName();
     final rawRefs = json['references'];
     final refs = rawRefs is List
         ? rawRefs.map((e) => e.toString()).toList()
@@ -398,9 +460,7 @@ class AxDiscussionMessage {
       references: refs,
       editedAt: json['editedAt'] as String? ?? json['edited_at'] as String?,
       createdAt: _string(json, 'createdAt', _string(json, 'created_at')),
-      isMe: currentUserId != null &&
-          currentUserId.isNotEmpty &&
-          authorId == currentUserId,
+      isMe: isMe,
     );
   }
 }
@@ -417,6 +477,7 @@ class AxSpace {
     this.archived = false,
     this.role = 'owner',
     this.settings = const {},
+    this.permissions,
   });
 
   final String id;
@@ -429,6 +490,11 @@ class AxSpace {
   final bool archived;
   final String role;
   final Map<String, dynamic> settings;
+  final AxSpacePermissions? permissions;
+  AxSpacePermissions get effectivePermissions => role == 'owner'
+      ? AxSpacePermissions.forRole(role)
+      : permissions ?? AxSpacePermissions.forRole(role);
+  bool get allowWork => settings['allowWork'] != false;
 
   factory AxSpace.fromJson(Map<String, dynamic> json) => AxSpace(
         id: _string(json, 'id'),
@@ -451,6 +517,9 @@ class AxSpace {
             (json['settings'] is Map &&
                 (json['settings'] as Map)['archived'] == true),
         role: _string(json, 'role', 'owner'),
+        permissions: json['permissions'] is Map
+            ? AxSpacePermissions.fromJson(json['permissions'] as Map)
+            : null,
         settings: json['settings'] is Map
             ? Map<String, dynamic>.from(json['settings'] as Map)
             : const {},
@@ -479,6 +548,7 @@ class AxSpace {
         archived: archived ?? this.archived,
         role: role ?? this.role,
         settings: settings ?? this.settings,
+        permissions: permissions,
       );
 }
 
@@ -1110,6 +1180,7 @@ class AxSpaceMember {
     required this.email,
     required this.role,
     required this.createdAt,
+    this.permissions,
   });
 
   final String userId;
@@ -1117,6 +1188,10 @@ class AxSpaceMember {
   final String email;
   final String role;
   final String createdAt;
+  final AxSpacePermissions? permissions;
+  AxSpacePermissions get effectivePermissions => role == 'owner'
+      ? AxSpacePermissions.forRole(role)
+      : permissions ?? AxSpacePermissions.forRole(role);
 
   factory AxSpaceMember.fromJson(Map<String, dynamic> json) => AxSpaceMember(
         userId: _string(json, 'userId'),
@@ -1124,6 +1199,9 @@ class AxSpaceMember {
         email: _string(json, 'email'),
         role: _string(json, 'role', 'viewer'),
         createdAt: _string(json, 'createdAt'),
+        permissions: json['permissions'] is Map
+            ? AxSpacePermissions.fromJson(json['permissions'] as Map)
+            : null,
       );
 }
 

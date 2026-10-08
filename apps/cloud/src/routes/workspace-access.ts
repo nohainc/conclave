@@ -1,7 +1,6 @@
+import { loadSpacePermissions } from "./space-permissions.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
-  AuthorizationError,
-  authorizeSpaceMembership,
   authorizeWorkspaceOwner,
   type SecurityContext,
 } from "@conclave/security";
@@ -207,18 +206,24 @@ export async function createWorkspaceSpaceGrant(
       "Only the Workspace owner can grant this Workspace",
     );
   }
-  let membership: { role: string } | null = null;
-  try {
-    membership = await authorizeSpaceMembership(
-      env.CONCLAVE_DB,
-      context,
-      spaceId,
-      "spaces:write",
+  const rawMembership = await env.CONCLAVE_DB.prepare(
+    "SELECT role FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
+  )
+    .bind(spaceId, context.userId)
+    .first<{ role: string }>();
+  const membership = rawMembership;
+  if (membership) {
+    const policy = await loadSpacePermissions(env, context.userId, spaceId);
+    if (!policy.rights.attachWorkspace)
+      throw new HttpError(
+        403,
+        "Workspace attachment is not allowed for this member",
+      );
+  } else if (body.confirmContribution !== true) {
+    throw new HttpError(
+      403,
+      "Workspace contribution must be explicitly authorized",
     );
-  } catch (error) {
-    if (!(error instanceof AuthorizationError)) throw error;
-    // A Workspace owner may grant their own Workspace to a Space without
-    // becoming a Space collaborator; the Space still controls use.
   }
   await authorizeWorkspaceOwner(
     env.CONCLAVE_DB,
@@ -240,10 +245,7 @@ export async function createWorkspaceSpaceGrant(
       "This Workspace is already connected to the Space",
     );
   }
-  if (
-    membership?.role === "collaborator" &&
-    body.confirmContribution !== true
-  ) {
+  if (membership?.role !== "owner" && body.confirmContribution !== true) {
     throw new HttpError(
       400,
       "Collaborators must explicitly confirm Workspace contribution",

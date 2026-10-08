@@ -1154,8 +1154,14 @@ class _WorkTimelineCard extends StatelessWidget {
     final timestamp = DateTime.tryParse(request.createdAt)?.toLocal();
     final timeLabel = timestamp == null ? '' : _chatTimestamp(timestamp);
     final elapsed = _totalElapsed();
-    final requesterInitials = request.requestedByName.isNotEmpty
-        ? request.requestedByName
+    final rawRequesterName = request.requestedByName.trim();
+    final effectiveRequesterName = (rawRequesterName.isEmpty ||
+            rawRequesterName == request.requestedByUserId ||
+            rawRequesterName.startsWith('usr_'))
+        ? 'Team member'
+        : rawRequesterName;
+    final requesterInitials = effectiveRequesterName.isNotEmpty
+        ? effectiveRequesterName
             .trim()
             .split(' ')
             .where((s) => s.isNotEmpty)
@@ -1164,15 +1170,15 @@ class _WorkTimelineCard extends StatelessWidget {
             .join()
             .toUpperCase()
         : 'U';
-    final normalizedRequesterName =
-        request.requestedByName.trim().toLowerCase();
+    final normalizedRequesterName = effectiveRequesterName.trim().toLowerCase();
     final normalizedCurrentName = currentUserName?.trim().toLowerCase();
     final isOwnRequest = (currentUserId != null &&
             currentUserId!.isNotEmpty &&
             request.requestedByUserId == currentUserId) ||
         (normalizedCurrentName != null &&
             normalizedCurrentName.isNotEmpty &&
-            normalizedRequesterName == normalizedCurrentName);
+            (normalizedRequesterName == normalizedCurrentName ||
+                rawRequesterName.toLowerCase() == normalizedCurrentName));
     final showRequesterIdentity =
         !isOwnRequest && request.requestedByUserId?.trim().isNotEmpty == true;
 
@@ -1340,7 +1346,7 @@ class _WorkTimelineCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          request.requestedByName,
+                          effectiveRequesterName,
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -1623,10 +1629,22 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                   'Status · ${details.status}',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                if (details.requestedByName?.isNotEmpty == true) ...[
-                  const SizedBox(height: 6),
-                  Text('Requested by ${details.requestedByName}'),
-                ],
+                Builder(builder: (context) {
+                  final rawDetailName = details.requestedByName?.trim();
+                  final displayDetailName = (rawDetailName == null ||
+                          rawDetailName.isEmpty ||
+                          rawDetailName == details.requestedByUserId ||
+                          rawDetailName.startsWith('usr_'))
+                      ? (details.requestedByUserId?.isNotEmpty == true
+                          ? 'Team member'
+                          : null)
+                      : rawDetailName;
+                  if (displayDetailName == null) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text('Requested by $displayDetailName'),
+                  );
+                }),
                 const SizedBox(height: 16),
                 Text('Original request',
                     style: Theme.of(context).textTheme.titleSmall),

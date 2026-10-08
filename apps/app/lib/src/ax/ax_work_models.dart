@@ -533,6 +533,18 @@ class AxWorkRequest {
               Map<String, dynamic>.from(item),
             ))
         .toList();
+    final rawRequestedByUserId =
+        (json['requestedByUserId'] ?? json['requested_by_user_id'])?.toString();
+    final rawRequestedByName =
+        (json['requestedByName'] ?? json['requested_by_name'])
+            ?.toString()
+            .trim();
+    final effectiveRequestedByName = (rawRequestedByName == null ||
+            rawRequestedByName.isEmpty ||
+            rawRequestedByName == rawRequestedByUserId ||
+            rawRequestedByName.startsWith('usr_'))
+        ? 'Team member'
+        : rawRequestedByName;
     return AxWorkRequest(
       id: json['id']?.toString() ?? '',
       conversationId: json['conversationId']?.toString(),
@@ -548,10 +560,8 @@ class AxWorkRequest {
           ? AxTurnExecutionConfig.fromJson(
               Map<String, dynamic>.from(json['executionConfig'] as Map))
           : null,
-      requestedByName: json['requestedByName']?.toString() ?? 'Team member',
-      requestedByUserId:
-          (json['requestedByUserId'] ?? json['requested_by_user_id'])
-              ?.toString(),
+      requestedByName: effectiveRequestedByName,
+      requestedByUserId: rawRequestedByUserId,
       prompt: json['prompt']?.toString() ?? '',
       workflowId: json['workflowId']?.toString() ?? 'direct',
       workflowVersion: json['workflowVersion'] as int? ?? 1,
@@ -665,6 +675,17 @@ abstract interface class AxDataSource {
     required String role,
   }) async =>
       throw UnimplementedError('Space collaboration is not available');
+  Future<void> updateSpaceMemberPermissions(
+          {required String spaceId,
+          required String userId,
+          required AxSpacePermissions permissions}) async =>
+      throw UnimplementedError('Member permissions are not available');
+  Future<void> inviteSpaceMemberWithPermissions(
+          {required String spaceId,
+          required String email,
+          required String role,
+          required AxSpacePermissions permissions}) =>
+      inviteSpaceMember(spaceId: spaceId, email: email, role: role);
   Future<void> changeSpaceMemberRole({
     required String spaceId,
     required String userId,

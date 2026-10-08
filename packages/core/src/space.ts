@@ -10,6 +10,11 @@ export interface SpaceMembership {
   readonly spaceId: string;
   readonly userId: string;
   readonly role: SpaceRole;
+  readonly permissions?: {
+    readonly chat: boolean;
+    readonly work: boolean;
+    readonly manageOwnThreads: boolean;
+  };
   readonly createdAt: string;
   readonly updatedAt: string;
 }

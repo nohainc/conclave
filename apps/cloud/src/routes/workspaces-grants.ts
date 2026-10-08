@@ -1,3 +1,4 @@
+import { requireSpaceRight } from "./space-permissions.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
   canTransitionWorkspaceSpaceGrantStatus,
@@ -7,6 +8,7 @@ import {
 import {
   authorizeSpaceMembership,
   authorizeWorkspaceOwner,
+  authorizeSpaceOwner,
 } from "@conclave/security";
 
 import {
@@ -82,7 +84,13 @@ export async function handleListSpaceWorkspaces(
     .bind(spaceId, new Date().toISOString())
     .all<Record<string, unknown>>();
   return json({
-    workspaces: (rows.results ?? []).map(workspaceSpaceGrantMetadata),
+    workspaces: (rows.results ?? []).map((row) => ({
+      ...workspaceSpaceGrantMetadata(row),
+      canRevoke:
+        row.owner_user_id === context.userId ||
+        context.spaceRoles[spaceId] === "owner",
+      canOpenWorkspace: row.owner_user_id === context.userId,
+    })),
   });
 }
 
@@ -93,12 +101,7 @@ export async function handleRequestSpaceWorkspace(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  await authorizeSpaceMembership(
-    env.CONCLAVE_DB,
-    context,
-    spaceId,
-    "spaces:write",
-  );
+  await requireSpaceRight(env, context, spaceId, "attachWorkspace");
   const body = (await request.json().catch(() => ({}))) as Record<
     string,
     unknown
@@ -210,12 +213,20 @@ export async function handleRevokeWorkspaceSpaceGrant(
   const context = await securityContext(request, env, ctx);
   const existing = await loadWorkspaceSpaceGrant(env, grantId);
   if (!existing) throw new HttpError(404, "Workspace Space Grant not found");
-  await authorizeWorkspaceOwner(
-    env.CONCLAVE_DB,
-    context,
-    String(existing.workspace_id),
-    "workspace:manage",
-  );
+  try {
+    await authorizeWorkspaceOwner(
+      env.CONCLAVE_DB,
+      context,
+      String(existing.workspace_id),
+      "workspace:manage",
+    );
+  } catch {
+    await authorizeSpaceOwner(
+      env.CONCLAVE_DB,
+      context,
+      String(existing.space_id),
+    );
+  }
   if (!isWorkspaceSpaceGrantStatus(existing.status)) {
     throw new HttpError(409, "Workspace Grant has an invalid stored status");
   }

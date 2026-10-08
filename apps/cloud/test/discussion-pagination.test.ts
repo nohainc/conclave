@@ -20,7 +20,8 @@ type Page = {
 
 function fixture(count = 7) {
   const sqlite = new DatabaseSync(":memory:");
-  sqlite.exec(`CREATE TABLE discussion_messages(id TEXT PRIMARY KEY, thread_id TEXT,
+  sqlite.exec(`CREATE TABLE users(id TEXT PRIMARY KEY, display_name TEXT);
+    CREATE TABLE discussion_messages(id TEXT PRIMARY KEY, thread_id TEXT,
     author_user_id TEXT, body TEXT, references_json TEXT, edited_at TEXT, created_at TEXT);
     CREATE INDEX discussion_time ON discussion_messages(thread_id, created_at);`);
   const insert = sqlite.prepare(

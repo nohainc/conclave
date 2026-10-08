@@ -1265,7 +1265,7 @@ void main() {
     // Switch to Members Tab
     await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
-    expect(find.text('Space roles control collaboration across team members.'),
+    expect(find.text('Choose what each member can do in this Space.'),
         findsOneWidget);
     expect(find.byTooltip('Share Space'), findsOneWidget);
 
@@ -2088,17 +2088,6 @@ void main() {
 
     expect(openedWorkspaceId, 'ws-prod');
 
-    await tester.tap(find.byTooltip('Edit Workspace access'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Read repository files'));
-    await tester.tap(find.text('Change repository files'));
-    await tester.tap(find.text('Confirm access'));
-    await tester.pumpAndSettle();
-    expect(customDataSource.savedPermissions,
-        ['repository:read', 'repository:write']);
-    await tester.pump(const Duration(seconds: 10));
-    await tester.pumpAndSettle();
-
     await tester.binding.setSurfaceSize(null);
   });
 
@@ -2302,7 +2291,8 @@ void main() {
     expect(find.text('Connect Workspace'), findsOneWidget); // Dialog title
 
     // Attempt to connect already connected workspace
-    await tester.tap(find.widgetWithText(FilledButton, 'Connect'));
+    await tester
+        .tap(find.widgetWithText(FilledButton, 'Authorize and connect'));
     await tester.pumpAndSettle();
 
     // Verify warning is displayed and dialog is still visible
@@ -2431,7 +2421,7 @@ void main() {
     // Verify distinct sections
     expect(find.text('Members (1)'), findsOneWidget);
     expect(find.text('Vitalii Noha'), findsOneWidget);
-    expect(find.text('owner'), findsOneWidget);
+    expect(find.text('Owner'), findsOneWidget);
 
     expect(find.text('Pending invitations (1)'), findsOneWidget);
     expect(find.text('ulikossnokia@gmail.com'), findsOneWidget);

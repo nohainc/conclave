@@ -1,3 +1,8 @@
+export * from "./space-permissions.js";
+import {
+  spaceMemberPermissions,
+  type SpaceMemberPermissions,
+} from "./space-permissions.js";
 /** Security primitives for current Conclave identities and resources. */
 
 export const SPACE_ROLES = ["owner", "collaborator", "viewer"] as const;
@@ -76,6 +81,7 @@ export interface SecurityContext {
   readonly userId: string;
   readonly user: AuthenticatedUser;
   readonly spaceRoles: Readonly<Record<string, SpaceRole>>;
+  readonly spacePermissions?: Readonly<Record<string, SpaceMemberPermissions>>;
   readonly sessionId: string;
   readonly clientType: ClientType;
   readonly audience?: string;
@@ -104,9 +110,30 @@ export function authorize(
     throw new AuthorizationError(permission);
   }
   const role = context.spaceRoles[spaceId];
-  if (!role || !SPACE_ROLE_PERMISSIONS[role]?.includes(permission)) {
+  if (
+    !role ||
+    !allowsSpacePermission(
+      role,
+      context.spacePermissions?.[spaceId],
+      permission,
+    )
+  ) {
     throw new AuthorizationError(permission, spaceId);
   }
+}
+
+export function allowsSpacePermission(
+  role: SpaceRole,
+  rights: SpaceMemberPermissions | undefined,
+  permission: Permission,
+): boolean {
+  if (!rights || role === "owner")
+    return SPACE_ROLE_PERMISSIONS[role].includes(permission);
+  if (permission === "spaces:read") return true;
+  if (permission === "spaces:write")
+    return rights.chat || rights.work || rights.manageOwnThreads;
+  if (permission === "run.start") return rights.chat || rights.work;
+  return false;
 }
 
 export interface DatabaseStatement {
@@ -164,22 +191,29 @@ export async function resolveSpaceSecurityContextFromIdentity(
   }
   const memberships = await db
     .prepare(
-      `SELECT sm.space_id, sm.role
+      `SELECT sm.space_id, sm.role, s.settings_json AS settingsJson
        FROM space_memberships sm JOIN spaces s ON s.id = sm.space_id
        WHERE sm.user_id = ?1`,
     )
     .bind(user.id)
-    .all<{ space_id: string; role: SpaceRole }>();
+    .all<{ space_id: string; role: SpaceRole; settingsJson: string }>();
   const spaceRoles: Record<string, SpaceRole> = {};
+  const spacePermissions: Record<string, SpaceMemberPermissions> = {};
   for (const membership of memberships.results ?? []) {
     if (SPACE_ROLES.includes(membership.role)) {
       spaceRoles[membership.space_id] = membership.role;
+      spacePermissions[membership.space_id] = spaceMemberPermissions(
+        membership.role,
+        membership.settingsJson,
+        user.id,
+      );
     }
   }
   return {
     userId: user.id,
     user,
     spaceRoles,
+    spacePermissions,
     sessionId: identity.sessionId,
     clientType,
     ...(audience ? { audience } : {}),
@@ -197,16 +231,24 @@ export async function authorizeSpaceMembership(
   }
   const membership = await db
     .prepare(
-      `SELECT sm.role FROM space_memberships sm
+      `SELECT sm.role, s.settings_json AS settingsJson FROM space_memberships sm
        JOIN spaces s ON s.id = sm.space_id
        WHERE sm.space_id = ?1 AND sm.user_id = ?2`,
     )
     .bind(spaceId, context.userId)
-    .first<{ role: SpaceRole }>();
+    .first<{ role: SpaceRole; settingsJson?: string }>();
   if (
     !membership ||
     !SPACE_ROLES.includes(membership.role) ||
-    !SPACE_ROLE_PERMISSIONS[membership.role].includes(permission)
+    !allowsSpacePermission(
+      membership.role,
+      spaceMemberPermissions(
+        membership.role,
+        membership.settingsJson,
+        context.userId,
+      ),
+      permission,
+    )
   ) {
     throw new AuthorizationError(permission, spaceId);
   }

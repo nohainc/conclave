@@ -53,10 +53,12 @@ extension _ThreadActions on _ThreadPageState {
         ? 'Please use the attached inputs to complete the request.'
         : text;
     final attachments = List<Map<String, dynamic>>.from(_workAttachments);
-    final workflowId = _workflow.split(':').first;
-    final workflowVersion = int.tryParse(_workflow.split(':v').last) ?? 1;
-    final selectedWorkflow =
-        _workflowCatalog.where((w) => w.reference == _workflow).firstOrNull;
+    final workflowId = _effectiveWorkflow.split(':').first;
+    final workflowVersion =
+        int.tryParse(_effectiveWorkflow.split(':v').last) ?? 1;
+    final selectedWorkflow = _availableWorkflows
+        .where((w) => w.reference == _effectiveWorkflow)
+        .firstOrNull;
     final bindingId = selectedWorkflow?.composerBindingId;
     final bindings = _composerWorkConfig['bindings'];
     final rawBinding =
@@ -407,6 +409,7 @@ extension _ThreadActions on _ThreadPageState {
   }
 
   Future<void> _sendDiscussion() async {
+    if (!widget.space.effectivePermissions.chat) return;
     final text = _discussionController.text;
     if (text.trim().isEmpty) return;
     _discussionController.clear();

@@ -94,6 +94,10 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
           fontWeight: FontWeight.w500,
         ),
       ),
+      subtitle: !thread.creatorIsOwner && thread.creatorEmail.isNotEmpty
+          ? Text('Created by ${thread.creatorEmail}',
+              style: const TextStyle(fontSize: 12))
+          : null,
       onTap: archived || pending ? null : () => widget.onOpenThread(thread.id),
       trailing: (isOwner || (canManage && thread.canConfigureWork)) && !pending
           ? Row(
@@ -157,6 +161,15 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Allow Work workflows'),
+              subtitle: const Text(
+                  'When turned off, members can use Chat only. Existing work and workspace connections are kept.'),
+              value: allowWork,
+              onChanged: isOwner && !_savingWorkSetting ? _setAllowWork : null,
+            ),
+            const SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -169,7 +182,7 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                     ),
                   ),
                 ),
-                if (canManage)
+                if (canAttachWorkspace)
                   IconButton(
                     icon: const Icon(Icons.add),
                     tooltip: 'Connect Workspace',
@@ -214,21 +227,13 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    onTap: () {
-                      if (widget.onOpenWorkspace != null) {
-                        widget.onOpenWorkspace!(workspaceId);
-                      }
-                    },
-                    trailing: isOwner
+                    onTap: workspace['canOpenWorkspace'] == false
+                        ? null
+                        : () {
+                            widget.onOpenWorkspace?.call(workspaceId);
+                          },
+                    trailing: isOwner || workspace['canRevoke'] == true
                         ? Row(mainAxisSize: MainAxisSize.min, children: [
-                            IconButton(
-                              icon:
-                                  const Icon(Icons.security_outlined, size: 18),
-                              tooltip: 'Edit Workspace access',
-                              onPressed: workspace['optimistic'] == true
-                                  ? null
-                                  : () => _editWorkspaceAccess(workspace),
-                            ),
                             IconButton(
                               icon: const Icon(Icons.link_off, size: 18),
                               tooltip: 'Revoke grant',
@@ -260,206 +265,228 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
     }
   }
 
-  Widget _membersTab() => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Space roles control collaboration across team members.',
+  Widget _membersTab() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  'Choose what each member can do in this Space.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              if (canInvite)
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  tooltip: 'Share Space',
+                  splashRadius: 20,
+                  onPressed: _share,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (membersError != null)
+            const Text(
+                'Members could not be loaded. Reopen this tab to try again.'),
+          if (membersLoading)
+            const LinearProgressIndicator()
+          else ...[
+            if (members.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 8, bottom: 4),
+                child: Text(
+                  'Members (${members.length})',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  horizontalMargin: 0,
+                  columnSpacing: 20,
+                  dataRowMinHeight: 56,
+                  dataRowMaxHeight: 64,
+                  columns: const [
+                    DataColumn(label: Text('Member')),
+                    DataColumn(label: Text('Chat')),
+                    DataColumn(label: Text('Work')),
+                    DataColumn(label: Text('Own threads')),
+                    DataColumn(label: Text('Attach workspace')),
+                    DataColumn(label: Text('Invite members')),
+                    DataColumn(label: Text('')),
+                  ],
+                  rows: members
+                      .map((member) => DataRow(cells: [
+                            DataCell(Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(member.displayName.isNotEmpty
+                                            ? member.displayName
+                                            : member.email),
+                                        if (member.role == 'owner') ...[
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: ConclaveColors
+                                                  .primarySoftColor(isDark),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              'Owner',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: ConclaveColors
+                                                    .primaryForeground(isDark),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ]),
+                                  if (member.displayName != member.email)
+                                    Text(member.email,
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant)),
+                                ])),
+                            for (final entry
+                                in member.effectivePermissions.toJson().entries)
+                              DataCell(Checkbox(
+                                key: ValueKey(
+                                    'permission-${member.userId}-${entry.key}'),
+                                value: entry.value,
+                                onChanged: isOwner &&
+                                        member.role != 'owner' &&
+                                        !_savingMembers.contains(member.userId)
+                                    ? (value) => _setMemberPermission(
+                                        member, entry.key, value == true)
+                                    : null,
+                              )),
+                            DataCell(isOwner && member.role != 'owner'
+                                ? IconButton(
+                                    icon: const Icon(
+                                        Icons.person_remove_outlined),
+                                    tooltip: 'Remove from Space',
+                                    onPressed: () => _removeMember(member))
+                                : const SizedBox.shrink()),
+                          ]))
+                      .toList(),
+                ),
+              ),
+            ] else
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text('No members found.'),
+              ),
+            if (invitations.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  'Pending invitations (${invitations.length})',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              ...invitations.map((invite) {
+                final timeText = _formatInvitationTime(invite.createdAt);
+                final roleText = invite.role.toUpperCase();
+                final subtitle = timeText.isNotEmpty
+                    ? '$roleText · Invited $timeText'
+                    : roleText;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.amber.withValues(alpha: 0.15),
+                    child: const Icon(
+                      Icons.mail_outline,
+                      size: 16,
+                      color: Colors.amber,
+                    ),
+                  ),
+                  title: Text(
+                    invite.email,
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  subtitle: Text(
+                    subtitle,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 12,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                ),
-                if (isOwner)
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    tooltip: 'Share Space',
-                    splashRadius: 20,
-                    onPressed: _share,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (membersError != null)
-              const Text(
-                  'Members could not be loaded. Reopen this tab to try again.'),
-            if (membersLoading)
-              const LinearProgressIndicator()
-            else ...[
-              if (members.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.only(top: 8, bottom: 4),
-                  child: Text(
-                    'Members (${members.length})',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                ...members.map((member) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: CircleAvatar(
-                        radius: 16,
-                        backgroundColor:
-                            ConclaveBrand.accent.withValues(alpha: 0.15),
-                        child: Text(
-                          (member.displayName.isNotEmpty
-                                  ? member.displayName[0]
-                                  : member.email.isNotEmpty
-                                      ? member.email[0]
-                                      : 'M')
-                              .toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 12,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: Colors.amber.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: const Text(
+                          'PENDING',
+                          style: TextStyle(
+                            fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: ConclaveBrand.accent,
+                            color: Colors.amber,
                           ),
                         ),
                       ),
-                      title: Text(
-                        member.displayName.isNotEmpty
-                            ? member.displayName
-                            : member.email,
-                        style: const TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w500,
+                      if (canInvite) ...[
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.refresh, size: 18),
+                          tooltip: 'Resend invitation',
+                          onPressed: () => _resendInvitation(invite),
                         ),
-                      ),
-                      subtitle: member.displayName.isNotEmpty &&
-                              member.email.isNotEmpty &&
-                              member.displayName != member.email
-                          ? Text(member.email)
-                          : null,
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Chip(label: Text(member.role)),
-                          if (isOwner && member.role != 'owner') ...[
-                            const SizedBox(width: 4),
-                            PopupMenuButton<String>(
-                              tooltip: 'Member actions',
-                              onSelected: (action) {
-                                if (action == 'role') {
-                                  _changeRole(member);
-                                } else if (action == 'remove') {
-                                  _removeMember(member);
-                                }
-                              },
-                              itemBuilder: (context) => const [
-                                PopupMenuItem(
-                                  value: 'role',
-                                  child: Text('Change role'),
-                                ),
-                                PopupMenuItem(
-                                  value: 'remove',
-                                  child: Text('Remove from Space'),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    )),
-              ] else
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('No members found.'),
-                ),
-              if (invitations.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    'Pending invitations (${invitations.length})',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                ...invitations.map((invite) {
-                  final timeText = _formatInvitationTime(invite.createdAt);
-                  final roleText = invite.role.toUpperCase();
-                  final subtitle = timeText.isNotEmpty
-                      ? '$roleText · Invited $timeText'
-                      : roleText;
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(
-                      radius: 16,
-                      backgroundColor: Colors.amber.withValues(alpha: 0.15),
-                      child: const Icon(
-                        Icons.mail_outline,
-                        size: 16,
-                        color: Colors.amber,
-                      ),
-                    ),
-                    title: Text(
-                      invite.email,
-                      style: const TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    subtitle: Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: Colors.amber.withValues(alpha: 0.4),
-                            ),
-                          ),
-                          child: const Text(
-                            'PENDING',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.amber,
-                            ),
-                          ),
+                        IconButton(
+                          icon: const Icon(Icons.cancel_outlined, size: 18),
+                          tooltip: 'Revoke invitation',
+                          onPressed: () => _revokeInvitation(invite),
                         ),
-                        if (isOwner) ...[
-                          const SizedBox(width: 4),
-                          IconButton(
-                            icon: const Icon(Icons.refresh, size: 18),
-                            tooltip: 'Resend invitation',
-                            onPressed: () => _resendInvitation(invite),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.cancel_outlined, size: 18),
-                            tooltip: 'Revoke invitation',
-                            onPressed: () => _revokeInvitation(invite),
-                          ),
-                        ],
                       ],
-                    ),
-                  );
-                }),
-              ],
+                    ],
+                  ),
+                );
+              }),
             ],
           ],
-        ),
-      );
+        ],
+      ),
+    );
+  }
 }

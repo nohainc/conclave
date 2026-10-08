@@ -85,11 +85,19 @@ function db(
 ) {
   return {
     prepare(query: string) {
+      let _values: unknown[] = [];
       return {
-        bind() {
+        bind(...bound: unknown[]) {
+          _values = bound;
           return this;
         },
         async first<T>() {
+          if (query.includes("workflow_id AS workflowId"))
+            return {
+              workflowId: "direct",
+              requesterUserId: "user-a",
+              threadId: lease?.threadId,
+            } as T;
           if (query.includes("thread_runtime_leases")) return lease as T;
           if (query.includes("FROM threads ws")) return thread as T;
           return query.includes("space_memberships") ? ({ role } as T) : null;

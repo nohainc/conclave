@@ -11,12 +11,14 @@ it("reads threads and configuration with distinct update timestamps", async () =
   const sqlite = new DatabaseSync(":memory:");
   try {
     sqlite.exec(`
-      CREATE TABLE spaces (id TEXT, settings_json TEXT);
+      CREATE TABLE spaces (id TEXT, owner_user_id TEXT, settings_json TEXT);
+      CREATE TABLE users (id TEXT, email TEXT, display_name TEXT);
       CREATE TABLE threads (id TEXT, space_id TEXT, name TEXT, status TEXT,
         access_policy_json TEXT, lead_user_id TEXT, created_at TEXT, updated_at TEXT);
       CREATE TABLE thread_work_configs (thread_id TEXT, config_json TEXT, updated_at TEXT);
       CREATE TABLE space_memberships (id TEXT, space_id TEXT, user_id TEXT, role TEXT, created_at TEXT, updated_at TEXT);
-      INSERT INTO spaces VALUES ('space-test', '{}');
+      INSERT INTO spaces VALUES ('space-test', 'user-owner', '{}');
+      INSERT INTO users VALUES ('user-owner', 'owner@conclave.test', 'Owner');
       INSERT INTO threads VALUES ('stream-test', 'space-test', 'Test stream', 'active', '{}', 'user-owner', 'created', 'stream-updated');
       INSERT INTO thread_work_configs VALUES ('stream-test', '{"defaultWorkflowId":"full_cycle","bindings":{}}', 'config-updated');
       INSERT INTO space_memberships VALUES ('membership', 'space-test', 'user-owner', 'owner', 'created', 'updated');

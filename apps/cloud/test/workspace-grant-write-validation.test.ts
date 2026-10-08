@@ -72,7 +72,7 @@ async function createGrant(
     new Request("https://cloud.test", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ confirmContribution: true, ...body }),
     }),
     env,
     context,
@@ -96,7 +96,7 @@ describe("Workspace Grant write validation", () => {
         new Request("https://cloud.test", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ confirmContribution: true, ...body }),
         }),
         env,
         context,

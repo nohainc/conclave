@@ -49,6 +49,7 @@ mixin _CatalogApi on _AxApiClientCore {
       headers: _headers(contentType: 'application/json'),
       body: jsonEncode({
         'workspaceId': workspaceId,
+        'confirmContribution': true,
         'allowedPermissions': allowedPermissions,
       }),
     );

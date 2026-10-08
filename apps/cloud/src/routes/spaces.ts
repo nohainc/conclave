@@ -1,3 +1,15 @@
+import {
+  defaultSpaceMemberPermissions,
+  spaceMemberPermissions,
+  SPACE_MEMBER_PERMISSION_KEYS,
+  parseSpaceSettings,
+} from "@conclave/security";
+import {
+  loadSpacePermissions,
+  requireSpaceRight,
+  validateMemberPermissions,
+  permissionJsonPath,
+} from "./space-permissions.js";
 import { conditionalJson } from "./conditional-read.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
@@ -69,6 +81,11 @@ export async function handleListSpaces(
         name: row.name,
         description: row.description,
         role: row.role,
+        permissions: spaceMemberPermissions(
+          row.role,
+          row.settingsJson,
+          context.userId,
+        ),
         instructions:
           typeof settings.instructions === "string"
             ? settings.instructions
@@ -105,6 +122,13 @@ export async function handleCreateSpace(
       ? (body.settings as Record<string, unknown>)
       : {};
   delete settings.defaultExecutionPolicy;
+  delete settings.memberPermissions;
+  delete settings.invitationPermissions;
+  if (
+    settings.allowWork !== undefined &&
+    typeof settings.allowWork !== "boolean"
+  )
+    throw new HttpError(400, "allowWork must be boolean");
   const now = new Date().toISOString();
   const id = `space-${crypto.randomUUID()}`;
 
@@ -198,6 +222,11 @@ export async function handleGetSpace(
       name: row.name,
       description: row.description,
       role: row.role,
+      permissions: spaceMemberPermissions(
+        row.role,
+        row.settingsJson,
+        context.userId,
+      ),
       instructions:
         typeof settings.instructions === "string" ? settings.instructions : "",
       settings,
@@ -238,6 +267,8 @@ export async function handleUpdateSpace(
     }>();
   if (!existing) throw new HttpError(404, "Space not found");
 
+  if (context.userId !== existing.ownerUserId)
+    throw new HttpError(403, "Only the Space owner can update Space settings");
   const body = (await request.json()) as Record<string, unknown>;
   if (
     body.settings &&
@@ -250,6 +281,21 @@ export async function handleUpdateSpace(
     )
       throw new HttpError(403, "Only the Space owner can reorder Threads");
   }
+  const incomingSettings = parseSpaceSettings(body.settings);
+  if (
+    Object.hasOwn(incomingSettings, "memberPermissions") ||
+    Object.hasOwn(incomingSettings, "invitationPermissions")
+  ) {
+    throw new HttpError(
+      400,
+      "Member rights must be changed through the member permission controls",
+    );
+  }
+  if (
+    incomingSettings.allowWork !== undefined &&
+    typeof incomingSettings.allowWork !== "boolean"
+  )
+    throw new HttpError(400, "allowWork must be boolean");
   const settings = {
     ...spaceSettings(existing.settingsJson),
     ...(typeof body.settings === "object" && body.settings !== null
@@ -292,14 +338,21 @@ export async function handleUpdateSpace(
       throw new HttpError(409, "You already have a Space with this name");
     }
   }
+  const settingsPatch = {
+    ...incomingSettings,
+    ...(typeof body.instructions === "string"
+      ? { instructions: body.instructions }
+      : {}),
+    ...(typeof body.archived === "boolean" ? { archived: body.archived } : {}),
+  };
   const mutation = env.CONCLAVE_DB.prepare(
     `UPDATE spaces SET name = ?1, description = ?2,
-       settings_json = ?3, updated_at = ?4
+       settings_json = json_patch(settings_json, ?3), updated_at = ?4
      WHERE id = ?5`,
   ).bind(
     space.name,
     space.description,
-    JSON.stringify(space.settings),
+    JSON.stringify(settingsPatch),
     now,
     spaceId,
   );
@@ -407,7 +460,21 @@ export async function handleListSpaceMembers(
   )
     .bind(spaceId)
     .all();
-  return json({ members: rows.results ?? [] });
+  const space = await env.CONCLAVE_DB.prepare(
+    "SELECT settings_json AS settingsJson FROM spaces WHERE id = ?1",
+  )
+    .bind(spaceId)
+    .first<{ settingsJson: string }>();
+  return json({
+    members: (rows.results ?? []).map((row) => ({
+      ...row,
+      permissions: spaceMemberPermissions(
+        String(row.role),
+        space?.settingsJson,
+        String(row.userId),
+      ),
+    })),
+  });
 }
 
 export async function handleListSpaceInvitations(
@@ -416,12 +483,20 @@ export async function handleListSpaceInvitations(
   spaceId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeSpaceOwnerOrThrow(request, env, spaceId, accessContext);
+  const context = await authorizeRequest(
+    request,
+    env,
+    "spaces:read",
+    spaceId,
+    accessContext,
+  );
+  const policy = await loadSpacePermissions(env, context.userId, spaceId);
+  if (!policy.rights.inviteMembers) return json({ invitations: [] });
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT id, email, role, status, expires_at AS expiresAt, created_at AS createdAt
-     FROM space_invitations WHERE space_id = ?1 AND status = 'pending' ORDER BY created_at DESC`,
+     FROM space_invitations WHERE space_id = ?1 AND status = 'pending' AND (?2 = 'owner' OR invited_by_user_id = ?3) ORDER BY created_at DESC`,
   )
-    .bind(spaceId)
+    .bind(spaceId, policy.role, context.userId)
     .all();
   return json({ invitations: rows.results ?? [] });
 }
@@ -448,11 +523,18 @@ export async function handleCreateSpaceInvitation(
   spaceId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const context = await authorizeSpaceOwnerOrThrow(
+  const context = await authorizeRequest(
     request,
     env,
+    "spaces:read",
     spaceId,
     accessContext,
+  );
+  const policy = await requireSpaceRight(
+    env,
+    context,
+    spaceId,
+    "inviteMembers",
   );
   const body = (await request.json()) as Record<string, unknown>;
   const email = requiredString(body.email, "email").trim().toLowerCase();
@@ -460,6 +542,26 @@ export async function handleCreateSpaceInvitation(
     body.role === "viewer" || body.role === "collaborator" ? body.role : null;
   if (!role || !email.includes("@"))
     throw new HttpError(400, "Valid email and Space role are required");
+  const requestedPermissions =
+    body.permissions === undefined
+      ? defaultSpaceMemberPermissions(role)
+      : validateMemberPermissions(body.permissions);
+  const permissions = Object.fromEntries(
+    SPACE_MEMBER_PERMISSION_KEYS.map((key) => [
+      key,
+      requestedPermissions[key] && policy.rights[key],
+    ]),
+  );
+  if (
+    body.permissions !== undefined &&
+    SPACE_MEMBER_PERMISSION_KEYS.some(
+      (key) => requestedPermissions[key] && !policy.rights[key],
+    )
+  )
+    throw new HttpError(
+      403,
+      "You cannot invite a member with rights you do not hold",
+    );
   const existingMember = await env.CONCLAVE_DB.prepare(
     `SELECT pm.user_id FROM space_memberships pm
      JOIN users u ON u.id = pm.user_id
@@ -487,11 +589,11 @@ export async function handleCreateSpaceInvitation(
   const now = new Date();
   const id = `pinv-${crypto.randomUUID()}`;
   const token = `space_invite_${crypto.randomUUID()}_${crypto.randomUUID()}`;
-  await env.CONCLAVE_DB.prepare(
-    `INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?8, ?8)`,
-  )
-    .bind(
+    ).bind(
       id,
       spaceId,
       email,
@@ -500,8 +602,16 @@ export async function handleCreateSpaceInvitation(
       context.userId,
       new Date(now.getTime() + 7 * 86400000).toISOString(),
       now.toISOString(),
-    )
-    .run();
+    ),
+    env.CONCLAVE_DB.prepare(
+      "UPDATE spaces SET settings_json = json_set(settings_json, ?1, json(?2)), updated_at = ?3 WHERE id = ?4",
+    ).bind(
+      permissionJsonPath("invitationPermissions", id),
+      JSON.stringify(permissions),
+      now.toISOString(),
+      spaceId,
+    ),
+  ]);
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO space_audit_log (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
      VALUES (?1, ?2, 'user', ?3, 'space.invitation.created', 'invitation', ?4, ?5, ?6)`,
@@ -566,17 +676,40 @@ export async function handleChangeSpaceMemberRole(
     accessContext,
   );
   const body = (await request.json()) as Record<string, unknown>;
-  const role =
-    body.role === "viewer" || body.role === "collaborator" ? body.role : null;
+  const permissions =
+    body.permissions === undefined
+      ? null
+      : validateMemberPermissions(body.permissions);
+  const role = permissions
+    ? SPACE_MEMBER_PERMISSION_KEYS.some((key) => permissions[key])
+      ? "collaborator"
+      : "viewer"
+    : body.role === "viewer" || body.role === "collaborator"
+      ? body.role
+      : null;
   if (!role)
-    throw new HttpError(400, "Space role must be collaborator or viewer");
-  const result = await env.CONCLAVE_DB.prepare(
-    `UPDATE space_memberships SET role = ?1, updated_at = ?2 WHERE space_id = ?3 AND user_id = ?4 AND role <> 'owner'`,
+    throw new HttpError(400, "Space role or member permissions are required");
+  const member = await env.CONCLAVE_DB.prepare(
+    "SELECT role FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
   )
-    .bind(role, new Date().toISOString(), spaceId, userId)
-    .run();
-  if (!result.success || (result.meta?.changes ?? 0) === 0)
-    throw new HttpError(404, "Space member not found");
+    .bind(spaceId, userId)
+    .first<{ role: string }>();
+  if (!member) throw new HttpError(404, "Space member not found");
+  if (member.role === "owner")
+    throw new HttpError(403, "Owner permissions cannot be changed");
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      "UPDATE space_memberships SET role = ?1, updated_at = ?2 WHERE space_id = ?3 AND user_id = ?4 AND role <> 'owner'",
+    ).bind(role, new Date().toISOString(), spaceId, userId),
+    env.CONCLAVE_DB.prepare(
+      "UPDATE spaces SET settings_json = json_set(settings_json, ?1, json(?2)), updated_at = ?3 WHERE id = ?4",
+    ).bind(
+      permissionJsonPath("memberPermissions", userId),
+      JSON.stringify(permissions ?? defaultSpaceMemberPermissions(role)),
+      new Date().toISOString(),
+      spaceId,
+    ),
+  ]);
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO space_audit_log (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, 'space.member.role_changed', 'user', ?4, ?5, ?6)`,
   )
@@ -585,14 +718,19 @@ export async function handleChangeSpaceMemberRole(
       spaceId,
       context.userId,
       userId,
-      JSON.stringify({ role }),
+      JSON.stringify({ role, permissions }),
       new Date().toISOString(),
     )
     .run();
   await publishCollaborationEvent(env, "space.updated", spaceId, userId, {
     additionalRecipientUserIds: [userId],
   });
-  return json({ spaceId, userId, role });
+  return json({
+    spaceId,
+    userId,
+    role,
+    permissions: permissions ?? defaultSpaceMemberPermissions(role),
+  });
 }
 
 export async function handleRemoveSpaceMember(
@@ -615,6 +753,11 @@ export async function handleRemoveSpaceMember(
     .run();
   if (!result.success || (result.meta?.changes ?? 0) === 0)
     throw new HttpError(404, "Space member not found");
+  await env.CONCLAVE_DB.prepare(
+    "UPDATE spaces SET settings_json = json_remove(settings_json, ?1) WHERE id = ?2",
+  )
+    .bind(permissionJsonPath("memberPermissions", userId), spaceId)
+    .run();
   // A contributed execution Workspace is owned by the departing user. Revoke
   // that user's Space Grants with the membership removal so the scheduler
   // cannot continue using infrastructure after collaboration ends.
@@ -650,19 +793,28 @@ export async function handleExpireSpaceInvitation(
   invitationId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const context = await authorizeSpaceOwnerOrThrow(
+  const context = await authorizeRequest(
     request,
     env,
+    "spaces:read",
     spaceId,
     accessContext,
   );
+  const policy = await requireSpaceRight(
+    env,
+    context,
+    spaceId,
+    "inviteMembers",
+  );
   const existing = await env.CONCLAVE_DB.prepare(
-    `SELECT id, email FROM space_invitations WHERE id = ?1 AND space_id = ?2 AND status = 'pending'`,
+    `SELECT id, email, invited_by_user_id AS invitedByUserId FROM space_invitations WHERE id = ?1 AND space_id = ?2 AND status = 'pending'`,
   )
     .bind(invitationId, spaceId)
-    .first<{ id: string; email: string }>();
+    .first<{ id: string; email: string; invitedByUserId: string }>();
   if (!existing) throw new HttpError(404, "Pending invitation not found");
 
+  if (policy.role !== "owner" && existing.invitedByUserId !== context.userId)
+    throw new HttpError(403, "Only your own invitations can be revoked");
   const result = await env.CONCLAVE_DB.prepare(
     `UPDATE space_invitations SET status = 'expired', updated_at = ?1 WHERE id = ?2 AND space_id = ?3 AND status = 'pending'`,
   )
@@ -670,6 +822,11 @@ export async function handleExpireSpaceInvitation(
     .run();
   if (!result.success || (result.meta?.changes ?? 0) === 0)
     throw new HttpError(404, "Pending invitation not found");
+  await env.CONCLAVE_DB.prepare(
+    "UPDATE spaces SET settings_json = json_remove(settings_json, ?1) WHERE id = ?2",
+  )
+    .bind(permissionJsonPath("invitationPermissions", invitationId), spaceId)
+    .run();
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO space_audit_log (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, 'space.invitation.expired', 'invitation', ?4, '{}', ?5)`,
   )
@@ -732,11 +889,12 @@ export async function handleAcceptSpaceInvitation(
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
   const invitation = await env.CONCLAVE_DB.prepare(
-    `SELECT id, space_id AS spaceId, email, role, status, expires_at AS expiresAt
+    `SELECT id, space_id AS spaceId, email, role, status, invited_by_user_id AS invitedByUserId, expires_at AS expiresAt
      FROM space_invitations WHERE id = ?1`,
   )
     .bind(invitationId)
     .first<{
+      invitedByUserId: string;
       id: string;
       spaceId: string;
       email: string;
@@ -753,10 +911,45 @@ export async function handleAcceptSpaceInvitation(
     invitation.email.trim().toLowerCase()
   )
     throw new HttpError(403, "Invitation email does not match signed-in user");
+  const inviter = await loadSpacePermissions(
+    env,
+    invitation.invitedByUserId,
+    invitation.spaceId,
+  );
+  if (!inviter.rights.inviteMembers)
+    throw new HttpError(403, "The inviter can no longer invite members");
+  const settings = parseSpaceSettings(inviter.settingsJson);
+  const snapshot = parseSpaceSettings(
+    parseSpaceSettings(settings.invitationPermissions)[invitation.id],
+  );
+  const defaults = defaultSpaceMemberPermissions(invitation.role);
+  const permissions = Object.fromEntries(
+    SPACE_MEMBER_PERMISSION_KEYS.map((key) => [
+      key,
+      (Object.keys(snapshot).length ? snapshot[key] === true : defaults[key]) &&
+        inviter.rights[key],
+    ]),
+  );
+  const existingMember = await env.CONCLAVE_DB.prepare(
+    "SELECT user_id FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
+  )
+    .bind(invitation.spaceId, context.userId)
+    .first();
+  if (existingMember)
+    throw new HttpError(409, "You are already a member of this Space");
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.batch([
     env.CONCLAVE_DB.prepare(
-      `INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5) ON CONFLICT(space_id, user_id) DO UPDATE SET role = excluded.role, updated_at = excluded.updated_at`,
+      "UPDATE spaces SET settings_json = json_remove(json_set(settings_json, ?1, json(?2)), ?3), updated_at = ?4 WHERE id = ?5",
+    ).bind(
+      permissionJsonPath("memberPermissions", context.userId),
+      JSON.stringify(permissions),
+      permissionJsonPath("invitationPermissions", invitation.id),
+      now,
+      invitation.spaceId,
+    ),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5) ON CONFLICT(space_id, user_id) DO NOTHING`,
     ).bind(
       `pm-${crypto.randomUUID()}`,
       invitation.spaceId,

@@ -110,7 +110,16 @@ class _ThreadPageState extends State<ThreadPage>
   String _workflow = '';
   List<AxBuiltinWorkflow> _workflowCatalog = const [];
   List<AxBuiltinWorkflow> get _currentWorkflows =>
-      _currentWorkflowVersions(_workflowCatalog);
+      _currentWorkflowVersions(_availableWorkflows);
+  List<AxBuiltinWorkflow> get _availableWorkflows => _workflowCatalog
+      .where((workflow) => workflow.id == 'chat'
+          ? widget.space.effectivePermissions.chat
+          : widget.space.allowWork && widget.space.effectivePermissions.work)
+      .toList();
+  String get _effectiveWorkflow =>
+      _availableWorkflows.any((item) => item.reference == _workflow)
+          ? _workflow
+          : _availableWorkflows.firstOrNull?.reference ?? '';
   bool _loadingWorkflows = true;
   String? _workflowCatalogError;
   late AxDiscussionCache _fallbackDiscussionCache;
@@ -562,7 +571,8 @@ class _ThreadPageState extends State<ThreadPage>
   }
 
   bool get _canExecute =>
-      widget.space.role == 'owner' || widget.thread.canExecuteWork;
+      (widget.space.role == 'owner' || widget.thread.canExecuteWork) &&
+      _effectiveWorkflow.isNotEmpty;
   bool get _canConfigureWork =>
       widget.space.role == 'owner' || widget.thread.canConfigureWork;
 
@@ -680,9 +690,15 @@ class _ThreadPageState extends State<ThreadPage>
               ? message.authorUserId == widget.currentUserId
               : message.isMe;
       final date = DateTime.tryParse(message.createdAt)?.toLocal();
+      final rawAuthor = isMe ? 'You' : (message.authorName?.trim() ?? '');
+      final displayAuthor = (rawAuthor.isEmpty ||
+              rawAuthor == message.authorUserId ||
+              rawAuthor.startsWith('usr_'))
+          ? (isMe ? 'You' : 'Member')
+          : rawAuthor;
       return _DiscussionItem(
           id: message.id,
-          author: isMe ? 'You' : message.authorName ?? 'Member',
+          author: displayAuthor,
           text: message.body,
           sentAt: date == null ? null : _chatTimestamp(date),
           isMe: isMe);
@@ -837,6 +853,7 @@ class _ThreadPageState extends State<ThreadPage>
           key: alignWithWork ? _chatComposerKey : null,
           controller: _discussionController,
           chatStyle: true,
+          enabled: widget.space.effectivePermissions.chat,
           onSend: _sendDiscussion,
           additionalControlsBuilder: alignWithWork
               ? (_) => ValueListenableBuilder<double>(
@@ -912,8 +929,8 @@ class _ThreadPageState extends State<ThreadPage>
         historyController: _workHistoryController,
         currentUserId: widget.currentUserId,
         currentUserName: widget.currentUserName,
-        workflow: _workflow,
-        workflowCatalog: _workflowCatalog,
+        workflow: _effectiveWorkflow,
+        workflowCatalog: _availableWorkflows,
         workConfig: _composerWorkConfig,
         spaceWorkers: _spaceWorkers,
         eligibleWorkers: _eligibleWorkers,
