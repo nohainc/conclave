@@ -2230,4 +2230,103 @@ void main() {
     await tester.tap(find.text('Continue →'));
     expect(continueOpened, isTrue);
   });
+
+  testWidgets(
+      'Phase 28 — Offline behavior: EstablishedUserHome shows cached sections and connectivity indicator without replacing page',
+      (tester) async {
+    String? openedWorkstream;
+    AxProductUpdate? openedUpdate;
+
+    const continueItems = [
+      AxContinueWorkItem(
+        projectId: 'project-1',
+        projectName: 'Conclave Core',
+        workstreamId: 'ws-offline',
+        workstreamTitle: 'Offline Mode Testing',
+        collaboratorsDisplay: 'You + ChatGPT',
+        lastMessageSnippet: 'Cached context remains fully readable.',
+        lastActivityDisplay: 'Just now',
+      ),
+    ];
+
+    const cachedUpdates = [
+      AxProductUpdate(
+        id: 'up-cached',
+        slug: 'cached-update',
+        title: 'Cached Release Note',
+        summary: 'Details loaded from local cache.',
+        category: AxProductUpdateCategory.workflow,
+        publishedAt: '2026-10-08T00:00:00Z',
+        status: AxProductUpdateStatus.published,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      scaffold(
+        HomePage(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [],
+          continueWorkItems: continueItems,
+          productUpdates: cachedUpdates,
+          productUpdateReadStates: const {},
+          aiUpdates: const [],
+          run: null,
+          openFindingCount: 0,
+          isOffline: true, // Offline mode active
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenWorkstream: (pId, wsId) => openedWorkstream = wsId,
+          onOpenRun: (_, __) {},
+          onCreateProject: () {},
+          onOpenUpdateDetail: (u) => openedUpdate = u,
+        ),
+      ),
+    );
+
+    // 1. Page is NOT replaced by an error screen; Home title renders
+    expect(find.text('Home'), findsOneWidget);
+
+    // 2. Connectivity indicator is displayed
+    expect(find.text('Offline · Cached data'), findsOneWidget);
+
+    // 3. Cached Continue Working is present and interactive
+    expect(find.text('Continue working'), findsOneWidget);
+    expect(find.text('Offline Mode Testing'), findsOneWidget);
+    await tester.tap(find.text('Continue →'));
+    expect(openedWorkstream, 'ws-offline');
+
+    // 4. Cached What's New is present and readable
+    expect(find.text("What's new"), findsOneWidget);
+    expect(find.text('Cached Release Note'), findsOneWidget);
+    await tester.ensureVisible(find.text('Learn more →'));
+    await tester.tap(find.text('Learn more →'));
+    expect(openedUpdate?.id, 'up-cached');
+  });
+
+  testWidgets(
+      'Phase 28 — Offline behavior: NewUserHome shows connectivity indicator when offline',
+      (tester) async {
+    await tester.pumpWidget(
+      scaffold(
+        HomePage(
+          projects: const [],
+          workspaces: const [],
+          workers: const [],
+          invitations: const [],
+          run: null,
+          openFindingCount: 0,
+          isOffline: true,
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenRun: (_, __) {},
+          onCreateProject: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('Offline · Cached data'), findsOneWidget);
+    expect(find.text('How Conclave AX works'), findsOneWidget);
+  });
 }

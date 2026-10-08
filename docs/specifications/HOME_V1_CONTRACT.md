@@ -531,8 +531,22 @@ Progressive Rendering Flow
   - An error, timeout, or schema failure in the **What's New** product updates service will **never** prevent `For You`, `Running Now`, or `Continue Working` from rendering.
   - An error or empty response in the **AI Updates** capability service will **never** produce a whole-page error or crash the application.
   - If a secondary section's data projection throws an exception, it is caught locally and gracefully collapses to `const SizedBox.shrink()`, preserving primary triage and daily workflows intact.
-- **Zero Monolithic Error Pages:** Home isolates degradation to the individual optional section level rather than replacing the entire surface with an error screen.
+---
 
+## Offline & Degraded Connectivity Behavior (Phase 28)
 
+When network connectivity is disrupted or AX cannot reach Cloud services, Home preserves user workflow continuity instead of blanking out or rendering full-page error blocks:
 
+```text
+Offline Home State
+├── Small Connectivity Indicator (Header: "Offline · Cached data")
+├── Cached Continue Working (Full read and local conversation resumption)
+├── Cached What's New & AI Updates (Full read of locally stored announcements)
+└── Server-Dependent Actions (Gracefully degraded/disabled without disrupting read access)
+```
 
+### 1. Architectural Rules & Degradation Contract
+- **Never Replace Home with Error Screens:** AX does not display a full-page disconnect banner or modal blocker. The core structure remains intact and immediately usable.
+- **Persistent Local Cache Access:** Cached `Continue Working` workstreams, `What's New` product updates, and `AI Updates` remain fully visible, selectable, and navigable.
+- **Subtle Connectivity Indicator:** A non-intrusive status pill (`Offline · Cached data`) appears in the header to inform the user of offline status.
+- **Natural Server Action Degradation:** Operations requiring server round-trips (such as creating projects or accepting/declining cloud invitations) naturally indicate offline status or disable gracefully, while offline-safe read actions (`Continue →`, `Learn more →`) execute seamlessly.

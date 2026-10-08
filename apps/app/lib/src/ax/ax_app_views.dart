@@ -84,6 +84,7 @@ extension _AxAppViews on _AxAppStateMixin {
                 }).toList(),
                 continueWorkItems:
                     _deriveContinueWorkItems(store.projects.items),
+                isOffline: store.lifecycle.isOffline,
                 onAcceptInvitation: _acceptInvitation,
                 onDeclineInvitation: _declineInvitation,
                 run: executionSnapshot.run,

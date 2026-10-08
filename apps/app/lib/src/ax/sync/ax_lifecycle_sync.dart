@@ -6,6 +6,8 @@ class AxLifecycleSync {
   final AxSyncEngine engine;
   final void Function(String?) onNotice;
   bool _online = true;
+  bool get isOnline => _online;
+  bool get isOffline => !_online;
   bool _disposed = false;
   int _generation = 0;
   Future<void>? _flight;

@@ -23,6 +23,7 @@ class HomePage extends StatelessWidget {
     this.aiUpdates = const [],
     this.userName,
     this.greeting,
+    this.isOffline = false,
     this.onAcceptInvitation,
     this.onDeclineInvitation,
     this.onOpenWorkstream,
@@ -50,6 +51,7 @@ class HomePage extends StatelessWidget {
   final List<AxAiUpdate> aiUpdates;
   final String? userName;
   final String? greeting;
+  final bool isOffline;
   final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
   final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
   final void Function(String projectId, String workstreamId)? onOpenWorkstream;
@@ -68,6 +70,7 @@ class HomePage extends StatelessWidget {
           onCreateProject: onCreateProject,
           onOpenWorkspaces: onOpenWorkspaces,
           invitations: invitations,
+          isOffline: isOffline,
           onAcceptInvitation: onAcceptInvitation,
           onDeclineInvitation: onDeclineInvitation,
         )
@@ -83,6 +86,7 @@ class HomePage extends StatelessWidget {
           aiUpdates: aiUpdates,
           userName: userName,
           greeting: greeting,
+          isOffline: isOffline,
           onAcceptInvitation: onAcceptInvitation,
           onDeclineInvitation: onDeclineInvitation,
           run: run,
@@ -105,6 +109,7 @@ class NewUserHome extends StatelessWidget {
     required this.onCreateProject,
     required this.onOpenWorkspaces,
     this.invitations = const [],
+    this.isOffline = false,
     this.onAcceptInvitation,
     this.onDeclineInvitation,
   });
@@ -112,6 +117,7 @@ class NewUserHome extends StatelessWidget {
   final VoidCallback onCreateProject;
   final VoidCallback onOpenWorkspaces;
   final List<AxProjectInvitation> invitations;
+  final bool isOffline;
   final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
   final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
 
@@ -125,18 +131,32 @@ class NewUserHome extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Welcome to Conclave AX',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Bring your people and AI together.',
-            style: TextStyle(
-              color: colorScheme.onSurfaceVariant,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Welcome to Conclave AX',
+                      style:
+                          TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Bring your people and AI together.',
+                      style: TextStyle(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isOffline) const _OfflineConnectivityIndicator(),
+            ],
           ),
           const SizedBox(height: 24),
 
@@ -578,6 +598,7 @@ class EstablishedUserHome extends StatelessWidget {
     this.aiUpdates = const [],
     this.userName,
     this.greeting,
+    this.isOffline = false,
     this.onAcceptInvitation,
     this.onDeclineInvitation,
     required this.run,
@@ -604,6 +625,7 @@ class EstablishedUserHome extends StatelessWidget {
   final List<AxAiUpdate> aiUpdates;
   final String? userName;
   final String? greeting;
+  final bool isOffline;
   final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
   final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
   final AxRun? run;
@@ -738,25 +760,34 @@ class EstablishedUserHome extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Home',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
-              ),
-              if (effectiveGreeting != null &&
-                  effectiveGreeting.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  effectiveGreeting,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w500,
-                  ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Home',
+                      style:
+                          TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                    ),
+                    if (effectiveGreeting != null &&
+                        effectiveGreeting.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        effectiveGreeting,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
+              ),
+              if (isOffline) const _OfflineConnectivityIndicator(),
             ],
           ),
           const SizedBox(height: 20),
@@ -978,6 +1009,48 @@ class _SectionHeader extends StatelessWidget {
         color: isSecondary
             ? colorScheme.onSurface.withValues(alpha: 0.85)
             : colorScheme.onSurface,
+      ),
+    );
+  }
+}
+
+class _OfflineConnectivityIndicator extends StatelessWidget {
+  const _OfflineConnectivityIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xfff59e0b).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: const Color(0xfff59e0b).withValues(alpha: 0.35),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+              color: Color(0xfff59e0b),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          const Text(
+            'Offline · Cached data',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Color(0xfff59e0b),
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
       ),
     );
   }
