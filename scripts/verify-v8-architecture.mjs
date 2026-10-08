@@ -367,17 +367,15 @@ if (
   );
 }
 if (
-  !siteProductionDeploy.includes('workflows: ["CI"]') ||
-  !siteProductionDeploy.includes("types: [completed]") ||
+  !siteProductionDeploy.includes("branches: [main]") ||
+  !siteProductionDeploy.includes('"apps/site/**"') ||
+  !siteProductionDeploy.includes("cancel-in-progress: true") ||
   !siteProductionDeploy.includes(
-    "github.event.workflow_run.conclusion == 'success'",
-  ) ||
-  !siteProductionDeploy.includes(
-    "ref: ${{ github.event.workflow_run.head_sha }}",
+    "wrangler deploy --config wrangler.production.jsonc",
   )
 ) {
   failures.push(
-    "Public-site production deployment must use the successful main-branch CI revision.",
+    "Public-site production deployment must trigger on main site changes with cancellation enabled.",
   );
 }
 

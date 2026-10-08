@@ -27,16 +27,38 @@ pnpm exec wrangler d1 migrations list "$database_name" \
   --remote \
   --config "$wrangler_config"
 
-echo "Applying pending migrations to remote D1 database: $database_name"
+echo "Inspecting schema before migration: $database_name"
 prepared_dir="$(mktemp -d "${TMPDIR:-/tmp}/conclave-d1-migration.XXXXXX")"
 trap 'rm -rf "$prepared_dir"' EXIT
 pnpm exec wrangler d1 execute "$database_name" \
   --remote --config "$wrangler_config" --json \
   --command "SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY type,name; SELECT name FROM d1_migrations WHERE name = '0006_chat_workflow_admission.sql';" \
   > "$prepared_dir/schema.json"
-node scripts/space-thread-schema-preflight.mjs "$prepared_dir/schema.json"
+if ! node scripts/space-thread-schema-preflight.mjs "$prepared_dir/schema.json"; then
+  if [[ "${CONFIRM_SPACE_THREAD_CUTOVER:-}" != "YES" || ! -s "${CONCLAVE_CUTOVER_BACKUP_FILE:-}" ]]; then
+    cat >&2 <<'EOF'
+The existing database needs a data-preserving cutover, not a reset.
+Create a private D1 backup and rehearse the cutover before proceeding.
+Then rerun with CONFIRM_PRODUCTION_MIGRATION=YES,
+CONFIRM_SPACE_THREAD_CUTOVER=YES, and CONCLAVE_CUTOVER_BACKUP_FILE
+pointing to the verified, nonempty backup. No remote data has changed.
+EOF
+    exit 2
+  fi
+  node scripts/prepare-space-thread-cutover.mjs \
+    "$prepared_dir/schema.json" "$wrangler_config" "$prepared_dir/cutover"
+  echo "Applying separately confirmed Space/Thread cutover: $database_name"
+  pnpm exec wrangler d1 migrations apply "$database_name" \
+    --remote --config "$prepared_dir/cutover/wrangler.json"
+  pnpm exec wrangler d1 execute "$database_name" \
+    --remote --config "$wrangler_config" --json \
+    --command "SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY type,name; SELECT name FROM d1_migrations WHERE name = '0006_chat_workflow_admission.sql';" \
+    > "$prepared_dir/schema.json"
+  node scripts/space-thread-schema-preflight.mjs "$prepared_dir/schema.json"
+fi
 node scripts/prepare-chat-workflow-migration.mjs \
   "$prepared_dir/schema.json" "$wrangler_config" "$prepared_dir"
+echo "Applying remaining pending migrations: $database_name"
 pnpm exec wrangler d1 migrations apply "$database_name" \
   --remote \
   --config "$prepared_dir/wrangler.json"

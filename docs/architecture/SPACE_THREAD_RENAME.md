@@ -149,3 +149,45 @@ TypeScript/script tests, 16 explicit Cloud fixture tests, all Dart/Flutter suite
 332 Workspace tests, 144 Profile Lab tests and 591 AX tests). Ten opt-in live
 provider tests were skipped. Additional schema-preflight/hygiene regression tests
 pass; the production inspection fails the cutover preflight as intended.
+
+## Operational cutover tooling
+
+The production migration command now has a separately confirmed, one-off
+cutover path for an existing pre-rename database. It instantiates an isolated
+`0017_space_thread_cutover.sql` from the inspected schema instead of editing or
+replaying the fresh-start baseline. It preserves historical extra tables/columns
+and all row identities. Schema assertions reject drift; a transaction restores
+foreign keys, constraints, indexes and triggers. Metadata conversion changes
+structural Space/Thread keys and realtime scopes/events, preserving free-form
+user text and leaving signed Profile payloads/signatures untouched. Ambiguous
+old/new metadata key collisions stop the conversion.
+
+The cutover requires both `CONFIRM_SPACE_THREAD_CUTOVER=YES` and a nonempty,
+verified backup path in `CONCLAVE_CUTOVER_BACKUP_FILE`, in addition to the usual
+`CONFIRM_PRODUCTION_MIGRATION=YES`. Without these, it stops before remote changes.
+Stop writes and runtime executions for the coordinated cutover; do not equate a
+private backup file's presence with a completed rehearsal.
+
+~~~sh
+CONFIRM_PRODUCTION_MIGRATION=YES \
+CONFIRM_SPACE_THREAD_CUTOVER=YES \
+CONCLAVE_CUTOVER_BACKUP_FILE=/private/tmp/conclave-pre-cutover-backup.sql \
+bash scripts/migrate-production-d1.sh
+~~~
+
+With the user's explicit authorization, a private production backup was exported
+and the exact generated cutover rehearsed locally on 2026-10-08. All 71 tables
+and 1,145 rows were preserved, with zero foreign-key violations. Every current
+baseline table and column exists in the converted copy. Fixture tests additionally
+verify rollback on schema drift and ambiguous metadata, preservation of IDs,
+invitation tokens, user text and signed Profile signatures, and mixed-schema
+rejection. Static/TypeScript acceptance checks passed. The backup is outside the
+repository; no user data is committed. After explicit user authorization, production application completed on
+2026-10-08. `0017_space_thread_cutover.sql` applied successfully and no remaining
+migrations were pending. Remote checks confirmed all 71 schema tables and the
+1,145 pre-cutover rows were preserved; the migration history contains one new
+record (1,146 rows including that record), with zero foreign-key violations.
+The Space/Thread preflight now passes remotely. Atomic execution guards additionally
+reject active Work Requests, Worker assignments and leases. No app/Worker release
+or local Workspace metadata conversion was performed by this database operation.
+The private backup remains outside version control for rollback.

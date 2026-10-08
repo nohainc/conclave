@@ -150,4 +150,30 @@ describe("CI acceptance orchestration", () => {
       }
     },
   );
+
+  it("public site production deployment is decoupled with path filtering and self-contained validation", () => {
+    const workflow = source(".github/workflows/deploy-site-production.yml");
+    expect(workflow).toContain("branches: [main]");
+    expect(workflow).toContain('paths:\n      - "apps/site/**"');
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("cancel-in-progress: true");
+    expect(workflow).not.toContain('workflows: ["CI"]');
+    expect(workflow).not.toContain("workflow_run:");
+
+    // Ensures site builds and all validations are present
+    expect(workflow).toContain("./node_modules/.bin/astro check");
+    expect(workflow).toContain("./node_modules/.bin/astro build");
+    expect(workflow).toContain("node scripts/check-performance.mjs");
+    expect(workflow).toContain("node scripts/check-accessibility.mjs");
+    expect(workflow).toContain("node scripts/check-responsive.mjs");
+    expect(workflow).toContain("node scripts/check-analytics-privacy.mjs");
+    expect(workflow).toContain("node scripts/check-security.mjs");
+    expect(workflow).toContain("node scripts/check-content.mjs");
+    expect(workflow).toContain("node scripts/check-release.mjs");
+    expect(workflow).toContain("./node_modules/.bin/vitest run test");
+    expect(workflow).toContain("Verify static routes");
+    expect(workflow).toContain(
+      "../../node_modules/.bin/wrangler deploy --config wrangler.production.jsonc",
+    );
+  });
 });
