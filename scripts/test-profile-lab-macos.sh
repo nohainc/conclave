@@ -32,20 +32,4 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo "Running Conclave Profile Lab macOS verification pipeline"
-cd "$PROFILE_LAB_DIR"
-flutter pub get
-
-echo "Building the production CLI Worker Engine binary for fixture acceptance..."
-bash "$ROOT/scripts/build-cli-worker-engine.sh"
-
-echo "Running formatting check..."
-dart format --output=none --set-exit-if-changed lib test
-
-echo "Running static analysis..."
-flutter analyze
-
-echo "Running unit and integration tests..."
-flutter test
-
-echo "All Profile Lab macOS checks passed."
+bash "$ROOT/scripts/check-flutter-app.sh" profile_lab

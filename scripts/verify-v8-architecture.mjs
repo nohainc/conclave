@@ -273,11 +273,23 @@ for (const retiredName of [
 }
 
 const scripts = packageJson.scripts ?? {};
+// Follow local check composition without weakening the required leaf checks.
+function expandCheck(name, active = new Set()) {
+  if (active.has(name)) throw new Error(`Cyclic check script: ${name}`);
+  const next = new Set([...active, name]);
+  const command = scripts[name] ?? "";
+  return command.replace(
+    /\bpnpm (check(?::[\w-]+)?)(?![\w:-])/g,
+    (match, child) => `${match} ${expandCheck(child, next)}`,
+  );
+}
+const completeCheck = expandCheck("check");
+
 if (!scripts["v8:architecture-check"]) {
   failures.push("package.json must expose v8:architecture-check.");
 }
 for (const step of ["pnpm v8:architecture-check", "pnpm build", "pnpm test"]) {
-  if (!scripts.check?.includes(step)) {
+  if (!completeCheck.includes(step)) {
     failures.push(`pnpm check must include ${step}.`);
   }
 }
@@ -288,8 +300,19 @@ for (const name of Object.keys(scripts)) {
     );
   }
 }
-if (!/^ {2}repository-check:/m.test(ci)) {
-  failures.push("CI is missing the consolidated repository-check job.");
+for (const job of [
+  "repo-static",
+  "typescript",
+  "dart-core",
+  "app-flutter",
+  "workspace-check",
+  "workspace-macos-build",
+  "profile-lab-macos",
+  "site-astro",
+  "acceptance-gate",
+]) {
+  if (!new RegExp(`^  ${job}:`, "m").test(ci))
+    failures.push(`CI is missing ${job}.`);
 }
 if (
   /engine-tests|profile-fixture-tests|profile-security-tests|workspace-runtime-tests|v8-runtime-e2e|work-v1-e2e|v7-runtime-e2e|worker-adapters:test|v4-architecture-guard/.test(
@@ -298,8 +321,16 @@ if (
 ) {
   failures.push("CI retains a historical runtime or architecture gate.");
 }
-if (!ci.includes("run: pnpm check")) {
-  failures.push("CI must run the consolidated pnpm check gate.");
+for (const command of [
+  "pnpm check:static",
+  "pnpm check:typescript",
+  "bash scripts/check-dart-packages.sh",
+  "bash scripts/check-flutter-app.sh app",
+  "bash scripts/check-flutter-app.sh workspace",
+  "bash scripts/check-flutter-app.sh profile_lab",
+]) {
+  if (!ci.includes(`run: ${command}`))
+    failures.push(`CI is missing validation owner: ${command}.`);
 }
 if (!deploy.includes("run: pnpm check")) {
   failures.push("The production deployment workflow must pass pnpm check.");
@@ -356,7 +387,7 @@ for (const check of [
   "pnpm check:dart",
   "pnpm check:fixture-e2e",
 ]) {
-  if (!scripts.check?.includes(check)) {
+  if (!completeCheck.includes(check)) {
     failures.push(`pnpm check is missing required validation: ${check}.`);
   }
 }

@@ -8,8 +8,12 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  repository-check:
+  repo-static:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,45 +24,143 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - uses: subosito/flutter-action@v2
+      - id: flutter
+        uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+          pub-cache: false
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-
       - run: pnpm install --frozen-lockfile
-      - name: Verify Conclave AX branding invariants, vector purity, and asset synchronization
-        run: pnpm brand:check
-      - name: Validate v8 architecture, Cloud, protocol, Engine, Workspace, AX, and fixture E2E
-        run: pnpm check
+      - run: pnpm check:static
+
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:typescript
+
+  dart-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          pub-cache: false
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-
+      - run: bash scripts/check-dart-packages.sh
 
   app-flutter:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/app
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - id: flutter
+        uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - run: flutter pub get
-      - run: flutter analyze
+          pub-cache: false
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-
+      - run: bash scripts/check-flutter-app.sh app
       - run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
+        working-directory: apps/app
+
+  workspace-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          pub-cache: false
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-
+      - run: bash scripts/check-flutter-app.sh workspace
+
+  workspace-macos-build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - id: flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          pub-cache: false
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: flutter pub get
+        working-directory: apps/workspace
+      - run: bash scripts/build-cli-worker-engine.sh
+      - name: Build Workspace using prepared dependencies and Engine
+        env:
+          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
+        run: bash scripts/build-workspace-macos.sh --prepared
 
   profile-lab-macos:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - id: flutter
+        uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - name: Run Profile Lab checks and fixture based Engine acceptance
-        run: bash scripts/test-profile-lab-macos.sh
-      - name: Build Profile Lab for macOS
+          pub-cache: false
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check Profile Lab and fixture Engine acceptance
+        run: bash scripts/check-flutter-app.sh profile_lab
+      - name: Build Profile Lab using prepared dependencies and Engine
         env:
           CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
-        run: bash scripts/build-profile-lab-macos.sh --release
+        run: bash scripts/build-profile-lab-macos.sh --release --prepared
 
   site-astro:
     runs-on: ubuntu-latest
@@ -95,27 +197,32 @@ jobs:
           test -f dist/security/index.html
           test -f dist/downloads/index.html
 
-  workspace-flutter:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: apps/workspace
+  acceptance-gate:
+    name: Repository Acceptance Gate
+    runs-on: ubuntu-latest
+    if: ${{ !cancelled() }}
+    needs:
+      [
+        repo-static,
+        typescript,
+        dart-core,
+        app-flutter,
+        workspace-check,
+        workspace-macos-build,
+        profile-lab-macos,
+        site-astro,
+      ]
     steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      - run: flutter analyze
-      - name: Build Conclave Workspace for macOS
-        if: runner.os == 'macOS'
-        working-directory: .
+      - name: Require every validation domain to succeed
         env:
-          CONCLAVE_WORKSPACE_SKIP_CHECKS: "1"
-          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
-        run: bash scripts/build-workspace-macos.sh
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY_GATE'
+          import json, os, sys
+          jobs = json.loads(os.environ['NEEDS_JSON'])
+          failed = {name: job['result'] for name, job in jobs.items() if job['result'] != 'success'}
+          if failed:
+              print(f"Acceptance failed: {failed}")
+              sys.exit(1)
+          print("Repository acceptance passed.")
+          PY_GATE

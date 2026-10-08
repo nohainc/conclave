@@ -8,7 +8,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "test": "vitest run packages/protocol/test packages/workspace-runtime-protocol/test packages/security/test packages/core/test packages/tool-profile/test apps/cloud/test scripts/verify-v8-architecture.test.mjs scripts/verify-branding.test.mjs scripts/production-workspace-gateway-smoke.test.mjs scripts/setup-development-profile-signing.test.mjs scripts/setup-development-auth.test.mjs scripts/provision-profile-starter-templates.test.mjs scripts/provision-profile-qualification-evidence.test.mjs scripts/resolve-build-profile-trust.test.mjs scripts/align-workspace-grant-schema.test.mjs scripts/local-cloud-proxy.test.mjs scripts/prepare-chat-workflow-migration.test.mjs",
+    "test": "vitest run --exclude apps/cloud/test/v8-schema-clean-room-acceptance.test.ts --exclude apps/cloud/test/work-v1-v8-regression.acceptance.test.ts packages/protocol/test packages/workspace-runtime-protocol/test packages/security/test packages/core/test packages/tool-profile/test apps/cloud/test scripts/verify-v8-architecture.test.mjs scripts/verify-branding.test.mjs scripts/production-workspace-gateway-smoke.test.mjs scripts/setup-development-profile-signing.test.mjs scripts/setup-development-auth.test.mjs scripts/provision-profile-starter-templates.test.mjs scripts/provision-profile-qualification-evidence.test.mjs scripts/resolve-build-profile-trust.test.mjs scripts/align-workspace-grant-schema.test.mjs scripts/local-cloud-proxy.test.mjs scripts/prepare-chat-workflow-migration.test.mjs scripts/ci-orchestration.test.mjs",
     "workspace:build": "bash scripts/build-workspace.sh",
     "workspace:build:macos": "bash scripts/build-workspace-macos.sh",
     "workspace:test:macos": "bash scripts/test-workspace-macos.sh",
@@ -38,12 +38,15 @@
     "site:preview": "cd apps/site && ./node_modules/.bin/astro preview",
     "check:dart": "bash scripts/check-dart-packages.sh",
     "check:fixture-e2e": "pnpm exec vitest run apps/cloud/test/v8-schema-clean-room-acceptance.test.ts apps/cloud/test/work-v1-v8-regression.acceptance.test.ts",
-    "check": "pnpm brand:check && pnpm cloud:schema-check && pnpm v8:architecture-check && pnpm protocol:boundaries-check && pnpm protocol:check && pnpm --dir apps/cloud types:check && pnpm usage:architecture-guard && pnpm docs:check && pnpm cloud:execution-boundary-check && pnpm production:preflight && pnpm auth:access-guard && pnpm format:check && pnpm lint && pnpm build && pnpm test && pnpm check:dart && pnpm check:fixture-e2e",
+    "check": "pnpm check:static && pnpm check:typescript && pnpm check:dart && pnpm check:apps",
     "protocol:boundaries-check": "node scripts/verify-protocol-boundaries.mjs",
     "start:local": "./scripts/start-local.sh",
     "db:migrate:production": "./scripts/migrate-production-d1.sh",
     "protocol:generate": "node scripts/generate-protocol-bindings.mjs",
-    "protocol:check": "node scripts/verify-protocol-bindings.mjs"
+    "protocol:check": "node scripts/verify-protocol-bindings.mjs",
+    "check:static": "pnpm brand:check && pnpm cloud:schema-check && pnpm v8:architecture-check && pnpm protocol:boundaries-check && pnpm protocol:check && pnpm usage:architecture-guard && pnpm docs:check && pnpm cloud:execution-boundary-check && pnpm production:preflight && pnpm auth:access-guard && pnpm format:check && pnpm lint",
+    "check:typescript": "pnpm --dir apps/cloud types:check && pnpm build && pnpm test && pnpm check:fixture-e2e",
+    "check:apps": "bash scripts/check-flutter-app.sh workspace && bash scripts/check-flutter-app.sh profile_lab && bash scripts/check-flutter-app.sh app"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",

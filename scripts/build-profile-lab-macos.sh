@@ -21,10 +21,15 @@ command -v ditto >/dev/null 2>&1 || {
 
 MODE="release"
 OPEN_APP="0"
+PREPARED="0"
 SIGN_APP="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --prepared)
+      PREPARED="1"
+      shift
+      ;;
     --debug)
       MODE="debug"
       shift
@@ -57,6 +62,7 @@ while [[ $# -gt 0 ]]; do
       echo "Run scripts/test-profile-lab-macos.sh separately for analysis and tests."
       echo ""
       echo "Options:"
+      echo "  --prepared         Reuse dependencies and Engine; skip clean (CI only)"
       echo "  --release          Build in release mode (default)"
       echo "  --debug            Build in debug mode"
       echo "  --version, -v VER  Override Profile Lab version"
@@ -88,9 +94,16 @@ fi
 PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-profile-trust.mjs")"
 echo "Building Conclave Profile Lab $VERSION for macOS (mode: $MODE)"
 cd "$PROFILE_LAB_DIR"
-flutter clean
-flutter pub get
-bash "$ROOT/scripts/build-cli-worker-engine.sh"
+if [[ "$PREPARED" == "1" ]]; then
+  [[ -f .dart_tool/package_config.json && -x assets/engines/conclave_cli_worker_engine ]] || {
+    echo "Prepared build requires resolved app dependencies and a freshly built Engine." >&2
+    exit 1
+  }
+else
+  flutter clean
+  flutter pub get
+  bash "$ROOT/scripts/build-cli-worker-engine.sh"
+fi
 
 if [[ "$MODE" == "debug" ]]; then
   flutter build macos --debug \

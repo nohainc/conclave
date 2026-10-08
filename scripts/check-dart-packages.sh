@@ -15,9 +15,6 @@ dart_packages=(
 
 flutter_packages=(
   packages/conclave_design
-  apps/workspace
-  apps/profile_lab
-  apps/app
 )
 
 resolve_dart_package_dependencies() {
@@ -46,10 +43,6 @@ for package_path in "${flutter_packages[@]}"; do
   resolve_flutter_package_dependencies "$package_path"
 done
 
-# Workspace acceptance tests exercise the Engine executable through the real
-# Profile Lab and Workspace path; build it before Flutter starts those tests.
-bash "$ROOT/scripts/build-cli-worker-engine.sh"
-
 dart format --output=none --set-exit-if-changed "${dart_packages[@]}" "${flutter_packages[@]}"
 
 check_dart_package() {
@@ -69,18 +62,10 @@ done
 
 check_flutter_package() {
   local package_path="$1"
-  local test_args=()
-  if [[ "$package_path" == "apps/workspace" ]]; then
-    test_args=(--concurrency=1)
-  fi
   (
     cd "$ROOT/$package_path"
     flutter analyze
-    if [[ "$package_path" == "apps/workspace" ]]; then
-      DART_EXECUTABLE="$(command -v dart)" flutter test "${test_args[@]}"
-    else
-      flutter test
-    fi
+    flutter test
   )
 }
 
