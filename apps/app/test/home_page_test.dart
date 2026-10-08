@@ -1347,4 +1347,68 @@ void main() {
     // AI updates section is omitted cleanly
     expect(find.text('AI updates'), findsNothing);
   });
+
+  test(
+      'Phase 18 — Model discovery automatically generates system AI capability updates',
+      () {
+    final discoveryUpdates =
+        AxAiCapabilityUpdateService.synthesizeDiscoveredModelUpdates(
+      workerProfileId: 'chatgpt',
+      provider: 'openai',
+      workerDisplayName: 'ChatGPT Worker',
+      previousModelIds: ['gpt-4o', 'o1-mini'],
+      currentModelIds: ['gpt-4o', 'o1-mini', 'o3-mini'],
+      timestamp: DateTime(2026, 10, 8),
+    );
+
+    expect(discoveryUpdates.length, 1);
+    final autoUpdate = discoveryUpdates.first;
+    expect(autoUpdate.isSystemGenerated, isTrue);
+    expect(autoUpdate.isEditorial, isFalse);
+    expect(autoUpdate.source, AxAiCapabilityUpdateSource.systemGenerated);
+    expect(autoUpdate.type, AxAiCapabilityUpdateType.modelAdded);
+    expect(autoUpdate.modelId, 'o3-mini');
+    expect(autoUpdate.title, 'New model available');
+    expect(autoUpdate.summary,
+        'Model o3-mini is now available for your ChatGPT Worker.');
+  });
+
+  test(
+      'Phase 18 — Editorial updates take precedence over raw system discovery updates',
+      () {
+    const editorialUpdate = AxAiCapabilityUpdate(
+      id: 'ed-o3-mini',
+      workerProfileId: 'chatgpt',
+      provider: 'openai',
+      type: AxAiCapabilityUpdateType.modelAdded,
+      source: AxAiCapabilityUpdateSource.editorial,
+      modelId: 'o3-mini',
+      title: 'OpenAI o3-mini reasoning model released',
+      summary: 'High-speed STEM reasoning model with flexible effort controls.',
+      publishedAt: '2026-10-08T00:00:00Z',
+    );
+
+    final rawDiscoveryUpdates =
+        AxAiCapabilityUpdateService.synthesizeDiscoveredModelUpdates(
+      workerProfileId: 'chatgpt',
+      previousModelIds: ['gpt-4o'],
+      currentModelIds: ['gpt-4o', 'o3-mini', 'gpt-4.5'],
+    );
+    expect(rawDiscoveryUpdates.length, 2);
+
+    final merged = AxAiCapabilityUpdateService.mergeUpdates(
+      editorialUpdates: [editorialUpdate],
+      discoveryUpdates: rawDiscoveryUpdates,
+    );
+
+    // Should have 2 items total: editorial for o3-mini and discovery for gpt-4.5
+    expect(merged.length, 2);
+    final o3Item = merged.firstWhere((u) => u.modelId == 'o3-mini');
+    expect(o3Item.isEditorial, isTrue);
+    expect(o3Item.title, 'OpenAI o3-mini reasoning model released');
+
+    final gpt45Item = merged.firstWhere((u) => u.modelId == 'gpt-4.5');
+    expect(gpt45Item.isSystemGenerated, isTrue);
+    expect(gpt45Item.title, 'New model available');
+  });
 }

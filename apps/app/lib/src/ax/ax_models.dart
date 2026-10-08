@@ -1862,12 +1862,34 @@ enum AxAiCapabilityUpdateType {
       this == capabilityAdded || this == capabilityChanged;
 }
 
+enum AxAiCapabilityUpdateSource {
+  editorial('editorial', 'Editorial'),
+  systemGenerated('system_generated', 'System');
+
+  const AxAiCapabilityUpdateSource(this.wireName, this.label);
+
+  final String wireName;
+  final String label;
+
+  static AxAiCapabilityUpdateSource fromString(String? value) {
+    if (value == null) return AxAiCapabilityUpdateSource.editorial;
+    return AxAiCapabilityUpdateSource.values.firstWhere(
+      (e) => e.wireName == value || e.name == value,
+      orElse: () => AxAiCapabilityUpdateSource.editorial,
+    );
+  }
+
+  bool get isEditorial => this == editorial;
+  bool get isSystemGenerated => this == systemGenerated;
+}
+
 class AxAiCapabilityUpdate {
   const AxAiCapabilityUpdate({
     required this.id,
     required this.workerProfileId,
     this.provider,
     this.type = AxAiCapabilityUpdateType.capabilityAdded,
+    this.source = AxAiCapabilityUpdateSource.editorial,
     this.modelId,
     this.modelDisplayName,
     required this.title,
@@ -1885,6 +1907,7 @@ class AxAiCapabilityUpdate {
   final String workerProfileId;
   final String? provider;
   final AxAiCapabilityUpdateType type;
+  final AxAiCapabilityUpdateSource source;
   final String? modelId;
   final String? modelDisplayName;
   final String title;
@@ -1895,6 +1918,9 @@ class AxAiCapabilityUpdate {
   final String? _workerDisplayName;
   final String? _customDateDisplay;
   final String? actionLabel;
+
+  bool get isSystemGenerated => source.isSystemGenerated;
+  bool get isEditorial => source.isEditorial;
 
   /// Worker type identifier alias for compatibility.
   String get workerTypeId => workerProfileId;
@@ -1959,6 +1985,7 @@ class AxAiCapabilityUpdate {
     String? workerProfileId,
     String? provider,
     AxAiCapabilityUpdateType? type,
+    AxAiCapabilityUpdateSource? source,
     String? modelId,
     String? modelDisplayName,
     String? title,
@@ -1975,6 +2002,7 @@ class AxAiCapabilityUpdate {
         workerProfileId: workerProfileId ?? this.workerProfileId,
         provider: provider ?? this.provider,
         type: type ?? this.type,
+        source: source ?? this.source,
         modelId: modelId ?? this.modelId,
         modelDisplayName: modelDisplayName ?? this.modelDisplayName,
         title: title ?? this.title,
@@ -1996,6 +2024,8 @@ class AxAiCapabilityUpdate {
             '',
         provider: json['provider'] as String?,
         type: AxAiCapabilityUpdateType.fromString(json['type'] as String?),
+        source: AxAiCapabilityUpdateSource.fromString(
+            json['source'] as String? ?? json['origin'] as String?),
         modelId: json['modelId'] as String?,
         modelDisplayName: json['modelDisplayName'] as String?,
         title: json['title'] as String? ?? '',
@@ -2013,6 +2043,7 @@ class AxAiCapabilityUpdate {
         'workerProfileId': workerProfileId,
         if (provider != null) 'provider': provider,
         'type': type.wireName,
+        'source': source.wireName,
         if (modelId != null) 'modelId': modelId,
         if (modelDisplayName != null) 'modelDisplayName': modelDisplayName,
         'title': title,
@@ -2152,5 +2183,104 @@ class AxAiCapabilityUpdateService {
       return filtered.sublist(0, limit);
     }
     return filtered;
+  }
+
+  /// Automatically synthesizes system-generated AI capability discovery updates
+  /// when local or catalog model discovery detects newly available or retired models.
+  /// (e.g. Profile discovery detects [A, B] -> [A, B, C]).
+  static List<AxAiCapabilityUpdate> synthesizeDiscoveredModelUpdates({
+    required String workerProfileId,
+    String? provider,
+    String? workerDisplayName,
+    required List<String> previousModelIds,
+    required List<String> currentModelIds,
+    DateTime? timestamp,
+  }) {
+    final updates = <AxAiCapabilityUpdate>[];
+    final prevSet = previousModelIds.toSet();
+    final currentSet = currentModelIds.toSet();
+
+    final addedModels = currentSet.difference(prevSet);
+    final removedModels = prevSet.difference(currentSet);
+
+    final resolvedWorkerDisplayName = workerDisplayName ??
+        switch (workerProfileId.toLowerCase()) {
+          'chatgpt' => 'ChatGPT Worker',
+          'gemini' => 'Gemini Worker',
+          'claude' => 'Claude Worker',
+          'ollama' => 'Ollama Worker',
+          _ =>
+            '${workerProfileId.isEmpty ? "AI" : "${workerProfileId[0].toUpperCase()}${workerProfileId.substring(1)}"} Worker',
+        };
+
+    for (final modelId in addedModels) {
+      updates.add(
+        AxAiCapabilityUpdate(
+          id: 'discovery-$workerProfileId-added-$modelId',
+          workerProfileId: workerProfileId,
+          provider: provider,
+          type: AxAiCapabilityUpdateType.modelAdded,
+          source: AxAiCapabilityUpdateSource.systemGenerated,
+          modelId: modelId,
+          modelDisplayName: modelId,
+          title: 'New model available',
+          summary:
+              'Model $modelId is now available for your $resolvedWorkerDisplayName.',
+          publishedAt: timestamp ?? DateTime.now(),
+          workerDisplayName: resolvedWorkerDisplayName,
+        ),
+      );
+    }
+
+    for (final modelId in removedModels) {
+      updates.add(
+        AxAiCapabilityUpdate(
+          id: 'discovery-$workerProfileId-removed-$modelId',
+          workerProfileId: workerProfileId,
+          provider: provider,
+          type: AxAiCapabilityUpdateType.modelRemoved,
+          source: AxAiCapabilityUpdateSource.systemGenerated,
+          modelId: modelId,
+          modelDisplayName: modelId,
+          title: 'Model retired',
+          summary:
+              'Model $modelId was removed or retired from $resolvedWorkerDisplayName.',
+          publishedAt: timestamp ?? DateTime.now(),
+          workerDisplayName: resolvedWorkerDisplayName,
+        ),
+      );
+    }
+
+    return updates;
+  }
+
+  /// Merges curated editorial updates with automated system discovery updates.
+  /// If an editorial update already covers a specific modelId for a workerProfileId,
+  /// the curated editorial item takes precedence over the automated discovery item.
+  static List<AxAiCapabilityUpdate> mergeUpdates({
+    required List<AxAiCapabilityUpdate> editorialUpdates,
+    List<AxAiCapabilityUpdate> discoveryUpdates = const [],
+  }) {
+    final editorialModelKeys = <String>{};
+    for (final u in editorialUpdates) {
+      if (u.modelId != null && u.modelId!.isNotEmpty) {
+        editorialModelKeys.add(
+            '${u.workerProfileId.toLowerCase()}:${u.modelId!.toLowerCase()}');
+      }
+    }
+
+    final merged = <AxAiCapabilityUpdate>[...editorialUpdates];
+    for (final disc in discoveryUpdates) {
+      final key =
+          '${disc.workerProfileId.toLowerCase()}:${disc.modelId?.toLowerCase()}';
+      if (disc.modelId != null && editorialModelKeys.contains(key)) {
+        // Suppress redundant system discovery item when curated editorial update exists
+        continue;
+      }
+      merged.add(disc);
+    }
+
+    merged.sort((a, b) => b.publishedDateTime.compareTo(a.publishedDateTime));
+    return merged;
   }
 }

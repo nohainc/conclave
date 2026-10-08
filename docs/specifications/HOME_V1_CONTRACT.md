@@ -320,6 +320,23 @@ Home Surface
 - **Shared Access Inclusion:** If a collaborator gains access to a Worker profile through a shared Project Workstream or grant, relevant updates for that Worker automatically become visible on Home.
 - **Zero-State Omission:** If the user has zero accessible workers or no updates match their accessible workers, the AI updates section collapses completely (`const SizedBox.shrink()`) without placeholder clutter.
 
+---
+
+## Separation of Model Discovery from Editorial Updates (Phase 18)
+
+Not every capability change requires a human-authored news article. Conclave distinguishes:
+1. **System-Generated Discovery Updates (`AxAiCapabilityUpdateSource.systemGenerated`):**
+   - Automatically synthesized when Tool Profile or provider model discovery detects newly available or retired models (e.g. `[A, B] -> [A, B, C]`).
+   - Title: `New model available` / `Model retired`.
+   - Summary: `Model <modelId> is now available for your <WorkerName>.`
+2. **Editorial Updates (`AxAiCapabilityUpdateSource.editorial`):**
+   - Curated announcements for major AI releases with customized descriptions, guidance, and deep-link actions.
+
+### Precedence & Merging (`AxAiCapabilityUpdateService.mergeUpdates`)
+- When both curated editorial updates and automated model discovery items exist for the same `workerProfileId:modelId` pair, the **curated editorial announcement takes precedence** to avoid redundant noise.
+- Both types are formatted and presented uniformly within the "AI updates" surface.
+
+
 
 
 
