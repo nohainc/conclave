@@ -455,6 +455,39 @@ Archive Management Scope
 - **No Archive Buttons on Home:** The legacy `"Archived Projects"` button previously located beneath the title is permanently removed from Home.
 - **Dedicated Navigation Placement:** Archive discovery and project restoration live cleanly inside the global application menu (`AppMenu`) and sidebar (`AppSidebar`), or inside the Project management surface (`ProjectPage`), preserving Home purely for active attention, active execution, active workstreams, and relevant updates.
 
+---
+
+## Integrated Invitation UX & Single Source of Truth (Phase 25)
+
+Invitations remain prominent across Conclave AX without maintaining disparate, disconnected invitation models or state pools.
+
+```text
+AxProjectInvitation Reactive Stream
+               ↓
+    AxCollaborationMutations
+               │
+  ┌────────────┼────────────┬─────────────┬──────────────┐
+  ▼            ▼            ▼             ▼              ▼
+Home Card   For You     Notification   Sidebar Tree   Project
+(New User)  (Attention)    Badge       (Pending)     Membership
+```
+
+### 1. Unified State & Immediate Synchronization
+- **Single Source of Truth:** `store.invitations` and `store.collaboration` own the canonical state and lifecycle for project invitations across all presentation projections.
+- **Projections over the Same State:**
+  - **New-User Home:** `Join a Project` priority card.
+  - **Established-User Home:** Top-ranked `Project invitation` rows in the `For You` attention section via `AxHomeAttentionProjector`.
+  - **Notification Center & Inbox:** `Pending invitations` section within `_showNotifications` dialog.
+  - **Sidebar Project Tree:** `Pending invitations (N)` group in `ProjectTree`.
+- **Immediate Multi-Surface Updates:**
+  - Accepting an invitation from Home executes `store.acceptInvitation(invite)` which optimistically updates both the `invitations` and `projects` stores.
+  - Instantly without page reload or manual refetch:
+    1. Home removes the invitation item.
+    2. Notification badge decreases.
+    3. Sidebar `ProjectTree` adds the joined project and clears the pending invitation entry.
+    4. Project membership queries are refreshed.
+    5. The client transitions directly into the newly joined project conversation space.
+
 
 
 

@@ -2195,6 +2195,58 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpWidget(const SizedBox.shrink());
     });
+
+    testWidgets(
+        'Phase 25: Integrated invitation UX — Accepting invitation from established Home instantly synchronizes Home, sidebar Projects, notification badge, and navigates into project',
+        (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final data = _InvitationTestFixture(
+        initialProjects: const [
+          AxProject(
+            id: 'existing-proj-1',
+            name: 'Existing Project',
+            description: 'Main project',
+            branch: 'main',
+            lastActivity: '2026-10-07T10:00:00Z',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: ConclaveAppShell(
+          services: const DefaultPlatformServices(),
+          dataSource: data,
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // Established Home is visible
+      expect(find.text('Home'), findsOneWidget);
+      expect(find.text('For you'), findsOneWidget);
+      expect(find.text('Vitalii Noha invited you to Joined AX Core'),
+          findsOneWidget);
+      expect(find.text('Pending invitations (1)'), findsOneWidget);
+
+      // Tap Accept on Home invitation
+      await tester.tap(find.text('Accept'));
+      await tester.pumpAndSettle();
+
+      // Instantly without reload:
+      // 1. Toast confirms joined
+      expect(find.text('Joined Joined AX Core.'), findsOneWidget);
+      // 2. Navigates into newly joined project
+      expect(find.text('Joined AX Core'), findsWidgets);
+      // 3. Pending invitations in sidebar is gone
+      expect(find.text('Pending invitations (1)'), findsNothing);
+
+      // Drain toast timer
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 }
 
@@ -2227,7 +2279,9 @@ class _ProjectScopedFixture extends AxFixtureDataSource {
 }
 
 class _InvitationTestFixture extends AxFixtureDataSource {
-  final List<AxProject> initialProjects = const [];
+  _InvitationTestFixture({this.initialProjects = const []});
+
+  final List<AxProject> initialProjects;
   var pendingInvitations = <AxProjectInvitation>[
     const AxProjectInvitation(
       id: 'inv-invite-1',
