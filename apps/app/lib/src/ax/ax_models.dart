@@ -695,7 +695,10 @@ class AxArtifact {
 class AxRun {
   const AxRun({
     required this.id,
+    this.projectId,
+    this.projectName,
     this.workstreamId,
+    this.workstreamTitle,
     required this.status,
     required this.objective,
     required this.taskCount,
@@ -703,10 +706,18 @@ class AxRun {
     required this.openFindingCount,
     required this.verifiedCriterionCount,
     required this.criterionCount,
+    this.workerName,
+    this.modelName,
+    this.effort,
+    this.startedAt,
+    this.durationDisplay,
   });
 
   final String id;
+  final String? projectId;
+  final String? projectName;
   final String? workstreamId;
+  final String? workstreamTitle;
   final RunStatus status;
   final String objective;
   final int taskCount;
@@ -714,10 +725,62 @@ class AxRun {
   final int openFindingCount;
   final int verifiedCriterionCount;
   final int criterionCount;
+  final String? workerName;
+  final String? modelName;
+  final String? effort;
+  final DateTime? startedAt;
+  final String? durationDisplay;
+
+  bool get isRunning =>
+      status == RunStatus.running || status == RunStatus.active;
+
+  AxRun copyWith({
+    String? id,
+    String? projectId,
+    String? projectName,
+    String? workstreamId,
+    String? workstreamTitle,
+    RunStatus? status,
+    String? objective,
+    int? taskCount,
+    int? completedTaskCount,
+    int? openFindingCount,
+    int? verifiedCriterionCount,
+    int? criterionCount,
+    String? workerName,
+    String? modelName,
+    String? effort,
+    DateTime? startedAt,
+    String? durationDisplay,
+  }) {
+    return AxRun(
+      id: id ?? this.id,
+      projectId: projectId ?? this.projectId,
+      projectName: projectName ?? this.projectName,
+      workstreamId: workstreamId ?? this.workstreamId,
+      workstreamTitle: workstreamTitle ?? this.workstreamTitle,
+      status: status ?? this.status,
+      objective: objective ?? this.objective,
+      taskCount: taskCount ?? this.taskCount,
+      completedTaskCount: completedTaskCount ?? this.completedTaskCount,
+      openFindingCount: openFindingCount ?? this.openFindingCount,
+      verifiedCriterionCount:
+          verifiedCriterionCount ?? this.verifiedCriterionCount,
+      criterionCount: criterionCount ?? this.criterionCount,
+      workerName: workerName ?? this.workerName,
+      modelName: modelName ?? this.modelName,
+      effort: effort ?? this.effort,
+      startedAt: startedAt ?? this.startedAt,
+      durationDisplay: durationDisplay ?? this.durationDisplay,
+    );
+  }
 
   factory AxRun.fromJson(Map<String, dynamic> json) => AxRun(
         id: _string(json, 'id'),
+        projectId: json['projectId'] as String?,
+        projectName: json['projectName'] as String?,
         workstreamId: json['workstreamId'] as String?,
+        workstreamTitle: json['workstreamTitle'] as String?,
         status: RunStatus.values.firstWhere(
           (value) => value.name == json['status'],
           orElse: () => RunStatus.running,
@@ -728,7 +791,34 @@ class AxRun {
         openFindingCount: json['openFindingCount'] as int? ?? 0,
         verifiedCriterionCount: json['verifiedCriterionCount'] as int? ?? 0,
         criterionCount: json['criterionCount'] as int? ?? 0,
+        workerName: json['workerName'] as String?,
+        modelName: json['modelName'] as String?,
+        effort: json['effort'] as String?,
+        startedAt: json['startedAt'] != null
+            ? DateTime.tryParse(json['startedAt'] as String)
+            : null,
+        durationDisplay: json['durationDisplay'] as String?,
       );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        if (projectId != null) 'projectId': projectId,
+        if (projectName != null) 'projectName': projectName,
+        if (workstreamId != null) 'workstreamId': workstreamId,
+        if (workstreamTitle != null) 'workstreamTitle': workstreamTitle,
+        'status': status.name,
+        'objective': objective,
+        'taskCount': taskCount,
+        'completedTaskCount': completedTaskCount,
+        'openFindingCount': openFindingCount,
+        'verifiedCriterionCount': verifiedCriterionCount,
+        'criterionCount': criterionCount,
+        if (workerName != null) 'workerName': workerName,
+        if (modelName != null) 'modelName': modelName,
+        if (effort != null) 'effort': effort,
+        if (startedAt != null) 'startedAt': startedAt!.toIso8601String(),
+        if (durationDisplay != null) 'durationDisplay': durationDisplay,
+      };
 }
 
 class AxViewer {

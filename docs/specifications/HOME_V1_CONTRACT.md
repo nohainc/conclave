@@ -336,6 +336,23 @@ Not every capability change requires a human-authored news article. Conclave dis
 - When both curated editorial updates and automated model discovery items exist for the same `workerProfileId:modelId` pair, the **curated editorial announcement takes precedence** to avoid redundant noise.
 - Both types are formatted and presented uniformly within the "AI updates" surface.
 
+---
+
+## Ephemeral "Running now" Execution Surface (Phase 19)
+
+Home avoids permanent or static "Active Runs" cards that clutter the screen when no work is executing.
+
+### 1. Ephemeral Display Contract
+- **Active Execution Only:** The "Running now" section appears **only** when an execution is genuinely active (`run != null && run.isRunning` where status is `RunStatus.running` or `RunStatus.active`).
+- **Rich Card Presentation (`_RunningNowCard`):**
+  - **Objective:** Prominent title (e.g., `Landing page review`).
+  - **Worker & Model Metadata:** Concise context badge (e.g., `ChatGPT · Model X · High`).
+  - **Workstream Hierarchy:** Navigation path (e.g., `Website / Landing Page`).
+  - **Duration & Progress:** Active execution time or task counts (e.g., `Running for 1m 42s` or `2/5 tasks completed`).
+  - **Direct CTA:** `Open →` button navigating directly into the executing Workstream/Run view.
+- **Zero-State Omission:** When nothing is running (`run == null` or run has reached a terminal/non-running state like `completed`, `failed`, `cancelled`), the section is completely omitted (`const SizedBox.shrink()`), preventing empty-state clutter.
+
+
 
 
 

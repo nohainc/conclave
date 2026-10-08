@@ -665,7 +665,7 @@ class EstablishedUserHome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasActiveRun = run != null;
+    final isRunningNow = run != null && run!.isRunning;
     final hasContinueWork = continueWorkItems.isNotEmpty || projects.isNotEmpty;
 
     return SingleChildScrollView(
@@ -692,28 +692,14 @@ class EstablishedUserHome extends StatelessWidget {
             onOpenNotifications: onOpenNotifications,
           ),
 
-          // Running Now (Conditional active execution)
-          if (hasActiveRun) ...[
+          // Running Now (Ephemeral active execution)
+          if (isRunningNow) ...[
             const _SectionHeader(title: 'Running now'),
             const SizedBox(height: 12),
-            Card(
-              child: ListTile(
-                leading: Icon(
-                  Icons.play_circle_fill,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                title: Text(
-                  run!.objective,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                subtitle: Text(
-                  '${run!.completedTaskCount}/${run!.taskCount} tasks completed',
-                ),
-                trailing: FilledButton.tonal(
-                  onPressed: () => onOpenRun(projects.first.id, run!.id),
-                  child: const Text('Open run details'),
-                ),
-              ),
+            _RunningNowCard(
+              run: run!,
+              defaultProjectId: projects.isNotEmpty ? projects.first.id : '',
+              onOpenRun: onOpenRun,
             ),
             const SizedBox(height: 24),
           ],
@@ -2032,6 +2018,149 @@ class _InvitationItem extends StatelessWidget {
                 child: const Text('Accept'),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RunningNowCard extends StatelessWidget {
+  const _RunningNowCard({
+    required this.run,
+    required this.defaultProjectId,
+    required this.onOpenRun,
+  });
+
+  final AxRun run;
+  final String defaultProjectId;
+  final void Function(String projectId, String runId) onOpenRun;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final targetProjectId = (run.projectId != null && run.projectId!.isNotEmpty)
+        ? run.projectId!
+        : defaultProjectId;
+
+    final workerModelEffort = [
+      if (run.workerName != null && run.workerName!.isNotEmpty) run.workerName!,
+      if (run.modelName != null && run.modelName!.isNotEmpty) run.modelName!,
+      if (run.effort != null && run.effort!.isNotEmpty) run.effort!,
+    ].join(' · ');
+
+    final breadcrumb = [
+      if (run.projectName != null && run.projectName!.isNotEmpty)
+        run.projectName!,
+      if (run.workstreamTitle != null && run.workstreamTitle!.isNotEmpty)
+        run.workstreamTitle!,
+    ].join(' / ');
+
+    final durationText = run.durationDisplay ??
+        (run.taskCount > 0
+            ? '${run.completedTaskCount}/${run.taskCount} tasks completed'
+            : 'Running');
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.sync_rounded,
+                    size: 18,
+                    color: colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        run.objective,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (workerModelEffort.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          workerModelEffort,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                      if (breadcrumb.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          breadcrumb,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                            color: colorScheme.outline,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.schedule_rounded,
+                      size: 16,
+                      color: colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      durationText,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+                FilledButton.tonal(
+                  onPressed: () => onOpenRun(targetProjectId, run.id),
+                  child: const Text('Open →'),
+                ),
+              ],
+            ),
           ],
         ),
       ),

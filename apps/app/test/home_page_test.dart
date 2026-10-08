@@ -1411,4 +1411,136 @@ void main() {
     expect(gpt45Item.isSystemGenerated, isTrue);
     expect(gpt45Item.title, 'New model available');
   });
+
+  testWidgets(
+      'Phase 19 — Running now renders ephemeral execution card with rich metadata and Open CTA when run is active',
+      (tester) async {
+    String? openedProjectId;
+    String? openedRunId;
+
+    const activeRun = AxRun(
+      id: 'run-101',
+      projectId: 'proj-landing',
+      projectName: 'Website',
+      workstreamId: 'ws-landing',
+      workstreamTitle: 'Landing Page',
+      status: RunStatus.running,
+      objective: 'Landing page review',
+      taskCount: 5,
+      completedTaskCount: 2,
+      openFindingCount: 0,
+      verifiedCriterionCount: 2,
+      criterionCount: 5,
+      workerName: 'ChatGPT',
+      modelName: 'Model X',
+      effort: 'High',
+      durationDisplay: 'Running for 1m 42s',
+    );
+
+    await tester.pumpWidget(
+      scaffold(
+        EstablishedUserHome(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [],
+          invitations: const [],
+          attentionItems: const [],
+          continueWorkItems: const [],
+          productUpdates: const [],
+          productUpdateReadStates: const {},
+          aiUpdates: const [],
+          run: activeRun,
+          openFindingCount: 0,
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenRun: (pId, rId) {
+            openedProjectId = pId;
+            openedRunId = rId;
+          },
+        ),
+      ),
+    );
+
+    // Section header
+    expect(find.text('Running now'), findsOneWidget);
+
+    // Card contents
+    expect(find.text('Landing page review'), findsOneWidget);
+    expect(find.text('ChatGPT · Model X · High'), findsOneWidget);
+    expect(find.text('Website / Landing Page'), findsOneWidget);
+    expect(find.text('Running for 1m 42s'), findsOneWidget);
+    expect(find.text('Open →'), findsOneWidget);
+
+    // Tap CTA
+    await tester.tap(find.text('Open →'));
+    expect(openedProjectId, 'proj-landing');
+    expect(openedRunId, 'run-101');
+  });
+
+  testWidgets(
+      'Phase 19 — Running now is completely omitted with zero noise when run is null or completed',
+      (tester) async {
+    // 1. When run is null
+    await tester.pumpWidget(
+      scaffold(
+        EstablishedUserHome(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [],
+          invitations: const [],
+          attentionItems: const [],
+          continueWorkItems: const [],
+          productUpdates: const [],
+          productUpdateReadStates: const {},
+          aiUpdates: const [],
+          run: null,
+          openFindingCount: 0,
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenRun: (_, __) {},
+        ),
+      ),
+    );
+
+    expect(find.text('Running now'), findsNothing);
+    expect(find.text('Open →'), findsNothing);
+    expect(find.text('No active runs'), findsNothing);
+    expect(find.text('No runs executing'), findsNothing);
+
+    // 2. When run status is completed
+    const completedRun = AxRun(
+      id: 'run-done',
+      status: RunStatus.completed,
+      objective: 'Completed task review',
+      taskCount: 3,
+      completedTaskCount: 3,
+      openFindingCount: 0,
+      verifiedCriterionCount: 3,
+      criterionCount: 3,
+    );
+
+    await tester.pumpWidget(
+      scaffold(
+        EstablishedUserHome(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [],
+          invitations: const [],
+          attentionItems: const [],
+          continueWorkItems: const [],
+          productUpdates: const [],
+          productUpdateReadStates: const {},
+          aiUpdates: const [],
+          run: completedRun,
+          openFindingCount: 0,
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenRun: (_, __) {},
+        ),
+      ),
+    );
+
+    expect(find.text('Running now'), findsNothing);
+    expect(find.text('Completed task review'), findsNothing);
+  });
 }
