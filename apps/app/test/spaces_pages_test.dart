@@ -8,6 +8,7 @@ import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:conclave_app/src/ax/sync/ax_session_catalogs.dart';
+import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
 
 import 'ax_fixture_data.dart';
 import 'conversation_turn_fixture.dart';
@@ -803,6 +804,7 @@ void main() {
               'Checking that everything is ready…'),
           isTrue);
       expect(sends, 0);
+      expect(find.byTooltip('Refresh Work history'), findsNothing);
       final pendingInput =
           tester.widget<TextField>(find.byType(TextField).first);
       expect(pendingInput.enabled, isTrue);
@@ -820,7 +822,7 @@ void main() {
       expect(sends, 0);
       // Leave the input empty so validation failure restores the original.
       await tester.enterText(find.byType(TextField).first, '');
-      await tester.tap(find.byTooltip('Refresh Work history'));
+      await AxWorkHistoryCache.forSource(data).refresh('thread-1');
       await tester.pumpAndSettle();
       expect(
           find.byType(ConclaveMarkdownBody).evaluate().where((element) =>
@@ -865,6 +867,8 @@ void main() {
         ];
         submitted.complete('saved-1');
         await tester.pumpAndSettle();
+        expect(find.textContaining('A previous request is still in progress.'), findsOneWidget);
+        expect(find.text('Cancel pending request'), findsOneWidget);
         expect(
             tester
                 .widget<TextField>(find.byType(TextField).first)
@@ -900,7 +904,7 @@ void main() {
             finalText: 'Completed answer',
           )
         ];
-        await tester.tap(find.byTooltip('Refresh Work history'));
+        await AxWorkHistoryCache.forSource(data).refresh('thread-1');
         await tester.pumpAndSettle();
         expect(
             tester
@@ -971,7 +975,7 @@ void main() {
           ...data.requests,
           _workRequest('new-result', 'completed')
         ];
-        await tester.tap(find.byTooltip('Refresh Work history'));
+        await AxWorkHistoryCache.forSource(data).refresh('thread-1');
       }
       await tester.pumpAndSettle();
       expect(position.pixels, closeTo(readingOffset, 1));
@@ -983,7 +987,7 @@ void main() {
           ...data.requests,
           _workRequest('another-result', 'completed')
         ];
-        await tester.tap(find.byTooltip('Refresh Work history'));
+        await AxWorkHistoryCache.forSource(data).refresh('thread-1');
         await tester.pumpAndSettle();
         expect(position.extentAfter, closeTo(0, 1));
       }
@@ -2781,6 +2785,31 @@ void main() {
     });
   }
 
+  testWidgets('pass-through profile accepts a custom next-turn model', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final data = _ComposerOptionsDataSource()..allowsCustomModel = true;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ThreadPage(
+      initialTab: 1,
+      space: const AxSpace(id: 'space-1', name: 'Space', branch: '', lastActivity: '', role: 'owner'),
+      thread: const AxThread(id: 'stream-1', spaceId: 'space-1', name: 'Stream', lead: '', status: 'active', brief: '', primaryWorkspace: '', queueStatus: '', workConfig: {
+        'bindings': {'direct': {'workerId': 'w-chatgpt'}}
+      }),
+      dataSource: data, onBackToSpace: _noop, onArchive: _noop,
+    ))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Choose model'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enter model ID…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), 'provider-model');
+    await tester.tap(find.text('Use model'));
+    await tester.pumpAndSettle();
+    expect(find.text('provider-model'), findsOneWidget);
+    expect(data.savedWorkConfig, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
       'composer uses normalized capabilities and snapshots local next-turn choices',
       (tester) async {
@@ -2826,6 +2855,8 @@ void main() {
     expect(find.text('Legacy model'), findsNothing);
     expect(tester.getCenter(find.byTooltip('Choose worker')).dy,
         tester.getCenter(find.byTooltip('Send request')).dy);
+    await tester.ensureVisible(find.byTooltip('Choose reasoning effort'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Choose reasoning effort'));
     await tester.pumpAndSettle();
     await tester.tap(find.byWidgetPredicate((widget) =>
@@ -2846,6 +2877,8 @@ void main() {
         widget.value == 'typed-model'));
     await tester.pumpAndSettle();
     expect(find.text('Default effort'), findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('Choose reasoning effort'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Choose reasoning effort'));
     await tester.pumpAndSettle();
     await tester.tap(find.byWidgetPredicate((widget) =>
@@ -2877,6 +2910,8 @@ void main() {
     expect(find.text('Profile model'), findsOneWidget);
     expect(find.text('deep effort'), findsOneWidget);
     // An explicit Default also replaces the remembered effort.
+    await tester.ensureVisible(find.byTooltip('Choose reasoning effort'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Choose reasoning effort'));
     await tester.pumpAndSettle();
     await tester.tap(find.byWidgetPredicate((widget) =>
@@ -2891,6 +2926,8 @@ void main() {
     }
     expect(find.text('Profile model'), findsOneWidget);
     expect(find.text('Default effort'), findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('Choose reasoning effort'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Choose reasoning effort'));
     await tester.pumpAndSettle();
     await tester.tap(find.byWidgetPredicate((widget) =>
@@ -3569,6 +3606,7 @@ class _MembersTabTestDataSource extends AxFixtureDataSource {
 
 class _ComposerOptionsDataSource extends _ModelSelectionTestDataSource {
   bool supportsDeep = true;
+  bool allowsCustomModel = false;
   @override
   Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => [
         for (final first in [true, false])
@@ -3583,7 +3621,7 @@ class _ComposerOptionsDataSource extends _ModelSelectionTestDataSource {
             'localConcurrencyLimit': 1,
             'modelOptions': {
               'catalog': [
-                {'id': 'legacy', 'name': 'Legacy model'}
+                if (!allowsCustomModel) {'id': 'legacy', 'name': 'Legacy model'}
               ]
             },
             'executionOptions': {
@@ -3591,11 +3629,11 @@ class _ComposerOptionsDataSource extends _ModelSelectionTestDataSource {
               'models': {
                 'supported': first,
                 'discovery': 'profile_catalog',
-                'allowsCustomModel': false,
+                'allowsCustomModel': allowsCustomModel,
                 'allowedModelIds':
-                    first ? ['typed-model', 'simple-model'] : <String>[],
+                    first && !allowsCustomModel ? ['typed-model', 'simple-model'] : <String>[],
                 'defaultModelId': null,
-                'options': first
+                'options': first && !allowsCustomModel
                     ? [
                         {
                           'id': 'typed-model',

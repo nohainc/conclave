@@ -64,3 +64,21 @@ Workspace readiness must use the same Worker catalog coordinator as Profile down
 Readiness checks resolve the currently downloaded Profiles without waiting for an in-progress catalog refresh. Catalog refresh downloads each Worker's Profile and then reruns readiness. A Worker with no release in the selected channel must not block another Worker's readiness or leave the refresh stuck on “Checking…”.
 
 Unsigned desktop builds reuse the saved hosted development public trust in `.development/hosted-profile-trust.json` when no explicit trust configuration is provided. Build scripts reject missing, empty, or invalid trust instead of producing an app unable to verify Profiles. Explicit public trust overrides this default; Developer ID signed builds always require explicit trust and never automatically adopt development keys. Profile signatures remain required regardless of desktop application signing.
+
+## Models and effort choices
+
+The composer projects model/effort choices from the published Profile reported
+by Workspace. Authoring starter templates do not fill missing capabilities in
+an older signed release. If a release has no catalog or omits effort arguments,
+create a successor Draft, populate its catalog from the provider CLI's available
+models (including each model's effort levels), and configure the generic
+`reasoningEffort` argument mapping. Run the complete Test Ladder, sync the exact
+Draft, publish it, and promote it to the Workspace's selected channel. Do not
+modify a signed payload or cached release file. Refresh the app after Workspace
+reports the new release. Local dev using the hosted API proxy uses that same
+published registry; isolated dev requires its own qualified release and signer.
+
+After a Space/Thread cutover, also convert local directory markers as described
+in `docs/architecture/SPACE_THREAD_RENAME.md`. Workspace **Test** checks provider
+readiness; it does not prove that an existing Thread directory can be admitted.
+Verify a normal Chat and Work request as well.

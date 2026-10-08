@@ -15,12 +15,18 @@ Rendered messages use one selection region across paragraphs, lists and code
 blocks, allowing partial or whole-message selection. Copy Markdown preserves
 the original source; copying a text selection copies the visible text.
 
+Work history updates automatically; the composer has no manual history refresh
+control. Error-specific retry actions remain available when synchronization fails.
+
 Chat and Work history open at the latest message and follow updates while the
 reader is at the bottom. Scrolling up pauses following until the reader returns
 to the bottom. Work sending (including keyboard submission) stays disabled while
 a request is preparing or awaiting completion, failure or cancellation.
 The input remains editable throughout preparation, submission, and execution so
-the user can draft the next request while sending stays disabled.
+the user can draft the next request while sending stays disabled. The composer
+explains when an unfinished request blocks Send and offers cancellation of pending
+requests. Profiles allowing custom models expose a model-ID entry option alongside
+Default and their declared catalog; catalog-only profiles do not expose that option.
 
 Thread content is capped at 800 logical pixels per pane. At available widths
 of 1000 pixels or more, Chat and Work appear side by side with a vertical divider;

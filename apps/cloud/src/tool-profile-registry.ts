@@ -51,6 +51,15 @@ export interface ToolProfileSigningPreflight {
   )[];
 }
 
+// Production databases created before the space/thread cutover can still
+// contain the retired workstream capability names. Normalize those persisted
+// values at the Cloud boundary so catalog reads remain available while the
+// data migration is completed; all downstream contracts use thread names.
+const retiredCapabilityAliases: Readonly<Record<string, string>> = {
+  workstream_read: "thread_read",
+  workstream_write: "thread_write",
+};
+
 const signingPreflightMessage =
   "conclave-tool-profile-signing-preflight-v1\nconclave";
 
@@ -1236,6 +1245,13 @@ export async function resolveLogicalWorkerCatalog(
       throw new ToolProfileRegistryError(
         500,
         "logical Worker metadata is invalid",
+      );
+    }
+    if (Array.isArray(capabilities)) {
+      capabilities = capabilities.map((value) =>
+        typeof value === "string"
+          ? (retiredCapabilityAliases[value] ?? value)
+          : value,
       );
     }
     if (

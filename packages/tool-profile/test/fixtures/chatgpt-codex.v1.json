@@ -4,7 +4,10 @@
   "releaseVersion": 1,
   "logicalWorkerTypeId": "chatgpt",
   "engineFamily": "cli",
-  "engineCompatibility": { "min": "1.0.0", "maxExclusive": "2.0.0" },
+  "engineCompatibility": {
+    "min": "1.0.0",
+    "maxExclusive": "2.0.0"
+  },
   "providerTool": {
     "name": "Codex CLI",
     "executableCandidates": ["codex"],
@@ -16,9 +19,17 @@
       "arguments": ["--version"],
       "timeoutMs": 10000,
       "source": "stdout",
-      "extract": { "kind": "regex_capture", "patternId": "semver" }
+      "extract": {
+        "kind": "regex_capture",
+        "patternId": "semver"
+      }
     },
-    "supportedVersions": [{ "min": "0.158.0", "maxExclusive": "0.190.0" }]
+    "supportedVersions": [
+      {
+        "min": "0.158.0",
+        "maxExclusive": "0.190.0"
+      }
+    ]
   },
   "environment": {
     "passthrough": [
@@ -35,7 +46,9 @@
       "CODEX_HOME",
       "OPENAI_API_KEY"
     ],
-    "set": { "NO_COLOR": "1" }
+    "set": {
+      "NO_COLOR": "1"
+    }
   },
   "probe": {
     "passive": {
@@ -52,14 +65,19 @@
     },
     "live": {
       "timeoutMs": 30000,
-      "expectedFinalText": { "kind": "exact", "value": "OK" }
+      "expectedFinalText": {
+        "kind": "exact",
+        "value": "OK"
+      }
     }
   },
   "execution": {
     "arguments": [
       "--ask-for-approval",
       "never",
-      { "sandboxPolicyMapping": true },
+      {
+        "sandboxPolicyMapping": true
+      },
       "exec",
       "--json",
       "--color",
@@ -67,60 +85,117 @@
       "--skip-git-repo-check",
       "--cd",
       "{{workingDirectory}}",
-      { "modelArguments": true },
+      {
+        "modelArguments": true
+      },
       {
         "ifPresent": "reasoningEffort",
         "values": ["-c", "model_reasoning_effort=\"{{reasoningEffort}}\""]
       },
-      { "sessionResumeArguments": true },
+      {
+        "sessionResumeArguments": true
+      },
       {
         "ifAbsent": "sessionId",
         "ifSessionPolicy": "stateless",
         "values": ["--ephemeral"]
       },
-      { "providerTimeoutArguments": true },
+      {
+        "providerTimeoutArguments": true
+      },
       "-"
     ],
-    "stdin": { "mode": "raw_text", "value": "{{prompt}}" },
-    "output": { "mode": "jsonl" },
+    "stdin": {
+      "mode": "raw_text",
+      "value": "{{prompt}}"
+    },
+    "output": {
+      "mode": "jsonl"
+    },
     "events": [
       {
         "when": [
-          { "kind": "equals", "selector": "$.type", "value": "thread.started" }
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "thread.started"
+          }
         ],
-        "actions": [{ "type": "set_session", "selector": "$.thread_id" }]
+        "actions": [
+          {
+            "type": "set_session",
+            "selector": "$.thread_id"
+          }
+        ]
       },
       {
         "when": [
-          { "kind": "equals", "selector": "$.type", "value": "turn.completed" }
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "turn.completed"
+          }
         ],
-        "actions": [{ "type": "mark_success" }]
+        "actions": [
+          {
+            "type": "mark_success"
+          }
+        ]
       },
       {
         "when": [
-          { "kind": "equals", "selector": "$.type", "value": "item.completed" },
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "item.completed"
+          },
           {
             "kind": "equals",
             "selector": "$.item.type",
             "value": "agent_message"
           }
         ],
-        "actions": [{ "type": "set_final_text", "selector": "$.item.text" }]
-      },
-      {
-        "when": [
-          { "kind": "equals", "selector": "$.type", "value": "turn.failed" }
-        ],
         "actions": [
-          { "type": "set_provider_error", "selector": "$.error.message" },
-          { "type": "mark_failure" }
+          {
+            "type": "set_final_text",
+            "selector": "$.item.text"
+          }
         ]
       },
       {
-        "when": [{ "kind": "equals", "selector": "$.type", "value": "error" }],
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "turn.failed"
+          }
+        ],
         "actions": [
-          { "type": "set_provider_error", "selector": "$.message" },
-          { "type": "mark_failure" }
+          {
+            "type": "set_provider_error",
+            "selector": "$.error.message"
+          },
+          {
+            "type": "mark_failure"
+          }
+        ]
+      },
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "error"
+          }
+        ],
+        "actions": [
+          {
+            "type": "set_provider_error",
+            "selector": "$.message"
+          },
+          {
+            "type": "mark_failure"
+          }
         ]
       }
     ]
@@ -154,27 +229,14 @@
       "gpt-5.6-sol",
       "gpt-5.6-terra",
       "gpt-5.6-luna",
-      "gpt-reserve",
-      "o3",
-      "o3-mini",
-      "o1",
-      "o1-mini",
-      "o1-preview",
-      "gpt-4.5-preview",
-      "gpt-4o",
-      "gpt-4o-mini",
-      "chatgpt-4o-latest",
-      "gpt-4-turbo",
-      "gpt-4",
-      "codex-mini",
+      "gpt-5.5",
       "gpt-test"
     ],
     "catalog": [
       {
         "id": "gpt-6.1-sol",
-        "name": "GPT-6.1 Sol",
-        "badge": "Workhorse",
-        "description": "Latest workhorse model for coding and everyday work",
+        "name": "GPT-6.1-Sol",
+        "description": "Latest workhorse model for coding and everyday work.",
         "defaultReasoningEffort": "low",
         "supportedReasoningEfforts": [
           "low",
@@ -187,10 +249,9 @@
       },
       {
         "id": "gpt-6-astra",
-        "name": "GPT-6 Astra",
-        "badge": "Frontier Reasoning",
-        "description": "Frontier intelligence for the most demanding work",
-        "defaultReasoningEffort": "medium",
+        "name": "GPT-6-Astra",
+        "description": "Frontier intelligence for the most demanding work.",
+        "defaultReasoningEffort": "low",
         "supportedReasoningEfforts": [
           "low",
           "medium",
@@ -202,10 +263,9 @@
       },
       {
         "id": "gpt-6-sol",
-        "name": "GPT-6 Sol",
-        "badge": "Workhorse",
-        "description": "Previous generation workhorse model",
-        "defaultReasoningEffort": "low",
+        "name": "GPT-6-Sol",
+        "description": "Previous generation workhorse model.",
+        "defaultReasoningEffort": "medium",
         "supportedReasoningEfforts": [
           "low",
           "medium",
@@ -217,24 +277,15 @@
       },
       {
         "id": "gpt-6-luna",
-        "name": "GPT-6 Luna",
-        "badge": "Fast & Affordable",
-        "description": "Fast and affordable model for easier tasks",
-        "defaultReasoningEffort": "low",
-        "supportedReasoningEfforts": [
-          "low",
-          "medium",
-          "high",
-          "xhigh",
-          "max",
-          "ultra"
-        ]
+        "name": "GPT-6-Luna",
+        "description": "Fast and affordable model for easier tasks.",
+        "defaultReasoningEffort": "medium",
+        "supportedReasoningEfforts": ["low", "medium", "high", "xhigh", "max"]
       },
       {
         "id": "gpt-5.6-sol",
-        "name": "GPT-5.6 Sol",
-        "badge": "Workhorse",
-        "description": "Older generation workhorse model",
+        "name": "GPT-5.6-Sol",
+        "description": "Older generation workhorse model.",
         "defaultReasoningEffort": "low",
         "supportedReasoningEfforts": [
           "low",
@@ -247,10 +298,9 @@
       },
       {
         "id": "gpt-5.6-terra",
-        "name": "GPT-5.6 Terra",
-        "badge": "Balanced",
-        "description": "Older balanced model for straightforward work",
-        "defaultReasoningEffort": "low",
+        "name": "GPT-5.6-Terra",
+        "description": "Older balanced model for straightforward work.",
+        "defaultReasoningEffort": "medium",
         "supportedReasoningEfforts": [
           "low",
           "medium",
@@ -262,125 +312,24 @@
       },
       {
         "id": "gpt-5.6-luna",
-        "name": "GPT-5.6 Luna",
-        "badge": "Fast",
-        "description": "Older fast and efficient model",
-        "defaultReasoningEffort": "low",
-        "supportedReasoningEfforts": [
-          "low",
-          "medium",
-          "high",
-          "xhigh",
-          "max",
-          "ultra"
-        ]
-      },
-      {
-        "id": "gpt-reserve",
-        "name": "GPT Reserve",
-        "badge": "Agentic",
-        "description": "Fast and affordable agentic coding model",
-        "defaultReasoningEffort": "low",
-        "supportedReasoningEfforts": [
-          "low",
-          "medium",
-          "high",
-          "xhigh",
-          "max",
-          "ultra"
-        ]
-      },
-      {
-        "id": "o3",
-        "name": "o3",
-        "badge": "Reasoning",
-        "description": "Most powerful reasoning model for coding, science, and math",
+        "name": "GPT-5.6-Luna",
+        "description": "Older fast and efficient model.",
         "defaultReasoningEffort": "medium",
-        "supportedReasoningEfforts": ["low", "medium", "high"]
+        "supportedReasoningEfforts": ["low", "medium", "high", "xhigh", "max"]
       },
       {
-        "id": "o3-mini",
-        "name": "o3-mini",
-        "badge": "Fast Reasoning",
-        "description": "High-speed reasoning specialized for STEM and programming",
+        "id": "gpt-5.5",
+        "name": "GPT-5.5",
+        "description": "Legacy coding model.",
         "defaultReasoningEffort": "medium",
-        "supportedReasoningEfforts": ["low", "medium", "high"]
-      },
-      {
-        "id": "o1",
-        "name": "o1",
-        "badge": "Reasoning",
-        "description": "Advanced full-scale reasoning model for deep logic problems",
-        "defaultReasoningEffort": "medium",
-        "supportedReasoningEfforts": ["low", "medium", "high"]
-      },
-      {
-        "id": "o1-mini",
-        "name": "o1-mini",
-        "badge": "Fast Reasoning",
-        "description": "Efficient reasoning model for fast coding tasks",
-        "defaultReasoningEffort": "medium",
-        "supportedReasoningEfforts": ["low", "medium", "high"]
-      },
-      {
-        "id": "o1-preview",
-        "name": "o1-preview",
-        "badge": "Reasoning Preview",
-        "description": "Preview reasoning model for multi-step reasoning",
-        "defaultReasoningEffort": "medium",
-        "supportedReasoningEfforts": ["low", "medium", "high"]
-      },
-      {
-        "id": "gpt-4.5-preview",
-        "name": "GPT-4.5",
-        "badge": "Massive Knowledge",
-        "description": "Largest flagship model with broad world knowledge and deep nuance"
-      },
-      {
-        "id": "gpt-4o",
-        "name": "GPT-4o",
-        "badge": "Flagship",
-        "description": "High-intelligence flagship model for complex text, code, and reasoning"
-      },
-      {
-        "id": "gpt-4o-mini",
-        "name": "GPT-4o mini",
-        "badge": "Fast & Affordable",
-        "description": "Lightweight and fast for everyday coding and tasks"
-      },
-      {
-        "id": "chatgpt-4o-latest",
-        "name": "ChatGPT-4o",
-        "badge": "Dynamic",
-        "description": "Continuously updated ChatGPT-4o release"
-      },
-      {
-        "id": "codex-mini",
-        "name": "Codex Mini",
-        "badge": "Code Specialist",
-        "description": "Fast low-latency code generation and refactoring"
-      },
-      {
-        "id": "gpt-4-turbo",
-        "name": "GPT-4 Turbo",
-        "badge": "Legacy",
-        "description": "High-capacity GPT-4 model with 128k context"
-      },
-      {
-        "id": "gpt-4",
-        "name": "GPT-4",
-        "badge": "Legacy",
-        "description": "Original GPT-4 instruction following model"
-      },
-      {
-        "id": "gpt-test",
-        "name": "GPT Test",
-        "badge": "Testing",
-        "description": "Test environment model"
+        "supportedReasoningEfforts": ["low", "medium", "high", "xhigh"]
       }
     ]
   },
-  "timeout": { "providerArguments": [], "providerReserveMs": 2000 },
+  "timeout": {
+    "providerArguments": [],
+    "providerReserveMs": 2000
+  },
   "sandbox": {
     "mappings": {
       "restricted": ["--sandbox", "workspace-write"],
@@ -391,7 +340,11 @@
   "progress": [
     {
       "when": [
-        { "kind": "equals", "selector": "$.type", "value": "turn.started" }
+        {
+          "kind": "equals",
+          "selector": "$.type",
+          "value": "turn.started"
+        }
       ],
       "percentage": 10,
       "messageKey": "provider_working"
@@ -423,7 +376,10 @@
         "issueCode": "session_resume_failed"
       },
       {
-        "evidence": { "kind": "stderr_pattern", "patternId": "cancelled" },
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "cancelled"
+        },
         "issueCode": "cancelled"
       },
       {
@@ -455,7 +411,9 @@
         "issueCode": "provider_failure"
       },
       {
-        "evidence": { "kind": "missing_terminal" },
+        "evidence": {
+          "kind": "missing_terminal"
+        },
         "issueCode": "provider_failure"
       }
     ]
@@ -463,19 +421,30 @@
   "capabilities": ["text", "local_file", "durable_session", "thread_read"],
   "compatibilityOverrides": [
     {
-      "providerVersion": { "min": "0.180.0", "maxExclusive": "0.181.0" },
+      "providerVersion": {
+        "min": "0.180.0",
+        "maxExclusive": "0.181.0"
+      },
       "executionArguments": [
         "--ask-for-approval",
         "never",
         "exec",
-        { "sandboxPolicyMapping": true },
-        { "modelArguments": true },
+        {
+          "sandboxPolicyMapping": true
+        },
+        {
+          "modelArguments": true
+        },
         {
           "ifPresent": "reasoningEffort",
           "values": ["-c", "model_reasoning_effort=\"{{reasoningEffort}}\""]
         },
-        { "sessionResumeArguments": true },
-        { "providerTimeoutArguments": true },
+        {
+          "sessionResumeArguments": true
+        },
+        {
+          "providerTimeoutArguments": true
+        },
         "--json",
         "-"
       ]

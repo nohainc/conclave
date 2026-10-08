@@ -50,7 +50,7 @@ class AxModelOption {
 
 List<AxModelOption> _modelsForWorker(AxWorker worker) {
   final options = worker.executionOptions;
-  if (options != null) {
+  if (options != null && options.models.isNotEmpty) {
     return options.models
         .map((model) => AxModelOption(
               id: model.id,
@@ -64,6 +64,10 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         .toList();
   }
 
+  // Older or partially published profiles can expose the normalized
+  // execution envelope without its catalog. Keep the legacy capability
+  // projection as a compatibility fallback so the composer still offers the
+  // worker's actual model choices.
   final catalog = worker.modelOptions['catalog'];
   if (catalog is! List) return const [];
   return catalog
@@ -482,20 +486,21 @@ class _WorkComposer extends StatelessWidget {
         availableModels.where((m) => m.id == selectedModel).firstOrNull;
     final normalizedEffort = assignedWorker?.executionOptions
         ?.effortsForModel(selectedModel.isEmpty ? null : selectedModel);
-    final supportedEfforts = (normalizedEffort == null
-            ? null
-            : normalizedEffort.supported
-                ? normalizedEffort.values
-                : const <String>[]) ??
-        currentModelOption?.supportedReasoningEfforts ??
-        (selectedModel.isEmpty &&
-                assignedWorker?.modelOptions['supportedReasoningEfforts']
-                    is List
-            ? (assignedWorker!.modelOptions['supportedReasoningEfforts']
-                    as List)
-                .whereType<String>()
-                .toList()
-            : const <String>[]);
+    final normalizedValues = normalizedEffort?.supported == true
+        ? normalizedEffort!.values
+        : const <String>[];
+    final supportedEfforts = normalizedValues.isNotEmpty
+        ? normalizedValues
+        : (currentModelOption?.supportedReasoningEfforts.isNotEmpty == true
+            ? currentModelOption!.supportedReasoningEfforts
+            : (selectedModel.isEmpty &&
+                    assignedWorker?.modelOptions['supportedReasoningEfforts']
+                        is List
+                ? (assignedWorker!.modelOptions['supportedReasoningEfforts']
+                        as List)
+                    .whereType<String>()
+                    .toList()
+                : const <String>[]));
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -541,11 +546,6 @@ class _WorkComposer extends StatelessWidget {
                   }
                 },
               ),
-            ),
-            IconButton(
-              tooltip: 'Refresh Work history',
-              onPressed: () => onRefresh(),
-              icon: const Icon(Icons.refresh, size: 18),
             ),
             if (onOpenSettings != null)
               IconButton(
@@ -795,6 +795,13 @@ class _WorkComposer extends StatelessWidget {
                                       ),
                                     ),
                                   ),
+                                if (assignedWorker?.executionOptions
+                                        ?.allowsCustomModel ==
+                                    true)
+                                  const PopupMenuItem<String>(
+                                    value: '__enter_model_id__',
+                                    child: Text('Enter model ID…'),
+                                  ),
                               ];
                               final value = await _showAnchoredMenu<String>(
                                 buttonContext: modelBtnContext,
@@ -805,6 +812,43 @@ class _WorkComposer extends StatelessWidget {
                                     availableModels.isNotEmpty ? 1 : 0,
                               );
                               if (!modelBtnContext.mounted || value == null) {
+                                return;
+                              }
+                              if (value == '__enter_model_id__') {
+                                var enteredModel = selectedModel;
+                                final model = await showDialog<String>(
+                                  context: modelBtnContext,
+                                  builder: (dialogContext) => AlertDialog(
+                                    title: const Text('Choose model'),
+                                    content: TextFormField(
+                                      initialValue: selectedModel,
+                                      onChanged: (value) => enteredModel = value,
+                                      autofocus: true,
+                                      decoration: const InputDecoration(
+                                          labelText: 'Model ID'),
+                                      onFieldSubmitted: (value) =>
+                                          Navigator.pop(dialogContext,
+                                              value.trim()),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(dialogContext),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(
+                                            dialogContext,
+                                            enteredModel.trim()),
+                                        child: const Text('Use model'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (!modelBtnContext.mounted || model == null) {
+                                  return;
+                                }
+                                onModelChanged?.call(stepKind, model);
                                 return;
                               }
                               onModelChanged?.call(stepKind, value);
@@ -1003,6 +1047,7 @@ class _WorkComposer extends StatelessWidget {
           MarkdownComposer(
             controller: requestController,
             chatStyle: true,
+            sendInToolbar: true,
             minLines: 2,
             maxLines: 6,
             enabled: canExecute,
@@ -1053,6 +1098,29 @@ class _WorkComposer extends StatelessWidget {
             ),
           ],
           if (loadingWorkflows) const LinearProgressIndicator(),
+          if (awaitingResponse && !submitting)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(children: [
+                const Expanded(
+                  child: Text(
+                    'A previous request is still in progress. You can draft your next message or cancel the pending request.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+                if (onCancelRun != null)
+                  TextButton(
+                    onPressed: () async {
+                      for (final request in workTimeline.where((request) =>
+                          const {'queued', 'running', 'waiting'}
+                              .contains(request.status))) {
+                        await onCancelRun!(request.id);
+                      }
+                    },
+                    child: const Text('Cancel pending request'),
+                  ),
+              ]),
+            ),
           if (workflowCatalogError != null)
             Text(workflowCatalogError!, style: TextStyle(color: colors.error)),
           if (!canExecute)

@@ -191,3 +191,18 @@ The Space/Thread preflight now passes remotely. Atomic execution guards addition
 reject active Work Requests, Worker assignments and leases. No app/Worker release
 or local Workspace metadata conversion was performed by this database operation.
 The private backup remains outside version control for rollback.
+
+### Workspace marker cutover
+
+An initialized Work Root also needs its identity markers converted. A Cloud D1
+cutover alone does not convert local directories. Stop Workspace, then preview
+`node scripts/convert-workspace-thread-markers.mjs WORK_ROOT`; run the same
+command with `--apply` after inspecting the IDs. It validates the entire inventory,
+rejects symlinks/mismatched identities/existing current markers, preserves the
+creation timestamp and user files, and retains each old marker as a
+`.pre-thread-cutover` backup. The runtime continues to reject directories without
+current identity markers; there is no legacy admission alias.
+
+Signed Profiles containing retired capability names require a new qualified
+release. A successful readiness probe does not validate Thread directory
+admission. Include a real Chat and Work request after both cutovers.

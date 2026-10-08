@@ -41,6 +41,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       [
         "0007_chat_profile_starter_attestation.sql",
         "0008_codex_compatibility_approval_policy.sql",
+        "0017_chatgpt_starter_model_catalog.sql",
       ]
         .map((name) =>
           readFileSync(join(root, "apps/cloud/migrations-v8", name), "utf8"),

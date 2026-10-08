@@ -33,9 +33,6 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/app
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -46,25 +43,29 @@ jobs:
           node-version: 24
           cache: pnpm
       - name: Install repository toolchain
-        working-directory: .
         run: pnpm install --frozen-lockfile
       - name: Validate production Gateway smoke script
-        working-directory: .
         run: node --check scripts/production-workspace-gateway-smoke.mjs
-      - uses: subosito/flutter-action@v2
+      - id: flutter
+        uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+          pub-cache: false
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-
       - name: Validate Cloud contract and TypeScript packages
-        working-directory: .
         run: pnpm validate:cloud && pnpm check:fixture-e2e
       - name: Validate AX Web App
-        working-directory: .
         run: pnpm validate:app
       - name: Build Flutter web
+        working-directory: apps/app
         run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
       - name: Verify browser bundle contains no server secrets
-        working-directory: .
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CONCLAVE_AUTH_GITHUB_CLIENT_SECRET: ${{ secrets.CONCLAVE_AUTH_GITHUB_CLIENT_SECRET }}
@@ -73,10 +74,8 @@ jobs:
           CONCLAVE_WORKSPACE_ED25519_SEED: ${{ secrets.CONCLAVE_WORKSPACE_ED25519_SEED }}
         run: node scripts/assert-no-browser-secrets.mjs apps/app/build/web
       - name: Verify production security configuration
-        working-directory: .
         run: node scripts/verify-production-security.mjs
       - name: Preflight production Tool Profile signer and trust root
-        working-directory: .
         env:
           CONCLAVE_RELEASE_PRIVATE_KEY: ${{ secrets.CONCLAVE_RELEASE_PRIVATE_KEY }}
           CONCLAVE_RELEASE_PUBLISHER: ${{ vars.CONCLAVE_RELEASE_PUBLISHER }}
@@ -152,7 +151,14 @@ jobs:
               let input = "";
               process.stdin.on("data", (chunk) => (input += chunk));
               process.stdin.on("end", () => {
-                const configured = new Set(JSON.parse(input).map((secret) => secret.name));
+                const firstBracket = input.indexOf("[");
+                const lastBracket = input.lastIndexOf("]");
+                if (firstBracket === -1 || lastBracket === -1 || lastBracket < firstBracket) {
+                  console.error("Unable to parse wrangler secret list output as JSON array:\n" + input);
+                  process.exit(1);
+                }
+                const parsed = JSON.parse(input.slice(firstBracket, lastBracket + 1));
+                const configured = new Set(parsed.map((secret) => secret.name));
                 const required = [
                   "BETTER_AUTH_SECRET",
                 ];
@@ -174,7 +180,6 @@ jobs:
               });
             '
       - name: Require Better Auth signing secret for desktop auth smoke
-        working-directory: .
         env:
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
         run: |
@@ -190,7 +195,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: CONFIRM_PRODUCTION_MIGRATION=YES ../../scripts/migrate-production-d1.sh
       - name: Verify production D1 schema before Worker deploy
-        working-directory: .
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -202,7 +206,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm exec wrangler deploy --config ../../infra/cloudflare/app.wrangler.jsonc
       - name: Require production dual desktop-auth and Workspace Gateway acceptance
-        working-directory: .
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -210,7 +213,6 @@ jobs:
         run: node scripts/production-workspace-gateway-smoke.mjs
       - name: Ensure production smoke runtime is removed
         if: always()
-        working-directory: .
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -589,7 +589,7 @@ it("maps generic effort values and rejects invalid model/effort combinations", (
   expect(() =>
     expandExecutionArguments(
       profile,
-      context({ model: "o3", reasoningEffort: "ultra" }),
+      context({ model: "gpt-6-luna", reasoningEffort: "ultra" }),
     ),
   ).toThrow(/Effort/);
   profile.model.executionOptions.modelSwitchSupported = false;
@@ -597,7 +597,7 @@ it("maps generic effort values and rejects invalid model/effort combinations", (
     expandExecutionArguments(
       profile,
       context({
-        model: "o3",
+        model: "gpt-6-luna",
         sessionPolicy: "durable",
         sessionId: "native",
         sessionModel: "gpt-6.1-sol",

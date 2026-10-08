@@ -195,6 +195,38 @@ describe("approved logical Worker catalog projection", () => {
       /capabilities are invalid/,
     );
   });
+
+  it("normalizes retired workstream capability names from persisted catalogs", async () => {
+    const statement = {
+      bind: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      all: vi.fn(async () => ({
+        results: [
+          {
+            worker_type_id: "legacy-worker",
+            display_name: "Legacy Worker",
+            description: "",
+            engine_family: "cli",
+            visibility_state: "visible",
+            release_stage: "stable",
+            capabilities_json: '["text","workstream_read","workstream_write"]',
+            sort_order: 1,
+            profile_definition_id: "legacy-cli",
+            provider_tool_name: "legacy",
+          },
+        ],
+      })),
+    };
+    const db = { prepare: vi.fn(() => statement) } as unknown as D1Database;
+
+    await expect(resolveLogicalWorkerCatalog(db)).resolves.toMatchObject([
+      {
+        workerTypeId: "legacy-worker",
+        capabilities: ["text", "thread_read", "thread_write"],
+      },
+    ]);
+  });
 });
 
 describe("stable Tool Profile acceptance evidence", () => {

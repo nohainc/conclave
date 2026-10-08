@@ -79,6 +79,63 @@ describe("Workspace Worker inventory catalog metadata", () => {
     expect(retiredBody.workers[0]?.catalogLifecycleState).toBe("retired");
   });
 
+  it("does not invent model choices from an authoring template", async () => {
+    const row = {
+      worker_id: "workspace-worker-chatgpt",
+      workspace_id: "workspace-1",
+      workspace_name: "Workspace",
+      worker_type_id: "chatgpt",
+      activation_state: "enabled",
+      readiness_state: "ready",
+      readiness_issue_code: null,
+      capabilities_json: '["text","thread_read"]',
+      local_concurrency_limit: 1,
+      engine_version: "1.0.0",
+      profile_definition_id: "chatgpt-codex",
+      profile_release_version: 2,
+      provider_tool_name: "Codex CLI",
+      provider_tool_version: "0.160.0",
+      last_seen_at: "2026-10-02T00:00:00.000Z",
+      catalog_display_name: "ChatGPT",
+      catalog_description: "",
+      catalog_lifecycle_state: "active",
+      catalog_visibility_state: "visible",
+      model_profile_json: JSON.stringify({
+        model: {
+          supported: true,
+          unknownModelPolicy: "profile_allowlist",
+          allowlist: ["gpt-test"],
+        },
+      }),
+      starter_profile_json: JSON.stringify({
+        model: {
+          supported: true,
+          catalog: [{ id: "gpt-test", name: "GPT Test" }],
+        },
+      }),
+    };
+    const statement = {
+      bind: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      all: vi.fn(async () => ({ results: [row] })),
+    };
+    const env = {
+      CONCLAVE_ENVIRONMENT: "development",
+      CONCLAVE_DB: { prepare: vi.fn(() => statement) },
+      TEST_AUTHENTICATION: async () => ({ userId: "user-1" }),
+    } as unknown as Env;
+
+    const response = await handleListWorkspaceWorkerInventory(
+      new Request("https://conclave.test/api/workers"),
+      env,
+    );
+    const body = (await response.json()) as {
+      workers: Array<{ modelOptions: { catalog: Array<{ id: string }> } }>;
+    };
+    expect(body.workers[0]?.modelOptions.catalog).toEqual([]);
+  });
+
   it("discovers a newly approved Cloud Worker from the selected catalog channel", async () => {
     const queries: string[] = [];
     let catalogBoundChannel: string | undefined;
