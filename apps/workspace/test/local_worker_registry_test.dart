@@ -169,7 +169,7 @@ void main() {
       File('${directory.path}/Engines/cli_worker/engine'),
       File('${directory.path}/Workers/worker-old/state/session.json'),
       File('${directory.path}/Workers/worker-old/logs/worker.jsonl'),
-      File('${directory.path}/Work/workstream/notes.txt'),
+      File('${directory.path}/Work/thread/notes.txt'),
     ];
     for (final preserved in preservedFiles) {
       await preserved.create(recursive: true);

@@ -112,7 +112,7 @@ void main() {
                   shellContext: const AxShellContext(
                     navigation: AxNavigation.workspaces(),
                     workspaces: [initialWorkspace],
-                    projects: [],
+                    spaces: [],
                     themeMode: ThemeMode.system,
                   ),
                   onNavigateTo: (_) {},

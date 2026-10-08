@@ -30,7 +30,7 @@ are implementation details shown only in Advanced Diagnostics.
 
 ## Applications
 
-- **Conclave AX** — Flutter Web application for Projects, Workstreams, Chat
+- **Conclave AX** — Flutter Web application for Spaces, Threads, Chat
   (discussion) and Work.
 - **Conclave Cloud** — TypeScript/Cloudflare collaboration, scheduling,
   Workspace Gateway, Worker catalog and Profile release control plane.
@@ -92,7 +92,7 @@ Implement & Verify
 Full Cycle
 ~~~
 
-Workstreams bind those Steps to logical Workers. Users do not build arbitrary
+Threads bind those Steps to logical Workers. Users do not build arbitrary
 Workflow graphs or edit Conclave's internal orchestration prompts in v1.
 
 ## Technology stack
@@ -111,8 +111,8 @@ Workflow graphs or edit Conclave's internal orchestration prompts in v1.
 
 ## Key concepts
 
-- **Project** — collaboration/history/authorization boundary.
-- **Workstream** — persistent unit of work and local working directory.
+- **Space** — collaboration/history/authorization boundary.
+- **Thread** — persistent unit of work and local working directory.
 - **Workspace** — one machine-backed execution environment.
 - **Worker Type** — stable product AI/tool identity such as `chatgpt` or
   `gemini`.
@@ -122,8 +122,8 @@ Workflow graphs or edit Conclave's internal orchestration prompts in v1.
   Engine.
 - **Provider CLI** — local tool that owns provider authentication/session/billing
   mode.
-- **Workspace Grant** — Project authorization to use a Workspace.
-- **Assignment** — immutable execution snapshot resolving Project + Workstream +
+- **Workspace Grant** — Space authorization to use a Workspace.
+- **Assignment** — immutable execution snapshot resolving Space + Thread +
   logical Worker + runtime evidence.
 
 ## Runtime trust boundary

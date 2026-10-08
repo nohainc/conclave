@@ -176,7 +176,7 @@ const cloudAcceptanceScenarioNames = <String>[
   'passive_probe',
   'live_probe',
   'model_selection',
-  'representative_workstream_write',
+  'representative_thread_write',
   'durable_session_start',
   'durable_session_resume',
   'cancellation',
@@ -204,8 +204,8 @@ Map<String, String>? cloudAcceptanceScenarioStatuses(
             ((model['allowlist'] as List?)?.isNotEmpty ?? false)
         ? 'passed'
         : 'not_applicable',
-    'representative_workstream_write':
-        capabilities.contains('workstream_write') ? 'passed' : 'not_applicable',
+    'representative_thread_write':
+        capabilities.contains('thread_write') ? 'passed' : 'not_applicable',
     'durable_session_start':
         hasDurableSessionCapability ? 'passed' : 'not_applicable',
     'durable_session_resume':
@@ -318,7 +318,7 @@ class ProfileLabTestSandbox {
   /// 4. CLI Version Probe (Zero Model Quota)
   /// 5. Passive Probe (Zero Model Quota)
   /// 6. Live Probe (Engine-controlled OK probe)
-  /// 7. Representative workstream write (real assignment and file verification)
+  /// 7. Representative thread write (real assignment and file verification)
   /// 8. Session Test (real create/resume assignments if supported)
   /// 9. Model Selection Test (real model-selected assignment if supported)
   /// 10. Cancellation Test (real assignment canceled through the Engine)
@@ -854,32 +854,32 @@ class ProfileLabTestSandbox {
         }
       }
 
-      // --- STAGE 7: Representative Workstream Write ---
+      // --- STAGE 7: Representative Thread Write ---
       final s7Timer = Stopwatch()..start();
       const writeSentinel = 'conclave-profile-lab-write-verified';
       final writeTarget = File('${scratchDir.path}/acceptance-write.txt');
-      final workstreamWriteApplicable =
-          expectedAcceptanceScenarios?['representative_workstream_write'] ==
+      final threadWriteApplicable =
+          expectedAcceptanceScenarios?['representative_thread_write'] ==
               'passed';
-      if (!workstreamWriteApplicable) {
+      if (!threadWriteApplicable) {
         s7Timer.stop();
-        observedAcceptanceScenarios['representative_workstream_write'] =
+        observedAcceptanceScenarios['representative_thread_write'] =
             'not_applicable';
         addStage(
-          stageId: 'representative_workstream_write',
-          displayName: 'Representative Workstream Write',
+          stageId: 'representative_thread_write',
+          displayName: 'Representative Thread Write',
           status: 'skipped',
           durationMs: 0,
           diagnostics:
-              'This Tool Profile does not declare the workstream_write capability.',
+              'This Tool Profile does not declare the thread_write capability.',
           consumesQuota: false,
           details: {'applicability': 'not_applicable'},
         );
       } else if (haltExecution) {
         s7Timer.stop();
         addStage(
-          stageId: 'representative_workstream_write',
-          displayName: 'Representative Workstream Write',
+          stageId: 'representative_thread_write',
+          displayName: 'Representative Thread Write',
           status: 'skipped',
           durationMs: 0,
           diagnostics: 'Skipped due to prior live probe failure.',
@@ -888,7 +888,7 @@ class ProfileLabTestSandbox {
       } else {
         try {
           await executeAssignment(
-            label: 'representative-workstream-write',
+            label: 'representative-thread-write',
             prompt: 'Create the file "acceptance-write.txt" in the current '
                 'working directory and write exactly this UTF-8 text into it: '
                 '$writeSentinel. Do not just describe the action. Then reply '
@@ -897,12 +897,12 @@ class ProfileLabTestSandbox {
           final wroteExpectedContent = await writeTarget.exists() &&
               await writeTarget.readAsString() == writeSentinel;
           s7Timer.stop();
-          observedAcceptanceScenarios['representative_workstream_write'] =
+          observedAcceptanceScenarios['representative_thread_write'] =
               wroteExpectedContent ? 'passed' : 'failed';
           if (wroteExpectedContent) {
             addStage(
-              stageId: 'representative_workstream_write',
-              displayName: 'Representative Workstream Write',
+              stageId: 'representative_thread_write',
+              displayName: 'Representative Thread Write',
               status: 'passed',
               durationMs: s7Timer.elapsedMilliseconds,
               diagnostics:
@@ -912,24 +912,23 @@ class ProfileLabTestSandbox {
           } else {
             haltExecution = true;
             addStage(
-              stageId: 'representative_workstream_write',
-              displayName: 'Representative Workstream Write',
+              stageId: 'representative_thread_write',
+              displayName: 'Representative Thread Write',
               status: 'failed',
               durationMs: s7Timer.elapsedMilliseconds,
               diagnostics:
                   'Engine assignment completed without writing the expected file contents.',
               consumesQuota: true,
-              issueCode: 'workstream_write_not_observed',
+              issueCode: 'thread_write_not_observed',
             );
           }
         } on Object catch (error) {
           s7Timer.stop();
           haltExecution = true;
-          observedAcceptanceScenarios['representative_workstream_write'] =
-              'failed';
+          observedAcceptanceScenarios['representative_thread_write'] = 'failed';
           addStage(
-            stageId: 'representative_workstream_write',
-            displayName: 'Representative Workstream Write',
+            stageId: 'representative_thread_write',
+            displayName: 'Representative Thread Write',
             status: 'failed',
             durationMs: s7Timer.elapsedMilliseconds,
             diagnostics: 'Engine execution failed: $error',

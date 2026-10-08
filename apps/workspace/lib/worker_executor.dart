@@ -7,7 +7,7 @@ import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'cloud_connection.dart';
 import 'runtime_capabilities.dart';
-import 'workstream_directory.dart';
+import 'thread_directory.dart';
 
 /// Translate Cloud assignment permissions without consulting names or providers.
 WorkerExecutionPolicy assignmentExecutionPolicy(Map<String, Object?> payload) =>
@@ -20,10 +20,10 @@ bool profileAllowsAssignment(
         Map<String, Object?> payload, Iterable<String> capabilities) =>
     assignmentExecutionPolicy(payload) !=
         WorkerExecutionPolicy.providerDefault ||
-    capabilities.contains('workstream_read');
+    capabilities.contains('thread_read');
 
 Future<void> _materializeWorkRequestInputs({
-  required Directory workstreamDirectory,
+  required Directory threadDirectory,
   required Map<String, Object?> payload,
 }) async {
   final rawRequestId = payload['workRequestId'];
@@ -40,8 +40,8 @@ Future<void> _materializeWorkRequestInputs({
     }
     return;
   }
-  final root = Directory(
-      '${workstreamDirectory.path}${Platform.pathSeparator}.conclave');
+  final root =
+      Directory('${threadDirectory.path}${Platform.pathSeparator}.conclave');
   final inputs = Directory('${root.path}${Platform.pathSeparator}inputs');
   final requestDirectory =
       Directory('${inputs.path}${Platform.pathSeparator}$rawRequestId');
@@ -97,16 +97,16 @@ Future<void> _materializeWorkRequestInputs({
   }
 }
 
-/// Provider-independent guidance attached to every Workstream execution.
+/// Provider-independent guidance attached to every Thread execution.
 /// It describes the local directory contract without exposing paths or
 /// turning Git operations into a Conclave-managed subsystem.
-const workstreamExecutionGuidance = <String>[
-  'This directory is the Workstream persistent isolated working area.',
+const threadExecutionGuidance = <String>[
+  'This directory is the Thread persistent isolated working area.',
   'Reuse existing files and repositories when they are present.',
   'Clone repositories here when the requested work needs one.',
   'Do not assume this directory is disposable; preserve useful local state.',
   'Use normal Git safety practices for fetch, branch, commit, and push.',
-  'For parallel Workstreams using one repository, prefer a dedicated branch per Workstream.',
+  'For parallel Threads using one repository, prefer a dedicated branch per Thread.',
   'Fetch before integrating remote changes.',
   'Commit and push meaningful state before moving work to another physical Workspace.',
   'Use Workspace-local Git, SSH, or provider CLI authentication for private repositories.',
@@ -157,20 +157,20 @@ class WorkerAssignmentHandler {
     required this.resolveLogicalWorker,
     this.executeWithToolProfile,
     this.defaultWorkingDirectory,
-    this.workstreamDirectoryLifecycle,
-    WorkstreamMutationCoordinator? workstreamMutationCoordinator,
+    this.threadDirectoryLifecycle,
+    ThreadMutationCoordinator? threadMutationCoordinator,
     this.onProgress,
     this.cancelToolProfileAssignment,
-  }) : workstreamMutationCoordinator = workstreamMutationCoordinator ??
-            (workstreamDirectoryLifecycle == null
+  }) : threadMutationCoordinator = threadMutationCoordinator ??
+            (threadDirectoryLifecycle == null
                 ? null
-                : WorkstreamMutationCoordinator(workstreamDirectoryLifecycle));
+                : ThreadMutationCoordinator(threadDirectoryLifecycle));
 
   final AssignmentLogicalWorkerResolver resolveLogicalWorker;
   final ToolProfileAssignmentExecutor? executeWithToolProfile;
   final Directory? defaultWorkingDirectory;
-  final WorkstreamDirectoryLifecycle? workstreamDirectoryLifecycle;
-  final WorkstreamMutationCoordinator? workstreamMutationCoordinator;
+  final ThreadDirectoryLifecycle? threadDirectoryLifecycle;
+  final ThreadMutationCoordinator? threadMutationCoordinator;
   final WorkerProgressRelay? onProgress;
   final Future<bool> Function(String assignmentId)? cancelToolProfileAssignment;
 
@@ -200,23 +200,23 @@ class WorkerAssignmentHandler {
     }
     rejectWorkerControlledPaths(context.payload);
     final executionClass = context.payload['executionClass'];
-    final projectId = _requiredStringForWorkstream(
-        context.payload['projectId'], 'projectId', executionClass);
-    final workstreamId = _requiredStringForWorkstream(
-        context.payload['workstreamId'], 'workstreamId', executionClass);
+    final spaceId = _requiredStringForThread(
+        context.payload['spaceId'], 'spaceId', executionClass);
+    final threadId = _requiredStringForThread(
+        context.payload['threadId'], 'threadId', executionClass);
     var directory = defaultWorkingDirectory ?? Directory.current;
-    if (projectId != null && workstreamId != null) {
-      final lifecycle = workstreamDirectoryLifecycle;
+    if (spaceId != null && threadId != null) {
+      final lifecycle = threadDirectoryLifecycle;
       if (lifecycle == null) {
         throw const RuntimeViolation(
-            'Workstream directory lifecycle is required for scoped execution');
+            'Thread directory lifecycle is required for scoped execution');
       }
       directory = await lifecycle.ensureForExecution(
-        projectId: projectId,
-        workstreamId: workstreamId,
+        spaceId: spaceId,
+        threadId: threadId,
       );
       await _materializeWorkRequestInputs(
-        workstreamDirectory: directory,
+        threadDirectory: directory,
         payload: context.payload,
       );
     }
@@ -291,40 +291,40 @@ class WorkerAssignmentHandler {
       );
     }
 
-    if (context.payload['executionClass'] != 'stateful_workstream') {
+    if (context.payload['executionClass'] != 'stateful_thread') {
       return execute();
     }
-    final projectId = context.payload['projectId'];
-    final workstreamId = context.payload['workstreamId'];
+    final spaceId = context.payload['spaceId'];
+    final threadId = context.payload['threadId'];
     final leaseId = context.payload['leaseId'];
     final fencingToken = context.payload['fencingToken'];
-    final coordinator = workstreamMutationCoordinator;
-    if (projectId is! String ||
-        workstreamId is! String ||
+    final coordinator = threadMutationCoordinator;
+    if (spaceId is! String ||
+        threadId is! String ||
         leaseId is! String ||
         fencingToken is! int) {
       throw const RuntimeViolation(
-          'stateful assignment requires Workstream lease identity');
+          'stateful assignment requires Thread lease identity');
     }
     if (coordinator == null) {
       throw const RuntimeViolation(
-          'Workstream mutation coordinator is required for stateful execution');
+          'Thread mutation coordinator is required for stateful execution');
     }
     return coordinator.withMutation(
-      projectId: projectId,
-      workstreamId: workstreamId,
+      spaceId: spaceId,
+      threadId: threadId,
       leaseId: leaseId,
       fencingToken: fencingToken,
       action: (_) => execute(),
     );
   }
 
-  String? _requiredStringForWorkstream(
+  String? _requiredStringForThread(
       Object? value, String field, Object? executionClass) {
-    if (value == null && executionClass != 'stateful_workstream') return null;
+    if (value == null && executionClass != 'stateful_thread') return null;
     if (value is! String || value.trim().isEmpty) {
       throw RuntimeViolation(
-          'execution assignment field $field is required for Workstream CWD');
+          'execution assignment field $field is required for Thread CWD');
     }
     return value;
   }
@@ -347,12 +347,11 @@ class WorkerAssignmentHandler {
           'attemptId': context.attemptId,
           'assignmentId': context.assignmentId,
           'idempotencyKey': context.idempotencyKey,
-          if (payload['projectId'] is String) 'projectId': payload['projectId'],
-          if (payload['workstreamId'] is String)
-            'workstreamId': payload['workstreamId'],
+          if (payload['spaceId'] is String) 'spaceId': payload['spaceId'],
+          if (payload['threadId'] is String) 'threadId': payload['threadId'],
           if (payload['workRequestId'] is String)
             'workRequestId': payload['workRequestId'],
-          'workstreamExecutionGuidance': workstreamExecutionGuidance,
+          'threadExecutionGuidance': threadExecutionGuidance,
         },
       };
 }

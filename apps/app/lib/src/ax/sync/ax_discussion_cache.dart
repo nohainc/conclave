@@ -102,7 +102,7 @@ class AxDiscussionCache {
   AxQuery<AxDiscussionHistory> query(String id,
           {bool reconcileNewest = true}) =>
       AxQuery(
-        key: AxQueryKey(['workstream', id, 'discussion']),
+        key: AxQueryKey(['thread', id, 'discussion']),
         load: () => _synchronize(id, reconcileNewest: reconcileNewest),
       );
   AxDiscussionHistory _history(String id) =>
@@ -146,8 +146,7 @@ class AxDiscussionCache {
         if (!seen.add(cursor)) {
           throw const AxApiException('Discussion cursor repeated');
         }
-        final page =
-            await ds.loadDiscussionPage(workstreamId: id, after: cursor);
+        final page = await ds.loadDiscussionPage(threadId: id, after: cursor);
         additions.addAll(page.messages);
         newestCursor = page.newestCursor ?? newestCursor;
         cursor = page.nextCursor;
@@ -155,7 +154,7 @@ class AxDiscussionCache {
     }
     // Reopening reconciles edits; reconnects need only new messages.
     final head = reconcileNewest || previous.newestCursor == null
-        ? await ds.loadDiscussionPage(workstreamId: id)
+        ? await ds.loadDiscussionPage(threadId: id)
         : null;
     if (head != null) additions.addAll(head.messages);
     final current = _history(id);
@@ -228,7 +227,7 @@ class AxDiscussionCache {
     try {
       final message = await ds.loadDiscussionMessage(messageId: entityId);
       if (!identical(_contexts[id], context)) return;
-      if (message.id != entityId || message.workstreamId != id) {
+      if (message.id != entityId || message.threadId != id) {
         throw const AxApiException('Discussion message identity mismatch');
       }
       context.realtimeError = null;
@@ -266,7 +265,7 @@ class AxDiscussionCache {
     () async {
       try {
         final page =
-            await source!.loadDiscussionPage(workstreamId: id, before: cursor);
+            await source!.loadDiscussionPage(threadId: id, before: cursor);
         if (page.nextCursor == cursor) {
           throw const AxApiException('Discussion cursor repeated');
         }
@@ -310,11 +309,11 @@ class AxDiscussionCache {
   Future<void> send(String id, String text,
       {String? userId, String? userName}) async {
     final context = _context(id);
-    final scope = 'workstream:$id:send-discussion';
+    final scope = 'thread:$id:send-discussion';
     final key = _attempts.keyFor(scope, text);
     final temp = AxDiscussionMessage(
         id: 'temp-${DateTime.now().microsecondsSinceEpoch}-${++_temporaryId}',
-        workstreamId: id,
+        threadId: id,
         authorUserId: userId ?? '',
         authorName: userName ?? 'You',
         body: text,
@@ -335,8 +334,8 @@ class AxDiscussionCache {
             final saved = source == null
                 ? temp.copyWith(id: temp.id.replaceFirst('temp-', 'local-'))
                 : await source!.sendDiscussionMessage(
-                    workstreamId: id, text: text, idempotencyKey: key);
-            if (saved.id.isEmpty || saved.workstreamId != id) {
+                    threadId: id, text: text, idempotencyKey: key);
+            if (saved.id.isEmpty || saved.threadId != id) {
               throw const AxApiException(
                   'Discussion response identity does not match');
             }
@@ -384,7 +383,7 @@ class AxDiscussionCache {
                     messageId: messageId,
                     text: text,
                     references: original.references);
-            if (saved.id != messageId || saved.workstreamId != id) {
+            if (saved.id != messageId || saved.threadId != id) {
               throw const AxApiException(
                   'Discussion response identity does not match');
             }

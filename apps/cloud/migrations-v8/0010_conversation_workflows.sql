@@ -1,14 +1,14 @@
 -- Conversation Continuity Phase 1: product identity above Work execution.
 CREATE TABLE conversations (
   id TEXT PRIMARY KEY,
-  workstream_id TEXT NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
+  thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
   workflow_id TEXT NOT NULL CHECK (workflow_id IN ('chat', 'work')),
   workflow_version INTEGER NOT NULL CHECK (workflow_version > 0),
   conversation_revision INTEGER NOT NULL DEFAULT 0 CHECK (conversation_revision >= 0),
   context_revision INTEGER NOT NULL DEFAULT 0 CHECK (context_revision >= 0 AND context_revision <= conversation_revision),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  UNIQUE (workstream_id, workflow_id)
+  UNIQUE (thread_id, workflow_id)
 );
 
 CREATE TABLE conversation_work_requests (
@@ -19,8 +19,8 @@ CREATE TABLE conversation_work_requests (
 );
 
 CREATE TRIGGER trg_conversation_identity_immutable
-BEFORE UPDATE OF id, workstream_id, workflow_id, workflow_version ON conversations
-WHEN OLD.id IS NOT NEW.id OR OLD.workstream_id IS NOT NEW.workstream_id
+BEFORE UPDATE OF id, thread_id, workflow_id, workflow_version ON conversations
+WHEN OLD.id IS NOT NEW.id OR OLD.thread_id IS NOT NEW.thread_id
   OR OLD.workflow_id IS NOT NEW.workflow_id OR OLD.workflow_version IS NOT NEW.workflow_version
 BEGIN
   SELECT RAISE(ABORT, 'Conversation identity and Workflow are immutable');

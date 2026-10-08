@@ -19,7 +19,7 @@ The default layout is:
     Profiles/    verified Tool Profiles and cached logical Worker catalog
     Engines/     generic CLI Worker Engine
     Workers/     per-Worker state, sessions, and diagnostics
-    Work/        Workstream working directories (Work Root)
+    Work/        Thread working directories (Work Root)
     Updates/     staged Workspace updates
 ~/Library/Logs/Conclave Workspace/
     workspace.log

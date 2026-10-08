@@ -35,7 +35,7 @@ function request(path: string, method = "GET"): Request {
 describe("Worker API routes", () => {
   it("routes canonical history reads to the Conversation-scoped handler", async () => {
     const handler = vi.fn(async () => new Response("{}"));
-    const req = request("/api/workstreams/W/conversations/C/history");
+    const req = request("/api/threads/W/conversations/C/history");
     const env = {} as Env;
     await routeWorkerRequest(
       req,
@@ -60,7 +60,7 @@ describe("Worker API routes", () => {
   });
   it("routes Conversation reads through scoped authorization", async () => {
     const handler = vi.fn(async () => new Response("{}"));
-    const req = request("/api/workstreams/W/conversations");
+    const req = request("/api/threads/W/conversations");
     const env = {} as Env;
     await routeWorkerRequest(
       req,

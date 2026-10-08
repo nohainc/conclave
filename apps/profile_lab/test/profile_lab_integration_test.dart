@@ -212,8 +212,7 @@ void main() {
       expect(ladderRes.stages[1].status, equals('passed'));
       expect(
         ladderRes.stages
-            .where(
-                (stage) => stage.stageId == 'representative_workstream_write')
+            .where((stage) => stage.stageId == 'representative_thread_write')
             .single
             .status,
         isNot(equals('passed')),

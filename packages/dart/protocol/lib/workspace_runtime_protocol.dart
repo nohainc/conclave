@@ -16,7 +16,7 @@ const workspaceRuntimeMessageTypes = <String>{
   'workspace.status',
   'workspace.update',
   'worker.inventory',
-  'workstream.status',
+  'thread.status',
   'assignment.start',
   'assignment.ack',
   'assignment.progress',

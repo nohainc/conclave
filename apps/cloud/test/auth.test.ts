@@ -44,8 +44,8 @@ describe("IdentityService", () => {
     const request = new Request(
       "https://app.conclave.test/api/auth/sign-in/github",
     );
-    expect(safeAuthReturnTo(request, "/projects/p-1/workstreams/ws-1")).toBe(
-      "/projects/p-1/workstreams/ws-1",
+    expect(safeAuthReturnTo(request, "/spaces/p-1/threads/ws-1")).toBe(
+      "/spaces/p-1/threads/ws-1",
     );
     expect(safeAuthReturnTo(request, "https://evil.example/steal")).toBe("/");
     expect(safeAuthReturnTo(request, "/api/auth/sign-out")).toBe("/");
@@ -143,7 +143,7 @@ describe("IdentityService", () => {
     }));
 
     const identity = await service.resolve(
-      new Request("https://conclave.test/api/projects", {
+      new Request("https://conclave.test/api/spaces", {
         headers: { cookie: "better-auth.session_token=opaque" },
       }),
       {
@@ -167,7 +167,7 @@ describe("IdentityService", () => {
     }));
 
     await expect(
-      service.resolve(new Request("https://conclave.test/api/projects"), {
+      service.resolve(new Request("https://conclave.test/api/spaces"), {
         CONCLAVE_DB: {} as D1Database,
         CONCLAVE_ENVIRONMENT: "development",
       }),
@@ -247,7 +247,7 @@ describe("IdentityService", () => {
   it("enforces same-origin mutations for cookie sessions", () => {
     expect(() =>
       requireSameOriginForCookieMutation(
-        new Request("https://app.conclave.test/api/projects", {
+        new Request("https://app.conclave.test/api/spaces", {
           method: "POST",
           headers: {
             cookie: "better-auth.session_token=opaque",
@@ -259,7 +259,7 @@ describe("IdentityService", () => {
 
     expect(() =>
       requireSameOriginForCookieMutation(
-        new Request("https://app.conclave.test/api/projects", {
+        new Request("https://app.conclave.test/api/spaces", {
           method: "POST",
           headers: {
             cookie: "better-auth.session_token=opaque",
@@ -271,7 +271,7 @@ describe("IdentityService", () => {
 
     expect(() =>
       requireSameOriginForCookieMutation(
-        new Request("https://app.conclave.test/api/projects", {
+        new Request("https://app.conclave.test/api/spaces", {
           method: "POST",
           headers: { cookie: "better-auth.session_token=opaque" },
         }),
@@ -347,7 +347,7 @@ describe("IdentityService", () => {
                 {
                   id: "inv-1",
                   workspaceId: "ws-team",
-                  projectId: null,
+                  spaceId: null,
                   email: "person@example.test",
                   role: "member",
                   status: "pending",
@@ -374,7 +374,7 @@ describe("IdentityService", () => {
       {
         id: "inv-1",
         workspaceId: "ws-team",
-        projectId: null,
+        spaceId: null,
         email: "person@example.test",
         role: "member",
         status: "pending",

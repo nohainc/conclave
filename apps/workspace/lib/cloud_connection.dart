@@ -374,20 +374,20 @@ class WorkspaceCloudConnection {
     }
   }
 
-  /// Reports only logical Workstream readiness. Local absolute paths and
+  /// Reports only logical Thread readiness. Local absolute paths and
   /// repository locations never cross the runtime boundary.
-  void reportWorkstreamStatus({
-    required String projectId,
-    required String workstreamId,
+  void reportThreadStatus({
+    required String spaceId,
+    required String threadId,
     required String workingDirectoryState,
   }) {
     if (!const {'absent', 'ready', 'conflict', 'unavailable'}
         .contains(workingDirectoryState)) {
       throw ArgumentError.value(workingDirectoryState, 'workingDirectoryState');
     }
-    _sendIfConnected('workstream.status', {
-      'projectId': projectId,
-      'workstreamId': workstreamId,
+    _sendIfConnected('thread.status', {
+      'spaceId': spaceId,
+      'threadId': threadId,
       'workingDirectoryState': workingDirectoryState,
     });
   }
@@ -848,7 +848,7 @@ class WorkspaceCloudConnection {
     } else if (decoded['type'] == 'workspace.heartbeat.ack') {
       _heartbeatTimeoutTimer?.cancel();
       _heartbeatTimeoutTimer = null;
-    } else if (decoded['type'] == 'workstream.status') {
+    } else if (decoded['type'] == 'thread.status') {
       // Runtime readiness is currently informational. The payload is not
       // persisted here and contains no local path.
     } else if (decoded['type'] == 'assignment.start') {

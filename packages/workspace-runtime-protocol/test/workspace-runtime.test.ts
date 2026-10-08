@@ -107,18 +107,18 @@ describe("Workspace Runtime protocol", () => {
     }
   });
 
-  it("accepts logical Workstream readiness without a local path", () => {
+  it("accepts logical Thread readiness without a local path", () => {
     expect(
       parseWorkspaceRuntimeMessage({
         ...base,
-        type: "workstream.status",
+        type: "thread.status",
         payload: {
-          projectId: "project-1",
-          workstreamId: "workstream-1",
+          spaceId: "space-1",
+          threadId: "thread-1",
           workingDirectoryState: "ready",
         },
       }).type,
-    ).toBe("workstream.status");
+    ).toBe("thread.status");
   });
 
   it("accepts only bounded safe Worker inventory projections", () => {

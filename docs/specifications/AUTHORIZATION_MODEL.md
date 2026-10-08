@@ -1,24 +1,24 @@
 # Authorization Model
 
-**Status:** Current security policy for Conclave AX, Cloud, Workspace ownership, Workstreams, and Tool Profiles.
+**Status:** Current security policy for Conclave AX, Cloud, Workspace ownership, Threads, and Tool Profiles.
 
-Cloud resolves the authenticated Better Auth session to an active Conclave user. It derives Project roles from `project_memberships`; it does not trust client-supplied organization or Workspace membership claims.
+Cloud resolves the authenticated Better Auth session to an active Conclave user. It derives Space roles from `space_memberships`; it does not trust client-supplied organization or Workspace membership claims.
 
-## Project access
+## Space access
 
-Project roles are `owner`, `collaborator`, and `viewer`. Their permission sets are defined in `packages/security/src/index.ts`:
+Space roles are `owner`, `collaborator`, and `viewer`. Their permission sets are defined in `packages/security/src/index.ts`:
 
-- Owners can read, write, and manage their Project, start Work, and control Runs.
-- Collaborators can read and write Project content and start Work.
-- Viewers can read Project content.
+- Owners can read, write, and manage their Space, start Work, and control Runs.
+- Collaborators can read and write Space content and start Work.
+- Viewers can read Space content.
 
 Cloud checks membership at the resource boundary. A missing, suspended, or deactivated user is denied.
 
 ## Workspace execution access
 
-A Workspace has one Cloud owner. The owner manages the Workspace runtime. Project access to a Workspace is granted explicitly through a Project-to-Workspace Grant. Grants scope which Workspace resources a Project's Workstreams may use; they do not change Workspace ownership.
+A Workspace has one Cloud owner. The owner manages the Workspace runtime. Space access to a Workspace is granted explicitly through a Space-to-Workspace Grant. Grants scope which Workspace resources a Space's Threads may use; they do not change Workspace ownership.
 
-Cloud authorizes each Workstream operation and assignment using Project membership, Workspace ownership/grants, Workstream state, logical Worker readiness, and scheduling policy. Workspace independently enforces local permissions, readiness, concurrency, deadlines, cancellation, and process cleanup.
+Cloud authorizes each Thread operation and assignment using Space membership, Workspace ownership/grants, Thread state, logical Worker readiness, and scheduling policy. Workspace independently enforces local permissions, readiness, concurrency, deadlines, cancellation, and process cleanup.
 
 Assignment execution uses one canonical permission vocabulary across Cloud,
 Workspace Runtime Protocol, Workspace, and Engine admission:
@@ -28,12 +28,12 @@ Workspace Runtime Protocol, Workspace, and Engine admission:
 - `shell:execute`
 - `network:use`
 
-Cloud intersects only the permissions allowed by the requester's Project role
-with `workspace_project_grants.allowed_permissions_json`, then applies the
+Cloud intersects only the permissions allowed by the requester's Space role
+with `workspace_space_grants.allowed_permissions_json`, then applies the
 request's read-only Step policy. Cloud does not pretend to know the local
 Worker permission set. Workspace compares the exact permission IDs in the
 assignment snapshot against the installed Worker's local permission ceiling;
-unknown names are rejected. Project access policy values such as `view`,
+unknown names are rejected. Space access policy values such as `view`,
 `discuss`, and `execute` are a separate vocabulary and are not assignment
 execution permissions.
 
@@ -59,7 +59,7 @@ Profile administration and release management use the dedicated `profiles:admin`
 
 ## Step-up authentication and audit
 
-Sensitive ownership or release operations may require a recent step-up proof tied to the current human session. Each route declares its required assurance and Cloud checks it before mutation. Security-relevant authorization, ownership, Workspace, Workstream, and Profile changes are written to the applicable audit stream without credentials or secret payloads.
+Sensitive ownership or release operations may require a recent step-up proof tied to the current human session. Each route declares its required assurance and Cloud checks it before mutation. Security-relevant authorization, ownership, Workspace, Thread, and Profile changes are written to the applicable audit stream without credentials or secret payloads.
 
 Workspace ownership reconciliation is a narrow migration recovery operation.
 It requires a desktop session created by fresh browser approval and an exact

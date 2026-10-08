@@ -8,8 +8,8 @@ resulting changes and evidence across multiple sessions.
 
 ## Vision
 
-Conclave helps people direct that work through persistent Projects and
-Workstreams. People discuss intent, start constrained Workflows, observe
+Conclave helps people direct that work through persistent Spaces and
+Threads. People discuss intent, start constrained Workflows, observe
 execution, review changes and evidence, and decide what happens next. Conclave
 keeps ownership of shared state and validates each transition.
 
@@ -23,7 +23,7 @@ on the user's machine.
 Conclave does not guarantee AI correctness. It makes work inspectable and
 acceptance evidence-based through:
 
-- explicit Workstream state and execution policy;
+- explicit Thread state and execution policy;
 - visible progress, artifacts, and decisions;
 - machine-generated test and build evidence;
 - independent verification where appropriate;
@@ -31,8 +31,8 @@ acceptance evidence-based through:
 
 ## User experience
 
-People should be able to describe a goal, follow its Workstream, answer
+People should be able to describe a goal, follow its Thread, answer
 questions or approvals when needed, and review the completed work without
 manually coordinating every execution detail. Work remains attributable to its
-Project and Workstream, with current state and evidence available for later
+Space and Thread, with current state and evidence available for later
 review.

@@ -5,8 +5,8 @@
 ## Purpose
 
 The public site explains Conclave AX and directs visitors to the authenticated
-application. It does not implement application workflows or own user, Project,
-Workstream, Workspace, or Worker state.
+application. It does not implement application workflows or own user, Space,
+Thread, Workspace, or Worker state.
 
 | Domain | Responsibility | Authentication |
 | --- | --- | --- |
@@ -24,7 +24,7 @@ runtime that supervises provider CLI execution.
 The site should help a visitor understand:
 
 1. What Conclave AX does.
-2. How Projects, Workstreams, Conclave Cloud, and Conclave Workspace relate.
+2. How Spaces, Threads, Conclave Cloud, and Conclave Workspace relate.
 3. How local provider CLI execution and Tool Profiles fit into the system.
 4. Where to start.
 
@@ -33,16 +33,16 @@ works** action links to public explanatory content.
 
 ## Product explanation
 
-Conclave AX is where people discuss work, direct Workstreams, and review
+Conclave AX is where people discuss work, direct Threads, and review
 execution evidence. Conclave Cloud owns shared product state and authorization.
-A Project may use a Workspace through an explicit Project-to-Workspace Grant.
+A Space may use a Workspace through an explicit Space-to-Workspace Grant.
 Conclave Workspace runs locally and supervises the CLI Worker Engine, which
 invokes a locally installed provider CLI using an approved Tool Profile.
 
 ```text
-Conclave AX -> Conclave Cloud -> Project / Workstream policy
+Conclave AX -> Conclave Cloud -> Space / Thread policy
                                       |
-                             Project-to-Workspace Grant
+                             Space-to-Workspace Grant
                                       v
                            Conclave Workspace
                                       |
@@ -72,8 +72,8 @@ required to explain the current product.
 Public security content may explain these boundaries:
 
 - Better Auth establishes the human application session.
-- Conclave Cloud enforces Project, Workspace, Workstream, and Profile policy.
-- A Project can use a Workspace only through an explicit grant.
+- Conclave Cloud enforces Space, Workspace, Thread, and Profile policy.
+- A Space can use a Workspace only through an explicit grant.
 - Conclave Workspace supervises local provider processes and keeps provider
   credentials local.
 - Tool Profiles are signed, bounded configuration interpreted by the generic
@@ -85,8 +85,8 @@ availability and provider claims.
 
 ## Public terminology
 
-Use **Conclave AX**, **Conclave Cloud**, **Conclave Workspace**, **Project**,
-**Workstream**, **Worker**, **CLI Worker Engine**, and **Tool Profile** for the
+Use **Conclave AX**, **Conclave Cloud**, **Conclave Workspace**, **Space**,
+**Thread**, **Worker**, **CLI Worker Engine**, and **Tool Profile** for the
 current product. Avoid retired product concepts and implementation names in
 public copy. Provider names may appear when they match the current catalog and
 trademark requirements.
@@ -96,7 +96,7 @@ trademark requirements.
 The public site does not:
 
 - implement login, discussion, Work, execution, or orchestration;
-- show private Project, Workspace, or Worker data;
+- show private Space, Workspace, or Worker data;
 - install or register a Workspace;
 - collect provider credentials or machine credentials;
 - expose authenticated Cloud APIs as public website functionality.
@@ -125,7 +125,7 @@ part of launch validation.
 Marketing analytics are separate from Conclave Cloud telemetry. Any enabled
 analytics sends only aggregate event name, public path, and timestamp. When the
 configured endpoint is absent, no analytics requests are sent. Do not send
-cookies, user identifiers, Project or Workspace identifiers, credentials, or
+cookies, user identifiers, Space or Workspace identifiers, credentials, or
 application content.
 
 The public Worker uses a self-only Content Security Policy, denies framing,
@@ -144,7 +144,7 @@ on decorative gradients, robot imagery, or animation to explain the product.
 An implementation is conformant when a visitor can, without signing in:
 
 - distinguish the public site from `app.conclaveax.com`;
-- explain the Project/Workstream to Workspace execution path;
+- explain the Space/Thread to Workspace execution path;
 - understand that provider execution uses local CLI software;
 - find the primary application action and public product explanations;
 - use the site with a keyboard and on narrow screens;

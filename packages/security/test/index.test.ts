@@ -3,15 +3,15 @@ import {
   AuthorizationError,
   authorize,
   authorizeProfileAdmin,
-  authorizeProjectMembership,
-  authorizeProjectOwner,
-  authorizeProjectInvitationResponse,
-  canAccessProjectInvitation,
+  authorizeSpaceMembership,
+  authorizeSpaceOwner,
+  authorizeSpaceInvitationResponse,
+  canAccessSpaceInvitation,
   authorizeWorkspaceOwner,
   computePackageDigest,
   extractBearerToken,
   hashToken,
-  resolveProjectSecurityContextFromIdentity,
+  resolveSpaceSecurityContextFromIdentity,
   type DatabaseAdapter,
   type DatabaseStatement,
   type SecurityContext,
@@ -26,7 +26,7 @@ const user = {
 const context: SecurityContext = {
   userId: user.id,
   user,
-  projectRoles: { "project-1": "collaborator", "project-2": "viewer" },
+  spaceRoles: { "space-1": "collaborator", "space-2": "viewer" },
   sessionId: "session-1",
   clientType: "web",
 };
@@ -42,35 +42,33 @@ function database(firstResult: unknown): DatabaseAdapter {
 }
 
 describe("current authorization model", () => {
-  it("authorizes actions from current Project roles only", () => {
-    expect(() =>
-      authorize(context, "projects:write", "project-1"),
-    ).not.toThrow();
-    expect(() => authorize(context, "runs:control", "project-1")).toThrow(
+  it("authorizes actions from current Space roles only", () => {
+    expect(() => authorize(context, "spaces:write", "space-1")).not.toThrow();
+    expect(() => authorize(context, "runs:control", "space-1")).toThrow(
       AuthorizationError,
     );
-    expect(() => authorize(context, "projects:write", "project-2")).toThrow(
+    expect(() => authorize(context, "spaces:write", "space-2")).toThrow(
       AuthorizationError,
     );
-    expect(() =>
-      authorize(context, "projects:read", "unrelated-project"),
-    ).toThrow(AuthorizationError);
+    expect(() => authorize(context, "spaces:read", "unrelated-space")).toThrow(
+      AuthorizationError,
+    );
   });
 
-  it("rechecks Project membership and ownership in the database", async () => {
+  it("rechecks Space membership and ownership in the database", async () => {
     const db = database({ role: "owner" });
     await expect(
-      authorizeProjectMembership(db, context, "project-1", "projects:manage"),
+      authorizeSpaceMembership(db, context, "space-1", "spaces:manage"),
     ).resolves.toEqual({ role: "owner" });
     await expect(
-      authorizeProjectOwner(db, context, "project-1"),
+      authorizeSpaceOwner(db, context, "space-1"),
     ).resolves.toBeUndefined();
     await expect(
-      authorizeProjectMembership(
+      authorizeSpaceMembership(
         database(null),
         context,
-        "project-1",
-        "projects:read",
+        "space-1",
+        "spaces:read",
       ),
     ).rejects.toBeInstanceOf(AuthorizationError);
   });
@@ -88,7 +86,7 @@ describe("current authorization model", () => {
     ).rejects.toBeInstanceOf(AuthorizationError);
   });
 
-  it("keeps Profile administration separate from Project and Workspace roles", () => {
+  it("keeps Profile administration separate from Space and Workspace roles", () => {
     expect(() => authorizeProfileAdmin(context, ["user-1"])).not.toThrow();
     expect(() => authorizeProfileAdmin(context, ["another-user"])).toThrow(
       AuthorizationError,
@@ -128,7 +126,7 @@ describe("current authorization model", () => {
     ).toThrow(AuthorizationError);
   });
 
-  it("resolves human identity and Project roles without legacy aliases", async () => {
+  it("resolves human identity and Space roles without legacy aliases", async () => {
     let call = 0;
     const db: DatabaseAdapter = {
       prepare: () => {
@@ -144,27 +142,27 @@ describe("current authorization model", () => {
             }) as T,
           all: async <T>() =>
             (++call === 1
-              ? { results: [{ project_id: "project-1", role: "owner" }] }
+              ? { results: [{ space_id: "space-1", role: "owner" }] }
               : { results: [] }) as unknown as { results: readonly T[] },
           run: async () => ({ success: true }),
         };
         return statement;
       },
     };
-    const resolved = await resolveProjectSecurityContextFromIdentity(db, {
+    const resolved = await resolveSpaceSecurityContextFromIdentity(db, {
       userId: "user-1",
       email: "one@example.test",
       name: "User One",
       sessionId: "session-1",
     });
-    expect(resolved.projectRoles).toEqual({ "project-1": "owner" });
+    expect(resolved.spaceRoles).toEqual({ "space-1": "owner" });
     expect(resolved.clientType).toBe("web");
     expect(resolved.audience).toBeUndefined();
     expect(resolved).not.toHaveProperty("authorizationModel");
     expect(resolved).not.toHaveProperty("workspaceRole");
     expect(resolved).not.toHaveProperty("organizationId");
 
-    const desktopResolved = await resolveProjectSecurityContextFromIdentity(
+    const desktopResolved = await resolveSpaceSecurityContextFromIdentity(
       db,
       {
         userId: "user-1",
@@ -201,7 +199,7 @@ describe("security token utilities", () => {
 describe("invitation authorization", () => {
   const invitation = {
     id: "inv-1",
-    projectId: "project-1",
+    spaceId: "space-1",
     email: "one@example.test",
     status: "pending",
     expiresAt: new Date(Date.now() + 60000).toISOString(),
@@ -209,7 +207,7 @@ describe("invitation authorization", () => {
 
   it("authorizes invitation response when email matches and status is pending", () => {
     expect(() =>
-      authorizeProjectInvitationResponse(context, invitation),
+      authorizeSpaceInvitationResponse(context, invitation),
     ).not.toThrow();
   });
 
@@ -219,13 +217,13 @@ describe("invitation authorization", () => {
       user: { ...context.user, email: "other@example.test" },
     };
     expect(() =>
-      authorizeProjectInvitationResponse(wrongUser, invitation),
+      authorizeSpaceInvitationResponse(wrongUser, invitation),
     ).toThrow(AuthorizationError);
   });
 
   it("rejects invitation response when invitation is not pending", () => {
     expect(() =>
-      authorizeProjectInvitationResponse(context, {
+      authorizeSpaceInvitationResponse(context, {
         ...invitation,
         status: "accepted",
       }),
@@ -234,15 +232,15 @@ describe("invitation authorization", () => {
 
   it("rejects invitation response when invitation has expired", () => {
     expect(() =>
-      authorizeProjectInvitationResponse(context, {
+      authorizeSpaceInvitationResponse(context, {
         ...invitation,
         expiresAt: new Date(Date.now() - 60000).toISOString(),
       }),
     ).toThrow(AuthorizationError);
   });
 
-  it("allows access to project owners or matching recipients", () => {
-    expect(canAccessProjectInvitation(context, invitation)).toBe(true);
+  it("allows access to space owners or matching recipients", () => {
+    expect(canAccessSpaceInvitation(context, invitation)).toBe(true);
 
     const ownerContext: SecurityContext = {
       userId: "owner-id",
@@ -252,11 +250,11 @@ describe("invitation authorization", () => {
         displayName: "Owner",
         status: "active",
       },
-      projectRoles: { "project-1": "owner" },
+      spaceRoles: { "space-1": "owner" },
       sessionId: "s2",
       clientType: "web",
     };
-    expect(canAccessProjectInvitation(ownerContext, invitation)).toBe(true);
+    expect(canAccessSpaceInvitation(ownerContext, invitation)).toBe(true);
 
     const unrelatedContext: SecurityContext = {
       userId: "other-id",
@@ -266,12 +264,10 @@ describe("invitation authorization", () => {
         displayName: "Other",
         status: "active",
       },
-      projectRoles: {},
+      spaceRoles: {},
       sessionId: "s3",
       clientType: "web",
     };
-    expect(canAccessProjectInvitation(unrelatedContext, invitation)).toBe(
-      false,
-    );
+    expect(canAccessSpaceInvitation(unrelatedContext, invitation)).toBe(false);
   });
 });

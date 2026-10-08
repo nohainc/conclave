@@ -6,7 +6,7 @@ import 'package:conclave_app/src/ax/ax_stores.dart';
 import 'package:conclave_app/src/ax/sync/ax_session_catalogs.dart';
 import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
 import 'package:conclave_app/src/ax/sync/ax_realtime_cache_router.dart';
-import 'package:conclave_app/src/features/projects/projects_pages.dart';
+import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'ax_fixture_data.dart';
 
 class CatalogSource extends AxFixtureDataSource {
@@ -42,8 +42,8 @@ class CatalogSource extends AxFixtureDataSource {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> loadProjectWorkspaces(
-      {required String projectId}) {
+  Future<List<Map<String, dynamic>>> loadSpaceWorkspaces(
+      {required String spaceId}) {
     grantReads++;
     return grantResponse?.future ??
         Future.value([
@@ -188,18 +188,17 @@ void main() {
           {int initialTab = 0}) =>
       MaterialApp(
           home: Scaffold(
-              body: WorkstreamPage(
+              body: ThreadPage(
         key: ValueKey(id),
-        project: AxProject.fromJson({'id': 'p', 'name': 'Project'}),
-        workstream:
-            AxWorkstream.fromJson({'id': id, 'projectId': 'p', 'name': id}),
+        space: AxSpace.fromJson({'id': 'p', 'name': 'Space'}),
+        thread: AxThread.fromJson({'id': id, 'spaceId': 'p', 'name': id}),
         dataSource: source,
         catalogs: catalogs,
         initialTab: initialTab,
-        onBackToProject: () {},
+        onBackToSpace: () {},
         onArchive: () {},
       )));
-  testWidgets('recreated Workstreams reuse Workflow and Worker reads',
+  testWidgets('recreated Threads reuse Workflow and Worker reads',
       (tester) async {
     final source = CatalogSource();
     final store = AxStore(source);
@@ -236,7 +235,7 @@ void main() {
     expect(source.workerReads, 2);
     expect(source.workflowReads, 1);
   });
-  testWidgets('delayed Project grants cannot restore outdated Worker choices',
+  testWidgets('delayed Space grants cannot restore outdated Worker choices',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));

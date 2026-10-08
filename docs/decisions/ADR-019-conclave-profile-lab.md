@@ -75,7 +75,7 @@ Provider CLI (local binary)
 ```
 
 ### Definitions:
-- **Logical Worker (`worker_catalog`):** The stable, product-facing identity referenced by Conclave AX, Cloud, Workflows, Workstream bindings, permissions, scheduling, history, and inventory (e.g., `chatgpt`, `gemini`, `claude`).
+- **Logical Worker (`worker_catalog`):** The stable, product-facing identity referenced by Conclave AX, Cloud, Workflows, Thread bindings, permissions, scheduling, history, and inventory (e.g., `chatgpt`, `gemini`, `claude`).
 - **Tool Profile Definition (`tool_profile_definitions`):** The specification of how a logical Worker is implemented across provider tools (e.g., `chatgpt-codex`, `gemini-antigravity`, `claude-code`). Each logical Worker references one active Profile Definition.
 - **Tool Profile Release (`tool_profile_releases`):** An immutable, versioned, signed payload for a Profile Definition (e.g., `v12`, `v13`, `v14`).
 - **Generic CLI Worker Engine:** The shared, provider-independent child-process supervisor and protocol bridge (`engines/cli_worker`).
@@ -106,7 +106,7 @@ The responsibilities of Conclave applications are strictly separated:
 |     Conclave AX     |      |  Conclave Workspace |      | Conclave Profile Lab|
 +---------------------+      +---------------------+      +---------------------+
 | Human orchestration |      | Local Work Root &   |      | Profile engineering |
-| Projects & Streams  |      | reliable execution  |      | Draft authoring     |
+| Spaces & Streams  |      | reliable execution  |      | Draft authoring     |
 | Step bindings       |      | Admitted signed     |      | Local Engine testing|
 | Worker selection    |      |   releases ONLY     |      | Validation & Diffing|
 | Readiness display   |      | Enforces local auth |      | Promotion & Rollback|
@@ -126,8 +126,8 @@ Profile Lab must **never** behave like Conclave Workspace. Specifically, Profile
 2. **MUST NOT** advertise local Workers to Cloud inventory or synchronize readiness slots;
 3. **MUST NOT** receive Work assignments from the Cloud scheduler;
 4. **MUST NOT** participate in Work scheduling or capacity allocation;
-5. **MUST NOT** create Workstreams or own Project Work Roots;
-6. **MUST NOT** execute normal AX Work Requests or expose local Workers to Projects.
+5. **MUST NOT** create Threads or own Space Work Roots;
+6. **MUST NOT** execute normal AX Work Requests or expose local Workers to Spaces.
 
 The local Engine execution inside Profile Lab exists **exclusively for Profile candidate validation and testing**.
 
@@ -140,7 +140,7 @@ The local Engine execution inside Profile Lab exists **exclusively for Profile c
 | **Test Unsigned Local Drafts** | Yes (sandbox only) | Forbidden | Forbidden | Forbidden |
 | **Verify Signed Profile Releases**| Yes | Yes (mandatory) | No | Signs upon publish |
 | **Execute Normal Work Assignments**| Forbidden | Yes | Forbidden | Schedules |
-| **Own Project Work Roots** | Forbidden | Yes | Forbidden | Metadata only |
+| **Own Space Work Roots** | Forbidden | Yes | Forbidden | Metadata only |
 | **Configure Step Bindings** | Forbidden | Forbidden | Yes | Stores & validates |
 | **Manage Release Channels** | Yes (promote/rollback)| Forbidden | Forbidden | Updates pointers |
 | **Revoke Profile Releases** | Yes (admin action) | Consumes blocklist | Forbidden | Enforces revocation |

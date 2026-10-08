@@ -258,10 +258,10 @@ for (const retiredName of [
   "credential_profiles",
   "ai_accounts",
   "host_workspace_bindings",
-  "workstream_checkouts",
-  "workstream_checkpoints",
-  "workstream_current_checkpoints",
-  "workstream_diff_artifacts",
+  "thread_checkouts",
+  "thread_checkpoints",
+  "thread_current_checkpoints",
+  "thread_diff_artifacts",
   "workspace_pairing_intents",
   "workspace_enrollments",
   "checkout_id",
@@ -369,25 +369,25 @@ if (
     "Cloud must verify generated Wrangler types without rewriting them.",
   );
 }
-if (!infraWrangler.includes('"name": "CONCLAVE_WORKSTREAM_COORDINATOR"')) {
+if (!infraWrangler.includes('"name": "CONCLAVE_THREAD_COORDINATOR"')) {
   failures.push(
-    "Production Wrangler configuration is missing the Workstream coordinator binding.",
+    "Production Wrangler configuration is missing the Thread coordinator binding.",
   );
 }
-if (!infraWrangler.includes('"class_name": "WorkstreamExecutionCoordinator"')) {
+if (!infraWrangler.includes('"class_name": "ThreadExecutionCoordinator"')) {
   failures.push(
-    "Production Wrangler configuration is missing the Workstream coordinator class.",
+    "Production Wrangler configuration is missing the Thread coordinator class.",
   );
 }
-if (!infraWrangler.includes('"tag": "v8-workstream-coordinator"')) {
+if (!infraWrangler.includes('"tag": "v8-thread-coordinator"')) {
   failures.push(
-    "Production Wrangler configuration is missing its Workstream coordinator migration.",
+    "Production Wrangler configuration is missing its Thread coordinator migration.",
   );
 }
 for (const binding of [
   "CONCLAVE_WORKSPACE_GATEWAY",
   "CONCLAVE_REALTIME_GATEWAY",
-  "CONCLAVE_WORKSTREAM_COORDINATOR",
+  "CONCLAVE_THREAD_COORDINATOR",
   "CONCLAVE_RUN_WORKFLOW",
 ]) {
   if (!wranglerTypes.includes(binding)) {
@@ -605,9 +605,9 @@ if (
   );
 }
 for (const file of [
-  "apps/app/lib/src/features/projects/projects_pages/workstream_page.dart",
-  "apps/app/lib/src/features/projects/projects_pages/workstream_actions.dart",
-  "apps/app/lib/src/features/projects/projects_pages/work_components.dart",
+  "apps/app/lib/src/features/spaces/spaces_pages/thread_page.dart",
+  "apps/app/lib/src/features/spaces/spaces_pages/thread_actions.dart",
+  "apps/app/lib/src/features/spaces/spaces_pages/work_components.dart",
 ]) {
   const source = readRequired(file);
   if (

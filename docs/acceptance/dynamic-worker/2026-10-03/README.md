@@ -19,7 +19,7 @@ application branch or executable:
    local Worker ready.
 5. The safe Workspace inventory is joined to Cloud catalog metadata in the AX
    Worker projection. AX's real `AxApiClient` creates a `direct` Work Request
-   for a Workstream; the Cloud test boundary applies the new Workstream binding
+   for a Thread; the Cloud test boundary applies the new Thread binding
    and dispatches an assignment to the Workspace handler. The bundled Engine
    and fixture CLI execute it and return `WORK_DONE`.
 6. AX loads the completed Work Request through its real API client. The Work

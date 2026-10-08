@@ -5,12 +5,12 @@ import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 import WorkflowStep from "../components/WorkflowStep.astro";
-import ProjectWorkstreamShowcase from "../components/ProjectWorkstreamShowcase.astro";
+import SpaceThreadShowcase from "../components/SpaceThreadShowcase.astro";
 ---
 
 <SiteLayout
   title="How Conclave AX works — Shared AI Workspace"
-  description="See how Conclave AX connects people, shared AI accounts, focused workstreams, and advanced workflows in one collaborative workspace."
+  description="See how Conclave AX connects people, shared AI accounts, focused threads, and advanced workflows in one collaborative workspace."
 >
   <Section>
     <Container>
@@ -23,20 +23,20 @@ import ProjectWorkstreamShowcase from "../components/ProjectWorkstreamShowcase.a
 
       <div class="workflow-layout">
         <ol class="workflow-steps">
-          <WorkflowStep number="01" title="Create a Project">
-            <p>Set up a shared project for your family, startup, client engagement, or engineering team with customized member permissions and privacy settings.</p>
+          <WorkflowStep number="01" title="Create a Space">
+            <p>Set up a shared space for your family, startup, client engagement, or engineering team with customized member permissions and privacy settings.</p>
           </WorkflowStep>
 
           <WorkflowStep number="02" title="Invite your people">
-            <p>Invite collaborators via email or direct link. Members gain immediate access to project workstreams and shared AI capabilities.</p>
+            <p>Invite collaborators via email or direct link. Members gain immediate access to space threads and shared AI capabilities.</p>
           </WorkflowStep>
 
           <WorkflowStep number="03" title="Connect & share AI">
-            <p>Project members can contribute supported AI accounts (such as ChatGPT or Gemini) without ever exposing API keys or credentials.</p>
+            <p>Space members can contribute supported AI accounts (such as ChatGPT or Gemini) without ever exposing API keys or credentials.</p>
           </WorkflowStep>
 
-          <WorkflowStep number="04" title="Open a Workstream">
-            <p>Break major goals into focused workstreams—like travel itineraries, competitor research, draft messaging, or feature implementations.</p>
+          <WorkflowStep number="04" title="Open a Thread">
+            <p>Break major goals into focused threads—like travel itineraries, competitor research, draft messaging, or feature implementations.</p>
           </WorkflowStep>
 
           <WorkflowStep number="05" title="Collaborate in context">
@@ -52,11 +52,11 @@ import ProjectWorkstreamShowcase from "../components/ProjectWorkstreamShowcase.a
       <div class="how-it-works-principles">
         <div>
           <strong>Shared context by default.</strong>
-          <span>Everyone in the project sees the prompts, responses, attachments, and decisions.</span>
+          <span>Everyone in the space sees the prompts, responses, attachments, and decisions.</span>
         </div>
         <div>
           <strong>Private credentials.</strong>
-          <span>Sharing an AI account authorizes use for the project; credentials remain securely encrypted and private.</span>
+          <span>Sharing an AI account authorizes use for the space; credentials remain securely encrypted and private.</span>
         </div>
         <div>
           <strong>Multi-model continuity.</strong>
@@ -67,10 +67,10 @@ import ProjectWorkstreamShowcase from "../components/ProjectWorkstreamShowcase.a
       <div style="margin-top: var(--space-16);">
         <SectionHeader
           eyebrow="Practical examples"
-          title="See how projects and workstreams stay organized"
+          title="See how spaces and threads stay organized"
           description="Keep your work structured whether you are managing everyday life or building complex software."
         />
-        <ProjectWorkstreamShowcase />
+        <SpaceThreadShowcase />
       </div>
 
       <div class="actions" style="justify-content: center; margin-top: var(--space-16);">

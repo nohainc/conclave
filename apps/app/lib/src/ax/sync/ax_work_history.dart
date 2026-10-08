@@ -123,7 +123,7 @@ class AxWorkHistoryCache {
       : _sources[source] ??= AxWorkHistoryCache(source);
   final _contexts = <String, _HistoryContext>{};
   AxQuery<AxWorkHistory> query(String id, {bool activeOnly = false}) => AxQuery(
-      key: AxQueryKey(['workstream', id, 'work-requests']),
+      key: AxQueryKey(['thread', id, 'work-requests']),
       load: () => _load(id, activeOnly));
   AxWorkHistory peek(String id) =>
       engine.peek(query(id)).data ?? AxWorkHistory();
@@ -177,8 +177,8 @@ class AxWorkHistoryCache {
     }
     final context = _context(id);
     final revisions = Map.of(context.revisions);
-    final first = await source!.loadWorkstreamWorkRequestPage(
-        workstreamId: id, activeOnly: activeOnly);
+    final first = await source!
+        .loadThreadWorkRequestPage(threadId: id, activeOnly: activeOnly);
     final records = [...first.requests];
     // Active-only pages contain live/recently changed requests, not old history.
     var cursor = activeOnly ? first.nextCursor : null;
@@ -187,8 +187,8 @@ class AxWorkHistoryCache {
       if (!seen.add(cursor)) {
         throw const AxApiException('Work history cursor repeated');
       }
-      final page = await source!.loadWorkstreamWorkRequestPage(
-          workstreamId: id,
+      final page = await source!.loadThreadWorkRequestPage(
+          threadId: id,
           activeOnly: true,
           beforeCreatedAt: cursor.createdAt,
           beforeId: cursor.id);
@@ -267,7 +267,7 @@ class AxWorkHistoryCache {
             confirmedIds: current.confirmedIds);
       });
   AxQueryKey _creationKey(String id) =>
-      AxQueryKey(['mutation', 'workstream', id, 'create-work-request']);
+      AxQueryKey(['mutation', 'thread', id, 'create-work-request']);
   bool submitting(String id) => engine.mutations.isRunning(_creationKey(id));
   Map<String, String> localProgress(String id) =>
       Map.unmodifiable(_context(id).localProgress);
@@ -301,7 +301,7 @@ class AxWorkHistoryCache {
     }
     final inputs = List<Map<String, dynamic>>.unmodifiable(attachments
         .map((item) => freezeAxMutationInput(item) as Map<String, dynamic>));
-    final scope = 'workstream:$id:create-work-request';
+    final scope = 'thread:$id:create-work-request';
     final input = {
       'workflowId': workflowId,
       'workflowVersion': workflowVersion,
@@ -350,7 +350,7 @@ class AxWorkHistoryCache {
           if (source != null && !retrySubmission) {
             progress('Checking that everything is ready…');
             final issues = await source!.validateWorkRequestEligibility(
-                workstreamId: id,
+                threadId: id,
                 workflowId: workflowId,
                 attachments: inputs,
                 executionSelection: executionSelection);
@@ -448,7 +448,7 @@ class AxWorkHistoryCache {
     () async {
       try {
         final pageKey = AxQueryKey([
-          'workstream',
+          'thread',
           id,
           'work-requests',
           'page',
@@ -460,8 +460,8 @@ class AxWorkHistoryCache {
             AxQuery<AxWorkRequestPage>(
                 key: pageKey,
                 load: () async {
-                  final page = await source!.loadWorkstreamWorkRequestPage(
-                      workstreamId: id,
+                  final page = await source!.loadThreadWorkRequestPage(
+                      threadId: id,
                       beforeCreatedAt: cursor.createdAt,
                       beforeId: cursor.id);
                   if (page.nextCursor == cursor) {
@@ -512,7 +512,7 @@ class AxWorkHistoryCache {
     return completer.future;
   }
 
-  Iterable<String> get workstreamIds => _contexts.keys.toList();
+  Iterable<String> get threadIds => _contexts.keys.toList();
   Set<String> activeIds(String id) => peek(id)
       .requests
       .where((r) =>
@@ -572,7 +572,7 @@ class AxWorkHistoryCache {
           if (revision != context.revisions[requestId]) continue;
           final previous = request(id, requestId);
           if ((detail.id != null && detail.id != requestId) ||
-              (detail.workstreamId != null && detail.workstreamId != id) ||
+              (detail.threadId != null && detail.threadId != id) ||
               !const {
                 'queued',
                 'running',
@@ -635,7 +635,7 @@ class AxWorkHistoryCache {
     if (source == null || !peek(id).initialLoaded) return {};
     final context = _context(id);
     final revisions = Map.of(context.revisions);
-    final page = await source!.loadWorkstreamWorkRequestPage(workstreamId: id);
+    final page = await source!.loadThreadWorkRequestPage(threadId: id);
     if (!identical(_contexts[id], context)) return {};
     final accepted = page.requests
         .where((r) => (context.revisions[r.id] ?? 0) == (revisions[r.id] ?? 0))
@@ -661,8 +661,8 @@ class AxWorkHistoryCache {
     AxWorkRequestCursor? cursor;
     final seen = <AxWorkRequestCursor>{};
     do {
-      final page = await source!.loadWorkstreamWorkRequestPage(
-          workstreamId: id,
+      final page = await source!.loadThreadWorkRequestPage(
+          threadId: id,
           activeOnly: true,
           beforeCreatedAt: cursor?.createdAt,
           beforeId: cursor?.id);
@@ -688,7 +688,7 @@ class AxWorkHistoryCache {
     for (final key in context?.pageKeys ?? <AxQueryKey>{}) {
       engine.remove(key);
     }
-    engine.invalidate(AxQueryKey(['workstream', id, 'work-requests']),
+    engine.invalidate(AxQueryKey(['thread', id, 'work-requests']),
         prefix: true);
     // Keep subscribers while resetting history and all cached pages.
     engine.remove(query(id).key);
@@ -706,7 +706,7 @@ class AxWorkHistoryCache {
       for (final key in entry.value.pageKeys) {
         engine.remove(key);
       }
-      engine.invalidate(AxQueryKey(['workstream', entry.key, 'work-requests']),
+      engine.invalidate(AxQueryKey(['thread', entry.key, 'work-requests']),
           prefix: true);
       engine.remove(query(entry.key).key);
     }

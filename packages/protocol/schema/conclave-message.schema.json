@@ -43,7 +43,7 @@
       "workspace.status",
       "workspace.update",
       "worker.inventory",
-      "workstream.status",
+      "thread.status",
       "assignment.start",
       "assignment.ack",
       "assignment.progress",
@@ -85,11 +85,11 @@
       "payload"
     ],
     "optionalEnvelopeFields": [
-      "projectId",
+      "spaceId",
       "runId",
       "taskId",
       "assignmentId",
-      "workstreamId",
+      "threadId",
       "attemptId",
       "workspaceRuntimeId",
       "workspaceId",
@@ -116,16 +116,16 @@
       "assignment.failed",
       "assignment.cancelled",
       "artifact.created",
-      "project.created",
-      "project.updated",
-      "project.archived",
-      "project.deleted",
-      "workstream.created",
-      "workstream.updated",
-      "workstream.deleted",
+      "space.created",
+      "space.updated",
+      "space.archived",
+      "space.deleted",
+      "thread.created",
+      "thread.updated",
+      "thread.deleted",
       "discussion.created",
       "discussion.updated",
-      "project_workspace_grant.updated"
+      "workspace_space_grant.updated"
     ],
     "ephemeralTypes": [
       "assignment.progress",
@@ -133,18 +133,18 @@
       "tool.invocation.status",
       "heartbeat"
     ],
-    "streamKinds": ["execution_workspace", "project", "user"],
+    "streamKinds": ["execution_workspace", "space", "user"],
     "collaborationTypes": [
-      "project.created",
-      "project.updated",
-      "project.archived",
-      "project.deleted",
-      "workstream.created",
-      "workstream.updated",
-      "workstream.deleted",
+      "space.created",
+      "space.updated",
+      "space.archived",
+      "space.deleted",
+      "thread.created",
+      "thread.updated",
+      "thread.deleted",
       "discussion.created",
       "discussion.updated",
-      "project_workspace_grant.updated"
+      "workspace_space_grant.updated"
     ]
   }
 }

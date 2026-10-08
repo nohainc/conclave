@@ -10,7 +10,7 @@ it("includes late prior replies while excluding the current request", async () =
   try {
     f.assign("A");
     f.sqlite
-      .exec(`INSERT INTO work_requests(id,workstream_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,input_json,created_at,updated_at)
+      .exec(`INSERT INTO work_requests(id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,input_json,created_at,updated_at)
       VALUES('R2','W','U','stateless','chat',1,'{}','running','{"originalRequest":"Current request"}','now','now')`);
     await f.db.batch(
       conversationSubmissionStatements(
@@ -94,7 +94,7 @@ it("includes late prior replies while excluding the current request", async () =
       )
       .run(conversation.id, "x".repeat(256 * 1024 + 1));
     f.sqlite
-      .exec(`INSERT INTO work_requests(id,workstream_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,input_json,created_at,updated_at)
+      .exec(`INSERT INTO work_requests(id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,input_json,created_at,updated_at)
       VALUES('R3','W','U','stateless','chat',1,'{}','running','{"originalRequest":"Next request"}','now','now')`);
     await f.db.batch(
       conversationSubmissionStatements(
@@ -122,13 +122,13 @@ it("assembles Work environment and scoped prerequisite results for the receiving
   const f = await conversationFixture();
   try {
     const snapshot = JSON.stringify({
-      projectInstructions: "Project rules",
-      workstreamInstructions: "Stream rules",
+      spaceInstructions: "Space rules",
+      threadInstructions: "Stream rules",
       resolvedBindings: { direct: { workerId: "worker-chatgpt" } },
     });
     f.sqlite
       .prepare(
-        `INSERT INTO work_requests(id,workstream_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,snapshot_json,primary_workspace_id,status,input_json,created_at,updated_at)
+        `INSERT INTO work_requests(id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,snapshot_json,primary_workspace_id,status,input_json,created_at,updated_at)
       VALUES('RW','W','U','stateful','direct',2,'{}',?,'WS','running','{}','now','now')`,
       )
       .run(snapshot);
@@ -143,11 +143,11 @@ it("assembles Work environment and scoped prerequisite results for the receiving
     );
     f.sqlite
       .exec(`INSERT INTO workflow_tasks(id,work_request_id,step_kind,execution_mode,timeout_ms,prompt_profile_version,status,attempt,output_json,created_at,updated_at) VALUES
-      ('IMPLEMENT','RW','implement','stateful_workstream',1000,'implement:v1','completed',1,'{"text":"Implementation result","workerId":"ChatGPT"}','now','now'),
+      ('IMPLEMENT','RW','implement','stateful_thread',1000,'implement:v1','completed',1,'{"text":"Implementation result","workerId":"ChatGPT"}','now','now'),
       ('VERIFY','RW','verify','stateless_read',1000,'verify:v1','queued',0,NULL,'now','now'),
       ('TEST','RW','test','stateless_read',1000,'test:v1','completed',1,'{"text":"Unrelated test output"}','now','now');
       INSERT INTO workflow_task_dependencies(task_id,depends_on_task_id) VALUES('VERIFY','IMPLEMENT');
-      INSERT INTO artifacts(id,project_id,workstream_id,work_request_id,content_digest,storage_key,created_at) VALUES('AR','P','W','RW','digest','secret-storage-key','now');`);
+      INSERT INTO artifacts(id,space_id,thread_id,work_request_id,content_digest,storage_key,created_at) VALUES('AR','P','W','RW','digest','secret-storage-key','now');`);
     const row = f.sqlite
       .prepare("SELECT id FROM conversations WHERE workflow_id='work'")
       .get() as { id: string };
@@ -163,10 +163,10 @@ it("assembles Work environment and scoped prerequisite results for the receiving
     expect(context.workflowExecutionContext).toMatchObject({
       activeStepId: "VERIFY",
       environment: {
-        projectId: "P",
-        workstreamId: "W",
+        spaceId: "P",
+        threadId: "W",
         workspaceId: "WS",
-        projectInstructions: "Project rules",
+        spaceInstructions: "Space rules",
       },
       artifacts: [{ id: "AR", contentDigest: "digest" }],
       prerequisiteResults: [
@@ -254,7 +254,7 @@ it("parallel worker steps preserve one base and never acquire a sibling's respon
     f.sqlite
       .prepare(
         `INSERT INTO worker_assignments
-      (id,project_id,execution_workspace_id,runtime_identity_id,worker_type_id,workspace_worker_id,task_id,status,model,permission_snapshot_json,session_policy,created_at,updated_at)
+      (id,space_id,execution_workspace_id,runtime_identity_id,worker_type_id,workspace_worker_id,task_id,status,model,permission_snapshot_json,session_policy,created_at,updated_at)
       VALUES('PARALLEL-B','P','WS','RT','gemini','worker-b','VERIFY','created','model-y',?,'durable_session','now','now')`,
       )
       .run(

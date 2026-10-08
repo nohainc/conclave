@@ -1,8 +1,8 @@
 # Conclave AX
 
-Conclave AX is the Flutter application for human authentication, Projects,
-Workstreams, Chat, Work, Workspace access, Worker catalog visibility, and
-account security. The Workstream Chat tab is the human discussion surface;
+Conclave AX is the Flutter application for human authentication, Spaces,
+Threads, Chat, Work, Workspace access, Worker catalog visibility, and
+account security. The Thread Chat tab is the human discussion surface;
 Work remains the execution surface.
 Logout sends an authenticated JSON request and clears the local session token
 after Cloud confirms success. Failed logout retains the session for retry.
@@ -12,7 +12,7 @@ Flavored Markdown with selectable text and soft line breaks. Its theme-derived
 style sheet covers headings, emphasis, code, quotes, lists, read-only task lists,
 tables, links and rules. HTML is not rendered. Source stays an ordinary Markdown
 string through storage and Worker execution; diagnostics stay plain text.
-The canonical [Workstream authored-content contract](../../docs/specifications/WORK_V1_CONTRACT.md#workstream-authored-content-contract)
+The canonical [Thread authored-content contract](../../docs/specifications/WORK_V1_CONTRACT.md#thread-authored-content-contract)
 keeps Chat `body`, Work `originalRequest`, Worker `finalText` and Step
 `resultText` as source strings. Existing plain text remains valid Markdown.
 No generated HTML, AST, renderer data or `contentFormat` field is persisted.
@@ -50,7 +50,7 @@ with red as their semantic color.
 Own Chat bubbles use the active navigation background (a light accent wash in
 light mode). Other bubbles stay transparent; both have no outline border.
 Chat and Work keep their composers and action controls fixed at the bottom of
-the Workstream page. Only message history scrolls. Long Markdown previews scroll
+the Thread page. Only message history scrolls. Long Markdown previews scroll
 inside a bounded preview area so they cannot displace the controls.
 Existing Chat messages open the same composer in compact mode with their
 original raw source, including formatting markers. Cmd/Ctrl+Enter saves edits;
@@ -89,11 +89,11 @@ Worker replies appear as compact Conclave messages in Work history. Failed
 Step diagnostics and implementation details are available from the **Run
 details** info action, keeping the main timeline focused on the response.
 AX sends commands and reads history over HTTP, with WebSocket notifications
-triggering immediate history refresh. It subscribes to the active Workstream
+triggering immediate history refresh. It subscribes to the active Thread
 and resynchronizes after reconnecting. While Work is queued, running, or waiting,
 a five-second HTTP refresh also reconciles progress and completion if a live
 notification is missed. The fallback stops after completion or leaving the page.
-To enable Work, open **Project → Workspaces → Edit Workspace access** (shield
+To enable Work, open **Space → Workspaces → Edit Workspace access** (shield
 icon), select **Read repository files** and **Change repository files**, then
 confirm. Test steps also require **Execute commands and tests**. Both Workspace
 connection flows present these choices explicitly; permissions are never
@@ -102,7 +102,7 @@ automatically widened. Existing connections retain their permissions.
 The Work composer loads the current Workflow catalog: Chat, Work, Research,
 Plan & Implement, Implement & Verify, and Full Cycle. Work displays `direct:v2`;
 historical `direct:v1` requests still display Direct. Choose Chat here for an AI
-conversation: it is read-only, resumes a separate Workstream provider session,
+conversation: it is read-only, resumes a separate Thread provider session,
 and acquires no mutation lease. Work is writable and uses mutation coordination.
 The team Chat discussion tab remains a separate collaboration surface.
 
@@ -131,9 +131,9 @@ and Work history/details with Markdown delimiters and fenced code. Work
 execution regression tests also forward the original Markdown prompt unchanged.
 Chat validates nonblank content without trimming its stored source.
 
-This project is a starting point for a Flutter application.
+This space is a starting point for a Flutter application.
 
-A few resources to get you started if this is your first Flutter project:
+A few resources to get you started if this is your first Flutter space:
 
 - [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
 - [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)

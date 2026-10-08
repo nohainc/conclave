@@ -13,7 +13,7 @@
     "passive_probe": "passed",
     "live_probe": "passed",
     "model_selection": "not_applicable",
-    "representative_workstream_write": "not_applicable",
+    "representative_thread_write": "not_applicable",
     "durable_session_start": "passed",
     "durable_session_resume": "passed",
     "timeout": "passed",

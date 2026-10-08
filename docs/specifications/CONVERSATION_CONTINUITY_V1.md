@@ -3,16 +3,16 @@
 **Status:** implemented through Phase 30, including legacy-assumption cleanup, the continuity regression matrix, context/revision evidence, concurrency guards and execution boundaries.
 **Boundary:** Conclave Core and Human Product Protocol. **Contract version:** 1.
 
-Project → Workstream → Conversation → Work Requests is the product ownership
+Space → Thread → Conversation → Work Requests is the product ownership
 model for current manual AI interactions. A Conversation identifies the workflow;
 a Workflow defines execution, while bindings select the Worker, model and effort.
 Human team Discussion remains separate.
 
 ## Domain model and initial definitions
 
-`Conversation` has `id`, `workstreamId`, `workflowId`, `workflowVersion`,
+`Conversation` has `id`, `threadId`, `workflowId`, `workflowVersion`,
 `conversationRevision`, `contextRevision`, `createdAt`, and `updatedAt`.
-Identity, Workstream ownership and Workflow version are immutable.
+Identity, Thread ownership and Workflow version are immutable.
 
 `WorkflowDefinition` has `id`, `type`, `version`, `capabilities`,
 `configurationSchema`, and `execution` (a pinned execution Workflow ID/version).
@@ -20,7 +20,7 @@ Definitions live in provider-independent Core. Capabilities are the union of the
 pinned graph's required Step capabilities. The configuration schema describes
 optional string `workerId`, `model`, and `reasoningEffort` choices and disallows
 other properties. Choices are still stored and validated through existing
-Workstream bindings; Phase 1 does not add a configuration-write endpoint or
+Thread bindings; Phase 1 does not add a configuration-write endpoint or
 duplicate that state.
 
 | Product Workflow | Type/version | Execution Workflow | Binding |
@@ -39,10 +39,10 @@ not yet acquire Conversations. Historical `direct:v1` requests remain unassociat
 
 ## Creation and revisions
 
-Initially there is one implicit Conversation per Workstream and current manual
+Initially there is one implicit Conversation per Thread and current manual
 Workflow. The first eligible Chat/Work request creates it lazily. Its ID is
-`conversation-` plus SHA-256 of the JSON array `[workstreamId, workflowId]`;
-it contains no provider handle. Empty Workstreams return no Conversations until
+`conversation-` plus SHA-256 of the JSON array `[threadId, workflowId]`;
+it contains no provider handle. Empty Threads return no Conversations until
 a request is accepted. No explicit create/reset/rename/delete/Workflow-switch
 operation exists in this phase.
 
@@ -66,12 +66,12 @@ Database guards prevent changing identity or existing associations.
 - `GET /api/workflows/definitions` returns `{ workflows: WorkflowDefinition[] }`
   for current manual definitions. Like the existing built-in catalog, this is
   product metadata and supports conditional reads.
-- `GET /api/workstreams/:id/conversations` returns
-  `{ conversations: Conversation[] }` after Workstream `view` authorization.
+- `GET /api/threads/:id/conversations` returns
+  `{ conversations: Conversation[] }` after Thread `view` authorization.
   No native provider data is included.
 - Existing create-request routes still use execution IDs (`chat`/`direct`). They
   automatically associate current manual requests and return `conversationId`
-  in `workRequest`. Optional `conversationId` must match the Workstream and
+  in `workRequest`. Optional `conversationId` must match the Thread and
   selected manual Workflow; other/incompatible IDs fail 400.
 - Work history/detail reads include nullable `conversationId`. Historical
   unassociated requests return null. AX retains it in typed history/detail models
@@ -100,7 +100,7 @@ a production migration or deployment.
 Native provider session keys and local Engine state remain unchanged. Conversation
 identity does not yet drive session-key derivation, replay history, transfer context,
 summarize messages, or prove which revision a Worker consumed. Model/effort defaults
-remain shared Workstream binding settings; submitted selections remain immutable.
+remain shared Thread binding settings; submitted selections remain immutable.
 Switching Workers can resume an older local thread missing intervening turns,
 as recorded in the [Phase 0 audit](../architecture/CONVERSATION_CONTINUITY_PHASE_0_AUDIT.md).
 
@@ -150,7 +150,7 @@ until refreshed, rather than guessing control permissions.
 
 The authenticated read-cache DTO preserves policy and binding metadata. AX strips
 these presentation fields from its executable `snapshot` projection, and Cloud
-never adds them to historical execution snapshots. Profile validation, Project
+never adds them to historical execution snapshots. Profile validation, Space
 permissions, Worker readiness, and server authorization remain independently
 required; UI flags cannot grant execution or filesystem authority.
 
@@ -163,7 +163,7 @@ unchanged; this phase performs no production deployment.
 Composer selections are next-turn defaults. AX captures an immutable
 `executionSelection` before asynchronous readiness checks or submission. Manual
 Chat/Work requests carry Worker, selected model and effort explicitly, including
-null for Default, together with the selected Workflow version. Saved Workstream
+null for Default, together with the selected Workflow version. Saved Thread
 bindings remain defaults for future requests; they do not change accepted turns.
 
 Cloud validates the selection and resolves the authoritative signed Tool Profile
@@ -274,13 +274,13 @@ cleanup does not remove recorded facts. Deleting the owning Conversation is the
 explicit retention boundary and cascades its history. Sequence reflects recording
 order; `occurredAt` preserves source timing, including imported records.
 
-`GET /api/workstreams/:id/conversations/:conversationId/history` requires
-Workstream view access and verifies Conversation ownership. It accepts `limit`
+`GET /api/threads/:id/conversations/:conversationId/history` requires
+Thread view access and verifies Conversation ownership. It accepts `limit`
 (1–100, default 50), `afterSequence` (default 0), and optional `throughSequence`.
 The response contains `conversationId`, `historyRevision`, `throughSequence`,
 ordered `entries`, and nullable `nextCursor`. Carry both cursor fields into each
 subsequent request to retain a stable upper bound while new entries are appended.
-Invalid or out-of-range cursors return 400; a Conversation outside the Workstream
+Invalid or out-of-range cursors return 400; a Conversation outside the Thread
 returns 404 after access checking. AX exposes typed history reads and retains its
 existing timeline presentation, using canonical message/reply text where present.
 
@@ -311,7 +311,7 @@ Last model/effort describe the last successful execution, and null denotes Defau
 Cloud derives the opaque reference from Workspace, logical Worker, Profile
 definition, Conversation, and logical session key. Model, effort, and compatible
 Profile release changes do not change it. Current manual Conversations map one to
-one to the existing Workstream/workflow session keys, preserving native continuity.
+one to the existing Thread/workflow session keys, preserving native continuity.
 A fresh-session retry changes the logical key and therefore the session generation.
 Future multiple Conversations must allocate distinct logical keys; ownership
 validation rejects using another Conversation's existing mapping.
@@ -427,7 +427,7 @@ Send stays visible. Preview has one Send control. Text input remains editable
 while an execution is active; sending another request stays disabled until it ends.
 
 Workflow capability metadata determines which controls are shown; graph workflows
-retain their per-Step Work settings. The Worker picker lists eligible Project
+retain their per-Step Work settings. The Worker picker lists eligible Space
 Workers with their names, Workspace labels, and existing provider icons or generic
 initials. An unassigned workflow can select its Worker directly in the composer.
 Selectors prefer the typed version 1 `executionOptions` projection from Phase 7.
@@ -436,7 +436,7 @@ capability and supported values. Older API responses retain the existing
 Profile-owned `modelOptions` fallback. No global provider model list is introduced.
 
 Selections are local next-turn overrides per composer binding, initially seeded
-from shared Workstream settings. Picking Worker/model/effort does not write shared
+from shared Thread settings. Picking Worker/model/effort does not write shared
 Work settings or change the Conversation or historical turn metadata. Users with
 execution permission can choose next-turn options independently of permission to
 edit shared settings. Selecting a different Worker restores its remembered valid choices (Phase 10),
@@ -446,8 +446,8 @@ that binding. Submission snapshots the effective local selection before asynchro
 work, retaining the existing immutable accepted-turn contract. Later composer edits
 cannot mutate the submitted selection.
 
-Local choices survive sending while this Workstream form remains mounted and are
-cleared when it switches Workstreams. Phase 10 adds separate last-used combinations per Worker within this form. Cascading catalog reconciliation is described in Phase 9 below; Cloud and Engine
+Local choices survive sending while this Thread form remains mounted and are
+cleared when it switches Threads. Phase 10 adds separate last-used combinations per Worker within this form. Cascading catalog reconciliation is described in Phase 9 below; Cloud and Engine
 remain the authoritative validators for stale selections.
 
 This is an AX-only UI/state change. No database migration or protocol change is
@@ -464,7 +464,7 @@ models retains an effort only when supported by the destination model. Default
 remains an absent override, allowing Profile/Engine defaults to apply.
 
 Inventory refreshes reconcile local overrides and shared-setting seeds without
-writing shared Workstream settings or historical turns. Removed choices revert to
+writing shared Thread settings or historical turns. Removed choices revert to
 Default and do not reappear merely because a later catalog includes them again.
 Loading/error notifications without catalog data preserve the last usable catalog.
 Worker picker callbacks recheck eligibility before accepting a selection.
@@ -479,7 +479,7 @@ preference restoration is described in Phase 10 below.
 
 ## Phase 10 — Remember next-turn selections per Worker
 
-Each mounted Workstream form remembers the last model and effort overrides for
+Each mounted Thread form remembers the last model and effort overrides for
 each Worker, separately per composer binding. Sending preserves the selection.
 Switching away records the current combination, including choices seeded from
 shared Work settings; switching back restores it after capability reconciliation.
@@ -489,12 +489,12 @@ Explicitly selecting Default replaces the previous remembered override.
 Inventory updates reconcile preferences for inactive selections too, so removed
 model/effort choices do not reappear when returning to a Worker. Transient fetch
 failures retain the existing catalog and preferences. Shared binding edits reset
-that binding's local preferences. Changing Workstream, Project, user identity, or
+that binding's local preferences. Changing Thread, Space, user identity, or
 data source clears local choices to prevent preferences crossing those boundaries.
 
 Preferences contain only model and effort overrides. They do not determine
 canonical Conversation state, native Worker sessions, or historical turn metadata.
-They remain in memory for the lifetime of the Workstream form; reopening the form
+They remain in memory for the lifetime of the Thread form; reopening the form
 or restarting the app seeds choices from shared settings again. Cross-device or
 restart persistence is outside this phase. No migration or API change is required.
 
@@ -707,7 +707,7 @@ retain tombstones so deltas can communicate removals.
 Cloud route modules assemble inputs from canonical history and the frozen Work
 Request snapshot. Workflow state explicitly includes execution workflow identity
 and version, Work Request identity/status, and step identity, kind, status, and
-attempt. Project/Workstream instructions seed constraints. Version 1 committed
+attempt. Space/Thread instructions seed constraints. Version 1 committed
 `context.fact_updated` Conclave events materialize scalar or identified string
 facts; worker prose never becomes authoritative decisions or summaries. Missing
 facts remain empty. This phase adds no context-authoring endpoint or automatic
@@ -747,9 +747,9 @@ instructions. Existing `context` and `workflowState` fields remain available in
 version 1 for the current protocol readers.
 
 Chat execution context contains task identity/state but no added environment or
-execution artifact set. Work and other workflows include scoped Project, Workstream
-and Workspace identities, immutable Project/Workstream instructions, and artifact
-identity/digest references from the same Work Request and Project. Local filesystem
+execution artifact set. Work and other workflows include scoped Space, Thread
+and Workspace identities, immutable Space/Thread instructions, and artifact
+identity/digest references from the same Work Request and Space. Local filesystem
 state, paths, credentials and artifact bodies are not read from Cloud. Workspace
 continues to provide authorized Work Root access through the existing execution
 policy. This is a dispatch-time state snapshot, not a filesystem inspection.
@@ -846,7 +846,7 @@ or repeated-role workflow definitions are enabled in this phase.
 `conversation_workflow_step_runs` persists immutable step/task/parent identity.
 Existing `workflow_tasks` remain the single owner of step state and output.
 Worker turns receive immutable `workflowStepRunId` ownership; several turns can
-belong to one step across retries. Before dispatch, the StepRun projects the
+belong to one step across retries. Before dispatch, the StepRun spaces the
 immutable resolved binding. Once dispatched, selection/session/context attribution
 comes from its most recent actual Worker turn, including explicit null model/effort
 for provider defaults rather than falling back to configured values. Historical
@@ -951,7 +951,7 @@ remain deferred until multi-step Conversation workflows are enabled.
 
 Chat and Work apply composer Worker changes immediately to next-turn preferences,
 without confirmation dialogs or context-synchronization messages. Sending retains
-the same Workstream and selected workflow; routing, bootstrap, resume and delta
+the same Thread and selected workflow; routing, bootstrap, resume and delta
 synchronization remain below the UI boundary. Existing turns retain their recorded
 Worker attribution. No extra timeline event is needed while the selected Worker
 is already visible beside Send.
@@ -963,7 +963,7 @@ so the next-turn binding cannot carry another Worker's identity metadata.
 
 Widget regressions exercise repeated switches for both Chat and Work, immediate
 submission to the selected Worker, absence of confirmation/synchronization UI,
-and no mutation of shared Workstream defaults. Existing composer tests preserve
+and no mutation of shared Thread defaults. Existing composer tests preserve
 earlier submitted selections when preferences change. No database migration,
 public API or runtime protocol change is required.
 
@@ -1063,7 +1063,7 @@ do not invent revisions. These semantics supersede the Phase 1 reservation above
 
 Each dispatch freezes the preceding accepted-request boundary as
 `baseContextRevision`, plus its canonical history watermark. WorkflowStepRun
-projects that immutable invocation evidence from its Worker turn; queued steps
+spaces that immutable invocation evidence from its Worker turn; queued steps
 use the immutable request boundary. Later Conversation changes and completion
 never relabel an older step's starting revision. The fresh-start schema rejects
 turn insertion when its base differs from its scoped request boundary, and retains
@@ -1162,7 +1162,7 @@ within the original Worker step and WorkflowRun.
 
 Cloud never owns native session handles. Workspace retains session files, locks
 and local diagnostics. The existing Core Router remains the provider-independent
-policy boundary; the Dart adapter projects that policy onto validated local state
+policy boundary; the Dart adapter spaces that policy onto validated local state
 and the existing runtime envelope. No provider-specific execution path, new
 workflow UI, orchestration service or public compatibility API is introduced.
 
@@ -1186,7 +1186,7 @@ boundary; routing decisions alone are not evidence that a provider resumed.
 | Model change | Keep session or reconstruct according to Profile capability | Core routing matrix; Engine release compatibility subprocess fixtures |
 | New Worker | Bootstrap existing canonical context | Core routing matrix; Cloud bootstrap fixtures |
 | Return to previous Worker | Resume its own session with bounded delta | Core round-trip regression; Engine delta-context fixtures |
-| Worker switch in Chat/Work | No warning | AX `projects_pages_test.dart` |
+| Worker switch in Chat/Work | No warning | AX `spaces_pages_test.dart` |
 | Workspace/Engine restart | Read persisted native state without in-memory dependency | Engine `worker_session_test.dart` uses a new store instance; release compatibility tests start separate Engine processes |
 | Lost native session | Invalidate, reconstruct once, retain logical run | Engine release compatibility fixtures and invalidation/replacement tests |
 | Chat request | One WorkflowRun and one StepRun | Cloud turn regression and workflow-run projection tests |
@@ -1197,7 +1197,7 @@ boundary; routing decisions alone are not evidence that a provider resumed.
 
 The round-trip regression retains separate Worker/Profile identities and checks
 that returning to the original Worker selects its existing session and only the
-missing revision range. The completed-turn regression changes persisted Workstream
+missing revision range. The completed-turn regression changes persisted Thread
 execution defaults and reads historical attribution again, rather than relying on
 an unchanged in-memory object. Native-state tests recreate their store to make
 restart persistence explicit.
@@ -1213,8 +1213,8 @@ rather than deleting valid configuration or historical evidence.
 
 | Old assumption | Current ownership / cleanup |
 | --- | --- |
-| Selected Worker identifies the Conversation | Conversation identity is Workstream + Workflow; turns and WorkerSessions carry Worker/Profile identity |
-| Model/effort are global conversation state | Workstream bindings are configuration defaults; composer choices are local next-turn preferences; immutable turns retain actual execution choices |
+| Selected Worker identifies the Conversation | Conversation identity is Thread + Workflow; turns and WorkerSessions carry Worker/Profile identity |
+| Model/effort are global conversation state | Thread bindings are configuration defaults; composer choices are local next-turn preferences; immutable turns retain actual execution choices |
 | Messages invoke CLI directly | Submission creates product request/run records; Workflow scheduling delegates execution; Workspace supervises the generic Engine |
 | Work tab knows a provider runtime | Composer consumes normalized Worker options; shared `WorkerPresentation` owns branding and generic fallback, with no execution behavior |
 | Workflow owns provider/session behavior | Execution Engine owns session scope/configuration; local Router and Worker Engine own continuity and native handles |

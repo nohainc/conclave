@@ -15,7 +15,7 @@ import {
   conversationWorkflowForExecution,
   type WorkRequest,
   type WorkRequestSnapshot,
-  type WorkstreamExecutionPolicy,
+  type ThreadExecutionPolicy,
   type BuiltinWorkflowDefinition,
   type WorkflowId,
 } from "@conclave/core";
@@ -23,7 +23,7 @@ import {
 import { createEventPublisher } from "../event-publisher.js";
 import {
   HttpError,
-  authorizeWorkstreamAccess,
+  authorizeThreadAccess,
   eligibilityMessage,
   errorMessage,
   json,
@@ -57,20 +57,20 @@ export async function createOrGetRun(
 export async function handleValidateWorkRequest(
   request: Request,
   env: SecurityEnv,
-  workstreamId: string,
+  threadId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const { context, projectId } = await authorizeWorkstreamAccess(
+  const { context, spaceId } = await authorizeThreadAccess(
     request,
     env,
-    workstreamId,
+    threadId,
     "execute",
     accessContext,
   );
   const membership = await env.CONCLAVE_DB.prepare(
-    "SELECT role FROM project_memberships WHERE project_id = ?1 AND user_id = ?2",
+    "SELECT role FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
   )
-    .bind(projectId, context.userId)
+    .bind(spaceId, context.userId)
     .first<{ role: "owner" | "collaborator" | "viewer" }>();
   if (
     !membership ||
@@ -78,13 +78,13 @@ export async function handleValidateWorkRequest(
   )
     throw new HttpError(
       403,
-      "Only a Project owner or collaborator with Work execution access can submit Work",
+      "Only a Space owner or collaborator with Work execution access can submit Work",
     );
   const row = await env.CONCLAVE_DB.prepare(
-    `SELECT wc.config_json AS configJson FROM workstreams ws
-       LEFT JOIN workstream_work_configs wc ON wc.workstream_id = ws.id WHERE ws.id = ?1`,
+    `SELECT wc.config_json AS configJson FROM threads ws
+       LEFT JOIN thread_work_configs wc ON wc.thread_id = ws.id WHERE ws.id = ?1`,
   )
-    .bind(workstreamId)
+    .bind(threadId)
     .first<{ configJson: string | null }>();
   const config = parseJson<Record<string, unknown>>(row?.configJson, {
     defaultWorkflowId: "full_cycle",
@@ -134,8 +134,8 @@ export async function handleValidateWorkRequest(
   }
   const { issues } = await validateWorkflowWorkerEligibility(
     env,
-    projectId,
-    workstreamId,
+    spaceId,
+    threadId,
     workflow,
     executionSelection
       ? {
@@ -154,8 +154,8 @@ export async function handleValidateWorkRequest(
     attachments,
   );
   if (
-    !env.CONCLAVE_WORKSTREAM_COORDINATOR &&
-    workflow.steps.some((step) => step.executionMode === "stateful_workstream")
+    !env.CONCLAVE_THREAD_COORDINATOR &&
+    workflow.steps.some((step) => step.executionMode === "stateful_thread")
   ) {
     issues.push({
       stepKind: workflow.steps[0]?.kind ?? "implement",
@@ -179,20 +179,20 @@ export async function handleValidateWorkRequest(
 export async function handleCreateWorkRequest(
   request: Request,
   env: SecurityEnv,
-  workstreamId: string,
+  threadId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const { context, projectId } = await authorizeWorkstreamAccess(
+  const { context, spaceId } = await authorizeThreadAccess(
     request,
     env,
-    workstreamId,
+    threadId,
     "execute",
     accessContext,
   );
   const membership = await env.CONCLAVE_DB.prepare(
-    "SELECT role FROM project_memberships WHERE project_id = ?1 AND user_id = ?2",
+    "SELECT role FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
   )
-    .bind(projectId, context.userId)
+    .bind(spaceId, context.userId)
     .first<{ role: "owner" | "collaborator" | "viewer" }>();
   if (
     !membership ||
@@ -200,14 +200,14 @@ export async function handleCreateWorkRequest(
   )
     throw new HttpError(
       403,
-      "Only a Project owner or collaborator with Work execution access can submit Work",
+      "Only a Space owner or collaborator with Work execution access can submit Work",
     );
   const body = (await request.json()) as Record<string, unknown>;
   const receipt = await MutationIdempotency.from(
     request,
     env.CONCLAVE_DB,
     context.userId,
-    `workstream:${workstreamId}:create-work-request`,
+    `thread:${threadId}:create-work-request`,
     body,
   );
   const replay = await receipt?.replay();
@@ -220,12 +220,12 @@ export async function handleCreateWorkRequest(
         : null;
   const workConfigRow = await env.CONCLAVE_DB.prepare(
     `SELECT wc.config_json AS configJson, p.settings_json AS settingsJson
-     FROM workstreams ws
-     JOIN projects p ON p.id = ws.project_id
-     LEFT JOIN workstream_work_configs wc ON wc.workstream_id = ws.id
+     FROM threads ws
+     JOIN spaces p ON p.id = ws.space_id
+     LEFT JOIN thread_work_configs wc ON wc.thread_id = ws.id
      WHERE ws.id = ?1`,
   )
-    .bind(workstreamId)
+    .bind(threadId)
     .first<{ configJson: string | null; settingsJson: string | null }>();
   const workConfig = parseJson<Record<string, unknown>>(
     workConfigRow?.configJson,
@@ -240,7 +240,7 @@ export async function handleCreateWorkRequest(
   // Mutation coordination follows the authoritative Steps, independently of
   // durable provider conversation/session state.
   const mode = canonicalWorkflow.steps.some(
-    (step) => step.executionMode === "stateful_workstream",
+    (step) => step.executionMode === "stateful_thread",
   )
     ? "stateful"
     : "stateless";
@@ -466,8 +466,8 @@ export async function handleCreateWorkRequest(
   }
   const eligibility = await validateWorkflowWorkerEligibility(
     env,
-    projectId,
-    workstreamId,
+    spaceId,
+    threadId,
     workflowSnapshot,
     resolvedBindings,
     normalizedAttachments,
@@ -483,8 +483,8 @@ export async function handleCreateWorkRequest(
       { status: 422 },
     );
   }
-  if (!env.CONCLAVE_WORKSTREAM_COORDINATOR && mode === "stateful") {
-    throw new HttpError(503, "Workstream runtime coordination is unavailable");
+  if (!env.CONCLAVE_THREAD_COORDINATOR && mode === "stateful") {
+    throw new HttpError(503, "Thread runtime coordination is unavailable");
   }
   if (eligibility.primaryWorkspaceId) {
     if (
@@ -498,17 +498,17 @@ export async function handleCreateWorkRequest(
     }
     body.primaryWorkspaceId = eligibility.primaryWorkspaceId;
   }
-  const projectSettings = parseJson<Record<string, unknown>>(
+  const spaceSettings = parseJson<Record<string, unknown>>(
     workConfigRow?.settingsJson,
     {},
   );
-  const projectInstructions =
-    typeof projectSettings.instructions === "string"
-      ? projectSettings.instructions
+  const spaceInstructions =
+    typeof spaceSettings.instructions === "string"
+      ? spaceSettings.instructions
       : "";
-  const workstreamInstructions =
-    typeof workConfig.workstreamInstructions === "string"
-      ? workConfig.workstreamInstructions
+  const threadInstructions =
+    typeof workConfig.threadInstructions === "string"
+      ? workConfig.threadInstructions
       : "";
   const manualWorkflow = conversationWorkflowForExecution(
     workflowId,
@@ -536,17 +536,17 @@ export async function handleCreateWorkRequest(
     workflowVersion,
     workflowSnapshot,
     resolvedBindings,
-    projectInstructions,
-    workstreamInstructions,
+    spaceInstructions,
+    threadInstructions,
     stepAdditionalInstructions,
     promptProfileVersions,
   };
   const policyRow = await env.CONCLAVE_DB.prepare(
-    "SELECT mode, primary_workspace_id AS primaryWorkspaceId FROM workstream_execution_policies WHERE workstream_id = ?1",
+    "SELECT mode, primary_workspace_id AS primaryWorkspaceId FROM thread_execution_policies WHERE thread_id = ?1",
   )
-    .bind(workstreamId)
-    .first<WorkstreamExecutionPolicy>();
-  const policy: WorkstreamExecutionPolicy =
+    .bind(threadId)
+    .first<ThreadExecutionPolicy>();
+  const policy: ThreadExecutionPolicy =
     canonicalWorkflow.steps.length === 1
       ? {
           mode,
@@ -568,7 +568,7 @@ export async function handleCreateWorkRequest(
     workflowVersion,
   );
   const selectedConversationId = conversationWorkflow
-    ? conversationId(workstreamId, conversationWorkflow.id)
+    ? conversationId(threadId, conversationWorkflow.id)
     : undefined;
   if (
     body.conversationId !== undefined &&
@@ -576,7 +576,7 @@ export async function handleCreateWorkRequest(
   ) {
     throw new HttpError(
       400,
-      "Conversation does not match this Workstream and Workflow",
+      "Conversation does not match this Thread and Workflow",
     );
   }
   const workRequest: WorkRequest = {
@@ -585,7 +585,7 @@ export async function handleCreateWorkRequest(
       ? { conversationId: selectedConversationId }
       : {}),
     ...(executionConfig ? { executionConfig } : {}),
-    workstreamId,
+    threadId,
     requestedByUserId: context.userId,
     mode,
     workflowId,
@@ -612,18 +612,18 @@ export async function handleCreateWorkRequest(
   const runId = `run-${crypto.randomUUID()}`;
   const responseBody = {
     workRequest,
-    run: { id: runId, projectId, workstreamId, status: "created" },
+    run: { id: runId, spaceId, threadId, status: "created" },
   };
   const write = (receipts: D1PreparedStatement[]) =>
     env.CONCLAVE_DB.batch([
       ...receipts,
       env.CONCLAVE_DB.prepare(
         `INSERT INTO work_requests
-       (id, workstream_id, requested_by_user_id, mode, workflow_id, workflow_version, workflow_snapshot_json, snapshot_json, status, primary_workspace_id, input_json, created_at, updated_at)
+       (id, thread_id, requested_by_user_id, mode, workflow_id, workflow_version, workflow_snapshot_json, snapshot_json, status, primary_workspace_id, input_json, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'queued', ?9, ?10, ?11, ?11)`,
       ).bind(
         workRequest.id,
-        workstreamId,
+        threadId,
         context.userId,
         mode,
         workflowId,
@@ -637,7 +637,7 @@ export async function handleCreateWorkRequest(
       ...(conversationWorkflow
         ? conversationSubmissionStatements(
             env.CONCLAVE_DB,
-            workstreamId,
+            threadId,
             conversationWorkflow,
             workRequest.id,
             now,
@@ -653,19 +653,19 @@ export async function handleCreateWorkRequest(
         : []),
       env.CONCLAVE_DB.prepare(
         `INSERT INTO runs
-       (id, project_id, workstream_id, work_request_id, status, created_at, updated_at)
+       (id, space_id, thread_id, work_request_id, status, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, 'created', ?5, ?5)`,
-      ).bind(runId, projectId, workstreamId, workRequest.id, now),
+      ).bind(runId, spaceId, threadId, workRequest.id, now),
       env.CONCLAVE_DB.prepare(
-        `INSERT INTO project_audit_log
-       (id, project_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
-       VALUES (?1, ?2, 'user', ?3, 'workstream.work_requested', 'work_request', ?4, ?5, ?6)`,
+        `INSERT INTO space_audit_log
+       (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
+       VALUES (?1, ?2, 'user', ?3, 'thread.work_requested', 'work_request', ?4, ?5, ?6)`,
       ).bind(
         `pa-${crypto.randomUUID()}`,
-        projectId,
+        spaceId,
         context.userId,
         workRequest.id,
-        JSON.stringify({ workstreamId, runId, workflowId, workflowVersion }),
+        JSON.stringify({ threadId, runId, workflowId, workflowVersion }),
         now,
       ),
     ]);
@@ -677,13 +677,13 @@ export async function handleCreateWorkRequest(
     await createEventPublisher(env).publish({
       type: "work_request.created",
       workspaceId: workRequest.primaryWorkspaceId!,
-      projectId,
+      spaceId,
       runId,
       idempotencyKey: `work-request:${workRequest.id}:created`,
       payload: {
         entityId: workRequest.id,
         workRequestId: workRequest.id,
-        workstreamId,
+        threadId,
         status: "queued",
       },
     });
@@ -701,7 +701,7 @@ async function resumeSubmission(
 ): Promise<Response> {
   const { workRequest, run } = (await response.clone().json()) as {
     workRequest: WorkRequest;
-    run: { id: string; projectId: string; workstreamId: string };
+    run: { id: string; spaceId: string; threadId: string };
   };
   if (replay) {
     const row = await env.CONCLAVE_DB.prepare(
@@ -712,22 +712,22 @@ async function resumeSubmission(
     if (!row || ["completed", "failed", "cancelled"].includes(row.status))
       return response;
   }
-  if (workRequest.mode === "stateful" && env.CONCLAVE_WORKSTREAM_COORDINATOR) {
-    const coordinator = env.CONCLAVE_WORKSTREAM_COORDINATOR.getByName(
-      workRequest.workstreamId,
+  if (workRequest.mode === "stateful" && env.CONCLAVE_THREAD_COORDINATOR) {
+    const coordinator = env.CONCLAVE_THREAD_COORDINATOR.getByName(
+      workRequest.threadId,
     );
     const result = await coordinator.fetch(
-      new Request("https://workstream-coordinator/enqueue", {
+      new Request("https://thread-coordinator/enqueue", {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-workstream-id": workRequest.workstreamId,
+          "x-thread-id": workRequest.threadId,
         },
         body: JSON.stringify({ workRequestId: workRequest.id }),
       }),
     );
     if (!result.ok)
-      throw new HttpError(503, "Workstream execution coordinator unavailable");
+      throw new HttpError(503, "Thread execution coordinator unavailable");
   }
   await createOrGetRun(env, {
     runId: run.id,
@@ -735,8 +735,8 @@ async function resumeSubmission(
     idempotencyKey: workRequest.id,
     organizationId: workRequest.primaryWorkspaceId!,
     workRequestId: workRequest.id,
-    workstreamId: workRequest.workstreamId,
-    projectId: run.projectId,
+    threadId: workRequest.threadId,
+    spaceId: run.spaceId,
     builtinWorkflow: workRequest.workflowSnapshot,
     input: workRequest.input,
   });

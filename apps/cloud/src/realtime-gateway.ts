@@ -17,11 +17,11 @@ import {
 } from "./realtime-queue.js";
 
 export interface RealtimeScope {
-  kind?: "user" | "project" | "workstream" | "run" | "execution_workspace";
+  kind?: "user" | "space" | "thread" | "run" | "execution_workspace";
   executionWorkspaceId?: string;
   workspaceId?: string;
-  projectId?: string;
-  workstreamId?: string;
+  spaceId?: string;
+  threadId?: string;
   runId?: string;
 }
 
@@ -64,9 +64,9 @@ const MAX_SOCKET_BUFFERED_BYTES = 256 * 1024;
 
 export function scopeKey(scope: RealtimeScope): string {
   if (scope.kind) {
-    return `${scope.kind}=${scope.executionWorkspaceId ?? scope.projectId ?? scope.workstreamId ?? scope.runId ?? ""}`;
+    return `${scope.kind}=${scope.executionWorkspaceId ?? scope.spaceId ?? scope.threadId ?? scope.runId ?? ""}`;
   }
-  return ["workspaceId", "projectId", "runId"]
+  return ["workspaceId", "spaceId", "runId"]
     .map((field) => `${field}=${scope[field as keyof RealtimeScope] ?? ""}`)
     .join("&");
 }
@@ -161,8 +161,8 @@ export function parseRealtimeClientMessage(
   if (scope.kind === "user")
     return { type: value.type, scope: { kind: "user" } };
   if (
-    scope.kind === "project" ||
-    scope.kind === "workstream" ||
+    scope.kind === "space" ||
+    scope.kind === "thread" ||
     scope.kind === "run"
   ) {
     const idField = `${scope.kind}Id`;
@@ -192,7 +192,7 @@ export function parseRealtimeClientMessage(
       },
     };
   }
-  const scopeFields = ["workspaceId", "projectId", "runId"] as const;
+  const scopeFields = ["workspaceId", "spaceId", "runId"] as const;
   if (typeof scope.workspaceId !== "string" || scope.workspaceId.length === 0) {
     throw new Error("Realtime subscription workspaceId is required");
   }
@@ -205,9 +205,7 @@ export function parseRealtimeClientMessage(
     type: value.type,
     scope: {
       workspaceId: scope.workspaceId,
-      ...(typeof scope.projectId === "string"
-        ? { projectId: scope.projectId }
-        : {}),
+      ...(typeof scope.spaceId === "string" ? { spaceId: scope.spaceId } : {}),
       ...(typeof scope.runId === "string" ? { runId: scope.runId } : {}),
     },
   };
@@ -236,9 +234,8 @@ export function eventMatchesScope(
   scope: RealtimeScope,
 ): boolean {
   if (scope.kind === "user") return true;
-  if (scope.kind === "project") return event.projectId === scope.projectId;
-  if (scope.kind === "workstream")
-    return event.workstreamId === scope.workstreamId;
+  if (scope.kind === "space") return event.spaceId === scope.spaceId;
+  if (scope.kind === "thread") return event.threadId === scope.threadId;
   if (scope.kind === "run") return event.runId === scope.runId;
   if (scope.kind === "execution_workspace") {
     return event.workspaceId === scope.executionWorkspaceId;
@@ -246,7 +243,7 @@ export function eventMatchesScope(
   return (
     !!event.workspaceId &&
     event.workspaceId === scope.workspaceId &&
-    (!scope.projectId || event.projectId === scope.projectId) &&
+    (!scope.spaceId || event.spaceId === scope.spaceId) &&
     (!scope.runId || event.runId === scope.runId)
   );
 }
@@ -267,29 +264,29 @@ export async function authorizeRealtimeScope(
   scope: RealtimeScope,
 ): Promise<{ allowed: true } | { allowed: false; reason: string }> {
   if (scope.kind === "user") return { allowed: true };
-  if (scope.kind === "project") {
+  if (scope.kind === "space") {
     const member = await db
       .prepare(
-        "SELECT 1 AS member FROM project_memberships WHERE project_id = ?1 AND user_id = ?2",
+        "SELECT 1 AS member FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
       )
-      .bind(scope.projectId, userId)
+      .bind(scope.spaceId, userId)
       .first<{ member: number }>();
     return member
       ? { allowed: true }
-      : { allowed: false, reason: "project_access_denied" };
+      : { allowed: false, reason: "space_access_denied" };
   }
-  if (scope.kind === "workstream") {
+  if (scope.kind === "thread") {
     const member = await db
       .prepare(
-        `SELECT 1 AS member FROM workstreams w
-       JOIN project_memberships pm ON pm.project_id = w.project_id
+        `SELECT 1 AS member FROM threads w
+       JOIN space_memberships pm ON pm.space_id = w.space_id
        WHERE w.id = ?1 AND pm.user_id = ?2`,
       )
-      .bind(scope.workstreamId, userId)
+      .bind(scope.threadId, userId)
       .first<{ member: number }>();
     return member
       ? { allowed: true }
-      : { allowed: false, reason: "workstream_access_denied" };
+      : { allowed: false, reason: "thread_access_denied" };
   }
   if (scope.kind === "execution_workspace") {
     const owner = await db
@@ -305,8 +302,8 @@ export async function authorizeRealtimeScope(
   if (scope.kind === "run") {
     const row = await db
       .prepare(
-        `SELECT pm.user_id FROM project_memberships pm
-       JOIN runs resource ON resource.project_id = pm.project_id
+        `SELECT pm.user_id FROM space_memberships pm
+       JOIN runs resource ON resource.space_id = pm.space_id
        WHERE resource.id = ?1 AND pm.user_id = ?2`,
       )
       .bind(scope.runId, userId)
@@ -324,23 +321,23 @@ export async function authorizeRealtimeScope(
   if (!owner)
     return { allowed: false, reason: "execution_workspace_access_denied" };
 
-  if (scope.projectId) {
-    const project = await db
+  if (scope.spaceId) {
+    const space = await db
       .prepare(
-        `SELECT 1 AS granted FROM workspace_project_grants
-                  WHERE project_id = ?1 AND workspace_id = ?2 AND status = 'active'`,
+        `SELECT 1 AS granted FROM workspace_space_grants
+                  WHERE space_id = ?1 AND workspace_id = ?2 AND status = 'active'`,
       )
-      .bind(scope.projectId, scope.workspaceId)
+      .bind(scope.spaceId, scope.workspaceId)
       .first<{ granted: number }>();
-    if (!project) {
-      return { allowed: false, reason: "project_access_denied" };
+    if (!space) {
+      return { allowed: false, reason: "space_access_denied" };
     }
   }
   if (scope.runId) {
     const run = await db
       .prepare(
         `SELECT 1 AS granted FROM runs r
-                  JOIN workspace_project_grants g ON g.project_id = r.project_id
+                  JOIN workspace_space_grants g ON g.space_id = r.space_id
                   WHERE r.id = ?1 AND g.workspace_id = ?2 AND g.status = 'active'`,
       )
       .bind(scope.runId, scope.workspaceId)
@@ -557,11 +554,11 @@ export class RealtimeGateway implements DurableObject {
       for (const connected of this.clients.values()) {
         // Deletion removes memberships. Deliver its ID-only signal to the
         // captured audience without keeping now-invalid focused subscriptions.
-        if (event.type === "project.deleted") {
+        if (event.type === "space.deleted") {
           for (const [key, scope] of connected.subscriptions) {
             if (
-              scope.projectId === event.projectId ||
-              ((scope.kind === "workstream" || scope.kind === "run") &&
+              scope.spaceId === event.spaceId ||
+              ((scope.kind === "thread" || scope.kind === "run") &&
                 !(
                   await authorizeRealtimeScope(
                     this.env.CONCLAVE_DB,
@@ -593,17 +590,17 @@ export class RealtimeGateway implements DurableObject {
         }
         if (stream.kind === "user" && stream.id !== connected.identity.userId)
           continue;
-        if (stream.kind === "project" && event.type !== "project.deleted") {
+        if (stream.kind === "space" && event.type !== "space.deleted") {
           const member = await authorizeRealtimeScope(
             this.env.CONCLAVE_DB,
             connected.identity.userId,
-            { kind: "project", projectId: stream.id },
+            { kind: "space", spaceId: stream.id },
           );
           if (!member.allowed) {
             const owner =
-              event.type === "project_workspace_grant.updated"
+              event.type === "workspace_space_grant.updated"
                 ? await this.env.CONCLAVE_DB.prepare(
-                    "SELECT 1 AS owner FROM workspace_project_grants WHERE id = ?1 AND project_id = ?2 AND granted_by_user_id = ?3",
+                    "SELECT 1 AS owner FROM workspace_space_grants WHERE id = ?1 AND space_id = ?2 AND granted_by_user_id = ?3",
                   )
                     .bind(
                       event.payload.entityId,
@@ -641,8 +638,8 @@ export class RealtimeGateway implements DurableObject {
             type: "reconnect.required",
             reason: "durable_event_gap",
             scope:
-              stream.kind === "project"
-                ? { kind: "project", projectId: stream.id }
+              stream.kind === "space"
+                ? { kind: "space", spaceId: stream.id }
                 : stream.kind === "user"
                   ? { kind: "user" }
                   : gapScope,
@@ -684,7 +681,7 @@ export class RealtimeGateway implements DurableObject {
     const durable = isDurableRealtimeEventType(event.type);
     const coalesceKey = durable
       ? undefined
-      : `${event.type}:${realtimeStreamKey(realtimeEventStream(event))}:${event.projectId ?? ""}:${event.runId ?? ""}:${event.assignmentId ?? ""}`;
+      : `${event.type}:${realtimeStreamKey(realtimeEventStream(event))}:${event.spaceId ?? ""}:${event.runId ?? ""}:${event.assignmentId ?? ""}`;
     const frame = JSON.stringify({ type: "event", event });
     if (
       connected.queue.depth === 0 &&
@@ -710,11 +707,11 @@ export class RealtimeGateway implements DurableObject {
       this.sendRaw(connected.socket, {
         type: "reconnect.required",
         reason: "connection_queue_limit",
-        ...(realtimeEventStream(event).kind === "project"
+        ...(realtimeEventStream(event).kind === "space"
           ? {
               scope: {
-                kind: "project",
-                projectId: realtimeEventStream(event).id,
+                kind: "space",
+                spaceId: realtimeEventStream(event).id,
               },
             }
           : {}),

@@ -2,7 +2,7 @@ import {
   MANUAL_WORKFLOW_POLICY,
   type WorkflowCapabilities,
 } from "./workflow-policy.js";
-import { BUILTIN_WORKFLOW_CATALOG, type WorkflowId } from "./workstream.js";
+import { BUILTIN_WORKFLOW_CATALOG, type WorkflowId } from "./thread.js";
 
 /** Product workflow identity, independent of its versioned execution graph. */
 export interface WorkflowDefinition {
@@ -24,7 +24,7 @@ export interface WorkflowDefinition {
 
 export interface Conversation {
   readonly id: string;
-  readonly workstreamId: string;
+  readonly threadId: string;
   readonly workflowId: string;
   readonly workflowVersion: number;
   /** Accepted requests, including requests that subsequently fail. */

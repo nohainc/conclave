@@ -19,7 +19,7 @@ VALUES (
 );
 
 CREATE TABLE realtime_event_cursors__stream_aligned (
-  stream_kind TEXT NOT NULL DEFAULT 'execution_workspace' CHECK (stream_kind IN ('execution_workspace', 'project', 'user')),
+  stream_kind TEXT NOT NULL DEFAULT 'execution_workspace' CHECK (stream_kind IN ('execution_workspace', 'space', 'user')),
   stream_id TEXT,
   workspace_id TEXT,
   next_sequence INTEGER NOT NULL DEFAULT 0,
@@ -47,11 +47,11 @@ CREATE UNIQUE INDEX idx_realtime_event_cursors_stream
 
 CREATE TABLE realtime_events__stream_aligned (
   event_id TEXT PRIMARY KEY,
-  stream_kind TEXT NOT NULL DEFAULT 'execution_workspace' CHECK (stream_kind IN ('execution_workspace', 'project', 'user')),
+  stream_kind TEXT NOT NULL DEFAULT 'execution_workspace' CHECK (stream_kind IN ('execution_workspace', 'space', 'user')),
   stream_id TEXT,
   workspace_id TEXT,
-  workstream_id TEXT,
-  project_id TEXT,
+  thread_id TEXT,
+  space_id TEXT,
   run_id TEXT,
   task_id TEXT,
   attempt_id TEXT,
@@ -72,8 +72,8 @@ INSERT INTO realtime_events__stream_aligned (
   stream_kind,
   stream_id,
   workspace_id,
-  workstream_id,
-  project_id,
+  thread_id,
+  space_id,
   run_id,
   task_id,
   attempt_id,
@@ -91,7 +91,7 @@ SELECT
   workspace_id,
   workspace_id,
   NULL,
-  project_id,
+  space_id,
   run_id,
   task_id,
   attempt_id,

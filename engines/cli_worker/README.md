@@ -35,7 +35,7 @@ execution deadlines are capped by Engine-owned limits. Session keys and stored
 provider session IDs are validated, and session files are confined to the
 Engine state directory. Provider credentials such as `OPENAI_API_KEY` can be
 passed through only when an official Profile explicitly declares them.
-The provider working directory is fixed to the Engine's assigned Workstream
+The provider working directory is fixed to the Engine's assigned Thread
 directory; Profile data cannot select an arbitrary working directory.
 
 The host process supervisor owns cancellation of the Engine process. Within an

@@ -21,27 +21,27 @@ export async function handleUploadArtifact(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const url = new URL(request.url);
-  const projectId = url.searchParams.get("projectId");
+  const spaceId = url.searchParams.get("spaceId");
   const runId = url.searchParams.get("runId");
   const taskId = url.searchParams.get("taskId");
   const attemptId = url.searchParams.get("attemptId");
   const assignmentId = url.searchParams.get("assignmentId");
-  if (!projectId || !runId) {
-    throw new HttpError(400, "projectId and runId are required");
+  if (!spaceId || !runId) {
+    throw new HttpError(400, "spaceId and runId are required");
   }
   const context = await workspaceOwnerContext(
     request,
     env,
     workspaceId,
-    "projects:read",
+    "spaces:read",
     accessContext,
   );
   const scope = await env.CONCLAVE_DB.prepare(
     `SELECT p.workspace_id AS workspaceId
-       FROM projects p JOIN runs r ON r.project_id = p.id
+       FROM spaces p JOIN runs r ON r.space_id = p.id
       WHERE p.id = ?1 AND r.id = ?2 AND p.workspace_id = ?3`,
   )
-    .bind(projectId, runId, workspaceId)
+    .bind(spaceId, runId, workspaceId)
     .first<{ workspaceId: string }>();
   if (!scope) throw new HttpError(404, "Artifact scope not found");
   const lengthHeader = request.headers.get("content-length");
@@ -95,7 +95,7 @@ export async function handleUploadArtifact(
   try {
     await env.CONCLAVE_DB.prepare(
       `INSERT INTO artifacts
-       (id, workspace_id, project_id, run_id, task_id, attempt_id, assignment_id,
+       (id, workspace_id, space_id, run_id, task_id, attempt_id, assignment_id,
         media_type, content_digest, storage_kind, storage_key, inline_content,
         size_bytes, provenance_json, created_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'r2', ?10, NULL, ?11, ?12, ?13)`,
@@ -103,7 +103,7 @@ export async function handleUploadArtifact(
       .bind(
         artifactId,
         workspaceId,
-        projectId,
+        spaceId,
         runId,
         taskId,
         attemptId,
@@ -129,7 +129,7 @@ export async function handleUploadArtifact(
   await createEventPublisher(env).publish({
     type: "artifact.created",
     workspaceId,
-    projectId,
+    spaceId,
     runId,
     taskId: taskId ?? undefined,
     assignmentId: assignmentId ?? undefined,
@@ -141,7 +141,7 @@ export async function handleUploadArtifact(
     },
   });
   await recordAudit(env, context, "artifact.created", "artifact", artifactId, {
-    projectId,
+    spaceId,
     runId,
     sizeBytes: body.byteLength,
     mediaType,
@@ -164,8 +164,8 @@ export async function handleGetArtifact(
   await authorizeRequest(
     request,
     env,
-    "projects:read",
-    String(row.project_id),
+    "spaces:read",
+    String(row.space_id),
     accessContext,
   );
   if (request.method === "HEAD") {

@@ -12,26 +12,26 @@ import 'package:conclave_app/src/ax/ax_models.dart';
 import 'ax_fixture_data.dart';
 
 void main() {
-  testWidgets('clicking another project loads and reveals its Workstreams',
+  testWidgets('clicking another space loads and reveals its Threads',
       (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final data = _ProjectScopedFixture();
+    final data = _SpaceScopedFixture();
     await tester.pumpWidget(MaterialApp(
         home: ConclaveAppShell(
       services: const DefaultPlatformServices(),
       dataSource: data,
     )));
     await tester.pumpAndSettle();
-    final tree = find.byType(ProjectTree);
+    final tree = find.byType(SpaceTree);
     final target = find.descendant(of: tree, matching: find.text('Atlas API'));
     expect(find.descendant(of: tree, matching: find.text('Atlas conversation')),
         findsNothing);
     await tester.tap(target);
     await tester.pumpAndSettle();
-    expect(data.selectedProjects, contains('atlas'));
+    expect(data.selectedSpaces, contains('atlas'));
     expect(find.descendant(of: tree, matching: find.text('Atlas conversation')),
         findsOneWidget);
     await tester.tap(target);
@@ -45,8 +45,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets(
-      'project collapse survives background refresh and can expand again',
+  testWidgets('space collapse survives background refresh and can expand again',
       (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
@@ -57,85 +56,78 @@ void main() {
       home: ConclaveAppShell(
         services: const DefaultPlatformServices(),
         dataSource: const AxFixtureDataSource(),
-        initialUri:
-            Uri.parse('/projects/project-auth/workstreams/workstream-auth'),
+        initialUri: Uri.parse('/spaces/space-auth/threads/thread-auth'),
       ),
     ));
     await tester.pumpAndSettle();
-    final tree = find.byType(ProjectTree);
-    final project =
+    final tree = find.byType(SpaceTree);
+    final space =
         find.descendant(of: tree, matching: find.text('Authentication'));
     final stream = find.descendant(
         of: tree, matching: find.text('Authentication hardening'));
     expect(stream, findsOneWidget);
-    // Keep the active Workstream route while collapsing its sidebar parent.
-    tester.widget<ProjectTree>(tree).onToggleProjectExpanded('project-auth');
+    // Keep the active Thread route while collapsing its sidebar parent.
+    tester.widget<SpaceTree>(tree).onToggleSpaceExpanded!('space-auth');
     await tester.pumpAndSettle();
     expect(stream, findsNothing);
     await tester.pump(const Duration(seconds: 6));
     await tester.pumpAndSettle();
     expect(stream, findsNothing);
-    await tester.tap(project);
+    await tester.tap(space);
     await tester.pumpAndSettle();
     expect(stream, findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
   group('AxShellContext and isNavActive', () {
-    test('isNavActive correctly isolates Home from projects and workstreams',
-        () {
+    test('isNavActive correctly isolates Home from spaces and threads', () {
       const homeContext = AxShellContext(
         navigation: AxNavigation.home(),
-        projects: [],
+        spaces: [],
       );
       expect(homeContext.isNavActive(const AxNavigation.home()), isTrue);
-      expect(homeContext.isNavActive(const AxNavigation.projects()), isFalse);
+      expect(homeContext.isNavActive(const AxNavigation.spaces()), isFalse);
       expect(homeContext.isNavActive(const AxNavigation.workspaces()), isFalse);
 
-      const projectContext = AxShellContext(
-        navigation: AxNavigation.project('project-1'),
-        projects: [],
+      const spaceContext = AxShellContext(
+        navigation: AxNavigation.space('space-1'),
+        spaces: [],
       );
-      // Home must NOT be active when on a project page
-      expect(projectContext.isNavActive(const AxNavigation.home()), isFalse);
-      expect(
-          projectContext.isNavActive(const AxNavigation.project('project-1')),
+      // Home must NOT be active when on a space page
+      expect(spaceContext.isNavActive(const AxNavigation.home()), isFalse);
+      expect(spaceContext.isNavActive(const AxNavigation.space('space-1')),
           isTrue);
-      expect(
-          projectContext.isNavActive(const AxNavigation.project('project-2')),
+      expect(spaceContext.isNavActive(const AxNavigation.space('space-2')),
           isFalse);
-      expect(projectContext.isNavActive(const AxNavigation.projects()), isTrue);
+      expect(spaceContext.isNavActive(const AxNavigation.spaces()), isTrue);
 
-      const workstreamContext = AxShellContext(
-        navigation: AxNavigation.workstream('project-1', 'ws-1'),
-        projects: [],
+      const threadContext = AxShellContext(
+        navigation: AxNavigation.thread('space-1', 'ws-1'),
+        spaces: [],
       );
-      // Home must NOT be active when on a workstream page
-      expect(workstreamContext.isNavActive(const AxNavigation.home()), isFalse);
-      expect(
-          workstreamContext
-              .isNavActive(const AxNavigation.project('project-1')),
+      // Home must NOT be active when on a thread page
+      expect(threadContext.isNavActive(const AxNavigation.home()), isFalse);
+      expect(threadContext.isNavActive(const AxNavigation.space('space-1')),
           isTrue);
-      expect(
-          workstreamContext.isNavActive(const AxNavigation.projects()), isTrue);
+      expect(threadContext.isNavActive(const AxNavigation.spaces()), isTrue);
     });
 
     test('isNavActive covers every route kind accurately', () {
-      // Projects section active for projects, project, workstream, and run
-      const routesInProjects = [
-        AxNavigation.projects(),
-        AxNavigation.project('p-1'),
-        AxNavigation.workstream('p-1', 'ws-1'),
+      // Spaces section active for spaces, space, thread, and run
+      const routesInSpaces = [
+        AxNavigation.spaces(),
+        AxNavigation.space('p-1'),
+        AxNavigation.thread('p-1', 'ws-1'),
         AxNavigation.run('p-1', 'r-1'),
-        AxNavigation.workstream('p-1', 'ws-2'),
+        AxNavigation.thread('p-1', 'ws-2'),
       ];
 
-      for (final nav in routesInProjects) {
-        final ctx = AxShellContext(navigation: nav, projects: const []);
+      for (final nav in routesInSpaces) {
+        final ctx = AxShellContext(navigation: nav, spaces: const []);
         expect(
-          ctx.isNavActive(const AxNavigation.projects()),
+          ctx.isNavActive(const AxNavigation.spaces()),
           isTrue,
-          reason: '$nav should activate Projects group',
+          reason: '$nav should activate Spaces group',
         );
         expect(
           ctx.isNavActive(const AxNavigation.home()),
@@ -152,34 +144,34 @@ void main() {
       // Workspaces route
       const workspaceCtx = AxShellContext(
         navigation: AxNavigation.workspaces(),
-        projects: [],
+        spaces: [],
       );
       expect(workspaceCtx.isNavActive(const AxNavigation.workspaces()), isTrue);
-      expect(workspaceCtx.isNavActive(const AxNavigation.projects()), isFalse);
+      expect(workspaceCtx.isNavActive(const AxNavigation.spaces()), isFalse);
       expect(workspaceCtx.isNavActive(const AxNavigation.home()), isFalse);
 
       // Profile & Security route
       const profileCtx = AxShellContext(
         navigation: AxNavigation.profileSecurity(),
-        projects: [],
+        spaces: [],
       );
       expect(
           profileCtx.isNavActive(const AxNavigation.profileSecurity()), isTrue);
       expect(profileCtx.isNavActive(const AxNavigation.home()), isFalse);
-      expect(profileCtx.isNavActive(const AxNavigation.projects()), isFalse);
+      expect(profileCtx.isNavActive(const AxNavigation.spaces()), isFalse);
     });
   });
 
   group('AxSidebar Canonical Component', () {
-    const testProject = AxProject(
-      id: 'project-1',
+    const testSpace = AxSpace(
+      id: 'space-1',
       name: 'Conclave AX',
       branch: 'main',
       lastActivity: 'today',
-      workstreams: [
-        AxWorkstream(
+      threads: [
+        AxThread(
           id: 'ws-1',
-          projectId: 'project-1',
+          spaceId: 'space-1',
           name: 'Authentication redesign',
           lead: 'Vitalii',
           status: 'running',
@@ -193,14 +185,14 @@ void main() {
     testWidgets('renders canonical sidebar hierarchy and triggers callbacks',
         (tester) async {
       AxNavigation? navigatedTo;
-      String? toggledProjectId;
-      var createProjectCalled = false;
+      String? toggledSpaceId;
+      var createSpaceCalled = false;
 
       final shellContext = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: [testProject],
-        workstreamsByProject: {testProject.id: testProject.workstreams},
-        selectedProject: testProject,
+        spaces: [testSpace],
+        threadsBySpace: {testSpace.id: testSpace.threads},
+        selectedSpace: testSpace,
         workspaces: [
           const AxWorkspace(
             id: 'worker-1',
@@ -217,7 +209,7 @@ void main() {
         ],
         viewerDisplayName: 'Vitalii Noha',
         viewerEmail: 'vitalii@example.com',
-        expandedProjectIds: {'project-1'},
+        expandedSpaceIds: {'space-1'},
       );
 
       await tester.pumpWidget(
@@ -227,8 +219,8 @@ void main() {
             body: AxSidebar(
               shellContext: shellContext,
               onNavigateTo: (nav) => navigatedTo = nav,
-              onToggleProjectExpanded: (id) => toggledProjectId = id,
-              onCreateProject: () => createProjectCalled = true,
+              onToggleSpaceExpanded: (id) => toggledSpaceId = id,
+              onCreateSpace: () => createSpaceCalled = true,
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -239,10 +231,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // Check Header & Main Sections
-      expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand & Project
+      expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand & Space
       expect(find.text('Home'), findsNothing);
-      expect(find.text('Projects'), findsNothing);
-      expect(find.text('PROJECTS'), findsNothing);
+      expect(find.text('Spaces'), findsNothing);
+      expect(find.text('SPACES'), findsNothing);
 
       // Tapping Conclave AX brand navigates to Home
       await tester.tap(find.text('Conclave AX').first);
@@ -258,30 +250,30 @@ void main() {
       expect(find.text('AI Accounts'), findsNothing);
       expect(find.text('INSIGHTS'), findsNothing);
 
-      // Check Project & Workstream tree
+      // Check Space & Thread tree
       expect(find.text('Authentication redesign'), findsOneWidget);
 
       // Check Viewer Initials & Name button
       expect(find.text('VN'), findsOneWidget);
       expect(find.text('Vitalii Noha'), findsOneWidget);
 
-      // Tap New Project button before alarm icon
-      await tester.tap(find.byTooltip('New Project'));
+      // Tap New Space button before alarm icon
+      await tester.tap(find.byTooltip('New Space'));
       await tester.pumpAndSettle();
-      expect(createProjectCalled, isTrue);
+      expect(createSpaceCalled, isTrue);
 
-      // Selecting an expanded Project from Home preserves its expansion.
+      // Selecting an expanded Space from Home preserves its expansion.
       await tester.tap(find.text('Conclave AX').last);
-      expect(navigatedTo?.kind, AxRouteKind.project);
-      expect(navigatedTo?.projectId, 'project-1');
-      expect(toggledProjectId, isNull);
+      expect(navigatedTo?.kind, AxRouteKind.space);
+      expect(navigatedTo?.spaceId, 'space-1');
+      expect(toggledSpaceId, isNull);
 
-      // Tap workstream row
+      // Tap thread row
       await tester.tap(find.text('Authentication redesign'));
-      expect(navigatedTo?.kind, AxRouteKind.workstream);
-      expect(navigatedTo?.workstreamId, 'ws-1');
+      expect(navigatedTo?.kind, AxRouteKind.thread);
+      expect(navigatedTo?.threadId, 'ws-1');
 
-      // Verify folder open icon is displayed for expanded project
+      // Verify folder open icon is displayed for expanded space
       expect(
         find.byWidgetPredicate(
             (w) => w is ConclaveFolderIcon && w.isExpanded == true),
@@ -296,7 +288,7 @@ void main() {
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
       expect(find.text('Workspaces'), findsOneWidget);
-      expect(find.text('Archived Projects'), findsOneWidget);
+      expect(find.text('Archived Spaces'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
       expect(find.text('About Conclave AX'), findsOneWidget);
@@ -318,8 +310,8 @@ void main() {
 
       final shellContext = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: [testProject],
-        workstreamsByProject: {testProject.id: testProject.workstreams},
+        spaces: [testSpace],
+        threadsBySpace: {testSpace.id: testSpace.threads},
         viewerDisplayName: 'Vitalii Noha',
         viewerEmail: 'vitalii@example.com',
       );
@@ -331,8 +323,8 @@ void main() {
             body: AxSidebar(
               shellContext: shellContext,
               onNavigateTo: (nav) => navigatedTo = nav,
-              onToggleProjectExpanded: (_) {},
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (_) {},
+              onCreateSpace: () {},
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -363,7 +355,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(navigatedTo, isNull);
       expect(find.text('Workspaces'), findsOneWidget);
-      expect(find.text('Archived Projects'), findsOneWidget);
+      expect(find.text('Archived Spaces'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
       expect(find.text('About Conclave AX'), findsOneWidget);
@@ -383,8 +375,8 @@ void main() {
 
       final shellContext = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: [testProject],
-        workstreamsByProject: {testProject.id: testProject.workstreams},
+        spaces: [testSpace],
+        threadsBySpace: {testSpace.id: testSpace.threads},
         themeMode: ThemeMode.system,
         viewerDisplayName: 'Vitalii Noha',
       );
@@ -396,8 +388,8 @@ void main() {
             body: AxSidebar(
               shellContext: shellContext,
               onNavigateTo: (_) {},
-              onToggleProjectExpanded: (_) {},
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (_) {},
+              onCreateSpace: () {},
               onSetThemeMode: (mode) => selectedThemeMode = mode,
               onLogout: () => logoutTriggered = true,
               onOpenAbout: () => aboutTriggered = true,
@@ -463,8 +455,8 @@ void main() {
 
       final shellContext = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: [testProject],
-        workstreamsByProject: {testProject.id: testProject.workstreams},
+        spaces: [testSpace],
+        threadsBySpace: {testSpace.id: testSpace.threads},
         themeMode: ThemeMode.light,
         viewerDisplayName: 'Vitalii Noha',
       );
@@ -493,7 +485,7 @@ void main() {
 
       // Check items exist
       expect(find.text('Workspaces'), findsOneWidget);
-      expect(find.text('Archived Projects'), findsOneWidget);
+      expect(find.text('Archived Spaces'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
       expect(find.text('About Conclave AX'), findsOneWidget);
@@ -539,28 +531,27 @@ void main() {
       expect(logoutTriggered, isTrue);
     });
 
-    testWidgets('excludes archived workstreams from sidebar list',
-        (tester) async {
-      const projectWithArchived = AxProject(
-        id: 'project-2',
+    testWidgets('excludes archived threads from sidebar list', (tester) async {
+      const spaceWithArchived = AxSpace(
+        id: 'space-2',
         name: 'Conclave Core',
         branch: 'main',
         lastActivity: 'today',
-        workstreams: [
-          AxWorkstream(
+        threads: [
+          AxThread(
             id: 'ws-active',
-            projectId: 'project-2',
-            name: 'Active Workstream',
+            spaceId: 'space-2',
+            name: 'Active Thread',
             lead: 'Vitalii',
             status: 'active',
             brief: 'Active task',
             primaryWorkspace: 'MacBook Pro',
             queueStatus: 'Idle',
           ),
-          AxWorkstream(
+          AxThread(
             id: 'ws-archived',
-            projectId: 'project-2',
-            name: 'Old Archived Workstream',
+            spaceId: 'space-2',
+            name: 'Old Archived Thread',
             lead: 'Vitalii',
             status: 'archived',
             brief: 'Archived task',
@@ -572,11 +563,9 @@ void main() {
 
       final shellContext = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: [projectWithArchived],
-        workstreamsByProject: {
-          projectWithArchived.id: projectWithArchived.workstreams
-        },
-        expandedProjectIds: {'project-2'},
+        spaces: [spaceWithArchived],
+        threadsBySpace: {spaceWithArchived.id: spaceWithArchived.threads},
+        expandedSpaceIds: {'space-2'},
       );
 
       await tester.pumpWidget(
@@ -586,8 +575,8 @@ void main() {
             body: AxSidebar(
               shellContext: shellContext,
               onNavigateTo: (_) {},
-              onToggleProjectExpanded: (_) {},
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (_) {},
+              onCreateSpace: () {},
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -597,21 +586,21 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Active Workstream'), findsOneWidget);
-      expect(find.text('Old Archived Workstream'), findsNothing);
+      expect(find.text('Active Thread'), findsOneWidget);
+      expect(find.text('Old Archived Thread'), findsNothing);
     });
   });
 
   group('AxTopBar Canonical Component', () {
-    const testProject = AxProject(
-      id: 'project-1',
+    const testSpace = AxSpace(
+      id: 'space-1',
       name: 'Conclave AX',
       branch: 'main',
       lastActivity: 'today',
-      workstreams: [
-        AxWorkstream(
+      threads: [
+        AxThread(
           id: 'ws-1',
-          projectId: 'project-1',
+          spaceId: 'space-1',
           name: 'Authentication redesign',
           lead: 'Vitalii',
           status: 'running',
@@ -635,10 +624,10 @@ void main() {
       var commandPaletteOpened = false;
 
       final shellContext = AxShellContext(
-        navigation: const AxNavigation.workstream('project-1', 'ws-1'),
-        projects: const [testProject],
-        selectedProject: testProject,
-        selectedWorkstream: testProject.workstreams.first,
+        navigation: const AxNavigation.thread('space-1', 'ws-1'),
+        spaces: const [testSpace],
+        selectedSpace: testSpace,
+        selectedThread: testSpace.threads.first,
         workspaces: const [
           AxWorkspace(
             id: 'worker-1',
@@ -691,10 +680,10 @@ void main() {
       expect(find.byTooltip('Switch to dark mode'), findsNothing);
       expect(find.text('About'), findsNothing);
 
-      // Click Project in breadcrumb
+      // Click Space in breadcrumb
       await tester.tap(find.text('Conclave AX'));
-      expect(navigatedTo?.kind, AxRouteKind.project);
-      expect(navigatedTo?.projectId, 'project-1');
+      expect(navigatedTo?.kind, AxRouteKind.space);
+      expect(navigatedTo?.spaceId, 'space-1');
 
       // Click Search affordance
       await tester.tap(find.text('Search or jump to...'));
@@ -713,8 +702,8 @@ void main() {
 
       final shellContext = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: [testProject],
-        workstreamsByProject: {testProject.id: testProject.workstreams},
+        spaces: [testSpace],
+        threadsBySpace: {testSpace.id: testSpace.threads},
         viewerDisplayName: 'Vitalii Noha',
         viewerEmail: 'vitalii@example.com',
         isDarkTheme: true,
@@ -762,8 +751,8 @@ void main() {
 
       final shellContext = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: [testProject],
-        workstreamsByProject: {testProject.id: testProject.workstreams},
+        spaces: [testSpace],
+        threadsBySpace: {testSpace.id: testSpace.threads},
         viewerDisplayName: 'Vitalii Noha',
         viewerEmail: 'vitalii@example.com',
         isDarkTheme: true,
@@ -812,7 +801,7 @@ void main() {
       expect(clearCalled, isTrue);
     });
 
-    testWidgets('renders Run breadcrumbs: Project / Workstream / Run',
+    testWidgets('renders Run breadcrumbs: Space / Thread / Run',
         (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -825,13 +814,13 @@ void main() {
 
       final shellContext = AxShellContext(
         navigation:
-            const AxNavigation.run('project-1', 'run-1', workstreamId: 'ws-1'),
-        projects: const [testProject],
-        selectedProject: testProject,
-        selectedWorkstream: testProject.workstreams.first,
+            const AxNavigation.run('space-1', 'run-1', threadId: 'ws-1'),
+        spaces: const [testSpace],
+        selectedSpace: testSpace,
+        selectedThread: testSpace.threads.first,
         selectedRun: const AxRun(
           id: 'run-1',
-          workstreamId: 'ws-1',
+          threadId: 'ws-1',
           status: RunStatus.running,
           objective: 'Run test objective',
           taskCount: 2,
@@ -863,15 +852,14 @@ void main() {
       expect(find.text('Authentication redesign'), findsOneWidget);
       expect(find.text('Run'), findsOneWidget);
 
-      // Click Workstream link in breadcrumb
+      // Click Thread link in breadcrumb
       await tester.tap(find.text('Authentication redesign'));
-      expect(navigatedTo?.kind, AxRouteKind.workstream);
-      expect(navigatedTo?.projectId, 'project-1');
-      expect(navigatedTo?.workstreamId, 'ws-1');
+      expect(navigatedTo?.kind, AxRouteKind.thread);
+      expect(navigatedTo?.spaceId, 'space-1');
+      expect(navigatedTo?.threadId, 'ws-1');
     });
 
-    testWidgets(
-        'compact HUD prioritizes leaf entity in breadcrumbs for workstream',
+    testWidgets('compact HUD prioritizes leaf entity in breadcrumbs for thread',
         (tester) async {
       tester.view.physicalSize = const Size(500, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -883,10 +871,10 @@ void main() {
       AxNavigation? navigatedTo;
 
       final shellContext = AxShellContext(
-        navigation: const AxNavigation.workstream('project-1', 'ws-1'),
-        projects: const [testProject],
-        selectedProject: testProject,
-        selectedWorkstream: testProject.workstreams.first,
+        navigation: const AxNavigation.thread('space-1', 'ws-1'),
+        spaces: const [testSpace],
+        selectedSpace: testSpace,
+        selectedThread: testSpace.threads.first,
       );
 
       await tester.pumpWidget(
@@ -907,14 +895,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // In compact mode, parent project 'Conclave AX' and workstream are displayed
+      // In compact mode, parent space 'Conclave AX' and thread are displayed
       expect(find.text('Conclave AX'), findsOneWidget);
       expect(find.text('Authentication redesign'), findsOneWidget);
 
-      // Tapping parent project navigates back to the Project
+      // Tapping parent space navigates back to the Space
       await tester.tap(find.text('Conclave AX'));
-      expect(navigatedTo?.kind, AxRouteKind.project);
-      expect(navigatedTo?.projectId, 'project-1');
+      expect(navigatedTo?.kind, AxRouteKind.space);
+      expect(navigatedTo?.spaceId, 'space-1');
     });
 
     testWidgets('compact HUD displays full breadcrumb path for run',
@@ -930,13 +918,13 @@ void main() {
 
       final shellContext = AxShellContext(
         navigation:
-            const AxNavigation.run('project-1', 'run-1', workstreamId: 'ws-1'),
-        projects: const [testProject],
-        selectedProject: testProject,
-        selectedWorkstream: testProject.workstreams.first,
+            const AxNavigation.run('space-1', 'run-1', threadId: 'ws-1'),
+        spaces: const [testSpace],
+        selectedSpace: testSpace,
+        selectedThread: testSpace.threads.first,
         selectedRun: const AxRun(
           id: 'run-1',
-          workstreamId: 'ws-1',
+          threadId: 'ws-1',
           status: RunStatus.running,
           objective: 'Run test objective',
           taskCount: 2,
@@ -965,19 +953,19 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // In compact mode, parent project and workstream are displayed
+      // In compact mode, parent space and thread are displayed
       expect(find.text('Conclave AX'), findsOneWidget);
       expect(find.text('Authentication redesign'), findsOneWidget);
       expect(find.text('Run'), findsOneWidget);
 
-      // Tapping parent workstream navigates to parent Workstream
+      // Tapping parent thread navigates to parent Thread
       await tester.ensureVisible(find.text('Authentication redesign'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Authentication redesign'),
           warnIfMissed: false);
-      expect(navigatedTo?.kind, AxRouteKind.workstream);
-      expect(navigatedTo?.projectId, 'project-1');
-      expect(navigatedTo?.workstreamId, 'ws-1');
+      expect(navigatedTo?.kind, AxRouteKind.thread);
+      expect(navigatedTo?.spaceId, 'space-1');
+      expect(navigatedTo?.threadId, 'ws-1');
     });
 
     testWidgets(
@@ -985,13 +973,13 @@ void main() {
         (tester) async {
       AxNavigation? navigatedTo;
       var notificationsOpened = false;
-      var createProjectOpened = false;
+      var createSpaceOpened = false;
       var collapseToggled = false;
 
       final shellContext = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: [testProject],
-        workstreamsByProject: {testProject.id: testProject.workstreams},
+        spaces: [testSpace],
+        threadsBySpace: {testSpace.id: testSpace.threads},
         viewerDisplayName: 'Vitalii Noha',
         viewerEmail: 'vitalii@example.com',
         unreadNotificationCount: 2,
@@ -1007,7 +995,7 @@ void main() {
                 shellContext: shellContext,
                 onNavigateTo: (nav) => navigatedTo = nav,
                 onOpenDrawer: () {},
-                onCreateProject: () => createProjectOpened = true,
+                onCreateSpace: () => createSpaceOpened = true,
                 onOpenCommandPalette: () {},
                 onOpenNotifications: () => notificationsOpened = true,
                 onToggleTheme: () {},
@@ -1027,9 +1015,9 @@ void main() {
       expect(find.byTooltip('Conclave AX — Home'), findsOneWidget);
       expect(find.byTooltip('Expand sidebar'), findsOneWidget);
       expect(find.byTooltip('Search...'), findsOneWidget);
-      expect(find.byTooltip('Add Project'), findsOneWidget);
+      expect(find.byTooltip('Add Space'), findsOneWidget);
       expect(find.byTooltip('Notifications'), findsOneWidget);
-      expect(find.byTooltip('YOUR PROJECTS'), findsOneWidget);
+      expect(find.byTooltip('YOUR SPACES'), findsOneWidget);
       expect(find.byTooltip('Vitalii Noha'), findsOneWidget);
       expect(find.byTooltip('Application menu'), findsOneWidget);
 
@@ -1055,25 +1043,25 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Search or jump to...'), findsNothing); // popup closed
 
-      // Tapping Add Project icon
-      await tester.tap(find.byTooltip('Add Project'));
-      expect(createProjectOpened, isTrue);
+      // Tapping Add Space icon
+      await tester.tap(find.byTooltip('Add Space'));
+      expect(createSpaceOpened, isTrue);
 
       // Tapping Notifications icon
       await tester.tap(find.byTooltip('Notifications'));
       expect(notificationsOpened, isTrue);
 
-      // Tapping Projects & Workstreams popup menu
-      await tester.tap(find.byTooltip('YOUR PROJECTS'));
+      // Tapping Spaces & Threads popup menu
+      await tester.tap(find.byTooltip('YOUR SPACES'));
       await tester.pumpAndSettle();
       expect(find.byType(ConclaveFolderIcon), findsAtLeastNWidgets(1));
-      expect(find.text(testProject.name), findsOneWidget);
-      expect(find.text(testProject.workstreams.first.name), findsOneWidget);
-      expect(find.text('Create Project'), findsNothing); // Removed from menu
-      await tester.tap(find.text(testProject.workstreams.first.name));
+      expect(find.text(testSpace.name), findsOneWidget);
+      expect(find.text(testSpace.threads.first.name), findsOneWidget);
+      expect(find.text('Create Space'), findsNothing); // Removed from menu
+      await tester.tap(find.text(testSpace.threads.first.name));
       await tester.pumpAndSettle();
-      expect(navigatedTo?.kind, AxRouteKind.workstream);
-      expect(navigatedTo?.workstreamId, testProject.workstreams.first.id);
+      expect(navigatedTo?.kind, AxRouteKind.thread);
+      expect(navigatedTo?.threadId, testSpace.threads.first.id);
 
       // Tapping Profile avatar button navigates to profile
       await tester.tap(find.byTooltip('Vitalii Noha'));
@@ -1143,7 +1131,7 @@ void main() {
       // 1. Global context test: "2 / 3 Workspaces online"
       const globalContext = AxShellContext(
         navigation: AxNavigation.home(),
-        projects: [],
+        spaces: [],
         workspaces: [macBook, buildServer, officeMac],
       );
 
@@ -1215,13 +1203,13 @@ void main() {
         activeTaskCount: 0,
       );
 
-      // Workstream context: targeted workspace online
+      // Thread context: targeted workspace online
       const wsCtxOnline = AxShellContext(
-        navigation: AxNavigation.workstream('project-1', 'ws-1'),
-        projects: [],
-        selectedWorkstream: AxWorkstream(
+        navigation: AxNavigation.thread('space-1', 'ws-1'),
+        spaces: [],
+        selectedThread: AxThread(
           id: 'ws-1',
-          projectId: 'project-1',
+          spaceId: 'space-1',
           name: 'Authentication redesign',
           lead: 'Vitalii',
           status: 'running',
@@ -1234,13 +1222,13 @@ void main() {
       expect(wsCtxOnline.executionStatusLabel, 'MacBook Pro · Online');
       expect(wsCtxOnline.executionStatusTone, ExecutionStatusTone.usable);
 
-      // Workstream context: targeted workspace offline
+      // Thread context: targeted workspace offline
       const wsCtxOffline = AxShellContext(
-        navigation: AxNavigation.workstream('project-1', 'ws-2'),
-        projects: [],
-        selectedWorkstream: AxWorkstream(
+        navigation: AxNavigation.thread('space-1', 'ws-2'),
+        spaces: [],
+        selectedThread: AxThread(
           id: 'ws-2',
-          projectId: 'project-1',
+          spaceId: 'space-1',
           name: 'Core refactor',
           lead: 'Vitalii',
           status: 'running',
@@ -1256,7 +1244,7 @@ void main() {
       // Reconnecting / stale state
       const staleCtx = AxShellContext(
         navigation: AxNavigation.home(),
-        projects: [],
+        spaces: [],
         workspaces: [macBook],
         realtimeStale: true,
       );
@@ -1265,7 +1253,7 @@ void main() {
       // Empty workspaces state
       const emptyCtx = AxShellContext(
         navigation: AxNavigation.home(),
-        projects: [],
+        spaces: [],
         workspaces: [],
       );
       expect(emptyCtx.executionStatusLabel, 'No Workspaces');
@@ -1274,15 +1262,15 @@ void main() {
   });
 
   group('Phase 10 — Shell Cleanup, Regressions, and Deep Interactions', () {
-    const projectA = AxProject(
+    const spaceA = AxSpace(
       id: 'p-1',
       name: 'Conclave Core',
       branch: 'main',
       lastActivity: 'today',
-      workstreams: [
-        AxWorkstream(
+      threads: [
+        AxThread(
           id: 'ws-running',
-          projectId: 'p-1',
+          spaceId: 'p-1',
           name: 'Engine optimization',
           lead: 'Vitalii',
           status: 'running',
@@ -1290,9 +1278,9 @@ void main() {
           primaryWorkspace: 'MacBook Pro',
           queueStatus: 'Running',
         ),
-        AxWorkstream(
+        AxThread(
           id: 'ws-queued',
-          projectId: 'p-1',
+          spaceId: 'p-1',
           name: 'Queue integration',
           lead: 'Vitalii',
           status: 'queued',
@@ -1300,9 +1288,9 @@ void main() {
           primaryWorkspace: 'MacBook Pro',
           queueStatus: 'Queued',
         ),
-        AxWorkstream(
+        AxThread(
           id: 'ws-failed',
-          projectId: 'p-1',
+          spaceId: 'p-1',
           name: 'Buggy patch',
           lead: 'Vitalii',
           status: 'failed',
@@ -1317,10 +1305,10 @@ void main() {
         (tester) async {
       const allRoutes = [
         AxNavigation.home(),
-        AxNavigation.projects(),
-        AxNavigation.project('p-1'),
-        AxNavigation.workstream('p-1', 'ws-running'),
-        AxNavigation.run('p-1', 'run-1', workstreamId: 'ws-running'),
+        AxNavigation.spaces(),
+        AxNavigation.space('p-1'),
+        AxNavigation.thread('p-1', 'ws-running'),
+        AxNavigation.run('p-1', 'run-1', threadId: 'ws-running'),
         AxNavigation.workspaces(),
         AxNavigation.workspaces(),
         AxNavigation.profileSecurity(),
@@ -1329,9 +1317,9 @@ void main() {
       for (final nav in allRoutes) {
         final ctx = AxShellContext(
           navigation: nav,
-          projects: const [projectA],
-          selectedProject: projectA,
-          expandedProjectIds: {'p-1'},
+          spaces: const [spaceA],
+          selectedSpace: spaceA,
+          expandedSpaceIds: {'p-1'},
         );
 
         await tester.pumpWidget(
@@ -1341,8 +1329,8 @@ void main() {
               body: AxSidebar(
                 shellContext: ctx,
                 onNavigateTo: (_) {},
-                onToggleProjectExpanded: (_) {},
-                onCreateProject: () {},
+                onToggleSpaceExpanded: (_) {},
+                onCreateSpace: () {},
                 onLogout: () {},
                 onOpenAbout: () {},
                 onOpenExternal: (_) {},
@@ -1358,17 +1346,17 @@ void main() {
     });
 
     testWidgets(
-        'Project click opens project and toggles expansion only when clicking active project',
+        'Space click opens space and toggles expansion only when clicking active space',
         (tester) async {
       AxNavigation? navigatedTo;
-      String? toggledProjectId;
+      String? toggledSpaceId;
 
-      // 1. Initially on Home (not active project)
+      // 1. Initially on Home (not active space)
       final homeContext = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: [projectA],
-        workstreamsByProject: {projectA.id: projectA.workstreams},
-        expandedProjectIds: {},
+        spaces: [spaceA],
+        threadsBySpace: {spaceA.id: spaceA.threads},
+        expandedSpaceIds: {},
       );
 
       await tester.pumpWidget(
@@ -1378,8 +1366,8 @@ void main() {
             body: AxSidebar(
               shellContext: homeContext,
               onNavigateTo: (nav) => navigatedTo = nav,
-              onToggleProjectExpanded: (id) => toggledProjectId = id,
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (id) => toggledSpaceId = id,
+              onCreateSpace: () {},
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -1389,32 +1377,32 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Workstreams should not be visible when collapsed
+      // Threads should not be visible when collapsed
       expect(find.text('Engine optimization'), findsNothing);
-      // Collapsed project shows closed folder icon
+      // Collapsed space shows closed folder icon
       expect(
         find.byWidgetPredicate(
             (w) => w is ConclaveFolderIcon && w.isExpanded == false),
         findsOneWidget,
       );
 
-      // Tap the project item -> should navigate to project and toggle expansion
+      // Tap the space item -> should navigate to space and toggle expansion
       await tester.tap(find.text('Conclave Core'));
-      expect(navigatedTo?.kind, AxRouteKind.project);
-      expect(navigatedTo?.projectId, 'p-1');
-      expect(toggledProjectId, 'p-1');
+      expect(navigatedTo?.kind, AxRouteKind.space);
+      expect(navigatedTo?.spaceId, 'p-1');
+      expect(toggledSpaceId, 'p-1');
 
       // Reset
       navigatedTo = null;
-      toggledProjectId = null;
+      toggledSpaceId = null;
 
       // 2. When expanded
-      final expandedProjectContext = AxShellContext(
-        navigation: const AxNavigation.project('p-1'),
-        projects: [projectA],
-        workstreamsByProject: {projectA.id: projectA.workstreams},
-        selectedProject: projectA,
-        expandedProjectIds: {'p-1'},
+      final expandedSpaceContext = AxShellContext(
+        navigation: const AxNavigation.space('p-1'),
+        spaces: [spaceA],
+        threadsBySpace: {spaceA.id: spaceA.threads},
+        selectedSpace: spaceA,
+        expandedSpaceIds: {'p-1'},
       );
 
       await tester.pumpWidget(
@@ -1422,10 +1410,10 @@ void main() {
           theme: ConclaveBrand.darkTheme(),
           home: Scaffold(
             body: AxSidebar(
-              shellContext: expandedProjectContext,
+              shellContext: expandedSpaceContext,
               onNavigateTo: (nav) => navigatedTo = nav,
-              onToggleProjectExpanded: (id) => toggledProjectId = id,
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (id) => toggledSpaceId = id,
+              onCreateSpace: () {},
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -1435,7 +1423,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Expanded project shows open folder icon and workstreams
+      // Expanded space shows open folder icon and threads
       expect(
         find.byWidgetPredicate(
             (w) => w is ConclaveFolderIcon && w.isExpanded == true),
@@ -1443,19 +1431,19 @@ void main() {
       );
       expect(find.text('Engine optimization'), findsOneWidget);
 
-      // Tap the project item again -> toggles expansion to collapse and navigates
+      // Tap the space item again -> toggles expansion to collapse and navigates
       await tester.tap(find.text('Conclave Core'));
-      expect(navigatedTo?.kind, AxRouteKind.project);
-      expect(toggledProjectId, 'p-1');
+      expect(navigatedTo?.kind, AxRouteKind.space);
+      expect(toggledSpaceId, 'p-1');
     });
 
-    testWidgets('Workstream status dot indicators render for each status',
+    testWidgets('Thread status dot indicators render for each status',
         (tester) async {
       final expandedContext = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: [projectA],
-        workstreamsByProject: {projectA.id: projectA.workstreams},
-        expandedProjectIds: {'p-1'},
+        spaces: [spaceA],
+        threadsBySpace: {spaceA.id: spaceA.threads},
+        expandedSpaceIds: {'p-1'},
       );
 
       await tester.pumpWidget(
@@ -1465,8 +1453,8 @@ void main() {
             body: AxSidebar(
               shellContext: expandedContext,
               onNavigateTo: (_) {},
-              onToggleProjectExpanded: (_) {},
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (_) {},
+              onCreateSpace: () {},
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -1493,12 +1481,12 @@ void main() {
 
       AxNavigation? navigatedTo;
 
-      // Test 1: Project route -> "Projects / Conclave Core"
-      final projectContext = AxShellContext(
-        navigation: const AxNavigation.project('p-1'),
-        projects: [projectA],
-        workstreamsByProject: {projectA.id: projectA.workstreams},
-        selectedProject: projectA,
+      // Test 1: Space route -> "Spaces / Conclave Core"
+      final spaceContext = AxShellContext(
+        navigation: const AxNavigation.space('p-1'),
+        spaces: [spaceA],
+        threadsBySpace: {spaceA.id: spaceA.threads},
+        selectedSpace: spaceA,
       );
 
       await tester.pumpWidget(
@@ -1506,7 +1494,7 @@ void main() {
           theme: ConclaveBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
-              shellContext: projectContext,
+              shellContext: spaceContext,
               onNavigateTo: (nav) => navigatedTo = nav,
               onOpenCommandPalette: () {},
               onToggleTheme: () {},
@@ -1520,12 +1508,12 @@ void main() {
 
       expect(find.text('Conclave Core'), findsOneWidget);
 
-      // Test 1b: Workstream route -> "Conclave Core / WS"
-      final workstreamContext = AxShellContext(
-        navigation: const AxNavigation.workstream('p-1', 'ws-1'),
-        projects: const [projectA],
-        selectedProject: projectA,
-        selectedWorkstream: projectA.workstreams.first,
+      // Test 1b: Thread route -> "Conclave Core / WS"
+      final threadContext = AxShellContext(
+        navigation: const AxNavigation.thread('p-1', 'ws-1'),
+        spaces: const [spaceA],
+        selectedSpace: spaceA,
+        selectedThread: spaceA.threads.first,
       );
 
       await tester.pumpWidget(
@@ -1533,7 +1521,7 @@ void main() {
           theme: ConclaveBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
-              shellContext: workstreamContext,
+              shellContext: threadContext,
               onNavigateTo: (nav) => navigatedTo = nav,
               onOpenCommandPalette: () {},
               onToggleTheme: () {},
@@ -1547,7 +1535,7 @@ void main() {
 
       expect(find.text('Conclave Core'), findsOneWidget);
       await tester.tap(find.text('Conclave Core'));
-      expect(navigatedTo?.kind, AxRouteKind.project);
+      expect(navigatedTo?.kind, AxRouteKind.space);
 
       // Test 1c: Workspace route -> "Workspaces / Workspace Name"
       const testWs = AxWorkspace(
@@ -1561,8 +1549,8 @@ void main() {
       );
       final workspaceContext = AxShellContext(
         navigation: const AxNavigation.workspace('ws-mac'),
-        projects: [projectA],
-        workstreamsByProject: {projectA.id: projectA.workstreams},
+        spaces: [spaceA],
+        threadsBySpace: {spaceA.id: spaceA.threads},
         workspaces: [testWs],
       );
 
@@ -1602,7 +1590,7 @@ void main() {
 
       const degradedCtx = AxShellContext(
         navigation: AxNavigation.home(),
-        projects: [],
+        spaces: [],
         workspaces: [
           AxWorkspace(
             id: 'worker-1',
@@ -1656,7 +1644,7 @@ void main() {
 
       const shellContext = AxShellContext(
         navigation: AxNavigation.home(),
-        projects: [],
+        spaces: [],
       );
 
       // 1. Desktop
@@ -1723,10 +1711,10 @@ void main() {
 
       final shellContext = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: [projectA],
-        workstreamsByProject: {projectA.id: projectA.workstreams},
-        selectedProject: projectA,
-        expandedProjectIds: {'p-1'},
+        spaces: [spaceA],
+        threadsBySpace: {spaceA.id: spaceA.threads},
+        selectedSpace: spaceA,
+        expandedSpaceIds: {'p-1'},
         viewerDisplayName: 'Vitalii Noha',
         viewerEmail: 'vitalii@example.com',
       );
@@ -1740,8 +1728,8 @@ void main() {
                 AxSidebar(
                   shellContext: shellContext,
                   onNavigateTo: (_) {},
-                  onToggleProjectExpanded: (_) {},
-                  onCreateProject: () {},
+                  onToggleSpaceExpanded: (_) {},
+                  onCreateSpace: () {},
                   onLogout: () {},
                   onOpenAbout: () {},
                   onOpenExternal: (_) {},
@@ -1782,19 +1770,19 @@ void main() {
     });
 
     testWidgets(
-        'Phase 8: Project tree centerpiece with trailing meaningful status dots and contextual create',
+        'Phase 8: Space tree centerpiece with trailing meaningful status dots and contextual create',
         (tester) async {
-      var createProjectCalled = false;
+      var createSpaceCalled = false;
 
-      const project = AxProject(
+      const space = AxSpace(
         id: 'p-1',
         name: 'Conclave AX',
         branch: 'main',
         lastActivity: 'today',
-        workstreams: [
-          AxWorkstream(
+        threads: [
+          AxThread(
             id: 'ws-1',
-            projectId: 'p-1',
+            spaceId: 'p-1',
             name: 'Authentication redesign',
             lead: 'Vitalii',
             status: 'running',
@@ -1802,9 +1790,9 @@ void main() {
             primaryWorkspace: 'MacBook Pro',
             queueStatus: 'Running',
           ),
-          AxWorkstream(
+          AxThread(
             id: 'ws-2',
-            projectId: 'p-1',
+            spaceId: 'p-1',
             name: 'Landing page',
             lead: 'Vitalii',
             status: 'idle',
@@ -1812,9 +1800,9 @@ void main() {
             primaryWorkspace: 'MacBook Pro',
             queueStatus: 'Idle',
           ),
-          AxWorkstream(
+          AxThread(
             id: 'ws-3',
-            projectId: 'p-1',
+            spaceId: 'p-1',
             name: 'Scheduler',
             lead: 'Vitalii',
             status: 'queued',
@@ -1827,10 +1815,10 @@ void main() {
 
       final shellContext = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: [project],
-        workstreamsByProject: {project.id: project.workstreams},
-        selectedProject: project,
-        expandedProjectIds: {'p-1'},
+        spaces: [space],
+        threadsBySpace: {space.id: space.threads},
+        selectedSpace: space,
+        expandedSpaceIds: {'p-1'},
       );
 
       await tester.pumpWidget(
@@ -1840,8 +1828,8 @@ void main() {
             body: AxSidebar(
               shellContext: shellContext,
               onNavigateTo: (_) {},
-              onToggleProjectExpanded: (_) {},
-              onCreateProject: () => createProjectCalled = true,
+              onToggleSpaceExpanded: (_) {},
+              onCreateSpace: () => createSpaceCalled = true,
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -1851,27 +1839,27 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Project rows display the project name without legacy Goal counts.
-      expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand and Project
+      // Space rows display the space name without legacy Goal counts.
+      expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand and Space
       expect(find.text('5'), findsNothing);
 
-      // Workstream rows are rendered
+      // Thread rows are rendered
       expect(find.text('Authentication redesign'), findsOneWidget);
       expect(find.text('Landing page'), findsOneWidget);
       expect(find.text('Scheduler'), findsOneWidget);
 
-      // Test New Project button in sidebar header row
-      await tester.tap(find.byTooltip('New Project'));
+      // Test New Space button in sidebar header row
+      await tester.tap(find.byTooltip('New Space'));
       await tester.pumpAndSettle();
-      expect(createProjectCalled, isTrue);
+      expect(createSpaceCalled, isTrue);
     });
 
     testWidgets(
-        'Phase 9: Fix Home/Projects active navigation isolation across all routes',
+        'Phase 9: Fix Home/Spaces active navigation isolation across all routes',
         (tester) async {
-      const ws1 = AxWorkstream(
+      const ws1 = AxThread(
         id: 'ws-1',
-        projectId: 'p-1',
+        spaceId: 'p-1',
         name: 'Authentication redesign',
         lead: 'Vitalii',
         status: 'running',
@@ -1880,80 +1868,79 @@ void main() {
         queueStatus: 'Running',
       );
 
-      const project = AxProject(
+      const space = AxSpace(
         id: 'p-1',
         name: 'Conclave AX',
         branch: 'main',
         lastActivity: 'today',
-        workstreams: [ws1],
+        threads: [ws1],
       );
 
       // 1. On Home route (/)
       final homeCtx = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: [project],
-        workstreamsByProject: {project.id: project.workstreams},
-        expandedProjectIds: {'p-1'},
+        spaces: [space],
+        threadsBySpace: {space.id: space.threads},
+        expandedSpaceIds: {'p-1'},
       );
       expect(homeCtx.isNavActive(const AxNavigation.home()), isTrue);
-      expect(homeCtx.isNavActive(const AxNavigation.projects()), isFalse);
+      expect(homeCtx.isNavActive(const AxNavigation.spaces()), isFalse);
 
-      // 2. On Projects list (/projects)
-      final projectsCtx = AxShellContext(
-        navigation: const AxNavigation.projects(),
-        projects: [project],
-        workstreamsByProject: {project.id: project.workstreams},
-        expandedProjectIds: {'p-1'},
+      // 2. On Spaces list (/spaces)
+      final spacesCtx = AxShellContext(
+        navigation: const AxNavigation.spaces(),
+        spaces: [space],
+        threadsBySpace: {space.id: space.threads},
+        expandedSpaceIds: {'p-1'},
       );
-      expect(projectsCtx.isNavActive(const AxNavigation.home()), isFalse);
-      expect(projectsCtx.isNavActive(const AxNavigation.projects()), isTrue);
+      expect(spacesCtx.isNavActive(const AxNavigation.home()), isFalse);
+      expect(spacesCtx.isNavActive(const AxNavigation.spaces()), isTrue);
 
-      // 3. On Project detail (/projects/p-1)
-      final projectDetailCtx = AxShellContext(
-        navigation: const AxNavigation.project('p-1'),
-        projects: [project],
-        workstreamsByProject: {project.id: project.workstreams},
-        selectedProject: project,
-        expandedProjectIds: {'p-1'},
+      // 3. On Space detail (/spaces/p-1)
+      final spaceDetailCtx = AxShellContext(
+        navigation: const AxNavigation.space('p-1'),
+        spaces: [space],
+        threadsBySpace: {space.id: space.threads},
+        selectedSpace: space,
+        expandedSpaceIds: {'p-1'},
       );
-      expect(projectDetailCtx.isNavActive(const AxNavigation.home()), isFalse);
-      expect(
-          projectDetailCtx.isNavActive(const AxNavigation.projects()), isTrue);
+      expect(spaceDetailCtx.isNavActive(const AxNavigation.home()), isFalse);
+      expect(spaceDetailCtx.isNavActive(const AxNavigation.spaces()), isTrue);
 
-      // 4. On Workstream detail (/projects/p-1/workstreams/ws-1)
-      final workstreamCtx = AxShellContext(
-        navigation: const AxNavigation.workstream('p-1', 'ws-1'),
-        projects: [project],
-        workstreamsByProject: {project.id: project.workstreams},
-        selectedProject: project,
-        selectedWorkstream: ws1,
-        expandedProjectIds: {'p-1'},
+      // 4. On Thread detail (/spaces/p-1/threads/ws-1)
+      final threadCtx = AxShellContext(
+        navigation: const AxNavigation.thread('p-1', 'ws-1'),
+        spaces: [space],
+        threadsBySpace: {space.id: space.threads},
+        selectedSpace: space,
+        selectedThread: ws1,
+        expandedSpaceIds: {'p-1'},
       );
-      expect(workstreamCtx.isNavActive(const AxNavigation.home()), isFalse);
-      expect(workstreamCtx.isNavActive(const AxNavigation.projects()), isTrue);
+      expect(threadCtx.isNavActive(const AxNavigation.home()), isFalse);
+      expect(threadCtx.isNavActive(const AxNavigation.spaces()), isTrue);
 
-      // 5. On Run detail (/projects/p-1/workstreams/ws-1/runs/r-1)
+      // 5. On Run detail (/spaces/p-1/threads/ws-1/runs/r-1)
       final runCtx = AxShellContext(
-        navigation: const AxNavigation.run('p-1', 'r-1', workstreamId: 'ws-1'),
-        projects: [project],
-        workstreamsByProject: {project.id: project.workstreams},
-        selectedProject: project,
-        selectedWorkstream: ws1,
-        expandedProjectIds: {'p-1'},
+        navigation: const AxNavigation.run('p-1', 'r-1', threadId: 'ws-1'),
+        spaces: [space],
+        threadsBySpace: {space.id: space.threads},
+        selectedSpace: space,
+        selectedThread: ws1,
+        expandedSpaceIds: {'p-1'},
       );
       expect(runCtx.isNavActive(const AxNavigation.home()), isFalse);
-      expect(runCtx.isNavActive(const AxNavigation.projects()), isTrue);
+      expect(runCtx.isNavActive(const AxNavigation.spaces()), isTrue);
 
-      // 6. Verify Visual UI: when on Workstream, Workstream item is highlighted, Home is not
+      // 6. Verify Visual UI: when on Thread, Thread item is highlighted, Home is not
       await tester.pumpWidget(
         MaterialApp(
           theme: ConclaveBrand.darkTheme(),
           home: Scaffold(
             body: AxSidebar(
-              shellContext: workstreamCtx,
+              shellContext: threadCtx,
               onNavigateTo: (_) {},
-              onToggleProjectExpanded: (_) {},
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (_) {},
+              onCreateSpace: () {},
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -1963,16 +1950,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Home container has transparent background, Projects nav is active
+      // Home container has transparent background, Spaces nav is active
       expect(find.text('Authentication redesign'), findsOneWidget);
     });
 
     testWidgets(
         'Phase 11: Responsive layout adapts across Desktop, Medium (Rail), and Mobile',
         (tester) async {
-      const ws = AxWorkstream(
+      const ws = AxThread(
         id: 'ws-1',
-        projectId: 'p-1',
+        spaceId: 'p-1',
         name: 'Authentication redesign',
         lead: 'Vitalii',
         status: 'running',
@@ -1981,21 +1968,21 @@ void main() {
         queueStatus: 'Running',
       );
 
-      const project = AxProject(
+      const space = AxSpace(
         id: 'p-1',
         name: 'Conclave AX',
         branch: 'main',
         lastActivity: 'today',
-        workstreams: [ws],
+        threads: [ws],
       );
 
       final shellContext = AxShellContext(
-        navigation: const AxNavigation.workstream('p-1', 'ws-1'),
-        projects: [project],
-        workstreamsByProject: {project.id: project.workstreams},
-        selectedProject: project,
-        selectedWorkstream: ws,
-        expandedProjectIds: {'p-1'},
+        navigation: const AxNavigation.thread('p-1', 'ws-1'),
+        spaces: [space],
+        threadsBySpace: {space.id: space.threads},
+        selectedSpace: space,
+        selectedThread: ws,
+        expandedSpaceIds: {'p-1'},
         viewerDisplayName: 'Vitalii Noha',
         viewerEmail: 'vitalii@example.com',
       );
@@ -2015,8 +2002,8 @@ void main() {
                         child: AxSidebar(
                           shellContext: shellContext,
                           onNavigateTo: (_) {},
-                          onToggleProjectExpanded: (_) {},
-                          onCreateProject: () {},
+                          onToggleSpaceExpanded: (_) {},
+                          onCreateSpace: () {},
                           onOpenCommandPalette: _dummyAction,
                           onOpenNotifications: _dummyAction,
                           onLogout: () {},
@@ -2034,8 +2021,8 @@ void main() {
                         child: AxSidebar(
                           shellContext: shellContext,
                           onNavigateTo: _dummyNav,
-                          onToggleProjectExpanded: _dummyToggle,
-                          onCreateProject: _dummyAction,
+                          onToggleSpaceExpanded: _dummyToggle,
+                          onCreateSpace: _dummyAction,
                           onOpenCommandPalette: _dummyAction,
                           onOpenNotifications: _dummyAction,
                           onLogout: _dummyAction,
@@ -2077,7 +2064,7 @@ void main() {
       await tester.pumpWidget(buildAppScaffold());
       await tester.pumpAndSettle();
 
-      // Full sidebar visible with project tree, search & alarm button
+      // Full sidebar visible with space tree, search & alarm button
       expect(find.byType(AxSidebar), findsOneWidget);
       expect(find.byType(AxTopBar), findsNothing); // Top HUD hidden on desktop
       expect(
@@ -2097,9 +2084,9 @@ void main() {
       // Top HUD visible with breadcrumb and hamburger menu, pinned sidebar hidden
       expect(find.byType(AxTopBar), findsOneWidget);
       expect(find.byTooltip('Open menu'), findsOneWidget);
-      expect(find.text('Conclave AX'), findsOneWidget); // breadcrumb project
+      expect(find.text('Conclave AX'), findsOneWidget); // breadcrumb space
       expect(find.text('Authentication redesign'),
-          findsOneWidget); // breadcrumb workstream
+          findsOneWidget); // breadcrumb thread
 
       // Tap hamburger menu to open drawer with full sidebar
       await tester.tap(find.byTooltip('Open menu'));
@@ -2159,7 +2146,7 @@ void main() {
     });
 
     testWidgets(
-        'Phase 6: Accepting invitation on zero-project screen navigates directly into accepted project without reload',
+        'Phase 6: Accepting invitation on zero-space screen navigates directly into accepted space without reload',
         (tester) async {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1;
@@ -2175,9 +2162,9 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Zero-project screen with Pending Invitation in Join a Project priority card
+      // Zero-space screen with Pending Invitation in Join a Space priority card
       expect(find.text('Welcome to Conclave AX'), findsOneWidget);
-      expect(find.text('Join a Project'), findsOneWidget);
+      expect(find.text('Join a Space'), findsOneWidget);
       expect(find.text('You have 1 invitation.'), findsOneWidget);
       expect(find.text('Joined AX Core'), findsWidgets);
 
@@ -2185,9 +2172,9 @@ void main() {
       await tester.tap(find.text('Accept'));
       await tester.pumpAndSettle();
 
-      // Invitation is accepted and disappears, user is navigated into project
+      // Invitation is accepted and disappears, user is navigated into space
       expect(find.text('Welcome to Conclave AX'), findsNothing);
-      expect(find.text('Join a Project'), findsNothing);
+      expect(find.text('Join a Space'), findsNothing);
       expect(find.text('Joined Joined AX Core.'), findsOneWidget);
       expect(find.text('Joined AX Core'), findsWidgets);
 
@@ -2197,7 +2184,7 @@ void main() {
     });
 
     testWidgets(
-        'Phase 25: Integrated invitation UX — Accepting invitation from established Home instantly synchronizes Home, sidebar Projects, notification badge, and navigates into project',
+        'Phase 25: Integrated invitation UX — Accepting invitation from established Home instantly synchronizes Home, sidebar Spaces, notification badge, and navigates into space',
         (tester) async {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1;
@@ -2205,11 +2192,11 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final data = _InvitationTestFixture(
-        initialProjects: const [
-          AxProject(
+        initialSpaces: const [
+          AxSpace(
             id: 'existing-proj-1',
-            name: 'Existing Project',
-            description: 'Main project',
+            name: 'Existing Space',
+            description: 'Main space',
             branch: 'main',
             lastActivity: '2026-10-07T10:00:00Z',
           ),
@@ -2238,7 +2225,7 @@ void main() {
       // Instantly without reload:
       // 1. Toast confirms joined
       expect(find.text('Joined Joined AX Core.'), findsOneWidget);
-      // 2. Navigates into newly joined project
+      // 2. Navigates into newly joined space
       expect(find.text('Joined AX Core'), findsWidgets);
       // 3. Pending invitations in sidebar is gone
       expect(find.text('Pending invitations (1)'), findsNothing);
@@ -2255,19 +2242,18 @@ void _dummyToggle(String _) {}
 void _dummyAction() {}
 void _dummyExternal(Uri _) {}
 
-class _ProjectScopedFixture extends AxFixtureDataSource {
-  final selectedProjects = <String>[];
+class _SpaceScopedFixture extends AxFixtureDataSource {
+  final selectedSpaces = <String>[];
   @override
-  Future<List<AxWorkstream>> loadProjectWorkstreams(
-      {required String projectId}) async {
-    selectedProjects.add(projectId);
-    if (projectId != 'atlas') {
-      return super.loadProjectWorkstreams(projectId: projectId);
+  Future<List<AxThread>> loadSpaceThreads({required String spaceId}) async {
+    selectedSpaces.add(spaceId);
+    if (spaceId != 'atlas') {
+      return super.loadSpaceThreads(spaceId: spaceId);
     }
     return const [
-      AxWorkstream(
+      AxThread(
           id: 'atlas-chat',
-          projectId: 'atlas',
+          spaceId: 'atlas',
           name: 'Atlas conversation',
           lead: 'Test',
           status: 'active',
@@ -2279,14 +2265,14 @@ class _ProjectScopedFixture extends AxFixtureDataSource {
 }
 
 class _InvitationTestFixture extends AxFixtureDataSource {
-  _InvitationTestFixture({this.initialProjects = const []});
+  _InvitationTestFixture({this.initialSpaces = const []});
 
-  final List<AxProject> initialProjects;
-  var pendingInvitations = <AxProjectInvitation>[
-    const AxProjectInvitation(
+  final List<AxSpace> initialSpaces;
+  var pendingInvitations = <AxSpaceInvitation>[
+    const AxSpaceInvitation(
       id: 'inv-invite-1',
-      projectId: 'proj-joined-1',
-      projectName: 'Joined AX Core',
+      spaceId: 'proj-joined-1',
+      spaceName: 'Joined AX Core',
       email: 'user@example.com',
       role: 'member',
       status: 'pending',
@@ -2298,28 +2284,28 @@ class _InvitationTestFixture extends AxFixtureDataSource {
 
   @override
   Future<AxSnapshot> loadBootstrapState(
-      {String? projectId, String? workspaceId}) async {
+      {String? spaceId, String? workspaceId}) async {
     final base = await super
-        .loadBootstrapState(projectId: projectId, workspaceId: workspaceId);
-    return base.copyWith(projects: initialProjects);
+        .loadBootstrapState(spaceId: spaceId, workspaceId: workspaceId);
+    return base.copyWith(spaces: initialSpaces);
   }
 
   @override
-  Future<List<AxProject>> loadProjects({bool includeArchived = false}) async =>
-      initialProjects;
+  Future<List<AxSpace>> loadSpaces({bool includeArchived = false}) async =>
+      initialSpaces;
 
   @override
-  Future<List<AxProjectInvitation>> loadCurrentUserInvitations() async =>
+  Future<List<AxSpaceInvitation>> loadCurrentUserInvitations() async =>
       pendingInvitations;
 
   @override
-  Future<void> acceptProjectInvitation({required String invitationId}) async {
+  Future<void> acceptSpaceInvitation({required String invitationId}) async {
     pendingInvitations =
         pendingInvitations.where((i) => i.id != invitationId).toList();
   }
 
   @override
-  Future<void> declineProjectInvitation({required String invitationId}) async {
+  Future<void> declineSpaceInvitation({required String invitationId}) async {
     pendingInvitations =
         pendingInvitations.where((i) => i.id != invitationId).toList();
   }

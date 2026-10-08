@@ -300,7 +300,7 @@ matching qualification and a ready signer, regardless of desktop signing.
 For an existing v8 development database missing `tool_profile_local_qualification_evidence`, run `node scripts/provision-profile-qualification-evidence.mjs` and apply `.development/provision-profile-qualification.sql` to the selected D1 database. This adopts the current baseline table, index, and immutable evidence triggers without resetting Drafts or releases. Fresh databases already include these objects.
 
 Older development databases may retain the obsolete required
-`workspace_project_grants.scope` column, causing current grant creation to fail.
+`workspace_space_grants.scope` column, causing current grant creation to fail.
 The fresh v8 baseline intentionally has no grant scope or repository/path mapping
 contract. Inspect the hosted schema and dependencies, export the grant table to a
 protected local backup, then run `node scripts/align-workspace-grant-schema.mjs`

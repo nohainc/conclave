@@ -9,15 +9,15 @@ export 'home_analytics.dart';
 class HomePage extends StatelessWidget {
   const HomePage({
     super.key,
-    required this.projects,
+    List<AxSpace>? spaces,
     required this.workspaces,
     required this.workers,
     required this.run,
     required this.openFindingCount,
     required this.onOpenWorkspaces,
-    required this.onOpenProject,
+    ValueChanged<String>? onOpenSpace,
     required this.onOpenRun,
-    required this.onCreateProject,
+    VoidCallback? onCreateSpace,
     this.invitations = const [],
     this.attentionItems = const [],
     this.continueWorkItems = const [],
@@ -29,24 +29,29 @@ class HomePage extends StatelessWidget {
     this.isOffline = false,
     this.onAcceptInvitation,
     this.onDeclineInvitation,
-    this.onOpenWorkstream,
+    this.onOpenThread,
     this.onOpenNotifications,
     this.onOpenWhatsNew,
     this.onOpenUpdateDetail,
     this.onDismissUpdate,
     this.onOpenAiUpdate,
-  });
+  })  : spaces = spaces ?? const [],
+        onOpenSpace = onOpenSpace ?? _noopString,
+        onCreateSpace = onCreateSpace ?? _noopVoid;
 
-  final List<AxProject> projects;
+  static void _noopString(String _) {}
+  static void _noopVoid() {}
+
+  final List<AxSpace> spaces;
   final List<AxWorkspace> workspaces;
   final List<AxWorker> workers;
   final AxRun? run;
   final int openFindingCount;
   final VoidCallback onOpenWorkspaces;
-  final ValueChanged<String> onOpenProject;
-  final void Function(String projectId, String runId) onOpenRun;
-  final VoidCallback onCreateProject;
-  final List<AxProjectInvitation> invitations;
+  final ValueChanged<String> onOpenSpace;
+  final void Function(String spaceId, String runId) onOpenRun;
+  final VoidCallback onCreateSpace;
+  final List<AxSpaceInvitation> invitations;
   final List<AxHomeAttentionItem> attentionItems;
   final List<AxContinueWorkItem> continueWorkItems;
   final List<AxProductUpdate> productUpdates;
@@ -55,22 +60,22 @@ class HomePage extends StatelessWidget {
   final String? userName;
   final String? greeting;
   final bool isOffline;
-  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
-  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
-  final void Function(String projectId, String workstreamId)? onOpenWorkstream;
+  final ValueChanged<AxSpaceInvitation>? onAcceptInvitation;
+  final ValueChanged<AxSpaceInvitation>? onDeclineInvitation;
+  final void Function(String spaceId, String threadId)? onOpenThread;
   final VoidCallback? onOpenNotifications;
   final VoidCallback? onOpenWhatsNew;
   final ValueChanged<AxProductUpdate>? onOpenUpdateDetail;
   final ValueChanged<AxProductUpdate>? onDismissUpdate;
   final ValueChanged<AxAiCapabilityUpdate>? onOpenAiUpdate;
 
-  /// New-user experience is active when user has zero projects.
-  bool get isNewUser => projects.isEmpty;
+  /// New-user experience is active when user has zero spaces.
+  bool get isNewUser => spaces.isEmpty;
 
   @override
   Widget build(BuildContext context) => isNewUser
       ? NewUserHome(
-          onCreateProject: onCreateProject,
+          onCreateSpace: onCreateSpace,
           onOpenWorkspaces: onOpenWorkspaces,
           invitations: invitations,
           isOffline: isOffline,
@@ -78,7 +83,7 @@ class HomePage extends StatelessWidget {
           onDeclineInvitation: onDeclineInvitation,
         )
       : EstablishedUserHome(
-          projects: projects,
+          spaces: spaces,
           workspaces: workspaces,
           workers: workers,
           invitations: invitations,
@@ -95,9 +100,9 @@ class HomePage extends StatelessWidget {
           run: run,
           openFindingCount: openFindingCount,
           onOpenWorkspaces: onOpenWorkspaces,
-          onOpenProject: onOpenProject,
+          onOpenSpace: onOpenSpace,
           onOpenRun: onOpenRun,
-          onOpenWorkstream: onOpenWorkstream,
+          onOpenThread: onOpenThread,
           onOpenNotifications: onOpenNotifications,
           onOpenWhatsNew: onOpenWhatsNew,
           onOpenUpdateDetail: onOpenUpdateDetail,
@@ -109,20 +114,22 @@ class HomePage extends StatelessWidget {
 class NewUserHome extends StatelessWidget {
   const NewUserHome({
     super.key,
-    required this.onCreateProject,
+    VoidCallback? onCreateSpace,
     required this.onOpenWorkspaces,
     this.invitations = const [],
     this.isOffline = false,
     this.onAcceptInvitation,
     this.onDeclineInvitation,
-  });
+  }) : onCreateSpace = onCreateSpace ?? _noopVoid;
 
-  final VoidCallback onCreateProject;
+  static void _noopVoid() {}
+
+  final VoidCallback onCreateSpace;
   final VoidCallback onOpenWorkspaces;
-  final List<AxProjectInvitation> invitations;
+  final List<AxSpaceInvitation> invitations;
   final bool isOffline;
-  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
-  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
+  final ValueChanged<AxSpaceInvitation>? onAcceptInvitation;
+  final ValueChanged<AxSpaceInvitation>? onDeclineInvitation;
 
   @override
   Widget build(BuildContext context) {
@@ -163,9 +170,9 @@ class NewUserHome extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // If invitations exist, Join a Project takes priority
+          // If invitations exist, Join a Space takes priority
           if (hasInvitations) ...[
-            _JoinProjectPriorityCard(
+            _JoinSpacePriorityCard(
               invitations: invitations,
               onAccept: onAcceptInvitation,
               onDecline: onDeclineInvitation,
@@ -182,13 +189,13 @@ class NewUserHome extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            _CreateFirstProjectCard(
-              onCreateProject: onCreateProject,
+            _CreateFirstSpaceCard(
+              onCreateSpace: onCreateSpace,
               isSecondary: true,
             ),
           ] else ...[
-            _CreateFirstProjectCard(
-              onCreateProject: onCreateProject,
+            _CreateFirstSpaceCard(
+              onCreateSpace: onCreateSpace,
               isSecondary: false,
             ),
           ],
@@ -222,7 +229,7 @@ class NewUserHome extends StatelessWidget {
                     icon: Icons.shield_outlined,
                     title: 'Private credentials',
                     description:
-                        'Share AI access in projects without ever exposing your API keys or machine logins.',
+                        'Share AI access in spaces without ever exposing your API keys or machine logins.',
                   ),
                   _OnboardingValueCard(
                     icon: Icons.forum_outlined,
@@ -298,7 +305,7 @@ class _AdvancedWorkspaceCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Connect Conclave Workspace to make local Workers available to your Projects.',
+                  'Connect Conclave Workspace to make local Workers available to your Spaces.',
                   style: TextStyle(
                     fontSize: 13,
                     color: colorScheme.onSurfaceVariant,
@@ -339,7 +346,7 @@ class _AdvancedWorkspaceCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Connect Conclave Workspace to make local Workers available to your Projects.',
+                      'Connect Conclave Workspace to make local Workers available to your Spaces.',
                       style: TextStyle(
                         fontSize: 13,
                         color: colorScheme.onSurfaceVariant,
@@ -364,13 +371,15 @@ class _AdvancedWorkspaceCard extends StatelessWidget {
   }
 }
 
-class _CreateFirstProjectCard extends StatelessWidget {
-  const _CreateFirstProjectCard({
-    required this.onCreateProject,
+class _CreateFirstSpaceCard extends StatelessWidget {
+  const _CreateFirstSpaceCard({
+    VoidCallback? onCreateSpace,
     this.isSecondary = false,
-  });
+  }) : onCreateSpace = onCreateSpace ?? _noopVoid;
 
-  final VoidCallback onCreateProject;
+  static void _noopVoid() {}
+
+  final VoidCallback onCreateSpace;
   final bool isSecondary;
 
   @override
@@ -416,7 +425,7 @@ class _CreateFirstProjectCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 const Text(
-                  'Create your first Project',
+                  'Create your first Space',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -435,14 +444,14 @@ class _CreateFirstProjectCard extends StatelessWidget {
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: () {
-                AxHomeAnalytics.trackCreateProject(
+                AxHomeAnalytics.trackCreateSpace(
                   source:
                       isSecondary ? 'new_user_secondary' : 'new_user_primary',
                 );
-                onCreateProject();
+                onCreateSpace();
               },
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Create Project →'),
+              label: const Text('Create Space →'),
             ),
           ],
         ),
@@ -451,16 +460,16 @@ class _CreateFirstProjectCard extends StatelessWidget {
   }
 }
 
-class _JoinProjectPriorityCard extends StatelessWidget {
-  const _JoinProjectPriorityCard({
+class _JoinSpacePriorityCard extends StatelessWidget {
+  const _JoinSpacePriorityCard({
     required this.invitations,
     this.onAccept,
     this.onDecline,
   });
 
-  final List<AxProjectInvitation> invitations;
-  final ValueChanged<AxProjectInvitation>? onAccept;
-  final ValueChanged<AxProjectInvitation>? onDecline;
+  final List<AxSpaceInvitation> invitations;
+  final ValueChanged<AxSpaceInvitation>? onAccept;
+  final ValueChanged<AxSpaceInvitation>? onDecline;
 
   @override
   Widget build(BuildContext context) {
@@ -504,7 +513,7 @@ class _JoinProjectPriorityCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Join a Project',
+                        'Join a Space',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -596,7 +605,7 @@ class _OnboardingValueCard extends StatelessWidget {
 class EstablishedUserHome extends StatelessWidget {
   const EstablishedUserHome({
     super.key,
-    required this.projects,
+    List<AxSpace>? spaces,
     required this.workspaces,
     required this.workers,
     this.invitations = const [],
@@ -613,20 +622,23 @@ class EstablishedUserHome extends StatelessWidget {
     required this.run,
     required this.openFindingCount,
     required this.onOpenWorkspaces,
-    required this.onOpenProject,
+    ValueChanged<String>? onOpenSpace,
     required this.onOpenRun,
-    this.onOpenWorkstream,
+    this.onOpenThread,
     this.onOpenNotifications,
     this.onOpenWhatsNew,
     this.onOpenUpdateDetail,
     this.onDismissUpdate,
     this.onOpenAiUpdate,
-  });
+  })  : spaces = spaces ?? const [],
+        onOpenSpace = onOpenSpace ?? _noopString;
 
-  final List<AxProject> projects;
+  static void _noopString(String _) {}
+
+  final List<AxSpace> spaces;
   final List<AxWorkspace> workspaces;
   final List<AxWorker> workers;
-  final List<AxProjectInvitation> invitations;
+  final List<AxSpaceInvitation> invitations;
   final List<AxHomeAttentionItem> attentionItems;
   final List<AxContinueWorkItem> continueWorkItems;
   final List<AxProductUpdate> productUpdates;
@@ -635,14 +647,14 @@ class EstablishedUserHome extends StatelessWidget {
   final String? userName;
   final String? greeting;
   final bool isOffline;
-  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
-  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
+  final ValueChanged<AxSpaceInvitation>? onAcceptInvitation;
+  final ValueChanged<AxSpaceInvitation>? onDeclineInvitation;
   final AxRun? run;
   final int openFindingCount;
   final VoidCallback onOpenWorkspaces;
-  final ValueChanged<String> onOpenProject;
-  final void Function(String projectId, String runId) onOpenRun;
-  final void Function(String projectId, String workstreamId)? onOpenWorkstream;
+  final ValueChanged<String> onOpenSpace;
+  final void Function(String spaceId, String runId) onOpenRun;
+  final void Function(String spaceId, String threadId)? onOpenThread;
   final VoidCallback? onOpenNotifications;
   final VoidCallback? onOpenWhatsNew;
   final ValueChanged<AxProductUpdate>? onOpenUpdateDetail;
@@ -677,7 +689,7 @@ class EstablishedUserHome extends StatelessWidget {
       return AxAiCapabilityUpdateService.getRelevantUpdates(
         updates: aiUpdates.isNotEmpty ? aiUpdates : defaultAiCapabilityUpdates,
         workers: workers,
-        projects: projects,
+        spaces: spaces,
       );
     } catch (_) {
       return const [];
@@ -685,18 +697,18 @@ class EstablishedUserHome extends StatelessWidget {
   }
 
   List<AxContinueWorkItem> _deriveDefaultContinueWorkItems(
-      List<AxProject> projects) {
+      List<AxSpace> spaces) {
     final list = <AxContinueWorkItem>[];
-    for (final p in projects) {
+    for (final p in spaces) {
       if (p.archived) continue;
-      if (p.workstreams.isNotEmpty) {
-        for (final ws in p.workstreams) {
+      if (p.threads.isNotEmpty) {
+        for (final ws in p.threads) {
           if (ws.archived) continue;
           list.add(AxContinueWorkItem(
-            projectId: p.id,
-            projectName: p.name,
-            workstreamId: ws.id,
-            workstreamTitle: ws.name,
+            spaceId: p.id,
+            spaceName: p.name,
+            threadId: ws.id,
+            threadTitle: ws.name,
             collaboratorsDisplay: ws.lead.isNotEmpty && ws.lead != 'Unassigned'
                 ? ws.lead
                 : 'You and team AI',
@@ -709,10 +721,10 @@ class EstablishedUserHome extends StatelessWidget {
         }
       } else {
         list.add(AxContinueWorkItem(
-          projectId: p.id,
-          projectName: p.name,
-          workstreamId: 'default',
-          workstreamTitle: 'Main Workstream',
+          spaceId: p.id,
+          spaceName: p.name,
+          threadId: 'default',
+          threadTitle: 'Main Thread',
           collaboratorsDisplay: 'You and team AI',
           lastMessageSnippet: 'Continue conversation and work in context',
           lastActivityDisplay:
@@ -727,35 +739,35 @@ class EstablishedUserHome extends StatelessWidget {
   Widget build(BuildContext context) {
     List<AxHomeAttentionItem> effectiveAttentionItems;
     try {
-      effectiveAttentionItems = AxHomeAttentionProjector.project(
+      effectiveAttentionItems = AxHomeAttentionProjector.space(
         invitations: invitations,
         rawAttentionItems: attentionItems,
         openFindingCount: openFindingCount,
-        projects: projects,
+        spaces: spaces,
         onAcceptInvitation: onAcceptInvitation,
         onDeclineInvitation: onDeclineInvitation,
-        onOpenProject: onOpenProject,
-        onOpenWorkstream: onOpenWorkstream,
+        onOpenSpace: onOpenSpace,
+        onOpenThread: onOpenThread,
         onOpenWorkspaces: onOpenWorkspaces,
       );
     } catch (_) {
       effectiveAttentionItems = const [];
     }
     final hasAttentionItems = effectiveAttentionItems.isNotEmpty;
-    final authorizedProjectIds = projects.map((p) => p.id).toSet();
+    final authorizedSpaceIds = spaces.map((p) => p.id).toSet();
     final isRunAuthorized = run != null &&
-        (run!.projectId == null ||
-            run!.projectId!.isEmpty ||
-            authorizedProjectIds.contains(run!.projectId));
+        (run!.spaceId == null ||
+            run!.spaceId!.isEmpty ||
+            authorizedSpaceIds.contains(run!.spaceId));
     final isRunningNow = isRunAuthorized && run!.isRunning;
     List<AxContinueWorkItem> effectiveRecentWork;
     try {
       effectiveRecentWork = AxRecentWorkRanker.rank(
         (continueWorkItems.isNotEmpty
             ? continueWorkItems
-                .where((item) => authorizedProjectIds.contains(item.projectId))
+                .where((item) => authorizedSpaceIds.contains(item.spaceId))
                 .toList()
-            : _deriveDefaultContinueWorkItems(projects)),
+            : _deriveDefaultContinueWorkItems(spaces)),
         limit: 5,
       );
     } catch (_) {
@@ -814,11 +826,11 @@ class EstablishedUserHome extends StatelessWidget {
               invitations: invitations,
               attentionItems: attentionItems,
               openFindingCount: openFindingCount,
-              projects: projects,
+              spaces: spaces,
               onAcceptInvitation: onAcceptInvitation,
               onDeclineInvitation: onDeclineInvitation,
-              onOpenProject: onOpenProject,
-              onOpenWorkstream: onOpenWorkstream,
+              onOpenSpace: onOpenSpace,
+              onOpenThread: onOpenThread,
               onOpenWorkspaces: onOpenWorkspaces,
               onOpenNotifications: onOpenNotifications,
             ),
@@ -831,7 +843,7 @@ class EstablishedUserHome extends StatelessWidget {
             const SizedBox(height: 12),
             _RunningNowCard(
               run: run!,
-              defaultProjectId: projects.isNotEmpty ? projects.first.id : '',
+              defaultSpaceId: spaces.isNotEmpty ? spaces.first.id : '',
               onOpenRun: onOpenRun,
             ),
             const SizedBox(height: 28),
@@ -859,16 +871,16 @@ class EstablishedUserHome extends StatelessWidget {
                     return _ContinueWorkCard(
                       item: item,
                       onTap: () {
-                        AxHomeAnalytics.trackContinueWorkstream(
-                          projectId: item.projectId,
-                          workstreamId: item.workstreamId,
-                          projectName: item.projectName,
-                          workstreamTitle: item.workstreamTitle,
+                        AxHomeAnalytics.trackContinueThread(
+                          spaceId: item.spaceId,
+                          threadId: item.threadId,
+                          spaceName: item.spaceName,
+                          threadTitle: item.threadTitle,
                         );
-                        if (onOpenWorkstream != null) {
-                          onOpenWorkstream!(item.projectId, item.workstreamId);
+                        if (onOpenThread != null) {
+                          onOpenThread!(item.spaceId, item.threadId);
                         } else {
-                          onOpenProject(item.projectId);
+                          onOpenSpace(item.spaceId);
                         }
                       },
                     );
@@ -1098,21 +1110,23 @@ class _OfflineConnectivityIndicator extends StatelessWidget {
 }
 
 class AxHomeAttentionProjector {
-  static List<AxHomeAttentionItem> project({
-    required List<AxProjectInvitation> invitations,
+  static List<AxHomeAttentionItem> space({
+    required List<AxSpaceInvitation> invitations,
     required List<AxHomeAttentionItem> rawAttentionItems,
     required int openFindingCount,
-    required List<AxProject> projects,
-    ValueChanged<AxProjectInvitation>? onAcceptInvitation,
-    ValueChanged<AxProjectInvitation>? onDeclineInvitation,
-    ValueChanged<String>? onOpenProject,
-    void Function(String projectId, String workstreamId)? onOpenWorkstream,
+    List<AxSpace>? spaces,
+    ValueChanged<AxSpaceInvitation>? onAcceptInvitation,
+    ValueChanged<AxSpaceInvitation>? onDeclineInvitation,
+    ValueChanged<String>? onOpenSpace,
+    void Function(String spaceId, String threadId)? onOpenThread,
     VoidCallback? onOpenWorkspaces,
   }) {
+    final effectiveSpaces = spaces ?? const [];
+    final effectiveOpenSpace = onOpenSpace;
+    final effectiveOpenThread = onOpenThread;
     final list = <AxHomeAttentionItem>[];
-    final authorizedProjectIds = projects.map((p) => p.id).toSet();
-    final pendingInvitationProjectIds =
-        invitations.map((i) => i.projectId).toSet();
+    final authorizedSpaceIds = effectiveSpaces.map((p) => p.id).toSet();
+    final pendingInvitationSpaceIds = invitations.map((i) => i.spaceId).toSet();
 
     // 1. Invitations
     for (final inv in invitations) {
@@ -1123,16 +1137,16 @@ class AxHomeAttentionProjector {
               : 'A collaborator');
       list.add(AxHomeAttentionItem(
         id: 'invite-${inv.id}',
-        type: AxHomeAttentionType.projectInvitation,
-        kind: AxHomeAttentionType.projectInvitation,
-        categoryLabel: 'Project invitation',
-        title: '$inviter invited you to ${inv.projectName}',
+        type: AxHomeAttentionType.spaceInvitation,
+        kind: AxHomeAttentionType.spaceInvitation,
+        categoryLabel: 'Space invitation',
+        title: '$inviter invited you to ${inv.spaceName}',
         description:
             '${inv.role.toUpperCase()} · ${_formatRelativeTime(inv.createdAt)}',
         timestamp: DateTime.tryParse(inv.createdAt),
         timestampDisplay: _formatRelativeTime(inv.createdAt),
         invitation: inv,
-        projectId: inv.projectId,
+        spaceId: inv.spaceId,
         read: false,
         isUnread: true,
         isActionable: true,
@@ -1142,7 +1156,7 @@ class AxHomeAttentionProjector {
           onPerform: () {
             AxHomeAnalytics.trackAcceptInvitation(
               invitationId: inv.id,
-              projectId: inv.projectId,
+              spaceId: inv.spaceId,
               role: inv.role,
             );
             if (onAcceptInvitation != null) {
@@ -1155,7 +1169,7 @@ class AxHomeAttentionProjector {
           onPerform: () {
             AxHomeAnalytics.trackDeclineInvitation(
               invitationId: inv.id,
-              projectId: inv.projectId,
+              spaceId: inv.spaceId,
             );
             if (onDeclineInvitation != null) {
               onDeclineInvitation(inv);
@@ -1168,11 +1182,11 @@ class AxHomeAttentionProjector {
 
     // 2. Attention items (derive action closures if not already set)
     for (final raw in rawAttentionItems) {
-      if (raw.projectId != null &&
-          !authorizedProjectIds.contains(raw.projectId) &&
-          !pendingInvitationProjectIds.contains(raw.projectId)) {
+      if (raw.spaceId != null &&
+          !authorizedSpaceIds.contains(raw.spaceId) &&
+          !pendingInvitationSpaceIds.contains(raw.spaceId)) {
         // Enforce privacy and authorization boundary: never surface attention items
-        // referencing revoked, non-member, or unauthorized projects.
+        // referencing revoked, non-member, or unauthorized spaces.
         continue;
       }
       AxHomeAttentionAction? primary = raw.primaryAction;
@@ -1182,7 +1196,7 @@ class AxHomeAttentionProjector {
         final label = (raw.actionLabel != null && raw.actionLabel!.isNotEmpty)
             ? raw.actionLabel!
             : switch (raw.effectiveType) {
-                AxHomeAttentionType.projectInvitation => 'View →',
+                AxHomeAttentionType.spaceInvitation => 'View →',
                 AxHomeAttentionType.needsInput ||
                 AxHomeAttentionType.approvalRequired =>
                   'Review →',
@@ -1197,12 +1211,12 @@ class AxHomeAttentionProjector {
           if (onOpenWorkspaces != null) {
             action = onOpenWorkspaces;
           }
-        } else if (raw.projectId != null &&
-            raw.workstreamId != null &&
-            onOpenWorkstream != null) {
-          action = () => onOpenWorkstream(raw.projectId!, raw.workstreamId!);
-        } else if (raw.projectId != null && onOpenProject != null) {
-          action = () => onOpenProject(raw.projectId!);
+        } else if (raw.spaceId != null &&
+            raw.threadId != null &&
+            effectiveOpenThread != null) {
+          action = () => effectiveOpenThread(raw.spaceId!, raw.threadId!);
+        } else if (raw.spaceId != null && effectiveOpenSpace != null) {
+          action = () => effectiveOpenSpace(raw.spaceId!);
         }
         primary = AxHomeAttentionAction(
           label: label,
@@ -1211,8 +1225,8 @@ class AxHomeAttentionProjector {
               itemId: raw.id,
               type: raw.effectiveType.name,
               actionLabel: label,
-              projectId: raw.projectId,
-              workstreamId: raw.workstreamId,
+              spaceId: raw.spaceId,
+              threadId: raw.threadId,
             );
             action();
           },
@@ -1228,8 +1242,8 @@ class AxHomeAttentionProjector {
         description:
             raw.description.isNotEmpty ? raw.description : raw.subtitle,
         subtitle: raw.subtitle,
-        projectId: raw.projectId,
-        workstreamId: raw.workstreamId,
+        spaceId: raw.spaceId,
+        threadId: raw.threadId,
         workerId: raw.workerId,
         workspaceId: raw.workspaceId,
         timestamp: raw.timestamp ?? raw.createdAt,
@@ -1250,7 +1264,8 @@ class AxHomeAttentionProjector {
     // 3. Open findings
     if (openFindingCount > 0 &&
         !list.any((it) => it.effectiveType == AxHomeAttentionType.needsInput)) {
-      final firstProjectId = projects.isNotEmpty ? projects.first.id : null;
+      final firstSpaceId =
+          effectiveSpaces.isNotEmpty ? effectiveSpaces.first.id : null;
       list.add(AxHomeAttentionItem(
         id: 'findings-open',
         type: AxHomeAttentionType.needsInput,
@@ -1261,15 +1276,15 @@ class AxHomeAttentionProjector {
         description: 'Review task results and verification evidence',
         subtitle: 'Review task results and verification evidence',
         timestampDisplay: 'Needs attention',
-        projectId: firstProjectId,
+        spaceId: firstSpaceId,
         read: false,
         isUnread: true,
         isActionable: true,
         actionLabel: 'Review →',
         primaryAction: AxHomeAttentionAction(
           label: 'Review →',
-          onPerform: (firstProjectId != null && onOpenProject != null)
-              ? () => onOpenProject(firstProjectId)
+          onPerform: (firstSpaceId != null && effectiveOpenSpace != null)
+              ? () => effectiveOpenSpace(firstSpaceId)
               : () {},
         ),
       ));
@@ -1321,23 +1336,26 @@ class _ForYouSection extends StatelessWidget {
     required this.invitations,
     required this.attentionItems,
     required this.openFindingCount,
-    required this.projects,
+    List<AxSpace>? spaces,
     this.onAcceptInvitation,
     this.onDeclineInvitation,
-    required this.onOpenProject,
-    this.onOpenWorkstream,
+    ValueChanged<String>? onOpenSpace,
+    this.onOpenThread,
     required this.onOpenWorkspaces,
     this.onOpenNotifications,
-  });
+  })  : spaces = spaces ?? const [],
+        onOpenSpace = onOpenSpace ?? _noopString;
 
-  final List<AxProjectInvitation> invitations;
+  static void _noopString(String _) {}
+
+  final List<AxSpaceInvitation> invitations;
   final List<AxHomeAttentionItem> attentionItems;
   final int openFindingCount;
-  final List<AxProject> projects;
-  final ValueChanged<AxProjectInvitation>? onAcceptInvitation;
-  final ValueChanged<AxProjectInvitation>? onDeclineInvitation;
-  final ValueChanged<String> onOpenProject;
-  final void Function(String projectId, String workstreamId)? onOpenWorkstream;
+  final List<AxSpace> spaces;
+  final ValueChanged<AxSpaceInvitation>? onAcceptInvitation;
+  final ValueChanged<AxSpaceInvitation>? onDeclineInvitation;
+  final ValueChanged<String> onOpenSpace;
+  final void Function(String spaceId, String threadId)? onOpenThread;
   final VoidCallback onOpenWorkspaces;
   final VoidCallback? onOpenNotifications;
 
@@ -1345,15 +1363,15 @@ class _ForYouSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final items = AxHomeAttentionProjector.project(
+    final items = AxHomeAttentionProjector.space(
       invitations: invitations,
       rawAttentionItems: attentionItems,
       openFindingCount: openFindingCount,
-      projects: projects,
+      spaces: spaces,
       onAcceptInvitation: onAcceptInvitation,
       onDeclineInvitation: onDeclineInvitation,
-      onOpenProject: onOpenProject,
-      onOpenWorkstream: onOpenWorkstream,
+      onOpenSpace: onOpenSpace,
+      onOpenThread: onOpenThread,
       onOpenWorkspaces: onOpenWorkspaces,
     );
 
@@ -1443,7 +1461,7 @@ class _ForYouItemTile extends StatelessWidget {
       return item.categoryLabel!;
     }
     return switch (item.effectiveType) {
-      AxHomeAttentionType.projectInvitation => 'Project invitation',
+      AxHomeAttentionType.spaceInvitation => 'Space invitation',
       AxHomeAttentionType.needsInput => 'Needs your input',
       AxHomeAttentionType.approvalRequired => 'Approval required',
       AxHomeAttentionType.executionFailed => 'Failed execution',
@@ -1455,7 +1473,7 @@ class _ForYouItemTile extends StatelessWidget {
 
   Color _deriveCategoryColor(ColorScheme colorScheme, bool isDark) {
     return switch (item.effectiveType) {
-      AxHomeAttentionType.projectInvitation =>
+      AxHomeAttentionType.spaceInvitation =>
         ConclaveColors.primaryForeground(isDark),
       AxHomeAttentionType.needsInput ||
       AxHomeAttentionType.approvalRequired =>
@@ -1641,9 +1659,9 @@ class _ContinueWorkCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 1. PROJECT NAME (uppercase, tracked label)
+                  // 1. SPACE NAME (uppercase, tracked label)
                   Text(
-                    item.projectName.toUpperCase(),
+                    item.spaceName.toUpperCase(),
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 11,
@@ -1654,9 +1672,9 @@ class _ContinueWorkCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  // 2. WORKSTREAM TITLE
+                  // 2. THREAD TITLE
                   Text(
-                    item.workstreamTitle,
+                    item.threadTitle,
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
@@ -2059,12 +2077,12 @@ class AxWhatsNewDialog extends StatelessWidget {
 const defaultProductUpdates = [
   AxProductUpdate(
     id: 'update-invitations',
-    slug: 'project-invitations',
-    title: 'Project Invitations',
+    slug: 'space-invitations',
+    title: 'Space Invitations',
     summary:
-        'Invite family, friends, and teammates to shared projects and accept invitations directly in AX.',
+        'Invite family, friends, and teammates to shared spaces and accept invitations directly in AX.',
     details:
-        'Project owners and editors can now invite collaborators via email or handle invitation approvals directly within Conclave AX with full role-based access control.',
+        'Space owners and editors can now invite collaborators via email or handle invitation approvals directly within Conclave AX with full role-based access control.',
     category: AxProductUpdateCategory.collaboration,
     publishedAt: '2026-10-07T00:00:00Z',
     dateDisplay: 'Oct 7',
@@ -2075,7 +2093,7 @@ const defaultProductUpdates = [
     slug: 'conversation-continuity',
     title: 'Conversation Continuity',
     summary:
-        'Switch Workers while keeping your Workstream conversation in context without losing turn history.',
+        'Switch Workers while keeping your Thread conversation in context without losing turn history.',
     details:
         'Transition seamlessly between ChatGPT, Claude, and Gemini workers across conversational turns with preserved contextual memory and synthesis state.',
     category: AxProductUpdateCategory.workflow,
@@ -2241,7 +2259,7 @@ class _InvitationItem extends StatelessWidget {
     this.onDecline,
   });
 
-  final AxProjectInvitation invitation;
+  final AxSpaceInvitation invitation;
   final VoidCallback? onAccept;
   final VoidCallback? onDecline;
 
@@ -2267,9 +2285,11 @@ class _InvitationItem extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    invitation.projectName.isNotEmpty
-                        ? invitation.projectName
-                        : 'Project Invitation',
+                    invitation.spaceName.isNotEmpty
+                        ? invitation.spaceName
+                        : (invitation.spaceName.isNotEmpty
+                            ? invitation.spaceName
+                            : 'Space Invitation'),
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
@@ -2291,7 +2311,7 @@ class _InvitationItem extends StatelessWidget {
                 onPressed: () {
                   AxHomeAnalytics.trackDeclineInvitation(
                     invitationId: invitation.id,
-                    projectId: invitation.projectId,
+                    spaceId: invitation.spaceId,
                   );
                   onDecline!();
                 },
@@ -2306,7 +2326,7 @@ class _InvitationItem extends StatelessWidget {
                 onPressed: () {
                   AxHomeAnalytics.trackAcceptInvitation(
                     invitationId: invitation.id,
-                    projectId: invitation.projectId,
+                    spaceId: invitation.spaceId,
                     role: invitation.role,
                   );
                   onAccept!();
@@ -2327,22 +2347,22 @@ class _InvitationItem extends StatelessWidget {
 class _RunningNowCard extends StatelessWidget {
   const _RunningNowCard({
     required this.run,
-    required this.defaultProjectId,
+    String? defaultSpaceId,
     required this.onOpenRun,
-  });
+  }) : defaultSpaceId = defaultSpaceId ?? '';
 
   final AxRun run;
-  final String defaultProjectId;
-  final void Function(String projectId, String runId) onOpenRun;
+  final String defaultSpaceId;
+  final void Function(String spaceId, String runId) onOpenRun;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final targetProjectId = (run.projectId != null && run.projectId!.isNotEmpty)
-        ? run.projectId!
-        : defaultProjectId;
+    final targetSpaceId = (run.spaceId != null && run.spaceId!.isNotEmpty)
+        ? run.spaceId!
+        : defaultSpaceId;
 
     final workerModelEffort = [
       if (run.workerName != null && run.workerName!.isNotEmpty) run.workerName!,
@@ -2351,10 +2371,14 @@ class _RunningNowCard extends StatelessWidget {
     ].join(' · ');
 
     final breadcrumb = [
-      if (run.projectName != null && run.projectName!.isNotEmpty)
-        run.projectName!,
-      if (run.workstreamTitle != null && run.workstreamTitle!.isNotEmpty)
-        run.workstreamTitle!,
+      if (run.spaceName != null && run.spaceName!.isNotEmpty)
+        run.spaceName!
+      else if (run.spaceName != null && run.spaceName!.isNotEmpty)
+        run.spaceName!,
+      if (run.threadTitle != null && run.threadTitle!.isNotEmpty)
+        run.threadTitle!
+      else if (run.threadTitle != null && run.threadTitle!.isNotEmpty)
+        run.threadTitle!,
     ].join(' / ');
 
     final durationText = run.durationDisplay ??
@@ -2461,9 +2485,9 @@ class _RunningNowCard extends StatelessWidget {
                   onPressed: () {
                     AxHomeAnalytics.trackOpenRunningRun(
                       runId: run.id,
-                      projectId: targetProjectId,
+                      spaceId: targetSpaceId,
                     );
-                    onOpenRun(targetProjectId, run.id);
+                    onOpenRun(targetSpaceId, run.id);
                   },
                   child: const Text('Open →'),
                 ),

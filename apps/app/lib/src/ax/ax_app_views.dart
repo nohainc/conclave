@@ -16,7 +16,7 @@ extension _AxAppViews on _AxAppStateMixin {
 
   Widget _homeView() => ListenableBuilder(
       listenable: Listenable.merge([
-        store.projects,
+        store.spaces,
         store.workspaces,
         store.executionChanges,
         store.invitations,
@@ -28,7 +28,7 @@ extension _AxAppViews on _AxAppStateMixin {
           engine: store.syncEngine,
           query: store.catalogs.workers,
           builder: (context, workers) => HomePage(
-                projects: store.projects.items,
+                spaces: store.spaces.items,
                 workspaces: store.workspaces.items,
                 workers: workers.data ?? const [],
                 invitations: store.invitations.items,
@@ -36,11 +36,11 @@ extension _AxAppViews on _AxAppStateMixin {
                 productUpdateReadStates: store.productUpdateReadStates.value,
                 attentionItems: notifications.map((n) {
                   final kind = switch (n.kind) {
-                    AxNotificationKind.workstreamNeedsInput ||
+                    AxNotificationKind.threadNeedsInput ||
                     AxNotificationKind.workflowRunNeedsApproval ||
                     AxNotificationKind.approvalRequired =>
                       AxAttentionKind.needsInput,
-                    AxNotificationKind.workstreamFailed ||
+                    AxNotificationKind.threadFailed ||
                     AxNotificationKind.workflowRunFailed ||
                     AxNotificationKind.failed =>
                       AxAttentionKind.failedExecution,
@@ -49,20 +49,20 @@ extension _AxAppViews on _AxAppStateMixin {
                       AxAttentionKind.workerProblem,
                     AxNotificationKind.workspaceOffline =>
                       AxAttentionKind.workspaceProblem,
-                    AxNotificationKind.workstreamCompleted ||
+                    AxNotificationKind.threadCompleted ||
                     AxNotificationKind.workflowRunCompleted ||
                     AxNotificationKind.completed =>
                       AxAttentionKind.completed,
-                    AxNotificationKind.projectInvitationReceived ||
+                    AxNotificationKind.spaceInvitationReceived ||
                     AxNotificationKind.invitationReceived =>
                       AxAttentionKind.invitation,
                   };
                   final categoryLabel = switch (n.kind) {
-                    AxNotificationKind.workstreamNeedsInput ||
+                    AxNotificationKind.threadNeedsInput ||
                     AxNotificationKind.workflowRunNeedsApproval ||
                     AxNotificationKind.approvalRequired =>
                       'Needs your input',
-                    AxNotificationKind.workstreamFailed ||
+                    AxNotificationKind.threadFailed ||
                     AxNotificationKind.workflowRunFailed ||
                     AxNotificationKind.failed =>
                       'Failed execution',
@@ -71,31 +71,31 @@ extension _AxAppViews on _AxAppStateMixin {
                     AxNotificationKind.workerInstallFailed =>
                       'Worker install failed',
                     AxNotificationKind.workspaceOffline => 'Workspace offline',
-                    AxNotificationKind.workstreamCompleted ||
+                    AxNotificationKind.threadCompleted ||
                     AxNotificationKind.workflowRunCompleted ||
                     AxNotificationKind.completed =>
                       'Completed',
-                    AxNotificationKind.projectInvitationReceived ||
+                    AxNotificationKind.spaceInvitationReceived ||
                     AxNotificationKind.invitationReceived =>
-                      'Project invitation',
+                      'Space invitation',
                   };
                   final actionLabel = switch (n.kind) {
-                    AxNotificationKind.workstreamNeedsInput ||
+                    AxNotificationKind.threadNeedsInput ||
                     AxNotificationKind.workflowRunNeedsApproval ||
                     AxNotificationKind.approvalRequired =>
                       'Review →',
-                    AxNotificationKind.workstreamFailed ||
+                    AxNotificationKind.threadFailed ||
                     AxNotificationKind.workflowRunFailed ||
                     AxNotificationKind.failed =>
                       'Inspect →',
                     AxNotificationKind.workerCredentialProblem => 'Fix →',
                     AxNotificationKind.workerInstallFailed => 'Fix →',
                     AxNotificationKind.workspaceOffline => 'Connect →',
-                    AxNotificationKind.workstreamCompleted ||
+                    AxNotificationKind.threadCompleted ||
                     AxNotificationKind.workflowRunCompleted ||
                     AxNotificationKind.completed =>
                       'Open →',
-                    AxNotificationKind.projectInvitationReceived ||
+                    AxNotificationKind.spaceInvitationReceived ||
                     AxNotificationKind.invitationReceived =>
                       'View →',
                   };
@@ -107,17 +107,16 @@ extension _AxAppViews on _AxAppStateMixin {
                     subtitle: n.message,
                     timestampDisplay: _formatNotificationTime(n.createdAt),
                     actionLabel: actionLabel,
-                    projectId: n.projectId,
-                    workstreamId: n.workstreamId,
+                    spaceId: n.spaceId,
+                    threadId: n.threadId,
                     isUnread: !n.read,
                     isActionable: n.kind != AxNotificationKind.completed &&
-                        n.kind != AxNotificationKind.workstreamCompleted &&
+                        n.kind != AxNotificationKind.threadCompleted &&
                         n.kind != AxNotificationKind.workflowRunCompleted,
                     createdAt: n.createdAt,
                   );
                 }).toList(),
-                continueWorkItems:
-                    _deriveContinueWorkItems(store.projects.items),
+                continueWorkItems: _deriveContinueWorkItems(store.spaces.items),
                 isOffline: store.lifecycle.isOffline,
                 onAcceptInvitation: _acceptInvitation,
                 onDeclineInvitation: _declineInvitation,
@@ -127,13 +126,13 @@ extension _AxAppViews on _AxAppStateMixin {
                     .length,
                 onOpenWorkspaces: () =>
                     _navigateTo(const AxNavigation.workspaces()),
-                onOpenProject: (projectId) =>
-                    _navigateTo(AxNavigation.project(projectId)),
-                onOpenWorkstream: (projectId, workstreamId) => _navigateTo(
-                    AxNavigation.workstream(projectId, workstreamId)),
-                onOpenRun: (projectId, runId) =>
-                    _navigateTo(AxNavigation.run(projectId, runId)),
-                onCreateProject: _createProject,
+                onOpenSpace: (spaceId) =>
+                    _navigateTo(AxNavigation.space(spaceId)),
+                onOpenThread: (spaceId, threadId) =>
+                    _navigateTo(AxNavigation.thread(spaceId, threadId)),
+                onOpenRun: (spaceId, runId) =>
+                    _navigateTo(AxNavigation.run(spaceId, runId)),
+                onCreateSpace: _createSpace,
                 onOpenNotifications: _showNotifications,
                 onOpenWhatsNew: () => AxWhatsNewDialog.show(
                   context,
@@ -152,102 +151,100 @@ extension _AxAppViews on _AxAppStateMixin {
                     store.dismissProductUpdate(update.id),
               )));
 
-  List<AxContinueWorkItem> _deriveContinueWorkItems(List<AxProject> projects) {
+  List<AxContinueWorkItem> _deriveContinueWorkItems(List<AxSpace> spaces) {
     final items = <AxContinueWorkItem>[];
-    for (final project in projects) {
-      if (project.archived) continue;
-      if (project.workstreams.isNotEmpty) {
-        for (final ws in project.workstreams) {
+    for (final space in spaces) {
+      if (space.archived) continue;
+      if (space.threads.isNotEmpty) {
+        for (final ws in space.threads) {
           if (ws.archived) continue;
           items.add(AxContinueWorkItem(
-            projectId: project.id,
-            projectName: project.name,
-            workstreamId: ws.id,
-            workstreamTitle: ws.name,
+            spaceId: space.id,
+            spaceName: space.name,
+            threadId: ws.id,
+            threadTitle: ws.name,
             collaboratorsDisplay: ws.lead.isNotEmpty && ws.lead != 'Unassigned'
                 ? ws.lead
                 : 'You and team AI',
             lastMessageSnippet: ws.brief.isNotEmpty
                 ? ws.brief
                 : 'Continue conversation and work in context',
-            lastActivityDisplay: project.lastActivity.isNotEmpty
-                ? project.lastActivity
-                : 'Recently',
+            lastActivityDisplay:
+                space.lastActivity.isNotEmpty ? space.lastActivity : 'Recently',
           ));
         }
       } else {
         items.add(AxContinueWorkItem(
-          projectId: project.id,
-          projectName: project.name,
-          workstreamId: 'default',
-          workstreamTitle: 'Main Workstream',
+          spaceId: space.id,
+          spaceName: space.name,
+          threadId: 'default',
+          threadTitle: 'Main Thread',
           collaboratorsDisplay: 'You and team AI',
           lastMessageSnippet: 'Continue conversation and work in context',
-          lastActivityDisplay: project.lastActivity.isNotEmpty
-              ? project.lastActivity
-              : 'Recently',
+          lastActivityDisplay:
+              space.lastActivity.isNotEmpty ? space.lastActivity : 'Recently',
         ));
       }
     }
     return items.take(5).toList();
   }
 
-  Future<void> _showArchivedProjects() async {
+  Future<void> _showArchivedSpaces() async {
     try {
       final archived =
-          await widget.dataSource.loadProjects(includeArchived: true);
-      var inactive = archived.where((project) => project.archived).toList();
-      String? restoringProjectId;
+          await widget.dataSource.loadSpaces(includeArchived: true);
+      var inactive = archived.where((space) => space.archived).toList();
+      String? restoringSpaceId;
       if (!mounted) return;
       await showDialog<void>(
         context: navigatorKey.currentContext ?? context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (dialogContext, setDialogState) => AlertDialog(
-            title: const Text('Archived Projects'),
+            title: const Text('Archived Spaces'),
             content: SizedBox(
               width: 520,
               child: inactive.isEmpty
-                  ? const Text('No archived Projects.')
+                  ? const Text('No archived Spaces.')
                   : ListView.separated(
                       shrinkWrap: true,
                       itemCount: inactive.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (_, index) {
-                        final project = inactive[index];
-                        final restoring = restoringProjectId == project.id;
+                        final space = inactive[index];
+                        final restoring = restoringSpaceId == space.id;
                         return ListTile(
-                          title: Text(project.name),
-                          subtitle: Text(project.description.isEmpty
+                          title: Text(space.name),
+                          subtitle: Text(space.description.isEmpty
                               ? 'No description'
-                              : project.description),
+                              : space.description),
                           trailing: FilledButton.tonal(
                             onPressed: restoring
                                 ? null
                                 : () async {
                                     setDialogState(
-                                        () => restoringProjectId = project.id);
+                                        () => restoringSpaceId = space.id);
                                     try {
-                                      await store.collaboration.editProject(
-                                        project,
+                                      await store.collaboration.editSpace(
+                                        space,
                                         settings: const {'archived': false},
                                       );
                                       if (dialogContext.mounted) {
                                         setDialogState(() {
                                           inactive = inactive
-                                              .where((item) =>
-                                                  item.id != project.id)
+                                              .where(
+                                                  (item) => item.id != space.id)
                                               .toList();
-                                          restoringProjectId = null;
+                                          restoringSpaceId = null;
                                         });
                                       }
-                                      await store.projects.refresh();
+                                      await store.spaces.refresh();
                                       if (mounted) {
-                                        _showSnackBar('Project restored.');
+                                        _showSnackBar('Space restored.');
                                       }
                                     } catch (error) {
                                       if (dialogContext.mounted) {
                                         setDialogState(
-                                            () => restoringProjectId = null);
+                                            () => restoringSpaceId = null);
                                       }
                                       if (mounted) {
                                         _showSnackBar(error.toString(),
@@ -275,86 +272,84 @@ extension _AxAppViews on _AxAppStateMixin {
     }
   }
 
-  Widget _projectOverviewView() {
-    final project = selectedProject;
-    if (project == null) return _homeView();
-    return ProjectPage(
-      key: ValueKey('project-page-${project.id}'),
-      projectWorkstreams: store.projectWorkstreams,
-      workspaceGrants: store.projectWorkspaceGrants,
-      tabQueries: store.projectTabs,
+  Widget _spaceOverviewView() {
+    final space = selectedSpace;
+    if (space == null) return _homeView();
+    return SpacePage(
+      key: ValueKey('space-page-${space.id}'),
+      spaceThreads: store.spaceThreads,
+      workspaceGrants: store.spaceWorkspaceGrants,
+      tabQueries: store.spaceTabs,
       mutations: store.collaboration,
-      project: project,
+      space: space,
       dataSource: widget.dataSource,
-      onOpenWorkstream: (workstreamId) =>
-          _openWorkstream(project.id, workstreamId),
+      onOpenThread: (threadId) => _openThread(space.id, threadId),
       onOpenWorkspace: (workspaceId) =>
           _navigateTo(AxNavigation.workspaces(workspaceId: workspaceId)),
-      onEdit: () => _editProject(project),
-      onArchive: () => _archiveProject(project),
-      onDelete: () => _deleteProject(project.id),
+      onEdit: () => _editSpace(space),
+      onArchive: () => _archiveSpace(space),
+      onDelete: () => _deleteSpace(space.id),
     );
   }
 
-  void _openWorkstream(String projectId, String workstreamId) {
-    _navigateTo(AxNavigation.workstream(projectId, workstreamId));
+  void _openThread(String spaceId, String threadId) {
+    _navigateTo(AxNavigation.thread(spaceId, threadId));
   }
 
-  Widget _workstreamView() {
-    final project = selectedProject;
-    if (project == null) return _homeView();
-    return AxQueryBuilder<List<AxWorkstream>>(
-      key: ValueKey('workstream-page-${project.id}'),
-      engine: store.projectWorkstreams.engine,
-      query: store.projectWorkstreams.query(project.id),
+  Widget _threadView() {
+    final space = selectedSpace;
+    if (space == null) return _homeView();
+    return AxQueryBuilder<List<AxThread>>(
+      key: ValueKey('thread-page-${space.id}'),
+      engine: store.spaceThreads.engine,
+      query: store.spaceThreads.query(space.id),
       builder: (context, state) {
-        final workstream = state.data
-            ?.where((w) => w.id == navigation.workstreamId)
-            .firstOrNull;
-        if (workstream == null) {
+        final thread =
+            state.data?.where((w) => w.id == navigation.threadId).firstOrNull;
+        if (thread == null) {
           return Center(
               child: state.error != null
                   ? TextButton(
-                      onPressed: () => store.projectWorkstreams
-                          .ensure(project.id)
+                      onPressed: () => store.spaceThreads
+                          .ensure(space.id)
                           .then<void>((_) {},
                               onError: (Object _, StackTrace __) {}),
-                      child: const Text('Retry Workstreams'))
+                      child: const Text('Retry Threads'))
                   : Text(state.hasData
-                      ? 'Workstream unavailable'
-                      : 'Loading Workstream…'));
+                      ? 'Thread unavailable'
+                      : 'Loading Thread…'));
         }
-        return WorkstreamPage(
+        return ThreadPage(
           catalogs: store.catalogs,
           mutations: store.collaboration,
-          workspaceGrants: store.projectWorkspaceGrants,
+          workspaceGrants: store.spaceWorkspaceGrants,
           discussionCache: store.discussion,
           workHistoryCache: store.workHistory,
-          key: ValueKey(workstream.id),
-          project: project,
-          workstream: workstream,
+          key: ValueKey(thread.id),
+          space: space,
+          thread: thread,
           dataSource: widget.dataSource,
           realtimeEvents: realtimeClient.events,
           currentUserId: store.auth.viewer?.id,
           currentUserName: store.auth.viewer?.displayName,
-          onBackToProject: () => _navigateTo(AxNavigation.project(project.id)),
+          onBackToSpace: () => _navigateTo(AxNavigation.space(space.id)),
           onArchive: () async {
             try {
-              await store.collaboration.deleteWorkstream(workstream);
+              await store.collaboration.deleteThread(thread);
               if (!mounted) return;
-              _showSnackBar('Workstream deleted.');
-              _navigateTo(AxNavigation.project(project.id));
+              _showSnackBar('Thread deleted.');
+              _navigateTo(AxNavigation.space(space.id));
             } catch (error) {
               if (mounted) _showSnackBar(error.toString());
             }
           },
           onRename: (name) async {
             try {
-              await store.collaboration.editWorkstream(
-                workstream,
+              await store.collaboration.editThread(
+                thread,
                 name: name,
               );
-              if (mounted) _showSnackBar('Workstream updated.');
+              if (mounted) _showSnackBar('Thread updated.');
             } catch (error) {
               if (mounted) _showSnackBar(error.toString());
             }
@@ -362,7 +357,7 @@ extension _AxAppViews on _AxAppStateMixin {
           onRunWork: (prompt, workflowId, attachments, idempotencyKey,
                   executionSelection) =>
               widget.dataSource.createWorkRequest(
-            workstreamId: workstream.id,
+            threadId: thread.id,
             workflowId: workflowId,
             prompt: prompt,
             attachments: attachments,
@@ -376,24 +371,24 @@ extension _AxAppViews on _AxAppStateMixin {
 
   Widget _searchView() {
     return ListenableBuilder(
-        listenable: store.projects,
+        listenable: store.spaces,
         builder: (context, _) => _searchCollections(
             0,
             () => SearchPage(
                   query: _searchQuery.isNotEmpty
                       ? _searchQuery
                       : _searchQueryController.text.trim(),
-                  projects: store.projects.items,
+                  spaces: store.spaces.items,
                   workspaces: store.workspaces.items,
                   run: executionSnapshot.run,
-                  workstreamsByProject: {
-                    for (final project in store.projects.items)
-                      project.id: store.projectWorkstreams.peek(project.id),
+                  threadsBySpace: {
+                    for (final space in store.spaces.items)
+                      space.id: store.spaceThreads.peek(space.id),
                   },
                   onNavigateTo: _navigateTo,
-                  onSelectProject: (projectId) {
+                  onSelectSpace: (spaceId) {
                     _clearSearch();
-                    _navigateTo(AxNavigation.project(projectId));
+                    _navigateTo(AxNavigation.space(spaceId));
                   },
                   onClearSearch: _clearSearch,
                   onToggleTheme: _toggleTheme,
@@ -402,11 +397,10 @@ extension _AxAppViews on _AxAppStateMixin {
   }
 
   Widget _searchCollections(int index, Widget Function() build) {
-    if (index >= store.projects.items.length) return build();
-    final query =
-        store.projectWorkstreams.query(store.projects.items[index].id);
-    // Search watches already cached collections, without eagerly fetching all Projects.
-    return AxQueryBuilder<List<AxWorkstream>>(
+    if (index >= store.spaces.items.length) return build();
+    final query = store.spaceThreads.query(store.spaces.items[index].id);
+    // Search watches already cached collections, without eagerly fetching all Spaces.
+    return AxQueryBuilder<List<AxThread>>(
         engine: store.syncEngine,
         query: query,
         ensure: false,

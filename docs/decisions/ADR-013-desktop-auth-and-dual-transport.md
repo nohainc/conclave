@@ -38,7 +38,7 @@ Conclave Workspace
   HTTPS long-poll -> fallback runtime transport
 ~~~
 
-The desktop application becomes the primary management surface for one user's local Workspace and Workers. Conclave AX shows Workspace/Worker state and Project-facing execution availability, but does not own Workspace registration or local runtime recovery.
+The desktop application becomes the primary management surface for one user's local Workspace and Workers. Conclave AX shows Workspace/Worker state and Space-facing execution availability, but does not own Workspace registration or local runtime recovery.
 
 ## Decision
 
@@ -158,7 +158,7 @@ The Conclave AX Workspaces page remains useful for:
 - last seen;
 - synchronized Workers;
 - readiness/attention;
-- Project-facing execution availability.
+- Space-facing execution availability.
 
 Normal AX Workspace UI does not:
 
@@ -173,7 +173,7 @@ not part of the normal Workspace UI. Any administrative Cloud operation has
 its own current authorization contract and does not expose local Worker
 configuration.
 
-Project membership, Project Workspace Grants, and Workstream policy remain Cloud/AX concerns because they authorize collaborative use; they are not local machine configuration.
+Space membership, Space Workspace Grants, and Thread policy remain Cloud/AX concerns because they authorize collaborative use; they are not local machine configuration.
 
 ### 5. Runtime protocol is transport-independent
 

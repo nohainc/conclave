@@ -3,14 +3,14 @@ import { fileURLToPath } from "node:url";
 
 export function workspaceGrantScopeAlignmentSql(baseline) {
   const table = baseline.match(
-    /CREATE TABLE workspace_project_grants \([\s\S]*?\n\);/,
+    /CREATE TABLE workspace_space_grants \([\s\S]*?\n\);/,
   );
   if (!table || /\bscope\s+TEXT/i.test(table[0])) {
     throw new Error(
-      "Current v8 baseline must define project grants without legacy scope.",
+      "Current v8 baseline must define space grants without legacy scope.",
     );
   }
-  return "ALTER TABLE workspace_project_grants DROP COLUMN scope;\n";
+  return "ALTER TABLE workspace_space_grants DROP COLUMN scope;\n";
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

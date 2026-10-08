@@ -17,7 +17,7 @@ function createArtifactEnvironment() {
           return statement;
         },
         async first<T>() {
-          if (query.includes("FROM projects p JOIN runs r")) {
+          if (query.includes("FROM spaces p JOIN runs r")) {
             return (
               values[2] === "workspace-1"
                 ? { workspaceId: "workspace-1" }
@@ -40,7 +40,7 @@ function createArtifactEnvironment() {
             const [
               id,
               workspaceId,
-              projectId,
+              spaceId,
               runId,
               taskId,
               attemptId,
@@ -55,7 +55,7 @@ function createArtifactEnvironment() {
             artifacts.set(String(id), {
               id,
               workspace_id: workspaceId,
-              project_id: projectId,
+              space_id: spaceId,
               run_id: runId,
               task_id: taskId,
               attempt_id: attemptId,
@@ -73,7 +73,7 @@ function createArtifactEnvironment() {
             const [
               eventId,
               workspaceId,
-              projectId,
+              spaceId,
               runId,
               taskId,
               attemptId,
@@ -87,7 +87,7 @@ function createArtifactEnvironment() {
             const row = {
               event_id: eventId,
               workspace_id: workspaceId,
-              project_id: projectId,
+              space_id: spaceId,
               run_id: runId,
               task_id: taskId,
               attempt_id: attemptId,
@@ -139,7 +139,7 @@ function createArtifactEnvironment() {
         status: "active",
       },
       workspaceId: "workspace-1",
-      projectRoles: {},
+      spaceRoles: {},
       sessionId: "session-1",
       clientType: "web",
     }),
@@ -154,7 +154,7 @@ describe("artifact transport", () => {
     const { env, objects } = createArtifactEnvironment();
     const response = await worker.fetch(
       new Request(
-        "https://conclave.test/api/workspaces/workspace-1/artifacts?projectId=project-1&runId=run-1&artifactId=artifact-1&name=build%20output.zip",
+        "https://conclave.test/api/workspaces/workspace-1/artifacts?spaceId=space-1&runId=run-1&artifactId=artifact-1&name=build%20output.zip",
         {
           method: "POST",
           headers: {
@@ -183,7 +183,7 @@ describe("artifact transport", () => {
   it("retries an interrupted/reconnected upload idempotently", async () => {
     const { env, objects } = createArtifactEnvironment();
     const url =
-      "https://conclave.test/api/workspaces/workspace-1/artifacts?projectId=project-1&runId=run-1&artifactId=artifact-retry";
+      "https://conclave.test/api/workspaces/workspace-1/artifacts?spaceId=space-1&runId=run-1&artifactId=artifact-retry";
     const request = () =>
       new Request(url, {
         method: "POST",
@@ -207,7 +207,7 @@ describe("artifact transport", () => {
     const { env, objects } = createArtifactEnvironment();
     const response = await worker.fetch(
       new Request(
-        "https://conclave.test/api/workspaces/workspace-1/artifacts?projectId=project-1&runId=run-1",
+        "https://conclave.test/api/workspaces/workspace-1/artifacts?spaceId=space-1&runId=run-1",
         {
           method: "POST",
           headers: {
@@ -223,13 +223,13 @@ describe("artifact transport", () => {
     expect(objects.size).toBe(0);
   });
 
-  it("uses the current Project authorization path on retrieval and rejects expired sessions", async () => {
+  it("uses the current Space authorization path on retrieval and rejects expired sessions", async () => {
     const { env, artifacts, objects } = createArtifactEnvironment();
     const key = "artifact-objects/workspace-1/object-1";
     const row = {
       id: "artifact-1",
       workspace_id: "workspace-1",
-      project_id: "project-1",
+      space_id: "space-1",
       run_id: "run-1",
       media_type: "text/plain",
       content_digest: "sha256:test",
@@ -256,7 +256,7 @@ describe("artifact transport", () => {
         }),
       } as unknown as Env,
     );
-    // Legacy Workspace selector fields are ignored; access is Project-scoped.
+    // Legacy Workspace selector fields are ignored; access is Space-scoped.
     expect(denied.status).toBe(200);
 
     const expired = await worker.fetch(

@@ -331,7 +331,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       for (final field in [
         'assignmentId',
         'executionWorkspaceId',
-        'projectId',
+        'spaceId',
         'runId',
         'taskId',
         'attemptId',

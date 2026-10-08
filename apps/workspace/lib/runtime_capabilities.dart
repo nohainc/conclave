@@ -7,7 +7,7 @@ class RuntimeViolation implements Exception {
   String toString() => 'RuntimeViolation: $message';
 }
 
-/// Validates the immutable Project/Workspace scope before an Engine process is
+/// Validates the immutable Space/Workspace scope before an Engine process is
 /// launched. Workspace treats the snapshot as untrusted input even though
 /// Cloud produced it, because local Worker execution must not widen its scope.
 void validateAssignmentScope(
@@ -19,7 +19,7 @@ void validateAssignmentScope(
     throw const RuntimeViolation('assignment permission snapshot is required');
   }
   for (final field in [
-    'projectId',
+    'spaceId',
     'workspaceId',
     'grantId',
     'requesterUserId'
@@ -29,7 +29,7 @@ void validateAssignmentScope(
       throw RuntimeViolation('assignment snapshot field $field is required');
     }
   }
-  if (snapshot['projectId'] != payload['projectId'] ||
+  if (snapshot['spaceId'] != payload['spaceId'] ||
       snapshot['workspaceId'] != payload['executionWorkspaceId']) {
     throw const RuntimeViolation('assignment scope identity mismatch');
   }
@@ -50,7 +50,7 @@ void validateAssignmentScope(
     }
     if (_isSystemAdministration(permission)) {
       throw RuntimeViolation(
-          'system administration is never available to Project assignments: $permission');
+          'system administration is never available to Space assignments: $permission');
     }
     if (!runtimePermissionAllowed(permission, localWorkerPermissions)) {
       throw RuntimeViolation(
@@ -123,7 +123,7 @@ void _rejectWorkerControlledPaths(Map<String, Object?> value) {
 
 /// Rejects Cloud/Worker payloads that attempt to choose a process CWD.
 ///
-/// The Workspace must resolve the Workstream directory locally from immutable IDs.
+/// The Workspace must resolve the Thread directory locally from immutable IDs.
 void rejectWorkerControlledPaths(Map<String, Object?> value) {
   _rejectWorkerControlledPaths(value);
 }

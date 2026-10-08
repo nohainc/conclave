@@ -70,7 +70,7 @@ describe("v8 Tool Profile Cloud release domain", () => {
         visibility_state: "visible",
         release_stage: "stable",
         capabilities_json:
-          '["text","local_file","workstream_read","workstream_write","durable_session"]',
+          '["text","local_file","thread_read","thread_write","durable_session"]',
         sort_order: 10,
       },
       {
@@ -79,7 +79,7 @@ describe("v8 Tool Profile Cloud release domain", () => {
         visibility_state: "visible",
         release_stage: "stable",
         capabilities_json:
-          '["text","local_file","workstream_read","workstream_write","durable_session"]',
+          '["text","local_file","thread_read","thread_write","durable_session"]',
         sort_order: 20,
       },
     ]);

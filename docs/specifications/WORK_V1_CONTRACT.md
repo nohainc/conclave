@@ -4,9 +4,9 @@
 **Status:** Frozen
 **Scope:** Work composer and built-in Workflow semantics in Conclave AX
 
-## Workstream authored-content contract
+## Thread authored-content contract
 
-Workstream authored content is **GitHub-Flavored Markdown (GFM) source**.
+Thread authored content is **GitHub-Flavored Markdown (GFM) source**.
 AX edits and previews that source and renders it for reading. Existing ordinary
 plain-text records remain valid Markdown; no content-format database migration
 or record conversion is required in v1.
@@ -22,7 +22,7 @@ a request is preparing or awaiting completion, failure or cancellation.
 The input remains editable throughout preparation, submission, and execution so
 the user can draft the next request while sending stays disabled.
 
-Workstream content is capped at 800 logical pixels per pane. At available widths
+Thread content is capped at 800 logical pixels per pane. At available widths
 of 1000 pixels or more, Chat and Work appear side by side with a vertical divider;
 smaller windows use the Chat/Work tabs. Both layouts use the same tab controls.
 Each pane has 20 pixels of side and bottom padding and no top padding. The
@@ -54,14 +54,14 @@ or HTML documents) become a concrete product requirement.
 Cloud encodes durable Work session identities as `work-session-` plus a SHA-256
 hex digest. Keys satisfy the Engine's opaque identifier contract
 (`[A-Za-z0-9_-]+`, at most 256 characters). Work keeps the same identity across
-requests in a Workstream; Chat has a separate Workstream-scoped identity and
+requests in a Thread; Chat has a separate Thread-scoped identity and
 other Steps remain request-scoped. Fresh retries get
 distinct keys. This changes no persisted schema; previously rejected colon-based
 keys never created usable Engine sessions.
 
 AX exposes explicit repository read, repository write, and shell execution
 choices when connecting a Workspace. Workspace owners can edit an active or
-suspended Project grant through `PATCH /api/workspace-project-grants/:id` with
+suspended Space grant through `PATCH /api/workspace-space-grants/:id` with
 `allowedPermissions`; the existing permission validator, ownership check, and
 terminal-state restrictions apply. Omitted permissions remain unchanged.
 Work (`direct`) requires `repository:read` and `repository:write`; Test also requires
@@ -69,13 +69,13 @@ Work (`direct`) requires `repository:read` and `repository:write`; Test also req
 Run admission errors are selectable and have a copy action for the full message.
 
 This is the single authoritative catalog and semantic definition for Work v1.
-Architecture v8 preserves Workspace ownership, Workstream isolation,
+Architecture v8 preserves Workspace ownership, Thread isolation,
 Cloud/Workspace transport, AX-owned Worker usage policy, and the Workspace
 desktop lifecycle. Work v1 binds logical Workers and is intentionally
 independent from the underlying Engine/Profile implementation. See
 [Persistence Contracts](PERSISTENCE.md),
 [Architecture v8](../architecture/ARCHITECTURE_V8.md), and
-[ADR-011](../decisions/ADR-011-workstream-working-directories.md) for the
+[ADR-011](../decisions/ADR-011-thread-working-directories.md) for the
 matching runtime lease and local directory rules. A Work v1 Workflow describes
 the user-visible shape of a Work Request; it does not select a Worker, provider,
 model, Workspace, or execution permission.
@@ -87,7 +87,7 @@ Conclave defines canonical Steps
       ↓
 Conclave defines valid built-in Workflows
       ↓
-Workstream assigns Workers to Steps
+Thread assigns Workers to Steps
       ↓
 User selects a Workflow and enters a request
       ↓
@@ -97,8 +97,8 @@ Workers execute
 ~~~
 
 AX reads Workflow names and descriptions from the built-in catalog endpoint,
-which projects the shared core definitions. The composer selects the current
-Workstream default on load; it does not maintain its own Workflow name list.
+which spaces the shared core definitions. The composer selects the current
+Thread default on load; it does not maintain its own Workflow name list.
 
 ## Step kinds
 
@@ -108,10 +108,10 @@ tests.
 
 | `StepKind` | Meaning |
 | --- | --- |
-| `chat` | Respond conversationally using authorized Workstream context. Inspect files and use provider-supported read-only commands; do not modify files, dependencies, or repository state. Return natural Markdown. |
+| `chat` | Respond conversationally using authorized Thread context. Inspect files and use provider-supported read-only commands; do not modify files, dependencies, or repository state. Return natural Markdown. |
 | `research` | Gather and summarize relevant evidence from the request and authorized context, including findings, available sources/references, constraints, uncertainties, and recommended next actions. Do not make requested changes. |
 | `plan` | Turn the request and available evidence into an ordered implementation plan and clear completion criteria. Do not make requested changes. |
-| `implement` | Make the requested changes in the Workstream execution context. |
+| `implement` | Make the requested changes in the Thread execution context. |
 | `test` | Run relevant tests or validation against the implementation and report commands/results. Do not intentionally change product source as part of the test step. |
 | `verify` | Independently compare the result and available evidence with the request and completion criteria; report confirmed outcomes, gaps, and risks. Do not implement fixes. |
 
@@ -167,10 +167,10 @@ interface BuiltinWorkflowDefinition {
 interface BuiltinWorkflowStep {
   kind: StepKind;
   order: number;
-  executionMode: "stateless_read" | "stateful_workstream";
+  executionMode: "stateless_read" | "stateful_thread";
   executionClass: "analysis" | "workspace_action";
   requiredCapabilities: WorkflowCapability[];
-  readWritePolicy: "read_only" | "write_workstream";
+  readWritePolicy: "read_only" | "write_thread";
   timeoutMs: number;
   promptProfileVersion: string;
   dependsOn: StepKind[]; // fixed by the built-in definition
@@ -180,9 +180,9 @@ interface BuiltinWorkflowStep {
 ```
 
 `WorkflowCapability` is a closed, provider-neutral set: `authorized_context_read`,
-`workstream_write`, `test_execution`, and `independent_verification`.
+`thread_write`, `test_execution`, and `independent_verification`.
 `WorkflowResultSemantics` is likewise closed: `conversation_response`, `evidence_summary`,
-`implementation_plan`, `workstream_changes`, `test_report`, and
+`implementation_plan`, `thread_changes`, `test_report`, and
 `verification_report`. Step definitions set their required capabilities,
 read/write policy, execution class, timeout, internal prompt profile, fixed
 upstream inputs, and result semantics. These values are owned by Conclave and
@@ -191,11 +191,11 @@ are part of the immutable Workflow version.
 ## Before submission
 
 Before creating a Work Request, Cloud resolves every required Step binding and
-checks that each Worker exists, belongs to an active Project Workspace grant,
+checks that each Worker exists, belongs to an active Space Workspace grant,
 is enabled locally and for Cloud scheduling, and is Ready. Cloud also checks
 that the Worker and grant provide every required Step capability and the grant
 allows the permissions needed by the Step. Any explicitly configured model must
-be permitted by the Workstream execution policy; if that policy has an explicit
+be permitted by the Thread execution policy; if that policy has an explicit
 model allowlist, a model must be selected from it.
 
 The composer requests this eligibility check before submission and presents
@@ -210,7 +210,7 @@ The v1 step policy is:
 | `chat` | `analysis` | `authorized_context_read` | `read_only` | `conversation_response` |
 | `research` | `analysis` | `authorized_context_read` | `read_only` | `evidence_summary` |
 | `plan` | `analysis` | `authorized_context_read` | `read_only` | `implementation_plan` |
-| `implement` | `workspace_action` | `workstream_write` | `write_workstream` | `workstream_changes` |
+| `implement` | `workspace_action` | `thread_write` | `write_thread` | `thread_changes` |
 | `test` | `workspace_action` | `authorized_context_read`, `test_execution` | `read_only` | `test_report` |
 | `verify` | `workspace_action` | `authorized_context_read`, `independent_verification` | `read_only` | `verification_report` |
 
@@ -226,10 +226,10 @@ execution environment without selecting a Worker or tool.
 
 ## Internal Step Prompt Profiles
 
-`chat:v1` answers conversationally with bounded user request, Project and
-Workstream instructions, Chat-specific additional instructions, and attachment
+`chat:v1` answers conversationally with bounded user request, Space and
+Thread instructions, Chat-specific additional instructions, and attachment
 or reference metadata. Files are referenced through the existing assignment
-input paths. Chat may inspect the current Workstream directory and repository
+input paths. Chat may inspect the current Thread directory and repository
 state using provider-supported read-only commands. It must not create, modify,
 delete or rename files, change Git state, install or update dependencies, or
 perform implementation work. Modification requests receive an explanation and
@@ -252,38 +252,38 @@ Cloud renders prompts through the single Work v1 prompt renderer. Its fixed
 profiles are `chat:v1`, `research:v1`, `plan:v1`, `implement:v1`, `test:v1`, and
 `verify:v1`. A Workflow step's `promptProfileVersion` selects exactly one
 matching profile. The renderer consumes structured request text, attachments,
-Project and Workstream instructions, step-specific instructions, authorized
-upstream step results, and current Workstream context. It applies bounded input
+Space and Thread instructions, step-specific instructions, authorized
+upstream step results, and current Thread context. It applies bounded input
 limits. Work (`direct:v2`) is the writable one-step fast path: it preserves the submitted request
-as the first prompt content, then adds only configured Project, Workstream, and
+as the first prompt content, then adds only configured Space, Thread, and
 Work instructions (Direct for historical v1) plus a short hidden instruction to act in the authorized
-Workstream and return the result. Other Workflows begin with their fixed
+Thread and return the result. Other Workflows begin with their fixed
 StepKind instructions and include only the authorized handoff data for that
 Step.
 Profiles are internal, versioned Conclave instructions used by Cloud's prompt
 renderer. They are not a user-facing template language: users cannot edit the
 Conclave instructions, insert macros, or control handoff composition. Users
-can specialize a run only through the bounded Project, Workstream, and
+can specialize a run only through the bounded Space, Thread, and
 Step-specific additional-instruction fields defined below.
 
 ## Team collaboration and authorization
 
-Work belongs to the shared Project and Workstream. A Project owner or
+Work belongs to the shared Space and Thread. A Space owner or
 collaborator may submit a Work Request only when the member also passes the
-Workstream's execute-access policy and the Project permission check. Viewers
+Thread's execute-access policy and the Space permission check. Viewers
 cannot submit Work. Cloud enforces these checks when creating the request; the
 composer's eligibility check is informational and is not an authorization
 boundary.
 
-Project members who have Workstream view access may inspect its Work timeline
-and Run Details, including Work submitted by another member. Workstream access
+Space members who have Thread view access may inspect its Work timeline
+and Run Details, including Work submitted by another member. Thread access
 policy still controls visibility. Read access does not grant execution or
 configuration rights.
 
-Changing the Workstream's default Workflow, Step bindings, or Workstream
-instructions requires Workstream configuration access (`projects:write` plus
-the Workstream manage rule). In the current model, that means a Project owner
-or the collaborator assigned as Workstream lead. Cloud enforces this on every
+Changing the Thread's default Workflow, Step bindings, or Thread
+instructions requires Thread configuration access (`spaces:write` plus
+the Thread manage rule). In the current model, that means a Space owner
+or the collaborator assigned as Thread lead. Cloud enforces this on every
 configuration write, and the UI uses the server-projected `canConfigureWork`
 capability to disable unavailable controls.
 
@@ -326,13 +326,13 @@ an error alone never implies that the conversation context was restored.
 The renderer passes only these inputs for each step. It does not append prior
 Worker messages or conversational sessions.
 
-Work uses one durable logical session scope per Workstream's `direct` binding:
-`workstream:<workstreamId>:direct:work-conversation`. This lets later Work
+Work uses one durable logical session scope per Thread's `direct` binding:
+`thread:<threadId>:direct:work-conversation`. This lets later Work
 requests continue the same Work conversation. Chat uses its own durable base,
-`workstream:<workstreamId>:chat:conversation`, across requests in that Workstream.
+`thread:<threadId>:chat:conversation`, across requests in that Thread.
 Chat and Work never share a session key, even when their Worker/model match.
 Both bases are encoded using the existing Engine-safe SHA-256 key format.
-Chat requests use `mode = stateless` and never enqueue with the Workstream
+Chat requests use `mode = stateless` and never enqueue with the Thread
 mutation coordinator or acquire its lease. This does not change their durable
 provider session or read-only filesystem policy. Work/direct remains stateful,
 durable, and writable within its authorized scope. Request mode follows the
@@ -403,11 +403,11 @@ fall back to available Step output or assignment timestamps.
 
 | Step | Handoff |
 | --- | --- |
-| `research` | Original request, attachment contents, Project and Workstream instructions, Research-specific instructions. |
-| `plan` | Original request, attachment metadata, Research result if present, Project and Workstream instructions, Plan-specific instructions. |
-| `implement` | Original request, relevant Research result, Plan result if present, Project and Workstream instructions, Implementation-specific instructions, and access to the writable Workstream filesystem. |
-| `test` | Original request, Plan result, Implementation result, Project and Workstream instructions, Test-specific instructions, and current Workstream filesystem. Test may run existing tests, builds, lint, and typecheck commands, but cannot edit application, test, configuration, or dependency files or fix failures. Requests to add tests are implemented in the Implement step, then checked by Test. |
-| `verify` | Original request, relevant Research and Plan results, Implementation result, Test result if present, Project and Workstream instructions, Verify-specific instructions, and the current Workstream filesystem. Verify holds the active Workstream lease for filesystem identity, but its effective permissions and provider execution are read-only; it uses a fresh Work Request-scoped Verify session. |
+| `research` | Original request, attachment contents, Space and Thread instructions, Research-specific instructions. |
+| `plan` | Original request, attachment metadata, Research result if present, Space and Thread instructions, Plan-specific instructions. |
+| `implement` | Original request, relevant Research result, Plan result if present, Space and Thread instructions, Implementation-specific instructions, and access to the writable Thread filesystem. |
+| `test` | Original request, Plan result, Implementation result, Space and Thread instructions, Test-specific instructions, and current Thread filesystem. Test may run existing tests, builds, lint, and typecheck commands, but cannot edit application, test, configuration, or dependency files or fix failures. Requests to add tests are implemented in the Implement step, then checked by Test. |
+| `verify` | Original request, relevant Research and Plan results, Implementation result, Test result if present, Space and Thread instructions, Verify-specific instructions, and the current Thread filesystem. Verify holds the active Thread lease for filesystem identity, but its effective permissions and provider execution are read-only; it uses a fresh Work Request-scoped Verify session. |
 
 These result selections are recorded in each built-in step's `inputsFrom`.
 Research receives attachment contents; Plan receives attachment metadata only;
@@ -434,7 +434,7 @@ choose either option. A fresh retry gets a new logical session key; resume uses
 the original Work Request and Step key. Other Step retries reuse only their own
 Work Request-scoped session.
 
-Retry admission rechecks the selected Worker's current readiness, Project grant,
+Retry admission rechecks the selected Worker's current readiness, Space grant,
 capabilities, and permissions against the immutable binding snapshot. A failed
 Run can be cancelled to close it without retrying. Repeated retries happen only
 after another explicit user action.
@@ -443,9 +443,9 @@ Step identity and task role are the canonical `StepKind`; there is no separate
 free-form `role`. A step's `executionMode`, read/write policy, timeout, prompt
 profile, order, and dependencies are product-owned values. The current fixed
 execution modes are `stateless_read` for `chat`, `research` and `plan`, and
-`stateful_workstream` for `implement`, `test`, and `verify`. A stateful
-Work Request is one whose selected Workflow contains a `stateful_workstream`
-Step. Cloud acquires one Workstream runtime lease before that request starts and
+`stateful_thread` for `implement`, `test`, and `verify`. A stateful
+Work Request is one whose selected Workflow contains a `stateful_thread`
+Step. Cloud acquires one Thread runtime lease before that request starts and
 holds it through a terminal state; a stateless-only Work Request has no lease.
 The request-level lease prevents another stateful Work Request from
 interleaving between Steps and keeps all stateful Steps on the Primary
@@ -509,7 +509,7 @@ workflows:
 ```
 
 This catalog fixes the complete step sequence for each reference. The
-Workstream may choose a default built-in, and an authorized Work Request may
+Thread may choose a default built-in, and an authorized Work Request may
 select one of the same built-ins. A submitted request snapshots its exact
 Workflow reference and resolved steps so later releases cannot reinterpret a
 run already created.
@@ -536,7 +536,7 @@ Work Request Workflow, separate from the human/team Chat discussion tab and its
 Discussion message storage. Both AI Chat and Work responses use the shared
 `ConclaveMarkdownBody`; authored Markdown source remains unchanged.
 
-History and Run details project the Workflow name from the immutable saved
+History and Run details space the Workflow name from the immutable saved
 snapshot, falling back to the exact versioned catalog entry when necessary.
 AX carries this historical name in its Work Request read model and uses the
 exact ID/version catalog lookup only for older responses without a name. Thus
@@ -554,9 +554,9 @@ interface WorkRequestSnapshot {
   workflowId: WorkflowId;
   workflowVersion: number;
   workflowSnapshot: BuiltinWorkflowDefinition;
-  resolvedBindings: Partial<Record<"direct" | StepKind, WorkstreamStepBinding>>;
-  projectInstructions: string;
-  workstreamInstructions: string;
+  resolvedBindings: Partial<Record<"direct" | StepKind, ThreadStepBinding>>;
+  spaceInstructions: string;
+  threadInstructions: string;
   stepAdditionalInstructions: Partial<Record<StepKind, string>>;
   promptProfileVersions: Partial<Record<StepKind, string>>;
 }
@@ -583,7 +583,7 @@ the affected Step, Worker, and input type. URL references are ordinary text
 references and do not request provider fetching by Workspace. Chat, Work,
 Research, and Implement receive safe relative file references; Plan receives
 attachment metadata, and Test/Verify use their defined handoff inputs.
-Workstream-local execution materializes file bytes under
+Thread-local execution materializes file bytes under
 `.conclave/inputs/<work-request-id>/file-NNN`; paths are derived from
 server-generated request identity and attachment order, never accepted from
 the client. The same materialized files are immutable across retries. This
@@ -605,26 +605,26 @@ interface WorkRequestAttachmentReference {
 Cloud copies the selected binding and its Worker ID, model, fallback, and
 additional instructions for each Step in the selected Workflow. Assignment
 selection and prompt construction read these snapshots for a Work Request;
-they do not consult later Workstream bindings or Project/Workstream
+they do not consult later Thread bindings or Space/Thread
 instructions. The submitted input and attachment contents are also retained
 in `input_json`. Status and execution records may change, but the Workflow and
 execution snapshots do not. Pre-snapshot Work Requests cannot be reconstructed
 reliably and must be resubmitted in development environments.
-The development baseline omits the former project-owned Workflow tables;
+The development baseline omits the former space-owned Workflow tables;
 existing local databases created from that unreleased schema must be reset and
 rebootstrapped rather than upgraded through a compatibility layer.
 
-## Workstream Work configuration
+## Thread Work configuration
 
 ### Work execution path
 
 Work Requests selecting Work use the configured `direct` Worker binding and hold a
-Workstream runtime lease for the request because Work contains the stateful
+Thread runtime lease for the request because Work contains the stateful
 `implement` Step. Cloud dispatches the assignment to
 the selected Worker's Workspace; the Workspace starts the generic CLI Worker
 Engine, which resolves the signed Tool Profile and starts the provider CLI.
 Work Requests, step progress, logical Worker and Engine/Profile/provider CLI attribution,
-timing, and final results are available to AX through the Workstream history
+timing, and final results are available to AX through the Thread history
 API. The timeline reconstructs from Cloud after page reload or browser restart,
 and each Run retains its original request text. Work requests use the same
 assignment dispatcher and Workspace execution path as Workflow Steps.
@@ -632,7 +632,7 @@ assignment dispatcher and Workspace execution path as Workflow Steps.
 Work lifecycle changes publish durable Cloud realtime events: `work_request`
 creation/start/completion/failure/cancellation and Step
 queued/running/completion/failure/cancellation.
-AX subscribes to the current Workstream and refreshes the persisted timeline on
+AX subscribes to the current Thread and refreshes the persisted timeline on
 each matching event. Reconnect gaps trigger a full history refresh. The Run card
 shows product Step names and states such as `running`, `done`, and `waiting`;
 assignment identifiers and lease details remain out of the user-facing card.
@@ -647,12 +647,12 @@ details. The timeline identifies the interrupted Step (for example, `Cancelled
 during Implement`). A Work Request is not marked cancelled while its active
 Worker process may still be running.
 
-Each Workstream stores one constrained `WorkstreamWorkConfig`:
+Each Thread stores one constrained `ThreadWorkConfig`:
 
 ```ts
-interface WorkstreamWorkConfig {
+interface ThreadWorkConfig {
   defaultWorkflowId: WorkflowId;
-  workstreamInstructions?: string;
+  threadInstructions?: string;
   bindings: Partial<Record<
     "direct" | StepKind,
     {
@@ -684,18 +684,18 @@ Worker label fields are bounded presentation snapshots only. If a selected
 Worker becomes unavailable, AX keeps its Worker ID and shows the saved label
 with an explicit unavailable state and a user-controlled replacement choice.
 Fallback Workers follow the same rule. Cloud may retain an unchanged stale
-binding so unrelated Workstream edits do not erase user intent; current
+binding so unrelated Thread edits do not erase user intent; current
 catalog, grant, and readiness checks still determine whether it can execute.
 
-`workstreamInstructions` is an optional Workstream-wide text field, bounded to
-4,000 characters. Project instructions remain in Project settings, and each
+`threadInstructions` is an optional Thread-wide text field, bounded to
+4,000 characters. Space instructions remain in Space settings, and each
 Step may have additional instructions in its Worker binding. These three
 user-editable instruction levels are appended after Conclave's immutable
 StepKind guidance. The run-specific request remains a separate labeled input;
 handoff data continues to be selected and supplied by Conclave.
 
 AX may offer a one-click suggested setup using Ready Workers available through
-Project Workspace grants. The mixed ChatGPT/Gemini suggestion and single-Worker
+Space Workspace grants. The mixed ChatGPT/Gemini suggestion and single-Worker
 suggestions are UI conveniences only: they do not constrain the catalog or
 execution model, and users may edit every binding afterward.
 
@@ -711,7 +711,7 @@ execution model, and users may edit every binding afterward.
 
 Workflow selection does not override AX-owned Step binding/model/fallback
 policy, Cloud authorization, Workspace readiness, local permissions, or
-Workstream execution rules. The Work request text remains user input; Conclave
+Thread execution rules. The Work request text remains user input; Conclave
 system prompts and the meaning of each `StepKind` remain product-owned.
 
 ## Workflow source
@@ -748,7 +748,7 @@ see [AX server-state ownership](../architecture/AX_SERVER_STATE.md).
 Work lifecycle and Step events reconcile individual cached Work Requests.
 Sufficient event state patches the cache; missing results or details use the
 single-request endpoint. Healthy realtime performs no Work polling. During
-outages, visible Workstreams use a fifteen-second active-entity fallback; restored
+outages, visible Threads use a fifteen-second active-entity fallback; restored
 connections discover a bounded recent page and resynchronize known active IDs.
 Immutable older history remains cached.
 
@@ -772,7 +772,7 @@ older-response fallback. See
 [generic execution options](CONVERSATION_CONTINUITY_V1.md#phase-7--generic-worker-execution-options).
 
 AX obtains `modelOptions` from the human Worker inventory projection. Cloud
-projects only model catalog and effort metadata from the published, non-revoked
+spaces only model catalog and effort metadata from the published, non-revoked
 Tool Profile release matching the installed worker, profile identity and version.
 There are no provider/model lists hardcoded in AX. A missing catalog offers only
 Default model. Effort options follow the selected model's declared supported
@@ -780,7 +780,7 @@ efforts, with profile-level efforts used only where the model inherits them.
 Default model and Default effort omit overrides and let the provider CLI's local
 configuration apply; catalog default effort is descriptive, not injected. Changing
 model clears the prior effort override. Work uses the dedicated `direct` binding
-for both picker updates and API execution; Chat uses `chat`. Workstream bindings accept bounded
+for both picker updates and API execution; Chat uses `chat`. Thread bindings accept bounded
 `reasoningEffort` strings, alongside model. Failed submissions retain the API's
 specific error message so validation failures can be diagnosed.
 This is an additive human API projection; no runtime schema or D1 migration is
@@ -788,7 +788,7 @@ required. Existing published profiles remain immutable; adding model catalogs
 requires authoring and publishing a new signed release through Profile Lab.
 
 Manual Chat/Work Worker, model, and effort controls sit beside Send and are local
-next-turn overrides seeded from shared Workstream bindings. Choosing them does not
+next-turn overrides seeded from shared Thread bindings. Choosing them does not
 save shared Work settings. Workflow policy and Profile capabilities gate controls;
 Workers can be selected directly without opening settings. See
 [dynamic composer](CONVERSATION_CONTINUITY_V1.md#phase-8--dynamic-next-turn-composer).
@@ -806,10 +806,10 @@ and lifecycle timestamps. Historical turns never read current bindings/inventory
 for Worker/Profile/model/effort attribution. See Conversation Continuity V1 Phase 4.
 
 
-The Workstream composer remembers model and effort choices per Worker and composer
+The Thread composer remembers model and effort choices per Worker and composer
 binding while the form is mounted. Returning to a Worker restores its last valid
 combination, including explicit Default choices. Catalog refreshes reconcile these
-preferences; shared binding edits and Workstream/Project/user/data-source changes
+preferences; shared binding edits and Thread/Space/user/data-source changes
 reset them. This local preference state does not change canonical Conversations or
 historical turns. See [Conversation Continuity Phase 10](CONVERSATION_CONTINUITY_V1.md#phase-10--remember-next-turn-selections-per-worker).
 
@@ -852,19 +852,19 @@ this presentation, including when metadata contains several steps. Rendering and
 new workflow definitions remain deferred. See
 [Phase 21](CONVERSATION_CONTINUITY_V1.md#phase-21--future-multi-step-presentation-capability).
 
-### Workstream management ownership
+### Thread management ownership
 
-Project owners may rename, configure, archive, restore or delete any Workstream.
-Collaborators may create Workstreams and perform those operations only on a
-Workstream where they are the assigned lead. Creation sets the authenticated
+Space owners may rename, configure, archive, restore or delete any Thread.
+Collaborators may create Threads and perform those operations only on a
+Thread where they are the assigned lead. Creation sets the authenticated
 creator as lead, so existing `lead_user_id` is the management-responsibility
 boundary; this phase does not reinterpret or replace existing leads. Viewers
-cannot create or manage Workstreams. View, Discuss and execution remain governed
+cannot create or manage Threads. View, Discuss and execution remain governed
 by their existing access policy and are not reduced by hiding management actions.
 
-Project Workstream rows use the server's `canConfigureWork` result for management
-menus, with an owner override. Project-wide Workstream reordering is owner-only
-in both UI and API, because it changes ordering for other members' Workstreams.
+Space Thread rows use the server's `canConfigureWork` result for management
+menus, with an owner override. Space-wide Thread reordering is owner-only
+in both UI and API, because it changes ordering for other members' Threads.
 The creation response includes management/execution capabilities immediately,
 without waiting for a collection refresh. Existing update/delete authorization
 continues to reject cross-lead writes; UI visibility is not the security boundary.

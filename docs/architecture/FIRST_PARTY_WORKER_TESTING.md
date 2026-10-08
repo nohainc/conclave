@@ -20,7 +20,7 @@ These tests do not require provider accounts or use provider allowance.
 
 The opt-in [Profile acceptance suite](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md#release-gates)
 uses the installed Codex and Antigravity CLIs. It writes digest-bound evidence
-for passive/live probes, a Workstream write, durable session start/resume,
+for passive/live probes, a Thread write, durable session start/resume,
 timeout, and process-tree cancellation. Set only the corresponding opt-in
 variable and an evidence directory when an operator is ready to run it:
 

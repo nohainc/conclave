@@ -9,7 +9,7 @@ import 'package:conclave_app/src/features/navigation/app_sidebar.dart';
 import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
 import 'package:conclave_app/src/features/common/conclave_code_block.dart';
 import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
-import 'package:conclave_app/src/features/projects/projects_pages.dart';
+import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
 
 import 'ax_fixture_data.dart';
@@ -55,10 +55,10 @@ void main() {
       AxNavigation? navigatedTo;
       const shellContext = AxShellContext(
         navigation: AxNavigation.home(),
-        projects: [
-          AxProject(
-            id: 'project-1',
-            name: 'Project One',
+        spaces: [
+          AxSpace(
+            id: 'space-1',
+            name: 'Space One',
             branch: 'main',
             lastActivity: 'just now',
           ),
@@ -83,8 +83,8 @@ void main() {
             body: AppSidebar(
               shellContext: shellContext,
               onNavigateTo: (nav) => navigatedTo = nav,
-              onToggleProjectExpanded: (_) {},
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (_) {},
+              onCreateSpace: () {},
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -124,7 +124,7 @@ void main() {
         (WidgetTester tester) async {
       const shellContext = AxShellContext(
         navigation: AxNavigation.profileSecurity(),
-        projects: [],
+        spaces: [],
         workspaces: [],
         viewerDisplayName: 'Vitalii Noha',
         viewerEmail: 'vitalii@example.test',
@@ -137,8 +137,8 @@ void main() {
             body: AppSidebar(
               shellContext: shellContext,
               onNavigateTo: (_) {},
-              onToggleProjectExpanded: (_) {},
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (_) {},
+              onCreateSpace: () {},
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -357,7 +357,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
 
     // 7. Work Response Card
     testWidgets(
-        'WorkstreamPage renders prompt bubble and AI response card with theme tokens',
+        'ThreadPage renders prompt bubble and AI response card with theme tokens',
         (WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -367,16 +367,16 @@ This is standard body paragraph text with **bold** and `inline_code`.
         MaterialApp(
           theme: ConclaveBrand.darkTheme(),
           home: Scaffold(
-            body: WorkstreamPage(
-              project: const AxProject(
+            body: ThreadPage(
+              space: const AxSpace(
                 id: 'p1',
                 name: 'Core Engine',
                 branch: 'main',
                 lastActivity: 'just now',
               ),
-              workstream: const AxWorkstream(
+              thread: const AxThread(
                 id: 'ws-1',
-                projectId: 'p1',
+                spaceId: 'p1',
                 name: 'Auth Refactor',
                 lead: 'Vitalii',
                 status: 'active',
@@ -385,7 +385,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
                 queueStatus: 'Idle',
               ),
               dataSource: dataSource,
-              onBackToProject: () {},
+              onBackToSpace: () {},
               onArchive: () {},
             ),
           ),
@@ -393,7 +393,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
       );
       await tester.pumpAndSettle();
 
-      // Workstream tabs and panes render
+      // Thread tabs and panes render
       expect(find.text('Chat'), findsAtLeastNWidgets(1));
       expect(find.text('Work'), findsAtLeastNWidgets(1));
     });

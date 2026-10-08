@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import { MutationIdempotency } from "../src/routes/mutation-idempotency.js";
 import {
-  handleCreateProject,
-  handleCreateWorkstream,
+  handleCreateSpace,
+  handleCreateThread,
   handleCreateDiscussionMessage,
 } from "../src/routes/handlers.js";
 import type { SecurityEnv } from "../src/routes/handlers.js";
@@ -33,7 +33,7 @@ function fixture() {
         status: "active",
       },
       workspaceId: "",
-      projectRoles: {},
+      spaceRoles: {},
       sessionId: "session",
       clientType: "web",
     }),
@@ -110,46 +110,46 @@ describe("durable mutation receipts", () => {
           ...statements,
           f.db
             .prepare(
-              "INSERT INTO projects(id,owner_user_id,name,created_at,updated_at) VALUES(?,?,?,?,?)",
+              "INSERT INTO spaces(id,owner_user_id,name,created_at,updated_at) VALUES(?,?,?,?,?)",
             )
-            .bind("P", "missing-user", "Project", "now", "now"),
+            .bind("P", "missing-user", "Space", "now", "now"),
         ]),
       ),
     ).rejects.toThrow();
     expect(await receipt.replay()).toBeNull();
-    expect(
-      f.sqlite.prepare("SELECT count(*) AS n FROM projects").get()?.n,
-    ).toBe(0);
+    expect(f.sqlite.prepare("SELECT count(*) AS n FROM spaces").get()?.n).toBe(
+      0,
+    );
     await receipt.commit({ id: "one" }, 201, (statements) =>
       f.db.batch(statements),
     );
     expect(await receipt.replay()).not.toBeNull();
     f.sqlite.close();
   });
-  it("concurrent lost-response retries create one Workstream, one Discussion and one event each", async () => {
+  it("concurrent lost-response retries create one Thread, one Discussion and one event each", async () => {
     const f = fixture();
     const p = (
       (await (
-        await handleCreateProject(
-          new Request("https://cloud.test/projects", {
+        await handleCreateSpace(
+          new Request("https://cloud.test/spaces", {
             method: "POST",
-            body: JSON.stringify({ name: "Project" }),
+            body: JSON.stringify({ name: "Space" }),
           }),
           f.env,
         )
-      ).json()) as { project: { id: string } }
-    ).project.id;
+      ).json()) as { space: { id: string } }
+    ).space.id;
     const responses = await Promise.all(
       Array.from({ length: 5 }, () =>
-        handleCreateWorkstream(request({ name: "Stream" }), f.env, p),
+        handleCreateThread(request({ name: "Stream" }), f.env, p),
       ),
     );
     const bodies = (await Promise.all(responses.map((r) => r.json()))) as {
-      workstream: { id: string };
+      thread: { id: string };
     }[];
-    expect(new Set(bodies.map((b) => b.workstream.id)).size).toBe(1);
+    expect(new Set(bodies.map((b) => b.thread.id)).size).toBe(1);
     expect(responses.every((r) => r.status === 201)).toBe(true);
-    const w = bodies[0]!.workstream.id;
+    const w = bodies[0]!.thread.id;
     const chats = await Promise.all(
       Array.from({ length: 5 }, () =>
         handleCreateDiscussionMessage(request({ body: "Hello" }), f.env, w),
@@ -171,7 +171,7 @@ describe("durable mutation receipts", () => {
         .get()?.n,
     ).toBe(1);
     await expect(
-      handleCreateWorkstream(request({ name: "Changed" }), f.env, p),
+      handleCreateThread(request({ name: "Changed" }), f.env, p),
     ).rejects.toMatchObject({ status: 409 });
     await expect(
       handleCreateDiscussionMessage(request({ body: "Changed" }), f.env, w),
@@ -199,15 +199,15 @@ describe("durable mutation receipts", () => {
     const f = fixture();
     const p = (
       (await (
-        await handleCreateProject(
-          new Request("https://cloud.test/projects", {
+        await handleCreateSpace(
+          new Request("https://cloud.test/spaces", {
             method: "POST",
-            body: JSON.stringify({ name: "Project" }),
+            body: JSON.stringify({ name: "Space" }),
           }),
           f.env,
         )
-      ).json()) as { project: { id: string } }
-    ).project.id;
+      ).json()) as { space: { id: string } }
+    ).space.id;
     const token = "conclave_dhs_idempotency-test";
     f.sqlite
       .prepare(
@@ -221,12 +221,10 @@ describe("durable mutation receipts", () => {
       r.headers.set("authorization", `Bearer ${token}`);
       return r;
     };
-    await handleCreateWorkstream(authorized(), env, p);
-    f.sqlite
-      .prepare("DELETE FROM project_memberships WHERE project_id=?")
-      .run(p);
+    await handleCreateThread(authorized(), env, p);
+    f.sqlite.prepare("DELETE FROM space_memberships WHERE space_id=?").run(p);
     await expect(
-      handleCreateWorkstream(authorized(), env, p),
+      handleCreateThread(authorized(), env, p),
     ).rejects.toMatchObject({ status: 404 });
     f.sqlite.close();
   });

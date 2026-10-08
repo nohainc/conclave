@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import {
   handleListCurrentUserInvitations,
-  handleAcceptProjectInvitation,
-  handleDeclineProjectInvitation,
+  handleAcceptSpaceInvitation,
+  handleDeclineSpaceInvitation,
 } from "../src/routes/handlers.js";
 import worker from "../src/index.js";
 
@@ -21,11 +21,11 @@ describe("Recipient Invitations API", () => {
         ('user-other', 'other@example.com', 'Other Person', 'active', '${now}', '${now}');
     `);
 
-    // Seed project owned by vitalii
+    // Seed space owned by vitalii
     sqlite.exec(`
-      INSERT INTO projects (id, name, owner_user_id, created_at, updated_at)
+      INSERT INTO spaces (id, name, owner_user_id, created_at, updated_at)
       VALUES ('proj-1', 'Conclave AX Development', 'user-vitalii', '${now}', '${now}');
-      INSERT INTO project_memberships (id, project_id, user_id, role, created_at, updated_at)
+      INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at)
       VALUES ('pm-1', 'proj-1', 'user-vitalii', 'owner', '${now}', '${now}');
     `);
 
@@ -44,7 +44,7 @@ describe("Recipient Invitations API", () => {
               status: "active",
             },
             workspaceId: "",
-            projectRoles: {},
+            spaceRoles: {},
             sessionId: "sess-ulikoss",
             clientType: "web",
           };
@@ -59,7 +59,7 @@ describe("Recipient Invitations API", () => {
               status: "active",
             },
             workspaceId: "",
-            projectRoles: { "proj-1": "owner" },
+            spaceRoles: { "proj-1": "owner" },
             sessionId: "sess-vitalii",
             clientType: "web",
           };
@@ -73,7 +73,7 @@ describe("Recipient Invitations API", () => {
             status: "active",
           },
           workspaceId: "",
-          projectRoles: {},
+          spaceRoles: {},
           sessionId: "sess-other",
           clientType: "web",
         };
@@ -91,19 +91,19 @@ describe("Recipient Invitations API", () => {
 
       // Active invitation to ulikoss
       sqlite.exec(`
-        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
         VALUES ('pinv-1', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-1', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
       `);
 
       // Expired invitation to ulikoss
       sqlite.exec(`
-        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
         VALUES ('pinv-expired', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-exp', 'user-vitalii', 'pending', '${past}', '${past}', '${past}');
       `);
 
       // Invitation to someone else
       sqlite.exec(`
-        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
         VALUES ('pinv-other', 'proj-1', 'other@example.com', 'collaborator', 'hash-other', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
       `);
 
@@ -119,8 +119,8 @@ describe("Recipient Invitations API", () => {
       expect(body.invitations).toHaveLength(1);
       expect(body.invitations[0]).toMatchObject({
         id: "pinv-1",
-        projectId: "proj-1",
-        projectName: "Conclave AX Development",
+        spaceId: "proj-1",
+        spaceName: "Conclave AX Development",
         email: "ulikossnokia@gmail.com",
         role: "collaborator",
         status: "pending",
@@ -135,7 +135,7 @@ describe("Recipient Invitations API", () => {
       const future = new Date(Date.now() + 86400000).toISOString();
 
       sqlite.exec(`
-        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
         VALUES ('pinv-router', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-r', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
       `);
 
@@ -150,12 +150,12 @@ describe("Recipient Invitations API", () => {
   });
 
   describe("POST /api/invitations/:id/accept", () => {
-    it("atomically creates project membership and marks invitation accepted", async () => {
+    it("atomically creates space membership and marks invitation accepted", async () => {
       const { sqlite, env } = createTestEnv();
       const future = new Date(Date.now() + 86400000).toISOString();
 
       sqlite.exec(`
-        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
         VALUES ('pinv-accept-1', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-acc', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
       `);
 
@@ -166,7 +166,7 @@ describe("Recipient Invitations API", () => {
           headers: { authorization: "Bearer ulikoss" },
         },
       );
-      const res = await handleAcceptProjectInvitation(
+      const res = await handleAcceptSpaceInvitation(
         req,
         env as never,
         "pinv-accept-1",
@@ -175,7 +175,7 @@ describe("Recipient Invitations API", () => {
       const body = (await res.json()) as Record<string, unknown>;
       expect(body).toMatchObject({
         id: "pinv-accept-1",
-        projectId: "proj-1",
+        spaceId: "proj-1",
         role: "collaborator",
         status: "accepted",
         accepted: true,
@@ -184,19 +184,19 @@ describe("Recipient Invitations API", () => {
       // Verify DB membership was created
       const membership = sqlite
         .prepare(
-          "SELECT user_id, project_id, role FROM project_memberships WHERE project_id = 'proj-1' AND user_id = 'user-ulikoss'",
+          "SELECT user_id, space_id, role FROM space_memberships WHERE space_id = 'proj-1' AND user_id = 'user-ulikoss'",
         )
-        .get() as { user_id: string; project_id: string; role: string };
+        .get() as { user_id: string; space_id: string; role: string };
       expect(membership).toEqual({
         user_id: "user-ulikoss",
-        project_id: "proj-1",
+        space_id: "proj-1",
         role: "collaborator",
       });
 
       // Verify invitation status updated
       const invitation = sqlite
         .prepare(
-          "SELECT status, accepted_by_user_id FROM project_invitations WHERE id = 'pinv-accept-1'",
+          "SELECT status, accepted_by_user_id FROM space_invitations WHERE id = 'pinv-accept-1'",
         )
         .get() as { status: string; accepted_by_user_id: string };
       expect(invitation.status).toBe("accepted");
@@ -208,7 +208,7 @@ describe("Recipient Invitations API", () => {
       const future = new Date(Date.now() + 86400000).toISOString();
 
       sqlite.exec(`
-        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
         VALUES ('pinv-wrong', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-w', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
       `);
 
@@ -220,7 +220,7 @@ describe("Recipient Invitations API", () => {
         },
       );
       await expect(
-        handleAcceptProjectInvitation(req, env as never, "pinv-wrong"),
+        handleAcceptSpaceInvitation(req, env as never, "pinv-wrong"),
       ).rejects.toThrow("Invitation email does not match signed-in user");
     });
 
@@ -229,7 +229,7 @@ describe("Recipient Invitations API", () => {
       const past = new Date(Date.now() - 86400000).toISOString();
 
       sqlite.exec(`
-        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
         VALUES ('pinv-exp-acc', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-ea', 'user-vitalii', 'pending', '${past}', '${past}', '${past}');
       `);
 
@@ -241,8 +241,8 @@ describe("Recipient Invitations API", () => {
         },
       );
       await expect(
-        handleAcceptProjectInvitation(req, env as never, "pinv-exp-acc"),
-      ).rejects.toThrow("Project invitation expired");
+        handleAcceptSpaceInvitation(req, env as never, "pinv-exp-acc"),
+      ).rejects.toThrow("Space invitation expired");
     });
   });
 
@@ -252,7 +252,7 @@ describe("Recipient Invitations API", () => {
       const future = new Date(Date.now() + 86400000).toISOString();
 
       sqlite.exec(`
-        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
         VALUES ('pinv-dec-1', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-dec', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
       `);
 
@@ -263,7 +263,7 @@ describe("Recipient Invitations API", () => {
           headers: { authorization: "Bearer ulikoss" },
         },
       );
-      const res = await handleDeclineProjectInvitation(
+      const res = await handleDeclineSpaceInvitation(
         req,
         env as never,
         "pinv-dec-1",
@@ -272,27 +272,25 @@ describe("Recipient Invitations API", () => {
       const body = (await res.json()) as Record<string, unknown>;
       expect(body).toMatchObject({
         id: "pinv-dec-1",
-        projectId: "proj-1",
+        spaceId: "proj-1",
         status: "declined",
         declined: true,
       });
 
       // Verify DB status
       const invitation = sqlite
-        .prepare(
-          "SELECT status FROM project_invitations WHERE id = 'pinv-dec-1'",
-        )
+        .prepare("SELECT status FROM space_invitations WHERE id = 'pinv-dec-1'")
         .get() as { status: string };
       expect(invitation.status).toBe("declined");
 
       // Verify audit log
       const audit = sqlite
         .prepare(
-          "SELECT action, target_id FROM project_audit_log WHERE action = 'project.invitation.declined'",
+          "SELECT action, target_id FROM space_audit_log WHERE action = 'space.invitation.declined'",
         )
         .get() as { action: string; target_id: string };
       expect(audit).toMatchObject({
-        action: "project.invitation.declined",
+        action: "space.invitation.declined",
         target_id: "pinv-dec-1",
       });
     });
@@ -302,7 +300,7 @@ describe("Recipient Invitations API", () => {
       const future = new Date(Date.now() + 86400000).toISOString();
 
       sqlite.exec(`
-        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
         VALUES ('pinv-dec-wrong', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-dw', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
       `);
 
@@ -314,7 +312,7 @@ describe("Recipient Invitations API", () => {
         },
       );
       await expect(
-        handleDeclineProjectInvitation(req, env as never, "pinv-dec-wrong"),
+        handleDeclineSpaceInvitation(req, env as never, "pinv-dec-wrong"),
       ).rejects.toThrow("Invitation email does not match signed-in user");
     });
 
@@ -323,7 +321,7 @@ describe("Recipient Invitations API", () => {
       const future = new Date(Date.now() + 86400000).toISOString();
 
       sqlite.exec(`
-        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
         VALUES ('pinv-rt-1', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-rt', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
       `);
 
@@ -334,21 +332,21 @@ describe("Recipient Invitations API", () => {
           headers: { authorization: "Bearer ulikoss" },
         },
       );
-      await handleAcceptProjectInvitation(req, env as never, "pinv-rt-1");
+      await handleAcceptSpaceInvitation(req, env as never, "pinv-rt-1");
 
       const event = sqlite
         .prepare(
-          "SELECT event_type, project_id, payload_json FROM realtime_events WHERE project_id = 'proj-1' ORDER BY sequence DESC LIMIT 1",
+          "SELECT event_type, space_id, payload_json FROM realtime_events WHERE space_id = 'proj-1' ORDER BY sequence DESC LIMIT 1",
         )
         .get() as {
         event_type: string;
-        project_id: string;
+        space_id: string;
         payload_json: string;
       };
 
       expect(event).toBeDefined();
-      expect(event.event_type).toBe("project.updated");
-      expect(event.project_id).toBe("proj-1");
+      expect(event.event_type).toBe("space.updated");
+      expect(event.space_id).toBe("proj-1");
       expect(JSON.parse(event.payload_json)).toEqual({ entityId: "pinv-rt-1" });
     });
   });
@@ -361,7 +359,7 @@ describe("Recipient Invitations API", () => {
 
       // Vitalii invites newuser@example.com (does not exist in users table yet)
       sqlite.exec(`
-        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
         VALUES ('pinv-newuser', 'proj-1', 'newuser@example.com', 'collaborator', 'hash-nu', 'user-vitalii', 'pending', '${future}', '${now}', '${now}');
       `);
 
@@ -385,7 +383,7 @@ describe("Recipient Invitations API", () => {
             status: "active",
           },
           workspaceId: "",
-          projectRoles: {},
+          spaceRoles: {},
           sessionId: "sess-new",
           clientType: "web",
         }),
@@ -409,7 +407,7 @@ describe("Recipient Invitations API", () => {
           headers: { authorization: "Bearer newuser" },
         },
       );
-      const acceptRes = await handleAcceptProjectInvitation(
+      const acceptRes = await handleAcceptSpaceInvitation(
         acceptReq,
         customEnv as never,
         "pinv-newuser",
@@ -419,7 +417,7 @@ describe("Recipient Invitations API", () => {
       // Verify membership
       const member = sqlite
         .prepare(
-          "SELECT user_id, role FROM project_memberships WHERE project_id = 'proj-1' AND user_id = 'user-new'",
+          "SELECT user_id, role FROM space_memberships WHERE space_id = 'proj-1' AND user_id = 'user-new'",
         )
         .get() as { user_id: string; role: string };
       expect(member).toEqual({ user_id: "user-new", role: "collaborator" });
@@ -430,12 +428,12 @@ describe("Recipient Invitations API", () => {
       const future = new Date(Date.now() + 86400000).toISOString();
 
       sqlite.exec(`
-        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
         VALUES ('pinv-dup-1', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-d1', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
       `);
 
       const req = new Request(
-        "https://conclave.test/api/projects/proj-1/invitations",
+        "https://conclave.test/api/spaces/proj-1/invitations",
         {
           method: "POST",
           headers: {
@@ -449,17 +447,17 @@ describe("Recipient Invitations API", () => {
         },
       );
 
-      const { handleCreateProjectInvitation } =
-        await import("../src/routes/projects.js");
+      const { handleCreateSpaceInvitation } =
+        await import("../src/routes/spaces.js");
       await expect(
-        handleCreateProjectInvitation(req, env as never, "proj-1"),
+        handleCreateSpaceInvitation(req, env as never, "proj-1"),
       ).rejects.toThrow("A pending invitation already exists for this user");
     });
 
-    it("prevents inviting a user who is already a project member", async () => {
+    it("prevents inviting a user who is already a space member", async () => {
       const { env } = createTestEnv();
       const req = new Request(
-        "https://conclave.test/api/projects/proj-1/invitations",
+        "https://conclave.test/api/spaces/proj-1/invitations",
         {
           method: "POST",
           headers: {
@@ -473,11 +471,11 @@ describe("Recipient Invitations API", () => {
         },
       );
 
-      const { handleCreateProjectInvitation } =
-        await import("../src/routes/projects.js");
+      const { handleCreateSpaceInvitation } =
+        await import("../src/routes/spaces.js");
       await expect(
-        handleCreateProjectInvitation(req, env as never, "proj-1"),
-      ).rejects.toThrow("This user is already a Project member");
+        handleCreateSpaceInvitation(req, env as never, "proj-1"),
+      ).rejects.toThrow("This user is already a Space member");
     });
 
     it("handles simultaneous accept and revoke race conditions", async () => {
@@ -485,22 +483,22 @@ describe("Recipient Invitations API", () => {
       const future = new Date(Date.now() + 86400000).toISOString();
 
       sqlite.exec(`
-        INSERT INTO project_invitations (id, project_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
+        INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
         VALUES ('pinv-race-1', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-rc', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
       `);
 
-      const { handleExpireProjectInvitation } =
-        await import("../src/routes/projects.js");
+      const { handleExpireSpaceInvitation } =
+        await import("../src/routes/spaces.js");
 
       // Case A: Revoke happens first
       const revokeReq = new Request(
-        "https://conclave.test/api/projects/proj-1/invitations/pinv-race-1/expire",
+        "https://conclave.test/api/spaces/proj-1/invitations/pinv-race-1/expire",
         {
           method: "POST",
           headers: { authorization: "Bearer vitalii" },
         },
       );
-      const revokeRes = await handleExpireProjectInvitation(
+      const revokeRes = await handleExpireSpaceInvitation(
         revokeReq,
         env as never,
         "proj-1",
@@ -517,8 +515,8 @@ describe("Recipient Invitations API", () => {
         },
       );
       await expect(
-        handleAcceptProjectInvitation(acceptReq, env as never, "pinv-race-1"),
-      ).rejects.toThrow("Project invitation not found");
+        handleAcceptSpaceInvitation(acceptReq, env as never, "pinv-race-1"),
+      ).rejects.toThrow("Space invitation not found");
     });
   });
 });

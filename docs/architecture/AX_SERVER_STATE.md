@@ -2,8 +2,8 @@
 
 The in-memory server-state API lives in `apps/app/lib/src/ax/sync/`.
 Cloud remains authoritative. Phase 1 introduced the isolated engine. Phase 2
-integrated Project Workstream collections into navigation and the sidebar.
-Phase 3 adds focused Project details and separates navigation from bootstrap.
+integrated Space Thread collections into navigation and the sidebar.
+Phase 3 adds focused Space details and separates navigation from bootstrap.
 Phase 4 moves paginated Discussion history and optimistic writes into shared state.
 Phases 5–6 add scroll pagination and infinite Work history. Phase 7 routes Work
 events into individual cached requests and uses polling only during realtime
@@ -49,7 +49,7 @@ reported to the current Dart Zone.
 ## Normalization and realtime
 
 `AxEntityStore<T>` supplies typed ID-indexed tables and immutable collection ID
-lists. Use separate tables for Projects, Workstreams, and other entity types.
+lists. Use separate tables for Spaces, Threads, and other entity types.
 Replacing P2's collection preserves P1's IDs and entities. Removed collection
 members stay in the entity table until explicitly removed/cleared. This phase does not wire
 normalization into existing screens. Future normalized-query integration must
@@ -77,91 +77,91 @@ optimistic races/rollback, and normalized collection isolation. Existing AX
 HTTP, navigation, and shell tests remain regression coverage before migration.
 No schema, wire protocol, dependency, or compatibility migration is required.
 
-## Phase 2: Project/sidebar ownership
+## Phase 2: Space/sidebar ownership
 
-Project catalog/read-model loads and `ProjectStore` retain only Project fields,
-with empty nested Workstream lists. `AxProjectWorkstreams` owns each immutable
-collection under structural key `['project', projectId, 'workstreams']`.
-`AxSnapshot.projects[*].workstreams` is no longer the source for sidebar rows
-or selected Workstream resolution. Project-page and search inputs may compose
+Space catalog/read-model loads and `SpaceStore` retain only Space fields,
+with empty nested Thread lists. `AxSpaceThreads` owns each immutable
+collection under structural key `['space', spaceId, 'threads']`.
+`AxSnapshot.spaces[*].threads` is no longer the source for sidebar rows
+or selected Thread resolution. Space-page and search inputs may compose
 nested lists from the cache as view projections only.
 
-Expanded `ProjectTree` rows use `AxQueryBuilder` subscriptions. Cold collections
+Expanded `SpaceTree` rows use `AxQueryBuilder` subscriptions. Cold collections
 show a local loading row and retry on failure. Cached rows render on the first
 frame, remain visible during stale refreshes/failures, and rebuild only their
 query consumer. Collapsing unsubscribes the row but retains its collection.
-Selecting another expanded Project preserves expansion; clicking the focused
-Project explicitly toggles it. Deep links initially expand their parent.
+Selecting another expanded Space preserves expansion; clicking the focused
+Space explicitly toggles it. Deep links initially expand their parent.
 
 Both internal and browser navigation ensure the target collection rather than
-reloading Projects/session/Workspaces. Project views share the same query;
-opening a Workstream does not trigger a duplicate snapshot load. Project-view
+reloading Spaces/session/Workspaces. Space views share the same query;
+opening a Thread does not trigger a duplicate snapshot load. Space-view
 collaboration loading shares the query and cannot overwrite cached collections.
 Changes to a collection do not reload unrelated collaboration/Workspace data.
-Workstream create/update/delete actions refresh only the owning collection.
-Shell Workstream creation uses its authoritative Cloud method rather than
+Thread create/update/delete actions refresh only the owning collection.
+Shell Thread creation uses its authoritative Cloud method rather than
 fabricating a local entity.
 Logout/session loss clears the collection cache; archive/delete remove only
-the affected Project collection. Other legacy snapshot refresh paths remain
-for later migration and cannot replace cached Workstream collections.
+the affected Space collection. Other legacy snapshot refresh paths remain
+for later migration and cannot replace cached Thread collections.
 
-`ax_project_cache_test.dart` provides deterministic delayed-response tests for
-cross-Project navigation, immediate cached rows, stale refreshes, local retry,
+`ax_space_cache_test.dart` provides deterministic delayed-response tests for
+cross-Space navigation, immediate cached rows, stale refreshes, local retry,
 subscription isolation, and collapse during a pending refresh. Existing shell
 fixtures explicitly supply keyed collections rather than implicitly reading
-nested Projects. There are no Cloud schema or endpoint changes; callers of
-`loadBootstrapState` must load Workstreams through their separate resource query.
+nested Spaces. There are no Cloud schema or endpoint changes; callers of
+`loadBootstrapState` must load Threads through their separate resource query.
 
 ## Phase 3: Navigation versus bootstrap
 
-`_navigateTo`, `_onBrowserNavigation`, and `_openWorkstream` apply navigation
+`_navigateTo`, `_onBrowserNavigation`, and `_openThread` apply navigation
 synchronously. Both navigation paths call the same `_ensureNavigationResources`
-helper after updating the route; the Workstream opener delegates exactly once.
-The helper independently ensures `['project', projectId]` details and
-`['project', projectId, 'workstreams']` collections through one shared
+helper after updating the route; the Thread opener delegates exactly once.
+The helper independently ensures `['space', spaceId]` details and
+`['space', spaceId, 'threads']` collections through one shared
 `AxSyncEngine`. It neither awaits network responses nor reloads the catalog,
 session, or bootstrap state. Matching history callbacks skip already-applied
 navigation. Fresh cache entries avoid HTTP; stale entries revalidate in the
 background while retaining data. Query generations and resource keys fence
 late writes, and a response never changes the active route.
 
-`AxProjectDetails` delegates to the additive typed `AxDataSource.loadProject`
-method for the existing `GET /projects/:id` endpoint. The HTTP loader validates
-the response identity and strips nested Workstreams. Project list summaries
+`AxSpaceDetails` delegates to the additive typed `AxDataSource.loadSpace`
+method for the existing `GET /spaces/:id` endpoint. The HTTP loader validates
+the response identity and strips nested Threads. Space list summaries
 serve as immediate view fallbacks but never mark detail queries hydrated.
-Project content subscribes to details independently of the root shell. A deep
-link whose Project is absent from the catalog shows local loading/retry until
-its detail query resolves, rather than rendering another Project. Successful
-Project create/update responses populate the detail query and fence old reads.
+Space content subscribes to details independently of the root shell. A deep
+link whose Space is absent from the catalog shows local loading/retry until
+its detail query resolves, rather than rendering another Space. Successful
+Space create/update responses populate the detail query and fence old reads.
 Session loss/logout clear both resource kinds; archive/delete remove only the
-owning Project's entries.
+owning Space's entries.
 
 `loadBootstrapState()` keeps its current public name temporarily. Its conceptual
 role is **load bootstrap state**: initial/recovery catalog, Workspaces, and
-session data. Production bootstrap no longer fetches selected Project details
-or Workstreams; deep links ensure those focused queries separately after
-bootstrap. Its `projectId` argument remains accepted but does not select or
+session data. Production bootstrap no longer fetches selected Space details
+or Threads; deep links ensure those focused queries separately after
+bootstrap. Its `spaceId` argument remains accepted but does not select or
 hydrate resources. Legacy realtime/polling snapshot refreshes remain pending
 later migration. Other page-local resource loaders (collaboration, Worker
 inventory, Workflow catalog, etc.) also remain for their respective phases.
 
-`ax_project_navigation_test.dart` verifies immediate route changes, one detail
+`ax_space_navigation_test.dart` verifies immediate route changes, one detail
 and collection request per key, matching history-event deduplication,
-back/forward cache reuse, late cross-Project responses, Workstream opening
+back/forward cache reuse, late cross-Space responses, Thread opening
 without a second bootstrap, deep-link retry, and authoritative-write fencing.
 HTTP tests cover detail-only requests and malformed/mismatched response
 rejection. Browser navigation is injectable for deterministic history tests;
 the default browser adapter and public data-source bootstrap name are retained.
 There are no Cloud endpoints, schemas, dependencies, or protocol migrations.
 Custom Dart `AxDataSource` implementations must implement the new focused
-`loadProject` read; all repository implementations and fixtures are updated.
+`loadSpace` read; all repository implementations and fixtures are updated.
 
 
 ## Phase 4: Shared Discussion history
 
 `AxStore.discussion` owns `AxDiscussionCache` under structural keys
-`['workstream', workstreamId, 'discussion']`. `AxDiscussionBuilder` subscribes
-only to that history. Destroying a Workstream page cancels its subscription;
+`['thread', threadId, 'discussion']`. `AxDiscussionBuilder` subscribes
+only to that history. Destroying a Thread page cancels its subscription;
 cached history and pending writes survive. Reopening renders cached messages
 immediately and synchronizes in the background. Session loss/logout clears
 history and fences late reads and writes.
@@ -201,7 +201,7 @@ load button remains available for short histories and retry. Each successful
 page advances its older cursor, and requests share one outstanding Future.
 Previously loaded older pages are retained and never requested again during
 normal synchronization. Prepending preserves the viewport; programmatic jumps
-do not trigger pagination, and late responses cannot move another Workstream's
+do not trigger pagination, and late responses cannot move another Thread's
 scroll position.
 
 Reconnect and connected events use `synchronize(reconcileNewest: false)`.
@@ -216,15 +216,15 @@ or schema migration is introduced by Phase 5.
 
 ## Phase 6: Infinite Work history
 
-`AxStore.workHistory` owns `['workstream', workstreamId, 'work-requests']`.
-`loadWorkstreamWorkRequestPage` delegates to the existing Work Requests endpoint
+`AxStore.workHistory` owns `['thread', threadId, 'work-requests']`.
+`loadThreadWorkRequestPage` delegates to the existing Work Requests endpoint
 with a typed `(createdAt, id)` cursor and a default limit of 50. The HTTP loader
 performs exactly one request, validates the envelope/cursor and request IDs,
 and returns chronological immutable results. The old list method is retained
 as a bounded newest-page wrapper; it no longer walks all history. Custom Dart
 data sources must implement the new page method.
 
-Work history is no longer owned by the Workstream widget. Its scoped listener
+Work history is no longer owned by the Thread widget. Its scoped listener
 renders cached requests immediately, retains history across disposal, and
 merges recent head refreshes without dropping older pages. Scrolling near the
 beginning or choosing **Load older Work history** fetches one older page and
@@ -258,10 +258,10 @@ migration and centralized polling ownership remain later phases.
 
 ## Phase 7: Realtime-first Work reconciliation
 
-`AxWorkRealtimeSync` is shared by the session store and Workstream views through
+`AxWorkRealtimeSync` is shared by the session store and Thread views through
 one instance per history cache. Stream leases process shell/view delivery only
-once. The shell keeps routing events into retained caches even when a Workstream
-view is destroyed; visible Workstream scopes own fallback synchronization. There
+once. The shell keeps routing events into retained caches even when a Thread
+view is destroyed; visible Thread scopes own fallback synchronization. There
 is no page-owned five-second timer or event-driven history-list refresh.
 
 | Event payload | Cache action |
@@ -273,7 +273,7 @@ is no page-owned five-second timer or event-driven history-list refresh.
 Cloud currently emits IDs/statuses for these events; terminal results and Step
 metadata therefore require the existing detail endpoint. Created, started,
 completed, failed and cancelled Work Request events, and queued, running,
-completed, failed and cancelled Step events are routed by Workstream/request ID.
+completed, failed and cancelled Step events are routed by Thread/request ID.
 Sequence/event-ID deduplication rejects duplicate and obsolete delivery.
 Per-entity revisions keep late head reads and older detail responses from
 replacing event state. A burst shares one pending detail request and queues at
@@ -295,7 +295,7 @@ when no visible scopes remain; its cached history stays available.
 
 The browser client sends the existing Cloud `ping` every twenty seconds and
 requires `realtime.pong` within ten seconds. A missing pong marks the connection
-stale and reconnects. An idle Workstream with healthy pongs does not become stale.
+stale and reconnects. An idle Thread with healthy pongs does not become stale.
 Timers stop on socket close/reconnect and app disposal; callbacks from replaced
 sockets cannot change the current transport. `realtime.ready` now reaches consumers.
 
@@ -318,14 +318,14 @@ handlers and the legacy shell recovery path remain outside this Work migration.
 ## Phase 8: Navigation-independent cache routing
 
 `AxRealtimeCacheRouter` receives the shared browser event envelope before shell
-notification/rendering handlers. Project events revalidate registered Project
-queries; Workstream events revalidate the owning Project's cached Workstream
+notification/rendering handlers. Space events revalidate registered Space
+queries; Thread events revalidate the owning Space's cached Thread
 collection. The parent can come from the envelope or be found in cached
 collections. Discussion events synchronize the keyed Discussion query even when
-its page has been destroyed. No selected Project is an input to this router.
+its page has been destroyed. No selected Space is an input to this router.
 
-Reconnect gaps revalidate cached or observed queries in the affected Project or
-Workstream scope; user scope and realtime ready revalidate all hydrated Project
+Reconnect gaps revalidate cached or observed queries in the affected Space or
+Thread scope; user scope and realtime ready revalidate all hydrated Space
 and Discussion queries. Cached data remains visible during refresh and failures.
 Unknown resources are not fetched eagerly. Generation fencing rejects pre-event
 and pre-session responses, and bounded event-ID deduplication prevents repeated
@@ -333,28 +333,28 @@ transport delivery. Work Request/Step events continue through the shared
 `AxWorkRealtimeSync` single-request reconciliation path; immutable history pages
 are excluded from generic reconnect revalidation.
 
-Project catalog notifications still refresh the shell's catalog, and unmigrated
+Space catalog notifications still refresh the shell's catalog, and unmigrated
 execution/workspace resources retain their existing focused refresh handlers.
-The selected-Project synchronization filter and mutable last-event Project ID
+The selected-Space synchronization filter and mutable last-event Space ID
 are removed. Reconnect recovery for migrated queries no longer loads a snapshot
-for a background Project into the selected view. No HTTP or schema changes are
+for a background Space into the selected view. No HTTP or schema changes are
 introduced. Updates require server event delivery; routes which do not publish
 an entity event are recovered on reconnect or explicit refresh.
 
 ## Phase 9: Collaboration synchronization signals
 
-Cloud now emits the durable Project, Workstream, Discussion and Workspace Grant
+Cloud now emits the durable Space, Thread, Discussion and Workspace Grant
 signals in the [realtime synchronization contract 1.1](../specifications/REALTIME_SYNCHRONIZATION.md).
-Collaboration has its own Project/user stream identity; `workspaceId` continues
+Collaboration has its own Space/user stream identity; `workspaceId` continues
 identifying real execution Workspaces on existing execution events only.
 
 The browser connects and subscribes to user scope without requiring execution
 infrastructure. Transport cursors distinguish stream kinds even when their IDs
 match. `discussion.created` follows forward pages from the shared cache's newest
 cursor. `discussion.updated` loads and merges a single cached message by ID, so
-remote edits to older loaded pages do not trigger full history fetches. Project
-catalog recovery includes missed creation/deletion signals. Project tombstones
-remove cached Project queries and reject their late reads; collaboration gaps
+remote edits to older loaded pages do not trigger full history fetches. Space
+catalog recovery includes missed creation/deletion signals. Space tombstones
+remove cached Space queries and reject their late reads; collaboration gaps
 do not activate execution polling. Older execution envelopes and cursor maps
 remain supported. Existing D1 installations require the documented one-time
 stream-schema alignment; fresh databases use the updated v8 baseline.
@@ -363,25 +363,25 @@ stream-schema alignment; fresh databases use the updated v8 baseline.
 
 `AxSyncScope` resolves the explicit transport scope, falling back to the durable
 stream identity and legacy execution `workspaceId`. A user subscription can
-therefore recover one Project stream without treating it as a user-wide gap.
+therefore recover one Space stream without treating it as a user-wide gap.
 Malformed narrow scopes never trigger broad recovery. Navigation is not an input.
 
 `AxSyncEngine.invalidateScope` marks affected query entries stale, fences older
 reads, and retains data. Immutable Work cursor-page entries are excluded.
 The cache router refreshes registered relevant queries in explicit scopes;
 user-wide recovery invalidates retained resources but eagerly refreshes only
-observed queries. Inactive Project queries revalidate when next ensured.
+observed queries. Inactive Space queries revalidate when next ensured.
 Repeated recovery frames for one scope share the pending recovery operation.
 
 | Gap scope | Recovery |
 | --- | --- |
-| Project | Project details and its Workstream collection, without child Chat reads |
-| Workstream | Forward Discussion pages from the newest cursor; active/recent Work discovery and known active/dirty requests by ID |
+| Space | Space details and its Thread collection, without child Chat reads |
+| Thread | Forward Discussion pages from the newest cursor; active/recent Work discovery and known active/dirty requests by ID |
 | Execution Workspace | Workspace state and Worker inventory; existing visible execution recovery remains bounded |
 | User/ready | Observed migrated resources and catalog recovery; no bootstrap snapshot reload |
 
 Discussion reconnect handling belongs to the session cache router rather than
-individual Workstream widgets. Cold observed Discussions recover with one latest
+individual Thread widgets. Cold observed Discussions recover with one latest
 page. Existing messages, optimistic overlays, expanded sidebar rows and older
 history stay visible during recovery and failures. Transport stale/disconnected
 states use the existing subtle reconnect status. A completed gap cannot clear a
@@ -391,7 +391,7 @@ Workspace HTTP APIs currently return user-wide lists. Recovery shares those
 reads under Workspace-specific query keys and merges only the affected Workspace
 and its Workers into the existing view projection. This does not introduce a
 new endpoint or reload `loadBootstrapState`. Catalog recovery remains a focused list
-read for user/ready frames; Project/Workstream gaps do not reload the catalog.
+read for user/ready frames; Space/Thread gaps do not reload the catalog.
 Unmigrated execution mutation events retain their existing read-model handler,
 which is separate from reconnect recovery.
 
@@ -405,20 +405,20 @@ WebSocket outage testing remains separate from deterministic tests and web build
 
 `AxStore.catalogs` owns `AxSessionCatalogs` on the session's existing sync engine.
 The immutable `['workflow-catalog']` query has a 45-minute stale window;
-`['workers']` has a 30-second stale window. Both survive Workstream disposal and
+`['workers']` has a 30-second stale window. Both survive Thread disposal and
 navigation, share in-flight reads, and clear with other server state on logout
 or session loss. Fresh empty responses are valid cached results. There is no
 IndexedDB, cache eviction timer or background polling for these queries.
 
-The shell, Workstream pages and execution Workspace recovery all use the same
-Worker query. `/workers` remains the existing user-wide HTTP read. A Workstream
-projects that inventory through its own Project Workspace grants and applies
-activation, readiness and catalog eligibility filters locally. The Project
+The shell, Thread pages and execution Workspace recovery all use the same
+Worker query. `/workers` remains the existing user-wide HTTP read. A Thread
+spaces that inventory through its own Space Workspace grants and applies
+activation, readiness and catalog eligibility filters locally. The Space
 grant read remains separate; grant-change signals reload the affected view's
 grants without bypassing the Worker cache. A delayed grant read uses the latest
 cached inventory, rather than restoring an older inventory response.
 
-Workstream query subscriptions populate cached Workflow choices immediately and
+Thread query subscriptions populate cached Workflow choices immediately and
 update Worker choices when a stale background refresh or realtime invalidation
 completes, including already-open settings dialogs. Page disposal unsubscribes
 without evicting shared data. Shell inventory rendering observes the same query.
@@ -426,7 +426,7 @@ Explicit scopes and user/ready recovery invalidate the Worker inventory where
 appropriate; reconnect does not expire the rarely-changing Workflow catalog.
 
 `worker.inventory.*` signals revalidate only the global Worker query, independently
-of the selected Project/Workspace. The legacy shell handler no longer requests
+of the selected Space/Workspace. The legacy shell handler no longer requests
 another inventory copy. `invalidateWorkflows()` is an explicit cache hook for
 publication/admin integrations: observed catalog views refresh immediately,
 while detached queries revalidate on the next ensure. No new Workflow publication
@@ -434,86 +434,86 @@ wire event is introduced; such a publisher can call this hook when available.
 
 `ax_session_catalogs_test.dart` covers stale-time boundaries, retained stale data,
 immutable results, in-flight sharing, observer updates, explicit invalidation,
-errors, session fencing, reconnect behavior and Workstream recreation. Existing
-Workspace recovery and Project/Workstream widget tests remain regression coverage.
+errors, session fencing, reconnect behavior and Thread recreation. Existing
+Workspace recovery and Space/Thread widget tests remain regression coverage.
 No HTTP contract, Cloud schema, protocol or compatibility migration is required.
-Standalone Workstream consumers may inject the session catalog cache; the default
+Standalone Thread consumers may inject the session catalog cache; the default
 source-associated fallback shares reads for consumers using the same data source.
 
-## Phase 12: Project Workspace grant collections
+## Phase 12: Space Workspace grant collections
 
-`AxStore.projectWorkspaceGrants` owns structural
-`['project', projectId, 'workspace-grants']` queries with a one-minute stale
-window. Workstreams in one Project and the Project's Workspace settings share
+`AxStore.spaceWorkspaceGrants` owns structural
+`['space', spaceId, 'workspace-grants']` queries with a one-minute stale
+window. Threads in one Space and the Space's Workspace settings share
 this immutable collection and in-flight reads. Cached grants render immediately;
 stale ensures retain them while revalidating. Worker choices combine the current
-shared inventory with this Project collection, rather than each Workstream
+shared inventory with this Space collection, rather than each Thread
 requesting both resources. Suspended grants do not supply Worker choices.
 
 Create, permission-edit and revoke actions use shared per-operation optimistic
 overlays. All observers see those changes immediately. A failed write removes
 only its own overlay, preserving concurrent writes and realtime updates. A
-successful write commits its local change, invalidates the Project grant key,
+successful write commits its local change, invalidates the Space grant key,
 and revalidates the existing HTTP collection. Confirmed writes survive read
 failures, which remain in query state for retry. Temporary create IDs disable
 edit/revoke controls until the authoritative collection supplies server IDs.
 No mutation changes the underlying data-source HTTP signatures.
 
-`project_workspace_grant.updated` revalidates only its Project's grant collection;
-query observers update Worker choices and Project settings. Project scope gaps
-include this collection. Session clearing and Project deletion fence late writes,
-remove optimistic overlays and preserve other Projects' collections. A detached
+`space_workspace_grant.updated` revalidates only its Space's grant collection;
+query observers update Worker choices and Space settings. Space scope gaps
+include this collection. Session clearing and Space deletion fence late writes,
+remove optimistic overlays and preserve other Spaces' collections. A detached
 view retains data without retaining its subscription.
 
 Grant cache tests cover cold/stale read sharing, nested immutability, create/edit/
 revoke reconciliation, failures, concurrent overlays, realtime during a write,
-reconciliation retry, session clearing and Project tombstones. Workstream widget
-coverage verifies that multiple views in a Project share one grant HTTP read.
+reconciliation retry, session clearing and Space tombstones. Thread widget
+coverage verifies that multiple views in a Space share one grant HTTP read.
 
 ## Phase 13: Aggregate Workspace grant counts
 
-The Workspace list now includes `activeProjectGrantCount`, as specified by the
-[Workspace Project Grants read model 1.1](../specifications/WORKSPACE_PROJECT_GRANTS.md).
+The Workspace list now includes `activeSpaceGrantCount`, as specified by the
+[Workspace Space Grants read model 1.1](../specifications/WORKSPACE_SPACE_GRANTS.md).
 Cloud aggregates counts in the same authorized D1 list statement. Counts are
-distinct Projects with active, unexpired grants to non-archived Projects; they
-include contributions even when the Workspace owner is not a Project member.
+distinct Spaces with active, unexpired grants to non-archived Spaces; they
+include contributions even when the Workspace owner is not a Space member.
 Only the authenticated owner's non-revoked Workspaces are returned.
 
-AX maps that field into `AxWorkspace.projectGrantCount` and renders it directly.
-The `_refreshWorkspaceProjectGrantCounts` Project loop and separate mutable
-count map are removed. Bootstrap reads do not trigger count-specific Project
+AX maps that field into `AxWorkspace.spaceGrantCount` and renders it directly.
+The `_refreshWorkspaceSpaceGrantCounts` Space loop and separate mutable
+count map are removed. Bootstrap reads do not trigger count-specific Space
 requests. Catalog/grant signals and shell grant writes refresh the Workspace
 summary with one Workspace list read; errors retain previous counts. A grant
-signal does not reload the Project catalog.
+signal does not reload the Space catalog.
 
 Actual-SQL Cloud tests verify status, expiration, archival, duplicates, ownership
-and zero counts. A 30-Project case makes one aggregate database read; a shell
-widget with 30 Projects makes zero per-Project grant reads for counting. HTTP
+and zero counts. A 30-Space case makes one aggregate database read; a shell
+widget with 30 Spaces makes zero per-Space grant reads for counting. HTTP
 client tests verify the additive field and legacy/default parsing. There is no
 D1 migration, new endpoint, dependency, runtime protocol or provider change.
 Deploy Cloud's additive field before AX to populate full counts; older responses
 remain parseable using the legacy field or zero fallback.
 
 
-## Phase 14: lazy Project tabs
+## Phase 14: lazy Space tabs
 
-`AxProjectTabQueries` shares session-scoped Project resources in the sync engine.
-ProjectPage observes and ensures only its selected tab: Workstreams use
-`project:<id>:workstreams`; Workspaces use `project:<id>:workspace-grants`;
-Members use `project:<id>:members` and `project:<id>:invitations`. Tab switches
-remove listeners without removing cached data. Reopening a tab or Project shows
+`AxSpaceTabQueries` shares session-scoped Space resources in the sync engine.
+SpacePage observes and ensures only its selected tab: Threads use
+`space:<id>:threads`; Workspaces use `space:<id>:workspace-grants`;
+Members use `space:<id>:members` and `space:<id>:invitations`. Tab switches
+remove listeners without removing cached data. Reopening a tab or Space shows
 cached results immediately and refreshes stale results in the background.
-Members/invitations use the default one-minute stale interval. Project gap
+Members/invitations use the default one-minute stale interval. Space gap
 recovery recognizes these queries and the audit query alongside existing keys.
 
 Owned Workspace inventory (`workspaces`, 30-second stale interval) is ensured
-only when Connect Workspace opens. The current Project page has no visible audit
-section, so it no longer fetches audit on entry. `project:<id>:audit` is available
-for an explicit future consumer; membership and Workstream writes invalidate it
+only when Connect Workspace opens. The current Space page has no visible audit
+section, so it no longer fetches audit on entry. `space:<id>:audit` is available
+for an explicit future consumer; membership and Thread writes invalidate it
 without fetching it. Membership writes revalidate only the affected Members or
-Invitations collection. Successful Workstream mutations record their results in
-the shared collection; the shell no longer refreshes it on every Project edit.
-Project snapshot nested Workstreams are never a fallback authority.
+Invitations collection. Successful Thread mutations record their results in
+the shared collection; the shell no longer refreshes it on every Space edit.
+Space snapshot nested Threads are never a fallback authority.
 
 Loading and errors are scoped to the selected tab. Failed refreshes preserve
 cached data, with retry controls for tab reads. Session clearing fences pending
@@ -528,23 +528,23 @@ protection. Live-browser interaction is not part of this automated verification.
 
 ## Phase 15: selective rendering
 
-`AxStore` owns the bootstrap/recovery projection and observable Project and
+`AxStore` owns the bootstrap/recovery projection and observable Space and
 Workspace lists. The shell retains navigation, expansion, authentication flow,
 and presentation state, with read accessors for the store rather than independent
 server-data copies. Worker inventory is read from the shared query; the shell
 has no Worker subscription that calls root `setState`.
 
-ProjectTree subscribes to the Project list and each expanded Project's Workstream
-query. The collapsed rail's Project menu subscribes locally without fetching
-unopened Workstreams. Home and Workspaces subscribe to the lists and Worker
+SpaceTree subscribes to the Space list and each expanded Space's Thread
+query. The collapsed rail's Space menu subscribes locally without fetching
+unopened Threads. Home and Workspaces subscribe to the lists and Worker
 inventory they display. Focused execution views subscribe to their retained
-execution projection, which does not emit for Project/Workspace-only writes.
-Search observes existing Workstream collections without eagerly loading them.
+execution projection, which does not emit for Space/Workspace-only writes.
+Search observes existing Thread collections without eagerly loading them.
 Navigation and bootstrap loading/error transitions may still rebuild the shell.
-Background Project/Workspace refreshes and successful recovery update their
+Background Space/Workspace refreshes and successful recovery update their
 stores without shell rebuilds; existing HTTP APIs remain unchanged.
 
-Within WorkstreamPage, Discussion observes its own cached query. Work history
+Within ThreadPage, Discussion observes its own cached query. Work history
 and Workflow/Worker/grant controls have separate local listenables. Catalog,
 inventory, and grant updates do not rebuild Chat or Work history. History updates
 do not rebuild Chat, and Discussion updates do not rebuild Work history.
@@ -556,7 +556,7 @@ local subscriptions instead of root server-update `setState` calls.
 Session clearing removes list projections, notifications, security data, and
 query caches. Delayed list/bootstrap reads are fenced across clearing/disposal;
 failed refreshes retain existing data. Build-count widget tests verify update
-isolation for Worker inventory, Workflow publication, Project lists, Chat, Work
+isolation for Worker inventory, Workflow publication, Space lists, Chat, Work
 history, Workspace consumers, reconnect notices, and notification counts.
 Existing navigation, optimistic write, reconnect, and responsive-layout tests
 remain regression coverage. No HTTP, database, or protocol migration is needed.
@@ -570,7 +570,7 @@ queue or persisted mutation replay. Optional mutation keys reject simultaneous
 writes to the same entity before another optimistic change or HTTP request.
 Session clearing releases leases and fences late completions.
 
-`AxCollaborationMutations` coordinates Project and Workstream writes across shared
+`AxCollaborationMutations` coordinates Space and Thread writes across shared
 queries. Temporary entities appear immediately and are replaced by server IDs.
 Pending temporary entities cannot be selected. Independent optimistic layers
 remain visible during reads; rollback removes only its own layer and preserves
@@ -589,7 +589,7 @@ methods and wire contracts remain intact; no database migration is required.
 
 ## Phase 17: durable mutation identities
 
-Work Request creation, Discussion sends, and Workstream creation carry opaque
+Work Request creation, Discussion sends, and Thread creation carry opaque
 client-generated `Idempotency-Key` headers. In-memory attempt identities survive
 response loss and view destruction. Sending the same unchanged input explicitly
 after failure retains its key; successful completion starts a new identity for
@@ -621,12 +621,12 @@ Cloud session authentication determines the Conclave user ID before hydration.
 The database `conclave-ax-read-cache-v1` stores versioned safe read DTOs per user,
 never the session, viewer email, tokens, account security, credentials, grants,
 pending forms, mutation keys, local optimistic entities, or executable operations.
-Project settings, Workstream configuration and Workflow snapshots use explicit
+Space settings, Thread configuration and Workflow snapshots use explicit
 field allowlists; arbitrary maps are not serialized. Existing user-authored
-Project/Chat/Work text is cached as product data, not interpreted as credentials.
+Space/Chat/Work text is cached as product data, not interpreted as credentials.
 Cached roles and Worker readiness are display hints, never authorization.
 
-Hydration restores Projects, per-Project Workstreams, Project detail, recent Chat
+Hydration restores Spaces, per-Space Threads, Space detail, recent Chat
 and Work, Workflow catalog, Workspace summaries, and safe Worker descriptors.
 All restored queries are stale. Their data renders before bootstrap completes;
 active navigation queries and bootstrap revalidate in the background. Failed
@@ -634,7 +634,7 @@ reads retain cached UI. Hydration cannot overwrite a newer value or a pending
 Cloud read. The authenticated user, generation, and query fences reject late
 restoration after logout or an account change.
 
-Persistence coalesces writes and saves only the most recently used 20 Workstream
+Persistence coalesces writes and saves only the most recently used 20 Thread
 histories, at most 50 confirmed messages and requests per collection. This bounds
 the persisted history independently of the Phase 19 RAM retention policy. Work cursors
 resume at the retained oldest request. Truncated Chat must revalidate its recent
@@ -651,8 +651,8 @@ There is no Cloud schema, HTTP, or runtime protocol change.
 
 ## Phase 19: bounded in-memory retention
 
-`AxSyncEngine` retains the 20 most recently accessed Workstream histories by
-structural Workstream ID, grouping Discussion, Work, and immutable page queries.
+`AxSyncEngine` retains the 20 most recently accessed Thread histories by
+structural Thread ID, grouping Discussion, Work, and immutable page queries.
 Query activity and subscription release schedule one coalesced retention sweep.
 Eviction cancels internal bridge subscriptions and releases each cache owner's
 pagination, revision, error, and reconciliation metadata. Engine removal fences
@@ -675,7 +675,7 @@ marks the head stale, and resets the opaque older cursor until head revalidation
 returns a valid frontier. Revisiting an evicted history fetches one recent page;
 older pages are fetched again only on demand after compaction/eviction.
 
-Projects, Workstreams, and the Workflow catalog are outside this retention policy
+Spaces, Threads, and the Workflow catalog are outside this retention policy
 and remain available for the authenticated session. Unobserved `run:*` query
 entries expire after five idle minutes at the next retention sweep. The legacy
 Run projection already holds only the current Run rather than a multi-Run cache.
@@ -697,7 +697,7 @@ session-owned `AxLifecycleSync` to revalidate active stale queries. Network
 restoration requests the same targeted read synchronization. Staleness includes
 each query's configured age as well as explicit invalidation. Fresh queries,
 inactive histories, internal cache bridges, and immutable older cursor pages do
-not trigger lifecycle reads. Visible expanded Projects, active Project tabs,
+not trigger lifecycle reads. Visible expanded Spaces, active Space tabs,
 Discussion/Work heads, and subscribed shared catalogs use their existing loaders.
 
 Lifecycle synchronization does not clear, invalidate, or replace cached data and
@@ -723,12 +723,12 @@ unbounded downloads. Their initial AX reads remain 50 rows and older history is
 requested only on demand. The existing paging envelopes and SQL cursor contracts
 are unchanged.
 
-Project detail, Project Workstreams, and Workflow catalog now support optional
+Space detail, Space Threads, and Workflow catalog now support optional
 ETag conditional reads. A stale sync-engine revalidation sends the last retained
 revision; unchanged authorized content returns an empty `304`, and the typed
 loader reuses the transport representation as a successful fresh read. Changed
 content returns the existing JSON body. Authorization, current permissions, and
-resource existence are checked before a Project conditional response.
+resource existence are checked before a Space conditional response.
 
 The memory-only validator cache is separately bounded and fenced by session and
 request generations. Logout and account changes clear it alongside server state;
@@ -743,11 +743,11 @@ optimization saves response bytes while keeping database reads unchanged; see
 The shell no longer owns the five-second Run snapshot refresh timer or schedules
 another bootstrap read after receiving an active/running/waiting/paused Run.
 Run, Task, Attempt, Assignment, Artifact, Finding, and Verification events never
-call `_loadBootstrapState()`. Events carrying `workRequestId` and `workstreamId` enter
+call `_loadBootstrapState()`. Events carrying `workRequestId` and `threadId` enter
 the shared Work realtime reconciler: complete payloads patch the cached request;
 otherwise one `GET /work-requests/:id` supplies authoritative details. The existing
 request deduplication, event sequencing, identity validation, and late-read fences
-apply. No Work history list, Project list, Workspace list, or session read is
+apply. No Work history list, Space list, Workspace list, or session read is
 needed for those execution signals.
 
 Progress-only execution bursts trigger no HTTP reads. Execution frames without a
@@ -758,16 +758,16 @@ state. `_loadBootstrapState()` remains only for authenticated bootstrap, a real
 authentication transition, and explicit recovery UI retry.
 
 The only execution safety reconciliation timer is the shared fifteen-second Work
-fallback. It runs while realtime is unavailable/stale and a Workstream view is
+fallback. It runs while realtime is unavailable/stale and a Thread view is
 subscribed, discovers active requests in those visible scopes, and refreshes
 retained active/dirty entities by ID. It does not traverse immutable old history,
-poll inactive cached Workstreams, or accumulate overlapping reads. Restored
+poll inactive cached Threads, or accumulate overlapping reads. Restored
 realtime performs targeted recovery and cancels the timer; releasing the last
 visible scope cancels it as well. The unrelated desktop authentication approval
 status timer remains part of its explicit sign-in flow.
 
 Shell regression tests advance an active Run beyond five seconds and a full
-minute without another bootstrap/Project/Workspace/session request. Execution
+minute without another bootstrap/Space/Workspace/session request. Execution
 frames produce exactly one detail request each without broad reads. Shared
 realtime tests verify no healthy-socket polling, visible-only outage fallback,
 no overlapping fallback reads, and cancellation after recovery/view disposal.
@@ -777,22 +777,22 @@ No HTTP, realtime schema, database, or persistent read-cache migration is needed
 
 `AxStore.snapshot`, `replaceSnapshot()` and `reload()` are removed. Bootstrap is
 explicitly named `loadBootstrapState()` in both the store and data-source
-interface. It initializes independent Project, Workspace and session stores;
-Project rows discard nested Workstreams. Navigation, reconnect and realtime
+interface. It initializes independent Space, Workspace and session stores;
+Space rows discard nested Threads. Navigation, reconnect and realtime
 continue to use scoped queries and never use bootstrap as their routine loader.
 Earlier phase notes describing retained snapshot paths are superseded here.
 
 `AxStore.execution` is a read-only legacy Run/execution projection, updated by
-`replaceExecution()`. It excludes Projects, Workspaces and viewer state, and
+`replaceExecution()`. It excludes Spaces, Workspaces and viewer state, and
 copies its execution collections into immutable lists. Replacing it cannot write
-collaboration caches or session state. Project archive/delete writes target the
-Project query directly. Search and command-palette inputs are explicit Project,
-Workspace and cached per-Project Workstream collections instead of a snapshot.
-Search observes cached collections without fetching every Project.
+collaboration caches or session state. Space archive/delete writes target the
+Space query directly. Search and command-palette inputs are explicit Space,
+Workspace and cached per-Space Thread collections instead of a snapshot.
+Search observes cached collections without fetching every Space.
 
-The list-shaped `loadWorkstreamWorkRequests()` and `loadDiscussionMessages()`
+The list-shaped `loadThreadWorkRequests()` and `loadDiscussionMessages()`
 data-source methods are removed; production consumers use cursor page methods.
-Chat/Work history, catalog, Worker inventory, grants and lazy Project tabs remain
+Chat/Work history, catalog, Worker inventory, grants and lazy Space tabs remain
 owned by their existing shared queries. No widget-owned canonical histories or
 coarse snapshot polling are reintroduced.
 
@@ -811,15 +811,15 @@ Request counts measure data-source invocations, not wall-clock Cloud latency.
 
 | Acceptance behavior | Executable coverage |
 | --- | --- |
-| Expand A, select B, return A: both children remain; one list read per fresh Project | `ax_project_cache_test.dart`, full shell and ProjectTree sequences |
-| Stale return: A rows visible on first frame, exactly one background A read, B untouched | `ax_project_cache_test.dart`, injected cache clock and navigation ensure |
-| Five callers share one Project collection read; old slow generation cannot overwrite new fast result | `ax_project_cache_test.dart`; generic engine equivalents in `ax_sync_engine_test.dart` |
-| Project route changes synchronously; cached back/forward makes no detail/list/bootstrap reads | `ax_project_navigation_test.dart` |
+| Expand A, select B, return A: both children remain; one list read per fresh Space | `ax_space_cache_test.dart`, full shell and SpaceTree sequences |
+| Stale return: A rows visible on first frame, exactly one background A read, B untouched | `ax_space_cache_test.dart`, injected cache clock and navigation ensure |
+| Five callers share one Space collection read; old slow generation cannot overwrite new fast result | `ax_space_cache_test.dart`; generic engine equivalents in `ax_sync_engine_test.dart` |
+| Space route changes synchronously; cached back/forward makes no detail/list/bootstrap reads | `ax_space_navigation_test.dart` |
 | W1 → W2 → W1 shows previous Chat/Work while synchronization is pending | `ax_discussion_cache_test.dart`, `ax_work_history_test.dart` |
 | 5,000-row Chat and Work histories load 50 initially; next 50 only on demand, no cursor traversal | `ax_discussion_cache_test.dart`, `ax_work_history_test.dart` |
 | Scrolling requests older pages once, deduplicates rows, preserves viewport and does not refetch exhausted history | Widget and engine cases in both history suites |
-| Non-selected expanded A receives realtime changes while selected B remains untouched | `ax_project_cache_test.dart`, `ax_realtime_cache_router_test.dart` |
-| Scoped reconnect keeps both cached collections visible during the pending read | `ax_project_cache_test.dart`; router, Discussion and Workspace recovery suites |
+| Non-selected expanded A receives realtime changes while selected B remains untouched | `ax_space_cache_test.dart`, `ax_realtime_cache_router_test.dart` |
+| Scoped reconnect keeps both cached collections visible during the pending read | `ax_space_cache_test.dart`; router, Discussion and Workspace recovery suites |
 | Execution events and a minute of active Run time cause no application bootstrap reload | `ax_snapshot_polling_test.dart` |
 
 Measured expectations are deterministic: fresh A/B list totals are 1/1, fresh
@@ -839,38 +839,38 @@ is reserved for a successful empty result. Cached messages remain visible on
 failure and retry clears the error after a successful response.
 
 Invitation and membership invalidations addressed to a non-member use a durable
-recipient `user` stream in addition to the normal Project stream. Adding a user
-only to Project-event fanout is insufficient: the realtime gateway correctly
+recipient `user` stream in addition to the normal Space stream. Adding a user
+only to Space-event fanout is insufficient: the realtime gateway correctly
 rejects that stream before invitation acceptance or after membership removal.
 Recipient signals contain entity IDs only, retain existing event types, and
-refresh the authenticated user's invitations and Project list. Project stream
-membership checks remain enforced; no Project access is granted by an invitation
+refresh the authenticated user's invitations and Space list. Space stream
+membership checks remain enforced; no Space access is granted by an invitation
 notification. Offline recipients recover through their user stream or initial
 invitation loading. Existing pending invitation records need no migration.
 
 Owned Workspace inventory uses the shared `ownedWorkspacesQuery` definition for
-WorkspaceStore, the Project Connect Workspace picker and persisted-cache restore.
+WorkspaceStore, the Space Connect Workspace picker and persisted-cache restore.
 The `workspaces`
 key has a single 30-second freshness policy and immutable list result shape.
 Consumers may register in either order without conflicting query definitions;
 they observe the same cached data and refresh updates. No API or schema change
 is required.
 
-Sidebar Projects are grouped from the authenticated user's role: `owner` entries
-appear in Your projects, and other accessible roles in Shared with you. Each
-group preserves the server's ordering and existing Workstream expansion state.
+Sidebar Spaces are grouped from the authenticated user's role: `owner` entries
+appear in Your spaces, and other accessible roles in Shared with you. Each
+group preserves the server's ordering and existing Thread expansion state.
 Owned-only expanded sidebars omit the group heading; shared groups remain labeled
 and empty groups are hidden. The collapsed rail shows separate folder and shared
-folder selectors only for populated groups, each containing its own Projects and
-Workstreams. Groups derive from the reactive Project list, so invitation
+folder selectors only for populated groups, each containing its own Spaces and
+Threads. Groups derive from the reactive Space list, so invitation
 acceptance and refresh update both views without a separate persisted category.
 No server contract or data migration is required.
 
-Project list and detail responses include the authenticated viewer's membership
+Space list and detail responses include the authenticated viewer's membership
 `role`. Sidebar grouping must use that server attribution, including after a
-Project detail refresh, rather than inferring ownership from a missing field.
+Space detail refresh, rather than inferring ownership from a missing field.
 
-Sidebar group labels use uppercase text. Shared Project pages omit the empty
+Sidebar group labels use uppercase text. Shared Space pages omit the empty
 instructions section while continuing to show configured instructions. The
 Members tab retains cached rows and an inline loading-failure notice without a
 Retry Members button; reopening the tab retries its stale query.

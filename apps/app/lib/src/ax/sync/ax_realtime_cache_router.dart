@@ -8,12 +8,12 @@ class AxRealtimeCacheRouter {
       {this.discussionChanged,
       this.discussionResynchronize,
       this.discussionObserved,
-      this.projectRemoved});
-  final Future<void> Function(
-      String workstreamId, String type, String entityId)? discussionChanged;
-  final Future<void> Function(String workstreamId)? discussionResynchronize;
-  final bool Function(String workstreamId)? discussionObserved;
-  final void Function(String projectId)? projectRemoved;
+      this.spaceRemoved});
+  final Future<void> Function(String threadId, String type, String entityId)?
+      discussionChanged;
+  final Future<void> Function(String threadId)? discussionResynchronize;
+  final bool Function(String threadId)? discussionObserved;
+  final void Function(String spaceId)? spaceRemoved;
   final AxSyncEngine engine;
   final _eventIds = <String>{};
   final _recoveries = <(String, String?), Future<void>>{};
@@ -35,9 +35,14 @@ class AxRealtimeCacheRouter {
         event['payload'] is Map ? event['payload'] as Map : const {};
     String? id(Object? value) =>
         value is String && value.isNotEmpty ? value : null;
-    final projectId = id(event['projectId']) ?? id(payload['projectId']);
-    final workstreamId =
-        id(event['workstreamId']) ?? id(payload['workstreamId']);
+    final spaceId = id(event['spaceId']) ??
+        id(payload['spaceId']) ??
+        id(event['spaceId']) ??
+        id(payload['spaceId']);
+    final threadId = id(event['threadId']) ??
+        id(payload['threadId']) ??
+        id(event['threadId']) ??
+        id(payload['threadId']);
     if (type == 'reconnect.required' || type == 'realtime.ready') {
       final scope = AxSyncScope.fromEvent(event);
       final key = (scope.kind, scope.id);
@@ -55,47 +60,51 @@ class AxRealtimeCacheRouter {
       return;
     }
     if (type.startsWith('discussion.') &&
-        workstreamId != null &&
+        threadId != null &&
         discussionChanged != null) {
       final entityId = id(payload['entityId']);
       if (entityId != null) {
-        await discussionChanged!(workstreamId, type, entityId);
+        await discussionChanged!(threadId, type, entityId);
       }
       return;
     }
-    if (type == 'project_workspace_grant.updated') {
-      if (projectId != null) {
-        await engine.revalidateWhere((key) =>
-            key == AxQueryKey(['project', projectId, 'workspace-grants']));
+    if (type == 'space_workspace_grant.updated' ||
+        type == 'workspace_space_grant.updated' ||
+        type == 'space_workspace_grant.updated') {
+      if (spaceId != null) {
+        await engine.revalidateWhere(
+            (key) => key == AxQueryKey(['space', spaceId, 'workspace-grants']));
       }
       return;
     }
-    if (type.startsWith('project.') || type.startsWith('invitation.')) {
-      final affected = projectId ?? id(payload['entityId']);
+    if (type.startsWith('space.') ||
+        type.startsWith('space.') ||
+        type.startsWith('invitation.')) {
+      final affected = spaceId ?? id(payload['entityId']);
       if (affected == null) return;
-      if (type == 'project.deleted') {
-        projectRemoved?.call(affected);
-        engine.remove(AxQueryKey(['project', affected]), prefix: true);
-        await engine.revalidateWhere((key) => key == AxQueryKey(['projects']));
+      if (type == 'space.deleted' || type == 'space.deleted') {
+        spaceRemoved?.call(affected);
+        engine.remove(AxQueryKey(['space', affected]), prefix: true);
+        await engine.revalidateWhere((key) => key == AxQueryKey(['spaces']));
         return;
       }
       await engine.revalidateWhere((key) =>
-          (key.parts[0] == 'project' &&
+          (key.parts[0] == 'space' &&
               key.parts.length >= 2 &&
               key.parts[1] == affected) ||
-          key == AxQueryKey(['projects']) ||
+          key == AxQueryKey(['spaces']) ||
           key == AxQueryKey(['me', 'invitations']));
-    } else if (type.startsWith('workstream.')) {
-      final affectedWorkstream = workstreamId ?? id(payload['entityId']);
-      final parents = <String>{if (projectId != null) projectId};
-      if (affectedWorkstream != null) {
+    } else if (type.startsWith('thread.') || type.startsWith('thread.')) {
+      final affectedThread = threadId ?? id(payload['entityId']);
+      final parents = <String>{if (spaceId != null) spaceId};
+      if (affectedThread != null) {
         for (final collection
-            in engine.cachedValues<List<AxWorkstream>>().entries) {
+            in engine.cachedValues<List<AxThread>>().entries) {
           final parts = collection.key.parts;
           if (parts.length == 3 &&
-              parts[0] == 'project' &&
-              parts[2] == 'workstreams' &&
-              collection.value.any((item) => item.id == affectedWorkstream)) {
+              parts[0] == 'space' &&
+              parts[2] == 'threads' &&
+              collection.value.any((item) => item.id == affectedThread)) {
             parents.add(parts[1]);
           }
         }
@@ -103,15 +112,15 @@ class AxRealtimeCacheRouter {
       await engine.revalidateWhere((key) =>
           (!type.contains('discussion') &&
               key.parts.length == 3 &&
-              key.parts[0] == 'project' &&
+              key.parts[0] == 'space' &&
               parents.contains(key.parts[1]) &&
-              key.parts[2] == 'workstreams') ||
-          (workstreamId != null &&
-              key == AxQueryKey(['workstream', workstreamId, 'discussion']) &&
+              key.parts[2] == 'threads') ||
+          (threadId != null &&
+              key == AxQueryKey(['thread', threadId, 'discussion']) &&
               type.contains('discussion')));
-    } else if (type.startsWith('discussion.') && workstreamId != null) {
-      await engine.revalidateWhere((key) =>
-          key == AxQueryKey(['workstream', workstreamId, 'discussion']));
+    } else if (type.startsWith('discussion.') && threadId != null) {
+      await engine.revalidateWhere(
+          (key) => key == AxQueryKey(['thread', threadId, 'discussion']));
     }
   }
 
@@ -121,7 +130,7 @@ class AxRealtimeCacheRouter {
         .where((key) =>
             scope.matches(key) &&
             key.parts.length == 3 &&
-            key.parts[0] == 'workstream' &&
+            key.parts[0] == 'thread' &&
             key.parts[2] == 'discussion' &&
             (scope.kind != 'user' || _observed(key)))
         .toList();
@@ -130,14 +139,14 @@ class AxRealtimeCacheRouter {
           scope.matches(key) &&
           _managed(key) &&
           (scope.kind != 'user' || _observed(key)) &&
-          (discussionResynchronize == null || key.parts[0] != 'workstream')),
+          (discussionResynchronize == null || key.parts[0] != 'thread')),
       if (discussionResynchronize != null)
         for (final key in discussions) discussionResynchronize!(key.parts[1]),
     ]);
   }
 
   bool _observed(AxQueryKey key) => key.parts.length == 3 &&
-          key.parts[0] == 'workstream' &&
+          key.parts[0] == 'thread' &&
           key.parts[2] == 'discussion' &&
           discussionObserved != null
       ? discussionObserved!(key.parts[1])
@@ -145,8 +154,8 @@ class AxRealtimeCacheRouter {
 
   bool _managed(AxQueryKey key) =>
       key == AxQueryKey(['workers']) ||
-      (key.parts[0] == 'project' && key.parts.length >= 2) ||
+      (key.parts[0] == 'space' && key.parts.length >= 2) ||
       (key.parts.length == 3 &&
-          key.parts[0] == 'workstream' &&
+          key.parts[0] == 'thread' &&
           key.parts[2] == 'discussion');
 }

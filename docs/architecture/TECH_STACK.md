@@ -25,7 +25,7 @@
 ## Applications and runtime
 
 Conclave AX is the human web application. Conclave Cloud owns identity,
-authorization, Projects, Workstreams, scheduling, Profile releases, and
+authorization, Spaces, Threads, scheduling, Profile releases, and
 persistence. Conclave Workspace owns local Work Root data, logical Worker
 readiness, Profile verification/cache, Engine supervision, permissions,
 cancellation, and diagnostics.

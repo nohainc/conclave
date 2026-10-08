@@ -14,16 +14,16 @@ void main() {
 
     setUp(() {
       sampleSnapshot = AxSnapshot.empty().copyWith(
-        projects: [
-          const AxProject(
+        spaces: [
+          const AxSpace(
             id: 'proj-1',
             name: 'Conclave Core',
             branch: 'main',
             lastActivity: 'now',
-            workstreams: [
-              AxWorkstream(
+            threads: [
+              AxThread(
                 id: 'ws-1',
-                projectId: 'proj-1',
+                spaceId: 'proj-1',
                 name: 'Authentication redesign',
                 lead: 'Vitalii',
                 status: 'active',
@@ -31,9 +31,9 @@ void main() {
                 primaryWorkspace: 'local',
                 queueStatus: 'idle',
               ),
-              AxWorkstream(
+              AxThread(
                 id: 'ws-2',
-                projectId: 'proj-1',
+                spaceId: 'proj-1',
                 name: 'Search page integration',
                 lead: 'Vitalii',
                 status: 'planning',
@@ -43,7 +43,7 @@ void main() {
               ),
             ],
           ),
-          const AxProject(
+          const AxSpace(
             id: 'proj-2',
             name: 'Data Pipeline',
             branch: 'develop',
@@ -61,7 +61,7 @@ void main() {
 
       final shellContext = AxShellContext(
         navigation: const AxNavigation.home(),
-        projects: sampleSnapshot.projects,
+        spaces: sampleSnapshot.spaces,
         workspaces: const [],
         unreadNotificationCount: 0,
         isDarkTheme: true,
@@ -76,8 +76,8 @@ void main() {
                 shellContext: shellContext,
                 searchController: controller,
                 onNavigateTo: (_) {},
-                onToggleProjectExpanded: (_) {},
-                onCreateProject: () {},
+                onToggleSpaceExpanded: (_) {},
+                onCreateSpace: () {},
                 onClearSearch: () => controller.clear(),
                 onLogout: () {},
                 onOpenAbout: () {},
@@ -126,15 +126,15 @@ void main() {
           home: Scaffold(
             body: SearchPage(
               query: 'auth',
-              projects: sampleSnapshot.projects,
+              spaces: sampleSnapshot.spaces,
               workspaces: sampleSnapshot.workspaces,
               run: sampleSnapshot.run,
-              workstreamsByProject: {
-                for (final project in sampleSnapshot.projects)
-                  project.id: project.workstreams
+              threadsBySpace: {
+                for (final space in sampleSnapshot.spaces)
+                  space.id: space.threads
               },
               onNavigateTo: (nav) => navigatedTarget = nav,
-              onSelectProject: (_) {},
+              onSelectSpace: (_) {},
               onClearSearch: () => searchCleared = true,
             ),
           ),
@@ -144,18 +144,18 @@ void main() {
       expect(find.text('Search Results'), findsOneWidget);
       expect(find.textContaining('for "auth"'), findsOneWidget);
 
-      // Should find workstream 'Authentication redesign'
+      // Should find thread 'Authentication redesign'
       expect(find.text('Authentication redesign'), findsOneWidget);
-      expect(find.text('WORKSTREAMS'), findsOneWidget);
+      expect(find.text('THREADS'), findsOneWidget);
 
-      // Tap the workstream result
+      // Tap the thread result
       await tester.tap(find.text('Authentication redesign'));
       await tester.pumpAndSettle();
 
       expect(searchCleared, isTrue);
       expect(
         navigatedTarget,
-        const AxNavigation.workstream('proj-1', 'ws-1'),
+        const AxNavigation.thread('proj-1', 'ws-1'),
       );
     });
 
@@ -169,15 +169,15 @@ void main() {
           home: Scaffold(
             body: SearchPage(
               query: 'nonexistentquery123',
-              projects: sampleSnapshot.projects,
+              spaces: sampleSnapshot.spaces,
               workspaces: sampleSnapshot.workspaces,
               run: sampleSnapshot.run,
-              workstreamsByProject: {
-                for (final project in sampleSnapshot.projects)
-                  project.id: project.workstreams
+              threadsBySpace: {
+                for (final space in sampleSnapshot.spaces)
+                  space.id: space.threads
               },
               onNavigateTo: (_) {},
-              onSelectProject: (_) {},
+              onSelectSpace: (_) {},
               onClearSearch: () => searchCleared = true,
             ),
           ),

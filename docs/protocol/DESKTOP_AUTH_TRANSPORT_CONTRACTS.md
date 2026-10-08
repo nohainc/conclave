@@ -169,7 +169,7 @@ not revoked.
 requires a desktop human session created within the last five minutes, the
 same authoritative owner, the exact installation/Workspace/runtime binding,
 and no active assignments. Cloud first fences the Workspace from scheduling,
-then revokes runtime identities, disconnects the Gateway, revokes Project
+then revokes runtime identities, disconnects the Gateway, revokes Space
 grants, marks the stable installation ownership record released, clears legacy
 runtime installation bindings, and records an audit event. It does not
 delete local Worker records, provider CLI sign-in state, or Work Root files. A

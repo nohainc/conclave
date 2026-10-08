@@ -97,7 +97,7 @@ void main() {
     expect(
       tester
           .widget<FilterChip>(
-            find.widgetWithText(FilterChip, 'workstream_write'),
+            find.widgetWithText(FilterChip, 'thread_write'),
           )
           .selected,
       isFalse,

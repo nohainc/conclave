@@ -17,7 +17,7 @@ class GlobalAppMenu extends StatelessWidget {
     required this.onOpenAbout,
     required this.onOpenExternal,
     required this.onLogout,
-    this.onOpenArchivedProjects,
+    this.onOpenArchivedSpaces,
     this.compact = false,
   });
 
@@ -28,7 +28,7 @@ class GlobalAppMenu extends StatelessWidget {
   final VoidCallback onOpenAbout;
   final ValueChanged<Uri> onOpenExternal;
   final VoidCallback onLogout;
-  final VoidCallback? onOpenArchivedProjects;
+  final VoidCallback? onOpenArchivedSpaces;
   final bool compact;
 
   @override
@@ -139,9 +139,9 @@ class GlobalAppMenu extends StatelessWidget {
             size: 16,
             color: menuIconColor,
           ),
-          onPressed: onOpenArchivedProjects,
+          onPressed: onOpenArchivedSpaces,
           child: const Text(
-            'Archived Projects',
+            'Archived Spaces',
             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
           ),
         ),

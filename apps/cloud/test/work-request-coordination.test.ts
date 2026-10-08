@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/routes/handlers.js", async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  authorizeWorkstreamAccess: async () => ({
+  authorizeThreadAccess: async () => ({
     context: { userId: "owner" },
-    projectId: "project",
+    spaceId: "space",
   }),
   validateWorkflowWorkerEligibility: async () => ({
     issues: [],
@@ -44,10 +44,10 @@ function fixture(coordinatorAvailable = true) {
                   },
                 }),
               };
-            if (sql.includes("project_memberships")) return { role: "owner" };
+            if (sql.includes("space_memberships")) return { role: "owner" };
             if (sql.includes("config_json"))
               return { configJson: JSON.stringify({ bindings: {} }) };
-            if (sql.includes("workstream_execution_policies"))
+            if (sql.includes("thread_execution_policies"))
               return {
                 mode: "stateful",
                 primaryWorkspaceId: "different-workspace",
@@ -68,7 +68,7 @@ function fixture(coordinatorAvailable = true) {
     CONCLAVE_RUN_WORKFLOW: { create },
     ...(coordinatorAvailable
       ? {
-          CONCLAVE_WORKSTREAM_COORDINATOR: {
+          CONCLAVE_THREAD_COORDINATOR: {
             getByName: () => ({ fetch: enqueue }),
           },
         }
@@ -107,9 +107,9 @@ describe("Work Request mutation coordination", () => {
         writes.find((w) => w.sql.includes("INSERT INTO work_requests"))
           ?.values[3],
       ).toBe("stateless");
-      expect(
-        writes.some((w) => w.sql.includes("workstream_runtime_leases")),
-      ).toBe(false);
+      expect(writes.some((w) => w.sql.includes("thread_runtime_leases"))).toBe(
+        false,
+      );
     },
   );
 

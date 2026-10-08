@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  sendProjectInvitationEmail,
+  sendSpaceInvitationEmail,
   resolveAppUrl,
 } from "../src/invitation-email.js";
-import { handleCreateProjectInvitation } from "../src/routes/projects.js";
+import { handleCreateSpaceInvitation } from "../src/routes/spaces.js";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 
 describe("Invitation Email Delivery", () => {
   it("resolves app URL from CONCLAVE_APP_URL, BETTER_AUTH_URL, or request URL", () => {
     const req = new Request(
-      "https://conclave.internal/api/projects/proj-1/invitations",
+      "https://conclave.internal/api/spaces/proj-1/invitations",
     );
     expect(
       resolveAppUrl(req, {
@@ -44,10 +44,10 @@ describe("Invitation Email Delivery", () => {
       CONCLAVE_EMAIL_FROM: "invitations@conclaveax.com",
     };
 
-    const ok = await sendProjectInvitationEmail(env as never, {
+    const ok = await sendSpaceInvitationEmail(env as never, {
       recipientEmail: "ulikossnokia@gmail.com",
       inviterName: "Vitalii Noha",
-      projectName: "Conclave AX Development",
+      spaceName: "Conclave AX Development",
       role: "collaborator",
       appUrl: "https://app.conclave.dev/?invitation=pinv-123",
     });
@@ -91,10 +91,10 @@ describe("Invitation Email Delivery", () => {
       CONCLAVE_EMAIL: mockEmail,
     };
 
-    await sendProjectInvitationEmail(env as never, {
+    await sendSpaceInvitationEmail(env as never, {
       recipientEmail: "malicious<script>@example.com",
       inviterName: "<script>alert('xss')</script>",
-      projectName: "Project <img src=x onerror=alert(1)>",
+      spaceName: "Space <img src=x onerror=alert(1)>",
       role: "viewer",
       appUrl: "https://app.conclave.dev/?invitation=pinv-xss",
     });
@@ -104,19 +104,19 @@ describe("Invitation Email Delivery", () => {
     expect(sent.html).toContain(
       "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;",
     );
-    expect(sent.html).toContain("Project &lt;img src=x onerror=alert(1)&gt;");
+    expect(sent.html).toContain("Space &lt;img src=x onerror=alert(1)&gt;");
   });
 
-  it("sends email and creates invitation on handleCreateProjectInvitation", async () => {
+  it("sends email and creates invitation on handleCreateSpaceInvitation", async () => {
     const { sqlite, db } = sqliteD1();
     const now = new Date().toISOString();
 
     sqlite.exec(`
       INSERT INTO users (id, email, display_name, status, created_at, updated_at)
       VALUES ('user-vitalii', 'vitalii@nohainc.com', 'Vitalii Noha', 'active', '${now}', '${now}');
-      INSERT INTO projects (id, name, owner_user_id, created_at, updated_at)
+      INSERT INTO spaces (id, name, owner_user_id, created_at, updated_at)
       VALUES ('proj-1', 'Conclave AX Development', 'user-vitalii', '${now}', '${now}');
-      INSERT INTO project_memberships (id, project_id, user_id, role, created_at, updated_at)
+      INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at)
       VALUES ('pm-1', 'proj-1', 'user-vitalii', 'owner', '${now}', '${now}');
     `);
 
@@ -139,14 +139,14 @@ describe("Invitation Email Delivery", () => {
           status: "active",
         },
         workspaceId: "",
-        projectRoles: { "proj-1": "owner" },
+        spaceRoles: { "proj-1": "owner" },
         sessionId: "sess-vitalii",
         clientType: "web",
       }),
     };
 
     const req = new Request(
-      "https://conclave.internal/api/projects/proj-1/invitations",
+      "https://conclave.internal/api/spaces/proj-1/invitations",
       {
         method: "POST",
         headers: {
@@ -160,11 +160,7 @@ describe("Invitation Email Delivery", () => {
       },
     );
 
-    const res = await handleCreateProjectInvitation(
-      req,
-      env as never,
-      "proj-1",
-    );
+    const res = await handleCreateSpaceInvitation(req, env as never, "proj-1");
     expect(res.status).toBe(201);
     expect(sentEmails).toHaveLength(1);
     expect(sentEmails[0]).toMatchObject({

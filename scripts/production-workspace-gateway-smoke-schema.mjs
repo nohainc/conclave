@@ -80,7 +80,7 @@ export const requiredProductionSmokeColumns = Object.freeze({
   ],
   conversations: [
     "id",
-    "workstream_id",
+    "thread_id",
     "workflow_id",
     "workflow_version",
     "conversation_revision",

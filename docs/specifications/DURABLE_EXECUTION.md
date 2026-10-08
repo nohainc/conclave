@@ -7,7 +7,7 @@ coordination state and does not replace persisted domain records.
 
 ## Lifecycle
 
-A Work Request is created for a Workstream under the frozen [Work v1
+A Work Request is created for a Thread under the frozen [Work v1
 contract](WORK_V1_CONTRACT.md). Cloud records the request, workflow snapshot,
 run, task, and assignment state. The Workflow advances the request through its
 configured steps and waits for Workspace execution, evidence, approvals, or

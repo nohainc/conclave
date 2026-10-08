@@ -44,14 +44,14 @@ void main() {
     return state.store as AxStore;
   }
 
-  for (final projectPage in [true, false]) {
+  for (final spacePage in [true, false]) {
     testWidgets(
-        'Worker update leaves shell, sidebar, ${projectPage ? 'Project' : 'Chat and Work history'} untouched',
+        'Worker update leaves shell, sidebar, ${spacePage ? 'Space' : 'Chat and Work history'} untouched',
         (tester) async {
-      final project = axFixtureSnapshot().projects.first;
-      final route = projectPage
-          ? '/projects/${project.id}'
-          : '/projects/${project.id}/workstreams/${project.workstreams.first.id}';
+      final space = axFixtureSnapshot().spaces.first;
+      final route = spacePage
+          ? '/spaces/${space.id}'
+          : '/spaces/${space.id}/threads/${space.threads.first.id}';
       final store = await shell(tester, route);
       observe();
       builds.clear();
@@ -70,16 +70,16 @@ void main() {
         'ConclaveAppShell',
         'MaterialApp',
         'AxSidebar',
-        'ProjectTree',
-        'ProjectPage',
-        'WorkstreamPage',
+        'SpaceTree',
+        'SpacePage',
+        'ThreadPage',
         'AxDiscussionBuilder',
         'work-history-scroll'
       ]) {
         expect(builds[type] ?? 0, 0,
             reason: '$type must not rebuild for Worker inventory');
       }
-      if (!projectPage) {
+      if (!spacePage) {
         expect(builds['ListenableBuilder'] ?? 0, greaterThan(0));
       }
       await tester.pumpWidget(const SizedBox());
@@ -89,47 +89,46 @@ void main() {
   testWidgets(
       'Work history and Discussion update their own panes independently',
       (tester) async {
-    final project = axFixtureSnapshot().projects.first;
-    final id = project.workstreams.first.id;
-    final store =
-        await shell(tester, '/projects/${project.id}/workstreams/$id');
+    final space = axFixtureSnapshot().spaces.first;
+    final id = space.threads.first.id;
+    final store = await shell(tester, '/spaces/${space.id}/threads/$id');
     observe();
     builds.clear();
     store.workHistory.replace(id, []);
     await tester.pumpAndSettle();
     expect(builds['work-history-scroll'] ?? 0, greaterThan(0));
     expect(builds['AxDiscussionBuilder'] ?? 0, 0);
-    expect(builds['WorkstreamPage'] ?? 0, 0);
+    expect(builds['ThreadPage'] ?? 0, 0);
     expect(builds['ConclaveAppShell'] ?? 0, 0);
     builds.clear();
     await store.discussion.synchronize(id, reconcileNewest: true);
     await tester.pumpAndSettle();
     expect(builds['AxDiscussionBuilder'] ?? 0, greaterThan(0));
     expect(builds['work-history-scroll'] ?? 0, 0);
-    expect(builds['WorkstreamPage'] ?? 0, 0);
+    expect(builds['ThreadPage'] ?? 0, 0);
     await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets(
-      'Project list updates only its consumers and remains current in sidebar',
+      'Space list updates only its consumers and remains current in sidebar',
       (tester) async {
-    final project = axFixtureSnapshot().projects.first;
-    final store = await shell(tester, '/projects/${project.id}');
+    final space = axFixtureSnapshot().spaces.first;
+    final store = await shell(tester, '/spaces/${space.id}');
     observe();
     builds.clear();
-    store.projects.replace([project.copyWith(name: 'Updated in background')]);
+    store.spaces.replace([space.copyWith(name: 'Updated in background')]);
     await tester.pumpAndSettle();
     expect(find.text('Updated in background'), findsOneWidget);
     expect(builds['ConclaveAppShell'] ?? 0, 0);
     expect(builds['AxSidebar'] ?? 0, 0);
-    expect(builds['ProjectPage'] ?? 0, 0);
+    expect(builds['SpacePage'] ?? 0, 0);
     expect(
-        builds['ValueListenableBuilder<List<AxProject>>'] ?? 0, greaterThan(0));
+        builds['ValueListenableBuilder<List<AxSpace>>'] ?? 0, greaterThan(0));
     await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets(
-      'Workspace consumers update counts without rebuilding shell or Project tree',
+      'Workspace consumers update counts without rebuilding shell or Space tree',
       (tester) async {
     final store = await shell(tester, '/workspaces');
     observe();
@@ -142,17 +141,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(builds['WorkspacesPage'] ?? 0, greaterThan(0));
     expect(builds['ConclaveAppShell'] ?? 0, 0);
-    expect(builds['ProjectTree'] ?? 0, 0);
+    expect(builds['SpaceTree'] ?? 0, 0);
     await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets(
       'Workflow publication updates controls without rebuilding Chat or history',
       (tester) async {
-    final project = axFixtureSnapshot().projects.first;
-    final id = project.workstreams.first.id;
-    final store =
-        await shell(tester, '/projects/${project.id}/workstreams/$id');
+    final space = axFixtureSnapshot().spaces.first;
+    final id = space.threads.first.id;
+    final store = await shell(tester, '/spaces/${space.id}/threads/$id');
     observe();
     builds.clear();
     store.syncEngine.update(
@@ -167,7 +165,7 @@ void main() {
       'ConclaveAppShell',
       'AxSidebar',
       'AxDiscussionBuilder',
-      'WorkstreamPage',
+      'ThreadPage',
       'work-history-scroll'
     ]) {
       expect(builds[type] ?? 0, 0, reason: type);
@@ -177,8 +175,8 @@ void main() {
 
   testWidgets('reconnect status and notification count update locally',
       (tester) async {
-    final project = axFixtureSnapshot().projects.first;
-    final store = await shell(tester, '/projects/${project.id}');
+    final space = axFixtureSnapshot().spaces.first;
+    final store = await shell(tester, '/spaces/${space.id}');
     observe();
     builds.clear();
     store.realtimeStatus.value = (true, 'Reconnecting selected resources');
@@ -188,8 +186,8 @@ void main() {
     for (final type in [
       'ConclaveAppShell',
       'AxSidebar',
-      'ProjectTree',
-      'ProjectPage'
+      'SpaceTree',
+      'SpacePage'
     ]) {
       expect(builds[type] ?? 0, 0, reason: type);
     }
@@ -197,21 +195,20 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  test('Project/Workspace list writes do not notify the execution projection',
+  test('Space/Workspace list writes do not notify the execution projection',
       () {
     final store = AxStore(SelectiveSource());
     var executionUpdates = 0;
     store.executionChanges.addListener(() => executionUpdates++);
     final fixture = axFixtureSnapshot();
-    store.projects.replace(fixture.projects);
+    store.spaces.replace(fixture.spaces);
     store.workspaces.replace(fixture.workspaces);
     store.replaceExecution(fixture);
     final previous = executionUpdates;
-    store.projects
-        .replace([store.projects.items.first.copyWith(name: 'Renamed')]);
+    store.spaces.replace([store.spaces.items.first.copyWith(name: 'Renamed')]);
     store.workspaces.replace([]);
     expect(executionUpdates, previous);
-    expect(store.projects.items.first.name, 'Renamed');
+    expect(store.spaces.items.first.name, 'Renamed');
     store.dispose();
   });
 
@@ -219,32 +216,31 @@ void main() {
       () {
     final store = AxStore(SelectiveSource());
     final fixture = axFixtureSnapshot();
-    final renamed = fixture.projects.first.copyWith(name: 'Cached project');
-    store.projects.replace([renamed]);
+    final renamed = fixture.spaces.first.copyWith(name: 'Cached space');
+    store.spaces.replace([renamed]);
     store.workspaces.replace(fixture.workspaces);
     store.auth.replace(fixture.viewer);
     store.replaceExecution(fixture);
-    expect(store.projects.items.single.name, 'Cached project');
+    expect(store.spaces.items.single.name, 'Cached space');
     expect(store.workspaces.items, fixture.workspaces);
     expect(store.auth.viewer, fixture.viewer);
-    expect(store.execution.projects, isEmpty);
+    expect(store.execution.spaces, isEmpty);
     expect(store.execution.workspaces, isEmpty);
     expect(store.execution.viewer, isNull);
     expect(() => store.execution.tasks.clear(), throwsUnsupportedError);
     store.dispose();
   });
 
-  test('bootstrap populates independent stores without nested Workstreams',
+  test('bootstrap populates independent stores without nested Threads',
       () async {
     final store = AxStore(SelectiveSource());
     final loaded = await store.loadBootstrapState();
-    expect(store.projects.items.map((project) => project.id),
-        loaded.projects.map((project) => project.id));
+    expect(store.spaces.items.map((space) => space.id),
+        loaded.spaces.map((space) => space.id));
     expect(store.workspaces.items, loaded.workspaces);
     expect(store.auth.viewer, loaded.viewer);
-    expect(store.projects.items.every((project) => project.workstreams.isEmpty),
-        isTrue);
-    expect(store.execution.projects, isEmpty);
+    expect(store.spaces.items.every((space) => space.threads.isEmpty), isTrue);
+    expect(store.execution.spaces, isEmpty);
     expect(store.execution.workspaces, isEmpty);
     store.dispose();
   });
@@ -252,24 +248,24 @@ void main() {
   test('cleared/disposed lists reject late reads', () async {
     final source = PendingLists();
     final store = AxStore(source);
-    final projects = store.projects.refresh();
+    final spaces = store.spaces.refresh();
     final workspaces = store.workspaces.list();
     store.clearServerState();
-    source.projects.complete(axFixtureSnapshot().projects);
+    source.spaces.complete(axFixtureSnapshot().spaces);
     source.workspaces.complete(axFixtureSnapshot().workspaces);
-    await Future.wait([projects, workspaces]);
-    expect(store.projects.items, isEmpty);
+    await Future.wait([spaces, workspaces]);
+    expect(store.spaces.items, isEmpty);
     expect(store.workspaces.items, isEmpty);
     store.dispose();
   });
 }
 
 class PendingLists extends AxFixtureDataSource {
-  final projects = Completer<List<AxProject>>();
+  final spaces = Completer<List<AxSpace>>();
   final workspaces = Completer<List<AxWorkspace>>();
   @override
-  Future<List<AxProject>> loadProjects({bool includeArchived = false}) =>
-      projects.future;
+  Future<List<AxSpace>> loadSpaces({bool includeArchived = false}) =>
+      spaces.future;
   @override
   Future<List<AxWorkspace>> loadWorkspaces() => workspaces.future;
 }

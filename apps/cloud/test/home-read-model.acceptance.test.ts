@@ -15,48 +15,48 @@ vi.mock("../src/routes/handlers.js", async (original) => ({
 
 import { handleGetHomeReadModel } from "../src/routes/home.js";
 
-it("projects authorized Home read model with attention, running, recentWork, productUpdates, and aiUpdates", async () => {
+it("spaces authorized Home read model with attention, running, recentWork, productUpdates, and aiUpdates", async () => {
   const sqlite = new DatabaseSync(":memory:");
   try {
     sqlite.exec(`
       CREATE TABLE users (id TEXT, email TEXT, display_name TEXT, status TEXT);
-      CREATE TABLE projects (id TEXT, name TEXT, description TEXT, settings_json TEXT, created_at TEXT, updated_at TEXT);
-      CREATE TABLE project_memberships (id TEXT, project_id TEXT, user_id TEXT, role TEXT, created_at TEXT, updated_at TEXT);
-      CREATE TABLE project_invitations (id TEXT, project_id TEXT, email TEXT, role TEXT, status TEXT, invited_by_user_id TEXT, expires_at TEXT, created_at TEXT, updated_at TEXT);
-      CREATE TABLE workstreams (id TEXT, project_id TEXT, name TEXT, status TEXT, access_policy_json TEXT, lead_user_id TEXT, created_at TEXT, updated_at TEXT);
-      CREATE TABLE work_requests (id TEXT, project_id TEXT, workstream_id TEXT, requested_by_user_id TEXT, workflow_id TEXT, workflow_version TEXT, workflow_snapshot_json TEXT, snapshot_json TEXT, input_json TEXT, status TEXT, created_at TEXT, updated_at TEXT);
-      CREATE TABLE discussion_messages (id TEXT, workstream_id TEXT, user_id TEXT, content TEXT, created_at TEXT, updated_at TEXT);
+      CREATE TABLE spaces (id TEXT, name TEXT, description TEXT, settings_json TEXT, created_at TEXT, updated_at TEXT);
+      CREATE TABLE space_memberships (id TEXT, space_id TEXT, user_id TEXT, role TEXT, created_at TEXT, updated_at TEXT);
+      CREATE TABLE space_invitations (id TEXT, space_id TEXT, email TEXT, role TEXT, status TEXT, invited_by_user_id TEXT, expires_at TEXT, created_at TEXT, updated_at TEXT);
+      CREATE TABLE threads (id TEXT, space_id TEXT, name TEXT, status TEXT, access_policy_json TEXT, lead_user_id TEXT, created_at TEXT, updated_at TEXT);
+      CREATE TABLE work_requests (id TEXT, space_id TEXT, thread_id TEXT, requested_by_user_id TEXT, workflow_id TEXT, workflow_version TEXT, workflow_snapshot_json TEXT, snapshot_json TEXT, input_json TEXT, status TEXT, created_at TEXT, updated_at TEXT);
+      CREATE TABLE discussion_messages (id TEXT, thread_id TEXT, user_id TEXT, content TEXT, created_at TEXT, updated_at TEXT);
       CREATE TABLE conversation_history_entries (id TEXT, work_request_id TEXT, conversation_id TEXT, kind TEXT, text TEXT, created_at TEXT);
-      CREATE TABLE conversation_work_requests (work_request_id TEXT, conversation_id TEXT, workstream_id TEXT);
+      CREATE TABLE conversation_work_requests (work_request_id TEXT, conversation_id TEXT, thread_id TEXT);
 
       -- Users
       INSERT INTO users VALUES ('user-123', 'vitalii@nohainc.com', 'Vitalii', 'active');
       INSERT INTO users VALUES ('user-inviter', 'julia@nohainc.com', 'Julia', 'active');
 
-      -- Authorized Project
-      INSERT INTO projects VALUES ('proj-auth', 'Authorized Project', 'Active project', '{"archived":false}', '2026-10-01T00:00:00Z', '2026-10-08T00:00:00Z');
-      INSERT INTO project_memberships VALUES ('pm-1', 'proj-auth', 'user-123', 'owner', '2026-10-01T00:00:00Z', '2026-10-08T00:00:00Z');
+      -- Authorized Space
+      INSERT INTO spaces VALUES ('proj-auth', 'Authorized Space', 'Active space', '{"archived":false}', '2026-10-01T00:00:00Z', '2026-10-08T00:00:00Z');
+      INSERT INTO space_memberships VALUES ('pm-1', 'proj-auth', 'user-123', 'owner', '2026-10-01T00:00:00Z', '2026-10-08T00:00:00Z');
 
-      -- Revoked / Unauthorized Project (user is not a member)
-      INSERT INTO projects VALUES ('proj-revoked', 'Revoked Project', 'Revoked', '{"archived":false}', '2026-10-01T00:00:00Z', '2026-10-08T00:00:00Z');
+      -- Revoked / Unauthorized Space (user is not a member)
+      INSERT INTO spaces VALUES ('proj-revoked', 'Revoked Space', 'Revoked', '{"archived":false}', '2026-10-01T00:00:00Z', '2026-10-08T00:00:00Z');
 
       -- Pending Invitation for user
-      INSERT INTO project_invitations VALUES ('inv-1', 'proj-auth', 'vitalii@nohainc.com', 'editor', 'pending', 'user-inviter', '2026-11-01T00:00:00Z', '2026-10-08T00:00:00Z', '2026-10-08T00:00:00Z');
+      INSERT INTO space_invitations VALUES ('inv-1', 'proj-auth', 'vitalii@nohainc.com', 'editor', 'pending', 'user-inviter', '2026-11-01T00:00:00Z', '2026-10-08T00:00:00Z', '2026-10-08T00:00:00Z');
 
-      -- Workstream in authorized project
-      INSERT INTO workstreams VALUES ('ws-auth', 'proj-auth', 'Core Architecture', 'active', '{}', 'user-123', '2026-10-02T00:00:00Z', '2026-10-08T05:00:00Z');
+      -- Thread in authorized space
+      INSERT INTO threads VALUES ('ws-auth', 'proj-auth', 'Core Architecture', 'active', '{}', 'user-123', '2026-10-02T00:00:00Z', '2026-10-08T05:00:00Z');
       INSERT INTO discussion_messages VALUES ('msg-1', 'ws-auth', 'user-123', 'Home read model projection complete.', '2026-10-08T05:00:00Z', '2026-10-08T05:00:00Z');
 
-      -- Workstream in revoked project (must NOT appear)
-      INSERT INTO workstreams VALUES ('ws-revoked', 'proj-revoked', 'Secret Workstream', 'active', '{}', 'other', '2026-10-02T00:00:00Z', '2026-10-08T05:00:00Z');
+      -- Thread in revoked space (must NOT appear)
+      INSERT INTO threads VALUES ('ws-revoked', 'proj-revoked', 'Secret Thread', 'active', '{}', 'other', '2026-10-02T00:00:00Z', '2026-10-08T05:00:00Z');
 
-      -- Active Run in authorized project
+      -- Active Run in authorized space
       INSERT INTO work_requests VALUES ('run-active', 'proj-auth', 'ws-auth', 'user-123', 'full_cycle', '1.0.0', '{}', '{}', '{"objective":"Building Home API projection"}', 'running', '2026-10-08T05:10:00Z', '2026-10-08T05:10:00Z');
 
-      -- Active Run in revoked project (must NOT appear)
+      -- Active Run in revoked space (must NOT appear)
       INSERT INTO work_requests VALUES ('run-secret', 'proj-revoked', 'ws-revoked', 'other', 'full_cycle', '1.0.0', '{}', '{}', '{"objective":"Secret Execution"}', 'running', '2026-10-08T05:10:00Z', '2026-10-08T05:10:00Z');
 
-      -- Failed execution in authorized project (attention item)
+      -- Failed execution in authorized space (attention item)
       INSERT INTO work_requests VALUES ('run-failed', 'proj-auth', 'ws-auth', 'user-123', 'full_cycle', '1.0.0', '{}', '{}', '{"objective":"Flaky task"}', 'failed', '2026-10-08T04:00:00Z', '2026-10-08T04:30:00Z');
     `);
 
@@ -105,34 +105,33 @@ it("projects authorized Home read model with attention, running, recentWork, pro
     expect(
       data.attention.some(
         (it) =>
-          it.type === "project_invitation" &&
-          String(it.title).includes("Julia"),
+          it.type === "space_invitation" && String(it.title).includes("Julia"),
       ),
     ).toBe(true);
     expect(
       data.attention.some(
-        (it) => it.type === "execution_failed" && it.projectId === "proj-auth",
+        (it) => it.type === "execution_failed" && it.spaceId === "proj-auth",
       ),
     ).toBe(true);
-    expect(data.attention.some((it) => it.projectId === "proj-revoked")).toBe(
+    expect(data.attention.some((it) => it.spaceId === "proj-revoked")).toBe(
       false,
     );
 
-    // 3. Running contains authorized active run and excludes revoked project run
+    // 3. Running contains authorized active run and excludes revoked space run
     expect(data.running).toHaveLength(1);
     expect(data.running[0]).toMatchObject({
       id: "run-active",
-      projectId: "proj-auth",
+      spaceId: "proj-auth",
       status: "running",
       objective: "Building Home API projection",
     });
 
-    // 4. Recent Work contains Core Architecture and snippet, and excludes revoked project workstream
+    // 4. Recent Work contains Core Architecture and snippet, and excludes revoked space thread
     expect(data.recentWork).toHaveLength(1);
     expect(data.recentWork[0]).toMatchObject({
-      projectId: "proj-auth",
-      workstreamId: "ws-auth",
-      workstreamTitle: "Core Architecture",
+      spaceId: "proj-auth",
+      threadId: "ws-auth",
+      threadTitle: "Core Architecture",
       lastMessageSnippet: "Home read model projection complete.",
     });
 

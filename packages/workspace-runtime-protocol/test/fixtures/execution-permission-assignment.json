@@ -1,6 +1,6 @@
 {
   "assignmentId": "assignment-permission-contract",
-  "projectId": "project-permission-contract",
+  "spaceId": "space-permission-contract",
   "executionWorkspaceId": "workspace-permission-contract",
   "workspaceRuntimeId": "runtime-permission-contract",
   "workerId": "worker-permission-contract",
@@ -12,7 +12,7 @@
   "executionClass": "stateless_read",
   "permissions": ["repository:read"],
   "permissionSnapshot": {
-    "projectId": "project-permission-contract",
+    "spaceId": "space-permission-contract",
     "workspaceId": "workspace-permission-contract",
     "grantId": "grant-permission-contract",
     "requesterUserId": "user-permission-contract",

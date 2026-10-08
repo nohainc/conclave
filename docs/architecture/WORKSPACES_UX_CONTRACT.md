@@ -6,13 +6,13 @@
 
 ## Product contract
 
-The top-level execution-capacity page is **Workspaces**. Each Workspace card groups its machine status, locally owned Workers, Project grants, and recent execution activity. AX reads safe Cloud projections; it does not manage local Worker setup or machine process state.
+The top-level execution-capacity page is **Workspaces**. Each Workspace card groups its machine status, locally owned Workers, Space grants, and recent execution activity. AX reads safe Cloud projections; it does not manage local Worker setup or machine process state.
 
 - Workspace represents one registered machine runtime and has one Cloud owner.
 - Each logical Worker belongs to exactly one Workspace.
 - Worker inventory and readiness are reported by Workspace. AX does not probe provider CLIs or start assignments directly.
-- Project owners grant Workspaces access to Projects. Workstreams bind logical Worker IDs under Cloud authorization.
-- Stateful Workstreams use their configured Workspace. Stateless execution may use another authorized Workspace when the Work policy permits it.
+- Space owners grant Workspaces access to Spaces. Threads bind logical Worker IDs under Cloud authorization.
+- Stateful Threads use their configured Workspace. Stateless execution may use another authorized Workspace when the Work policy permits it.
 - Workspace registration and local recovery are managed by the Conclave Workspace desktop application.
 
 ## Workspace overview model
@@ -25,7 +25,7 @@ WorkspaceOverview {
   workspace: WorkspaceSummary
   runtime: WorkspaceRuntimeSummary
   workers: List<WorkspaceWorkerSummary>
-  projectGrants: List<WorkspaceProjectGrantSummary>
+  spaceGrants: List<WorkspaceSpaceGrantSummary>
   activity: WorkspaceActivitySummary
 }
 ~~~
@@ -38,21 +38,21 @@ WorkspaceOverview {
 
 Activation and readiness are independent. Disabling a Worker does not erase its readiness result. Cloud scheduling state and limits are separate Cloud-owned controls.
 
-The Cloud Worker API is versionless. `GET /api/workers` returns safe inventory; scheduling controls remain Cloud-owned. Workstream Work configuration binds `direct` and the five Work v1 Steps to logical Worker IDs.
+The Cloud Worker API is versionless. `GET /api/workers` returns safe inventory; scheduling controls remain Cloud-owned. Thread Work configuration binds `direct` and the five Work v1 Steps to logical Worker IDs.
 
 ## Workspace page behavior
 
 - `/workspaces` is the canonical collection route.
 - `/workspaces/:workspaceId` opens the collection with the selected Workspace expanded and focused.
 - Workers appear only within their owning Workspace card.
-- The page may show connection state, safe machine facts, Worker readiness, Project access, and activity counts.
+- The page may show connection state, safe machine facts, Worker readiness, Space access, and activity counts.
 - Empty state directs the user to install and sign in to Conclave Workspace, which registers the machine.
 - An offline registered Workspace remains visible as offline. Reconnection and ownership recovery are handled by the desktop app.
 - AX does not expose local Worker setup, credentials, process controls, local paths, or machine repair actions.
 
-## Workstream execution configuration
+## Thread execution configuration
 
-Workstream configuration is Cloud-owned and constrained by the [Work v1 Contract](../specifications/WORK_V1_CONTRACT.md). A binding names a local Worker ID. It may also retain a display-name snapshot for explaining a binding whose Worker is no longer available; that snapshot is presentation-only and never affects authorization or scheduling. It does not contain an Engine version, Profile release, provider executable path, or secret.
+Thread configuration is Cloud-owned and constrained by the [Work v1 Contract](../specifications/WORK_V1_CONTRACT.md). A binding names a local Worker ID. It may also retain a display-name snapshot for explaining a binding whose Worker is no longer available; that snapshot is presentation-only and never affects authorization or scheduling. It does not contain an Engine version, Profile release, provider executable path, or secret.
 
 ~~~json
 {
@@ -75,7 +75,7 @@ Workstream configuration is Cloud-owned and constrained by the [Work v1 Contract
 }
 ~~~
 
-Cloud checks a Workstream's Project access and Workspace grants before scheduling. Workspace enforces its local readiness, permissions, concurrency limit, and process lifecycle. AX may suggest bindings from ready logical Workers; suggestions are ordinary editable Workstream settings.
+Cloud checks a Thread's Space access and Workspace grants before scheduling. Workspace enforces its local readiness, permissions, concurrency limit, and process lifecycle. AX may suggest bindings from ready logical Workers; suggestions are ordinary editable Thread settings.
 
 ## Ownership boundaries
 
@@ -86,8 +86,8 @@ Cloud checks a Workstream's Project access and Workspace grants before schedulin
 | Machine facts | Workspace reports; Cloud stores safe facts | Show concise, non-secret details |
 | Worker setup, activation, and readiness | Workspace | Show safe inventory and status |
 | Provider CLI authentication | Provider CLI on the Workspace machine | Never read or write credentials in AX |
-| Project membership and Workspace grants | Cloud | Provide authorized Project controls |
-| Workstream Worker bindings and scheduling | Cloud | Provide Workstream execution settings |
+| Space membership and Workspace grants | Cloud | Provide authorized Space controls |
+| Thread Worker bindings and scheduling | Cloud | Provide Thread execution settings |
 | Work Root, local files, processes, and logs | Workspace | Do not expose local paths or secrets in ordinary AX UI |
 
 ## Connection display

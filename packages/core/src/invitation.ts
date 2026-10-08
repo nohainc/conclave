@@ -1,5 +1,5 @@
 import { DomainInvariantError } from "./domain-error.js";
-import type { ProjectRole } from "./project.js";
+import type { SpaceRole } from "./space.js";
 
 export const INVITATION_STATUSES = [
   "pending",
@@ -11,16 +11,16 @@ export const INVITATION_STATUSES = [
 
 export type InvitationStatus = (typeof INVITATION_STATUSES)[number];
 
-export const VALID_INVITATION_ROLES: readonly ProjectRole[] = [
+export const VALID_INVITATION_ROLES: readonly SpaceRole[] = [
   "collaborator",
   "viewer",
 ] as const;
 
-export interface ProjectInvitation {
+export interface SpaceInvitation {
   readonly id: string;
-  readonly projectId: string;
+  readonly spaceId: string;
   readonly email: string;
-  readonly role: ProjectRole;
+  readonly role: SpaceRole;
   readonly invitedByUserId: string;
   readonly status: InvitationStatus;
   readonly expiresAt: string;
@@ -99,22 +99,22 @@ export function validateInvitationTransition(
 }
 
 /**
- * Validates new project invitation creation payload.
+ * Validates new space invitation creation payload.
  */
 export function validateInvitationCreation(params: {
-  projectId: string;
+  spaceId: string;
   email: string;
   role: string;
   invitedByUserId: string;
   expiresAt?: string;
 }): void {
-  if (!params.projectId || !params.projectId.trim()) {
-    throw new DomainInvariantError("Project ID is required for invitation");
+  if (!params.spaceId || !params.spaceId.trim()) {
+    throw new DomainInvariantError("Space ID is required for invitation");
   }
   if (!params.invitedByUserId || !params.invitedByUserId.trim()) {
     throw new DomainInvariantError("Invited by user ID is required");
   }
-  if (!VALID_INVITATION_ROLES.includes(params.role as ProjectRole)) {
+  if (!VALID_INVITATION_ROLES.includes(params.role as SpaceRole)) {
     throw new DomainInvariantError(
       `Invalid invitation role '${params.role}'. Must be 'collaborator' or 'viewer'`,
     );

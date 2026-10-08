@@ -15,8 +15,8 @@ class _BrowserRealtimeClient implements RealtimeClient {
   final _events = StreamController<Map<String, dynamic>>.broadcast();
   html.WebSocket? _socket;
   Uri? _endpoint;
-  String? _projectId;
-  String? _workstreamId;
+  String? _spaceId;
+  String? _threadId;
   String? _runId;
   String? _executionWorkspaceId;
   Timer? _reconnectTimer;
@@ -50,8 +50,8 @@ class _BrowserRealtimeClient implements RealtimeClient {
 
   @override
   Future<void> setScopes({
-    String? projectId,
-    String? workstreamId,
+    String? spaceId,
+    String? threadId,
     String? runId,
     String? executionWorkspaceId,
   }) async {
@@ -61,8 +61,8 @@ class _BrowserRealtimeClient implements RealtimeClient {
         _send({'type': 'unsubscribe', 'scope': scope});
       }
     }
-    _projectId = projectId;
-    _workstreamId = workstreamId;
+    _spaceId = spaceId;
+    _threadId = threadId;
     _runId = runId;
     _executionWorkspaceId = executionWorkspaceId;
     if (_socket?.readyState == html.WebSocket.OPEN) {
@@ -130,9 +130,8 @@ class _BrowserRealtimeClient implements RealtimeClient {
   }
 
   List<Map<String, dynamic>> _currentScopes() => [
-        if (_projectId != null) {'kind': 'project', 'projectId': _projectId},
-        if (_workstreamId != null)
-          {'kind': 'workstream', 'workstreamId': _workstreamId},
+        if (_spaceId != null) {'kind': 'space', 'spaceId': _spaceId},
+        if (_threadId != null) {'kind': 'thread', 'threadId': _threadId},
         if (_runId != null) {'kind': 'run', 'runId': _runId},
         if (_executionWorkspaceId != null)
           {

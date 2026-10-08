@@ -6,9 +6,9 @@ The following creation routes accept `Idempotency-Key`:
 
 | Route | Scope | Success |
 | --- | --- | --- |
-| `POST /projects/:id/workstreams` | Project + create Workstream | 201 |
-| `POST /workstreams/:id/discussion-messages` | Workstream + send Discussion | 201 |
-| `POST /workstreams/:id/work-requests` | Workstream + create Work Request | 202 |
+| `POST /spaces/:id/threads` | Space + create Thread | 201 |
+| `POST /threads/:id/discussion-messages` | Thread + send Discussion | 201 |
+| `POST /threads/:id/work-requests` | Thread + create Work Request | 202 |
 
 Keys contain 16–128 ASCII letters, digits, underscores, or hyphens. AX generates
 64-character cryptographically random hexadecimal keys. A key identifies one
@@ -22,7 +22,7 @@ Cloud authorizes the current user and resource before looking up a receipt.
 Receipts are scoped by user and route/resource, so another user or endpoint cannot
 recover the response. The `mutation_receipts` primary key is committed atomically
 with the domain writes. Concurrent duplicates lose the unique-key transaction,
-roll back their domain writes, and recover the winner's response. Workstreams
+roll back their domain writes, and recover the winner's response. Threads
 and Discussion creation events and audit writes are in that same transaction.
 A replay returns the original success status and JSON and adds
 `Idempotency-Replayed: true`. It does not repeat a collaboration creation event.

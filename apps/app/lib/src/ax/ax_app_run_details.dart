@@ -7,12 +7,12 @@ extension _AxAppRunDetails on _AxAppStateMixin {
         return _workspacesView();
       case AxRouteKind.profileSecurity:
         return _profileSecurityView();
-      case AxRouteKind.projects:
+      case AxRouteKind.spaces:
         return _homeView();
-      case AxRouteKind.project:
-        return _projectOverviewView();
-      case AxRouteKind.workstream:
-        return _workstreamView();
+      case AxRouteKind.space:
+        return _spaceOverviewView();
+      case AxRouteKind.thread:
+        return _threadView();
       case AxRouteKind.search:
         return _searchView();
       case AxRouteKind.run:
@@ -33,7 +33,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                   Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(selectedProject?.name ?? 'Project',
+                        Text(selectedSpace?.name ?? 'Space',
                             style: const TextStyle(
                                 color: Color(0xff777683), fontSize: 12)),
                         const SizedBox(height: 7),
@@ -245,7 +245,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 24),
           child: Text(run == null
-              ? 'No active run for this project.'
+              ? 'No active run for this space.'
               : 'The run has not created tasks yet.'),
         ),
       );
@@ -647,10 +647,10 @@ extension _AxAppRunDetails on _AxAppStateMixin {
           '${executionSnapshot.findings.length} findings · ${executionSnapshot.artifacts.length} artifacts',
       trailing: TextButton(
           onPressed: () {
-            final project = selectedProject;
+            final space = selectedSpace;
             final run = executionSnapshot.run;
-            if (project != null && run != null) {
-              _navigateTo(AxNavigation.run(project.id, run.id));
+            if (space != null && run != null) {
+              _navigateTo(AxNavigation.run(space.id, run.id));
             }
           },
           child: const Text('Open run details')),

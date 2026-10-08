@@ -20,8 +20,8 @@ export type WorkerDescriptorVisibilityState =
 export const WORKER_DESCRIPTOR_CAPABILITIES = [
   "text",
   "local_file",
-  "workstream_read",
-  "workstream_write",
+  "thread_read",
+  "thread_write",
   "durable_session",
   "image",
   "audio",

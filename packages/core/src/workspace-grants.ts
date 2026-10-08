@@ -3,39 +3,39 @@ import {
   type ExecutionPermission,
 } from "./execution-permissions.js";
 import { WORKER_INPUT_CAPABILITIES } from "./worker-inventory.js";
-import { WORKFLOW_CAPABILITIES } from "./workstream.js";
+import { WORKFLOW_CAPABILITIES } from "./thread.js";
 
-/** Project authorization to execute work through a Workspace. */
+/** Space authorization to execute work through a Workspace. */
 
-export type WorkspaceProjectGrantStatus =
+export type WorkspaceSpaceGrantStatus =
   "active" | "suspended" | "revoked" | "expired";
 
-export const WORKSPACE_PROJECT_GRANT_STATUSES = [
+export const WORKSPACE_SPACE_GRANT_STATUSES = [
   "active",
   "suspended",
   "revoked",
   "expired",
-] as const satisfies readonly WorkspaceProjectGrantStatus[];
+] as const satisfies readonly WorkspaceSpaceGrantStatus[];
 
 export const WORKSPACE_GRANT_CAPABILITIES = [
   ...WORKFLOW_CAPABILITIES,
   ...WORKER_INPUT_CAPABILITIES,
-  "workstream_read",
+  "thread_read",
   "durable_session",
 ] as const;
 
-export function isWorkspaceProjectGrantStatus(
+export function isWorkspaceSpaceGrantStatus(
   value: unknown,
-): value is WorkspaceProjectGrantStatus {
+): value is WorkspaceSpaceGrantStatus {
   return (
     typeof value === "string" &&
-    (WORKSPACE_PROJECT_GRANT_STATUSES as readonly string[]).includes(value)
+    (WORKSPACE_SPACE_GRANT_STATUSES as readonly string[]).includes(value)
   );
 }
 
-export function canTransitionWorkspaceProjectGrantStatus(
-  from: WorkspaceProjectGrantStatus,
-  to: WorkspaceProjectGrantStatus,
+export function canTransitionWorkspaceSpaceGrantStatus(
+  from: WorkspaceSpaceGrantStatus,
+  to: WorkspaceSpaceGrantStatus,
 ): boolean {
   if (from === to) return true;
   if (from === "active")
@@ -154,12 +154,12 @@ export function validateWorkspaceNetworkPolicy(
   return policy.mode === "allowlist" && policy.allowedHosts.length > 0;
 }
 
-export interface WorkspaceProjectGrant {
+export interface WorkspaceSpaceGrant {
   readonly id: string;
-  readonly projectId: string;
+  readonly spaceId: string;
   readonly workspaceId: string;
   readonly grantedByUserId: string;
-  readonly status: WorkspaceProjectGrantStatus;
+  readonly status: WorkspaceSpaceGrantStatus;
   readonly allowedWorkerIds: readonly string[];
   readonly allowedWorkerCapabilities: readonly string[];
   readonly allowedPermissions: readonly ExecutionPermission[];
@@ -171,7 +171,7 @@ export interface WorkspaceProjectGrant {
 }
 
 export interface EffectiveWorkspacePermission {
-  readonly projectId: string;
+  readonly spaceId: string;
   readonly workspaceId: string;
   readonly grantId: string;
   readonly requesterUserId: string;

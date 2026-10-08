@@ -12,11 +12,12 @@ class TestRealtime implements RealtimeClient {
   @override
   Future<void> setWorkspace(String workspaceId) async {}
   @override
-  Future<void> setScopes(
-      {String? projectId,
-      String? workstreamId,
-      String? runId,
-      String? executionWorkspaceId}) async {}
+  Future<void> setScopes({
+    String? spaceId,
+    String? threadId,
+    String? runId,
+    String? executionWorkspaceId,
+  }) async {}
   void emit(Map<String, dynamic> event) => controller.add(event);
   @override
   Future<void> close() => controller.close();

@@ -34,7 +34,7 @@ endpoints.
 **Contract ownership:** Cloud publishes the API/read-model contracts consumed
 by AX; AX owns human-facing product behavior.
 
-This protocol carries Projects, Workstreams, collaboration, Workstream
+This protocol carries Spaces, Threads, collaboration, Thread
 execution policy, Workspace grants, human-readable Workspace/Worker inventory,
 results, artifacts, and audit/read models. AX uses it to request product
 actions and display Cloud-authoritative state.
@@ -82,7 +82,7 @@ status, assignment delivery/acknowledgement/progress/results/errors, and
 cancellation. Cloud scheduling and Workspace execution use this boundary;
 transport choice does not change assignment semantics.
 
-Cloud-facing Worker Type IDs are product concepts. Project and Workstream
+Cloud-facing Worker Type IDs are product concepts. Space and Thread
 policy, Workspace inventory, and assignment snapshots use IDs such as
 `chatgpt` and `gemini`; internal Worker release identifiers are not accepted
 in this protocol.
@@ -135,7 +135,7 @@ Workspace owns Engine/Profile admission, process lifetime, local permissions, CW
 
 Cloud-to-Workspace assignments carry only the canonical execution permission
 IDs `repository:read`, `repository:write`, `shell:execute`, and `network:use`.
-Cloud derives its assignment set from Project role and Workspace Grant policy;
+Cloud derives its assignment set from Space role and Workspace Grant policy;
 Workspace independently enforces that set against local Worker permissions.
 Local permission identifiers are not aliases or Cloud-side boundaries.
 
@@ -162,8 +162,8 @@ These names describe Conclave domain values used across boundaries:
 
 | Canonical name | Meaning |
 | --- | --- |
-| `ProjectId` | Stable identity of a collaboration Project |
-| `WorkstreamId` | Stable identity of a persistent unit of work |
+| `SpaceId` | Stable identity of a collaboration Space |
+| `ThreadId` | Stable identity of a persistent unit of work |
 | `WorkspaceId` | Cloud identity of a registered machine Workspace |
 | `WorkspaceRuntimeId` | Identity of the connected machine runtime |
 | `WorkerId` | Identity of one Workspace-owned local Worker slot/configuration |
@@ -227,14 +227,14 @@ source for Worker Protocol 4.0 models and validation.
 Discussion reads use the [versioned paging contract](../specifications/DISCUSSION_PAGING.md). AX retains shared cached history across page disposal,
 synchronizes on reopening, and reconciles optimistic sends and edits per message.
 
-Human Product realtime collaboration signals and independent durable Project/user
+Human Product realtime collaboration signals and independent durable Space/user
 stream sequencing are specified in [Realtime synchronization 1.1](../specifications/REALTIME_SYNCHRONIZATION.md).
 Existing execution Workspace envelopes remain compatible; this does not change
 Workspace Runtime or Local Worker Protocol transport.
 
-Workspace Project grant collections and the additive aggregate count in
+Workspace Space grant collections and the additive aggregate count in
 `GET /api/workspaces` are Human Product HTTP read models. Their versioned
-[read model contract 1.1](../specifications/WORKSPACE_PROJECT_GRANTS.md) preserves
+[read model contract 1.1](../specifications/WORKSPACE_SPACE_GRANTS.md) preserves
 existing mutation endpoints and authorization. Runtime inventory and grant
 admission still belong to their existing Cloud/Workspace boundaries.
 

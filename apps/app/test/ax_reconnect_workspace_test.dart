@@ -24,10 +24,9 @@ class WorkspaceRecoverySource extends AxFixtureDataSource {
 
   @override
   Future<AxSnapshot> loadBootstrapState(
-      {String? projectId, String? workspaceId}) {
+      {String? spaceId, String? workspaceId}) {
     bootstraps++;
-    return super
-        .loadBootstrapState(projectId: projectId, workspaceId: workspaceId);
+    return super.loadBootstrapState(spaceId: spaceId, workspaceId: workspaceId);
   }
 }
 

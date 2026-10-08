@@ -2,7 +2,7 @@ import '../ax_data.dart';
 import '../ax_models.dart';
 import 'ax_sync_engine.dart';
 
-/// Session-owned, user-wide queries. Workstream eligibility is a view projection.
+/// Session-owned, user-wide queries. Thread eligibility is a view projection.
 class AxSessionCatalogs {
   AxSessionCatalogs(this.source, {AxSyncEngine? engine})
       : engine = engine ?? AxSyncEngine();

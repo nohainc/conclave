@@ -5,8 +5,8 @@ abstract interface class RealtimeClient {
   Future<void> connect(Uri endpoint, [String? workspaceId]);
   Future<void> setWorkspace(String workspaceId);
   Future<void> setScopes({
-    String? projectId,
-    String? workstreamId,
+    String? spaceId,
+    String? threadId,
     String? runId,
     String? executionWorkspaceId,
   });
@@ -26,8 +26,8 @@ class _StubRealtimeClient implements RealtimeClient {
   Future<void> setWorkspace(String workspaceId) async {}
   @override
   Future<void> setScopes({
-    String? projectId,
-    String? workstreamId,
+    String? spaceId,
+    String? threadId,
     String? runId,
     String? executionWorkspaceId,
   }) async {}

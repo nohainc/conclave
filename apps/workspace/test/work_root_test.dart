@@ -84,7 +84,7 @@ void main() {
     expect(resolved.path, isNot(contains('..')));
   });
 
-  test('rejects a root change while active Workstream work exists', () async {
+  test('rejects a root change while active Thread work exists', () async {
     final parent = await Directory.systemTemp.createTemp('conclave-work-root-');
     addTearDown(() => parent.delete(recursive: true));
     await expectLater(

@@ -12,7 +12,7 @@ through `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY`; it does not test Cloud rollout
 Conclave Workspace is the machine-side execution and security runtime.
 
 It maintains the Cloud connection, owns the local Work Root, creates/resolves
-Workstream working directories, manages logical Workers and local provider
+Thread working directories, manages logical Workers and local provider
 credentials, resolves signed Tool Profiles, launches the generic CLI Worker
 Engine, enforces local permissions, supervises execution, and reports safe
 readiness/status back to Conclave Cloud.
@@ -27,7 +27,7 @@ Its GUI is intentionally minimal and local-first:
 - updates;
 - pause/quit.
 
-Projects, Workstreams, Discuss, Work orchestration, Project membership and
+Spaces, Threads, Discuss, Work orchestration, Space membership and
 remote scheduling policy belong in Conclave AX.
 
 Users install only Conclave Workspace. Workspace manages the bundled generic

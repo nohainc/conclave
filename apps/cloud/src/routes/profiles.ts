@@ -1,10 +1,10 @@
 import {
-  projectModelOptions,
-  projectWorkerExecutionOptions,
+  spaceModelOptions,
+  spaceWorkerExecutionOptions,
 } from "../worker-execution-options.js";
 export {
-  projectModelOptions,
-  projectWorkerExecutionOptions,
+  spaceModelOptions,
+  spaceWorkerExecutionOptions,
 } from "../worker-execution-options.js";
 import { extractBearerToken, hashToken } from "@conclave/security";
 import {
@@ -92,11 +92,11 @@ export async function handleListWorkspaceWorkerInventory(
   };
   return json({
     workers: (rows.results ?? []).map((row) => ({
-      executionOptions: projectWorkerExecutionOptions(
+      executionOptions: spaceWorkerExecutionOptions(
         row.model_profile_json,
         row.provider_tool_version,
       ),
-      modelOptions: projectModelOptions(
+      modelOptions: spaceModelOptions(
         row.model_profile_json,
         row.provider_tool_version,
       ),

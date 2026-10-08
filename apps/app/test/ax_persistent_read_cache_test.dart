@@ -20,15 +20,15 @@ AxStore store(MemoryAxReadCacheBackend backend, {String user = 'A'}) {
   return value;
 }
 
-const project = AxProject(
+const space = AxSpace(
     id: 'P',
-    name: 'Cached Project',
+    name: 'Cached Space',
     branch: 'main',
     lastActivity: 'now',
     settings: {
       'token': 'SECRET',
       'providerCredentials': {'apiKey': 'SECRET'},
-      'workstreamOrder': ['W']
+      'threadOrder': ['W']
     });
 AxWorkRequest request(String id) => AxWorkRequest(
     id: id,
@@ -188,8 +188,7 @@ void main() {
     expect(await value.hydrateReadCache(), isFalse);
     value.dispose();
   });
-  test(
-      'only the 20 most recently used persisted Workstream histories are retained',
+  test('only the 20 most recently used persisted Thread histories are retained',
       () async {
     final backend = MemoryAxReadCacheBackend();
     final value = store(backend);
@@ -220,7 +219,7 @@ void main() {
         120,
         (i) => AxDiscussionMessage(
             id: 'D${i.toString().padLeft(3, '0')}',
-            workstreamId: 'W',
+            threadId: 'W',
             authorUserId: 'A',
             body: 'Message $i',
             createdAt: 'now'));
@@ -252,25 +251,25 @@ void main() {
     final backend = MemoryAxReadCacheBackend();
     final first = store(backend);
     await first.hydrateReadCache();
-    first.projects.replace([project]);
+    first.spaces.replace([space]);
     await first.persistence.flush();
     final second = store(backend);
     await second.hydrateReadCache();
     var reads = 0;
-    final pending = Completer<List<AxProject>>();
-    final query = AxQuery<List<AxProject>>(
-        key: second.projects.query.key,
+    final pending = Completer<List<AxSpace>>();
+    final query = AxQuery<List<AxSpace>>(
+        key: second.spaces.query.key,
         load: () {
           reads++;
           return pending.future;
         });
     final values = await Future.wait(
         List.generate(5, (_) => second.syncEngine.ensure(query)));
-    expect(values.every((v) => v.single.name == 'Cached Project'), isTrue);
+    expect(values.every((v) => v.single.name == 'Cached Space'), isTrue);
     expect(reads, 1);
-    pending.complete([project.copyWith(name: 'Revalidated')]);
+    pending.complete([space.copyWith(name: 'Revalidated')]);
     await Future<void>.delayed(Duration.zero);
-    expect(second.projects.items.single.name, 'Revalidated');
+    expect(second.spaces.items.single.name, 'Revalidated');
     first.dispose();
     second.dispose();
   });
@@ -281,20 +280,19 @@ void main() {
     final backend = MemoryAxReadCacheBackend();
     final first = store(backend);
     await first.hydrateReadCache();
-    first.projects.replace([project]);
+    first.spaces.replace([space]);
     first.workspaces.replace([const AxWorkspace(id: 'X', name: 'Workspace')]);
     first.syncEngine.update(
-        first.projectWorkstreams.query('P'),
+        first.spaceThreads.query('P'),
         (_) => [
-              AxWorkstream.fromJson(
-                  {'id': 'W', 'projectId': 'P', 'name': 'Stream'})
+              AxThread.fromJson({'id': 'W', 'spaceId': 'P', 'name': 'Stream'})
             ]);
     first.syncEngine.update(
         first.discussion.query('W'),
         (_) => AxDiscussionHistory(initialLoaded: true, messages: const [
               AxDiscussionMessage(
                   id: 'D',
-                  workstreamId: 'W',
+                  threadId: 'W',
                   authorUserId: 'A',
                   body: 'Hello',
                   createdAt: 'now')
@@ -307,19 +305,19 @@ void main() {
             confirmedIds: const ['R']));
     await first.persistence.flush();
     final text = jsonEncode((await backend.read('A')).records);
-    expect(text, contains('Cached Project'));
+    expect(text, contains('Cached Space'));
     expect(text, isNot(contains('SECRET')));
     expect(text, isNot(contains('private@test')));
     final other = store(backend, user: 'B');
     expect(await other.hydrateReadCache(), isFalse);
-    expect(other.projects.items, isEmpty);
+    expect(other.spaces.items, isEmpty);
     final reopened = store(backend);
     expect(await reopened.hydrateReadCache(), isTrue);
-    expect(reopened.projects.items.single.name, 'Cached Project');
+    expect(reopened.spaces.items.single.name, 'Cached Space');
     expect(reopened.workspaces.items.single.name, 'Workspace');
     expect(reopened.discussion.peek('W').messages.single.isMe, isTrue);
     expect(reopened.workHistory.peek('W').requests.single.id, 'R');
-    expect(reopened.syncEngine.peek(reopened.projects.query).isStale, isTrue);
+    expect(reopened.syncEngine.peek(reopened.spaces.query).isStale, isTrue);
     first.dispose();
     other.dispose();
     reopened.dispose();
@@ -330,9 +328,9 @@ void main() {
     final backend = MemoryAxReadCacheBackend();
     final value = store(backend);
     await value.hydrateReadCache();
-    value.projects.replace([project]);
+    value.spaces.replace([space]);
     final overlay = value.syncEngine.optimisticUpdate(
-        value.projects.query, (_) => [project.copyWith(name: 'Pending name')]);
+        value.spaces.query, (_) => [space.copyWith(name: 'Pending name')]);
     value.syncEngine.update(
         AxQuery<String>(
             key: AxQueryKey(['security']), load: () async => 'SECRET'),
@@ -346,7 +344,7 @@ void main() {
     expect(text, isNot(contains('Pending name')));
     expect(text, isNot(contains('SECRET')));
     expect(text, isNot(contains('local-pending')));
-    expect(text, contains('Cached Project'));
+    expect(text, contains('Cached Space'));
     overlay.rollback();
     value.dispose();
   });
@@ -354,22 +352,22 @@ void main() {
     final backend = MemoryAxReadCacheBackend();
     final first = store(backend);
     await first.hydrateReadCache();
-    first.projects.replace([project]);
+    first.spaces.replace([space]);
     await first.persistence.flush();
     final second = store(backend);
-    second.projects.replace([project.copyWith(name: 'New')]);
+    second.spaces.replace([space.copyWith(name: 'New')]);
     await second.hydrateReadCache();
-    expect(second.projects.items.single.name, 'New');
+    expect(second.spaces.items.single.name, 'New');
     final engine = AxSyncEngine();
-    final pending = Completer<List<AxProject>>();
-    final query = AxQuery<List<AxProject>>(
-        key: AxQueryKey(['projects']), load: () => pending.future);
+    final pending = Completer<List<AxSpace>>();
+    final query = AxQuery<List<AxSpace>>(
+        key: AxQueryKey(['spaces']), load: () => pending.future);
     final read = engine.refresh(query);
     final cache = AxPersistentReadCache(engine, const AxFixtureDataSource(),
         backend: backend);
     expect(await cache.hydrate('A'), isFalse);
     expect(engine.peek(query).hasData, isFalse);
-    pending.complete([project.copyWith(name: 'Network')]);
+    pending.complete([space.copyWith(name: 'Network')]);
     await read;
     expect(engine.peek(query).data!.single.name, 'Network');
     cache.dispose();
@@ -384,13 +382,13 @@ void main() {
     final b = store(backend, user: 'B');
     await a.hydrateReadCache();
     await b.hydrateReadCache();
-    a.projects.replace([project]);
-    b.projects.replace([project.copyWith(name: 'B')]);
+    a.spaces.replace([space]);
+    b.spaces.replace([space.copyWith(name: 'B')]);
     await a.persistence.flush();
     await b.persistence.flush();
     final stale = await backend.read('A');
     await a.logout();
-    expect(a.projects.items, isEmpty);
+    expect(a.spaces.items, isEmpty);
     expect(a.workHistory.peek('W').requests, isEmpty);
     expect((await backend.read('A')).records, isEmpty);
     expect((await backend.read('B')).records, isNotEmpty);
@@ -402,7 +400,7 @@ void main() {
     final backend = DelayedBackend();
     final first = store(backend);
     await first.hydrateReadCache();
-    first.projects.replace([project]);
+    first.spaces.replace([space]);
     await first.persistence.flush();
     final snapshot = await backend.read('A');
     backend.pending = Completer();
@@ -412,7 +410,7 @@ void main() {
     late.clearServerState();
     backend.pending!.complete(snapshot);
     expect(await hydration, isFalse);
-    expect(late.projects.items, isEmpty);
+    expect(late.spaces.items, isEmpty);
     await late.persistence.flush();
     expect((await backend.read('A')).records,
         isNotEmpty); // delayed test read returns the captured snapshot
@@ -431,11 +429,11 @@ void main() {
           authenticated: true,
           viewer: AxViewer(id: 'A', displayName: 'A', email: ''));
       expect(await value.hydrateReadCache(), isFalse);
-      value.projects.replace([project]);
+      value.spaces.replace([space]);
       await value.persistence.flush();
-      expect(value.projects.items.single.name, 'Cached Project');
+      expect(value.spaces.items.single.name, 'Cached Space');
       await value.logout();
-      expect(value.projects.items, isEmpty);
+      expect(value.spaces.items, isEmpty);
       value.dispose();
     }
   });
@@ -445,44 +443,44 @@ void main() {
     await backend.write('A', 0, [
       {
         'version': 999,
-        'key': ['projects'],
+        'key': ['spaces'],
         'data': []
       },
       {
         'version': 1,
-        'key': ['projects'],
+        'key': ['spaces'],
         'data': 'bad'
       }
     ]);
     final value = store(backend);
     expect(await value.hydrateReadCache(), isFalse);
-    expect(value.projects.items, isEmpty);
+    expect(value.spaces.items, isEmpty);
     value.dispose();
   });
   testWidgets(
-      'hydrated Project renders while background read is pending and remains on failure',
+      'hydrated Space renders while background read is pending and remains on failure',
       (tester) async {
     final backend = MemoryAxReadCacheBackend();
     final first = store(backend);
     await first.hydrateReadCache();
-    first.projects.replace([project]);
+    first.spaces.replace([space]);
     await first.persistence.flush();
     final second = store(backend);
     await second.hydrateReadCache();
     await tester.pumpWidget(MaterialApp(
-        home: ValueListenableBuilder<List<AxProject>>(
-            valueListenable: second.projects,
+        home: ValueListenableBuilder<List<AxSpace>>(
+            valueListenable: second.spaces,
             builder: (context, values, _) => Text(values.single.name))));
-    expect(find.text('Cached Project'), findsOneWidget);
-    final pending = Completer<List<AxProject>>();
-    final query = AxQuery<List<AxProject>>(
-        key: second.projects.query.key, load: () => pending.future);
+    expect(find.text('Cached Space'), findsOneWidget);
+    final pending = Completer<List<AxSpace>>();
+    final query = AxQuery<List<AxSpace>>(
+        key: second.spaces.query.key, load: () => pending.future);
     await second.syncEngine.ensure(query);
     await tester.pump();
-    expect(find.text('Cached Project'), findsOneWidget);
+    expect(find.text('Cached Space'), findsOneWidget);
     pending.completeError(StateError('offline'));
     await tester.pump();
-    expect(find.text('Cached Project'), findsOneWidget);
+    expect(find.text('Cached Space'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     first.dispose();
     second.dispose();

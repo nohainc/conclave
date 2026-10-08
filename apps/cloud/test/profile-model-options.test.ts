@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { projectModelOptions } from "../src/routes/profiles.js";
+import { spaceModelOptions } from "../src/routes/profiles.js";
 describe("profile selection projection", () => {
   it("keeps per-model efforts and filters out non-allowlisted entries", () => {
-    const result = projectModelOptions(
+    const result = spaceModelOptions(
       JSON.stringify({
         credential: "never exposed",
         model: {
@@ -25,10 +25,10 @@ describe("profile selection projection", () => {
   });
   it("does not invent a catalog for legacy profiles", () => {
     expect(
-      projectModelOptions(JSON.stringify({ model: { supported: true } }))
+      spaceModelOptions(JSON.stringify({ model: { supported: true } }))
         ?.catalog,
     ).toEqual([]);
-    expect(projectModelOptions("invalid")).toBeNull();
+    expect(spaceModelOptions("invalid")).toBeNull();
   });
 });
 
@@ -43,18 +43,18 @@ it("filters profile models against the installed CLI version", () => {
     },
   });
   expect(
-    projectModelOptions(payload, "1.5.0")?.catalog.map((item) => item.id),
+    spaceModelOptions(payload, "1.5.0")?.catalog.map((item) => item.id),
   ).toEqual(["old"]);
   expect(
-    projectModelOptions(payload, "2.0.0")?.catalog.map((item) => item.id),
+    spaceModelOptions(payload, "2.0.0")?.catalog.map((item) => item.id),
   ).toEqual(["new"]);
-  expect(projectModelOptions(payload)?.catalog).toEqual([]);
+  expect(spaceModelOptions(payload)?.catalog).toEqual([]);
 });
 
-it("projects normalized capabilities without provider instructions or fake Defaults", async () => {
-  const { projectWorkerExecutionOptions } =
+it("spaces normalized capabilities without provider instructions or fake Defaults", async () => {
+  const { spaceWorkerExecutionOptions } =
     await import("../src/worker-execution-options.js");
-  const result = projectWorkerExecutionOptions(
+  const result = spaceWorkerExecutionOptions(
     JSON.stringify({
       session: { supported: true },
       model: {
@@ -96,9 +96,9 @@ it("projects normalized capabilities without provider instructions or fake Defau
   expect(JSON.stringify(result)).not.toContain("private");
 });
 it("supports fixed-model effort and filters unavailable CLI-version models", async () => {
-  const { projectWorkerExecutionOptions } =
+  const { spaceWorkerExecutionOptions } =
     await import("../src/worker-execution-options.js");
-  const fixed = projectWorkerExecutionOptions(
+  const fixed = spaceWorkerExecutionOptions(
     JSON.stringify({
       model: {
         supported: false,
@@ -109,7 +109,7 @@ it("supports fixed-model effort and filters unavailable CLI-version models", asy
   );
   expect(fixed?.models.supported).toBe(false);
   expect(fixed?.effort.values).toEqual(["deep"]);
-  const result = projectWorkerExecutionOptions(
+  const result = spaceWorkerExecutionOptions(
     JSON.stringify({
       session: { supported: true },
       model: {

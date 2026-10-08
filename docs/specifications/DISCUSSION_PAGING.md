@@ -1,6 +1,6 @@
 # Discussion paging contract v1
 
-`GET /api/workstreams/:id/discussion-messages` authorizes access on every request and
+`GET /api/threads/:id/discussion-messages` authorizes access on every request and
 returns bounded pages. `limit` defaults to 50 and accepts integers from 1 to
 100. `before` and `after` are mutually exclusive opaque cursors.
 
@@ -20,8 +20,8 @@ chronologically by `(created_at, id)`, including equal timestamps.
 `nextCursor` continues in the requested direction and is null when that page
 has no continuation. `newestCursor` identifies the newest returned message;
 an empty forward page retains its incoming anchor. Cursors encode version 1,
-Workstream identity, creation timestamp, and message ID. They are pagination
-positions, not authorization tokens. Malformed, unsupported, cross-Workstream,
+Thread identity, creation timestamp, and message ID. They are pagination
+positions, not authorization tokens. Malformed, unsupported, cross-Thread,
 or conflicting cursors and invalid limits produce HTTP 400. All cursor values
 are bound SQL parameters. Clients must treat cursors as opaque.
 
@@ -38,7 +38,7 @@ reconciles the newest window for edits; creation-order cursors do not track edit
 Realtime contract 1.1 adds ID-only `discussion.created` and `discussion.updated`
 [signals](REALTIME_SYNCHRONIZATION.md). Creation uses the existing forward cursor.
 For edits, `GET /api/discussion-messages/:id` returns `{ message }` after current
-Workstream view authorization (404 when missing; access denied when unauthorized).
+Thread view authorization (404 when missing; access denied when unauthorized).
 It preserves authored Markdown and returns parsed references. AX
 `loadDiscussionMessage(messageId:)` merges that single entity when already cached,
 including in older pages, without changing either pagination cursor. Custom AX

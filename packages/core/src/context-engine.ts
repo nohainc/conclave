@@ -44,11 +44,11 @@ export interface WorkflowExecutionContext {
     readonly result: string | null;
   }[];
   readonly environment: {
-    readonly projectId: string;
-    readonly workstreamId: string;
+    readonly spaceId: string;
+    readonly threadId: string;
     readonly workspaceId: string | null;
-    readonly projectInstructions: string;
-    readonly workstreamInstructions: string;
+    readonly spaceInstructions: string;
+    readonly threadInstructions: string;
   } | null;
   readonly artifacts: readonly ContextArtifact[];
 }

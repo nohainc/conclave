@@ -1,0 +1,361 @@
+part of '../spaces_pages.dart';
+
+class SpacePage extends StatelessWidget {
+  const SpacePage({
+    super.key,
+    required this.space,
+    required this.dataSource,
+    required this.onOpenThread,
+    this.onOpenWorkspace,
+    this.onEdit,
+    required this.onArchive,
+    required this.onDelete,
+    this.onSpaceUpdated,
+    this.spaceThreads,
+    this.workspaceGrants,
+    this.tabQueries,
+    this.mutations,
+  });
+
+  final AxSpace space;
+  final AxDataSource dataSource;
+  final ValueChanged<String> onOpenThread;
+  final ValueChanged<String>? onOpenWorkspace;
+  final VoidCallback? onEdit;
+  final VoidCallback onArchive;
+  final VoidCallback onDelete;
+  final ValueChanged<AxSpace>? onSpaceUpdated;
+  final AxSpaceThreads? spaceThreads;
+  final AxSpaceWorkspaceGrants? workspaceGrants;
+  final AxSpaceTabQueries? tabQueries;
+  final AxCollaborationMutations? mutations;
+
+  // Compatibility getters/factory
+
+  @override
+  Widget build(BuildContext context) => _SpaceWorkspace(
+        key: ValueKey(space.id),
+        space: space,
+        dataSource: dataSource,
+        onOpenThread: onOpenThread,
+        onOpenWorkspace: onOpenWorkspace,
+        onEdit: onEdit,
+        onArchive: onArchive,
+        onDelete: onDelete,
+        onSpaceUpdated: onSpaceUpdated,
+        spaceThreads: spaceThreads,
+        workspaceGrants: workspaceGrants,
+        tabQueries: tabQueries,
+        mutations: mutations,
+      );
+}
+
+class _SpaceWorkspace extends StatefulWidget {
+  const _SpaceWorkspace({
+    super.key,
+    required this.space,
+    required this.dataSource,
+    required this.onOpenThread,
+    this.onOpenWorkspace,
+    this.onEdit,
+    required this.onArchive,
+    required this.onDelete,
+    this.onSpaceUpdated,
+    this.spaceThreads,
+    this.workspaceGrants,
+    this.tabQueries,
+    this.mutations,
+  });
+
+  final AxSpace space;
+  final AxDataSource dataSource;
+  final ValueChanged<String> onOpenThread;
+  final ValueChanged<String>? onOpenWorkspace;
+  final VoidCallback? onEdit;
+  final VoidCallback onArchive;
+  final VoidCallback onDelete;
+  final ValueChanged<AxSpace>? onSpaceUpdated;
+  final AxSpaceThreads? spaceThreads;
+  final AxSpaceWorkspaceGrants? workspaceGrants;
+  final AxSpaceTabQueries? tabQueries;
+  final AxCollaborationMutations? mutations;
+
+  @override
+  State<_SpaceWorkspace> createState() => _SpaceWorkspaceState();
+}
+
+class _SpaceWorkspaceState extends State<_SpaceWorkspace>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  late List<AxThread> threads;
+  List<AxSpaceMember> members = const [];
+  List<AxSpaceInvitation> invitations = const [];
+  List<AxWorkspace> ownedWorkspaces = const [];
+  List<Map<String, dynamic>> spaceWorkspaces = const [];
+  bool threadsLoading = true;
+  bool membersLoading = true;
+  Object? threadsError;
+  Object? membersError;
+  late AxSpaceTabQueries _queries;
+  late AxSpaceThreads _streams;
+  late AxCollaborationMutations _collaboration;
+  final _tabCancels = <void Function()>[];
+  int _activeTab = -1;
+  bool executionLoading = true;
+  Object? executionError;
+  late AxSpaceWorkspaceGrants _grants;
+  bool _savingField = false;
+  String? _editingField;
+
+  late TextEditingController _nameController;
+  late TextEditingController _descriptionController;
+  late TextEditingController _instructionsController;
+
+  bool get canManage =>
+      widget.space.role == 'owner' || widget.space.role == 'collaborator';
+  bool get isOwner => widget.space.role == 'owner';
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _nameController = TextEditingController(text: widget.space.name);
+    _descriptionController =
+        TextEditingController(text: widget.space.description);
+    _instructionsController =
+        TextEditingController(text: widget.space.instructions);
+    _configureQueries();
+    _tabController.addListener(_onTabChanged);
+    _onTabChanged();
+  }
+
+  void _configureQueries() {
+    _queries =
+        widget.tabQueries ?? AxSpaceTabQueries.forSource(widget.dataSource);
+    _streams = widget.spaceThreads ?? _queries.threads;
+    _collaboration = widget.mutations ??
+        AxCollaborationMutations(widget.dataSource, engine: _streams.engine);
+    _grants = widget.workspaceGrants ??
+        AxSpaceWorkspaceGrants.forSource(widget.dataSource);
+    threads = _streams.peek(widget.space.id);
+  }
+
+  void _onTabChanged() {
+    if (_activeTab == _tabController.index) return;
+    _activeTab = _tabController.index;
+    _bindActiveTab();
+  }
+
+  void _cancelTab() {
+    for (final cancel in _tabCancels) {
+      cancel();
+    }
+    _tabCancels.clear();
+  }
+
+  void _ensure<T>(AxSyncEngine engine, AxQuery<T> query) {
+    unawaited(engine
+        .ensure(query)
+        .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+  }
+
+  void _bindActiveTab() {
+    _cancelTab();
+    final id = widget.space.id;
+    if (_activeTab == 0) {
+      final query = _streams.query(id);
+      void apply(AxQueryState<List<AxThread>> state) {
+        threads = state.data ?? const [];
+        threadsLoading = !state.hasData && state.isFetching;
+        threadsError = state.error;
+      }
+
+      apply(_streams.engine.peek(query));
+      _tabCancels.add(_streams.engine.watch(query, (state) {
+        if (mounted) _updateState(() => apply(state));
+      }, fireImmediately: false));
+      _ensure(_streams.engine, query);
+    } else if (_activeTab == 1) {
+      void apply(AxQueryState<AxWorkspaceGrants> state) {
+        spaceWorkspaces = state.data ?? const [];
+        executionError = state.error;
+        executionLoading = !state.hasData && state.isFetching;
+      }
+
+      apply(_grants.peek(id));
+      _tabCancels.add(_grants.watch(id, (state) {
+        if (mounted) _updateState(() => apply(state));
+      }));
+      unawaited(_grants
+          .ensure(id)
+          .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    } else {
+      final membersQuery = _queries.members(id);
+      final invitationsQuery = _queries.invitations(id);
+      void apply() {
+        final memberState = _queries.engine.peek(membersQuery);
+        final invitationState = _queries.engine.peek(invitationsQuery);
+        members = memberState.data ?? const [];
+        invitations = invitationState.data ?? const [];
+        membersLoading = !memberState.hasData && memberState.isFetching;
+        membersError = memberState.error ?? invitationState.error;
+      }
+
+      apply();
+      _tabCancels.add(_queries.engine.watch(membersQuery, (_) {
+        if (mounted) _updateState(apply);
+      }, fireImmediately: false));
+      _tabCancels.add(_queries.engine.watch(invitationsQuery, (_) {
+        if (mounted) _updateState(apply);
+      }, fireImmediately: false));
+      _ensure(_queries.engine, membersQuery);
+      _ensure(_queries.engine, invitationsQuery);
+    }
+  }
+
+  void _recordThreads() {
+    _streams.engine.update(
+        _streams.query(widget.space.id), (_) => List.unmodifiable(threads));
+    _queries.engine.invalidate(_queries.audit(widget.space.id).key);
+  }
+
+  @override
+  void didUpdateWidget(_SpaceWorkspace oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.space.id != widget.space.id ||
+        oldWidget.space.name != widget.space.name ||
+        oldWidget.space.description != widget.space.description ||
+        oldWidget.space.instructions != widget.space.instructions) {
+      if (_editingField == null) {
+        _nameController.text = widget.space.name;
+        _descriptionController.text = widget.space.description;
+        _instructionsController.text = widget.space.instructions;
+      }
+    }
+    if (oldWidget.space.id != widget.space.id ||
+        oldWidget.dataSource != widget.dataSource ||
+        oldWidget.spaceThreads != widget.spaceThreads ||
+        oldWidget.workspaceGrants != widget.workspaceGrants ||
+        oldWidget.tabQueries != widget.tabQueries ||
+        oldWidget.mutations != widget.mutations) {
+      _cancelTab();
+      _configureQueries();
+      _bindActiveTab();
+    }
+  }
+
+  @override
+  void dispose() {
+    _cancelTab();
+    _tabController.removeListener(_onTabChanged);
+    _tabController.dispose();
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _instructionsController.dispose();
+    super.dispose();
+  }
+
+  void _updateState(VoidCallback callback) => setState(callback);
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Space Data directly without group control card or horizontal lines
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Line 1: Space Name
+                _buildEditableField(
+                  label: 'Space Name',
+                  fieldKey: 'name',
+                  value: widget.space.name,
+                  placeholder: 'Untitled Space',
+                  controller: _nameController,
+                  textStyle: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // Line 2: Description
+                _buildEditableField(
+                  label: 'Description',
+                  fieldKey: 'description',
+                  value: widget.space.description,
+                  placeholder: 'No space description provided.',
+                  controller: _descriptionController,
+                  maxLines: 2,
+                ),
+                if (isOwner || widget.space.instructions.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  // Space instructions
+                  _buildEditableField(
+                    label: 'Space Instructions',
+                    fieldKey: 'instructions',
+                    value: widget.space.instructions,
+                    placeholder: 'No instructions configured.',
+                    controller: _instructionsController,
+                    maxLines: 3,
+                  ),
+                ],
+                if (isOwner) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: widget.onArchive,
+                        icon: const Icon(Icons.archive_outlined),
+                        label: const Text('Archive'),
+                      ),
+                      TextButton.icon(
+                        onPressed: widget.onDelete,
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Delete'),
+                        style: TextButton.styleFrom(
+                            foregroundColor: ConclaveColors.error),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // 3 Tabs: Threads, Workspaces, Members aligned by center
+          AnimatedBuilder(
+            animation: _tabController,
+            builder: (context, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.center,
+                    tabs: const [
+                      Tab(text: 'Threads'),
+                      Tab(text: 'Workspaces'),
+                      Tab(text: 'Members'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (_tabController.index == 0)
+                  _threadsTab()
+                else if (_tabController.index == 1)
+                  _workspacesTab()
+                else
+                  _membersTab(),
+              ],
+            ),
+          ),
+        ],
+      );
+}

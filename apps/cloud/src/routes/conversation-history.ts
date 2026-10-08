@@ -2,27 +2,21 @@ import type {
   ConversationHistoryEntry,
   ConversationHistoryPage,
 } from "@conclave/core";
-import { authorizeWorkstreamAccess } from "./workstream-policy.js";
+import { authorizeThreadAccess } from "./thread-policy.js";
 import { HttpError, json, type SecurityEnv } from "./http-security.js";
 
 export async function handleListConversationHistory(
   request: Request,
   env: SecurityEnv,
-  workstreamId: string,
+  threadId: string,
   conversationId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeWorkstreamAccess(
-    request,
-    env,
-    workstreamId,
-    "view",
-    accessContext,
-  );
+  await authorizeThreadAccess(request, env, threadId, "view", accessContext);
   const scope = await env.CONCLAVE_DB.prepare(
-    "SELECT id FROM conversations WHERE id = ?1 AND workstream_id = ?2",
+    "SELECT id FROM conversations WHERE id = ?1 AND thread_id = ?2",
   )
-    .bind(conversationId, workstreamId)
+    .bind(conversationId, threadId)
     .first();
   if (!scope) throw new HttpError(404, "Conversation not found");
   const params = new URL(request.url).searchParams;

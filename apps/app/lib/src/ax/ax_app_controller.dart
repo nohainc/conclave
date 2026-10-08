@@ -66,9 +66,10 @@ extension _AxAppController on _AxAppStateMixin {
           authRequired = false;
           isLoading = false;
           loadError = null;
-          selectedProjectId =
-              navigation.projectId ?? store.projects.items.firstOrNull?.id;
-          _applyProjectNavigation();
+          selectedSpaceId = navigation.spaceId ??
+              navigation.spaceId ??
+              store.spaces.items.firstOrNull?.id;
+          _applySpaceNavigation();
         });
         _startRealtime();
         _ensureNavigationResources(navigation);
@@ -91,10 +92,10 @@ extension _AxAppController on _AxAppStateMixin {
   Future<void> _logout() async {
     try {
       await store.logout();
-      expandedProjectIds.clear();
+      expandedSpaceIds.clear();
       if (!mounted) return;
       _updateState(() {
-        selectedProjectId = null;
+        selectedSpaceId = null;
         authRequired = true;
       });
       browserNavigation.replaceWithLogin(navigation.toUri());
@@ -305,7 +306,7 @@ extension _AxAppController on _AxAppStateMixin {
     }
     if (type == 'realtime.ready') {
       _realtimeTransportConnected = true;
-      unawaited(_refreshRealtimeFeatures('project.updated'));
+      unawaited(_refreshRealtimeFeatures('space.updated'));
       _updateLiveState(() => realtimeStale = false);
       return;
     }
@@ -347,7 +348,7 @@ extension _AxAppController on _AxAppStateMixin {
         await store.resynchronizeWorkspace(scope.id!);
       } else if (scope.kind == 'user') {
         await Future.wait([
-          _refreshRealtimeFeatures('project.updated'),
+          _refreshRealtimeFeatures('space.updated'),
           _refreshRealtimeFeatures('workspace.updated'),
         ]);
       }
@@ -387,8 +388,8 @@ extension _AxAppController on _AxAppStateMixin {
       return;
     }
     if ((workspaceId == null || workspaceId.isEmpty) &&
-        !type.startsWith('project.') &&
-        type != 'project_workspace_grant.updated') {
+        !type.startsWith('space.') &&
+        type != 'space_workspace_grant.updated') {
       return;
     }
     try {
@@ -401,12 +402,14 @@ extension _AxAppController on _AxAppStateMixin {
         // The cache router owns invalidation; the shared query updates consumers.
         return;
       }
-      if (type.startsWith('project.invitation.') ||
+      if (type.startsWith('space.invitation.') ||
+          type.startsWith('space.invitation.') ||
           type.startsWith('invitation.') ||
-          type.startsWith('project.') ||
-          type == 'project_workspace_grant.updated') {
+          type.startsWith('space.') ||
+          type == 'space_workspace_grant.updated' ||
+          type == 'space_workspace_grant.updated') {
         await Future.wait([
-          store.projects.refresh(),
+          store.spaces.refresh(),
           store.invitations.refresh(),
         ]);
         if (!mounted) return;
@@ -414,7 +417,7 @@ extension _AxAppController on _AxAppStateMixin {
         return;
       }
       // Execution events are reconciled by the shared Work router, never by
-      // reloading Projects, Workspaces, authentication, or bootstrap state.
+      // reloading Spaces, Workspaces, authentication, or bootstrap state.
     } catch (error) {
       if (mounted) _showSnackBar('Live update refresh failed: $error');
     }
@@ -440,14 +443,14 @@ extension _AxAppController on _AxAppStateMixin {
     });
   }
 
-  Future<void> _acceptInvitation(AxProjectInvitation invite) async {
+  Future<void> _acceptInvitation(AxSpaceInvitation invite) async {
     try {
       await store.acceptInvitation(invite);
       if (!mounted) return;
       _showSnackBar(
-          'Joined ${invite.projectName.isNotEmpty ? invite.projectName : "Project"}.');
-      if (invite.projectId.isNotEmpty) {
-        _navigateTo(AxNavigation.project(invite.projectId));
+          'Joined ${invite.spaceName.isNotEmpty ? invite.spaceName : "Space"}.');
+      if (invite.spaceId.isNotEmpty) {
+        _navigateTo(AxNavigation.space(invite.spaceId));
       }
     } catch (error) {
       if (mounted) {
@@ -457,7 +460,7 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
-  Future<void> _declineInvitation(AxProjectInvitation invite) async {
+  Future<void> _declineInvitation(AxSpaceInvitation invite) async {
     try {
       await store.declineInvitation(invite);
       if (mounted) {
@@ -526,9 +529,9 @@ extension _AxAppController on _AxAppStateMixin {
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
-                                              invite.projectName.isNotEmpty
-                                                  ? invite.projectName
-                                                  : 'Project Invitation',
+                                              invite.spaceName.isNotEmpty
+                                                  ? invite.spaceName
+                                                  : 'Space Invitation',
                                               style: const TextStyle(
                                                 fontWeight: FontWeight.w700,
                                                 fontSize: 14,
@@ -636,16 +639,16 @@ extension _AxAppController on _AxAppStateMixin {
                                 return ListTile(
                                   leading: Icon(
                                     switch (notification.kind) {
-                                      AxNotificationKind.workstreamNeedsInput ||
+                                      AxNotificationKind.threadNeedsInput ||
                                       AxNotificationKind
                                           .workflowRunNeedsApproval ||
                                       AxNotificationKind.approvalRequired =>
                                         Icons.help_outline,
-                                      AxNotificationKind.workstreamFailed ||
+                                      AxNotificationKind.threadFailed ||
                                       AxNotificationKind.workflowRunFailed ||
                                       AxNotificationKind.failed =>
                                         Icons.error_outline,
-                                      AxNotificationKind.workstreamCompleted ||
+                                      AxNotificationKind.threadCompleted ||
                                       AxNotificationKind.workflowRunCompleted ||
                                       AxNotificationKind.completed =>
                                         Icons.check_circle_outline,
@@ -656,8 +659,9 @@ extension _AxAppController on _AxAppStateMixin {
                                         Icons.key_off_outlined,
                                       AxNotificationKind.workerInstallFailed =>
                                         Icons.download_for_offline_outlined,
+                                      AxNotificationKind.spaceInvitationReceived ||
                                       AxNotificationKind
-                                          .projectInvitationReceived ||
+                                          .spaceInvitationReceived ||
                                       AxNotificationKind.invitationReceived =>
                                         Icons.mail_outline,
                                     },
@@ -720,25 +724,26 @@ extension _AxAppController on _AxAppStateMixin {
 
   void _navigateToNotification(AxNotification notification) {
     switch (notification.target) {
-      case AxNotificationTarget.workstream:
-        if (notification.projectId != null &&
-            notification.workstreamId != null) {
-          _navigateTo(AxNavigation.workstream(
-              notification.projectId!, notification.workstreamId!));
-        } else if (notification.projectId != null) {
-          _navigateTo(AxNavigation.project(notification.projectId!));
+      case AxNotificationTarget.thread:
+        final spaceId = notification.spaceId;
+        final threadId = notification.threadId;
+        if (spaceId != null && threadId != null) {
+          _navigateTo(AxNavigation.thread(spaceId, threadId));
+        } else if (spaceId != null) {
+          _navigateTo(AxNavigation.space(spaceId));
         }
       case AxNotificationTarget.workflowRun:
       case AxNotificationTarget.run:
-        if (notification.projectId != null && notification.runId != null) {
-          _navigateTo(
-              AxNavigation.run(notification.projectId!, notification.runId!));
-        } else if (notification.projectId != null) {
-          _navigateTo(AxNavigation.project(notification.projectId!));
+        final spaceId = notification.spaceId;
+        if (spaceId != null && notification.runId != null) {
+          _navigateTo(AxNavigation.run(spaceId, notification.runId!));
+        } else if (spaceId != null) {
+          _navigateTo(AxNavigation.space(spaceId));
         }
-      case AxNotificationTarget.project:
-        if (notification.projectId != null) {
-          _navigateTo(AxNavigation.project(notification.projectId!));
+      case AxNotificationTarget.space:
+        final spaceId = notification.spaceId;
+        if (spaceId != null) {
+          _navigateTo(AxNavigation.space(spaceId));
         }
       case AxNotificationTarget.workspaces:
       case AxNotificationTarget.workspace:
@@ -776,7 +781,7 @@ extension _AxAppController on _AxAppStateMixin {
       'format': 'conclave-run-diagnostics-v1',
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
       'workspaceId': executionSnapshot.workspaceId,
-      'projectId': selectedProjectId,
+      'spaceId': selectedSpaceId,
       'runId': run.id,
       'status': run.status.name,
       'tasks': executionSnapshot.tasks
@@ -816,8 +821,8 @@ extension _AxAppController on _AxAppStateMixin {
       );
     }
     unawaited(realtimeClient.setScopes(
-      projectId: selectedProjectId,
-      workstreamId: navigation.workstreamId,
+      spaceId: selectedSpaceId,
+      threadId: navigation.threadId,
       runId: navigation.runId,
       executionWorkspaceId: workspaceId,
     ));
@@ -897,10 +902,11 @@ extension _AxAppController on _AxAppStateMixin {
   }
 
   Future<void> _loadBootstrapState(
-      {String? projectId, String? workspaceId, bool showSpinner = true}) async {
+      {String? spaceId, String? workspaceId, bool showSpinner = true}) async {
     if (store.auth.session?.authenticated != true) return;
+    final resolvedSpaceId = spaceId;
     if (showSpinner) {
-      final reconnecting = !isLoading && store.projects.items.isNotEmpty;
+      final reconnecting = !isLoading && store.spaces.items.isNotEmpty;
       _updateState(() {
         isLoading = true;
         loadError = null;
@@ -909,20 +915,20 @@ extension _AxAppController on _AxAppStateMixin {
     }
     try {
       final loaded = await store.loadBootstrapState(
-          projectId: projectId, workspaceId: workspaceId);
+          spaceId: resolvedSpaceId, workspaceId: workspaceId);
       if (!mounted) return;
       unawaited(store.invitations.refresh());
       optimisticRunStatus = null;
       if (showSpinner) {
         _updateState(() {
-          selectedProjectId = loaded.projects.any(
-                  (project) => project.id == (projectId ?? selectedProjectId))
-              ? (projectId ?? selectedProjectId)
-              : loaded.projects.firstOrNull?.id;
+          selectedSpaceId = loaded.spaces.any(
+                  (space) => space.id == (resolvedSpaceId ?? selectedSpaceId))
+              ? (resolvedSpaceId ?? selectedSpaceId)
+              : loaded.spaces.firstOrNull?.id;
           isLoading = false;
           isReconnecting = false;
           authRequired = false;
-          _applyProjectNavigation();
+          _applySpaceNavigation();
         });
       }
       _ensureNavigationResources(navigation);
@@ -953,12 +959,12 @@ extension _AxAppController on _AxAppStateMixin {
           store.persistence.userId != null &&
           store.persistence.userId != session.viewer?.id) {
         store.clearServerState();
-        expandedProjectIds.clear();
+        expandedSpaceIds.clear();
         _updateState(() => authRequired = true);
       }
       if (!session.authenticated && !authRequired) {
         store.clearServerState();
-        expandedProjectIds.clear();
+        expandedSpaceIds.clear();
         _updateState(() => authRequired = true);
         browserNavigation.replaceWithLogin(navigation.toUri());
         return;
@@ -981,7 +987,7 @@ extension _AxAppController on _AxAppStateMixin {
         if (hydrated) {
           _updateState(() {
             isLoading = false;
-            _applyProjectNavigation();
+            _applySpaceNavigation();
           });
         }
         await _loadWorkspaces();
@@ -992,23 +998,23 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
-  void _applyProjectNavigation() {
-    final routeProject = navigation.projectId;
-    if (routeProject != null &&
-        store.projects.items.any((project) => project.id == routeProject)) {
-      selectedProjectId = routeProject;
+  void _applySpaceNavigation() {
+    final routeSpace = navigation.spaceId;
+    if (routeSpace != null &&
+        store.spaces.items.any((space) => space.id == routeSpace)) {
+      selectedSpaceId = routeSpace;
     }
   }
 
   /// Navigation is applied synchronously before independent resource requests.
   void _ensureNavigationResources(AxNavigation target) {
-    final projectId = target.projectId;
-    if (projectId == null || store.auth.session?.authenticated != true) return;
-    unawaited(store.projectDetails
-        .ensure(projectId)
+    final spaceId = target.spaceId;
+    if (spaceId == null || store.auth.session?.authenticated != true) return;
+    unawaited(store.spaceDetails
+        .ensure(spaceId)
         .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-    unawaited(store.projectWorkstreams
-        .ensure(projectId)
+    unawaited(store.spaceThreads
+        .ensure(spaceId)
         .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
   }
 
@@ -1021,9 +1027,10 @@ extension _AxAppController on _AxAppStateMixin {
     if (next == navigation) return;
     _updateState(() {
       navigation = next;
-      selectedProjectId = next.projectId ?? selectedProjectId;
-      if (next.kind == AxRouteKind.workstream && next.projectId != null) {
-        expandedProjectIds.add(next.projectId!);
+      final spaceId = next.spaceId;
+      selectedSpaceId = spaceId ?? selectedSpaceId;
+      if (next.kind == AxRouteKind.thread && spaceId != null) {
+        expandedSpaceIds.add(spaceId);
       }
     });
     if (next.kind == AxRouteKind.profileSecurity) {
@@ -1031,8 +1038,8 @@ extension _AxAppController on _AxAppStateMixin {
     }
     _ensureNavigationResources(next);
     unawaited(realtimeClient.setScopes(
-      projectId: next.projectId ?? selectedProjectId,
-      workstreamId: next.workstreamId,
+      spaceId: next.spaceId ?? selectedSpaceId,
+      threadId: next.threadId,
       runId: next.runId,
       executionWorkspaceId: executionWorkspaceId,
     ));
@@ -1043,8 +1050,10 @@ extension _AxAppController on _AxAppStateMixin {
       mapEquals(actual.queryParameters, canonical.queryParameters);
 
   void _navigateTo(AxNavigation next, {bool replace = false}) {
-    if ((next.projectId?.startsWith('local-project-') ?? false) ||
-        (next.workstreamId?.startsWith('local-workstream-') ?? false)) {
+    if ((next.spaceId?.startsWith('local-space-') ?? false) ||
+        (next.spaceId?.startsWith('local-space-') ?? false) ||
+        (next.threadId?.startsWith('local-thread-') ?? false) ||
+        (next.threadId?.startsWith('local-thread-') ?? false)) {
       return;
     }
     if (next.kind != AxRouteKind.search &&
@@ -1057,9 +1066,10 @@ extension _AxAppController on _AxAppStateMixin {
     }
     _updateState(() {
       navigation = next;
-      selectedProjectId = next.projectId ?? selectedProjectId;
-      if (next.kind == AxRouteKind.workstream && next.projectId != null) {
-        expandedProjectIds.add(next.projectId!);
+      final spaceId = next.spaceId;
+      selectedSpaceId = spaceId ?? selectedSpaceId;
+      if (next.kind == AxRouteKind.thread && spaceId != null) {
+        expandedSpaceIds.add(spaceId);
       }
     });
     if (replace) {
@@ -1069,35 +1079,35 @@ extension _AxAppController on _AxAppStateMixin {
     }
     _ensureNavigationResources(next);
     unawaited(realtimeClient.setScopes(
-      projectId: next.projectId ?? selectedProjectId,
-      workstreamId: next.workstreamId,
+      spaceId: next.spaceId ?? selectedSpaceId,
+      threadId: next.threadId,
       runId: next.runId,
       executionWorkspaceId: executionWorkspaceId,
     ));
   }
 
   Future<void> _grantWorkspace(AxWorkspace workspace) async {
-    if (store.projects.items.isEmpty) {
-      _showSnackBar('Create a Project before granting Workspace access.');
+    if (store.spaces.items.isEmpty) {
+      _showSnackBar('Create a Space before granting Workspace access.');
       return;
     }
-    String? selectedProjectId = store.projects.items.first.id;
+    String? selectedSpaceId = store.spaces.items.first.id;
     final permissions = <String>{};
-    final projectId = await showDialog<String>(
+    final spaceId = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Grant Workspace to Project'),
+          title: const Text('Grant Workspace to Space'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             DropdownButtonFormField<String>(
-              initialValue: selectedProjectId,
-              decoration: const InputDecoration(labelText: 'Project'),
-              items: store.projects.items
-                  .map((project) => DropdownMenuItem(
-                      value: project.id, child: Text(project.name)))
+              initialValue: selectedSpaceId,
+              decoration: const InputDecoration(labelText: 'Space'),
+              items: store.spaces.items
+                  .map((space) => DropdownMenuItem(
+                      value: space.id, child: Text(space.name)))
                   .toList(),
               onChanged: (value) =>
-                  setDialogState(() => selectedProjectId = value),
+                  setDialogState(() => selectedSpaceId = value),
             ),
             const Text(
                 'Work needs repository read and write access. Test steps also need command execution.'),
@@ -1123,19 +1133,19 @@ extension _AxAppController on _AxAppStateMixin {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: selectedProjectId == null
+              onPressed: selectedSpaceId == null
                   ? null
-                  : () => Navigator.pop(dialogContext, selectedProjectId),
+                  : () => Navigator.pop(dialogContext, selectedSpaceId),
               child: const Text('Grant access'),
             ),
           ],
         ),
       ),
     );
-    if (projectId == null) return;
+    if (spaceId == null) return;
     try {
-      await store.projectWorkspaceGrants.create(
-        projectId: projectId,
+      await store.spaceWorkspaceGrants.create(
+        spaceId: spaceId,
         workspaceId: workspace.id,
         workspaceName: workspace.name,
         allowedPermissions: permissions.toList(),
@@ -1148,11 +1158,11 @@ extension _AxAppController on _AxAppStateMixin {
   }
 
   void _handleContextualCreate() {
-    final project = selectedProject;
-    if (project != null) {
-      _createWorkstream(project);
+    final space = selectedSpace;
+    if (space != null) {
+      _createThread(space);
     } else {
-      _createProject();
+      _createSpace();
     }
   }
 }

@@ -23,7 +23,7 @@ const session: RoutableWorkerSession = {
 const request: ConversationRouteRequest = {
   conversation: {
     id: "conversation",
-    workstreamId: "stream",
+    threadId: "stream",
     workflowId: "work",
     workflowVersion: 1,
     conversationRevision: 3,

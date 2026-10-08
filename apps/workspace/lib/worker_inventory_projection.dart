@@ -3,9 +3,9 @@ import 'package:conclave_protocol/worker_descriptor.dart';
 import 'local_worker_registry.dart';
 import 'tool_profile_release_verifier.dart';
 
-/// Projects a catalog-backed local Worker, failing closed when its Profile or
+/// Spaces a catalog-backed local Worker, failing closed when its Profile or
 /// Engine is not eligible for execution.
-Map<String, Object?> projectWorkerInventory({
+Map<String, Object?> spaceWorkerInventory({
   required LocalWorker worker,
   required WorkerDescriptor descriptor,
   required ToolProfileCandidate? eligibleProfile,
@@ -23,8 +23,7 @@ Map<String, Object?> projectWorkerInventory({
       runnable ? descriptor.capabilities : const <String>[];
   final capabilities = <String>{
     ...declaredCapabilities,
-    if (declaredCapabilities.contains('workstream_read'))
-      'authorized_context_read',
+    if (declaredCapabilities.contains('thread_read')) 'authorized_context_read',
   }.toList()
     ..sort();
 

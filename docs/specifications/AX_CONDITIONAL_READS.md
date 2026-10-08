@@ -2,8 +2,8 @@
 
 The stable read endpoints support optional HTTP content revisions:
 
-- `GET /api/projects/:id`
-- `GET /api/projects/:id/workstreams`
+- `GET /api/spaces/:id`
+- `GET /api/spaces/:id/threads`
 - `GET /api/workflows/catalog`
 
 A normal response retains its existing JSON envelope and adds an `ETag` of the
@@ -19,9 +19,9 @@ weak comparison; `*` matches an existing authorized representation. Both statuse
 include `ETag`, `Cache-Control: private, no-cache`, and `Vary: Cookie, Authorization`.
 See [HTTP conditional request semantics](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/If-None-Match).
 
-Project authorization and existence checks run before revision comparison.
-Workstream revisions are computed after membership-specific permissions and
-Project ordering are applied. Denied or missing resources never become `304`
+Space authorization and existence checks run before revision comparison.
+Thread revisions are computed after membership-specific permissions and
+Space ordering are applied. Denied or missing resources never become `304`
 responses. Workflow catalog publication remains on its existing public route.
 The server still queries and constructs the authorized representation; this
 change reduces response bandwidth, not D1 reads. No shared edge cache is added.

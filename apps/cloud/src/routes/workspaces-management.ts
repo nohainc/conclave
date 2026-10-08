@@ -17,7 +17,7 @@ export async function handleListWorkspaces(
   const context = await securityContext(request, env, accessContext);
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT execution_workspaces.id, name, status,
-            COALESCE(grants.activeProjectGrantCount, 0) AS activeProjectGrantCount,
+            COALESCE(grants.activeSpaceGrantCount, 0) AS activeSpaceGrantCount,
             EXISTS (SELECT 1 FROM workspace_runtime_identities identity
                     WHERE identity.workspace_id = execution_workspaces.id
                       AND identity.revoked_at IS NULL) AS hasRuntimeIdentity,
@@ -43,9 +43,9 @@ export async function handleListWorkspaces(
        FROM execution_workspaces
        LEFT JOIN workspace_runtime_facts f ON f.workspace_id = execution_workspaces.id
        LEFT JOIN (
-         SELECT g.workspace_id, COUNT(DISTINCT g.project_id) AS activeProjectGrantCount
-           FROM workspace_project_grants g
-           JOIN projects p ON p.id = g.project_id
+         SELECT g.workspace_id, COUNT(DISTINCT g.space_id) AS activeSpaceGrantCount
+           FROM workspace_space_grants g
+           JOIN spaces p ON p.id = g.space_id
            JOIN execution_workspaces owned ON owned.id = g.workspace_id
           WHERE owned.owner_user_id = ?1 AND g.status = 'active'
             AND (g.expires_at IS NULL OR g.expires_at > ?2)
@@ -199,7 +199,7 @@ export async function handleRevokeWorkspace(
   }
 
   await env.CONCLAVE_DB.prepare(
-    "UPDATE workspace_project_grants SET status = 'revoked', updated_at = ?1 WHERE workspace_id = ?2 AND status IN ('active', 'suspended')",
+    "UPDATE workspace_space_grants SET status = 'revoked', updated_at = ?1 WHERE workspace_id = ?2 AND status IN ('active', 'suspended')",
   )
     .bind(now, workspaceId)
     .run();

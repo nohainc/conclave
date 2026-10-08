@@ -131,7 +131,7 @@ it("creates no worker turn before actual dispatch and rolls invalid attribution 
   expect(await f.turns()).toEqual([]);
   expect(() =>
     f.sqlite.exec(
-      `INSERT INTO worker_assignments(id,project_id,execution_workspace_id,runtime_identity_id,worker_type_id,workspace_worker_id,task_id,status,created_at,updated_at) VALUES('invalid','P','WS','RT','chatgpt','worker-a','T','created','now','now')`,
+      `INSERT INTO worker_assignments(id,space_id,execution_workspace_id,runtime_identity_id,worker_type_id,workspace_worker_id,task_id,status,created_at,updated_at) VALUES('invalid','P','WS','RT','chatgpt','worker-a','T','created','now','now')`,
     ),
   ).toThrow();
   expect(
@@ -264,7 +264,7 @@ it("next-request defaults do not rewrite completed turn attribution or create ex
     const before = (await f.turns())[0];
     f.sqlite
       .prepare(
-        "INSERT INTO workstream_work_configs(workstream_id,config_json,updated_at) VALUES('W',?,'later')",
+        "INSERT INTO thread_work_configs(thread_id,config_json,updated_at) VALUES('W',?,'later')",
       )
       .run(
         JSON.stringify({

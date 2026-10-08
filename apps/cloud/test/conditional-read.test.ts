@@ -1,22 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 import * as security from "../src/routes/http-security.js";
 import { conditionalJson } from "../src/routes/conditional-read.js";
-import { handleGetProject } from "../src/routes/projects.js";
-import { handleListProjectWorkstreams } from "../src/routes/workstreams.js";
+import { handleGetSpace } from "../src/routes/spaces.js";
+import { handleListSpaceThreads } from "../src/routes/threads.js";
 import type { SecurityEnv } from "../src/routes/handlers.js";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 
 function request(etag?: string) {
-  return new Request("https://conclave.test/api/projects/p", {
+  return new Request("https://conclave.test/api/spaces/p", {
     headers: etag ? { "if-none-match": etag } : {},
   });
 }
 function fixture() {
   const { sqlite, db } = sqliteD1();
   sqlite.exec(`INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES ('u','u@test','User','now','now');
-    INSERT INTO projects(id,owner_user_id,name,settings_json,created_at,updated_at) VALUES ('p','u','Project','{}','now','now');
-    INSERT INTO project_memberships(id,project_id,user_id,role,created_at,updated_at) VALUES ('m','p','u','owner','now','now');
-    INSERT INTO workstreams(id,project_id,name,status,lead_user_id,created_at,updated_at) VALUES ('w','p','Work','active','u','now','now');`);
+    INSERT INTO spaces(id,owner_user_id,name,settings_json,created_at,updated_at) VALUES ('p','u','Space','{}','now','now');
+    INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at) VALUES ('m','p','u','owner','now','now');
+    INSERT INTO threads(id,space_id,name,status,lead_user_id,created_at,updated_at) VALUES ('w','p','Work','active','u','now','now');`);
   const env = {
     CONCLAVE_ENVIRONMENT: "development",
     CONCLAVE_DB: db,
@@ -24,7 +24,7 @@ function fixture() {
       userId: "u",
       user: { id: "u", email: "u@test", displayName: "User", status: "active" },
       workspaceId: "",
-      projectRoles: {},
+      spaceRoles: {},
       sessionId: "s",
       clientType: "web",
     }),
@@ -60,41 +60,39 @@ describe("stable read revisions v1", () => {
       expect((await conditionalJson(request(etag), data)).status).toBe(200);
     }
   });
-  it("Project edits with unchanged timestamps change the revision", async () => {
+  it("Space edits with unchanged timestamps change the revision", async () => {
     const { sqlite, env } = fixture();
     try {
-      const first = await handleGetProject(request(), env, "p");
+      const first = await handleGetSpace(request(), env, "p");
       const etag = first.headers.get("etag")!;
-      expect((await handleGetProject(request(etag), env, "p")).status).toBe(
-        304,
-      );
-      sqlite.exec("UPDATE projects SET name = 'Renamed' WHERE id = 'p'");
-      const changed = await handleGetProject(request(etag), env, "p");
+      expect((await handleGetSpace(request(etag), env, "p")).status).toBe(304);
+      sqlite.exec("UPDATE spaces SET name = 'Renamed' WHERE id = 'p'");
+      const changed = await handleGetSpace(request(etag), env, "p");
       expect(changed.status).toBe(200);
       expect(
-        ((await changed.json()) as { project: { name: string } }).project.name,
+        ((await changed.json()) as { space: { name: string } }).space.name,
       ).toBe("Renamed");
     } finally {
       sqlite.close();
     }
   });
-  it("Workstream creation/deletion and permission changes change collection revisions", async () => {
+  it("Thread creation/deletion and permission changes change collection revisions", async () => {
     const { sqlite, env } = fixture();
     try {
-      const first = await handleListProjectWorkstreams(request(), env, "p");
+      const first = await handleListSpaceThreads(request(), env, "p");
       const etag = first.headers.get("etag")!;
       expect(
-        (await handleListProjectWorkstreams(request(etag), env, "p")).status,
+        (await handleListSpaceThreads(request(etag), env, "p")).status,
       ).toBe(304);
       sqlite.exec(
-        "UPDATE project_memberships SET role = 'viewer' WHERE id = 'm'",
+        "UPDATE space_memberships SET role = 'viewer' WHERE id = 'm'",
       );
       expect(
-        (await handleListProjectWorkstreams(request(etag), env, "p")).status,
+        (await handleListSpaceThreads(request(etag), env, "p")).status,
       ).toBe(200);
-      sqlite.exec("DELETE FROM workstreams WHERE id = 'w'");
+      sqlite.exec("DELETE FROM threads WHERE id = 'w'");
       expect(
-        (await handleListProjectWorkstreams(request(etag), env, "p")).status,
+        (await handleListSpaceThreads(request(etag), env, "p")).status,
       ).toBe(200);
     } finally {
       sqlite.close();
@@ -103,18 +101,18 @@ describe("stable read revisions v1", () => {
   it("membership revocation is checked before returning 304", async () => {
     const { sqlite, env } = fixture();
     try {
-      const etag = (await handleGetProject(request(), env, "p")).headers.get(
+      const etag = (await handleGetSpace(request(), env, "p")).headers.get(
         "etag",
       )!;
-      sqlite.exec("DELETE FROM project_memberships WHERE id = 'm'");
+      sqlite.exec("DELETE FROM space_memberships WHERE id = 'm'");
       // TEST_AUTHENTICATION intentionally bypasses membership authorization.
       // Simulate its denied outcome at the real authorization boundary.
       const denied = vi
         .spyOn(security, "authorizeRequest")
         .mockRejectedValue(new Error("Resource not found"));
-      await expect(handleGetProject(request(etag), env, "p")).rejects.toThrow();
+      await expect(handleGetSpace(request(etag), env, "p")).rejects.toThrow();
       await expect(
-        handleListProjectWorkstreams(request("*"), env, "p"),
+        handleListSpaceThreads(request("*"), env, "p"),
       ).rejects.toThrow();
       expect(denied).toHaveBeenCalledTimes(2);
       denied.mockRestore();

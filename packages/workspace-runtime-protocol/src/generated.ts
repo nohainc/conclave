@@ -15,7 +15,7 @@ export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_MESSAGE_TYPES = [
   "workspace.status",
   "workspace.update",
   "worker.inventory",
-  "workstream.status",
+  "thread.status",
   "assignment.start",
   "assignment.ack",
   "assignment.progress",

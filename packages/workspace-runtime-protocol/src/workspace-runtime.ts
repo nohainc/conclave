@@ -23,7 +23,7 @@ export const WORKSPACE_RUNTIME_MESSAGE_TYPES = [
   "workspace.status",
   "workspace.update",
   "worker.inventory",
-  "workstream.status",
+  "thread.status",
   "assignment.start",
   "assignment.ack",
   "assignment.progress",

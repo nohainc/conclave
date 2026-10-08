@@ -22,7 +22,7 @@ export const RealtimeEventPayloadSchema = z
     tool: id.optional(),
     artifactId: id.optional(),
     workRequestId: id.optional(),
-    workstreamId: id.optional(),
+    threadId: id.optional(),
     stepKind: id.optional(),
     leaseId: id.optional(),
     workerId: id.optional(),
@@ -50,8 +50,8 @@ export const RealtimeEventEnvelopeSchema = z
     timestamp,
     workspaceId: id.optional(),
     stream: RealtimeStreamSchema.optional(),
-    projectId: id.optional(),
-    workstreamId: id.optional(),
+    spaceId: id.optional(),
+    threadId: id.optional(),
     runId: id.optional(),
     taskId: id.optional(),
     attemptId: id.optional(),
@@ -70,30 +70,30 @@ export const RealtimeEventEnvelopeSchema = z
       collaboration &&
       (!stream ||
         stream.kind === "execution_workspace" ||
-        !event.projectId ||
+        !event.spaceId ||
         !event.payload.entityId)
     ) {
       context.addIssue({
         code: "custom",
         message:
-          "Collaboration signals require a synchronization stream, projectId and entityId",
+          "Collaboration signals require a synchronization stream, spaceId and entityId",
       });
     }
     if (
       collaboration &&
-      (event.type.startsWith("workstream.") ||
+      (event.type.startsWith("thread.") ||
         event.type.startsWith("discussion.")) &&
-      (!event.workstreamId || event.payload.workstreamId !== event.workstreamId)
+      (!event.threadId || event.payload.threadId !== event.threadId)
     ) {
       context.addIssue({
         code: "custom",
-        message: "Workstream signals require matching workstreamId",
+        message: "Thread signals require matching threadId",
       });
     }
     if (
       collaboration &&
       Object.keys(event.payload).some(
-        (key) => !["entityId", "workstreamId"].includes(key),
+        (key) => !["entityId", "threadId"].includes(key),
       )
     ) {
       context.addIssue({
@@ -129,10 +129,10 @@ export const RealtimeEventEnvelopeSchema = z
         message: "Execution stream must match workspaceId",
       });
     }
-    if (stream?.kind === "project" && stream.id !== event.projectId) {
+    if (stream?.kind === "space" && stream.id !== event.spaceId) {
       context.addIssue({
         code: "custom",
-        message: "Project stream must match projectId",
+        message: "Space stream must match spaceId",
       });
     }
     if (stream && stream.kind !== "execution_workspace" && event.workspaceId) {

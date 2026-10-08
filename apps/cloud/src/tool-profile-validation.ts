@@ -94,8 +94,8 @@ export const channelNames = new Set<ToolProfileChannel>([
 export const productCapabilities = new Set([
   "text",
   "local_file",
-  "workstream_read",
-  "workstream_write",
+  "thread_read",
+  "thread_write",
   "durable_session",
   "image",
   "audio",
@@ -105,7 +105,7 @@ const acceptanceScenarios = [
   "passive_probe",
   "live_probe",
   "model_selection",
-  "representative_workstream_write",
+  "representative_thread_write",
   "durable_session_start",
   "durable_session_resume",
   "cancellation",
@@ -144,9 +144,7 @@ export function toolProfileAcceptanceScenarioStatuses(
       profile.model.supported && (profile.model.allowlist?.length ?? 0) > 0
         ? "passed"
         : "not_applicable",
-    representative_workstream_write: profile.capabilities.includes(
-      "workstream_write",
-    )
+    representative_thread_write: profile.capabilities.includes("thread_write")
       ? "passed"
       : "not_applicable",
     durable_session_start: supportsDurableSession ? "passed" : "not_applicable",

@@ -21,7 +21,7 @@ AxWorkRequestStatus detail(String id,
         {String status = 'completed', String ws = 'w'}) =>
     AxWorkRequestStatus(
         id: id,
-        workstreamId: ws,
+        threadId: ws,
         status: status,
         text: '# Result',
         originalRequest: 'Prompt $id',
@@ -44,14 +44,14 @@ class RealtimeSource extends AxFixtureDataSource {
   final queuedDetails = <Completer<AxWorkRequestStatus>>[];
   Completer<AxWorkRequestPage>? queuedPage;
   @override
-  Future<AxWorkRequestPage> loadWorkstreamWorkRequestPage(
-      {required String workstreamId,
+  Future<AxWorkRequestPage> loadThreadWorkRequestPage(
+      {required String threadId,
       int limit = 50,
       String? beforeCreatedAt,
       String? beforeId,
       bool activeOnly = false}) {
     pages.add(activeOnly);
-    pageScopes.add(workstreamId);
+    pageScopes.add(threadId);
     final pending = queuedPage;
     queuedPage = null;
     return pending?.future ??
@@ -78,7 +78,7 @@ Map<String, dynamic> event(String type,
       'workspaceId': 'workspace',
       'payload': <String, dynamic>{
         'workRequestId': id,
-        'workstreamId': ws,
+        'threadId': ws,
         'status': status,
         'stepKind': 'implement'
       }
@@ -98,7 +98,7 @@ void main() {
   }
 
   Future<void> drain() => Future<void>.delayed(Duration.zero);
-  test('Workstream gap recovers its retained active entities only', () async {
+  test('Thread gap recovers its retained active entities only', () async {
     await seed();
     await cache.refresh('other');
     source.pages.clear();
@@ -106,7 +106,7 @@ void main() {
     source.records = [];
     await sync.handle({
       'type': 'reconnect.required',
-      'scope': {'kind': 'workstream', 'workstreamId': 'w'}
+      'scope': {'kind': 'thread', 'threadId': 'w'}
     });
     expect(source.pageScopes, ['w']);
     expect(source.pages, [true]);
@@ -118,7 +118,7 @@ void main() {
       () async {
     await seed();
     await cache.refresh('background');
-    final cancel = sync.listen(null, workstreamId: 'w');
+    final cancel = sync.listen(null, threadId: 'w');
     final delayed = Completer<AxWorkRequestPage>();
     source.queuedPage = delayed;
     final visible = sync.handle({
@@ -127,7 +127,7 @@ void main() {
     });
     final background = sync.handle({
       'type': 'reconnect.required',
-      'scope': {'kind': 'workstream', 'workstreamId': 'background'}
+      'scope': {'kind': 'thread', 'threadId': 'background'}
     });
     delayed.complete(AxWorkRequestPage(requests: source.records));
     await Future.wait([visible, background]);
@@ -135,12 +135,12 @@ void main() {
     expect(cache.request('background', 'r'), isNotNull);
     cancel();
   });
-  test('Project stream gaps do not fetch execution history', () async {
+  test('Space stream gaps do not fetch execution history', () async {
     await seed();
     await sync.handle({
       'type': 'reconnect.required',
       'scope': {'kind': 'user'},
-      'stream': {'kind': 'project', 'id': 'P'}
+      'stream': {'kind': 'space', 'id': 'P'}
     });
     expect(source.pages, [false]);
     expect(source.gets, isEmpty);
@@ -280,7 +280,7 @@ void main() {
     final events = StreamController<Map<String, dynamic>>.broadcast();
     addTearDown(events.close);
     final root = sync.listen(events.stream);
-    final view = sync.listen(events.stream, workstreamId: 'w');
+    final view = sync.listen(events.stream, threadId: 'w');
     events.add(event('work_request.completed'));
     await drain();
     expect(source.gets, ['r']);
@@ -296,7 +296,7 @@ void main() {
       'healthy realtime disables polling; disconnection polls every 15 seconds and restoration stops it',
       (tester) async {
     await seed();
-    final cancel = sync.listen(null, workstreamId: 'w');
+    final cancel = sync.listen(null, threadId: 'w');
     await sync.handle({'type': 'realtime.connection', 'status': 'connected'});
     expect(sync.polling, isFalse);
     await tester.pump(const Duration(seconds: 45));
@@ -363,7 +363,7 @@ void main() {
     await cache.refresh('background');
     source.pages.clear();
     source.pageScopes.clear();
-    final release = sync.listen(null, workstreamId: 'w');
+    final release = sync.listen(null, threadId: 'w');
     await sync
         .handle({'type': 'realtime.connection', 'status': 'reconnecting'});
     await tester.pump(const Duration(seconds: 15));
@@ -375,7 +375,7 @@ void main() {
     expect(source.pageScopes, ['w']);
   });
 
-  test('Step events notify only their own Workstream', () async {
+  test('Step events notify only their own Thread', () async {
     await seed();
     var a = 0, b = 0;
     cache.watch('w', () => a++);
@@ -388,7 +388,7 @@ void main() {
       'a failed detail read does not enable polling while the socket is healthy',
       (tester) async {
     await seed();
-    final cancel = sync.listen(null, workstreamId: 'w');
+    final cancel = sync.listen(null, threadId: 'w');
     await sync.handle({'type': 'realtime.connection', 'status': 'connected'});
     final failed = Completer<AxWorkRequestStatus>();
     source.queuedDetails.add(failed);
@@ -407,7 +407,7 @@ void main() {
       'restoration discovers new requests and fetches older active entities by ID',
       () async {
     await seed();
-    final cancel = sync.listen(null, workstreamId: 'w');
+    final cancel = sync.listen(null, threadId: 'w');
     await sync.handle({'type': 'realtime.connection', 'status': 'connected'});
     cache.patchRequest('w', work('r'));
     source.records = [work('missed', status: 'completed')];
@@ -425,7 +425,7 @@ void main() {
       'slow fallback reads never accumulate polling requests and restoration follows them',
       (tester) async {
     await seed();
-    final cancel = sync.listen(null, workstreamId: 'w');
+    final cancel = sync.listen(null, threadId: 'w');
     final delayed = Completer<AxWorkRequestPage>();
     source.queuedPage = delayed;
     await tester.pump(const Duration(seconds: 15));

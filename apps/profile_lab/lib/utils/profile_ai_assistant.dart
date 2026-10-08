@@ -192,7 +192,7 @@ class ProfileAiHeuristicRepairService {
             base['probe'] = probe;
             break;
           case 'live_probe':
-          case 'representative_workstream_write':
+          case 'representative_thread_write':
             final exec =
                 Map<String, dynamic>.from(base['execution'] as Map? ?? {});
             exec['arguments'] = ['run', '{{prompt}}'];

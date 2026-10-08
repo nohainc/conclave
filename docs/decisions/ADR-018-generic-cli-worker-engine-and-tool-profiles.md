@@ -81,7 +81,7 @@ Gemini
 ## 1. Separate product identity from runtime implementation
 
 A logical Worker Type remains the product-facing identity used by AX, Cloud,
-Workflows, Workstream bindings, scheduling, and history.
+Workflows, Thread bindings, scheduling, and history.
 
 This identity is stored in `worker_catalog` and remains distinct from its
 implementation binding in `tool_profile_definitions`. Signed versioned
@@ -106,7 +106,7 @@ providerToolVersion = 0.x.y
 ~~~
 
 Changing the active profile release does not change the logical Worker ID and
-does not invalidate Workstream bindings such as:
+does not invalidate Thread bindings such as:
 
 ~~~text
 Implement -> ChatGPT
@@ -236,7 +236,7 @@ A Tool Profile cannot:
 - disable process/output/deadline limits;
 - inherit the complete parent environment;
 - execute arbitrary helper scripts;
-- escape the admitted Workstream/Worker state roots;
+- escape the admitted Thread/Worker state roots;
 - disable session-integrity checks;
 - bypass Workspace-approved local permissions;
 - disable profile signature/schema verification.
@@ -516,7 +516,7 @@ Implement & Verify
 Full Cycle
 ~~~
 
-Workstream bindings still target logical Workers:
+Thread bindings still target logical Workers:
 
 ~~~text
 Implement -> ChatGPT
@@ -525,7 +525,7 @@ Verify    -> Gemini
 
 The profile/engine implementation is resolved locally beneath that abstraction.
 
-Chat is read-only with a durable Workstream provider conversation and no mutation
+Chat is read-only with a durable Thread provider conversation and no mutation
 lease. Work is the display name of current `direct:v2`, with writable mutation
 coordination and a separate durable conversation. Historical `direct:v1` remains
 Direct; persisted `direct` bindings and identifiers are unchanged.
@@ -547,7 +547,7 @@ Do not force non-CLI integrations into command-line emulation.
 ## 21. Scope
 
 Conclave uses one generic CLI Worker Engine and signed Tool Profiles for normal
-CLI execution. Logical ChatGPT/Gemini Worker IDs and Workstream bindings remain
+CLI execution. Logical ChatGPT/Gemini Worker IDs and Thread bindings remain
 stable across Engine and Profile releases. Release status and acceptance
 evidence are tracked in the [v8 implementation plan](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
 

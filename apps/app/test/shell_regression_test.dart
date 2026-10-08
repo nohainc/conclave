@@ -7,15 +7,15 @@ import 'package:conclave_app/src/brand.dart';
 import 'package:conclave_app/src/features/navigation/app_menu.dart';
 import 'package:conclave_app/src/features/navigation/app_sidebar.dart';
 import 'package:conclave_app/src/features/navigation/app_top_hud.dart';
-import 'package:conclave_app/src/features/navigation/project_tree.dart';
+import 'package:conclave_app/src/features/navigation/space_tree.dart';
 import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
 import 'package:conclave_app/src/navigation/ax_navigation.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 
 void main() {
-  const wsRunning = AxWorkstream(
+  const wsRunning = AxThread(
     id: 'ws-1',
-    projectId: 'p-1',
+    spaceId: 'p-1',
     name: 'Authentication redesign',
     lead: 'Vitalii',
     status: 'running',
@@ -24,9 +24,9 @@ void main() {
     queueStatus: 'Running',
   );
 
-  const wsIdle = AxWorkstream(
+  const wsIdle = AxThread(
     id: 'ws-2',
-    projectId: 'p-1',
+    spaceId: 'p-1',
     name: 'Scheduler',
     lead: 'Vitalii',
     status: 'idle',
@@ -35,12 +35,12 @@ void main() {
     queueStatus: 'Idle',
   );
 
-  const testProject = AxProject(
+  const testSpace = AxSpace(
     id: 'p-1',
     name: 'Conclave AX',
     branch: 'main',
     lastActivity: 'today',
-    workstreams: [wsRunning, wsIdle],
+    threads: [wsRunning, wsIdle],
   );
 
   const testWorkspace = AxWorkspace(
@@ -54,14 +54,14 @@ void main() {
   );
 
   const baseShellContext = AxShellContext(
-    navigation: AxNavigation.workstream('p-1', 'ws-1'),
-    projects: [testProject],
-    workstreamsByProject: {
+    navigation: AxNavigation.thread('p-1', 'ws-1'),
+    spaces: [testSpace],
+    threadsBySpace: {
       'p-1': [wsRunning, wsIdle]
     },
-    selectedProject: testProject,
-    selectedWorkstream: wsRunning,
-    expandedProjectIds: {'p-1'},
+    selectedSpace: testSpace,
+    selectedThread: wsRunning,
+    expandedSpaceIds: {'p-1'},
     viewerDisplayName: 'Vitalii Noha',
     viewerEmail: 'vitalii@conclave.ax',
     workspaces: [testWorkspace],
@@ -76,7 +76,7 @@ void main() {
 
   group('Phase 13: Sidebar Content & Isolation Regressions', () {
     testWidgets(
-        'sidebar contains Conclave AX brand (home trigger), New Project button, Project tree, User profile, and Menu',
+        'sidebar contains Conclave AX brand (home trigger), New Space button, Space tree, User profile, and Menu',
         (tester) async {
       await tester.pumpWidget(
         wrapWithMaterial(
@@ -85,8 +85,8 @@ void main() {
             child: AppSidebar(
               shellContext: baseShellContext,
               onNavigateTo: (_) {},
-              onToggleProjectExpanded: (_) {},
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (_) {},
+              onCreateSpace: () {},
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -98,17 +98,17 @@ void main() {
 
       // Allowed permanent items:
       expect(find.text('Conclave AX'),
-          findsNWidgets(2)); // Brand Header & Project in tree
-      expect(find.byTooltip('New Project'),
-          findsOneWidget); // New Project button before alarm
+          findsNWidgets(2)); // Brand Header & Space in tree
+      expect(find.byTooltip('New Space'),
+          findsOneWidget); // New Space button before alarm
       expect(find.byTooltip('Notifications'), findsOneWidget); // Alarm button
       expect(
           find.descendant(
-              of: find.byType(ProjectTree), matching: find.text('Conclave AX')),
-          findsOneWidget); // Project name in tree
+              of: find.byType(SpaceTree), matching: find.text('Conclave AX')),
+          findsOneWidget); // Space name in tree
       expect(find.text('Authentication redesign'),
-          findsOneWidget); // Workstream in tree
-      expect(find.text('Scheduler'), findsOneWidget); // Workstream in tree
+          findsOneWidget); // Thread in tree
+      expect(find.text('Scheduler'), findsOneWidget); // Thread in tree
       expect(find.text('Vitalii Noha'),
           findsOneWidget); // User footer display name
       expect(find.text('VN'), findsOneWidget); // User avatar initials
@@ -116,8 +116,8 @@ void main() {
 
       // FORBIDDEN permanent sidebar items:
       expect(find.text('Home'), findsNothing);
-      expect(find.text('Projects'), findsNothing);
-      expect(find.text('PROJECTS'), findsNothing);
+      expect(find.text('Spaces'), findsNothing);
+      expect(find.text('SPACES'), findsNothing);
       expect(find.text('Workspaces'), findsNothing);
       expect(find.text('Workers'), findsNothing);
       expect(find.text('Usage'), findsNothing);
@@ -137,8 +137,8 @@ void main() {
             child: AppSidebar(
               shellContext: baseShellContext,
               onNavigateTo: (nav) => target = nav,
-              onToggleProjectExpanded: (_) {},
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (_) {},
+              onCreateSpace: () {},
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -156,13 +156,13 @@ void main() {
 
   group('Phase 13: Global Application Menu Regressions', () {
     testWidgets(
-        'menu contains Workspaces, Archived Projects, Appearance, Downloads, Documentation, About Conclave AX, Log out in correct order',
+        'menu contains Workspaces, Archived Spaces, Appearance, Downloads, Documentation, About Conclave AX, Log out in correct order',
         (tester) async {
       AxNavigation? navigated;
       bool aboutOpened = false;
       Uri? openedUrl;
       bool loggedOut = false;
-      bool archivedProjectsOpened = false;
+      bool archivedSpacesOpened = false;
 
       await tester.pumpWidget(
         wrapWithMaterial(
@@ -174,7 +174,7 @@ void main() {
                 onLogout: () => loggedOut = true,
                 onOpenAbout: () => aboutOpened = true,
                 onOpenExternal: (uri) => openedUrl = uri,
-                onOpenArchivedProjects: () => archivedProjectsOpened = true,
+                onOpenArchivedSpaces: () => archivedSpacesOpened = true,
               ),
             ],
           ),
@@ -188,7 +188,7 @@ void main() {
 
       // Verify all required items are present in the menu
       expect(find.text('Workspaces'), findsOneWidget);
-      expect(find.text('Archived Projects'), findsOneWidget);
+      expect(find.text('Archived Spaces'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Downloads'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
@@ -206,12 +206,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(navigated, const AxNavigation.workspaces());
 
-      // Re-open and test Archived Projects
+      // Re-open and test Archived Spaces
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Archived Projects'));
+      await tester.tap(find.text('Archived Spaces'));
       await tester.pumpAndSettle();
-      expect(archivedProjectsOpened, isTrue);
+      expect(archivedSpacesOpened, isTrue);
 
       // Re-open and test Downloads
       await tester.tap(find.byTooltip('Application menu'));
@@ -257,7 +257,7 @@ void main() {
                 onLogout: () {},
                 onOpenAbout: () {},
                 onOpenExternal: (_) {},
-                onOpenArchivedProjects: () {},
+                onOpenArchivedSpaces: () {},
               ),
             ],
           ),
@@ -297,10 +297,10 @@ void main() {
     });
   });
 
-  group('Phase 13: Project Tree Interaction & Workstream Selection', () {
+  group('Phase 13: Space Tree Interaction & Thread Selection', () {
     testWidgets('selecting expanded parent preserves expansion and navigates',
         (tester) async {
-      String? toggledProjectId;
+      String? toggledSpaceId;
       AxNavigation? navigated;
 
       await tester.pumpWidget(
@@ -310,8 +310,8 @@ void main() {
             child: AppSidebar(
               shellContext: baseShellContext,
               onNavigateTo: (nav) => navigated = nav,
-              onToggleProjectExpanded: (id) => toggledProjectId = id,
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (id) => toggledSpaceId = id,
+              onCreateSpace: () {},
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -321,23 +321,23 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Project tree displays open folder icon when expanded
+      // Space tree displays open folder icon when expanded
       expect(
         find.byWidgetPredicate(
             (w) => w is ConclaveFolderIcon && w.isExpanded == true),
         findsOneWidget,
       );
 
-      // Selecting the expanded parent from a Workstream preserves expansion.
+      // Selecting the expanded parent from a Thread preserves expansion.
       await tester.tap(find.descendant(
-        of: find.byType(ProjectTree),
+        of: find.byType(SpaceTree),
         matching: find.text('Conclave AX'),
       ));
-      expect(toggledProjectId, isNull);
-      expect(navigated, const AxNavigation.project('p-1'));
+      expect(toggledSpaceId, isNull);
+      expect(navigated, const AxNavigation.space('p-1'));
     });
 
-    testWidgets('selecting a workstream triggers navigation with active state',
+    testWidgets('selecting a thread triggers navigation with active state',
         (tester) async {
       AxNavigation? navigated;
 
@@ -348,8 +348,8 @@ void main() {
             child: AppSidebar(
               shellContext: baseShellContext,
               onNavigateTo: (nav) => navigated = nav,
-              onToggleProjectExpanded: (_) {},
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (_) {},
+              onCreateSpace: () {},
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},
@@ -359,9 +359,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Tap on idle workstream 'Scheduler'
+      // Tap on idle thread 'Scheduler'
       await tester.tap(find.text('Scheduler'));
-      expect(navigated, const AxNavigation.workstream('p-1', 'ws-2'));
+      expect(navigated, const AxNavigation.thread('p-1', 'ws-2'));
     });
   });
 
@@ -384,8 +384,8 @@ void main() {
                         child: AppSidebar(
                           shellContext: baseShellContext,
                           onNavigateTo: (_) {},
-                          onToggleProjectExpanded: (_) {},
-                          onCreateProject: () {},
+                          onToggleSpaceExpanded: (_) {},
+                          onCreateSpace: () {},
                           onOpenCommandPalette: _dummyAction,
                           onOpenNotifications: _dummyAction,
                           onLogout: () {},
@@ -403,8 +403,8 @@ void main() {
                         child: AppSidebar(
                           shellContext: baseShellContext,
                           onNavigateTo: _dummyNav,
-                          onToggleProjectExpanded: _dummyToggle,
-                          onCreateProject: _dummyAction,
+                          onToggleSpaceExpanded: _dummyToggle,
+                          onCreateSpace: _dummyAction,
                           onOpenCommandPalette: _dummyAction,
                           onOpenNotifications: _dummyAction,
                           onLogout: _dummyAction,
@@ -494,7 +494,7 @@ void main() {
                 onLogout: () {},
                 onOpenAbout: () {},
                 onOpenExternal: (_) {},
-                onOpenArchivedProjects: () {},
+                onOpenArchivedSpaces: () {},
               ),
             ],
           ),
@@ -522,8 +522,8 @@ void main() {
             child: AppSidebar(
               shellContext: baseShellContext,
               onNavigateTo: (_) {},
-              onToggleProjectExpanded: (_) {},
-              onCreateProject: () {},
+              onToggleSpaceExpanded: (_) {},
+              onCreateSpace: () {},
               onLogout: () {},
               onOpenAbout: () {},
               onOpenExternal: (_) {},

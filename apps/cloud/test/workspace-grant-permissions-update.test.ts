@@ -7,10 +7,10 @@ const state = vi.hoisted(() => ({ status: "active", owner: true }));
 vi.mock("../src/routes/handlers.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/routes/handlers.js")>()),
   securityContext: async () => ({ userId: "owner-1" }),
-  loadWorkspaceProjectGrant: async () => ({
+  loadWorkspaceSpaceGrant: async () => ({
     id: "grant-1",
     workspace_id: "workspace-1",
-    project_id: "project-1",
+    space_id: "space-1",
     status: state.status,
     allowed_permissions_json: "[]",
     expires_at: null,
@@ -24,7 +24,7 @@ vi.mock("@conclave/security", async (importOriginal) => ({
       throw Object.assign(new Error("Owner required"), { status: 403 });
   },
 }));
-import { handleUpdateWorkspaceProjectGrant } from "../src/routes/workspaces-grants.js";
+import { handleUpdateWorkspaceSpaceGrant } from "../src/routes/workspaces-grants.js";
 
 describe("Workspace grant access editing", () => {
   async function update(permissions: unknown) {
@@ -40,8 +40,8 @@ describe("Workspace grant access editing", () => {
         }),
       },
     } as never;
-    const result = handleUpdateWorkspaceProjectGrant(
-      new Request("https://cloud.test/api/workspace-project-grants/grant-1", {
+    const result = handleUpdateWorkspaceSpaceGrant(
+      new Request("https://cloud.test/api/workspace-space-grants/grant-1", {
         method: "PATCH",
         body: JSON.stringify({ allowedPermissions: permissions }),
       }),

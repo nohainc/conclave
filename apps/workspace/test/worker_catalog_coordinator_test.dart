@@ -395,7 +395,7 @@ void main() {
       'description': 'Updated catalog metadata',
       'profileDefinitionId': 'fixture-profile-v2',
       'providerToolName': 'fixture-next',
-      'capabilities': ['text', 'workstream_read'],
+      'capabilities': ['text', 'thread_read'],
       'sortOrder': 3,
     };
     remoteDescriptors = [changedOriginal, addedDescriptor];

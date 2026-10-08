@@ -1,6 +1,6 @@
 import type { ConversationTurn } from "@conclave/core";
 
-/** Call only after authorizing the enclosing Workstream/request collection. */
+/** Call only after authorizing the enclosing Thread/request collection. */
 export async function loadConversationTurns(
   db: D1Database,
   workRequestIds: readonly string[],

@@ -36,31 +36,28 @@ it("preserves historical checkout columns, index names, triggers and transitive 
     );
     baseline = baseline.replace(
       "  input_json TEXT NOT NULL DEFAULT '{}',\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL,\n  snapshot_json",
-      "  checkout_id TEXT REFERENCES workstream_checkouts(id) ON DELETE RESTRICT,\n  input_json TEXT NOT NULL DEFAULT '{}',\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL,\n  snapshot_json",
+      "  checkout_id TEXT REFERENCES thread_checkouts(id) ON DELETE RESTRICT,\n  input_json TEXT NOT NULL DEFAULT '{}',\n  created_at TEXT NOT NULL,\n  updated_at TEXT NOT NULL,\n  snapshot_json",
     );
     baseline = baseline
-      .replaceAll(
-        "idx_work_requests_workstream",
-        "idx_v6_work_requests_workstream",
-      )
+      .replaceAll("idx_work_requests_thread", "idx_v6_work_requests_thread")
       .replaceAll(
         "idx_workflow_tasks_request",
         "idx_v6_workflow_tasks_request",
       );
     db.exec(baseline);
-    db.exec(`CREATE TABLE workstream_checkouts(id TEXT PRIMARY KEY);
+    db.exec(`CREATE TABLE thread_checkouts(id TEXT PRIMARY KEY);
       CREATE TABLE historical_checkpoint(id TEXT PRIMARY KEY, request_id TEXT REFERENCES work_requests(id) ON DELETE RESTRICT, extra_json TEXT);
       CREATE TABLE checkpoint_link(id TEXT PRIMARY KEY, checkpoint_id TEXT REFERENCES historical_checkpoint(id) ON DELETE CASCADE);
       CREATE INDEX custom_checkpoint_index ON historical_checkpoint(request_id);
       CREATE TRIGGER preserve_checkout BEFORE UPDATE OF checkout_id ON work_requests WHEN OLD.checkout_id IS NOT NEW.checkout_id BEGIN SELECT RAISE(ABORT, 'immutable checkout'); END;
       INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES('user','test@example.com','Test','now','now');
-      INSERT INTO projects(id,owner_user_id,name,created_at,updated_at) VALUES('project','user','Project','now','now');
-      INSERT INTO workstreams(id,project_id,name,status,lead_user_id,created_at,updated_at) VALUES('stream','project','Stream','active','user','now','now');
-      INSERT INTO workstream_checkouts VALUES('checkout');
-      INSERT INTO work_requests(id,workstream_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,checkout_id,created_at,updated_at,cancel_requested_at)
+      INSERT INTO spaces(id,owner_user_id,name,created_at,updated_at) VALUES('space','user','Space','now','now');
+      INSERT INTO threads(id,space_id,name,status,lead_user_id,created_at,updated_at) VALUES('stream','space','Stream','active','user','now','now');
+      INSERT INTO thread_checkouts VALUES('checkout');
+      INSERT INTO work_requests(id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,checkout_id,created_at,updated_at,cancel_requested_at)
       VALUES('request','stream','user','stateless','direct',1,'{ "name": "Direct" }','cancelled','checkout','created','updated','cancelled-at');
       INSERT INTO workflow_tasks(id,work_request_id,step_kind,execution_mode,timeout_ms,prompt_profile_version,status,created_at,updated_at)
-      VALUES('task','request','implement','stateful_workstream',900000,'implement:v1','failed','created','updated');
+      VALUES('task','request','implement','stateful_thread',900000,'implement:v1','failed','created','updated');
       INSERT INTO historical_checkpoint VALUES('checkpoint','request','{"preserve":true}');
       INSERT INTO checkpoint_link VALUES('link','checkpoint');`);
     db.exec("PRAGMA foreign_keys = ON");
@@ -82,7 +79,7 @@ it("preserves historical checkout columns, index names, triggers and transitive 
         "UPDATE work_requests SET checkout_id = NULL WHERE id = 'request'",
       ),
     ).toThrow("immutable checkout");
-    db.exec(`INSERT INTO work_requests(id,workstream_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,created_at,updated_at) VALUES('chat','stream','user','stateless','chat',1,'{}','queued','now','now');
+    db.exec(`INSERT INTO work_requests(id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,created_at,updated_at) VALUES('chat','stream','user','stateless','chat',1,'{}','queued','now','now');
       INSERT INTO workflow_tasks(id,work_request_id,step_kind,execution_mode,timeout_ms,prompt_profile_version,status,created_at,updated_at) VALUES('chat-task','chat','chat','stateless_read',900000,'chat:v1','queued','now','now');`);
   } finally {
     db.close();

@@ -25,7 +25,7 @@ The catalog identity is deliberately separate from its implementation:
 - `tool_profile_releases` stores immutable, signed, versioned implementation behavior.
 
 Cloud permits at most one active Profile Definition per Worker. Replacing an
-implementation does not change the Worker Type ID used by Workstreams,
+implementation does not change the Worker Type ID used by Threads,
 permissions, inventory, scheduling, and history. Catalog identity and Profile
 Definition must remain separate even when a Worker has exactly one active
 implementation.
@@ -41,7 +41,7 @@ These are the initial entries, not an exhaustive list of Worker Types. New
 approved entries can use an existing Engine family and the supported Profile
 contract without an application-side ID-to-name mapping.
 
-Workflows, Workstream bindings, scheduling, history, and AX UI use logical
+Workflows, Thread bindings, scheduling, history, and AX UI use logical
 Worker IDs. They do not use Profile IDs, Engine versions, or provider
 executable names as identity.
 
@@ -192,13 +192,13 @@ unrunnable Worker schedulable.
 The authenticated human Worker inventory API composes catalog `displayName`
 and `description`, plus the Workspace name, into each local inventory record.
 AX reads these fields directly alongside readiness, capability, Engine,
-Profile, and provider-tool details; Workstream Worker choices render
+Profile, and provider-tool details; Thread Worker choices render
 `displayName · workspaceName` and retain the local Worker ID as the selection
 value. AX does not join a separate catalog response or infer a display name
 from the Worker Type ID.
 
 Cloud also checks the authoritative catalog independently during scheduling
-and Workstream binding validation. The inventory Worker Type must still have
+and Thread binding validation. The inventory Worker Type must still have
 an active, visible catalog entry allowed by that Workspace's stable, beta, or
 testing channel, and its Profile Definition must still be the matching active
 definition. A retired or otherwise ineligible Worker is rejected even if a
@@ -264,7 +264,7 @@ not reimplement provider login flows.
 
 Models are not Worker Types.
 
-AX/Workstream assignment may select an optional model.
+AX/Thread assignment may select an optional model.
 
 The Engine/Profile maps that model to the provider CLI only when supported.
 
@@ -306,8 +306,8 @@ Architecture v8 permits a new approved logical Worker (such as `claude` or arbit
 4. **Channel Promotion:** The maintainer promotes the release to the `testing` channel (`POST /api/admin/workers/definitions/:id/channels/testing`).
 5. **Dynamic Workspace & AX Discovery:**
    - **Workspace:** On next periodic catalog sync (`GET /api/workspace-runtime/workers/catalog`), Workspace dynamically discovers the new `WorkerDescriptor`, downloads the signed Tool Profile (`ToolProfileReleaseAdmission`), configures the local Worker slot, verifies local provider CLI readiness, and syncs safe readiness to Cloud.
-   - **Conclave AX:** On next catalog fetch (`GET /api/workers/catalog`), AX automatically renders the new Worker in Workspaces inventory, and Workstreams can bind task roles to it immediately.
-   - **Execution:** When AX dispatches a Workstream step to the new Worker, Cloud schedules the task to the ready Workspace, and Workspace executes it using the generic CLI Worker Engine (`engines/cli_worker`) configured by the signed Tool Profile.
+   - **Conclave AX:** On next catalog fetch (`GET /api/workers/catalog`), AX automatically renders the new Worker in Workspaces inventory, and Threads can bind task roles to it immediately.
+   - **Execution:** When AX dispatches a Thread step to the new Worker, Cloud schedules the task to the ready Workspace, and Workspace executes it using the generic CLI Worker Engine (`engines/cli_worker`) configured by the signed Tool Profile.
 
 Zero lines of application source code in `apps/workspace` or `apps/app` contain hardcoded Worker Type identities.
 
@@ -327,7 +327,7 @@ The dynamic catalog acceptance fixture separately introduces
 `dynamic-test-cli`. These identifiers exist only in tests. Cloud schema and
 catalog tests prove database discovery; Workspace tests prove catalog display,
 signed Profile download, explicit local configuration, readiness, inventory,
-and generic Engine execution; AX tests prove metadata display and Workstream
+and generic Engine execution; AX tests prove metadata display and Thread
 selection; Cloud scheduler tests prove it can be assigned. The Workspace
 fixture then retires the still-ready local Worker and verifies it is omitted
 from inventory and rejected for new execution, before restoring the catalog

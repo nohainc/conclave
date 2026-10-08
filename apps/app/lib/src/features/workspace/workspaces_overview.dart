@@ -79,7 +79,7 @@ class WorkspacesOverview extends StatelessWidget {
                   ),
                   Expanded(
                     flex: 2,
-                    child: Text('Projects',
+                    child: Text('Spaces',
                         textAlign: TextAlign.center, style: mutedStyle),
                   ),
                   Expanded(
@@ -158,7 +158,7 @@ class WorkspacesOverview extends StatelessWidget {
                         Expanded(
                           flex: 2,
                           child: Text(
-                            '${workspace.projectGrantCount}',
+                            '${workspace.spaceGrantCount}',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontSize: 13.5,

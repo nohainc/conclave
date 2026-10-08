@@ -10,7 +10,7 @@ models and callbacks instead of reaching into shell state directly.
 
 The first extracted pages are:
 
-- `features/projects/projects_pages.dart` for Projects and Project overview;
+- `features/spaces/spaces_pages.dart` for Spaces and Space overview;
 - `features/workspace/workspace_settings_page.dart` for Workspace settings.
 
 The AX application shell and its domain models use current AX naming. Additional

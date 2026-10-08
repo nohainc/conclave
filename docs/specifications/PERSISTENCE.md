@@ -73,9 +73,9 @@ invariants such as before/after row counts, and fail atomically if those checks
 do not pass. Never silently discard active human sessions during a schema
 change.
 
-Project-scoped records derive authorization from Project membership. Execution
-Workspaces are user-owned and connect to Projects only through explicit
-Workspace Project Grants. Human and runtime bearer credentials are held in OS
+Space-scoped records derive authorization from Space membership. Execution
+Workspaces are user-owned and connect to Spaces only through explicit
+Workspace Space Grants. Human and runtime bearer credentials are held in OS
 secure storage; Cloud stores only their token hashes. Provider CLI sign-in is
 owned by the provider CLI's local configuration. Plaintext credentials are not
 stored in D1.
@@ -100,27 +100,27 @@ for the versioned contract, import limits, and ordered migration requirements.
 Work Requests and Workflow Steps are persisted with dependencies, immutable
 Workflow/execution snapshots, and assignment references. Runs and Worker
 assignments record execution state. A Work Request containing any stateful
-Step holds one Workstream runtime lease for its lifetime; the lease selects the
-Primary Workspace, serializes stateful requests for that Workstream, and
+Step holds one Thread runtime lease for its lifetime; the lease selects the
+Primary Workspace, serializes stateful requests for that Thread, and
 provides a fencing token checked before filesystem mutation. Workspace resolves
-the Workstream directory from immutable Project and Workstream IDs. Research
+the Thread directory from immutable Space and Thread IDs. Research
 and Plan remain stateless, read-only Steps and may run on another eligible
 granted Workspace; they do not mutate that directory. D1 persists Work and
-lease metadata, not the local Workstream directory or its Git state. Persisted
+lease metadata, not the local Thread directory or its Git state. Persisted
 v8 records are authoritative current state; durable realtime events notify AX
 of changes and let it refresh that state. The schema does not include the
 retired pre-v8 Goal/Phase/Attempt/ModelCall/Finding/Verification aggregate.
 
-Workspace Project Grants authorize a Project to use an owner-controlled
-Workspace. A grant does not register repositories or map Project
+Workspace Space Grants authorize a Space to use an owner-controlled
+Workspace. A grant does not register repositories or map Space
 repository/path identifiers to local paths. Provider CLIs manage Git inside
-the ID-derived Workstream directory through the generic CLI Worker Engine;
+the ID-derived Thread directory through the generic CLI Worker Engine;
 Workspace exposes only read-only Git observability for repositories found
 there.
 
-Workstream authorization is evaluated from current Project membership and the
-Workstream access policy. The database does not duplicate Project roles in a
-separate Workstream membership table.
+Thread authorization is evaluated from current Space membership and the
+Thread access policy. The database does not duplicate Space roles in a
+separate Thread membership table.
 
 Every Workspace runtime identity has a credential hash. Stable installation
 ownership lives in `workspace_installations`, which records the owner,
@@ -146,7 +146,7 @@ active foreign owner must Release the installation first.
 `worker_assignments.worker_type_id` identifies the logical Worker type;
 `workspace_worker_id` identifies the Workspace's local Worker slot. The clean
 v8 baseline stores the Cloud Workflow instance ID on
-`runs.workflow_instance_id` and limits Workstream execution policy to logical
+`runs.workflow_instance_id` and limits Thread execution policy to logical
 Worker type IDs. It has no external-execution side table or provider allowlist.
 Apply this baseline only to a fresh development database; it is not an upgrade
 migration for an existing database.
@@ -155,7 +155,7 @@ migration for an existing database.
 
 Durable realtime events are change notifications, not the authoritative
 business record. Cloud retains event rows and their idempotency keys for 90
-days. The browser must refresh current Project, Workstream, and Work state from
+days. The browser must refresh current Space, Thread, and Work state from
 the authenticated read APIs after a reconnect or sequence gap; the realtime
 transport does not promise historical event replay. Ephemeral events are never
 persisted.
@@ -173,12 +173,12 @@ The Work Request, Step, and lease behavior here must match the
 [Work v1 Contract](WORK_V1_CONTRACT.md) and
 [Architecture v8](../architecture/ARCHITECTURE_V8.md). Local directory identity
 and mutation fencing are specified in
-[ADR-011](../decisions/ADR-011-workstream-working-directories.md).
+[ADR-011](../decisions/ADR-011-thread-working-directories.md).
 
 See [Protocol Boundaries](../architecture/PROTOCOL_BOUNDARIES.md).
 
 Durable realtime stream identity is `(kind, id)` for execution Workspace,
-Project, or user synchronization. Collaboration events have no execution
+Space, or user synchronization. Collaboration events have no execution
 Workspace identity. The fresh v8 baseline and one-time hosted alignment preserve
 existing execution counters and events; see [realtime synchronization 1.1](REALTIME_SYNCHRONIZATION.md).
 

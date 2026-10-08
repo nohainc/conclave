@@ -4,16 +4,16 @@ import 'sync/persistence/ax_persistent_read_cache.dart';
 import '../notifications/notification_models.dart';
 import 'ax_data.dart';
 import 'ax_models.dart';
-import 'sync/ax_project_workstreams.dart';
-import 'sync/ax_project_details.dart';
+import 'sync/ax_space_threads.dart';
+import 'sync/ax_space_details.dart';
 import 'sync/ax_sync_engine.dart';
 import 'sync/ax_discussion_cache.dart';
 import 'sync/ax_work_history.dart';
 import 'sync/ax_work_realtime_sync.dart';
 import 'sync/ax_realtime_cache_router.dart';
 import 'sync/ax_session_catalogs.dart';
-import 'sync/ax_project_workspace_grants.dart';
-import 'sync/ax_project_tab_queries.dart';
+import 'sync/ax_space_workspace_grants.dart';
+import 'sync/ax_space_tab_queries.dart';
 import 'sync/ax_owned_workspaces.dart';
 import 'sync/ax_collaboration_mutations.dart';
 import 'sync/ax_lifecycle_sync.dart';
@@ -167,7 +167,7 @@ class AxStore {
       workspaceId: value.workspaceId,
       activeRunId: value.activeRunId,
       run: value.run,
-      projects: const [],
+      spaces: const [],
       tasks: List.unmodifiable(value.tasks),
       findings: List.unmodifiable(value.findings),
       events: List.unmodifiable(value.events),
@@ -193,10 +193,10 @@ class AxStore {
         notifications.where((n) => !n.read).length + invitations.items.length;
   }
 
-  Future<void> acceptInvitation(AxProjectInvitation invite) =>
+  Future<void> acceptInvitation(AxSpaceInvitation invite) =>
       collaboration.acceptInvitation(invite);
 
-  Future<void> declineInvitation(AxProjectInvitation invite) =>
+  Future<void> declineInvitation(AxSpaceInvitation invite) =>
       collaboration.declineInvitation(invite);
 
   void dispose() {
@@ -207,7 +207,7 @@ class AxStore {
     persistence.dispose();
     _disposed = true;
     _sessionGeneration++;
-    projects.dispose();
+    spaces.dispose();
     workspaces.dispose();
     executionChanges.dispose();
     realtimeStatus.dispose();
@@ -226,14 +226,14 @@ class AxStore {
       UserInvitationsStore(dataSource, engine: syncEngine);
   late final AxSessionCatalogs catalogs =
       AxSessionCatalogs(dataSource, engine: syncEngine);
-  late final AxProjectTabQueries projectTabs =
-      AxProjectTabQueries(dataSource, engine: syncEngine);
-  late final AxProjectWorkspaceGrants projectWorkspaceGrants =
-      AxProjectWorkspaceGrants(dataSource, engine: syncEngine);
-  late final AxProjectWorkstreams projectWorkstreams =
-      AxProjectWorkstreams(dataSource, engine: syncEngine);
-  late final AxProjectDetails projectDetails =
-      AxProjectDetails(dataSource, engine: syncEngine);
+  late final AxSpaceTabQueries spaceTabs =
+      AxSpaceTabQueries(dataSource, engine: syncEngine);
+  late final AxSpaceWorkspaceGrants spaceWorkspaceGrants =
+      AxSpaceWorkspaceGrants(dataSource, engine: syncEngine);
+  late final AxSpaceThreads spaceThreads =
+      AxSpaceThreads(dataSource, engine: syncEngine);
+  late final AxSpaceDetails spaceDetails =
+      AxSpaceDetails(dataSource, engine: syncEngine);
   late final AxDiscussionCache discussion =
       AxDiscussionCache(dataSource, engine: syncEngine);
 
@@ -244,7 +244,7 @@ class AxStore {
       AxWorkRealtimeSync.forCache(workHistory);
 
   late final realtimeCacheRouter = AxRealtimeCacheRouter(syncEngine,
-      projectRemoved: projectWorkspaceGrants.remove,
+      spaceRemoved: spaceWorkspaceGrants.remove,
       discussionChanged: discussion.reconcileSignal,
       discussionObserved: discussion.isObserved,
       discussionResynchronize: (id) async {
@@ -296,7 +296,7 @@ class AxStore {
     lifecycle.reset();
     unawaited(persistence.clearUser());
     _sessionGeneration++;
-    projects.clear();
+    spaces.clear();
     workspaces.clear();
     security.value = null;
     securityError.value = null;
@@ -305,7 +305,7 @@ class AxStore {
     securityLoading.value = false;
     notifications.clear();
     unreadNotifications.value = 0;
-    projectWorkspaceGrants.clear();
+    spaceWorkspaceGrants.clear();
     realtimeCacheRouter.reset();
     workRealtime.reset();
     collaboration.clear();
@@ -318,26 +318,25 @@ class AxStore {
   final AuthStore auth;
   late final WorkspaceStore workspaces =
       WorkspaceStore(dataSource, engine: syncEngine);
-  late final ProjectStore projects =
-      ProjectStore(dataSource, engine: syncEngine);
+  late final SpaceStore spaces = SpaceStore(dataSource, engine: syncEngine);
   late final collaboration =
       AxCollaborationMutations(dataSource, engine: syncEngine);
   final RunStore runs;
 
   /// Bootstrap/recovery only; navigation uses focused queries.
   Future<AxSnapshot> loadBootstrapState(
-      {String? projectId, String? workspaceId}) async {
+      {String? spaceId, String? workspaceId}) async {
     final generation = _sessionGeneration;
     final loaded = await dataSource.loadBootstrapState(
-        projectId: projectId, workspaceId: workspaceId);
+        spaceId: spaceId, workspaceId: workspaceId);
     if (_disposed || generation != _sessionGeneration) {
       throw StateError('Bootstrap superseded');
     }
     final snapshot = loaded.copyWith(
-        projects: loaded.projects
-            .map((project) => project.copyWith(workstreams: const []))
+        spaces: loaded.spaces
+            .map((space) => space.copyWith(threads: const []))
             .toList());
-    projects.replace(snapshot.projects);
+    spaces.replace(snapshot.spaces);
     workspaces.replace(snapshot.workspaces);
     auth.replace(snapshot.viewer);
     replaceExecution(snapshot);
@@ -345,8 +344,8 @@ class AxStore {
   }
 }
 
-class ProjectStore extends ValueNotifier<List<AxProject>> {
-  ProjectStore(this.source, {AxSyncEngine? engine})
+class SpaceStore extends ValueNotifier<List<AxSpace>> {
+  SpaceStore(this.source, {AxSyncEngine? engine})
       : engine = engine ?? AxSyncEngine(),
         super(const []) {
     _cancel = this.engine.watch(
@@ -356,11 +355,11 @@ class ProjectStore extends ValueNotifier<List<AxProject>> {
   final AxDataSource source;
   final AxSyncEngine engine;
   late final void Function() _cancel;
-  late final query = AxQuery<List<AxProject>>(
-      key: AxQueryKey(['projects']),
-      load: () async => List.unmodifiable((await source.loadProjects())
-          .map((p) => p.copyWith(workstreams: const []))));
-  List<AxProject> get items => value;
+  late final query = AxQuery<List<AxSpace>>(
+      key: AxQueryKey(['spaces']),
+      load: () async => List.unmodifiable((await source.loadSpaces())
+          .map((s) => s.copyWith(threads: const []))));
+  List<AxSpace> get items => value;
   void clear() => engine.remove(query.key);
   @override
   void dispose() {
@@ -369,15 +368,15 @@ class ProjectStore extends ValueNotifier<List<AxProject>> {
     super.dispose();
   }
 
-  void replace(List<AxProject> items) {
+  void replace(List<AxSpace> items) {
     if (listEquals(value, items)) return;
     engine.update(
         query,
-        (_) => List.unmodifiable(
-            items.map((p) => p.copyWith(workstreams: const []))));
+        (_) =>
+            List.unmodifiable(items.map((s) => s.copyWith(threads: const []))));
   }
 
-  Future<List<AxProject>> refresh() => engine.refresh(query, supersede: true);
+  Future<List<AxSpace>> refresh() => engine.refresh(query, supersede: true);
 }
 
 class WorkspaceStore extends ValueNotifier<List<AxWorkspace>> {
@@ -490,7 +489,7 @@ class AxViewSignal extends ChangeNotifier {
   void bump() => notifyListeners();
 }
 
-class UserInvitationsStore extends ValueNotifier<List<AxProjectInvitation>> {
+class UserInvitationsStore extends ValueNotifier<List<AxSpaceInvitation>> {
   UserInvitationsStore(this.source, {AxSyncEngine? engine})
       : engine = engine ?? AxSyncEngine(),
         super(const []) {
@@ -501,11 +500,11 @@ class UserInvitationsStore extends ValueNotifier<List<AxProjectInvitation>> {
   final AxDataSource source;
   final AxSyncEngine engine;
   late final void Function() _cancel;
-  late final query = AxQuery<List<AxProjectInvitation>>(
+  late final query = AxQuery<List<AxSpaceInvitation>>(
       key: AxQueryKey(['me', 'invitations']),
       load: source.loadCurrentUserInvitations);
 
-  List<AxProjectInvitation> get items => value;
+  List<AxSpaceInvitation> get items => value;
   void clear() => engine.remove(query.key);
 
   @override
@@ -515,11 +514,11 @@ class UserInvitationsStore extends ValueNotifier<List<AxProjectInvitation>> {
     super.dispose();
   }
 
-  void replace(List<AxProjectInvitation> items) {
+  void replace(List<AxSpaceInvitation> items) {
     if (listEquals(value, items)) return;
     engine.update(query, (_) => List.unmodifiable(items));
   }
 
-  Future<List<AxProjectInvitation>> refresh() =>
+  Future<List<AxSpaceInvitation>> refresh() =>
       engine.refresh(query, supersede: true);
 }

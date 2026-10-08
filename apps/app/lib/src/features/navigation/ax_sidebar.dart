@@ -2,7 +2,7 @@ import 'app_sidebar.dart';
 
 export 'app_menu.dart';
 export 'app_sidebar.dart';
-export 'project_tree.dart';
+export 'space_tree.dart';
 
 /// Backward-compatible subclass of [AppSidebar].
 class AxSidebar extends AppSidebar {
@@ -10,9 +10,9 @@ class AxSidebar extends AppSidebar {
     super.key,
     required super.shellContext,
     required super.onNavigateTo,
-    required super.onToggleProjectExpanded,
-    required super.onCreateProject,
-    super.onCreateWorkstream,
+    super.onToggleSpaceExpanded,
+    super.onCreateSpace,
+    super.onCreateThread,
     super.searchController,
     super.searchFocusNode,
     super.onSearchChanged,
@@ -24,7 +24,7 @@ class AxSidebar extends AppSidebar {
     required super.onLogout,
     required super.onOpenAbout,
     required super.onOpenExternal,
-    super.onOpenArchivedProjects,
+    super.onOpenArchivedSpaces,
     super.onToggleCollapse,
     super.compact = false,
   });
@@ -37,8 +37,8 @@ class AxIconRail extends AppIconRail {
     required super.shellContext,
     required super.onNavigateTo,
     required super.onOpenDrawer,
-    super.onCreateProject,
-    super.onCreateWorkstream,
+    super.onCreateSpace,
+    super.onCreateThread,
     super.searchController,
     super.searchFocusNode,
     super.onSearchChanged,
@@ -50,7 +50,7 @@ class AxIconRail extends AppIconRail {
     required super.onLogout,
     required super.onOpenAbout,
     required super.onOpenExternal,
-    super.onOpenArchivedProjects,
+    super.onOpenArchivedSpaces,
     super.onToggleCollapse,
   });
 }

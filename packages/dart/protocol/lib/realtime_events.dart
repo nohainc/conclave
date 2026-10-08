@@ -72,8 +72,8 @@ class RealtimeEvent {
           throw const ProtocolException(
               'Synchronization streams require 1.1 and no workspaceId');
         }
-        if (kind == 'project' && decoded['projectId'] != streamId) {
-          throw const ProtocolException('Project stream must match projectId');
+        if (kind == 'space' && decoded['spaceId'] != streamId) {
+          throw const ProtocolException('Space stream must match spaceId');
         }
       }
     } else {
@@ -91,18 +91,16 @@ class RealtimeEvent {
         throw const ProtocolException(
             'Collaboration requires a synchronization stream');
       }
-      _requiredString(decoded, 'projectId');
+      _requiredString(decoded, 'spaceId');
       _requiredString(Map<String, Object?>.from(payload), 'entityId');
-      if (payload.keys
-          .any((key) => key != 'entityId' && key != 'workstreamId')) {
+      if (payload.keys.any((key) => key != 'entityId' && key != 'threadId')) {
         throw const ProtocolException(
             'Collaboration payloads contain identifiers only');
       }
-      if ((decoded['type'] as String).startsWith('workstream.') ||
+      if ((decoded['type'] as String).startsWith('thread.') ||
           (decoded['type'] as String).startsWith('discussion.')) {
-        if (_requiredString(decoded, 'workstreamId') !=
-            payload['workstreamId']) {
-          throw const ProtocolException('Workstream signal identity mismatch');
+        if (_requiredString(decoded, 'threadId') != payload['threadId']) {
+          throw const ProtocolException('Thread signal identity mismatch');
         }
       }
     } else if ((durableRealtimeEventTypes.contains(decoded['type']) ||
@@ -121,7 +119,7 @@ class RealtimeEvent {
       'artifactId',
       'workerId',
       'workRequestId',
-      'workstreamId',
+      'threadId',
       'stepKind',
       'leaseId',
       'percentage',

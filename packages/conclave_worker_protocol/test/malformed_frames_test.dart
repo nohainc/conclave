@@ -154,7 +154,7 @@ void main() {
       'protocolVersion': '4.0',
       'requestId': 'policy-1',
       'assignmentId': 'assignment-1',
-      'prompt': 'inspect the workstream',
+      'prompt': 'inspect the thread',
       'model': null,
       'timeoutMs': 1000,
       'sessionPolicy': 'stateless',

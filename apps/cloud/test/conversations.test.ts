@@ -8,7 +8,7 @@ const { authorize } = vi.hoisted(() => ({
 }));
 vi.mock("../src/routes/handlers.js", async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  authorizeWorkstreamAccess: authorize,
+  authorizeThreadAccess: authorize,
 }));
 import {
   conversationId,
@@ -19,11 +19,11 @@ import {
 it("isolates workflow scopes, preserves context revision, and gates Conversation reads", async () => {
   const { sqlite, db } = sqliteD1();
   sqlite.exec(`INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES('U','u@test','U','now','now');
-    INSERT INTO projects(id,owner_user_id,name,created_at,updated_at) VALUES('P','U','P','now','now');
-    INSERT INTO workstreams(id,project_id,name,status,lead_user_id,created_at,updated_at) VALUES('W','P','W','active','U','now','now');`);
+    INSERT INTO spaces(id,owner_user_id,name,created_at,updated_at) VALUES('P','U','P','now','now');
+    INSERT INTO threads(id,space_id,name,status,lead_user_id,created_at,updated_at) VALUES('W','P','W','active','U','now','now');`);
   // The ordered feature migration works against an existing v8 schema.
   sqlite.exec(`INSERT INTO work_requests
-    (id,workstream_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,snapshot_json,status,created_at,updated_at)
+    (id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,snapshot_json,status,created_at,updated_at)
     VALUES ('historical','W','U','stateful','direct',1,'{"name":"Direct"}','{"originalRequest":"Keep history"}','completed','old','old')`);
   sqlite.exec(
     "DROP TABLE conversation_work_requests; DROP TABLE conversations;",
@@ -55,7 +55,7 @@ it("isolates workflow scopes, preserves context revision, and gates Conversation
     db
       .prepare(
         `INSERT INTO work_requests
-    (id,workstream_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,created_at,updated_at)
+    (id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,created_at,updated_at)
     VALUES (?1,'W','U','stateful','direct',2,'{}','queued','now','now')`,
       )
       .bind(id);
@@ -71,16 +71,14 @@ it("isolates workflow scopes, preserves context revision, and gates Conversation
   ]);
   const id = conversationId("W", "work");
   expect(conversationId("W", "chat")).not.toBe(id);
-  const request = new Request(
-    "https://cloud.test/api/workstreams/W/conversations",
-  );
+  const request = new Request("https://cloud.test/api/threads/W/conversations");
   const env = { CONCLAVE_DB: db } as unknown as SecurityEnv;
   const response = await handleListConversations(request, env, "W");
   expect(await response.json()).toEqual({
     conversations: [
       {
         id,
-        workstreamId: "W",
+        threadId: "W",
         workflowId: "work",
         workflowVersion: 1,
         conversationRevision: 1,

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../brand.dart';
 import '../../navigation/ax_navigation.dart';
 import '../../ax/ax_models.dart';
-import '../../ax/sync/ax_project_workstreams.dart';
+import '../../ax/sync/ax_space_threads.dart';
 
 enum ExecutionStatusTone {
   usable,
@@ -33,13 +33,13 @@ extension ExecutionStatusToneHelpers on ExecutionStatusTone {
 class AxShellContext {
   const AxShellContext({
     required this.navigation,
-    required List<AxProject> projects,
-    this.projectListenable,
+    required List<AxSpace> spaces,
+    this.spaceListenable,
     this.workspaceListenable,
-    this.projectWorkstreams,
-    this.workstreamsByProject = const {},
-    this.selectedProject,
-    this.selectedWorkstream,
+    this.spaceThreads,
+    this.threadsBySpace = const {},
+    this.selectedSpace,
+    this.selectedThread,
     this.selectedRun,
     List<AxWorkspace> workspaces = const [],
     int unreadNotificationCount = 0,
@@ -52,33 +52,33 @@ class AxShellContext {
     this.realtimeListenable,
     this.viewerDisplayName,
     this.viewerEmail,
-    this.expandedProjectIds = const {},
-  })  : _projects = projects,
+    this.expandedSpaceIds = const {},
+  })  : _spaces = spaces,
         _workspaces = workspaces,
         _unreadNotificationCount = unreadNotificationCount,
         _realtimeStale = realtimeStale,
         _realtimeNotice = realtimeNotice;
 
   final AxNavigation navigation;
-  final List<AxProject> _projects;
-  final ValueListenable<List<AxProject>>? projectListenable;
-  List<AxProject> get projects => projectListenable?.value ?? _projects;
-  List<AxProject> get ownedProjects =>
-      projects.where((project) => project.role == 'owner').toList();
-  List<AxProject> get sharedProjects =>
-      projects.where((project) => project.role != 'owner').toList();
-  final AxProjectWorkstreams? projectWorkstreams;
-  final Map<String, List<AxWorkstream>> workstreamsByProject;
-  final AxProject? selectedProject;
-  final AxWorkstream? selectedWorkstream;
+  final List<AxSpace> _spaces;
+  final ValueListenable<List<AxSpace>>? spaceListenable;
+  List<AxSpace> get spaces => spaceListenable?.value ?? _spaces;
+  List<AxSpace> get ownedSpaces =>
+      spaces.where((space) => space.role == 'owner').toList();
+  List<AxSpace> get sharedSpaces =>
+      spaces.where((space) => space.role != 'owner').toList();
+  final AxSpaceThreads? spaceThreads;
+  final Map<String, List<AxThread>> threadsBySpace;
+  final AxSpace? selectedSpace;
+  final AxThread? selectedThread;
   final AxRun? selectedRun;
   final List<AxWorkspace> _workspaces;
   final ValueListenable<List<AxWorkspace>>? workspaceListenable;
   List<AxWorkspace> get workspaces => workspaceListenable?.value ?? _workspaces;
   final int _unreadNotificationCount;
   final ValueListenable<int>? unreadNotifications;
-  final ValueListenable<List<AxProjectInvitation>>? invitationsListenable;
-  List<AxProjectInvitation> get invitations =>
+  final ValueListenable<List<AxSpaceInvitation>>? invitationsListenable;
+  List<AxSpaceInvitation> get invitations =>
       invitationsListenable?.value ?? const [];
   int get unreadNotificationCount =>
       unreadNotifications?.value ?? _unreadNotificationCount;
@@ -94,25 +94,25 @@ class AxShellContext {
     final listenable = invitationsListenable;
     return listenable == null
         ? build()
-        : ValueListenableBuilder<List<AxProjectInvitation>>(
+        : ValueListenableBuilder<List<AxSpaceInvitation>>(
             valueListenable: listenable, builder: (context, _, __) => build());
   }
 
-  Widget watchProjectsAndWorkstreams(Widget Function() build) {
+  Widget watchSpacesAndThreads(Widget Function() build) {
     Widget collections(int index) {
-      final cache = projectWorkstreams;
-      if (cache == null || index >= projects.length) return build();
-      return AxQueryBuilder<List<AxWorkstream>>(
+      final cache = spaceThreads;
+      if (cache == null || index >= spaces.length) return build();
+      return AxQueryBuilder<List<AxThread>>(
           engine: cache.engine,
-          query: cache.query(projects[index].id),
+          query: cache.query(spaces[index].id),
           ensure: false,
           builder: (context, _) => collections(index + 1));
     }
 
-    final listenable = projectListenable;
+    final listenable = spaceListenable;
     return listenable == null
         ? collections(0)
-        : ValueListenableBuilder<List<AxProject>>(
+        : ValueListenableBuilder<List<AxSpace>>(
             valueListenable: listenable,
             builder: (context, _, __) => collections(0));
   }
@@ -131,17 +131,17 @@ class AxShellContext {
       builder: (context, _) => build());
   final String? viewerDisplayName;
   final String? viewerEmail;
-  final Set<String> expandedProjectIds;
+  final Set<String> expandedSpaceIds;
 
   int get onlineWorkspaceCount =>
       workspaces.where((w) => w.status.toLowerCase() == 'online').length;
 
   AxWorkspace? get targetedWorkspace {
-    final workstream = selectedWorkstream;
-    if (workstream != null &&
-        workstream.primaryWorkspace.isNotEmpty &&
-        workstream.primaryWorkspace != 'Not selected') {
-      final query = workstream.primaryWorkspace.trim().toLowerCase();
+    final thread = selectedThread;
+    if (thread != null &&
+        thread.primaryWorkspace.isNotEmpty &&
+        thread.primaryWorkspace != 'Not selected') {
+      final query = thread.primaryWorkspace.trim().toLowerCase();
       return workspaces.where((w) {
         return w.name.trim().toLowerCase() == query ||
             w.id.trim().toLowerCase() == query ||
@@ -151,13 +151,13 @@ class AxShellContext {
     return null;
   }
 
-  bool get isWorkstreamContext =>
-      selectedWorkstream != null ||
-      navigation.kind == AxRouteKind.workstream ||
+  bool get isThreadContext =>
+      selectedThread != null ||
+      navigation.kind == AxRouteKind.thread ||
       navigation.kind == AxRouteKind.run;
 
   String get executionStatusLabel {
-    if (isWorkstreamContext) {
+    if (isThreadContext) {
       final target = targetedWorkspace;
       if (target != null) {
         final isOnline = target.status.toLowerCase() == 'online';
@@ -170,7 +170,7 @@ class AxShellContext {
                 : 'Offline';
         return '${target.name} · $statusText';
       }
-      final customName = selectedWorkstream?.primaryWorkspace;
+      final customName = selectedThread?.primaryWorkspace;
       if (customName != null &&
           customName.isNotEmpty &&
           customName != 'Not selected') {
@@ -192,7 +192,7 @@ class AxShellContext {
     if (workspaces.isEmpty) {
       return ExecutionStatusTone.neutral;
     }
-    if (isWorkstreamContext) {
+    if (isThreadContext) {
       final target = targetedWorkspace;
       if (target != null) {
         final st = target.status.toLowerCase();
@@ -202,7 +202,7 @@ class AxShellContext {
         }
         return ExecutionStatusTone.failed;
       }
-      final customName = selectedWorkstream?.primaryWorkspace;
+      final customName = selectedThread?.primaryWorkspace;
       if (customName != null &&
           customName.isNotEmpty &&
           customName != 'Not selected') {
@@ -230,29 +230,28 @@ class AxShellContext {
     return initials.isNotEmpty ? initials.toUpperCase() : '?';
   }
 
-  bool isProjectExpanded(String projectId) =>
-      expandedProjectIds.contains(projectId);
+  bool isSpaceExpanded(String spaceId) => expandedSpaceIds.contains(spaceId);
 
   bool isNavActive(AxNavigation? target) {
     if (target == null) return false;
     switch (target.kind) {
       case AxRouteKind.home:
         return navigation.kind == AxRouteKind.home;
-      case AxRouteKind.projects:
-        return navigation.kind == AxRouteKind.projects ||
-            navigation.kind == AxRouteKind.project ||
-            navigation.kind == AxRouteKind.workstream ||
+      case AxRouteKind.spaces:
+        return navigation.kind == AxRouteKind.spaces ||
+            navigation.kind == AxRouteKind.space ||
+            navigation.kind == AxRouteKind.thread ||
             navigation.kind == AxRouteKind.run;
-      case AxRouteKind.project:
-        return (navigation.kind == AxRouteKind.project ||
-                navigation.kind == AxRouteKind.workstream ||
+      case AxRouteKind.space:
+        return (navigation.kind == AxRouteKind.space ||
+                navigation.kind == AxRouteKind.thread ||
                 navigation.kind == AxRouteKind.run) &&
-            target.projectId != null &&
-            navigation.projectId == target.projectId;
-      case AxRouteKind.workstream:
-        return navigation.kind == AxRouteKind.workstream &&
-            target.workstreamId != null &&
-            navigation.workstreamId == target.workstreamId;
+            target.spaceId != null &&
+            navigation.spaceId == target.spaceId;
+      case AxRouteKind.thread:
+        return navigation.kind == AxRouteKind.thread &&
+            target.threadId != null &&
+            navigation.threadId == target.threadId;
       case AxRouteKind.workspaces:
         return navigation.kind == AxRouteKind.workspaces;
       case AxRouteKind.profileSecurity:

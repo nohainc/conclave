@@ -3,7 +3,7 @@ import 'package:conclave_app/src/ax/ax_work_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('AX projects a Profile Lab-created Worker into Work execution history',
+  test('AX spaces a Profile Lab-created Worker into Work execution history',
       () {
     const workerTypeId = 'phase-13-unknown-provider';
     final worker = AxWorker.fromJson({
@@ -18,7 +18,7 @@ void main() {
       'readinessState': 'ready',
       'activationState': 'enabled',
       'localConcurrencyLimit': 1,
-      'capabilities': ['text', 'workstream_write', 'durable_session'],
+      'capabilities': ['text', 'thread_write', 'durable_session'],
       'profileDefinitionId': 'phase-13-profile',
       'profileReleaseVersion': 1,
       'providerToolName': 'Phase 13 Fixture CLI',

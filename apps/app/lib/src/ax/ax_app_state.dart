@@ -2,12 +2,12 @@ part of 'ax_app.dart';
 
 mixin _AxAppStateMixin on State<ConclaveAppShell> {
   AxSnapshot get executionSnapshot => store.execution;
-  String? selectedProjectId;
+  String? selectedSpaceId;
   RunStatus? optimisticRunStatus;
   bool isLoading = true;
   String? loadError;
   String? selectedTaskId = 'implement';
-  final Set<String> expandedProjectIds = <String>{};
+  final Set<String> expandedSpaceIds = <String>{};
   List<AxWorker> get workspaceWorkers =>
       store.syncEngine.peek(store.catalogs.workers).data ?? const [];
   bool get workspaceWorkerInventoryLoaded =>
@@ -164,23 +164,23 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     _focusSearch();
   }
 
-  AxProject? get selectedProject {
-    final id = navigation.projectId ?? selectedProjectId;
+  AxSpace? get selectedSpace {
+    final id = navigation.spaceId ?? selectedSpaceId;
     if (id == null) return null;
-    return store.projectDetails.peek(id) ??
-        store.projects.items.where((project) => project.id == id).firstOrNull;
+    return store.spaceDetails.peek(id) ??
+        store.spaces.items.where((space) => space.id == id).firstOrNull;
   }
 
   List<AxWorkspace> get workspaces => store.workspaces.items;
   AxTask? get selectedTask => executionSnapshot.tasks
       .where((task) => task.id == selectedTaskId)
       .firstOrNull;
-  AxWorkstream? get selectedWorkstream {
-    final project = selectedProject;
-    return (project == null
-            ? <AxWorkstream>[]
-            : store.projectWorkstreams.peek(project.id))
-        .where((workstream) => workstream.id == navigation.workstreamId)
+  AxThread? get selectedThread {
+    final space = selectedSpace;
+    return (space == null ? <AxThread>[] : store.spaceThreads.peek(space.id))
+        .where((thread) =>
+            thread.id == navigation.threadId ||
+            thread.id == navigation.threadId)
         .firstOrNull;
   }
 
@@ -189,12 +189,12 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
       notifications.where((notification) => !notification.read).length;
   AxShellContext get _shellContext => AxShellContext(
         navigation: navigation,
-        projects: store.projects.items,
-        projectListenable: store.projects,
+        spaces: store.spaces.items,
+        spaceListenable: store.spaces,
         workspaceListenable: store.workspaces,
-        projectWorkstreams: store.projectWorkstreams,
-        selectedProject: selectedProject,
-        selectedWorkstream: selectedWorkstream,
+        spaceThreads: store.spaceThreads,
+        selectedSpace: selectedSpace,
+        selectedThread: selectedThread,
         selectedRun: executionSnapshot.run,
         workspaces: store.workspaces.items,
         unreadNotificationCount: unreadNotificationCount,
@@ -209,14 +209,14 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
         realtimeNotice: realtimeNotice,
         viewerDisplayName: store.auth.viewer?.displayName,
         viewerEmail: store.auth.viewer?.email,
-        expandedProjectIds: expandedProjectIds,
+        expandedSpaceIds: expandedSpaceIds,
       );
-  void _toggleProjectExpanded(String projectId) {
+  void _toggleSpaceExpanded(String spaceId) {
     setState(() {
-      if (expandedProjectIds.contains(projectId)) {
-        expandedProjectIds.remove(projectId);
+      if (expandedSpaceIds.contains(spaceId)) {
+        expandedSpaceIds.remove(spaceId);
       } else {
-        expandedProjectIds.add(projectId);
+        expandedSpaceIds.add(spaceId);
       }
     });
   }
@@ -231,9 +231,9 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     final initialUri = widget.initialUri ?? browserNavigation.current;
     navigation = AxNavigation.fromUri(initialUri);
     // Expand deep links once; data refreshes must preserve manual collapse.
-    if (navigation.kind == AxRouteKind.workstream &&
-        navigation.projectId != null) {
-      expandedProjectIds.add(navigation.projectId!);
+    if (navigation.kind == AxRouteKind.thread &&
+        (navigation.spaceId != null || navigation.spaceId != null)) {
+      expandedSpaceIds.add(navigation.spaceId!);
     }
     _desktopAuthIntentId = _intentIdFromNavigation(navigation);
     if (!_isCanonicalWorkspaceUri(initialUri, navigation.toUri())) {
@@ -307,7 +307,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   @override
   Widget build(BuildContext context) => _buildApp(context);
 
-  Future<void> _createProject() async {
+  Future<void> _createSpace() async {
     var name = '';
     var description = '';
     var instructions = '';
@@ -318,7 +318,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
           Navigator.pop(
             dialogContext,
             (
-              name.isEmpty ? 'My first project' : name,
+              name.isEmpty ? 'My first space' : name,
               description.trim().isEmpty ? null : description.trim(),
               instructions.trim().isEmpty ? null : instructions.trim(),
             ),
@@ -326,7 +326,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
         }
 
         return AlertDialog(
-          title: const Text('Create project'),
+          title: const Text('Create Space'),
           content: SizedBox(
             width: 420,
             child: Column(
@@ -336,7 +336,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
                   autofocus: true,
                   onChanged: (value) => name = value,
                   onSubmitted: (_) => submit(),
-                  decoration: const InputDecoration(labelText: 'Project name'),
+                  decoration: const InputDecoration(labelText: 'Space name'),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -350,7 +350,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
                 TextField(
                   onChanged: (value) => instructions = value,
                   decoration: const InputDecoration(
-                    labelText: 'Project instructions (optional)',
+                    labelText: 'Space instructions (optional)',
                   ),
                   maxLines: 2,
                 ),
@@ -372,24 +372,24 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     );
     if (values == null) return;
     try {
-      final project = await store.collaboration.createProject(
+      final space = await store.collaboration.createSpace(
           name: values.$1, description: values.$2, instructions: values.$3);
       if (!mounted) return;
-      _navigateTo(AxNavigation.project(project.id), replace: true);
-      _showSnackBar('Project created. Create a Workstream to get started.');
+      _navigateTo(AxNavigation.space(space.id), replace: true);
+      _showSnackBar('Space created. Create a Thread to get started.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
     }
   }
 
-  Future<void> _createWorkstream([AxProject? targetProject]) async {
-    final project = targetProject ?? selectedProject;
-    if (project == null) return;
+  Future<void> _createThread([AxSpace? targetSpace]) async {
+    final space = targetSpace ?? selectedSpace;
+    if (space == null) return;
     var name = '';
     final created = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Create Workstream'),
+        title: const Text('Create Thread'),
         content: TextField(
           autofocus: true,
           onChanged: (value) => name = value,
@@ -399,7 +399,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
             }
           },
           decoration: const InputDecoration(
-            labelText: 'Workstream name',
+            labelText: 'Thread name',
             hintText: 'e.g. Authentication redesign',
           ),
         ),
@@ -421,48 +421,48 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     );
     if (created == null || created.isEmpty) return;
     try {
-      final workstream = await store.collaboration
-          .createWorkstream(projectId: project.id, name: created);
+      final thread = await store.collaboration
+          .createThread(spaceId: space.id, name: created);
       if (!mounted) return;
-      setState(() => expandedProjectIds.add(project.id));
-      _navigateTo(AxNavigation.workstream(project.id, workstream.id));
-      _showSnackBar('Workstream created.');
+      setState(() => expandedSpaceIds.add(space.id));
+      _navigateTo(AxNavigation.thread(space.id, thread.id));
+      _showSnackBar('Thread created.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
     }
   }
 
-  Future<void> _editProject(AxProject project) async {
-    var name = project.name;
-    var description = project.description;
-    var instructions = project.instructions;
+  Future<void> _editSpace(AxSpace space) async {
+    var name = space.name;
+    var description = space.description;
+    var instructions = space.instructions;
     final values = await showDialog<(String, String, String)?>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Project settings'),
+        title: const Text('Space settings'),
         content: SizedBox(
           width: 420,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextFormField(
-                initialValue: project.name,
+                initialValue: space.name,
                 onChanged: (value) => name = value,
-                decoration: const InputDecoration(labelText: 'Project name'),
+                decoration: const InputDecoration(labelText: 'Space name'),
               ),
               const SizedBox(height: 12),
               TextFormField(
-                initialValue: project.description,
+                initialValue: space.description,
                 onChanged: (value) => description = value,
                 decoration: const InputDecoration(labelText: 'Description'),
                 maxLines: 2,
               ),
               const SizedBox(height: 12),
               TextFormField(
-                initialValue: project.instructions,
+                initialValue: space.instructions,
                 onChanged: (value) => instructions = value,
                 decoration:
-                    const InputDecoration(labelText: 'Project instructions'),
+                    const InputDecoration(labelText: 'Space instructions'),
                 maxLines: 2,
               ),
             ],
@@ -485,69 +485,67 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     );
     if (values == null || values.$1.isEmpty) return;
     try {
-      await store.collaboration.editProject(
-        project,
+      await store.collaboration.editSpace(
+        space,
         name: values.$1,
         description: values.$2,
         instructions: values.$3,
       );
       if (!mounted) return;
-      _showSnackBar('Project updated.');
+      _showSnackBar('Space updated.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
     }
   }
 
-  Future<void> _archiveProject(AxProject project) async {
-    final confirmed = await _confirmProjectAction(
-      title: 'Archive project?',
-      message: 'Archived projects leave the active Projects list.',
+  Future<void> _archiveSpace(AxSpace space) async {
+    final confirmed = await _confirmSpaceAction(
+      title: 'Archive Space?',
+      message: 'Archived spaces leave the active Spaces list.',
       action: 'Archive',
     );
     if (!confirmed) return;
     try {
-      await widget.dataSource.archiveProject(projectId: project.id);
-      store.syncEngine.remove(store.projectDetails.query(project.id).key);
-      store.projectWorkstreams.engine
-          .remove(store.projectWorkstreams.query(project.id).key);
-      expandedProjectIds.remove(project.id);
+      await widget.dataSource.archiveSpace(spaceId: space.id);
+      store.syncEngine.remove(store.spaceDetails.query(space.id).key);
+      store.spaceThreads.engine.remove(store.spaceThreads.query(space.id).key);
+      expandedSpaceIds.remove(space.id);
       if (!mounted) return;
-      store.projects.replace(
-          store.projects.items.where((item) => item.id != project.id).toList());
-      selectedProjectId = null;
+      store.spaces.replace(
+          store.spaces.items.where((item) => item.id != space.id).toList());
+      selectedSpaceId = null;
       _navigateTo(const AxNavigation.home(), replace: true);
-      _showSnackBar('Project archived.');
+      _showSnackBar('Space archived.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
     }
   }
 
-  Future<void> _deleteProject(String projectId) async {
-    final confirmed = await _confirmProjectAction(
-      title: 'Delete project?',
-      message: 'This permanently removes the Project and its Workstreams.',
+  Future<void> _deleteSpace(String spaceId) async {
+    final confirmed = await _confirmSpaceAction(
+      title: 'Delete Space?',
+      message: 'This permanently removes the Space and its Threads.',
       action: 'Delete',
       destructive: true,
     );
     if (!confirmed) return;
     try {
-      await widget.dataSource.deleteProject(projectId: projectId);
-      store.syncEngine.remove(store.projectDetails.query(projectId).key);
-      store.projectWorkstreams.engine
-          .remove(store.projectWorkstreams.query(projectId).key);
-      expandedProjectIds.remove(projectId);
+      await widget.dataSource.deleteSpace(spaceId: spaceId);
+      store.syncEngine.remove(store.spaceDetails.query(spaceId).key);
+      store.spaceThreads.engine.remove(store.spaceThreads.query(spaceId).key);
+      expandedSpaceIds.remove(spaceId);
       if (!mounted) return;
-      store.projects.replace(
-          store.projects.items.where((item) => item.id != projectId).toList());
-      selectedProjectId = null;
+      store.spaces.replace(
+          store.spaces.items.where((item) => item.id != spaceId).toList());
+      selectedSpaceId = null;
       _navigateTo(const AxNavigation.home(), replace: true);
-      _showSnackBar('Project deleted.');
+      _showSnackBar('Space deleted.');
     } catch (error) {
       if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
     }
   }
 
-  Future<bool> _confirmProjectAction({
+  Future<bool> _confirmSpaceAction({
     required String title,
     required String message,
     required String action,

@@ -19,9 +19,9 @@ it("execution boundary configures next-turn choices without rewriting workflow o
     prompt: "Implement this",
     workerInput: { attachment: "A" },
     scope: {
-      projectId: "P",
+      spaceId: "P",
       requesterUserId: "U",
-      workstreamId: "W",
+      threadId: "W",
       workRequestId: "R",
     },
     retry: {},
@@ -40,7 +40,7 @@ it("execution boundary configures next-turn choices without rewriting workflow o
     model: "model-x",
     reasoningEffort: "medium",
     readOnly: false,
-    executionClass: "stateful_workstream",
+    executionClass: "stateful_thread",
     sessionPolicy: "durable_session",
     input: { attachment: "A", prompt: "Implement this" },
   });

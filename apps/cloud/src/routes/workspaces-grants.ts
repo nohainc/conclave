@@ -1,29 +1,29 @@
 import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
-  canTransitionWorkspaceProjectGrantStatus,
-  isWorkspaceProjectGrantStatus,
+  canTransitionWorkspaceSpaceGrantStatus,
+  isWorkspaceSpaceGrantStatus,
 } from "@conclave/core";
 
 import {
-  authorizeProjectMembership,
+  authorizeSpaceMembership,
   authorizeWorkspaceOwner,
 } from "@conclave/security";
 
 import {
   HttpError,
-  createWorkspaceProjectGrant,
+  createWorkspaceSpaceGrant,
   grantExpiry,
   grantExecutionPermissions,
   json,
-  loadWorkspaceProjectGrant,
+  loadWorkspaceSpaceGrant,
   recordAudit,
   requiredString,
   securityContext,
-  workspaceProjectGrantMetadata,
+  workspaceSpaceGrantMetadata,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
 
-export async function handleListWorkspaceProjectGrants(
+export async function handleListWorkspaceSpaceGrants(
   request: Request,
   env: SecurityEnv,
   workspaceId: string,
@@ -38,72 +38,66 @@ export async function handleListWorkspaceProjectGrants(
   );
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT g.*, ew.name AS workspace_name, ew.owner_user_id
-     FROM workspace_project_grants g JOIN execution_workspaces ew ON ew.id = g.workspace_id
+     FROM workspace_space_grants g JOIN execution_workspaces ew ON ew.id = g.workspace_id
      WHERE g.workspace_id = ?1 ORDER BY g.created_at DESC`,
   )
     .bind(workspaceId)
     .all<Record<string, unknown>>();
   return json({
-    grants: (rows.results ?? []).map(workspaceProjectGrantMetadata),
+    grants: (rows.results ?? []).map(workspaceSpaceGrantMetadata),
   });
 }
 
-export async function handleCreateWorkspaceProjectGrant(
+export async function handleCreateWorkspaceSpaceGrant(
   request: Request,
   env: SecurityEnv,
   workspaceId: string,
-  projectId: string,
+  spaceId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  return createWorkspaceProjectGrant(
-    request,
-    env,
-    context,
-    projectId,
-    workspaceId,
-  );
+  return createWorkspaceSpaceGrant(request, env, context, spaceId, workspaceId);
 }
 
-export async function handleListProjectWorkspaces(
+export async function handleListSpaceWorkspaces(
   request: Request,
   env: SecurityEnv,
-  projectId: string,
+  spaceId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  await authorizeProjectMembership(
+  await authorizeSpaceMembership(
     env.CONCLAVE_DB,
     context,
-    projectId,
-    "projects:read",
+    spaceId,
+    "spaces:read",
   );
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT g.*, ew.name AS workspace_name, ew.owner_user_id
-     FROM workspace_project_grants g JOIN execution_workspaces ew ON ew.id = g.workspace_id
-     WHERE g.project_id = ?1 AND g.status IN ('active', 'suspended')
+     FROM workspace_space_grants g JOIN execution_workspaces ew ON ew.id = g.workspace_id
+     WHERE g.space_id = ?1 AND g.status IN ('active', 'suspended')
        AND (g.expires_at IS NULL OR g.expires_at > ?2)
      ORDER BY ew.name`,
   )
-    .bind(projectId, new Date().toISOString())
+    .bind(spaceId, new Date().toISOString())
     .all<Record<string, unknown>>();
   return json({
-    workspaces: (rows.results ?? []).map(workspaceProjectGrantMetadata),
+    workspaces: (rows.results ?? []).map(workspaceSpaceGrantMetadata),
   });
 }
 
-export async function handleRequestProjectWorkspace(
+export async function handleRequestSpaceWorkspace(
   request: Request,
   env: SecurityEnv,
-  projectId: string,
+  spaceId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  await authorizeProjectMembership(
+  await authorizeSpaceMembership(
     env.CONCLAVE_DB,
     context,
-    projectId,
-    "projects:write",
+    spaceId,
+    "spaces:write",
   );
   const body = (await request.json().catch(() => ({}))) as Record<
     string,
@@ -113,24 +107,24 @@ export async function handleRequestProjectWorkspace(
   const replayableRequest = new Request(request, {
     body: JSON.stringify(body),
   });
-  return createWorkspaceProjectGrant(
+  return createWorkspaceSpaceGrant(
     replayableRequest,
     env,
     context,
-    projectId,
+    spaceId,
     workspaceId,
   );
 }
 
-export async function handleUpdateWorkspaceProjectGrant(
+export async function handleUpdateWorkspaceSpaceGrant(
   request: Request,
   env: SecurityEnv,
   grantId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  const existing = await loadWorkspaceProjectGrant(env, grantId);
-  if (!existing) throw new HttpError(404, "Workspace Project Grant not found");
+  const existing = await loadWorkspaceSpaceGrant(env, grantId);
+  if (!existing) throw new HttpError(404, "Workspace Space Grant not found");
   await authorizeWorkspaceOwner(
     env.CONCLAVE_DB,
     context,
@@ -151,7 +145,7 @@ export async function handleUpdateWorkspaceProjectGrant(
     throw new HttpError(400, "Workspace Grant update fields are invalid");
   }
   const existingStatus = existing.status;
-  if (!isWorkspaceProjectGrantStatus(existingStatus)) {
+  if (!isWorkspaceSpaceGrantStatus(existingStatus)) {
     throw new HttpError(409, "Workspace Grant has an invalid stored status");
   }
   let status = existingStatus;
@@ -160,7 +154,7 @@ export async function handleUpdateWorkspaceProjectGrant(
       throw new HttpError(400, "status must be active or suspended");
     }
     status = body.status;
-    if (!canTransitionWorkspaceProjectGrantStatus(existingStatus, status)) {
+    if (!canTransitionWorkspaceSpaceGrantStatus(existingStatus, status)) {
       throw new HttpError(409, "Workspace Grant status transition is invalid");
     }
   }
@@ -177,7 +171,7 @@ export async function handleUpdateWorkspaceProjectGrant(
     throw new HttpError(409, "Terminal Workspace Grants cannot be updated");
   }
   const updatedRow = await env.CONCLAVE_DB.prepare(
-    `UPDATE workspace_project_grants SET
+    `UPDATE workspace_space_grants SET
        status = ?1, expires_at = ?2, updated_at = ?3, allowed_permissions_json = ?6
      WHERE id = ?4 AND status = ?5`,
   )
@@ -189,58 +183,58 @@ export async function handleUpdateWorkspaceProjectGrant(
   await recordAudit(
     env,
     context,
-    "workspace.project_grant.updated",
-    "workspace_project_grant",
+    "workspace.space_grant.updated",
+    "workspace_space_grant",
     grantId,
     { status, allowedPermissions: JSON.parse(permissions) },
   );
   await publishCollaborationEvent(
     env,
-    "project_workspace_grant.updated",
-    String(existing.project_id),
+    "workspace_space_grant.updated",
+    String(existing.space_id),
     grantId,
     { additionalRecipientUserIds: [context.userId] },
   );
-  const updated = await loadWorkspaceProjectGrant(env, grantId);
+  const updated = await loadWorkspaceSpaceGrant(env, grantId);
   return json({
-    grant: updated ? workspaceProjectGrantMetadata(updated) : null,
+    grant: updated ? workspaceSpaceGrantMetadata(updated) : null,
   });
 }
 
-export async function handleRevokeWorkspaceProjectGrant(
+export async function handleRevokeWorkspaceSpaceGrant(
   request: Request,
   env: SecurityEnv,
   grantId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  const existing = await loadWorkspaceProjectGrant(env, grantId);
-  if (!existing) throw new HttpError(404, "Workspace Project Grant not found");
+  const existing = await loadWorkspaceSpaceGrant(env, grantId);
+  if (!existing) throw new HttpError(404, "Workspace Space Grant not found");
   await authorizeWorkspaceOwner(
     env.CONCLAVE_DB,
     context,
     String(existing.workspace_id),
     "workspace:manage",
   );
-  if (!isWorkspaceProjectGrantStatus(existing.status)) {
+  if (!isWorkspaceSpaceGrantStatus(existing.status)) {
     throw new HttpError(409, "Workspace Grant has an invalid stored status");
   }
   if (existing.status === "revoked") {
     return json({ ok: true, revokedAt: existing.updated_at });
   }
-  if (!canTransitionWorkspaceProjectGrantStatus(existing.status, "revoked")) {
+  if (!canTransitionWorkspaceSpaceGrantStatus(existing.status, "revoked")) {
     throw new HttpError(409, "Terminal Workspace Grants cannot be revoked");
   }
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.batch([
     env.CONCLAVE_DB.prepare(
-      "UPDATE workspace_project_grants SET status = 'revoked', updated_at = ?1 WHERE id = ?2 AND status = ?3",
+      "UPDATE workspace_space_grants SET status = 'revoked', updated_at = ?1 WHERE id = ?2 AND status = ?3",
     ).bind(now, grantId, existing.status),
     env.CONCLAVE_DB.prepare(
-      "UPDATE worker_assignments SET status = 'cancelled', error_json = ?1, updated_at = ?2 WHERE workspace_project_grant_id = ?3 AND status IN ('created', 'dispatched')",
+      "UPDATE worker_assignments SET status = 'cancelled', error_json = ?1, updated_at = ?2 WHERE workspace_space_grant_id = ?3 AND status IN ('created', 'dispatched')",
     ).bind(
       JSON.stringify({
-        code: "workspace_project_grant_revoked",
+        code: "workspace_space_grant_revoked",
         cancelledAt: now,
       }),
       now,
@@ -250,15 +244,15 @@ export async function handleRevokeWorkspaceProjectGrant(
   await recordAudit(
     env,
     context,
-    "workspace.project_grant.revoked",
-    "workspace_project_grant",
+    "workspace.space_grant.revoked",
+    "workspace_space_grant",
     grantId,
-    { projectId: existing.project_id, workspaceId: existing.workspace_id },
+    { spaceId: existing.space_id, workspaceId: existing.workspace_id },
   );
   await publishCollaborationEvent(
     env,
-    "project_workspace_grant.updated",
-    String(existing.project_id),
+    "workspace_space_grant.updated",
+    String(existing.space_id),
     grantId,
     { additionalRecipientUserIds: [context.userId] },
   );

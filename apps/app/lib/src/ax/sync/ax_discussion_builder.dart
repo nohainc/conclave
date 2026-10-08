@@ -6,10 +6,10 @@ class AxDiscussionBuilder extends StatefulWidget {
   const AxDiscussionBuilder(
       {super.key,
       required this.cache,
-      required this.workstreamId,
+      required this.threadId,
       required this.builder});
   final AxDiscussionCache cache;
-  final String workstreamId;
+  final String threadId;
   final Widget Function(BuildContext, AxDiscussionState) builder;
   @override
   State<AxDiscussionBuilder> createState() => _AxDiscussionBuilderState();
@@ -24,11 +24,11 @@ class _AxDiscussionBuilderState extends State<AxDiscussionBuilder> {
   }
 
   void _subscribe() {
-    cancel = widget.cache.watch(widget.workstreamId, (_) {
+    cancel = widget.cache.watch(widget.threadId, (_) {
       if (mounted) setState(() {});
     });
     unawaited(widget.cache
-        .synchronize(widget.workstreamId)
+        .synchronize(widget.threadId)
         .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
   }
 
@@ -36,7 +36,7 @@ class _AxDiscussionBuilderState extends State<AxDiscussionBuilder> {
   void didUpdateWidget(covariant AxDiscussionBuilder oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.cache != widget.cache ||
-        oldWidget.workstreamId != widget.workstreamId) {
+        oldWidget.threadId != widget.threadId) {
       cancel?.call();
       _subscribe();
     }
@@ -50,5 +50,5 @@ class _AxDiscussionBuilderState extends State<AxDiscussionBuilder> {
 
   @override
   Widget build(BuildContext context) =>
-      widget.builder(context, widget.cache.peek(widget.workstreamId));
+      widget.builder(context, widget.cache.peek(widget.threadId));
 }

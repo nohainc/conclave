@@ -16,9 +16,9 @@ are distinct paths. Work (`direct:v2`) is another AI workflow; historical
 `direct:v1` retains its original snapshot. The stable `direct` identifier must
 not be confused with the `implement` Step it executes.
 
-Current AI hierarchy is Project → Workstream → Work Request → Workflow Tasks /
+Current AI hierarchy is Space → Thread → Work Request → Workflow Tasks /
 Run → Worker Assignments. The product has no independently addressable
-Conversation between Workstream and Work Request. A Workflow determines Steps,
+Conversation between Thread and Work Request. A Workflow determines Steps,
 permissions and execution coordination; bindings select Workers and optionally
 models/efforts. Logical Worker identity is distinct from its signed Tool Profile
 and local provider CLI implementation.
@@ -31,13 +31,13 @@ Sources: [architecture](../../ARCHITECTURE.md), [v8 contract](ARCHITECTURE_V8.md
 
 | Stage | Chat workflow | Work workflow | Implementation |
 | --- | --- | --- | --- |
-| Composer | Selects `chat`; reads `chat` binding | Selects `direct`; reads `direct` binding | [Work controls](../../apps/app/lib/src/features/projects/projects_pages/work_components.dart) |
-| Settings | Worker, optional model, optional `reasoningEffort` | Same, independent binding | [page handlers](../../apps/app/lib/src/features/projects/projects_pages/workstream_page.dart), [settings save](../../apps/app/lib/src/features/projects/projects_pages/workstream_actions.dart) |
-| Submit | Sends Workflow ID, original request, attachments and idempotency key | Same | [AX API](../../apps/app/lib/src/ax/ax_data/workstream_api.dart) |
-| Cloud creation | Resolves canonical `chat:v1`, validates eligibility, snapshots binding | Resolves canonical `direct:v2`, snapshots `direct` binding | [creation](../../apps/cloud/src/routes/work-creation.ts), [core definitions](../../packages/core/src/workstream.ts) |
-| Orchestration | Stateless request coordination; read-only; durable provider session | Stateful Workstream coordination; writable policy; durable provider session | [Workflow runner](../../apps/cloud/src/workflow.ts) |
+| Composer | Selects `chat`; reads `chat` binding | Selects `direct`; reads `direct` binding | [Work controls](../../apps/app/lib/src/features/spaces/spaces_pages/work_components.dart) |
+| Settings | Worker, optional model, optional `reasoningEffort` | Same, independent binding | [page handlers](../../apps/app/lib/src/features/spaces/spaces_pages/thread_page.dart), [settings save](../../apps/app/lib/src/features/spaces/spaces_pages/thread_actions.dart) |
+| Submit | Sends Workflow ID, original request, attachments and idempotency key | Same | [AX API](../../apps/app/lib/src/ax/ax_data/thread_api.dart) |
+| Cloud creation | Resolves canonical `chat:v1`, validates eligibility, snapshots binding | Resolves canonical `direct:v2`, snapshots `direct` binding | [creation](../../apps/cloud/src/routes/work-creation.ts), [core definitions](../../packages/core/src/thread.ts) |
+| Orchestration | Stateless request coordination; read-only; durable provider session | Stateful Thread coordination; writable policy; durable provider session | [Workflow runner](../../apps/cloud/src/workflow.ts) |
 | Scheduling | Resolves logical Worker to authorized Workspace inventory and eligible Profile | Same, with mutation lease/fencing | [scheduler](../../apps/cloud/src/scheduler.ts), [dispatcher](../../apps/cloud/src/assignment-dispatcher.ts) |
-| Workspace | Validates assignment and local policy; supplies Workstream directory and Worker state directory | Same, enforcing authorized filesystem policy | [assignment admission](../../apps/workspace/lib/cloud_connection/assignment_handlers.dart), [runtime](../../apps/workspace/lib/workspace_runtime.dart) |
+| Workspace | Validates assignment and local policy; supplies Thread directory and Worker state directory | Same, enforcing authorized filesystem policy | [assignment admission](../../apps/workspace/lib/cloud_connection/assignment_handlers.dart), [runtime](../../apps/workspace/lib/workspace_runtime.dart) |
 | Engine | Reads local session mapping, interprets signed Profile, starts CLI with structured arguments | Same | [supervisor](../../packages/conclave_cli_worker_runtime/lib/src/cli_worker_engine_supervisor.dart), [Engine](../../engines/cli_worker/lib/src/cli_worker_engine.dart) |
 | Result | CLI output becomes WorkerResult, assignment output, StepResult and Work history | Same | [runner](../../apps/cloud/src/workflow.ts), [history projection](../../apps/cloud/src/routes/work-lifecycle.ts) |
 
@@ -49,8 +49,8 @@ provider conversation from Cloud history.
 
 | Information | Current location and ownership |
 | --- | --- |
-| Workflow defaults/type | `workstream_work_configs.config_json.defaultWorkflowId`; executable built-ins/versioned definitions in Core. Each request stores `work_requests.workflow_id`, `workflow_version`, `workflow_snapshot_json`. |
-| Selected Worker | Mutable Workstream `config_json.bindings[bindingId].workerId`; immutable resolved binding in `work_requests.snapshot_json`; concrete scheduling target in `worker_assignments` (Worker type, Workspace Worker ID, runtime identity, Workspace). |
+| Workflow defaults/type | `thread_work_configs.config_json.defaultWorkflowId`; executable built-ins/versioned definitions in Core. Each request stores `work_requests.workflow_id`, `workflow_version`, `workflow_snapshot_json`. |
+| Selected Worker | Mutable Thread `config_json.bindings[bindingId].workerId`; immutable resolved binding in `work_requests.snapshot_json`; concrete scheduling target in `worker_assignments` (Worker type, Workspace Worker ID, runtime identity, Workspace). |
 | Model | Optional binding `model`, request binding snapshot, assignment `model`, dispatched assignment evidence, completed StepResult `model`. |
 | Effort | Optional binding `reasoningEffort`, request snapshot, assignment dispatch/evidence JSON and completed StepResult. There is no dedicated effort column in `worker_assignments`. |
 | User AI request | `work_requests.input_json.originalRequest`, immutable execution snapshot, and request/Run associations. Not a `discussion_messages` row. |
@@ -71,11 +71,11 @@ ordered migrations, not the baseline's Workflow CHECK in isolation.
 
 ## Defaults and immutable selections
 
-Model and effort controls update shared persisted Workstream bindings, rather than
+Model and effort controls update shared persisted Thread bindings, rather than
 sending an explicit per-turn selection in the create-request body. Cloud reads and
 snapshots those bindings at creation. Later settings changes do not rewrite prior
 request snapshots. These are therefore defaults for subsequent requests, but are
-currently **Workstream-wide shared settings**, not Conversation-scoped preferences
+currently **Thread-wide shared settings**, not Conversation-scoped preferences
 or independent per-user drafts. Settings changes require Work configuration
 permission; execution and configuration permissions differ.
 
@@ -94,8 +94,8 @@ not establish an immutable selection captured when the user first typed a draft.
 
 [Cloud session-key derivation](../../apps/cloud/src/work-session-key.ts) hashes:
 
-- Chat: `workstream:<id>:chat:conversation`.
-- Work: `workstream:<id>:direct:work-conversation`.
+- Chat: `thread:<id>:chat:conversation`.
+- Work: `thread:<id>:direct:work-conversation`.
 - Other workflows: `work-request:<requestId>:<stepKind>`.
 - Explicit fresh retry: adds `:retry-fresh-<number>` to that base.
 
@@ -123,7 +123,7 @@ Consequences:
 - A Profile definition/tool identity change partitions continuity; compatible
   releases of the same definition can retain it.
 - A fresh retry's derived scope is not persisted as the new base for future normal
-  requests: later requests return to the ordinary Workstream base.
+  requests: later requests return to the ordinary Thread base.
 - Same-session model switching is attempted generically; actual provider support
   requires Profile/provider acceptance evidence, not inference from key stability.
 
@@ -134,7 +134,7 @@ See [Tool Profile session contract](../specifications/TOOL_PROFILE_V1.md) and
 
 | Assumption | Finding |
 | --- | --- |
-| Workstream = Worker | False in domain/schema: several bindings can select different Workers. However, simple conversation scopes are implicitly anchored to Workstream + binding. |
+| Thread = Worker | False in domain/schema: several bindings can select different Workers. However, simple conversation scopes are implicitly anchored to Thread + binding. |
 | Workflow = Worker | False: Workflow Steps own execution semantics; bindings and scheduling independently select logical Workers. |
 | Message = execution | False for Discussion. AI timeline currently renders request/result/progress from execution records rather than a canonical Conversation message log. |
 | One request = one Worker invocation | False globally: built-ins support dependency graphs, multiple Steps and attempts. Simple Chat/Work currently have one Step, but retries/dispatch recovery must still preserve distinct identities. |

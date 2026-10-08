@@ -411,7 +411,7 @@ void main() {
     expect(candidate.sent, isEmpty);
   });
 
-  test('reports Workstream readiness without a local path', () async {
+  test('reports Thread readiness without a local path', () async {
     final socket = FakeSocket();
     final connection = WorkspaceCloudConnection(
       uri: Uri.parse(
@@ -437,17 +437,17 @@ void main() {
     }));
     await waitFor(() => connection.isConnected);
 
-    connection.reportWorkstreamStatus(
-      projectId: 'project-1',
-      workstreamId: 'workstream-1',
+    connection.reportThreadStatus(
+      spaceId: 'space-1',
+      threadId: 'thread-1',
       workingDirectoryState: 'ready',
     );
     final status = socket.sent
         .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
-        .firstWhere((message) => message['type'] == 'workstream.status');
+        .firstWhere((message) => message['type'] == 'thread.status');
     final payload = status['payload'] as Map<String, dynamic>;
-    expect(payload['projectId'], 'project-1');
-    expect(payload['workstreamId'], 'workstream-1');
+    expect(payload['spaceId'], 'space-1');
+    expect(payload['threadId'], 'thread-1');
     expect(payload.containsKey('path'), isFalse);
     expect(payload.containsKey('relativePath'), isFalse);
     await connection.close();
@@ -815,7 +815,7 @@ void main() {
         'profileReleaseVersion': 1,
         'providerToolName': 'Fixture CLI',
         'providerToolVersion': '1.0.0',
-        'capabilities': ['text', 'workstream_read'],
+        'capabilities': ['text', 'thread_read'],
         'localConcurrencyLimit': 1,
         'revision': 2,
       },
@@ -1176,8 +1176,7 @@ void main() {
     await connection.close();
   });
 
-  test('allows stateful Work through ID-derived Workstream directories',
-      () async {
+  test('allows stateful Work through ID-derived Thread directories', () async {
     final socket = FakeSocket();
     var executed = false;
     final connection = WorkspaceCloudConnection(
@@ -1188,8 +1187,8 @@ void main() {
       factory: (_) async => socket,
       assignmentHandler: (context) async {
         executed = true;
-        expect(context.payload['projectId'], 'project-1');
-        expect(context.payload['workstreamId'], 'workstream-1');
+        expect(context.payload['spaceId'], 'space-1');
+        expect(context.payload['threadId'], 'thread-1');
         return const WorkspaceAssignmentResult(summary: 'empty directory work');
       },
     );
@@ -1217,9 +1216,9 @@ void main() {
         'engineVersion': '1.0.0',
         'profileDefinitionId': 'chatgpt-codex',
         'profileReleaseVersion': 1,
-        'projectId': 'project-1',
-        'workstreamId': 'workstream-1',
-        'executionClass': 'stateful_workstream',
+        'spaceId': 'space-1',
+        'threadId': 'thread-1',
+        'executionClass': 'stateful_thread',
         'input': {},
         'contextArtifactIds': [],
         'timeoutMs': 1000,

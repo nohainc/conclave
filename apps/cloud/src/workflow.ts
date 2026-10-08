@@ -23,7 +23,7 @@ import {
   dispatchTaskAssignment,
   type AssignmentDispatcherEnv,
 } from "./assignment-dispatcher.js";
-import type { WorkstreamBindingId } from "@conclave/core";
+import type { ThreadBindingId } from "@conclave/core";
 import {
   prepareWorkerStepExecution,
   completeWorkerStepExecution,
@@ -38,8 +38,8 @@ export interface ConclaveWorkflowParams {
   /** Immutable definition for the Work v1 Cloud Workflow. */
   readonly builtinWorkflow?: BuiltinWorkflowDefinition;
   readonly workRequestId?: string;
-  readonly workstreamId?: string;
-  readonly projectId?: string;
+  readonly threadId?: string;
+  readonly spaceId?: string;
   readonly input?: Record<string, unknown>;
   readonly retryStepKind?: StepKind;
   readonly retrySessionStrategy?: "resume" | "fresh";
@@ -57,7 +57,7 @@ export interface ConclaveWorkflowCheckpoint {
 }
 
 type ExecutionEnv = Env & {
-  readonly CONCLAVE_WORKSTREAM_COORDINATOR?: DurableObjectNamespace;
+  readonly CONCLAVE_THREAD_COORDINATOR?: DurableObjectNamespace;
 };
 
 interface AssignmentRow {
@@ -139,16 +139,16 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     params: ConclaveWorkflowParams,
     status: "completed" | "failed" | "cancelled",
   ): Promise<void> {
-    if (!params.workRequestId || !params.workstreamId) return;
+    if (!params.workRequestId || !params.threadId) return;
     const runtimeEnv = this.env as ExecutionEnv;
     const db = runtimeEnv.CONCLAVE_DB;
-    const namespace = runtimeEnv.CONCLAVE_WORKSTREAM_COORDINATOR;
+    const namespace = runtimeEnv.CONCLAVE_THREAD_COORDINATOR;
     if (!db) return;
     const request = await db
       .prepare(
-        "SELECT mode FROM work_requests WHERE id = ?1 AND workstream_id = ?2",
+        "SELECT mode FROM work_requests WHERE id = ?1 AND thread_id = ?2",
       )
-      .bind(params.workRequestId, params.workstreamId)
+      .bind(params.workRequestId, params.threadId)
       .first<{ mode: string }>();
     if (request?.mode === "stateless") {
       const now = new Date().toISOString();
@@ -163,18 +163,18 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     if (!namespace) return;
     const lease = await db
       .prepare(
-        `SELECT id, fencing_token AS fencingToken FROM workstream_runtime_leases
-       WHERE work_request_id = ?1 AND workstream_id = ?2 AND status = 'active' LIMIT 1`,
+        `SELECT id, fencing_token AS fencingToken FROM thread_runtime_leases
+       WHERE work_request_id = ?1 AND thread_id = ?2 AND status = 'active' LIMIT 1`,
       )
-      .bind(params.workRequestId, params.workstreamId)
+      .bind(params.workRequestId, params.threadId)
       .first<{ id: string; fencingToken: number }>();
     if (!lease) return;
-    const stub = namespace.getByName(params.workstreamId);
-    await stub.fetch("https://workstream-coordinator/complete", {
+    const stub = namespace.getByName(params.threadId);
+    await stub.fetch("https://thread-coordinator/complete", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-workstream-id": params.workstreamId,
+        "x-thread-id": params.threadId,
       },
       body: JSON.stringify({
         workRequestId: params.workRequestId,
@@ -238,20 +238,20 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     options: { status: string; stepKind?: StepKind; attempt?: number },
   ): Promise<void> {
     const workRequestId = params.workRequestId;
-    const workstreamId = params.workstreamId;
+    const threadId = params.threadId;
     const workspaceId = params.organizationId;
-    if (!workRequestId || !workstreamId || !workspaceId) return;
+    if (!workRequestId || !threadId || !workspaceId) return;
     try {
-      const projectId =
-        params.projectId ??
+      const spaceId =
+        params.spaceId ??
         (
           await (this.env as ExecutionEnv).CONCLAVE_DB.prepare(
-            "SELECT project_id AS projectId FROM workstreams WHERE id = ?1",
+            "SELECT space_id AS spaceId FROM threads WHERE id = ?1",
           )
-            .bind(workstreamId)
-            .first<{ projectId: string }>()
-        )?.projectId;
-      if (!projectId) return;
+            .bind(threadId)
+            .first<{ spaceId: string }>()
+        )?.spaceId;
+      if (!spaceId) return;
       const stepSuffix = options.stepKind ? `:step:${options.stepKind}` : "";
       const attemptSuffix = options.attempt
         ? `:attempt:${options.attempt}`
@@ -259,13 +259,13 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       await createEventPublisher(this.env).publish({
         type,
         workspaceId,
-        projectId,
+        spaceId,
         runId: params.runId,
         idempotencyKey: `work-request:${workRequestId}:${type}${stepSuffix}${attemptSuffix}`,
         payload: {
           entityId: options.stepKind ?? workRequestId,
           workRequestId,
-          workstreamId,
+          threadId,
           ...(options.stepKind ? { stepKind: options.stepKind } : {}),
           status: options.status,
         },
@@ -411,16 +411,12 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             : "Workflow has no runnable steps",
         };
       }
-      // Stateful Workstream steps are never concurrent. Independent stateless
+      // Stateful Thread steps are never concurrent. Independent stateless
       // steps can share one durable Workflow batch.
       const batch = ready.some(
-        (task) => task.step.executionMode === "stateful_workstream",
+        (task) => task.step.executionMode === "stateful_thread",
       )
-        ? [
-            ready.find(
-              (task) => task.step.executionMode === "stateful_workstream",
-            )!,
-          ]
+        ? [ready.find((task) => task.step.executionMode === "stateful_thread")!]
         : ready;
       const results = await Promise.all(
         batch.map((task) =>
@@ -594,21 +590,21 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             if (!prompt.trim()) throw new Error("Work Step prompt is empty");
             const context = await db
               .prepare(
-                `SELECT wr.workstream_id AS workstreamId,
+                `SELECT wr.thread_id AS threadId,
                       wr.requested_by_user_id AS requesterUserId,
                       wr.status AS workRequestStatus,
                       wr.cancel_requested_at AS cancelRequestedAt,
-                      ws.project_id AS projectId
-                 FROM work_requests wr JOIN workstreams ws ON ws.id = wr.workstream_id
+                      ws.space_id AS spaceId
+                 FROM work_requests wr JOIN threads ws ON ws.id = wr.thread_id
                 WHERE wr.id = ?1`,
               )
               .bind(params.workRequestId)
               .first<{
-                workstreamId: string;
+                threadId: string;
                 requesterUserId: string;
                 workRequestStatus: string;
                 cancelRequestedAt: string | null;
-                projectId: string;
+                spaceId: string;
               }>();
             if (!context) throw new Error("Work Request was not found");
             if (
@@ -617,7 +613,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             ) {
               return { status: "cancelled", assignmentId: "", startedAt };
             }
-            const bindingId = workBindingId as WorkstreamBindingId;
+            const bindingId = workBindingId as ThreadBindingId;
             const {
               workConfig: _workConfig,
               workRequestSnapshot: _snapshot,
@@ -631,9 +627,9 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
               prompt,
               workerInput,
               scope: {
-                projectId: context.projectId,
+                spaceId: context.spaceId,
                 requesterUserId: context.requesterUserId,
-                workstreamId: context.workstreamId,
+                threadId: context.threadId,
                 workRequestId: params.workRequestId!,
               },
               retry: {
@@ -840,9 +836,9 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       !Array.isArray(snapshot.resolvedBindings)
         ? snapshot.resolvedBindings
         : {};
-    const workstreamInstructions =
-      typeof snapshot.workstreamInstructions === "string"
-        ? snapshot.workstreamInstructions
+    const threadInstructions =
+      typeof snapshot.threadInstructions === "string"
+        ? snapshot.threadInstructions
         : "";
     return {
       ...callerInput,
@@ -851,17 +847,17 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         typeof snapshot.originalRequest === "string"
           ? snapshot.originalRequest
           : "",
-      projectInstructions:
-        typeof snapshot.projectInstructions === "string"
-          ? snapshot.projectInstructions
+      spaceInstructions:
+        typeof snapshot.spaceInstructions === "string"
+          ? snapshot.spaceInstructions
           : "",
-      workstreamInstructions,
+      threadInstructions,
       stepInstructions:
         typeof snapshot.stepAdditionalInstructions === "object" &&
         snapshot.stepAdditionalInstructions !== null
           ? snapshot.stepAdditionalInstructions
           : {},
-      workConfig: { bindings: resolvedBindings, workstreamInstructions },
+      workConfig: { bindings: resolvedBindings, threadInstructions },
       workRequestSnapshot: snapshot,
     };
   }

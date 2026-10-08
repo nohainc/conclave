@@ -13,10 +13,10 @@ import 'ax_work_models.dart';
 export 'ax_work_models.dart';
 
 part 'ax_data/catalog_api.dart';
-part 'ax_data/workstream_api.dart';
+part 'ax_data/thread_api.dart';
 part 'ax_data/auth_api.dart';
 part 'ax_data/workspace_api.dart';
-part 'ax_data/project_api.dart';
+part 'ax_data/space_api.dart';
 part 'ax_data/read_model_api.dart';
 
 class AxApiException implements Exception {
@@ -137,10 +137,10 @@ abstract class _AxApiClientCore
 class AxApiClient extends _AxApiClientCore
     with
         _CatalogApi,
-        _WorkstreamApi,
+        _ThreadApi,
         _AuthApi,
         _WorkspaceApi,
-        _ProjectApi,
+        _SpaceApi,
         _ReadModelApi {
   AxApiClient({super.baseUrl, super.client});
 }

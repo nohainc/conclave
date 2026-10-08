@@ -218,7 +218,7 @@ void main() {
           'engineFamily': 'cli',
           'visibilityState': 'visible',
           'releaseStage': 'testing',
-          'capabilities': ['text', 'workstream_read'],
+          'capabilities': ['text', 'thread_read'],
           'sortOrder': 5,
         },
       ],

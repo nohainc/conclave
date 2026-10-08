@@ -88,9 +88,9 @@ export async function loadConversationBootstrap(
   const current = await db
     .prepare(
       `SELECT wr.workflow_id AS workflowId, wr.workflow_version AS workflowVersion,
-    wfr.id AS workflowRunId, wr.status, wr.snapshot_json AS snapshotJson, ws.project_id AS projectId, wr.workstream_id AS workstreamId, wr.primary_workspace_id AS workspaceId FROM work_requests wr
+    wfr.id AS workflowRunId, wr.status, wr.snapshot_json AS snapshotJson, ws.space_id AS spaceId, wr.thread_id AS threadId, wr.primary_workspace_id AS workspaceId FROM work_requests wr
     JOIN conversation_workflow_runs wfr ON wfr.work_request_id = wr.id
-    JOIN workstreams ws ON ws.id = wr.workstream_id
+    JOIN threads ws ON ws.id = wr.thread_id
     JOIN conversation_work_requests cr ON cr.work_request_id = wr.id WHERE cr.conversation_id = ?1 AND wr.id = ?2`,
     )
     .bind(conversationId, workRequestId)
@@ -100,8 +100,8 @@ export async function loadConversationBootstrap(
       workflowVersion: number;
       status: string;
       snapshotJson: string;
-      projectId: string;
-      workstreamId: string;
+      spaceId: string;
+      threadId: string;
       workspaceId: string | null;
     }>();
   if (!current) throw new Error("Conversation workflow state is missing");
@@ -136,7 +136,7 @@ export async function loadConversationBootstrap(
         ? fact(snapshot.originalRequest)
         : null,
     constraints: Object.fromEntries(
-      ["projectInstructions", "workstreamInstructions"].flatMap((key) =>
+      ["spaceInstructions", "threadInstructions"].flatMap((key) =>
         typeof snapshot[key] === "string" && snapshot[key]
           ? [[key, fact(snapshot[key] as string)]]
           : [],
@@ -169,9 +169,9 @@ export async function loadConversationBootstrap(
     activeStepId ?? (taskRows.length === 1 ? taskRows[0]!.id : undefined);
   const artifacts = await db
     .prepare(
-      `SELECT id, content_digest AS contentDigest FROM artifacts WHERE work_request_id = ?1 AND project_id = ?2 ORDER BY id LIMIT 1001`,
+      `SELECT id, content_digest AS contentDigest FROM artifacts WHERE work_request_id = ?1 AND space_id = ?2 ORDER BY id LIMIT 1001`,
     )
-    .bind(workRequestId, current.projectId)
+    .bind(workRequestId, current.spaceId)
     .all<{ id: string; contentDigest: string }>();
   if ((artifacts.results?.length ?? 0) > 1000)
     throw new Error("Workflow artifact limit exceeded");
@@ -217,16 +217,16 @@ export async function loadConversationBootstrap(
           current.workflowId === "chat"
             ? null
             : {
-                projectId: current.projectId,
-                workstreamId: current.workstreamId,
+                spaceId: current.spaceId,
+                threadId: current.threadId,
                 workspaceId: current.workspaceId,
-                projectInstructions:
-                  typeof snapshot.projectInstructions === "string"
-                    ? snapshot.projectInstructions
+                spaceInstructions:
+                  typeof snapshot.spaceInstructions === "string"
+                    ? snapshot.spaceInstructions
                     : "",
-                workstreamInstructions:
-                  typeof snapshot.workstreamInstructions === "string"
-                    ? snapshot.workstreamInstructions
+                threadInstructions:
+                  typeof snapshot.threadInstructions === "string"
+                    ? snapshot.threadInstructions
                     : "",
               },
         artifacts:

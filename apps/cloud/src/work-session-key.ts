@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import type { WorkstreamBindingId } from "@conclave/core";
+import type { ThreadBindingId } from "@conclave/core";
 
 export function workStepSessionKey(params: {
-  readonly workBindingId?: WorkstreamBindingId;
-  readonly workstreamId: string;
+  readonly workBindingId?: ThreadBindingId;
+  readonly threadId: string;
   readonly workRequestId: string;
   readonly stepKind: string;
   readonly retryStepKind?: unknown;
@@ -12,9 +12,9 @@ export function workStepSessionKey(params: {
 }): string {
   const base =
     params.workBindingId === "direct"
-      ? `workstream:${params.workstreamId}:direct:work-conversation`
+      ? `thread:${params.threadId}:direct:work-conversation`
       : params.workBindingId === "chat"
-        ? `workstream:${params.workstreamId}:chat:conversation`
+        ? `thread:${params.threadId}:chat:conversation`
         : `work-request:${params.workRequestId}:${params.stepKind}`;
   const identity =
     params.retryStepKind === params.stepKind &&

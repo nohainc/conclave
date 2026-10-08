@@ -5,9 +5,13 @@ export const forbiddenArchitecture = [
   ],
   ["Studio AX naming", /\bStudio\w*\b|\/studio\//i],
   ["Studio snapshot API", /\/api\/studio\/snapshot/i],
-  ["compatibility Project read model", /\/read-model\b/i],
+  ["compatibility Space read model", /\/read-model\b/i],
   ["legacy snapshot API client", /\bloadSnapshot\s*\(/],
   ["V7Adapter", /V7Adapter/],
+  [
+    "retired Project/Workstream product identifiers",
+    /\b(?:AxProject\w*|ProjectRole|ProjectMembership|ProjectInvitation|WorkspaceProjectGrant|Workstream\w*|projectId|project_id|workstreamId|workstream_id|CONCLAVE_WORKSTREAM_COORDINATOR)\b|\/api\/(?:projects|workstreams)(?:\/|\b)/,
+  ],
   ["FirstPartyWorkerPackage", /FirstPartyWorkerPackage/],
   ["ConfiguredWorker identifier", /\bConfiguredWorker\b|\bconfiguredWorker\w*/],
   ["worker_releases", /worker_releases/i],
@@ -26,14 +30,14 @@ export const forbiddenArchitecture = [
   ["connector API route", /\/api\/connector\//i],
   ["managed provider credential identity", /\bcredentialProfileId\b/],
   [
-    "retired Workstream Checkout architecture",
-    /WorkstreamCheckout|WorkstreamCheckpoint|checkoutId|checkout_id|require_checkout|workstream_(?:current_)?checkpoints|workstream_checkouts|workstream_diff_artifacts|checkout\.(?:provision|status|recover|archive|finalize)|checkpointCommit|resetHard/i,
+    "retired Thread Checkout architecture",
+    /ThreadCheckout|ThreadCheckpoint|checkoutId|checkout_id|require_checkout|thread_(?:current_)?checkpoints|thread_checkouts|thread_diff_artifacts|checkout\.(?:provision|status|recover|archive|finalize)|checkpointCommit|resetHard/i,
   ],
   [
     "repository registration architecture",
-    /LocalRepositoryRegistry|repositoriesFile|CONCLAVE_WORKSPACE_REPOSITORIES|--repositories|repository_mappings_json|path_mappings_json|repositoryMappings|pathMappings|project_repository|selected_paths|full_workspace/i,
+    /LocalRepositoryRegistry|repositoriesFile|CONCLAVE_WORKSPACE_REPOSITORIES|--repositories|repository_mappings_json|path_mappings_json|repositoryMappings|pathMappings|space_repository|selected_paths|full_workspace/i,
   ],
-  ["write-only Workstream memberships", /workstream_memberships/i],
+  ["write-only Thread memberships", /thread_memberships/i],
   [
     "retired Workspace token pairing flow",
     /workspace_pairing_intents|workspace-pairing-intents|workspace_enrollments|workspace-runtime\/enroll|\/enrollments|CONCLAVE_ENROLLMENT_TOKEN|WorkspacePairingIntent|handle\w*WorkspacePairingIntent|handle\w*WorkspaceEnrollment|conclave_pair_|conclave_enroll_|WorkspacePairing(?:Service|ErrorKind|Exception)|AxWorkspaceEnrollment|createWorkspaceEnrollment/i,

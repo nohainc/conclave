@@ -460,7 +460,7 @@
       }
     ]
   },
-  "capabilities": ["text", "local_file", "durable_session", "workstream_read"],
+  "capabilities": ["text", "local_file", "durable_session", "thread_read"],
   "compatibilityOverrides": [
     {
       "providerVersion": { "min": "0.180.0", "maxExclusive": "0.181.0" },

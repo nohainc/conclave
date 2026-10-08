@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
-import { selectProjectExecutionTarget } from "../src/scheduler.js";
+import { selectSpaceExecutionTarget } from "../src/scheduler.js";
 
 const permissionAssignment = JSON.parse(
   readFileSync(
@@ -24,7 +24,7 @@ function candidate(overrides: Record<string, unknown> = {}) {
     (workerTypeId === "gemini" ? "gemini-antigravity" : "chatgpt-codex");
   return {
     grant_id: "grant-a",
-    project_id: "project-a",
+    space_id: "space-a",
     workspace_id: "workspace-a",
     grant_status: "active",
     allowed_worker_ids_json: "[]",
@@ -77,8 +77,8 @@ function db(
   rows: Record<string, unknown>[],
   role = "collaborator",
   lease: Record<string, unknown> | null = null,
-  workstream: Record<string, unknown> | null = {
-    project_id: "project-a",
+  thread: Record<string, unknown> | null = {
+    space_id: "space-a",
     lead_user_id: "user-a",
     access_policy_json: JSON.stringify({ allowedPermissions: ["execute"] }),
   },
@@ -90,9 +90,9 @@ function db(
           return this;
         },
         async first<T>() {
-          if (query.includes("workstream_runtime_leases")) return lease as T;
-          if (query.includes("FROM workstreams ws")) return workstream as T;
-          return query.includes("project_memberships") ? ({ role } as T) : null;
+          if (query.includes("thread_runtime_leases")) return lease as T;
+          if (query.includes("FROM threads ws")) return thread as T;
+          return query.includes("space_memberships") ? ({ role } as T) : null;
         },
         async all<T>() {
           return { results: rows as T[] };
@@ -102,10 +102,10 @@ function db(
   } as never;
 }
 
-describe("Project execution scheduler", () => {
+describe("Space execution scheduler", () => {
   it("emits the canonical permissions consumed by Workspace assignment execution", async () => {
-    const target = await selectProjectExecutionTarget(db([candidate()]), {
-      projectId: "project-a",
+    const target = await selectSpaceExecutionTarget(db([candidate()]), {
+      spaceId: "space-a",
       requesterUserId: "user-a",
       role: "collaborator",
       capabilities: ["repository"],
@@ -121,14 +121,14 @@ describe("Project execution scheduler", () => {
 
   it("fails closed when a stored Grant contains a noncanonical permission", async () => {
     await expect(
-      selectProjectExecutionTarget(
+      selectSpaceExecutionTarget(
         db([
           candidate({
             allowed_permissions_json: '["workspace:read"]',
           }),
         ]),
         {
-          projectId: "project-a",
+          spaceId: "space-a",
           requesterUserId: "user-a",
           role: "collaborator",
           capabilities: ["repository"],
@@ -147,8 +147,8 @@ describe("Project execution scheduler", () => {
     "fails closed when stored Grant %s are invalid",
     async (_name, override) => {
       await expect(
-        selectProjectExecutionTarget(db([candidate(override)]), {
-          projectId: "project-a",
+        selectSpaceExecutionTarget(db([candidate(override)]), {
+          spaceId: "space-a",
           requesterUserId: "user-a",
           role: "collaborator",
           capabilities: ["repository"],
@@ -177,8 +177,8 @@ describe("Project execution scheduler", () => {
     ],
   ])("rejects a stale Ready Worker that is %s", async (_case, override) => {
     await expect(
-      selectProjectExecutionTarget(db([candidate(override)]), {
-        projectId: "project-a",
+      selectSpaceExecutionTarget(db([candidate(override)]), {
+        spaceId: "space-a",
         requesterUserId: "user-a",
         role: "collaborator",
         capabilities: ["repository"],
@@ -188,7 +188,7 @@ describe("Project execution scheduler", () => {
 
   it("uses the AX Step binding for Worker and model", async () => {
     const configured = candidate({
-      workstream_work_config_json: JSON.stringify({
+      thread_work_config_json: JSON.stringify({
         defaultWorkflowId: "full_cycle",
         bindings: {
           implement: {
@@ -198,12 +198,12 @@ describe("Project execution scheduler", () => {
         },
       }),
     });
-    const result = await selectProjectExecutionTarget(db([configured]), {
-      projectId: "project-a",
+    const result = await selectSpaceExecutionTarget(db([configured]), {
+      spaceId: "space-a",
       requesterUserId: "user-a",
       role: "Implementer",
       capabilities: ["repository"],
-      workstreamId: "workstream-a",
+      threadId: "thread-a",
       workBindingId: "implement" as const,
     });
     expect(result).toMatchObject({
@@ -236,14 +236,14 @@ describe("Project execution scheduler", () => {
       },
     });
 
-    const atLimit = await selectProjectExecutionTarget(
+    const atLimit = await selectSpaceExecutionTarget(
       db([candidate({ ...configured, active_assignments: 2 })]),
       {
-        projectId: "project-a",
+        spaceId: "space-a",
         requesterUserId: "user-a",
         role: "implementer",
         capabilities: ["repository"],
-        workstreamId: "workstream-a",
+        threadId: "thread-a",
         workBindingId: "implement",
       },
     );
@@ -257,18 +257,18 @@ describe("Project execution scheduler", () => {
       profile_definition_id: "dynamic-test-cli",
       current_profile_definition_id: "dynamic-test-cli",
       provider_tool_name: "Fixture CLI",
-      workstream_work_config_json: JSON.stringify({
+      thread_work_config_json: JSON.stringify({
         defaultWorkflowId: "direct",
         bindings: { implement: { workerId: "workspace-worker-dynamic" } },
       }),
     });
 
-    const target = await selectProjectExecutionTarget(db([dynamicWorker]), {
-      projectId: "project-a",
+    const target = await selectSpaceExecutionTarget(db([dynamicWorker]), {
+      spaceId: "space-a",
       requesterUserId: "user-a",
       role: "implementer",
       capabilities: ["repository"],
-      workstreamId: "workstream-a",
+      threadId: "thread-a",
       workBindingId: "implement",
     });
 
@@ -288,76 +288,73 @@ describe("Project execution scheduler", () => {
       profile_definition_id: "dynamic-test-cli",
       current_profile_definition_id: "dynamic-test-cli",
       provider_tool_name: "Fixture CLI",
-      workstream_work_config_json: JSON.stringify({
+      thread_work_config_json: JSON.stringify({
         defaultWorkflowId: "direct",
         bindings: { implement: { workerId: "workspace-worker-dynamic" } },
       }),
     });
 
-    const target = await selectProjectExecutionTarget(
-      db([staleDynamicWorker]),
-      {
-        projectId: "project-a",
-        requesterUserId: "user-a",
-        role: "implementer",
-        capabilities: ["repository"],
-        workstreamId: "workstream-a",
-        workBindingId: "implement",
-      },
-    );
+    const target = await selectSpaceExecutionTarget(db([staleDynamicWorker]), {
+      spaceId: "space-a",
+      requesterUserId: "user-a",
+      role: "implementer",
+      capabilities: ["repository"],
+      threadId: "thread-a",
+      workBindingId: "implement",
+    });
 
     expect(target).toBeNull();
   });
 
-  it("requires AX to configure a Workstream Step before dispatch", async () => {
-    const result = await selectProjectExecutionTarget(db([candidate()]), {
-      projectId: "project-a",
+  it("requires AX to configure a Thread Step before dispatch", async () => {
+    const result = await selectSpaceExecutionTarget(db([candidate()]), {
+      spaceId: "space-a",
       requesterUserId: "user-a",
       role: "reviewer",
       capabilities: ["repository"],
-      workstreamId: "workstream-a",
+      threadId: "thread-a",
       workBindingId: "verify",
     });
     expect(result).toBeNull();
   });
 
-  it("fails closed when a Workstream row is missing", async () => {
-    const result = await selectProjectExecutionTarget(
+  it("fails closed when a Thread row is missing", async () => {
+    const result = await selectSpaceExecutionTarget(
       db([candidate()], "collaborator", null, null),
       {
-        projectId: "project-a",
+        spaceId: "space-a",
         requesterUserId: "user-a",
         role: "collaborator",
         capabilities: ["repository"],
-        workstreamId: "workstream-missing",
+        threadId: "thread-missing",
       },
     );
     expect(result).toBeNull();
   });
 
-  it("treats Workstream Worker Type policy as product IDs", async () => {
+  it("treats Thread Worker Type policy as product IDs", async () => {
     const configured = {
       ...candidate(),
-      workstream_work_config_json: JSON.stringify({
+      thread_work_config_json: JSON.stringify({
         defaultWorkflowId: "full_cycle",
         bindings: { implement: { workerId: "worker-a" } },
       }),
     };
     const request = {
-      projectId: "project-a",
+      spaceId: "space-a",
       requesterUserId: "user-a",
       role: "implementer",
       capabilities: ["repository"],
-      workstreamId: "workstream-a",
+      threadId: "thread-a",
       workBindingId: "implement" as const,
     };
-    const legacyPackageIdPolicy = await selectProjectExecutionTarget(
+    const legacyPackageIdPolicy = await selectSpaceExecutionTarget(
       db([{ ...configured, allowed_worker_type_ids_json: '["codex"]' }]),
       request,
     );
     expect(legacyPackageIdPolicy).toBeNull();
 
-    const productIdPolicy = await selectProjectExecutionTarget(
+    const productIdPolicy = await selectSpaceExecutionTarget(
       db([{ ...configured, allowed_worker_type_ids_json: '["chatgpt"]' }]),
       request,
     );
@@ -368,7 +365,7 @@ describe("Project execution scheduler", () => {
     const currentCandidate = {
       ...candidate({ worker_type_id: "gemini" }),
       grant_id: "grant-current",
-      project_id: "project-current",
+      space_id: "space-current",
       workspace_id: "workspace-current",
       grant_status: "active",
       allowed_worker_ids_json: "[]",
@@ -405,10 +402,10 @@ describe("Project execution scheduler", () => {
       active_assignments: 0,
     };
 
-    const target = await selectProjectExecutionTarget(
+    const target = await selectSpaceExecutionTarget(
       db([currentCandidate], "collaborator"),
       {
-        projectId: "project-current",
+        spaceId: "space-current",
         requesterUserId: "user-requester",
         role: "implementer",
         capabilities: ["code"],
@@ -416,7 +413,7 @@ describe("Project execution scheduler", () => {
     );
 
     expect(target).toMatchObject({
-      projectId: "project-current",
+      spaceId: "space-current",
       workspaceId: "workspace-current",
       workerId: "worker-antigravity-1",
       workerTypeId: "gemini",
@@ -424,11 +421,11 @@ describe("Project execution scheduler", () => {
     });
   });
 
-  it("narrows candidate Workers by Workstream type and model policy", async () => {
+  it("narrows candidate Workers by Thread type and model policy", async () => {
     const currentWorker = {
       ...candidate(),
       grant_id: "grant-current",
-      project_id: "project-current",
+      space_id: "space-current",
       workspace_id: "workspace-current",
       grant_status: "active",
       allowed_worker_ids_json: "[]",
@@ -464,7 +461,7 @@ describe("Project execution scheduler", () => {
 
     // 1. Rejected if allowed_worker_type_ids_json excludes this worker type
     await expect(
-      selectProjectExecutionTarget(
+      selectSpaceExecutionTarget(
         db(
           [
             {
@@ -475,7 +472,7 @@ describe("Project execution scheduler", () => {
           "collaborator",
         ),
         {
-          projectId: "project-current",
+          spaceId: "space-current",
           requesterUserId: "user-requester",
           role: "implementer",
           capabilities: ["code"],
@@ -485,7 +482,7 @@ describe("Project execution scheduler", () => {
 
     // 2. Rejected if allowed_models_json excludes requested model
     await expect(
-      selectProjectExecutionTarget(
+      selectSpaceExecutionTarget(
         db(
           [
             {
@@ -496,7 +493,7 @@ describe("Project execution scheduler", () => {
           "collaborator",
         ),
         {
-          projectId: "project-current",
+          spaceId: "space-current",
           requesterUserId: "user-requester",
           role: "implementer",
           capabilities: ["code"],
@@ -507,7 +504,7 @@ describe("Project execution scheduler", () => {
 
     // 3. Allowed when matching policy
     await expect(
-      selectProjectExecutionTarget(
+      selectSpaceExecutionTarget(
         db(
           [
             {
@@ -519,7 +516,7 @@ describe("Project execution scheduler", () => {
           "collaborator",
         ),
         {
-          projectId: "project-current",
+          spaceId: "space-current",
           requesterUserId: "user-requester",
           role: "implementer",
           capabilities: ["code"],
@@ -534,11 +531,11 @@ describe("Project execution scheduler", () => {
     });
   });
 
-  it("uses only the Project role and Workspace Grant at the Cloud boundary", async () => {
+  it("uses only the Space role and Workspace Grant at the Cloud boundary", async () => {
     const currentWorker = {
       ...candidate(),
       grant_id: "grant-current",
-      project_id: "project-current",
+      space_id: "space-current",
       workspace_id: "workspace-current",
       grant_status: "active",
       allowed_worker_ids_json: "[]",
@@ -577,10 +574,10 @@ describe("Project execution scheduler", () => {
       active_assignments: 0,
     };
 
-    const target = await selectProjectExecutionTarget(
+    const target = await selectSpaceExecutionTarget(
       db([currentWorker], "owner"),
       {
-        projectId: "project-current",
+        spaceId: "space-current",
         requesterUserId: "user-developer",
         role: "owner",
         capabilities: ["code"],
@@ -610,22 +607,22 @@ describe("Project execution scheduler", () => {
       active_assignments: 0,
     };
     const request = {
-      projectId: "project-a",
+      spaceId: "space-a",
       requesterUserId: "user-requester",
       role: "implementer",
       capabilities: ["repository"],
     };
     await expect(
-      selectProjectExecutionTarget(db([base]), request),
+      selectSpaceExecutionTarget(db([base]), request),
     ).resolves.toBeNull();
     await expect(
-      selectProjectExecutionTarget(
+      selectSpaceExecutionTarget(
         db([{ ...base, cloud_scheduling_state: "draining" }]),
         request,
       ),
     ).resolves.toBeNull();
     await expect(
-      selectProjectExecutionTarget(
+      selectSpaceExecutionTarget(
         db([
           {
             ...base,
@@ -638,7 +635,7 @@ describe("Project execution scheduler", () => {
       ),
     ).resolves.toBeNull();
     await expect(
-      selectProjectExecutionTarget(
+      selectSpaceExecutionTarget(
         db([
           {
             ...base,
@@ -651,13 +648,13 @@ describe("Project execution scheduler", () => {
       ),
     ).resolves.toBeNull();
     await expect(
-      selectProjectExecutionTarget(
+      selectSpaceExecutionTarget(
         db([{ ...base, cloud_scheduling_state: "enabled" }]),
         request,
       ),
     ).resolves.toMatchObject({ workerId: "worker-current" });
     await expect(
-      selectProjectExecutionTarget(
+      selectSpaceExecutionTarget(
         db([
           {
             ...base,
@@ -669,7 +666,7 @@ describe("Project execution scheduler", () => {
       ),
     ).resolves.toBeNull();
     await expect(
-      selectProjectExecutionTarget(
+      selectSpaceExecutionTarget(
         db([
           { ...base, cloud_scheduling_state: "enabled", active_assignments: 2 },
         ]),
@@ -677,7 +674,7 @@ describe("Project execution scheduler", () => {
       ),
     ).resolves.toBeNull();
     await expect(
-      selectProjectExecutionTarget(
+      selectSpaceExecutionTarget(
         db([
           {
             ...base,
@@ -703,13 +700,13 @@ describe("Project execution scheduler", () => {
       active_assignments: 0,
     };
     const request = {
-      projectId: "project-a",
+      spaceId: "space-a",
       requesterUserId: "user-requester",
       role: "implementer",
       capabilities: ["repository"],
     };
     const liveCheck = vi.fn(async () => true);
-    const target = await selectProjectExecutionTarget(
+    const target = await selectSpaceExecutionTarget(
       db([offlineProjection]),
       request,
       new Date(),
@@ -719,7 +716,7 @@ describe("Project execution scheduler", () => {
     expect(target?.workspaceId).toBe("workspace-live");
     expect(liveCheck).toHaveBeenCalledWith("workspace-live", "runtime-live");
     await expect(
-      selectProjectExecutionTarget(
+      selectSpaceExecutionTarget(
         db([{ ...offlineProjection, workspace_status: "online" }]),
         request,
         new Date(),
@@ -730,7 +727,7 @@ describe("Project execution scheduler", () => {
 });
 
 it("refuses silently replacing an accepted turn Profile release", async () => {
-  const target = await selectProjectExecutionTarget(
+  const target = await selectSpaceExecutionTarget(
     db([
       candidate({
         work_request_snapshot_json: JSON.stringify({
@@ -746,7 +743,7 @@ it("refuses silently replacing an accepted turn Profile release", async () => {
       }),
     ]),
     {
-      projectId: "project-a",
+      spaceId: "space-a",
       requesterUserId: "user-a",
       role: "collaborator",
       capabilities: ["repository"],
@@ -757,7 +754,7 @@ it("refuses silently replacing an accepted turn Profile release", async () => {
 });
 
 it("dispatches accepted Default model and effort even when later defaults differ", async () => {
-  const target = await selectProjectExecutionTarget(
+  const target = await selectSpaceExecutionTarget(
     db([
       candidate({
         work_request_snapshot_json: JSON.stringify({
@@ -773,7 +770,7 @@ it("dispatches accepted Default model and effort even when later defaults differ
       }),
     ]),
     {
-      projectId: "project-a",
+      spaceId: "space-a",
       requesterUserId: "user-a",
       role: "collaborator",
       capabilities: ["repository"],

@@ -104,7 +104,7 @@ describe("Workspace Worker inventory catalog metadata", () => {
                     engine_family: "cli",
                     visibility_state: "visible",
                     release_stage: "beta",
-                    capabilities_json: '["text","workstream_read"]',
+                    capabilities_json: '["text","thread_read"]',
                     sort_order: 30,
                     profile_definition_id: "dynamic-test-cli",
                     provider_tool_name: "Fixture CLI",

@@ -47,7 +47,7 @@ class AxWorkRealtimeSync {
   bool get polling => _fallback?.isActive == true;
 
   void Function() listen(Stream<Map<String, dynamic>>? events,
-      {String? workstreamId}) {
+      {String? threadId}) {
     if (_disposed) return () {};
     if (events != null) {
       final existing = _streams[events];
@@ -61,23 +61,23 @@ class AxWorkRealtimeSync {
             onDone: _disconnected));
       }
     }
-    if (workstreamId != null) {
-      _scopes[workstreamId] = (_scopes[workstreamId] ?? 0) + 1;
+    if (threadId != null) {
+      _scopes[threadId] = (_scopes[threadId] ?? 0) + 1;
     }
     _scheduleFallback();
-    if (workstreamId != null && _healthy) {
+    if (threadId != null && _healthy) {
       unawaited(_resync(discover: false).catchError((Object _) {}));
     }
     var cancelled = false;
     return () {
       if (cancelled) return;
       cancelled = true;
-      if (workstreamId != null) {
-        final count = (_scopes[workstreamId] ?? 1) - 1;
+      if (threadId != null) {
+        final count = (_scopes[threadId] ?? 1) - 1;
         if (count <= 0) {
-          _scopes.remove(workstreamId);
+          _scopes.remove(threadId);
         } else {
-          _scopes[workstreamId] = count;
+          _scopes[threadId] = count;
         }
       }
       if (events != null) {
@@ -212,11 +212,13 @@ class AxWorkRealtimeSync {
     }
     if (type == 'reconnect.required') {
       final scope = AxSyncScope.fromEvent(event);
-      if (scope.kind == 'project' || scope.kind == 'unknown') return;
-      if (scope.kind == 'workstream') {
+      if (scope.kind == 'space' || scope.kind == 'unknown') {
+        return;
+      }
+      if (scope.kind == 'thread') {
         // A scoped gap is not a transport outage. Recover retained active
-        // entities in this Workstream without polling unrelated views.
-        if (!cache.workstreamIds.contains(scope.id)) return;
+        // entities in this Thread without polling unrelated views.
+        if (!cache.threadIds.contains(scope.id)) return;
         await _resync(discover: true, targets: {scope.id!});
         return;
       }
@@ -262,15 +264,15 @@ class AxWorkRealtimeSync {
     if (raw is! Map) return;
     final payload = Map<String, dynamic>.from(raw);
     final id = payload['workRequestId'];
-    final workstreamId = payload['workstreamId'];
+    final threadId = payload['threadId'] ?? payload['threadId'];
     if (id is! String ||
         id.isEmpty ||
-        workstreamId is! String ||
-        workstreamId.isEmpty) {
+        threadId is! String ||
+        threadId.isEmpty) {
       return;
     }
     final sequence = event['sequence'];
-    final sequenceKey = '${event['workspaceId']}:$workstreamId:$id';
+    final sequenceKey = '${event['workspaceId']}:$threadId:$id';
     if (sequence is int && sequence > 0) {
       if (sequence <= (_sequences[sequenceKey] ?? -1)) return;
       _sequences[sequenceKey] = sequence;
@@ -289,27 +291,29 @@ class AxWorkRealtimeSync {
         full['prompt'] is String &&
         full['requestedByName'] is String &&
         full['status'] is String &&
-        (full['workstreamId'] == null ||
-            full['workstreamId'] == workstreamId) &&
+        (full['threadId'] == null ||
+            full['threadId'] == threadId ||
+            full['threadId'] == null ||
+            full['threadId'] == threadId) &&
         full['steps'] is List &&
         (full['steps'] as List).every((v) => v is Map) &&
         (full['status'] != 'completed' || full.containsKey('finalText'))) {
       try {
-        cache.patchRequest(workstreamId,
-            AxWorkRequest.fromJson(Map<String, dynamic>.from(full)));
+        cache.patchRequest(
+            threadId, AxWorkRequest.fromJson(Map<String, dynamic>.from(full)));
         return;
       } catch (_) {
         // Incomplete optional metadata falls back to the authoritative detail.
       }
     }
-    final current = cache.request(workstreamId, id);
+    final current = cache.request(threadId, id);
     final status = payload['status'];
     if (current != null &&
         status is String &&
         const {'queued', 'running', 'waiting'}.contains(current.status)) {
       if ((type == 'work_request.started' && status == 'running') ||
           (type == 'work_request.created' && status == 'queued')) {
-        cache.patchRequest(workstreamId, current.copyWith(status: status));
+        cache.patchRequest(threadId, current.copyWith(status: status));
         return;
       }
       final kind = payload['stepKind'];
@@ -320,7 +324,7 @@ class AxWorkRealtimeSync {
               s.kind == kind &&
               const {'queued', 'running', 'waiting'}.contains(s.status))) {
         cache.patchRequest(
-            workstreamId,
+            threadId,
             current.copyWith(steps: [
               for (final step in current.steps)
                 step.kind == kind ? step.withStatus(status) : step
@@ -330,7 +334,7 @@ class AxWorkRealtimeSync {
     }
     // Terminal and incomplete events need result/error/Step details.
     try {
-      await cache.refreshRequest(workstreamId, id, supersede: true);
+      await cache.refreshRequest(threadId, id, supersede: true);
     } catch (_) {
       _needsRecovery = true;
       _scheduleFallback();

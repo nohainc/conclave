@@ -141,14 +141,13 @@ void main() {
           theme: ConclaveBrand.lightTheme(),
           home: Scaffold(
             body: CommandPaletteDialog(
-              projects: snapshot.projects,
+              spaces: snapshot.spaces,
               workspaces: snapshot.workspaces,
               run: snapshot.run,
-              workstreamsByProject: {
-                for (final project in snapshot.projects)
-                  project.id: project.workstreams
+              threadsBySpace: {
+                for (final space in snapshot.spaces) space.id: space.threads
               },
-              onSelectProject: (_) {},
+              onSelectSpace: (_) {},
               onNavigateTo: (route) => navigatedTo = route,
               onToggleTheme: () {},
             ),
@@ -190,14 +189,14 @@ void main() {
           theme: ConclaveBrand.lightTheme(),
           home: Scaffold(
             body: CommandPaletteDialog(
-              projects: axFixtureSnapshot().projects,
+              spaces: axFixtureSnapshot().spaces,
               workspaces: axFixtureSnapshot().workspaces,
               run: axFixtureSnapshot().run,
-              workstreamsByProject: {
-                for (final project in axFixtureSnapshot().projects)
-                  project.id: project.workstreams
+              threadsBySpace: {
+                for (final space in axFixtureSnapshot().spaces)
+                  space.id: space.threads
               },
-              onSelectProject: (_) {},
+              onSelectSpace: (_) {},
               onNavigateTo: (route) => navigatedTo = route,
               onToggleTheme: () {},
             ),

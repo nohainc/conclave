@@ -18,8 +18,8 @@ void main() {
     final chat = AxDiscussionCache(null, engine: engine);
     final work = AxWorkHistoryCache(null, engine: engine);
     for (final key in [
-      ['projects'],
-      ['project', 'p', 'workstreams'],
+      ['spaces'],
+      ['space', 'p', 'threads'],
       ['workflow-catalog']
     ]) {
       engine.update(query(key), (_) => 42);
@@ -30,18 +30,18 @@ void main() {
       await settle();
     }
     final ids = engine.relevantKeys
-        .where((key) => key.parts.first == 'workstream')
+        .where((key) => key.parts.first == 'thread')
         .map((key) => key.parts[1])
         .toSet();
     expect(ids.length, 20);
     expect(ids, containsAll(['80', '99']));
-    expect(work.workstreamIds.length, lessThanOrEqualTo(20));
+    expect(work.threadIds.length, lessThanOrEqualTo(20));
     expect(engine.cachedValues<int>().values, everyElement(42));
   });
 
   test('touching a cached history changes its LRU position', () async {
     var now = DateTime.utc(2026);
-    final engine = AxSyncEngine(clock: () => now, maxRetainedWorkstreams: 2);
+    final engine = AxSyncEngine(clock: () => now, maxRetainedThreads: 2);
     final chat = AxDiscussionCache(null, engine: engine);
     chat.peek('a');
     await settle();
@@ -59,7 +59,7 @@ void main() {
 
   test('visible histories survive overflow and release enforces the limit',
       () async {
-    final engine = AxSyncEngine(maxRetainedWorkstreams: 1);
+    final engine = AxSyncEngine(maxRetainedThreads: 1);
     final chat = AxDiscussionCache(null, engine: engine);
     final releaseA = chat.watch('a', (_) {});
     final releaseB = chat.watch('b', (_) {});
@@ -73,13 +73,13 @@ void main() {
 
   test('read in flight is protected and collection resumes on completion',
       () async {
-    final engine = AxSyncEngine(maxRetainedWorkstreams: 1);
+    final engine = AxSyncEngine(maxRetainedThreads: 1);
     final pending = Completer<int>();
     final a = AxQuery(
-        key: AxQueryKey(['workstream', 'a', 'discussion']),
+        key: AxQueryKey(['thread', 'a', 'discussion']),
         load: () => pending.future);
     final read = engine.refresh(a);
-    final b = query(['workstream', 'b', 'discussion']);
+    final b = query(['thread', 'b', 'discussion']);
     final release = engine.watch(b, (_) {});
     await settle();
     expect(engine.relevantKeys.length, 2);
@@ -92,10 +92,10 @@ void main() {
 
   test('optimistic write is protected until its overlay is committed',
       () async {
-    final engine = AxSyncEngine(maxRetainedWorkstreams: 1);
-    final a = query(['workstream', 'a', 'work-requests']);
+    final engine = AxSyncEngine(maxRetainedThreads: 1);
+    final a = query(['thread', 'a', 'work-requests']);
     final overlay = engine.optimisticUpdate(a, (_) => 2);
-    final b = query(['workstream', 'b', 'discussion']);
+    final b = query(['thread', 'b', 'discussion']);
     final release = engine.watch(b, (_) {});
     await settle();
     expect(overlay.isCurrent(), isTrue);
@@ -139,7 +139,7 @@ void main() {
   });
 
   test('pending Chat send survives navigation and is not replayed', () async {
-    final engine = AxSyncEngine(maxRetainedWorkstreams: 1);
+    final engine = AxSyncEngine(maxRetainedThreads: 1);
     final source = DiscussionSource();
     final chat = AxDiscussionCache(source, engine: engine);
     final write = chat.send('a', 'pending');
@@ -158,9 +158,9 @@ void main() {
 
   test('hydrated unvisited histories are bounded without cache owners',
       () async {
-    final engine = AxSyncEngine(maxRetainedWorkstreams: 2);
+    final engine = AxSyncEngine(maxRetainedThreads: 2);
     for (var i = 0; i < 30; i++) {
-      engine.seed(query(['workstream', '$i', 'discussion']), i,
+      engine.seed(query(['thread', '$i', 'discussion']), i,
           accessed: DateTime.utc(2026).add(Duration(seconds: i)));
     }
     await settle();
@@ -168,25 +168,25 @@ void main() {
   });
 
   test('eviction releases Work bridge context and every cached page', () async {
-    final engine = AxSyncEngine(maxRetainedWorkstreams: 1);
+    final engine = AxSyncEngine(maxRetainedThreads: 1);
     final work = AxWorkHistoryCache(null, engine: engine);
     final releaseA = work.watch('a', () {});
     work.replace('a', [request('1')]);
     for (var i = 0; i < 10; i++) {
       engine.update(
-          query(['workstream', 'a', 'work-requests', 'page', '$i']), (_) => i);
+          query(['thread', 'a', 'work-requests', 'page', '$i']), (_) => i);
     }
     final releaseB = work.watch('b', () {});
     releaseA();
     await settle();
-    expect(work.workstreamIds, ['b']);
+    expect(work.threadIds, ['b']);
     expect(engine.relevantKeys.every((key) => key.parts[1] == 'b'), isTrue);
     releaseB();
   });
 
   test('direct query subscription pins history even with a cache owner',
       () async {
-    final engine = AxSyncEngine(maxRetainedWorkstreams: 1);
+    final engine = AxSyncEngine(maxRetainedThreads: 1);
     final chat = AxDiscussionCache(null, engine: engine);
     final release = engine.watch(chat.query('a'), (_) {});
     chat.peek('b');
@@ -218,16 +218,16 @@ void main() {
     final engine = AxSyncEngine(clock: () => now);
     final idle = query(['run', 'idle']);
     final active = query(['run', 'active']);
-    final project = query(['project', 'a']);
+    final space = query(['space', 'a']);
     engine.update(idle, (_) => 1);
     engine.peek(idle);
     engine.update(active, (_) => 1);
     final release = engine.watch(active, (_) {});
-    engine.update(project, (_) => 1);
+    engine.update(space, (_) => 1);
     now = now.add(const Duration(minutes: 6));
     engine.collectRetainedCache();
     expect(engine.cachedValues<int>().keys,
-        unorderedEquals([active.key, project.key]));
+        unorderedEquals([active.key, space.key]));
     release();
   });
 }

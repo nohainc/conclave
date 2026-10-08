@@ -29,7 +29,7 @@ The current source tree has converged on the v8 architecture:
   current readiness path, then calls the CLI Worker Engine supervisor.
 - One generic CLI Worker Engine is the production CLI runtime.
 - Current Cloud routes, authorization, protocol schemas, and persistence use
-  the current Project, Workspace, Workstream, Work, Worker, and Profile model.
+  the current Space, Workspace, Thread, Work, Worker, and Profile model.
 - The clean v8 schema is in `apps/cloud/migrations-v8/0001_conclave_v8.sql`.
 - Until the v8 release declaration, any change to that baseline requires a
   fresh production D1 bootstrap and verified data carry-forward. Schema freeze

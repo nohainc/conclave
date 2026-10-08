@@ -22,32 +22,32 @@ function fixture() {
         status: "active",
       },
       workspaceId: "",
-      projectRoles: {},
+      spaceRoles: {},
       sessionId: "session",
       clientType: "web",
     }),
   } as unknown as SecurityEnv;
-  function project(id: string, archived = false) {
+  function space(id: string, archived = false) {
     sqlite
       .prepare(
-        "INSERT INTO projects(id,owner_user_id,name,settings_json,created_at,updated_at) VALUES (?,'other',?,?, 'now','now')",
+        "INSERT INTO spaces(id,owner_user_id,name,settings_json,created_at,updated_at) VALUES (?,'other',?,?, 'now','now')",
       )
       .run(id, id, JSON.stringify({ archived }));
   }
   function grant(
     id: string,
-    projectId: string,
+    spaceId: string,
     status = "active",
     expiry: string | null = null,
     workspace = "mine",
   ) {
     sqlite
       .prepare(
-        "INSERT INTO workspace_project_grants(id,project_id,workspace_id,granted_by_user_id,status,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?,'now','now')",
+        "INSERT INTO workspace_space_grants(id,space_id,workspace_id,granted_by_user_id,status,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?,'now','now')",
       )
       .run(
         id,
-        projectId,
+        spaceId,
         workspace,
         workspace === "private" ? "other" : "owner",
         status,
@@ -60,14 +60,14 @@ function fixture() {
       env,
     );
     return (await response.json()) as {
-      workspaces: { id: string; activeProjectGrantCount: number }[];
+      workspaces: { id: string; activeSpaceGrantCount: number }[];
     };
   };
-  return { sqlite, db, project, grant, list };
+  return { sqlite, db, space, grant, list };
 }
 
-describe("Workspace aggregate Project grant counts", () => {
-  it("counts distinct active, unexpired grants to unarchived Projects, only for owned Workspaces", async () => {
+describe("Workspace aggregate Space grant counts", () => {
+  it("counts distinct active, unexpired grants to unarchived Spaces, only for owned Workspaces", async () => {
     const f = fixture();
     try {
       for (const id of [
@@ -79,8 +79,8 @@ describe("Workspace aggregate Project grant counts", () => {
         "future",
         "private",
       ])
-        f.project(id);
-      f.project("archived", true);
+        f.space(id);
+      f.space("archived", true);
       f.grant("g1", "active");
       f.grant("duplicate", "active");
       f.grant("g2", "suspended", "suspended");
@@ -93,31 +93,29 @@ describe("Workspace aggregate Project grant counts", () => {
       const { workspaces } = await f.list();
       expect(workspaces.map((w) => w.id).sort()).toEqual(["empty", "mine"]);
       expect(
-        workspaces.find((w) => w.id === "mine")?.activeProjectGrantCount,
+        workspaces.find((w) => w.id === "mine")?.activeSpaceGrantCount,
       ).toBe(2);
       expect(
-        workspaces.find((w) => w.id === "empty")?.activeProjectGrantCount,
+        workspaces.find((w) => w.id === "empty")?.activeSpaceGrantCount,
       ).toBe(0);
     } finally {
       f.sqlite.close();
     }
   });
-  it("returns counts for 30 Projects with one aggregate database read and no per-Project reads", async () => {
+  it("returns counts for 30 Spaces with one aggregate database read and no per-Space reads", async () => {
     const f = fixture();
     try {
       for (let i = 0; i < 30; i++) {
-        f.project(`p${i}`);
+        f.space(`p${i}`);
         f.grant(`g${i}`, `p${i}`);
       }
       const reads = vi.spyOn(f.db, "prepare");
       const { workspaces } = await f.list();
       expect(
-        workspaces.find((w) => w.id === "mine")?.activeProjectGrantCount,
+        workspaces.find((w) => w.id === "mine")?.activeSpaceGrantCount,
       ).toBe(30);
       expect(reads.mock.calls).toHaveLength(1);
-      expect(reads.mock.calls[0]?.[0]).toContain(
-        "COUNT(DISTINCT g.project_id)",
-      );
+      expect(reads.mock.calls[0]?.[0]).toContain("COUNT(DISTINCT g.space_id)");
     } finally {
       f.sqlite.close();
     }

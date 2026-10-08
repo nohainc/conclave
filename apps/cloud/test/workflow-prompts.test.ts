@@ -52,12 +52,10 @@ describe("Work v1 prompt profiles", () => {
         expect(prompt).toContain("This is a read-only interaction");
         expect(prompt).toContain("Do not perform implementation work");
         expect(prompt).not.toContain(
-          "Carry out the request in the current Workstream",
+          "Carry out the request in the current Thread",
         );
       } else {
-        expect(prompt).toContain(
-          "Carry out the request in the current Workstream",
-        );
+        expect(prompt).toContain("Carry out the request in the current Thread");
         expect(prompt).not.toContain("This is a read-only interaction");
       }
     },
@@ -67,8 +65,8 @@ describe("Work v1 prompt profiles", () => {
     const prompt = renderWorkStepPrompt(workflow, workflow.steps[0]!, {
       originalRequest: "Please implement **this change**.",
       workRequestId: "request-chat",
-      projectInstructions: "Prefer established patterns.",
-      workstreamInstructions: "Explain the current architecture.",
+      spaceInstructions: "Prefer established patterns.",
+      threadInstructions: "Explain the current architecture.",
       stepInstructions: {
         chat: "Discuss the tradeoffs.",
         implement: "Must not be inherited.",
@@ -88,10 +86,10 @@ describe("Work v1 prompt profiles", () => {
       "CHAT\nAnswer the user's request conversationally",
     );
     expect(prompt).toContain(
-      "Project instructions:\nPrefer established patterns.",
+      "Space instructions:\nPrefer established patterns.",
     );
     expect(prompt).toContain(
-      "Workstream instructions:\nExplain the current architecture.",
+      "Thread instructions:\nExplain the current architecture.",
     );
     expect(prompt).toContain(
       "Additional Chat instructions:\nDiscuss the tradeoffs.",
@@ -124,8 +122,8 @@ describe("Work v1 prompt profiles", () => {
     const oversized = "x".repeat(200000) + "UNBOUNDED_TAIL";
     const prompt = renderWorkStepPrompt(workflow, workflow.steps[0]!, {
       originalRequest: oversized,
-      projectInstructions: oversized,
-      workstreamInstructions: oversized,
+      spaceInstructions: oversized,
+      threadInstructions: oversized,
       stepInstructions: { chat: oversized },
       attachments: Array.from({ length: 20 }, () => ({
         kind: "url" as const,
@@ -146,19 +144,19 @@ describe("Work v1 prompt profiles", () => {
       attachments: [
         { name: "trace.txt", mediaType: "text/plain", content: "trace body" },
       ],
-      projectInstructions: "Use established router patterns.",
-      workstreamInstructions: "Keep the change small.",
+      spaceInstructions: "Use established router patterns.",
+      threadInstructions: "Keep the change small.",
       stepInstructions: { research: "Check the callback path." },
       stepResults: { verify: stepResult("Must not be inherited.") },
-      currentWorkstreamContext: "Must not be inherited.",
+      currentThreadContext: "Must not be inherited.",
     });
 
     expect(prompt).toContain(
       "Run-specific user request:\nInvestigate login redirect",
     );
     expect(prompt).toContain("Attachment (text/plain): trace.txt\ntrace body");
-    expect(prompt).toContain("Project instructions:");
-    expect(prompt).toContain("Workstream instructions:");
+    expect(prompt).toContain("Space instructions:");
+    expect(prompt).toContain("Thread instructions:");
     expect(prompt).toContain("Additional Research instructions:");
     expect(prompt).not.toContain("Must not be inherited");
   });
@@ -175,14 +173,14 @@ describe("Work v1 prompt profiles", () => {
           content: "private attachment body",
         },
       ],
-      projectInstructions: "Project policy",
-      workstreamInstructions: "Workstream policy",
+      spaceInstructions: "Space policy",
+      threadInstructions: "Thread policy",
       stepInstructions: { plan: "Include callback coverage." },
       stepResults: {
         research: stepResult("Redirect loop starts after callback."),
         implement: stepResult("Must not be inherited."),
       },
-      currentWorkstreamContext: "Must not be inherited.",
+      currentThreadContext: "Must not be inherited.",
     });
 
     expect(prompt).toContain("Attachment metadata:");
@@ -199,20 +197,20 @@ describe("Work v1 prompt profiles", () => {
     const prompt = renderWorkStepPrompt(workflow, workflow.steps[2]!, {
       originalRequest: "Fix login redirect",
       attachments: [{ name: "trace.txt", content: "Must not be inherited." }],
-      projectInstructions: "Use the shared router.",
-      workstreamInstructions: "Preserve existing behavior.",
+      spaceInstructions: "Use the shared router.",
+      threadInstructions: "Preserve existing behavior.",
       stepInstructions: { implement: "Add a regression fix." },
       stepResults: {
         research: stepResult("Callback state is lost."),
         plan: stepResult("Preserve callback state."),
         test: stepResult("Must not be inherited."),
       },
-      currentWorkstreamContext: "Must not be inherited.",
+      currentThreadContext: "Must not be inherited.",
     });
 
     expect(prompt).toContain("Research result:\nCallback state is lost.");
     expect(prompt).toContain("Plan result:\nPreserve callback state.");
-    expect(prompt).toContain("Use the writable Workstream filesystem");
+    expect(prompt).toContain("Use the writable Thread filesystem");
     expect(prompt).not.toContain("Attachment:");
     expect(prompt).not.toContain("Must not be inherited");
   });
@@ -222,22 +220,22 @@ describe("Work v1 prompt profiles", () => {
     const prompt = renderWorkStepPrompt(workflow, workflow.steps[3]!, {
       originalRequest: "Fix login redirect",
       attachments: [{ name: "trace.txt", content: "Must not be inherited." }],
-      projectInstructions: "Project policy",
-      workstreamInstructions: "Workstream policy",
+      spaceInstructions: "Space policy",
+      threadInstructions: "Thread policy",
       stepInstructions: { test: "Run callback regression tests." },
       stepResults: {
         research: stepResult("Must not be inherited."),
         plan: stepResult("Preserve callback state."),
         implement: stepResult("Updated callback persistence."),
       },
-      currentWorkstreamContext: "Working tree contains the implementation.",
+      currentThreadContext: "Working tree contains the implementation.",
     });
 
     expect(prompt).toContain("Plan result:\nPreserve callback state.");
     expect(prompt).toContain(
       "Implementation result:\nUpdated callback persistence.",
     );
-    expect(prompt).toContain("Current Workstream filesystem:");
+    expect(prompt).toContain("Current Thread filesystem:");
     expect(prompt).toContain("Working tree contains the implementation.");
     expect(prompt).not.toContain("Must not be inherited");
     expect(prompt).not.toContain("Attachment:");
@@ -248,8 +246,8 @@ describe("Work v1 prompt profiles", () => {
     const prompt = renderWorkStepPrompt(workflow, workflow.steps[4]!, {
       originalRequest: "Fix login redirect",
       attachments: [{ name: "trace.txt", content: "Must not be inherited." }],
-      projectInstructions: "Project policy",
-      workstreamInstructions: "Workstream policy",
+      spaceInstructions: "Space policy",
+      threadInstructions: "Thread policy",
       stepInstructions: { verify: "Check callback state." },
       stepResults: {
         research: stepResult("Callback state was dropped."),
@@ -258,14 +256,14 @@ describe("Work v1 prompt profiles", () => {
         test: stepResult("Callback regression test passes."),
         verify: stepResult("Must not be inherited."),
       },
-      currentWorkstreamContext: "Current files include the regression test.",
+      currentThreadContext: "Current files include the regression test.",
     });
 
     expect(prompt).toContain("Research result:");
     expect(prompt).toContain("Plan result:");
     expect(prompt).toContain("Implementation result:");
     expect(prompt).toContain("Test result:");
-    expect(prompt).toContain("Current Workstream filesystem:");
+    expect(prompt).toContain("Current Thread filesystem:");
     expect(prompt).toContain("fresh isolated assignment");
     expect(prompt).not.toContain("Must not be inherited");
   });
@@ -279,7 +277,7 @@ describe("Work v1 prompt profiles", () => {
         plan: stepResult("Not part of this Workflow."),
         implement: stepResult("Implementation result."),
       },
-      currentWorkstreamContext: "Current files.",
+      currentThreadContext: "Current files.",
     });
     expect(prompt).toContain("Implementation result:");
     expect(prompt).not.toContain("Research result:");
@@ -319,7 +317,7 @@ describe("Work v1 prompt profiles", () => {
               stepResult(`${inputKind} evidence`),
             ]),
           ),
-          currentWorkstreamContext: "Current Workstream files.",
+          currentThreadContext: "Current Thread files.",
         }),
       ).not.toThrow();
     }
@@ -329,13 +327,13 @@ describe("Work v1 prompt profiles", () => {
     const inputs = workStepPromptInputs(
       {
         originalRequest: "Implement this",
-        projectInstructions: "Use Dart",
+        spaceInstructions: "Use Dart",
         attachments: [{ name: "notes", sizeBytes: 32 }],
       },
       { research: stepResult("Found one issue") },
     );
     expect(inputs.originalRequest).toBe("Implement this");
-    expect(inputs.projectInstructions).toBe("Use Dart");
+    expect(inputs.spaceInstructions).toBe("Use Dart");
     expect(inputs.attachments).toHaveLength(1);
     expect(inputs.stepResults?.research?.text).toBe("Found one issue");
 

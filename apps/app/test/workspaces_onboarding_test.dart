@@ -29,7 +29,7 @@ void main() {
     expect(find.text('No Workspaces connected'), findsOneWidget);
     expect(
       find.text(
-          'Register a Workspace from the Conclave Workspace desktop app. Its status and Workers will appear here for Project activity.'),
+          'Register a Workspace from the Conclave Workspace desktop app. Its status and Workers will appear here for Space activity.'),
       findsOneWidget,
     );
     expect(find.text('Download Conclave Workspace'), findsOneWidget);

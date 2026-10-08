@@ -90,7 +90,7 @@ This specification establishes the source of truth for the Conclave brand and vi
 ### 4.2 Type Hierarchy
 | Style | Size | Line Height | Weight | Letter Spacing | Target Use Cases |
 |---|---|---|---|---|---|
-| `displayLarge` | 24px | 30px | 700 | -0.02em | Main project/workspace hero titles |
+| `displayLarge` | 24px | 30px | 700 | -0.02em | Main space/workspace hero titles |
 | `titleLarge` | 20px | 26px | 700 | -0.015em | Page headers, modal sheet headers |
 | `titleMedium` | 16px | 22px | 600 | -0.01em | Card headers, section headings |
 | `titleSmall` | 14px | 20px | 600 | 0.0em | Group labels, form section titles |
@@ -127,7 +127,7 @@ Conclave follows a strict **4px / 8px modular spacing grid**:
 | `xs` | 4px | Small status badges, model tags, code chip containers |
 | `sm` | 6px | Compact buttons, tooltip wrappers, sub-menus |
 | `md` | 8px–10px | Text inputs, dropdown menus, action sheets, standard buttons |
-| `lg` | 12px–14px | Cards, workstream panels, workspace viewport splitters |
+| `lg` | 12px–14px | Cards, thread panels, workspace viewport splitters |
 | `xl` | 16px–20px | Modal dialogs, bottom sheets, onboarding hero containers |
 | `pill` | 9999px | Filter chips, avatar badge rings, rounded pill buttons |
 

@@ -1,8 +1,8 @@
 import 'ax_idempotency.dart';
 import '../ax_data.dart';
 import '../ax_models.dart';
-import 'ax_project_details.dart';
-import 'ax_project_workstreams.dart';
+import 'ax_space_details.dart';
+import 'ax_space_threads.dart';
 import 'ax_sync_engine.dart';
 
 /// Shared collaboration writes. Widgets own form state and notifications only.
@@ -13,13 +13,13 @@ class AxCollaborationMutations {
   final _attempts = AxMutationAttempts();
   void clear() => _attempts.clear();
   int _nextId = 0;
-  late final details = AxProjectDetails(source, engine: engine);
-  late final workstreams = AxProjectWorkstreams(source, engine: engine);
-  late final projects = AxQuery<List<AxProject>>(
-      key: AxQueryKey(['projects']),
-      load: () async => List.unmodifiable((await source.loadProjects())
-          .map((p) => p.copyWith(workstreams: const []))));
-  late final invitations = AxQuery<List<AxProjectInvitation>>(
+  late final details = AxSpaceDetails(source, engine: engine);
+  late final threads = AxSpaceThreads(source, engine: engine);
+  late final spaces = AxQuery<List<AxSpace>>(
+      key: AxQueryKey(['spaces']),
+      load: () async => List.unmodifiable((await source.loadSpaces())
+          .map((s) => s.copyWith(threads: const []))));
+  late final invitations = AxQuery<List<AxSpaceInvitation>>(
       key: AxQueryKey(['me', 'invitations']),
       load: source.loadCurrentUserInvitations);
 
@@ -36,50 +36,49 @@ class AxCollaborationMutations {
           ? values.map((item) => id(item) == id(value) ? value : item)
           : [...values, value]);
 
-  Future<AxProject> createProject(
+  Future<AxSpace> createSpace(
       {required String name, String? description, String? instructions}) {
-    final local = AxProject(
-        id: _temporary('project'),
+    final local = AxSpace(
+        id: _temporary('space'),
         name: name,
         description: description ?? '',
         instructions: instructions ?? '',
         branch: 'main',
         lastActivity: 'now');
-    return engine.mutations.run(
-        AxMutationOperation<AxProject, AxOptimisticUpdate<List<AxProject>>>(
+    return engine.mutations
+        .run(AxMutationOperation<AxSpace, AxOptimisticUpdate<List<AxSpace>>>(
       optimisticUpdate: () => engine.optimisticUpdate(
-          projects, (state) => _put(state.data ?? [], local, (p) => p.id)),
+          spaces, (state) => _put(state.data ?? [], local, (s) => s.id)),
       isCurrent: (change) => change.isCurrent(),
       execute: (_) async {
-        final value = await source.createProject(
+        final value = await source.createSpace(
             name: name, description: description, instructions: instructions);
         if (value.id.isEmpty || value.id.startsWith('local-')) {
-          throw const AxApiException(
-              'Project response identity does not match');
+          throw const AxApiException('Space response identity does not match');
         }
-        return value.copyWith(workstreams: const []);
+        return value.copyWith(threads: const []);
       },
       commit: (saved, change) {
         change.commit((state) => _put(
-            (state.data ?? []).where((p) => p.id != local.id).toList(),
+            (state.data ?? []).where((s) => s.id != local.id).toList(),
             saved,
-            (p) => p.id));
+            (s) => s.id));
         engine.update(details.query(saved.id), (_) => saved);
       },
       rollback: (_, __, change) => change.rollback(),
       invalidate: (saved, _) async {
-        engine.invalidate(projects.key);
+        engine.invalidate(spaces.key);
       },
     ));
   }
 
-  Future<AxProject> editProject(AxProject original,
+  Future<AxSpace> editSpace(AxSpace original,
       {String? name,
       String? description,
       String? instructions,
       Map<String, dynamic>? settings}) {
     final query = details.query(original.id);
-    AxProject patch(AxProject value) => value.copyWith(
+    AxSpace patch(AxSpace value) => value.copyWith(
         name: name,
         description: description,
         instructions: instructions,
@@ -87,19 +86,19 @@ class AxCollaborationMutations {
         archived: settings?['archived'] is bool
             ? settings!['archived'] as bool
             : null,
-        workstreams: const []);
-    return engine.mutations.run(AxMutationOperation<AxProject,
-        (AxOptimisticUpdate<AxProject>, AxOptimisticUpdate<List<AxProject>>)>(
-      key: AxQueryKey(['mutation', 'project', original.id]),
+        threads: const []);
+    return engine.mutations.run(AxMutationOperation<AxSpace,
+        (AxOptimisticUpdate<AxSpace>, AxOptimisticUpdate<List<AxSpace>>)>(
+      key: AxQueryKey(['mutation', 'space', original.id]),
       optimisticUpdate: () {
         final detailChange = engine.optimisticUpdate(
             query, (state) => patch(state.data ?? original));
-        final listChange = engine.optimisticUpdate(projects, (state) {
-          final values = state.data ?? const <AxProject>[];
+        final listChange = engine.optimisticUpdate(spaces, (state) {
+          final values = state.data ?? const <AxSpace>[];
           if (!detailChange.isCurrent()) return values;
           final latest =
-              values.where((p) => p.id == original.id).firstOrNull ?? original;
-          return _replace(values, patch(latest), (p) => p.id);
+              values.where((s) => s.id == original.id).firstOrNull ?? original;
+          return _replace(values, patch(latest), (s) => s.id);
         });
         return (detailChange, listChange);
       },
@@ -109,144 +108,148 @@ class AxCollaborationMutations {
         changes.$2.rollback();
       },
       execute: (_) async {
-        final value = await source.updateProject(
-            projectId: original.id,
+        final value = await source.updateSpace(
+            spaceId: original.id,
             name: name,
             description: description,
             instructions: instructions,
             settings: settings);
         if (value.id != original.id) {
-          throw const AxApiException(
-              'Project response identity does not match');
+          throw const AxApiException('Space response identity does not match');
         }
-        return value.copyWith(workstreams: const []);
+        return value.copyWith(threads: const []);
       },
       commit: (saved, changes) {
         changes.$1.commit((_) => saved);
         changes.$2
-            .commit((state) => _replace(state.data ?? [], saved, (p) => p.id));
+            .commit((state) => _replace(state.data ?? [], saved, (s) => s.id));
       },
       rollback: (_, __, changes) {
         changes.$1.rollback();
         changes.$2.rollback();
       },
       invalidate: (_, __) async {
-        engine.invalidate(AxQueryKey(['project', original.id, 'audit']));
+        engine.invalidate(AxQueryKey(['space', original.id, 'audit']));
       },
     ));
   }
 
-  Future<AxWorkstream> createWorkstream(
-      {required String projectId,
-      required String name,
+  Future<AxThread> createThread(
+      {required String spaceId,
+      String? title,
+      String? name,
       String? idempotencyKey}) {
-    final query = workstreams.query(projectId);
-    final input = {'name': name};
-    final scope = 'project:$projectId:create-workstream';
+    final effectiveTitle = title ?? name ?? '';
+    final query = threads.query(spaceId);
+    final input = {'title': effectiveTitle};
+    final scope = 'space:$spaceId:create-thread';
     final key = idempotencyKey ?? _attempts.keyFor(scope, input);
-    final local = AxWorkstream.fromJson({
-      'id': _temporary('workstream'),
-      'projectId': projectId,
-      'name': name,
+    final local = AxThread.fromJson({
+      'id': _temporary('thread'),
+      'spaceId': spaceId,
+      'title': effectiveTitle,
+      'name': effectiveTitle,
       'status': 'active'
     });
-    return engine.mutations.run(AxMutationOperation<AxWorkstream,
-        AxOptimisticUpdate<List<AxWorkstream>>>(
-      key: AxQueryKey(['mutation', 'workstream-create', key]),
+    return engine.mutations
+        .run(AxMutationOperation<AxThread, AxOptimisticUpdate<List<AxThread>>>(
+      key: AxQueryKey(['mutation', 'thread-create', key]),
       optimisticUpdate: () => engine.optimisticUpdate(
-          query, (state) => _put(state.data ?? [], local, (w) => w.id)),
+          query, (state) => _put(state.data ?? [], local, (t) => t.id)),
       isCurrent: (change) => change.isCurrent(),
       execute: (_) async {
-        final value = await source.createWorkstream(
-            projectId: projectId, name: name, idempotencyKey: key);
+        final value = await source.createThread(
+            spaceId: spaceId, name: effectiveTitle, idempotencyKey: key);
         if (value.id.isEmpty ||
             value.id.startsWith('local-') ||
-            value.projectId != projectId) {
-          throw const AxApiException(
-              'Workstream response identity does not match');
+            value.spaceId != spaceId) {
+          throw const AxApiException('Thread response identity does not match');
         }
         return value;
       },
       commit: (saved, change) {
         _attempts.complete(scope, input, key);
         change.commit((state) => _put(
-            (state.data ?? []).where((w) => w.id != local.id).toList(),
+            (state.data ?? []).where((t) => t.id != local.id).toList(),
             saved,
-            (w) => w.id));
+            (t) => t.id));
       },
       rollback: (_, __, change) => change.rollback(),
       invalidate: (_, __) async {
-        engine.invalidate(AxQueryKey(['project', projectId, 'audit']));
+        engine.invalidate(AxQueryKey(['space', spaceId, 'audit']));
       },
     ));
   }
 
-  Future<AxWorkstream> editWorkstream(AxWorkstream original,
-      {String? name, String? status, Map<String, dynamic>? workConfig}) {
-    final query = workstreams.query(original.projectId);
-    AxWorkstream patch(AxWorkstream value) =>
-        value.copyWith(name: name, status: status, workConfig: workConfig);
-    return engine.mutations.run(AxMutationOperation<AxWorkstream,
-        AxOptimisticUpdate<List<AxWorkstream>>>(
-      key: AxQueryKey(['mutation', 'workstream', original.id]),
+  Future<AxThread> editThread(AxThread original,
+      {String? title,
+      String? name,
+      String? status,
+      Map<String, dynamic>? workConfig}) {
+    final effectiveTitle = title ?? name;
+    final query = threads.query(original.spaceId);
+    AxThread patch(AxThread value) => value.copyWith(
+        title: effectiveTitle, status: status, workConfig: workConfig);
+    return engine.mutations
+        .run(AxMutationOperation<AxThread, AxOptimisticUpdate<List<AxThread>>>(
+      key: AxQueryKey(['mutation', 'thread', original.id]),
       optimisticUpdate: () => engine.optimisticUpdate(
           query,
           (state) => _replace(
               state.data ?? [],
               patch((state.data ?? [])
-                      .where((w) => w.id == original.id)
+                      .where((t) => t.id == original.id)
                       .firstOrNull ??
                   original),
-              (w) => w.id)),
+              (t) => t.id)),
       isCurrent: (change) => change.isCurrent(),
       execute: (_) async {
-        final value = await source.updateWorkstream(
-            workstreamId: original.id,
-            name: name,
+        final value = await source.updateThread(
+            threadId: original.id,
+            name: effectiveTitle,
             status: status,
             workConfig: workConfig);
-        if (value.id != original.id || value.projectId != original.projectId) {
-          throw const AxApiException(
-              'Workstream response identity does not match');
+        if (value.id != original.id || value.spaceId != original.spaceId) {
+          throw const AxApiException('Thread response identity does not match');
         }
         return value;
       },
       commit: (saved, change) => change
-          .commit((state) => _replace(state.data ?? [], saved, (w) => w.id)),
+          .commit((state) => _replace(state.data ?? [], saved, (t) => t.id)),
       rollback: (_, __, change) => change.rollback(),
       invalidate: (_, __) async {
-        engine.invalidate(AxQueryKey(['project', original.projectId, 'audit']));
+        engine.invalidate(AxQueryKey(['space', original.spaceId, 'audit']));
       },
     ));
   }
 
-  Future<void> deleteWorkstream(AxWorkstream original) {
-    final query = workstreams.query(original.projectId);
-    List<AxWorkstream> remove(AxQueryState<List<AxWorkstream>> state) =>
-        List.unmodifiable((state.data ?? []).where((w) => w.id != original.id));
+  Future<void> deleteThread(AxThread original) {
+    final query = threads.query(original.spaceId);
+    List<AxThread> remove(AxQueryState<List<AxThread>> state) =>
+        List.unmodifiable((state.data ?? []).where((t) => t.id != original.id));
     return engine.mutations
-        .run(AxMutationOperation<void, AxOptimisticUpdate<List<AxWorkstream>>>(
-      key: AxQueryKey(['mutation', 'workstream', original.id]),
+        .run(AxMutationOperation<void, AxOptimisticUpdate<List<AxThread>>>(
+      key: AxQueryKey(['mutation', 'thread', original.id]),
       optimisticUpdate: () => engine.optimisticUpdate(query, remove),
       isCurrent: (change) => change.isCurrent(),
-      execute: (_) => source.deleteWorkstream(workstreamId: original.id),
+      execute: (_) => source.deleteThread(threadId: original.id),
       commit: (_, change) {
         change.commit(remove);
-        engine.remove(AxQueryKey(['workstream', original.id]), prefix: true);
+        engine.remove(AxQueryKey(['thread', original.id]), prefix: true);
       },
       rollback: (_, __, change) => change.rollback(),
       invalidate: (_, __) async {
-        engine.invalidate(AxQueryKey(['project', original.projectId, 'audit']));
+        engine.invalidate(AxQueryKey(['space', original.spaceId, 'audit']));
       },
     ));
   }
 
-  Future<void> acceptInvitation(AxProjectInvitation invite) {
+  Future<void> acceptInvitation(AxSpaceInvitation invite) {
     final inviteQuery = invitations;
-    final projectQuery = projects;
-    final projectLocal = AxProject(
-      id: invite.projectId,
-      name: invite.projectName.isNotEmpty ? invite.projectName : 'Project',
+    final spaceQuery = spaces;
+    final spaceLocal = AxSpace(
+      id: invite.spaceId,
+      name: invite.spaceName.isNotEmpty ? invite.spaceName : 'Space',
       description: '',
       instructions: '',
       branch: 'main',
@@ -255,42 +258,42 @@ class AxCollaborationMutations {
     return engine.mutations.run(AxMutationOperation<
         void,
         (
-          AxOptimisticUpdate<List<AxProjectInvitation>>,
-          AxOptimisticUpdate<List<AxProject>>
+          AxOptimisticUpdate<List<AxSpaceInvitation>>,
+          AxOptimisticUpdate<List<AxSpace>>
         )>(
       key: AxQueryKey(['mutation', 'invitation', 'accept', invite.id]),
       optimisticUpdate: () {
         final inviteChange = engine.optimisticUpdate(inviteQuery, (state) {
-          final items = state.data ?? const <AxProjectInvitation>[];
+          final items = state.data ?? const <AxSpaceInvitation>[];
           return List.unmodifiable(items.where((i) => i.id != invite.id));
         });
-        final projectChange = engine.optimisticUpdate(projectQuery, (state) {
-          final items = state.data ?? const <AxProject>[];
-          if (invite.projectId.isEmpty ||
-              items.any((p) => p.id == invite.projectId)) {
+        final spaceChange = engine.optimisticUpdate(spaceQuery, (state) {
+          final items = state.data ?? const <AxSpace>[];
+          if (invite.spaceId.isEmpty ||
+              items.any((s) => s.id == invite.spaceId)) {
             return items;
           }
-          return _put(items, projectLocal, (p) => p.id);
+          return _put(items, spaceLocal, (s) => s.id);
         });
-        return (inviteChange, projectChange);
+        return (inviteChange, spaceChange);
       },
       isCurrent: (changes) => changes.$1.isCurrent() && changes.$2.isCurrent(),
       cancel: (changes) {
         changes.$1.rollback();
         changes.$2.rollback();
       },
-      execute: (_) => source.acceptProjectInvitation(invitationId: invite.id),
+      execute: (_) => source.acceptSpaceInvitation(invitationId: invite.id),
       commit: (_, changes) {
         changes.$1.commit((state) => List.unmodifiable(
-            (state.data ?? const <AxProjectInvitation>[])
+            (state.data ?? const <AxSpaceInvitation>[])
                 .where((i) => i.id != invite.id)));
         changes.$2.commit((state) {
-          final items = state.data ?? const <AxProject>[];
-          if (invite.projectId.isEmpty ||
-              items.any((p) => p.id == invite.projectId)) {
+          final items = state.data ?? const <AxSpace>[];
+          if (invite.spaceId.isEmpty ||
+              items.any((s) => s.id == invite.spaceId)) {
             return items;
           }
-          return _put(items, projectLocal, (p) => p.id);
+          return _put(items, spaceLocal, (s) => s.id);
         });
       },
       rollback: (_, __, changes) {
@@ -299,29 +302,29 @@ class AxCollaborationMutations {
       },
       invalidate: (_, __) async {
         engine.invalidate(inviteQuery.key);
-        engine.invalidate(projectQuery.key);
-        if (invite.projectId.isNotEmpty) {
-          engine.invalidate(AxQueryKey(['project', invite.projectId]),
+        engine.invalidate(spaceQuery.key);
+        if (invite.spaceId.isNotEmpty) {
+          engine.invalidate(AxQueryKey(['space', invite.spaceId]),
               prefix: true);
         }
       },
     ));
   }
 
-  Future<void> declineInvitation(AxProjectInvitation invite) {
+  Future<void> declineInvitation(AxSpaceInvitation invite) {
     final inviteQuery = invitations;
-    return engine.mutations.run(AxMutationOperation<void,
-        AxOptimisticUpdate<List<AxProjectInvitation>>>(
+    return engine.mutations.run(
+        AxMutationOperation<void, AxOptimisticUpdate<List<AxSpaceInvitation>>>(
       key: AxQueryKey(['mutation', 'invitation', 'decline', invite.id]),
       optimisticUpdate: () => engine.optimisticUpdate(inviteQuery, (state) {
-        final items = state.data ?? const <AxProjectInvitation>[];
+        final items = state.data ?? const <AxSpaceInvitation>[];
         return List.unmodifiable(items.where((i) => i.id != invite.id));
       }),
       isCurrent: (change) => change.isCurrent(),
-      execute: (_) => source.declineProjectInvitation(invitationId: invite.id),
+      execute: (_) => source.declineSpaceInvitation(invitationId: invite.id),
       commit: (_, change) {
         change.commit((state) => List.unmodifiable(
-            (state.data ?? const <AxProjectInvitation>[])
+            (state.data ?? const <AxSpaceInvitation>[])
                 .where((i) => i.id != invite.id)));
       },
       rollback: (_, __, change) => change.rollback(),

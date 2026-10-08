@@ -6,7 +6,7 @@
 
 Conclave needs one human authentication boundary across the web application and
 Cloud APIs. Authentication establishes who is acting; Conclave's domain policy
-decides which Projects, Workspaces, Workstreams, and Profiles that person may
+decides which Spaces, Workspaces, Threads, and Profiles that person may
 use.
 
 Human sessions, Workspace runtime credentials, and provider CLI credentials
@@ -24,9 +24,9 @@ does not read session tokens into local storage or manufacture session
 cookies. Cloud maps the authenticated identity to a Conclave User and remains
 the authority for authorization.
 
-Conclave authorization is based on current domain rules: Project membership
-and roles, Workspace ownership, explicit Project-to-Workspace Grants,
-Workstream policy, step-up authentication, and Profile administration and
+Conclave authorization is based on current domain rules: Space membership
+and roles, Workspace ownership, explicit Space-to-Workspace Grants,
+Thread policy, step-up authentication, and Profile administration and
 release policy. Better Auth Organizations, if enabled for an identity-provider
 integration, do not define Conclave resource access.
 

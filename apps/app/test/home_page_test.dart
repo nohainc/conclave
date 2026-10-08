@@ -9,17 +9,17 @@ void main() {
         home: Scaffold(body: SingleChildScrollView(child: child)),
       );
 
-  const project = AxProject(
-    id: 'project-1',
-    name: 'Project One',
+  const space = AxSpace(
+    id: 'space-1',
+    name: 'Space One',
     branch: 'main',
     lastActivity: 'Today',
   );
 
-  const testInvite1 = AxProjectInvitation(
+  const testInvite1 = AxSpaceInvitation(
     id: 'inv-1',
-    projectId: 'proj-123',
-    projectName: 'Family Travel',
+    spaceId: 'proj-123',
+    spaceName: 'Family Travel',
     email: 'vitalii@nohainc.com',
     role: 'owner',
     status: 'pending',
@@ -29,10 +29,10 @@ void main() {
     createdAt: '2026-10-07T12:00:00Z',
   );
 
-  const testInvite2 = AxProjectInvitation(
+  const testInvite2 = AxSpaceInvitation(
     id: 'inv-2',
-    projectId: 'proj-456',
-    projectName: 'Home Renovation',
+    spaceId: 'proj-456',
+    spaceName: 'Home Renovation',
     email: 'vitalii@nohainc.com',
     role: 'editor',
     status: 'pending',
@@ -45,32 +45,32 @@ void main() {
   testWidgets(
       'NewUserHome renders collaborative onboarding and value cards when no invitations exist',
       (tester) async {
-    var projectCreated = false;
+    var spaceCreated = false;
     var workspaceOpened = false;
 
     await tester.pumpWidget(scaffold(HomePage(
-      projects: const [],
+      spaces: const [],
       workspaces: const [],
       workers: const [],
       invitations: const [],
       run: null,
       openFindingCount: 0,
       onOpenWorkspaces: () => workspaceOpened = true,
-      onOpenProject: (_) {},
+      onOpenSpace: (_) {},
       onOpenRun: (_, __) {},
-      onCreateProject: () => projectCreated = true,
+      onCreateSpace: () => spaceCreated = true,
     )));
 
     // NewUserHome Header & Hero
     expect(find.text('Welcome to Conclave AX'), findsOneWidget);
     expect(find.text('Bring your people and AI together.'), findsOneWidget);
-    expect(find.text('Create your first Project'), findsOneWidget);
+    expect(find.text('Create your first Space'), findsOneWidget);
     expect(find.text('Start a shared space for people, conversations and AI.'),
         findsOneWidget);
-    expect(find.text('Create Project →'), findsOneWidget);
+    expect(find.text('Create Space →'), findsOneWidget);
 
     // No priority invitation card or separator
-    expect(find.text('Join a Project'), findsNothing);
+    expect(find.text('Join a Space'), findsNothing);
     expect(find.text('or'), findsNothing);
 
     // Value cards
@@ -84,7 +84,7 @@ void main() {
         findsOneWidget);
     expect(
         find.text(
-            'Connect Conclave Workspace to make local Workers available to your Projects.'),
+            'Connect Conclave Workspace to make local Workers available to your Spaces.'),
         findsOneWidget);
     expect(find.text('Connect Workspace →'), findsOneWidget);
 
@@ -94,10 +94,10 @@ void main() {
     expect(find.text("What's new in Conclave"), findsNothing);
     expect(find.text('AI updates'), findsNothing);
     expect(find.text('Ready Workers'), findsNothing);
-    expect(find.text('Archived Projects'), findsNothing);
+    expect(find.text('Archived Spaces'), findsNothing);
 
-    await tester.tap(find.text('Create Project →'));
-    expect(projectCreated, isTrue);
+    await tester.tap(find.text('Create Space →'));
+    expect(spaceCreated, isTrue);
 
     await tester.ensureVisible(find.text('Connect Workspace →'));
     await tester.tap(find.text('Connect Workspace →'));
@@ -105,24 +105,24 @@ void main() {
   });
 
   testWidgets(
-      'NewUserHome prioritizes Join a Project card when user has 0 projects but has pending invitations',
+      'NewUserHome prioritizes Join a Space card when user has 0 spaces but has pending invitations',
       (tester) async {
-    var projectCreated = false;
+    var spaceCreated = false;
     var workspaceOpened = false;
-    AxProjectInvitation? acceptedInvite;
-    AxProjectInvitation? declinedInvite;
+    AxSpaceInvitation? acceptedInvite;
+    AxSpaceInvitation? declinedInvite;
 
     await tester.pumpWidget(scaffold(HomePage(
-      projects: const [],
+      spaces: const [],
       workspaces: const [],
       workers: const [],
       invitations: const [testInvite1, testInvite2],
       run: null,
       openFindingCount: 0,
       onOpenWorkspaces: () => workspaceOpened = true,
-      onOpenProject: (_) {},
+      onOpenSpace: (_) {},
       onOpenRun: (_, __) {},
-      onCreateProject: () => projectCreated = true,
+      onCreateSpace: () => spaceCreated = true,
       onAcceptInvitation: (inv) => acceptedInvite = inv,
       onDeclineInvitation: (inv) => declinedInvite = inv,
     )));
@@ -131,18 +131,18 @@ void main() {
     expect(find.text('Welcome to Conclave AX'), findsOneWidget);
     expect(find.text('Bring your people and AI together.'), findsOneWidget);
 
-    // Priority Join a Project card
-    expect(find.text('Join a Project'), findsOneWidget);
+    // Priority Join a Space card
+    expect(find.text('Join a Space'), findsOneWidget);
     expect(find.text('You have 2 invitations.'), findsOneWidget);
     expect(find.text('Family Travel'), findsOneWidget);
     expect(find.text('Invited by Julia · OWNER'), findsOneWidget);
     expect(find.text('Home Renovation'), findsOneWidget);
     expect(find.text('Invited by Alex · EDITOR'), findsOneWidget);
 
-    // 'or' divider and Create your first Project
+    // 'or' divider and Create your first Space
     expect(find.text('or'), findsOneWidget);
-    expect(find.text('Create your first Project'), findsOneWidget);
-    expect(find.text('Create Project →'), findsOneWidget);
+    expect(find.text('Create your first Space'), findsOneWidget);
+    expect(find.text('Create Space →'), findsOneWidget);
 
     // Value cards
     expect(find.text('How Conclave AX works'), findsOneWidget);
@@ -155,7 +155,7 @@ void main() {
         findsOneWidget);
     expect(
         find.text(
-            'Connect Conclave Workspace to make local Workers available to your Projects.'),
+            'Connect Conclave Workspace to make local Workers available to your Spaces.'),
         findsOneWidget);
     expect(find.text('Connect Workspace →'), findsOneWidget);
 
@@ -167,9 +167,9 @@ void main() {
     await tester.tap(find.text('Decline').last);
     expect(declinedInvite?.id, 'inv-2');
 
-    // Test create project
-    await tester.tap(find.text('Create Project →'));
-    expect(projectCreated, isTrue);
+    // Test create space
+    await tester.tap(find.text('Create Space →'));
+    expect(spaceCreated, isTrue);
 
     // Test connect workspace
     await tester.ensureVisible(find.text('Connect Workspace →'));
@@ -180,12 +180,12 @@ void main() {
   testWidgets(
       'EstablishedUserHome implements the 4-part contract and omits onboarding',
       (tester) async {
-    var openedProject = '';
-    var openedWorkstream = '';
-    AxProjectInvitation? acceptedInvite;
+    var openedSpace = '';
+    var openedThread = '';
+    AxSpaceInvitation? acceptedInvite;
 
     await tester.pumpWidget(scaffold(HomePage(
-      projects: const [project],
+      spaces: const [space],
       workspaces: const [
         AxWorkspace(id: 'workspace-1', name: 'MacBook'),
       ],
@@ -205,10 +205,10 @@ void main() {
       invitations: const [testInvite1],
       continueWorkItems: const [
         AxContinueWorkItem(
-          projectId: 'project-1',
-          projectName: 'Website Redesign',
-          workstreamId: 'ws-landing',
-          workstreamTitle: 'Landing page',
+          spaceId: 'space-1',
+          spaceName: 'Website Redesign',
+          threadId: 'ws-landing',
+          threadTitle: 'Landing page',
           collaboratorsDisplay: 'You and ChatGPT',
           lastMessageSnippet: "Let's simplify the hero section...",
           lastActivityDisplay: '18 min ago',
@@ -217,24 +217,24 @@ void main() {
       attentionItems: const [
         AxHomeAttentionItem(
           id: 'attn-1',
-          title: 'Authentication workstream needs your input',
+          title: 'Authentication thread needs your input',
           subtitle: 'Question from Erik about OAuth providers',
           timestampDisplay: '24 min ago',
-          projectId: 'project-1',
-          workstreamId: 'ws-auth',
+          spaceId: 'space-1',
+          threadId: 'ws-auth',
           actionLabel: 'Open',
         ),
       ],
       run: null,
       openFindingCount: 0,
       onOpenWorkspaces: () {},
-      onOpenProject: (id) => openedProject = id,
+      onOpenSpace: (id) => openedSpace = id,
       onOpenRun: (_, __) {},
-      onCreateProject: () {},
+      onCreateSpace: () {},
       onAcceptInvitation: (inv) => acceptedInvite = inv,
-      onOpenWorkstream: (pId, wsId) {
-        openedProject = pId;
-        openedWorkstream = wsId;
+      onOpenThread: (pId, wsId) {
+        openedSpace = pId;
+        openedThread = wsId;
       },
       onOpenNotifications: () {},
     )));
@@ -242,14 +242,13 @@ void main() {
     // 1. FOR YOU (unified prioritized card projection)
     expect(find.text('For you'), findsOneWidget);
     expect(find.text('View all notifications →'), findsOneWidget);
-    expect(find.text('Project invitation'), findsOneWidget);
+    expect(find.text('Space invitation'), findsOneWidget);
     expect(find.text('Julia invited you to Family Travel'), findsOneWidget);
     expect(find.text('Decline'), findsOneWidget);
     expect(find.text('Accept'), findsOneWidget);
 
     expect(find.text('Needs your input'), findsOneWidget);
-    expect(find.text('Authentication workstream needs your input'),
-        findsOneWidget);
+    expect(find.text('Authentication thread needs your input'), findsOneWidget);
     expect(find.text('Open'), findsOneWidget);
 
     // 2. CONTINUE WORKING
@@ -262,7 +261,7 @@ void main() {
 
     // 3. WHAT'S NEW
     expect(find.text("What's new"), findsOneWidget);
-    expect(find.text('Project Invitations'), findsOneWidget);
+    expect(find.text('Space Invitations'), findsOneWidget);
     expect(find.text('Conversation Continuity'), findsOneWidget);
 
     // 4. AI UPDATES
@@ -272,18 +271,18 @@ void main() {
     // INVARIANTS: Onboarding cards and prohibited legacy elements must NOT appear
     expect(find.text('Welcome to Conclave AX'), findsNothing);
     expect(find.text('How Conclave AX works'), findsNothing);
-    expect(find.text('Projects count'), findsNothing);
+    expect(find.text('Spaces count'), findsNothing);
     expect(find.text('Ready Workers count'), findsNothing);
     expect(find.text('Workspaces count'), findsNothing);
     expect(find.text('No active Runs'), findsNothing);
     expect(find.text('Nothing needs your attention.'), findsNothing);
-    expect(find.text('Archived Projects'), findsNothing);
+    expect(find.text('Archived Spaces'), findsNothing);
     expect(find.text('Your execution capacity at a glance.'), findsNothing);
 
     await tester.ensureVisible(find.text('Continue →'));
     await tester.tap(find.text('Continue →'));
-    expect(openedProject, 'project-1');
-    expect(openedWorkstream, 'ws-landing');
+    expect(openedSpace, 'space-1');
+    expect(openedThread, 'ws-landing');
 
     await tester.ensureVisible(find.text('Accept'));
     await tester.tap(find.text('Accept'));
@@ -294,8 +293,8 @@ void main() {
       'For you section correctly prioritizes items and respects 5-item limit',
       (tester) async {
     var notificationsOpened = false;
-    var openedProject = '';
-    var openedWorkstream = '';
+    var openedSpace = '';
+    var openedThread = '';
 
     final manyAttentionItems = [
       const AxHomeAttentionItem(
@@ -306,18 +305,18 @@ void main() {
         subtitle: 'Website Redesign',
         timestampDisplay: '1 hour ago',
         actionLabel: 'Review →',
-        projectId: 'proj-1',
-        workstreamId: 'ws-landing',
+        spaceId: 'proj-1',
+        threadId: 'ws-landing',
       ),
       const AxHomeAttentionItem(
         id: 'failed-1',
         kind: AxAttentionKind.failedExecution,
         categoryLabel: 'Failed execution',
         title: 'Build task failed on CI Worker',
-        subtitle: 'Project One',
+        subtitle: 'Space One',
         timestampDisplay: '15 min ago',
         actionLabel: 'Inspect →',
-        projectId: 'project-1',
+        spaceId: 'space-1',
       ),
       const AxHomeAttentionItem(
         id: 'worker-prob-1',
@@ -332,12 +331,12 @@ void main() {
         id: 'input-1',
         kind: AxAttentionKind.needsInput,
         categoryLabel: 'Needs your input',
-        title: 'Authentication workstream needs your input',
+        title: 'Authentication thread needs your input',
         subtitle: 'Conclave',
         timestampDisplay: '24 min ago',
         actionLabel: 'Open',
-        projectId: 'project-1',
-        workstreamId: 'ws-auth',
+        spaceId: 'space-1',
+        threadId: 'ws-auth',
       ),
       const AxHomeAttentionItem(
         id: 'workspace-prob-1',
@@ -359,7 +358,7 @@ void main() {
     ];
 
     await tester.pumpWidget(scaffold(HomePage(
-      projects: const [project],
+      spaces: const [space],
       workspaces: const [],
       workers: const [],
       invitations: const [testInvite1], // Priority 1: invitation
@@ -367,12 +366,12 @@ void main() {
       run: null,
       openFindingCount: 0,
       onOpenWorkspaces: () {},
-      onOpenProject: (id) => openedProject = id,
+      onOpenSpace: (id) => openedSpace = id,
       onOpenRun: (_, __) {},
-      onCreateProject: () {},
-      onOpenWorkstream: (pId, wsId) {
-        openedProject = pId;
-        openedWorkstream = wsId;
+      onCreateSpace: () {},
+      onOpenThread: (pId, wsId) {
+        openedSpace = pId;
+        openedThread = wsId;
       },
       onOpenNotifications: () => notificationsOpened = true,
     )));
@@ -381,13 +380,12 @@ void main() {
     expect(find.text('View all notifications →'), findsOneWidget);
 
     // Priority 1: Invitation (present)
-    expect(find.text('Project invitation'), findsOneWidget);
+    expect(find.text('Space invitation'), findsOneWidget);
     expect(find.text('Julia invited you to Family Travel'), findsOneWidget);
 
     // Priority 2: Needs your input (present)
     expect(find.text('Needs your input'), findsOneWidget);
-    expect(find.text('Authentication workstream needs your input'),
-        findsOneWidget);
+    expect(find.text('Authentication thread needs your input'), findsOneWidget);
 
     // Priority 3: Failed execution (present)
     expect(find.text('Failed execution'), findsOneWidget);
@@ -412,8 +410,8 @@ void main() {
 
     // Test action navigation on attention item
     await tester.tap(find.text('Open'));
-    expect(openedProject, 'project-1');
-    expect(openedWorkstream, 'ws-auth');
+    expect(openedSpace, 'space-1');
+    expect(openedThread, 'ws-auth');
   });
 
   testWidgets(
@@ -485,7 +483,7 @@ void main() {
     ];
 
     await tester.pumpWidget(scaffold(HomePage(
-      projects: const [project],
+      spaces: const [space],
       workspaces: const [],
       workers: const [],
       invitations: const [],
@@ -493,9 +491,9 @@ void main() {
       run: null,
       openFindingCount: 0,
       onOpenWorkspaces: () {},
-      onOpenProject: (_) {},
+      onOpenSpace: (_) {},
       onOpenRun: (_, __) {},
-      onCreateProject: () {},
+      onCreateSpace: () {},
     )));
 
     // Expect input-actionable (Priority 2) first
@@ -532,7 +530,7 @@ void main() {
     );
 
     await tester.pumpWidget(scaffold(HomePage(
-      projects: const [project],
+      spaces: const [space],
       workspaces: const [],
       workers: const [],
       invitations: const [],
@@ -540,9 +538,9 @@ void main() {
       run: null,
       openFindingCount: 0,
       onOpenWorkspaces: () {},
-      onOpenProject: (_) {},
+      onOpenSpace: (_) {},
       onOpenRun: (_, __) {},
-      onCreateProject: () {},
+      onCreateSpace: () {},
     )));
 
     expect(find.text('Decoupled Action Item'), findsOneWidget);
@@ -562,9 +560,9 @@ void main() {
       () {
     var acceptedInvite = false;
     var declinedInvite = false;
-    var openedProject = '';
+    var openedSpace = '';
 
-    final projected = AxHomeAttentionProjector.project(
+    final projected = AxHomeAttentionProjector.space(
       invitations: [testInvite1],
       rawAttentionItems: [
         const AxHomeAttentionItem(
@@ -573,20 +571,20 @@ void main() {
           title: 'Execution Failed on Worker',
           description: 'Stack trace error',
           actionLabel: 'Inspect →',
-          projectId: 'project-1',
+          spaceId: 'space-1',
         ),
       ],
       openFindingCount: 2,
-      projects: [project],
+      spaces: [space],
       onAcceptInvitation: (_) => acceptedInvite = true,
       onDeclineInvitation: (_) => declinedInvite = true,
-      onOpenProject: (id) => openedProject = id,
+      onOpenSpace: (id) => openedSpace = id,
     );
 
     expect(projected.length, 3);
 
     // 1. Invitation (Priority 1)
-    expect(projected[0].type, AxHomeAttentionType.projectInvitation);
+    expect(projected[0].type, AxHomeAttentionType.spaceInvitation);
     expect(projected[0].primaryAction?.label, 'Accept');
     expect(projected[0].secondaryAction?.label, 'Decline');
     projected[0].primaryAction?.onPerform();
@@ -598,73 +596,73 @@ void main() {
     expect(projected[1].type, AxHomeAttentionType.needsInput);
     expect(projected[1].primaryAction?.label, 'Review →');
     projected[1].primaryAction?.onPerform();
-    expect(openedProject, 'project-1');
+    expect(openedSpace, 'space-1');
 
     // 3. Raw attention item (Priority 3, executionFailed)
     expect(projected[2].type, AxHomeAttentionType.executionFailed);
     expect(projected[2].primaryAction?.label, 'Inspect →');
-    openedProject = '';
+    openedSpace = '';
     projected[2].primaryAction?.onPerform();
-    expect(openedProject, 'project-1');
+    expect(openedSpace, 'space-1');
   });
 
   testWidgets(
-      'Continue Working displays 3-5 workstream cards with project, title, collaborators, snippet and action',
+      'Continue Working displays 3-5 thread cards with space, title, collaborators, snippet and action',
       (tester) async {
-    var openedProject = '';
-    var openedWorkstream = '';
+    var openedSpace = '';
+    var openedThread = '';
 
     final continueItems = [
       const AxContinueWorkItem(
-        projectId: 'proj-conclave',
-        projectName: 'Conclave Development',
-        workstreamId: 'ws-sessions',
-        workstreamTitle: 'Worker Sessions',
+        spaceId: 'proj-conclave',
+        spaceName: 'Conclave Development',
+        threadId: 'ws-sessions',
+        threadTitle: 'Worker Sessions',
         collaboratorsDisplay: 'ChatGPT',
         lastMessageSnippet: 'We should persist the session context.',
         lastActivityDisplay: '23 min ago',
       ),
       const AxContinueWorkItem(
-        projectId: 'proj-web',
-        projectName: 'Website',
-        workstreamId: 'ws-landing',
-        workstreamTitle: 'Landing Page',
+        spaceId: 'proj-web',
+        spaceName: 'Website',
+        threadId: 'ws-landing',
+        threadTitle: 'Landing Page',
         collaboratorsDisplay: 'You + Gemini',
         lastMessageSnippet: 'The hero should bring people together.',
         lastActivityDisplay: 'Yesterday',
       ),
       const AxContinueWorkItem(
-        projectId: 'proj-docs',
-        projectName: 'Documentation',
-        workstreamId: 'ws-architecture',
-        workstreamTitle: 'Architecture v8',
+        spaceId: 'proj-docs',
+        spaceName: 'Documentation',
+        threadId: 'ws-architecture',
+        threadTitle: 'Architecture v8',
         collaboratorsDisplay: 'Julia + Claude',
         lastMessageSnippet: 'ADRs updated with signed tool profiles.',
         lastActivityDisplay: '2 days ago',
       ),
       const AxContinueWorkItem(
-        projectId: 'proj-cloud',
-        projectName: 'Cloud Services',
-        workstreamId: 'ws-d1',
-        workstreamTitle: 'D1 Migrations',
+        spaceId: 'proj-cloud',
+        spaceName: 'Cloud Services',
+        threadId: 'ws-d1',
+        threadTitle: 'D1 Migrations',
         collaboratorsDisplay: 'Erik',
         lastMessageSnippet: 'Baseline schema applied.',
         lastActivityDisplay: '3 days ago',
       ),
       const AxContinueWorkItem(
-        projectId: 'proj-mobile',
-        projectName: 'Mobile App',
-        workstreamId: 'ws-ios',
-        workstreamTitle: 'iOS Polish',
+        spaceId: 'proj-mobile',
+        spaceName: 'Mobile App',
+        threadId: 'ws-ios',
+        threadTitle: 'iOS Polish',
         collaboratorsDisplay: 'Alex',
         lastMessageSnippet: 'Responsive layouts fixed.',
         lastActivityDisplay: '4 days ago',
       ),
       const AxContinueWorkItem(
-        projectId: 'proj-extra',
-        projectName: 'Extra Project',
-        workstreamId: 'ws-extra',
-        workstreamTitle: 'Extra Workstream',
+        spaceId: 'proj-extra',
+        spaceName: 'Extra Space',
+        threadId: 'ws-extra',
+        threadTitle: 'Extra Thread',
         collaboratorsDisplay: 'Bot',
         lastMessageSnippet: 'Should not appear past 5 items.',
         lastActivityDisplay: '5 days ago',
@@ -672,40 +670,40 @@ void main() {
     ];
 
     await tester.pumpWidget(scaffold(HomePage(
-      projects: const [
-        AxProject(
+      spaces: const [
+        AxSpace(
           id: 'proj-conclave',
           name: 'Conclave Development',
           branch: 'main',
           lastActivity: 'Today',
         ),
-        AxProject(
+        AxSpace(
           id: 'proj-web',
           name: 'Website',
           branch: 'main',
           lastActivity: 'Today',
         ),
-        AxProject(
+        AxSpace(
           id: 'proj-docs',
           name: 'Documentation',
           branch: 'main',
           lastActivity: 'Today',
         ),
-        AxProject(
+        AxSpace(
           id: 'proj-cloud',
           name: 'Cloud Services',
           branch: 'main',
           lastActivity: 'Today',
         ),
-        AxProject(
+        AxSpace(
           id: 'proj-mobile',
           name: 'Mobile App',
           branch: 'main',
           lastActivity: 'Today',
         ),
-        AxProject(
+        AxSpace(
           id: 'proj-extra',
-          name: 'Extra Project',
+          name: 'Extra Space',
           branch: 'main',
           lastActivity: 'Today',
         ),
@@ -717,12 +715,12 @@ void main() {
       run: null,
       openFindingCount: 0,
       onOpenWorkspaces: () {},
-      onOpenProject: (_) {},
+      onOpenSpace: (_) {},
       onOpenRun: (_, __) {},
-      onCreateProject: () {},
-      onOpenWorkstream: (pId, wsId) {
-        openedProject = pId;
-        openedWorkstream = wsId;
+      onCreateSpace: () {},
+      onOpenThread: (pId, wsId) {
+        openedSpace = pId;
+        openedThread = wsId;
       },
     )));
 
@@ -755,14 +753,14 @@ void main() {
     expect(find.text('iOS Polish'), findsOneWidget);
 
     // 6th item should be truncated by 5-item limit
-    expect(find.text('EXTRA PROJECT'), findsNothing);
-    expect(find.text('Extra Workstream'), findsNothing);
+    expect(find.text('EXTRA SPACE'), findsNothing);
+    expect(find.text('Extra Thread'), findsNothing);
 
     // Test clicking Continue → on first card
     await tester.ensureVisible(find.text('Continue →').first);
     await tester.tap(find.text('Continue →').first);
-    expect(openedProject, 'proj-conclave');
-    expect(openedWorkstream, 'ws-sessions');
+    expect(openedSpace, 'proj-conclave');
+    expect(openedThread, 'ws-sessions');
   });
 
   test(
@@ -771,10 +769,10 @@ void main() {
     final now = DateTime(2026, 10, 8, 12, 0, 0);
 
     final itemArchived = AxContinueWorkItem(
-      projectId: 'p-archived',
-      projectName: 'Archived Project',
-      workstreamId: 'ws-1',
-      workstreamTitle: 'Old Workstream',
+      spaceId: 'p-archived',
+      spaceName: 'Archived Space',
+      threadId: 'ws-1',
+      threadTitle: 'Old Thread',
       collaboratorsDisplay: 'None',
       lastMessageSnippet: 'Archived',
       lastActivityDisplay: '1 year ago',
@@ -783,10 +781,10 @@ void main() {
     );
 
     final itemInaccessible = AxContinueWorkItem(
-      projectId: 'p-inaccessible',
-      projectName: 'Inaccessible Project',
-      workstreamId: 'ws-2',
-      workstreamTitle: 'Restricted',
+      spaceId: 'p-inaccessible',
+      spaceName: 'Inaccessible Space',
+      threadId: 'ws-2',
+      threadTitle: 'Restricted',
       collaboratorsDisplay: 'None',
       lastMessageSnippet: 'Restricted',
       lastActivityDisplay: 'Just now',
@@ -795,10 +793,10 @@ void main() {
     );
 
     final itemPassiveSyncOnly = AxContinueWorkItem(
-      projectId: 'p-passive',
-      projectName: 'Passive Metadata Updated Project',
-      workstreamId: 'ws-passive',
-      workstreamTitle: 'No Real Messages',
+      spaceId: 'p-passive',
+      spaceName: 'Passive Metadata Updated Space',
+      threadId: 'ws-passive',
+      threadTitle: 'No Real Messages',
       collaboratorsDisplay: 'None',
       lastMessageSnippet: 'Automated background sync ping',
       lastActivityDisplay: 'Just now',
@@ -810,10 +808,10 @@ void main() {
     );
 
     final itemUserParticipated = AxContinueWorkItem(
-      projectId: 'p-user',
-      projectName: 'User Discussion Project',
-      workstreamId: 'ws-user',
-      workstreamTitle: 'Active Discussion',
+      spaceId: 'p-user',
+      spaceName: 'User Discussion Space',
+      threadId: 'ws-user',
+      threadTitle: 'Active Discussion',
       collaboratorsDisplay: 'You + Team',
       lastMessageSnippet: 'I responded with the specs.',
       lastActivityDisplay: '2 hours ago',
@@ -822,10 +820,10 @@ void main() {
     );
 
     final itemWorkerResponded = AxContinueWorkItem(
-      projectId: 'p-worker',
-      projectName: 'AI Assistant Project',
-      workstreamId: 'ws-worker',
-      workstreamTitle: 'Worker Synthesis',
+      spaceId: 'p-worker',
+      spaceName: 'AI Assistant Space',
+      threadId: 'ws-worker',
+      threadTitle: 'Worker Synthesis',
       collaboratorsDisplay: 'ChatGPT',
       lastMessageSnippet: 'Synthesis completed with 3 artifacts.',
       lastActivityDisplay: '1 hour ago',
@@ -834,10 +832,10 @@ void main() {
     );
 
     final itemUnresolvedState = AxContinueWorkItem(
-      projectId: 'p-unresolved',
-      projectName: 'Execution Project',
-      workstreamId: 'ws-unresolved',
-      workstreamTitle: 'Pending Decisions',
+      spaceId: 'p-unresolved',
+      spaceName: 'Execution Space',
+      threadId: 'ws-unresolved',
+      threadTitle: 'Pending Decisions',
       collaboratorsDisplay: 'You + Gemini',
       lastMessageSnippet: 'Waiting for parameter confirmation.',
       lastActivityDisplay: '4 hours ago',
@@ -859,8 +857,8 @@ void main() {
     );
 
     // Assert archived and inaccessible items are completely excluded
-    expect(ranked.any((it) => it.projectId == 'p-archived'), isFalse);
-    expect(ranked.any((it) => it.projectId == 'p-inaccessible'), isFalse);
+    expect(ranked.any((it) => it.spaceId == 'p-archived'), isFalse);
+    expect(ranked.any((it) => it.spaceId == 'p-inaccessible'), isFalse);
 
     // Expected order:
     // 1. itemUnresolvedState (score ~ 1000 + 500 + 100 + decay) -> Rank 1
@@ -868,10 +866,10 @@ void main() {
     // 3. itemWorkerResponded (score ~ 250 + 100 + decay) -> Rank 3
     // 4. itemPassiveSyncOnly (score ~ 0 + 100 + decayed 3 days) -> Rank 4 (does NOT beat active conversations despite background metadata)
     expect(ranked.length, 4);
-    expect(ranked[0].workstreamId, 'ws-unresolved');
-    expect(ranked[1].workstreamId, 'ws-user');
-    expect(ranked[2].workstreamId, 'ws-worker');
-    expect(ranked[3].workstreamId, 'ws-passive');
+    expect(ranked[0].threadId, 'ws-unresolved');
+    expect(ranked[1].threadId, 'ws-user');
+    expect(ranked[2].threadId, 'ws-worker');
+    expect(ranked[3].threadId, 'ws-passive');
   });
 
   test(
@@ -882,8 +880,8 @@ void main() {
     final update1Published = AxProductUpdate(
       id: 'up-1',
       slug: 'invitations',
-      title: 'Project Invitations',
-      summary: 'Invite collaborators to projects.',
+      title: 'Space Invitations',
+      summary: 'Invite collaborators to spaces.',
       category: AxProductUpdateCategory.collaboration,
       publishedAt: now.subtract(const Duration(days: 1)),
       status: AxProductUpdateStatus.published,
@@ -995,7 +993,7 @@ void main() {
       AxProductUpdate(
         id: 'up-1',
         slug: 'collab',
-        title: 'Project Invitations',
+        title: 'Space Invitations',
         summary: 'Collaborate with your team.',
         details: 'Full RBAC invitation workflow directly inside AX.',
         category: AxProductUpdateCategory.collaboration,
@@ -1020,15 +1018,15 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: EstablishedUserHome(
-            projects: const [
-              AxProject(
+            spaces: const [
+              AxSpace(
                 id: 'p-1',
-                name: 'Main Project',
-                description: 'Active project',
+                name: 'Main Space',
+                description: 'Active space',
                 archived: false,
                 branch: 'main',
                 lastActivity: 'Just now',
-                workstreams: [],
+                threads: [],
               ),
             ],
             workspaces: const [],
@@ -1038,7 +1036,7 @@ void main() {
             productUpdates: updates,
             productUpdateReadStates: const {}, // Both updates unread
             onOpenWorkspaces: () {},
-            onOpenProject: (_) {},
+            onOpenSpace: (_) {},
             onOpenRun: (_, __) {},
             onOpenWhatsNew: () => seeAllOpened = true,
             onOpenUpdateDetail: (u) => selectedDetailUpdate = u,
@@ -1055,7 +1053,7 @@ void main() {
     // Verify tiles rendered with category pill and CTA
     expect(find.text('COLLABORATION'), findsOneWidget);
     expect(find.text('WORKFLOW'), findsOneWidget);
-    expect(find.text('Project Invitations'), findsOneWidget);
+    expect(find.text('Space Invitations'), findsOneWidget);
     expect(find.text('Conversation Continuity'), findsOneWidget);
     expect(find.text('Learn more →'), findsNWidgets(2));
 
@@ -1199,18 +1197,18 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: EstablishedUserHome(
-            projects: const [
-              AxProject(
+            spaces: const [
+              AxSpace(
                 id: 'p-1',
-                name: 'Active Project',
-                description: 'Project description',
+                name: 'Active Space',
+                description: 'Space description',
                 archived: false,
                 branch: 'main',
                 lastActivity: 'Just now',
-                workstreams: [
-                  AxWorkstream(
+                threads: [
+                  AxThread(
                     id: 'ws-1',
-                    projectId: 'p-1',
+                    spaceId: 'p-1',
                     name: 'AI Stream',
                     lead: 'Gemini',
                     status: 'active',
@@ -1238,7 +1236,7 @@ void main() {
             run: null,
             openFindingCount: 0,
             aiUpdates: aiUpdates,
-            onOpenProject: (_) {},
+            onOpenSpace: (_) {},
             onOpenRun: (_, __) {},
             onOpenWorkspaces: () {},
           ),
@@ -1305,22 +1303,22 @@ void main() {
     final chatgptOnly = AxAiCapabilityUpdateService.getRelevantUpdates(
       updates: updates,
       workers: [chatgptWorker],
-      projects: const [],
+      spaces: const [],
     );
     expect(chatgptOnly.length, 1);
     expect(chatgptOnly.first.workerProfileId, 'chatgpt');
     expect(chatgptOnly.first.title, 'ChatGPT New Model');
 
-    // Case 2: User gains access through shared Project Worker (e.g. Gemini lead/config in shared project)
-    const sharedProject = AxProject(
+    // Case 2: User gains access through shared Space Worker (e.g. Gemini lead/config in shared space)
+    const sharedSpace = AxSpace(
       id: 'proj-shared',
-      name: 'Shared Project',
+      name: 'Shared Space',
       branch: 'main',
       lastActivity: 'Now',
-      workstreams: [
-        AxWorkstream(
+      threads: [
+        AxThread(
           id: 'ws-gemini',
-          projectId: 'proj-shared',
+          spaceId: 'proj-shared',
           name: 'Gemini Analysis',
           lead: 'Gemini',
           status: 'active',
@@ -1335,7 +1333,7 @@ void main() {
         AxAiCapabilityUpdateService.getRelevantUpdates(
       updates: updates,
       workers: [chatgptWorker],
-      projects: [sharedProject],
+      spaces: [sharedSpace],
     );
     expect(chatgptAndSharedGemini.length, 2);
     final workerIds =
@@ -1347,7 +1345,7 @@ void main() {
     final zeroWorkers = AxAiCapabilityUpdateService.getRelevantUpdates(
       updates: updates,
       workers: const [],
-      projects: const [],
+      spaces: const [],
     );
     expect(zeroWorkers, isEmpty);
   });
@@ -1359,22 +1357,22 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: EstablishedUserHome(
-            projects: const [
-              AxProject(
+            spaces: const [
+              AxSpace(
                 id: 'p-1',
-                name: 'Solo Project',
-                description: 'Solo project',
+                name: 'Solo Space',
+                description: 'Solo space',
                 archived: false,
                 branch: 'main',
                 lastActivity: 'Just now',
-                workstreams: [],
+                threads: [],
               ),
             ],
             workspaces: const [],
             workers: const [],
             run: null,
             openFindingCount: 0,
-            onOpenProject: (_) {},
+            onOpenSpace: (_) {},
             onOpenRun: (_, __) {},
             onOpenWorkspaces: () {},
           ),
@@ -1453,10 +1451,10 @@ void main() {
   testWidgets(
       'Phase 19 — Running now renders ephemeral execution card with rich metadata and Open CTA when run is active',
       (tester) async {
-    String? openedProjectId;
+    String? openedSpaceId;
     String? openedRunId;
 
-    const activeRunProject = AxProject(
+    const activeRunSpace = AxSpace(
       id: 'proj-landing',
       name: 'Website',
       branch: 'main',
@@ -1465,10 +1463,10 @@ void main() {
 
     const activeRun = AxRun(
       id: 'run-101',
-      projectId: 'proj-landing',
-      projectName: 'Website',
-      workstreamId: 'ws-landing',
-      workstreamTitle: 'Landing Page',
+      spaceId: 'proj-landing',
+      spaceName: 'Website',
+      threadId: 'ws-landing',
+      threadTitle: 'Landing Page',
       status: RunStatus.running,
       objective: 'Landing page review',
       taskCount: 5,
@@ -1485,7 +1483,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         EstablishedUserHome(
-          projects: const [activeRunProject],
+          spaces: const [activeRunSpace],
           workspaces: const [],
           workers: const [],
           invitations: const [],
@@ -1497,9 +1495,9 @@ void main() {
           run: activeRun,
           openFindingCount: 0,
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
+          onOpenSpace: (_) {},
           onOpenRun: (pId, rId) {
-            openedProjectId = pId;
+            openedSpaceId = pId;
             openedRunId = rId;
           },
         ),
@@ -1518,7 +1516,7 @@ void main() {
 
     // Tap CTA
     await tester.tap(find.text('Open →'));
-    expect(openedProjectId, 'proj-landing');
+    expect(openedSpaceId, 'proj-landing');
     expect(openedRunId, 'run-101');
   });
 
@@ -1529,7 +1527,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         EstablishedUserHome(
-          projects: const [project],
+          spaces: const [space],
           workspaces: const [],
           workers: const [],
           invitations: const [],
@@ -1541,7 +1539,7 @@ void main() {
           run: null,
           openFindingCount: 0,
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
+          onOpenSpace: (_) {},
           onOpenRun: (_, __) {},
         ),
       ),
@@ -1567,7 +1565,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         EstablishedUserHome(
-          projects: const [project],
+          spaces: const [space],
           workspaces: const [],
           workers: const [],
           invitations: const [],
@@ -1579,7 +1577,7 @@ void main() {
           run: completedRun,
           openFindingCount: 0,
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
+          onOpenSpace: (_) {},
           onOpenRun: (_, __) {},
         ),
       ),
@@ -1614,7 +1612,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         EstablishedUserHome(
-          projects: const [project],
+          spaces: const [space],
           workspaces: const [],
           workers: const [],
           invitations: const [],
@@ -1645,7 +1643,7 @@ void main() {
           run: activeRun,
           openFindingCount: 0,
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
+          onOpenSpace: (_) {},
           onOpenRun: (_, __) {},
         ),
       ),
@@ -1659,7 +1657,7 @@ void main() {
     expect(find.text('Running now'), findsOneWidget);
     expect(find.text('Optimizing database queries'), findsOneWidget);
 
-    // Section 3: Continue Working - present (fallback derived from project)
+    // Section 3: Continue Working - present (fallback derived from space)
     expect(find.text('Continue working'), findsOneWidget);
 
     // Section 4: What's New - omitted (only draft update)
@@ -1706,7 +1704,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         EstablishedUserHome(
-          projects: const [project],
+          spaces: const [space],
           workspaces: const [],
           workers: const [testWorker],
           invitations: const [],
@@ -1718,7 +1716,7 @@ void main() {
           run: null, // No active executions
           openFindingCount: 0, // No attention items
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
+          onOpenSpace: (_) {},
           onOpenRun: (_, __) {},
         ),
       ),
@@ -1798,7 +1796,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         EstablishedUserHome(
-          projects: const [project],
+          spaces: const [space],
           workspaces: const [],
           workers: const [testWorker],
           invitations: const [],
@@ -1810,7 +1808,7 @@ void main() {
           run: activeRun,
           openFindingCount: 0,
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
+          onOpenSpace: (_) {},
           onOpenRun: (_, __) {},
         ),
       ),
@@ -1905,7 +1903,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         EstablishedUserHome(
-          projects: const [project],
+          spaces: const [space],
           workspaces: const [],
           workers: const [testWorker],
           invitations: const [],
@@ -1917,7 +1915,7 @@ void main() {
           run: activeRun,
           openFindingCount: 0,
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
+          onOpenSpace: (_) {},
           onOpenRun: (_, __) {},
         ),
       ),
@@ -1949,7 +1947,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         EstablishedUserHome(
-          projects: const [project],
+          spaces: const [space],
           workspaces: const [],
           workers: const [],
           invitations: const [],
@@ -1961,7 +1959,7 @@ void main() {
           run: null,
           openFindingCount: 0,
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
+          onOpenSpace: (_) {},
           onOpenRun: (_, __) {},
         ),
       ),
@@ -1974,7 +1972,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         EstablishedUserHome(
-          projects: const [project],
+          spaces: const [space],
           workspaces: const [],
           workers: const [],
           invitations: const [],
@@ -1987,7 +1985,7 @@ void main() {
           run: null,
           openFindingCount: 0,
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
+          onOpenSpace: (_) {},
           onOpenRun: (_, __) {},
         ),
       ),
@@ -2001,7 +1999,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         EstablishedUserHome(
-          projects: const [project],
+          spaces: const [space],
           workspaces: const [],
           workers: const [],
           invitations: const [],
@@ -2014,7 +2012,7 @@ void main() {
           run: null,
           openFindingCount: 0,
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
+          onOpenSpace: (_) {},
           onOpenRun: (_, __) {},
         ),
       ),
@@ -2026,34 +2024,34 @@ void main() {
   });
 
   testWidgets(
-      'Phase 24 — Home excludes Archived Projects utility shortcuts and leaves archive management to navigation',
+      'Phase 24 — Home excludes Archived Spaces utility shortcuts and leaves archive management to navigation',
       (tester) async {
     await tester.pumpWidget(
       scaffold(
         HomePage(
-          projects: const [project],
+          spaces: const [space],
           workspaces: const [],
           workers: const [],
           run: null,
           openFindingCount: 0,
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
+          onOpenSpace: (_) {},
           onOpenRun: (_, __) {},
-          onCreateProject: () {},
+          onCreateSpace: () {},
         ),
       ),
     );
 
-    // Home must NOT render Archived Projects shortcut or button
-    expect(find.text('Archived Projects'), findsNothing);
+    // Home must NOT render Archived Spaces shortcut or button
+    expect(find.text('Archived Spaces'), findsNothing);
     expect(find.byIcon(Icons.archive_outlined), findsNothing);
   });
 
   testWidgets(
       'Phase 26 — Deep-link every Home item to its exact actionable destination',
       (tester) async {
-    String? openedProject;
-    String? openedWorkstream;
+    String? openedSpace;
+    String? openedThread;
     var openedWorkspaces = false;
     AxProductUpdate? openedUpdate;
     AxAiCapabilityUpdate? openedAiUpdate;
@@ -2064,8 +2062,8 @@ void main() {
         type: AxHomeAttentionType.needsInput,
         title: 'Landing Page Approval Required',
         description: 'Review updated copy for launch',
-        projectId: 'project-1',
-        workstreamId: 'ws-landing',
+        spaceId: 'space-1',
+        threadId: 'ws-landing',
         actionLabel: 'Review →',
         isUnread: true,
         isActionable: true,
@@ -2083,10 +2081,10 @@ void main() {
 
     const continueItems = [
       AxContinueWorkItem(
-        projectId: 'project-1',
-        projectName: 'Alpha Project',
-        workstreamId: 'ws-landing',
-        workstreamTitle: 'Landing Page',
+        spaceId: 'space-1',
+        spaceName: 'Alpha Space',
+        threadId: 'ws-landing',
+        threadTitle: 'Landing Page',
         collaboratorsDisplay: 'You + ChatGPT',
         lastMessageSnippet: 'Ready for deployment review.',
         lastActivityDisplay: '10m ago',
@@ -2096,9 +2094,9 @@ void main() {
     const updates = [
       AxProductUpdate(
         id: 'up-1',
-        slug: 'project-invitations',
-        title: 'Project Invitations',
-        summary: 'Invite collaborators to shared projects.',
+        slug: 'space-invitations',
+        title: 'Space Invitations',
+        summary: 'Invite collaborators to shared spaces.',
         category: AxProductUpdateCategory.collaboration,
         publishedAt: '2026-10-07T00:00:00Z',
         dateDisplay: 'Oct 7',
@@ -2123,7 +2121,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         HomePage(
-          projects: const [project],
+          spaces: const [space],
           workspaces: const [],
           workers: const [
             AxWorker(
@@ -2145,37 +2143,37 @@ void main() {
           run: null,
           openFindingCount: 0,
           onOpenWorkspaces: () => openedWorkspaces = true,
-          onOpenProject: (pId) => openedProject = pId,
-          onOpenWorkstream: (pId, wsId) {
-            openedProject = pId;
-            openedWorkstream = wsId;
+          onOpenSpace: (pId) => openedSpace = pId,
+          onOpenThread: (pId, wsId) {
+            openedSpace = pId;
+            openedThread = wsId;
           },
           onOpenRun: (_, __) {},
-          onCreateProject: () {},
+          onCreateSpace: () {},
           onOpenUpdateDetail: (u) => openedUpdate = u,
           onOpenAiUpdate: (u) => openedAiUpdate = u,
         ),
       ),
     );
 
-    // 1. Needs Input -> exact Workstream deep-link
+    // 1. Needs Input -> exact Thread deep-link
     expect(find.text('Landing Page Approval Required'), findsOneWidget);
     await tester.tap(find.text('Review →'));
-    expect(openedProject, 'project-1');
-    expect(openedWorkstream, 'ws-landing');
+    expect(openedSpace, 'space-1');
+    expect(openedThread, 'ws-landing');
 
     // 2. Workspace problem -> exact Workspaces deep-link
     await tester.ensureVisible(find.text('Connect →'));
     await tester.tap(find.text('Connect →'));
     expect(openedWorkspaces, isTrue);
 
-    // 3. Continue Working -> exact Workstream deep-link
-    openedProject = null;
-    openedWorkstream = null;
+    // 3. Continue Working -> exact Thread deep-link
+    openedSpace = null;
+    openedThread = null;
     await tester.ensureVisible(find.text('Continue →'));
     await tester.tap(find.text('Continue →'));
-    expect(openedProject, 'project-1');
-    expect(openedWorkstream, 'ws-landing');
+    expect(openedSpace, 'space-1');
+    expect(openedThread, 'ws-landing');
 
     // 4. What's New -> update detail deep-link
     await tester.ensureVisible(find.text('Learn more →'));
@@ -2201,8 +2199,8 @@ void main() {
         type: AxHomeAttentionType.needsInput,
         title: 'Safe Attention Item',
         description: 'Requires user decision',
-        projectId: 'project-1',
-        workstreamId: 'ws-safe',
+        spaceId: 'space-1',
+        threadId: 'ws-safe',
         actionLabel: 'Open',
         isUnread: true,
         isActionable: true,
@@ -2211,10 +2209,10 @@ void main() {
 
     const continueItems = [
       AxContinueWorkItem(
-        projectId: 'project-1',
-        projectName: 'Active Project',
-        workstreamId: 'ws-safe',
-        workstreamTitle: 'Active Workstream',
+        spaceId: 'space-1',
+        spaceName: 'Active Space',
+        threadId: 'ws-safe',
+        threadTitle: 'Active Thread',
         collaboratorsDisplay: 'You + ChatGPT',
         lastMessageSnippet: 'Working on core logic.',
         lastActivityDisplay: '5m ago',
@@ -2242,7 +2240,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         HomePage(
-          projects: const [project],
+          spaces: const [space],
           workspaces: const [],
           workers: const [],
           attentionItems: attentionItems,
@@ -2253,10 +2251,10 @@ void main() {
           run: null,
           openFindingCount: 0,
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
-          onOpenWorkstream: (_, __) => continueOpened = true,
+          onOpenSpace: (_) {},
+          onOpenThread: (_, __) => continueOpened = true,
           onOpenRun: (_, __) {},
-          onCreateProject: () {},
+          onCreateSpace: () {},
         ),
       ),
     );
@@ -2265,7 +2263,7 @@ void main() {
     expect(find.text('For you'), findsOneWidget);
     expect(find.text('Safe Attention Item'), findsOneWidget);
     expect(find.text('Continue working'), findsOneWidget);
-    expect(find.text('Active Workstream'), findsOneWidget);
+    expect(find.text('Active Thread'), findsOneWidget);
 
     // Secondary empty/faulty sections gracefully collapse without whole-page error
     expect(find.text("What's new"), findsNothing);
@@ -2279,15 +2277,15 @@ void main() {
   testWidgets(
       'Phase 28 — Offline behavior: EstablishedUserHome shows cached sections and connectivity indicator without replacing page',
       (tester) async {
-    String? openedWorkstream;
+    String? openedThread;
     AxProductUpdate? openedUpdate;
 
     const continueItems = [
       AxContinueWorkItem(
-        projectId: 'project-1',
-        projectName: 'Conclave Core',
-        workstreamId: 'ws-offline',
-        workstreamTitle: 'Offline Mode Testing',
+        spaceId: 'space-1',
+        spaceName: 'Conclave Core',
+        threadId: 'ws-offline',
+        threadTitle: 'Offline Mode Testing',
         collaboratorsDisplay: 'You + ChatGPT',
         lastMessageSnippet: 'Cached context remains fully readable.',
         lastActivityDisplay: 'Just now',
@@ -2309,7 +2307,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         HomePage(
-          projects: const [project],
+          spaces: const [space],
           workspaces: const [],
           workers: const [],
           continueWorkItems: continueItems,
@@ -2320,10 +2318,10 @@ void main() {
           openFindingCount: 0,
           isOffline: true, // Offline mode active
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
-          onOpenWorkstream: (pId, wsId) => openedWorkstream = wsId,
+          onOpenSpace: (_) {},
+          onOpenThread: (pId, wsId) => openedThread = wsId,
           onOpenRun: (_, __) {},
-          onCreateProject: () {},
+          onCreateSpace: () {},
           onOpenUpdateDetail: (u) => openedUpdate = u,
         ),
       ),
@@ -2339,7 +2337,7 @@ void main() {
     expect(find.text('Continue working'), findsOneWidget);
     expect(find.text('Offline Mode Testing'), findsOneWidget);
     await tester.tap(find.text('Continue →'));
-    expect(openedWorkstream, 'ws-offline');
+    expect(openedThread, 'ws-offline');
 
     // 4. Cached What's New is present and readable
     expect(find.text("What's new"), findsOneWidget);
@@ -2355,7 +2353,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         HomePage(
-          projects: const [],
+          spaces: const [],
           workspaces: const [],
           workers: const [],
           invitations: const [],
@@ -2363,9 +2361,9 @@ void main() {
           openFindingCount: 0,
           isOffline: true,
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
+          onOpenSpace: (_) {},
           onOpenRun: (_, __) {},
-          onCreateProject: () {},
+          onCreateSpace: () {},
         ),
       ),
     );
@@ -2376,64 +2374,64 @@ void main() {
   });
 
   testWidgets(
-      'Phase 30 — Privacy and permissions: Home aggregation omits project name, workstream title, worker activity, conversation preview, and inaccessible AI updates after project access revocation',
+      'Phase 30 — Privacy and permissions: Home aggregation omits space name, thread title, worker activity, conversation preview, and inaccessible AI updates after space access revocation',
       (tester) async {
-    const authorizedProject = AxProject(
+    const authorizedSpace = AxSpace(
       id: 'proj-auth',
-      name: 'Authorized Project',
+      name: 'Authorized Space',
       branch: 'main',
       lastActivity: 'Today',
     );
 
-    // Attention items: one from authorized project, one from revoked project
+    // Attention items: one from authorized space, one from revoked space
     final attentionItems = [
       AxHomeAttentionItem(
         id: 'att-auth',
-        projectId: 'proj-auth',
+        spaceId: 'proj-auth',
         type: AxHomeAttentionType.needsInput,
         title: 'Review Authorized Spec',
-        description: 'Input needed on authorized workstream',
+        description: 'Input needed on authorized thread',
         createdAt: DateTime.parse('2026-10-08T09:00:00Z'),
       ),
       AxHomeAttentionItem(
         id: 'att-revoked',
-        projectId: 'proj-revoked',
+        spaceId: 'proj-revoked',
         type: AxHomeAttentionType.approvalRequired,
-        title: 'Secret Proposal in Revoked Project',
-        description: 'Confidential preview of revoked workstream',
+        title: 'Secret Proposal in Revoked Space',
+        description: 'Confidential preview of revoked thread',
         createdAt: DateTime.parse('2026-10-08T09:30:00Z'),
       ),
     ];
 
-    // Continue work items: one from authorized project, one from revoked project
+    // Continue work items: one from authorized space, one from revoked space
     const continueItems = [
       AxContinueWorkItem(
-        projectId: 'proj-auth',
-        projectName: 'Authorized Project',
-        workstreamId: 'ws-auth',
-        workstreamTitle: 'Active Authorized Workstream',
+        spaceId: 'proj-auth',
+        spaceName: 'Authorized Space',
+        threadId: 'ws-auth',
+        threadTitle: 'Active Authorized Thread',
         collaboratorsDisplay: 'You + ChatGPT',
         lastMessageSnippet: 'Authorized discussion snippet.',
         lastActivityDisplay: 'Just now',
       ),
       AxContinueWorkItem(
-        projectId: 'proj-revoked',
-        projectName: 'Revoked Secret Project',
-        workstreamId: 'ws-revoked',
-        workstreamTitle: 'Revoked Confidential Workstream',
+        spaceId: 'proj-revoked',
+        spaceName: 'Revoked Secret Space',
+        threadId: 'ws-revoked',
+        threadTitle: 'Revoked Confidential Thread',
         collaboratorsDisplay: 'Alice + Claude',
         lastMessageSnippet: 'Revoked confidential message preview.',
         lastActivityDisplay: '10 min ago',
       ),
     ];
 
-    // Running now: tied to revoked project
+    // Running now: tied to revoked space
     const revokedRun = AxRun(
       id: 'run-revoked',
-      projectId: 'proj-revoked',
-      projectName: 'Revoked Secret Project',
-      workstreamTitle: 'Revoked Confidential Workstream',
-      objective: 'Execute confidential task in revoked project',
+      spaceId: 'proj-revoked',
+      spaceName: 'Revoked Secret Space',
+      threadTitle: 'Revoked Confidential Thread',
+      objective: 'Execute confidential task in revoked space',
       workerName: 'Secret Worker',
       status: RunStatus.running,
       taskCount: 1,
@@ -2443,7 +2441,7 @@ void main() {
       criterionCount: 1,
     );
 
-    // AI Updates: one accessible (ChatGPT), one inaccessible (Ollama only available in revoked project)
+    // AI Updates: one accessible (ChatGPT), one inaccessible (Ollama only available in revoked space)
     const aiUpdates = [
       AxAiCapabilityUpdate(
         id: 'ai-chatgpt',
@@ -2451,7 +2449,7 @@ void main() {
         provider: 'openai',
         type: AxAiCapabilityUpdateType.modelAdded,
         title: 'ChatGPT 4.5 Turbo Enabled',
-        summary: 'New ChatGPT model is available for your projects.',
+        summary: 'New ChatGPT model is available for your spaces.',
         publishedAt: '2026-10-08T00:00:00Z',
       ),
       AxAiCapabilityUpdate(
@@ -2481,7 +2479,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         HomePage(
-          projects: const [authorizedProject],
+          spaces: const [authorizedSpace],
           workspaces: const [],
           workers: const [localWorker],
           attentionItems: attentionItems,
@@ -2490,31 +2488,30 @@ void main() {
           run: revokedRun,
           openFindingCount: 0,
           onOpenWorkspaces: () {},
-          onOpenProject: (_) {},
+          onOpenSpace: (_) {},
           onOpenRun: (_, __) {},
-          onCreateProject: () {},
+          onCreateSpace: () {},
         ),
       ),
     );
 
     // 1. Authorized resources MUST render
-    expect(find.text('AUTHORIZED PROJECT'), findsOneWidget);
-    expect(find.text('Active Authorized Workstream'), findsOneWidget);
+    expect(find.text('AUTHORIZED SPACE'), findsOneWidget);
+    expect(find.text('Active Authorized Thread'), findsOneWidget);
     expect(find.text('"Authorized discussion snippet."'), findsOneWidget);
     expect(find.text('Review Authorized Spec'), findsOneWidget);
     expect(find.text('ChatGPT 4.5 Turbo Enabled'), findsOneWidget);
 
-    // 2. Revoked project resources MUST NEVER appear on Home
-    expect(find.text('AUTHORIZED PROJECT'), findsOneWidget);
-    expect(find.text('REVOKED SECRET PROJECT'), findsNothing);
-    expect(find.text('Revoked Secret Project'), findsNothing);
-    expect(find.text('Revoked Confidential Workstream'), findsNothing);
+    // 2. Revoked space resources MUST NEVER appear on Home
+    expect(find.text('AUTHORIZED SPACE'), findsOneWidget);
+    expect(find.text('REVOKED SECRET SPACE'), findsNothing);
+    expect(find.text('Revoked Secret Space'), findsNothing);
+    expect(find.text('Revoked Confidential Thread'), findsNothing);
     expect(find.text('Revoked confidential message preview.'), findsNothing);
-    expect(find.text('Secret Proposal in Revoked Project'), findsNothing);
+    expect(find.text('Secret Proposal in Revoked Space'), findsNothing);
+    expect(find.text('Confidential preview of revoked thread'), findsNothing);
     expect(
-        find.text('Confidential preview of revoked workstream'), findsNothing);
-    expect(find.text('Execute confidential task in revoked project'),
-        findsNothing);
+        find.text('Execute confidential task in revoked space'), findsNothing);
     expect(find.text('Running now'), findsNothing);
 
     // 3. AI Update tied to inaccessible worker MUST NEVER appear
@@ -2531,7 +2528,7 @@ void main() {
           'type': 'needsInput',
           'title': 'Needs Input on Spec',
           'description': 'Description',
-          'projectId': 'proj-1',
+          'spaceId': 'proj-1',
           'unread': true,
           'actionable': true,
         },
@@ -2539,8 +2536,8 @@ void main() {
       'running': [
         {
           'id': 'run-1',
-          'projectId': 'proj-1',
-          'projectName': 'Project 1',
+          'spaceId': 'proj-1',
+          'spaceName': 'Space 1',
           'status': 'running',
           'objective': 'Optimizing DB',
           'taskCount': 2,
@@ -2552,10 +2549,10 @@ void main() {
       ],
       'recentWork': [
         {
-          'projectId': 'proj-1',
-          'projectName': 'Project 1',
-          'workstreamId': 'ws-1',
-          'workstreamTitle': 'Main',
+          'spaceId': 'proj-1',
+          'spaceName': 'Space 1',
+          'threadId': 'ws-1',
+          'threadTitle': 'Main',
           'collaboratorsDisplay': 'You + AI',
           'lastMessageSnippet': 'Ready to ship',
           'lastActivityDisplay': 'Just now',
@@ -2591,7 +2588,7 @@ void main() {
     expect(model.running, hasLength(1));
     expect(model.running.first.objective, 'Optimizing DB');
     expect(model.recentWork, hasLength(1));
-    expect(model.recentWork.first.workstreamTitle, 'Main');
+    expect(model.recentWork.first.threadTitle, 'Main');
     expect(model.productUpdates, hasLength(1));
     expect(model.productUpdates.first.title, 'Update 1');
     expect(model.aiUpdates, hasLength(1));
@@ -2611,25 +2608,25 @@ void main() {
         () {
       final event = {
         'type': 'invitation.received',
-        'projectId': 'proj-100',
+        'spaceId': 'proj-100',
         'payload': {
-          'projectId': 'proj-100',
-          'projectName': 'Super Project',
-          'prompt': 'Julia invited you to join Super Project',
+          'spaceId': 'proj-100',
+          'spaceName': 'Super Space',
+          'prompt': 'Julia invited you to join Super Space',
         },
       };
 
       final notification = notificationFromRealtimeEvent(event);
       expect(notification, isNotNull);
-      expect(notification!.kind, AxNotificationKind.projectInvitationReceived);
-      expect(notification.projectId, 'proj-100');
+      expect(notification!.kind, AxNotificationKind.spaceInvitationReceived);
+      expect(notification.spaceId, 'proj-100');
 
-      final items = AxHomeAttentionProjector.project(
+      final items = AxHomeAttentionProjector.space(
         invitations: [
-          const AxProjectInvitation(
+          const AxSpaceInvitation(
             id: 'inv-rt',
-            projectId: 'proj-100',
-            projectName: 'Super Project',
+            spaceId: 'proj-100',
+            spaceName: 'Super Space',
             email: 'user@conclave.dev',
             role: 'member',
             status: 'pending',
@@ -2641,101 +2638,101 @@ void main() {
         ],
         rawAttentionItems: const [],
         openFindingCount: 0,
-        projects: const [project],
+        spaces: const [space],
       );
 
       expect(items, hasLength(1));
-      expect(items.first.title, contains('Julia invited you to Super Project'));
-      expect(items.first.effectiveType, AxHomeAttentionType.projectInvitation);
+      expect(items.first.title, contains('Julia invited you to Super Space'));
+      expect(items.first.effectiveType, AxHomeAttentionType.spaceInvitation);
     });
 
     test(
-        'notificationFromRealtimeEvent parses workstream.needs_input and projects to For You',
+        'notificationFromRealtimeEvent parses thread.needs_input and spaces to For You',
         () {
       final event = {
-        'type': 'workstream.needs_input',
-        'projectId': 'project-1',
-        'workstreamId': 'ws-1',
+        'type': 'thread.needs_input',
+        'spaceId': 'space-1',
+        'threadId': 'ws-1',
         'payload': {
-          'projectId': 'project-1',
-          'workstreamId': 'ws-1',
+          'spaceId': 'space-1',
+          'threadId': 'ws-1',
           'prompt': 'Please clarify API endpoints',
         },
       };
 
       final notification = notificationFromRealtimeEvent(event);
       expect(notification, isNotNull);
-      expect(notification!.kind, AxNotificationKind.workstreamNeedsInput);
-      expect(notification.title, 'Workstream needs input');
+      expect(notification!.kind, AxNotificationKind.threadNeedsInput);
+      expect(notification.title, 'Thread needs input');
 
-      var openedWorkstream = '';
+      var openedThread = '';
       final rawItem = AxHomeAttentionItem(
         id: notification.id,
         kind: AxHomeAttentionType.needsInput,
         title: notification.title,
         subtitle: notification.message,
-        projectId: notification.projectId,
-        workstreamId: notification.workstreamId,
+        spaceId: notification.spaceId,
+        threadId: notification.threadId,
         isUnread: true,
         isActionable: true,
       );
 
-      final items = AxHomeAttentionProjector.project(
+      final items = AxHomeAttentionProjector.space(
         invitations: const [],
         rawAttentionItems: [rawItem],
         openFindingCount: 0,
-        projects: const [project],
-        onOpenWorkstream: (pId, wsId) => openedWorkstream = '$pId/$wsId',
+        spaces: const [space],
+        onOpenThread: (pId, wsId) => openedThread = '$pId/$wsId',
       );
 
       expect(items, hasLength(1));
       expect(items.first.primaryAction?.label, 'Review →');
       items.first.primaryAction?.onPerform();
-      expect(openedWorkstream, 'project-1/ws-1');
+      expect(openedThread, 'space-1/ws-1');
     });
 
     test(
-        'workstream.completed triggers For You review item and Running Now suppression',
+        'thread.completed triggers For You review item and Running Now suppression',
         () {
       final event = {
-        'type': 'workstream.completed',
-        'projectId': 'project-1',
-        'workstreamId': 'ws-1',
+        'type': 'thread.completed',
+        'spaceId': 'space-1',
+        'threadId': 'ws-1',
         'payload': {
-          'projectId': 'project-1',
-          'workstreamId': 'ws-1',
+          'spaceId': 'space-1',
+          'threadId': 'ws-1',
           'summary': 'Backend refactoring completed',
         },
       };
 
       final notification = notificationFromRealtimeEvent(event);
       expect(notification, isNotNull);
-      expect(notification!.kind, AxNotificationKind.workstreamCompleted);
+      expect(notification!.kind, AxNotificationKind.threadCompleted);
 
       final rawItem = AxHomeAttentionItem(
         id: notification.id,
         kind: AxHomeAttentionType.executionCompleted,
         title: notification.title,
         subtitle: notification.message,
-        projectId: notification.projectId,
-        workstreamId: notification.workstreamId,
+        spaceId: notification.spaceId,
+        threadId: notification.threadId,
         isUnread: true,
         isActionable: false,
       );
 
-      var openedWorkstream = '';
-      final items = AxHomeAttentionProjector.project(
+      var openedThread = '';
+      final items = AxHomeAttentionProjector.space(
         invitations: const [],
         rawAttentionItems: [rawItem],
         openFindingCount: 0,
-        projects: const [project],
-        onOpenWorkstream: (pId, wsId) => openedWorkstream = '$pId/$wsId',
+        spaces: const [space],
+        onOpenThread: (pId, wsId) => openedThread = '$pId/$wsId',
       );
 
       expect(items, hasLength(1));
       expect(items.first.primaryAction?.label, 'Open →');
       items.first.primaryAction?.onPerform();
-      expect(openedWorkstream, 'project-1/ws-1');
+      expect(openedThread, 'space-1/ws-1');
     });
 
     test('worker problem realtime events map to For You with Fix action', () {
@@ -2768,11 +2765,11 @@ void main() {
           isActionable: true,
         );
 
-        final items = AxHomeAttentionProjector.project(
+        final items = AxHomeAttentionProjector.space(
           invitations: const [],
           rawAttentionItems: [rawItem],
           openFindingCount: 0,
-          projects: const [project],
+          spaces: const [space],
           onOpenWorkspaces: () => workspacesOpened = true,
         );
 
@@ -2798,16 +2795,16 @@ void main() {
       ];
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [],
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
         productUpdates: productUpdates,
         productUpdateReadStates: const {},
       )));
@@ -2819,25 +2816,25 @@ void main() {
   });
 
   group('Phase 33 — Canonical Scenario Verification Matrix', () {
-    // 1. Scenario: Brand-new account -> Expected: Create/Join Project onboarding
+    // 1. Scenario: Brand-new account -> Expected: Create/Join Space onboarding
     testWidgets(
-        'Scenario: Brand-new account -> Expected: Create/Join Project onboarding',
+        'Scenario: Brand-new account -> Expected: Create/Join Space onboarding',
         (tester) async {
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [],
+        spaces: const [],
         workspaces: const [],
         workers: const [],
         invitations: const [],
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text('Welcome to Conclave AX'), findsOneWidget);
-      expect(find.text('Create your first Project'), findsOneWidget);
+      expect(find.text('Create your first Space'), findsOneWidget);
       expect(find.text('How Conclave AX works'), findsOneWidget);
       expect(find.text('People first'), findsOneWidget);
       expect(find.text('Private credentials'), findsOneWidget);
@@ -2851,40 +2848,40 @@ void main() {
         'Scenario: New user with invitation -> Expected: Invitation takes priority',
         (tester) async {
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [],
+        spaces: const [],
         workspaces: const [],
         workers: const [],
         invitations: const [testInvite1],
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
-      expect(find.text('Join a Project'), findsOneWidget);
+      expect(find.text('Join a Space'), findsOneWidget);
       expect(find.text('You have 1 invitation.'), findsOneWidget);
       expect(find.text('Family Travel'), findsOneWidget);
       expect(find.text('or'), findsOneWidget);
-      expect(find.text('Create your first Project'), findsOneWidget);
+      expect(find.text('Create your first Space'), findsOneWidget);
     });
 
-    // 3. Scenario: Project but no Workspace -> Expected: Normal Home, not setup warning
+    // 3. Scenario: Space but no Workspace -> Expected: Normal Home, not setup warning
     testWidgets(
-        'Scenario: Project but no Workspace -> Expected: Normal Home, not setup warning',
+        'Scenario: Space but no Workspace -> Expected: Normal Home, not setup warning',
         (tester) async {
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [],
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text('Home'), findsOneWidget);
@@ -2898,15 +2895,15 @@ void main() {
     testWidgets(
         'Scenario: Invitation received realtime -> Expected: Appears in For You',
         (tester) async {
-      final items = AxHomeAttentionProjector.project(
+      final items = AxHomeAttentionProjector.space(
         invitations: const [testInvite1],
         rawAttentionItems: const [],
         openFindingCount: 0,
-        projects: const [project],
+        spaces: const [space],
       );
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [testInvite1],
@@ -2914,9 +2911,9 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text('For you'), findsOneWidget);
@@ -2925,12 +2922,12 @@ void main() {
       expect(find.text('Decline'), findsOneWidget);
     });
 
-    // 5. Scenario: Invitation accepted -> Expected: Removed + Project appears
+    // 5. Scenario: Invitation accepted -> Expected: Removed + Space appears
     testWidgets(
-        'Scenario: Invitation accepted -> Expected: Removed + Project appears',
+        'Scenario: Invitation accepted -> Expected: Removed + Space appears',
         (tester) async {
-      AxProjectInvitation? accepted;
-      const newJoinedProject = AxProject(
+      AxSpaceInvitation? accepted;
+      const newJoinedSpace = AxSpace(
         id: 'proj-123',
         name: 'Family Travel',
         branch: 'main',
@@ -2938,42 +2935,42 @@ void main() {
       );
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [testInvite1],
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
         onAcceptInvitation: (inv) => accepted = inv,
       )));
 
       await tester.tap(find.text('Accept'));
       expect(accepted?.id, 'inv-1');
 
-      // Re-render with invitation accepted & converted to joined project
+      // Re-render with invitation accepted & converted to joined space
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project, newJoinedProject],
+        spaces: const [space, newJoinedSpace],
         workspaces: const [],
         workers: const [],
         invitations: const [],
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text('Julia invited you to Family Travel'), findsNothing);
       expect(find.text('FAMILY TRAVEL'), findsOneWidget);
     });
 
-    // 6. Scenario: Workstream needs input -> Expected: For You
-    testWidgets('Scenario: Workstream needs input -> Expected: For You',
+    // 6. Scenario: Thread needs input -> Expected: For You
+    testWidgets('Scenario: Thread needs input -> Expected: For You',
         (tester) async {
       final items = [
         const AxHomeAttentionItem(
@@ -2981,15 +2978,15 @@ void main() {
           type: AxHomeAttentionType.needsInput,
           title: 'Input requested for API spec',
           subtitle: 'Please clarify query parameter types',
-          projectId: 'project-1',
-          workstreamId: 'ws-1',
+          spaceId: 'space-1',
+          threadId: 'ws-1',
           isUnread: true,
           isActionable: true,
         ),
       ];
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [],
@@ -2997,9 +2994,9 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text('For you'), findsOneWidget);
@@ -3012,9 +3009,9 @@ void main() {
         (tester) async {
       const activeRun = AxRun(
         id: 'run-1',
-        projectId: 'project-1',
-        projectName: 'Project One',
-        workstreamTitle: 'Backend Architecture',
+        spaceId: 'space-1',
+        spaceName: 'Space One',
+        threadTitle: 'Backend Architecture',
         objective: 'Generating database migration schemas',
         workerName: 'Conclave Core Engine',
         status: RunStatus.running,
@@ -3026,16 +3023,16 @@ void main() {
       );
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [],
         run: activeRun,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text('Running now'), findsOneWidget);
@@ -3055,8 +3052,8 @@ void main() {
           type: AxHomeAttentionType.executionCompleted,
           title: 'Database schemas generated',
           subtitle: 'Completed successfully. 3 criteria verified.',
-          projectId: 'project-1',
-          workstreamId: 'ws-1',
+          spaceId: 'space-1',
+          threadId: 'ws-1',
           isUnread: true,
           isActionable: false,
         ),
@@ -3064,7 +3061,7 @@ void main() {
 
       // Re-rendered after completion: run is null / done, completion attention item in For You
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [],
@@ -3072,9 +3069,9 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text('Running now'), findsNothing);
@@ -3083,18 +3080,18 @@ void main() {
       expect(find.text('Open →'), findsOneWidget);
     });
 
-    // 9. Scenario: Recent Workstream -> Expected: Continue Working
-    testWidgets('Scenario: Recent Workstream -> Expected: Continue Working',
+    // 9. Scenario: Recent Thread -> Expected: Continue Working
+    testWidgets('Scenario: Recent Thread -> Expected: Continue Working',
         (tester) async {
-      const activeProject = AxProject(
+      const activeSpace = AxSpace(
         id: 'p-1',
         name: 'Mobile Client',
         branch: 'main',
         lastActivity: '10m ago',
-        workstreams: [
-          AxWorkstream(
+        threads: [
+          AxThread(
             id: 'ws-101',
-            projectId: 'p-1',
+            spaceId: 'p-1',
             name: 'Authentication Flow',
             lead: 'Vitalii + ChatGPT',
             status: 'active',
@@ -3106,16 +3103,16 @@ void main() {
       );
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [activeProject],
+        spaces: const [activeSpace],
         workspaces: const [],
         workers: const [],
         invitations: const [],
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text('Continue working'), findsOneWidget);
@@ -3128,19 +3125,19 @@ void main() {
           findsOneWidget);
     });
 
-    // 10. Scenario: Archived Workstream -> Expected: Not shown
-    testWidgets('Scenario: Archived Workstream -> Expected: Not shown',
+    // 10. Scenario: Archived Thread -> Expected: Not shown
+    testWidgets('Scenario: Archived Thread -> Expected: Not shown',
         (tester) async {
-      const projectWithArchived = AxProject(
+      const spaceWithArchived = AxSpace(
         id: 'p-1',
         name: 'Mobile Client',
         branch: 'main',
         lastActivity: '10m ago',
-        workstreams: [
-          AxWorkstream(
+        threads: [
+          AxThread(
             id: 'ws-active',
-            projectId: 'p-1',
-            name: 'Active Workstream',
+            spaceId: 'p-1',
+            name: 'Active Thread',
             lead: 'Vitalii',
             status: 'active',
             brief: 'Active work in progress.',
@@ -3148,13 +3145,13 @@ void main() {
             queueStatus: 'idle',
             archived: false,
           ),
-          AxWorkstream(
+          AxThread(
             id: 'ws-archived',
-            projectId: 'p-1',
+            spaceId: 'p-1',
             name: 'Obsolete Legacy Pipeline',
             lead: 'Old Worker',
             status: 'archived',
-            brief: 'Archived legacy workstream content.',
+            brief: 'Archived legacy thread content.',
             primaryWorkspace: 'ws',
             queueStatus: 'idle',
             archived: true,
@@ -3163,21 +3160,21 @@ void main() {
       );
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [projectWithArchived],
+        spaces: const [spaceWithArchived],
         workspaces: const [],
         workers: const [],
         invitations: const [],
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
-      expect(find.text('Active Workstream'), findsOneWidget);
+      expect(find.text('Active Thread'), findsOneWidget);
       expect(find.text('Obsolete Legacy Pipeline'), findsNothing);
-      expect(find.text('Archived legacy workstream content.'), findsNothing);
+      expect(find.text('Archived legacy thread content.'), findsNothing);
     });
 
     // 11. Scenario: Product update -> Expected: What's New
@@ -3188,7 +3185,7 @@ void main() {
           id: 'up-1',
           slug: 'smart-merge',
           title: 'Smart Branch Merging',
-          summary: 'Merge workstream branches safely with conflict analysis.',
+          summary: 'Merge thread branches safely with conflict analysis.',
           category: AxProductUpdateCategory.feature,
           publishedAt: '2026-10-08T00:00:00Z',
           status: AxProductUpdateStatus.published,
@@ -3196,7 +3193,7 @@ void main() {
       ];
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [],
@@ -3205,9 +3202,9 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text("What's new"), findsOneWidget);
@@ -3223,7 +3220,7 @@ void main() {
           id: 'up-1',
           slug: 'smart-merge',
           title: 'Smart Branch Merging',
-          summary: 'Merge workstream branches safely with conflict analysis.',
+          summary: 'Merge thread branches safely with conflict analysis.',
           category: AxProductUpdateCategory.feature,
           publishedAt: '2026-10-08T00:00:00Z',
           status: AxProductUpdateStatus.published,
@@ -3239,7 +3236,7 @@ void main() {
       };
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [],
@@ -3248,9 +3245,9 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text("What's new"), findsOneWidget);
@@ -3280,13 +3277,13 @@ void main() {
           provider: 'openai',
           type: AxAiCapabilityUpdateType.modelAdded,
           title: 'GPT-4o Mini and o1 Reasoning Added',
-          summary: 'Enhanced high-speed reasoning available for your projects.',
+          summary: 'Enhanced high-speed reasoning available for your spaces.',
           publishedAt: '2026-10-08T00:00:00Z',
         ),
       ];
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [chatgptWorker],
         invitations: const [],
@@ -3294,9 +3291,9 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text('AI updates'), findsOneWidget);
@@ -3331,7 +3328,7 @@ void main() {
       ];
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [chatgptWorker], // User has NO Gemini worker
         invitations: const [],
@@ -3339,9 +3336,9 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       // Gemini update should be filtered out
@@ -3379,7 +3376,7 @@ void main() {
 
       // 1. With worker present: AI update is shown
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [claudeWorker],
         invitations: const [],
@@ -3387,16 +3384,16 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text('Claude 3.5 Sonnet Updated'), findsOneWidget);
 
       // 2. Revoke worker access: workers list emptied -> AI update disappears
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [], // Claude worker revoked
         invitations: const [],
@@ -3404,9 +3401,9 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text('Claude 3.5 Sonnet Updated'), findsNothing);
@@ -3417,7 +3414,7 @@ void main() {
     testWidgets('Scenario: Empty optional section -> Expected: Section hidden',
         (tester) async {
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [],
@@ -3426,9 +3423,9 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       // Optional dynamic sections must be hidden when empty
@@ -3441,7 +3438,7 @@ void main() {
     testWidgets('Scenario: Offline -> Expected: Cached Home survives',
         (tester) async {
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [],
@@ -3449,43 +3446,43 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(find.text('Home'), findsOneWidget);
       expect(find.text('Offline · Cached data'), findsOneWidget);
       expect(find.text('Continue working'), findsOneWidget);
-      expect(find.text('PROJECT ONE'), findsOneWidget);
+      expect(find.text('SPACE ONE'), findsOneWidget);
     });
 
-    // 18. Scenario: Project permission revoked -> Expected: Data disappears
+    // 18. Scenario: Space permission revoked -> Expected: Data disappears
     testWidgets(
-        'Scenario: Project permission revoked -> Expected: Data disappears',
+        'Scenario: Space permission revoked -> Expected: Data disappears',
         (tester) async {
-      const authProj = AxProject(
+      const authProj = AxSpace(
         id: 'proj-allowed',
-        name: 'Allowed Project',
+        name: 'Allowed Space',
         branch: 'main',
         lastActivity: 'Now',
       );
 
       final continueItems = [
         const AxContinueWorkItem(
-          projectId: 'proj-allowed',
-          projectName: 'Allowed Project',
-          workstreamId: 'ws-1',
-          workstreamTitle: 'Allowed Workstream',
+          spaceId: 'proj-allowed',
+          spaceName: 'Allowed Space',
+          threadId: 'ws-1',
+          threadTitle: 'Allowed Thread',
           collaboratorsDisplay: 'You',
           lastMessageSnippet: 'Allowed message',
           lastActivityDisplay: 'Now',
         ),
         const AxContinueWorkItem(
-          projectId: 'proj-revoked',
-          projectName: 'Revoked Confidential Project',
-          workstreamId: 'ws-secret',
-          workstreamTitle: 'Secret Workstream',
+          spaceId: 'proj-revoked',
+          spaceName: 'Revoked Confidential Space',
+          threadId: 'ws-secret',
+          threadTitle: 'Secret Thread',
           collaboratorsDisplay: 'Secret Team',
           lastMessageSnippet: 'Revoked secret discussion',
           lastActivityDisplay: 'Now',
@@ -3493,7 +3490,7 @@ void main() {
       ];
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [authProj], // User ONLY has access to proj-allowed
+        spaces: const [authProj], // User ONLY has access to proj-allowed
         workspaces: const [],
         workers: const [],
         invitations: const [],
@@ -3501,15 +3498,15 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
-      expect(find.text('ALLOWED PROJECT'), findsOneWidget);
-      expect(find.text('Allowed Workstream'), findsOneWidget);
-      expect(find.text('REVOKED CONFIDENTIAL PROJECT'), findsNothing);
-      expect(find.text('Secret Workstream'), findsNothing);
+      expect(find.text('ALLOWED SPACE'), findsOneWidget);
+      expect(find.text('Allowed Thread'), findsOneWidget);
+      expect(find.text('REVOKED CONFIDENTIAL SPACE'), findsNothing);
+      expect(find.text('Secret Thread'), findsNothing);
       expect(find.text('Revoked secret discussion'), findsNothing);
     });
 
@@ -3521,12 +3518,12 @@ void main() {
         type: AxHomeAttentionType.needsInput,
         title: 'Needs Feedback on Architecture',
         subtitle: 'Review required',
-        projectId: 'project-1',
+        spaceId: 'space-1',
         isUnread: true,
         isActionable: true,
       );
 
-      final items = AxHomeAttentionProjector.project(
+      final items = AxHomeAttentionProjector.space(
         invitations: const [],
         rawAttentionItems: const [
           duplicateItem,
@@ -3534,7 +3531,7 @@ void main() {
           duplicateItem,
         ],
         openFindingCount: 0,
-        projects: const [project],
+        spaces: const [space],
       );
 
       // Deduplication guarantees exact length of 1
@@ -3555,7 +3552,7 @@ void main() {
       });
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [testInvite1],
@@ -3565,16 +3562,16 @@ void main() {
             type: AxHomeAttentionType.needsInput,
             title: 'Narrow screen test attention item',
             subtitle: 'Checking mobile layout wrapping and margins',
-            projectId: 'project-1',
+            spaceId: 'space-1',
             isUnread: true,
             isActionable: true,
           ),
         ],
         run: const AxRun(
           id: 'run-narrow',
-          projectId: 'project-1',
-          projectName: 'Project One',
-          workstreamTitle: 'Mobile Support',
+          spaceId: 'space-1',
+          spaceName: 'Space One',
+          threadTitle: 'Mobile Support',
           objective: 'Testing responsive layout on compact screens',
           workerName: 'Core Worker',
           status: RunStatus.running,
@@ -3586,9 +3583,9 @@ void main() {
         ),
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       expect(tester.takeException(), isNull);
@@ -3604,22 +3601,22 @@ void main() {
       AxHomeAnalytics.reset();
     });
 
-    testWidgets('Measure Home → Continue Workstream', (tester) async {
+    testWidgets('Measure Home → Continue Thread', (tester) async {
       final events = <AxHomeAnalyticsEvent>[];
       AxHomeAnalytics.setSink(events.add);
       addTearDown(() => AxHomeAnalytics.setSink(null));
 
-      var openedWorkstream = '';
-      const activeProject = AxProject(
+      var openedThread = '';
+      const activeSpace = AxSpace(
         id: 'p-analytics',
-        name: 'Analytics Project',
+        name: 'Analytics Space',
         branch: 'main',
         lastActivity: '1m ago',
-        workstreams: [
-          AxWorkstream(
+        threads: [
+          AxThread(
             id: 'ws-analytics',
-            projectId: 'p-analytics',
-            name: 'Telemetry Workstream',
+            spaceId: 'p-analytics',
+            name: 'Telemetry Thread',
             lead: 'Vitalii',
             status: 'active',
             brief: 'Instrumenting product discovery.',
@@ -3630,30 +3627,29 @@ void main() {
       );
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [activeProject],
+        spaces: const [activeSpace],
         workspaces: const [],
         workers: const [],
         invitations: const [],
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
-        onOpenWorkstream: (pId, wsId) => openedWorkstream = '$pId/$wsId',
+        onCreateSpace: () {},
+        onOpenThread: (pId, wsId) => openedThread = '$pId/$wsId',
       )));
 
       await tester.tap(find.text('Continue →'));
-      expect(openedWorkstream, 'p-analytics/ws-analytics');
+      expect(openedThread, 'p-analytics/ws-analytics');
 
       expect(events, hasLength(1));
-      expect(events.first.action, AxHomeAnalyticsAction.continueWorkstream);
-      expect(events.first.eventName, 'home.continue_workstream');
-      expect(events.first.properties['projectId'], 'p-analytics');
-      expect(events.first.properties['workstreamId'], 'ws-analytics');
-      expect(events.first.properties['projectName'], 'Analytics Project');
-      expect(
-          events.first.properties['workstreamTitle'], 'Telemetry Workstream');
+      expect(events.first.action, AxHomeAnalyticsAction.continueThread);
+      expect(events.first.eventName, 'home.continue_thread');
+      expect(events.first.properties['spaceId'], 'p-analytics');
+      expect(events.first.properties['threadId'], 'ws-analytics');
+      expect(events.first.properties['spaceName'], 'Analytics Space');
+      expect(events.first.properties['threadTitle'], 'Telemetry Thread');
     });
 
     testWidgets('Measure Home → Accept invitation', (tester) async {
@@ -3661,18 +3657,18 @@ void main() {
       AxHomeAnalytics.setSink(events.add);
       addTearDown(() => AxHomeAnalytics.setSink(null));
 
-      AxProjectInvitation? accepted;
+      AxSpaceInvitation? accepted;
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [testInvite1],
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
         onAcceptInvitation: (inv) => accepted = inv,
       )));
 
@@ -3686,7 +3682,7 @@ void main() {
           (e) => e.action == AxHomeAnalyticsAction.acceptInvitation);
       expect(event.eventName, 'home.accept_invitation');
       expect(event.properties['invitationId'], 'inv-1');
-      expect(event.properties['projectId'], 'proj-123');
+      expect(event.properties['spaceId'], 'proj-123');
       expect(event.properties['role'], 'owner');
     });
 
@@ -3695,22 +3691,22 @@ void main() {
       AxHomeAnalytics.setSink(events.add);
       addTearDown(() => AxHomeAnalytics.setSink(null));
 
-      var openedWorkstream = '';
+      var openedThread = '';
       final attentionItem = [
         const AxHomeAttentionItem(
           id: 'att-resolve-1',
           type: AxHomeAttentionType.needsInput,
           title: 'Spec Review Required',
           subtitle: 'Please check the architecture document',
-          projectId: 'project-1',
-          workstreamId: 'ws-spec',
+          spaceId: 'space-1',
+          threadId: 'ws-spec',
           isUnread: true,
           isActionable: true,
         ),
       ];
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [],
@@ -3718,14 +3714,14 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
-        onOpenWorkstream: (pId, wsId) => openedWorkstream = '$pId/$wsId',
+        onCreateSpace: () {},
+        onOpenThread: (pId, wsId) => openedThread = '$pId/$wsId',
       )));
 
       await tester.tap(find.text('Review →'));
-      expect(openedWorkstream, 'project-1/ws-spec');
+      expect(openedThread, 'space-1/ws-spec');
 
       expect(
           events.any((e) => e.action == AxHomeAnalyticsAction.resolveAttention),
@@ -3736,8 +3732,8 @@ void main() {
       expect(event.properties['itemId'], 'att-resolve-1');
       expect(event.properties['type'], 'needsInput');
       expect(event.properties['actionLabel'], 'Review →');
-      expect(event.properties['projectId'], 'project-1');
-      expect(event.properties['workstreamId'], 'ws-spec');
+      expect(event.properties['spaceId'], 'space-1');
+      expect(event.properties['threadId'], 'ws-spec');
     });
 
     testWidgets('Measure Home → open What\'s New', (tester) async {
@@ -3759,7 +3755,7 @@ void main() {
 
       var openedWhatsNew = false;
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [],
@@ -3767,9 +3763,9 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
         onOpenWhatsNew: () => openedWhatsNew = true,
       )));
 
@@ -3816,7 +3812,7 @@ void main() {
 
       AxAiCapabilityUpdate? openedAiUpdate;
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [chatgptWorker],
         invitations: const [],
@@ -3824,9 +3820,9 @@ void main() {
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
         onOpenAiUpdate: (up) => openedAiUpdate = up,
       )));
 
@@ -3845,33 +3841,33 @@ void main() {
       expect(event.properties['type'], 'modelAdded');
     });
 
-    testWidgets('Measure Home → create Project', (tester) async {
+    testWidgets('Measure Home → create Space', (tester) async {
       final events = <AxHomeAnalyticsEvent>[];
       AxHomeAnalytics.setSink(events.add);
       addTearDown(() => AxHomeAnalytics.setSink(null));
 
-      var projectCreated = false;
+      var spaceCreated = false;
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [],
+        spaces: const [],
         workspaces: const [],
         workers: const [],
         invitations: const [],
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () => projectCreated = true,
+        onCreateSpace: () => spaceCreated = true,
       )));
 
-      await tester.tap(find.text('Create Project →'));
-      expect(projectCreated, isTrue);
+      await tester.tap(find.text('Create Space →'));
+      expect(spaceCreated, isTrue);
 
-      expect(events.any((e) => e.action == AxHomeAnalyticsAction.createProject),
+      expect(events.any((e) => e.action == AxHomeAnalyticsAction.createSpace),
           isTrue);
       final event = events
-          .firstWhere((e) => e.action == AxHomeAnalyticsAction.createProject);
-      expect(event.eventName, 'home.create_project');
+          .firstWhere((e) => e.action == AxHomeAnalyticsAction.createSpace);
+      expect(event.eventName, 'home.create_space');
       expect(event.properties['source'], 'new_user_primary');
     });
   });
@@ -3880,28 +3876,28 @@ void main() {
     testWidgets(
         'Established user Home does not contain legacy metric counters or execution capacity subtitle',
         (tester) async {
-      const project = AxProject(
-        id: 'project-1',
-        name: 'Alpha Project',
+      const space = AxSpace(
+        id: 'space-1',
+        name: 'Alpha Space',
         branch: 'main',
         lastActivity: 'Today',
       );
 
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [project],
+        spaces: const [space],
         workspaces: const [],
         workers: const [],
         invitations: const [],
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       // Assert legacy metric cards are absent
-      expect(find.text('Projects'), findsNothing);
+      expect(find.text('Spaces'), findsNothing);
       expect(find.text('Workspaces'), findsNothing);
       expect(find.text('Ready Workers'), findsNothing);
       expect(find.text('execution-capacity'), findsNothing);
@@ -3910,35 +3906,35 @@ void main() {
       // Assert permanent empty-state cards from legacy Home are absent
       expect(find.text('No active Runs'), findsNothing);
       expect(find.text('Nothing needs your attention'), findsNothing);
-      expect(find.text('Recent Projects'), findsNothing);
+      expect(find.text('Recent Spaces'), findsNothing);
     });
 
     testWidgets(
-        'New user Home uses Project-first onboarding and omits old workspace-first dashboard',
+        'New user Home uses Space-first onboarding and omits old workspace-first dashboard',
         (tester) async {
       await tester.pumpWidget(scaffold(HomePage(
-        projects: const [],
+        spaces: const [],
         workspaces: const [],
         workers: const [],
         invitations: const [],
         run: null,
         openFindingCount: 0,
         onOpenWorkspaces: () {},
-        onOpenProject: (_) {},
+        onOpenSpace: (_) {},
         onOpenRun: (_, __) {},
-        onCreateProject: () {},
+        onCreateSpace: () {},
       )));
 
       // Assert legacy dashboard widgets are not rendered
-      expect(find.text('Projects'), findsNothing);
+      expect(find.text('Spaces'), findsNothing);
       expect(find.text('Workspaces'), findsNothing);
       expect(find.text('Ready Workers'), findsNothing);
       expect(find.text('No active Runs'), findsNothing);
       expect(find.text('Nothing needs your attention'), findsNothing);
 
-      // Assert project-first onboarding is rendered
-      expect(find.text('Create your first Project'), findsOneWidget);
-      expect(find.text('Create Project →'), findsOneWidget);
+      // Assert space-first onboarding is rendered
+      expect(find.text('Create your first Space'), findsOneWidget);
+      expect(find.text('Create Space →'), findsOneWidget);
     });
   });
 }

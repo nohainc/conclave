@@ -946,7 +946,7 @@ void main() {
     expect(find.text('Workers'), findsWidgets);
     expect(find.text('Overview'), findsNothing);
     expect(find.text('Settings'), findsNothing);
-    expect(find.text('Projects'), findsNothing);
+    expect(find.text('Spaces'), findsNothing);
     expect(find.text('Workspace management'), findsNothing);
 
     // Header actions: 3-lines menu icon, no duplicate button in header

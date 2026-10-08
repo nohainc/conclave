@@ -7,14 +7,14 @@ import {
 
 const selectionCalls: Record<string, unknown>[] = [];
 vi.mock("../src/scheduler.js", () => ({
-  selectProjectExecutionTarget: vi.fn(
+  selectSpaceExecutionTarget: vi.fn(
     async (_db: unknown, request: Record<string, unknown>) => {
       selectionCalls.push(request);
       return {
-        projectId: request.projectId,
+        spaceId: request.spaceId,
         workspaceId: "workspace-fixture",
         workspaceRuntimeIdentityId: "workspace-runtime-fixture",
-        workspaceProjectGrantId: "grant-fixture",
+        workspaceSpaceGrantId: "grant-fixture",
         workerId: request.workerId ?? "workspace-worker-fixture",
         workerTypeId: "chatgpt",
         engineVersion: "engine-fixture",
@@ -23,7 +23,7 @@ vi.mock("../src/scheduler.js", () => ({
         providerToolName: "codex",
         providerToolVersion: "cli-fixture",
         model: request.model ?? "fixture-model",
-        effectivePermissions: ["workstream.read"],
+        effectivePermissions: ["thread.read"],
         permissionSnapshot: {
           profileDefinitionId: "chatgpt-codex",
           profileReleaseVersion: 1,
@@ -32,7 +32,7 @@ vi.mock("../src/scheduler.js", () => ({
         selectionExplanation: { source: "fixture" },
         executionClass: request.executionClass,
         readOnly: request.readOnly,
-        workstreamId: request.workstreamId,
+        threadId: request.threadId,
         workRequestId: request.workRequestId,
       };
     },
@@ -43,7 +43,7 @@ import { recordAssignmentResult } from "../src/assignment-dispatcher.js";
 import { ConclaveRunWorkflow } from "../src/workflow.js";
 
 const requestText =
-  "  ## Improve Workstream\n\n**Keep source** [docs](https://example.com)\n\n```ts\nconst ready = true;\n```\n  ";
+  "  ## Improve Thread\n\n**Keep source** [docs](https://example.com)\n\n```ts\nconst ready = true;\n```\n  ";
 const workerBindings = {
   chat: { workerId: "worker-chat", model: "chat-model" },
   direct: { workerId: "worker-direct", model: "work-model" },
@@ -96,13 +96,13 @@ function createAcceptanceRun(
           }
           if (sql.includes("SELECT mode FROM work_requests"))
             return { mode: "stateless" } as T;
-          if (sql.includes("SELECT wr.workstream_id AS workstreamId")) {
+          if (sql.includes("SELECT wr.thread_id AS threadId")) {
             return {
-              workstreamId: "workstream-fixture",
+              threadId: "thread-fixture",
               requesterUserId: "user-fixture",
               workRequestStatus: "running",
               cancelRequestedAt: null,
-              projectId: "project-fixture",
+              spaceId: "space-fixture",
             } as T;
           }
           if (sql.includes("SELECT status, task_id FROM worker_assignments")) {
@@ -296,7 +296,7 @@ describe("Work v1 acceptance through the shared assignment dispatcher", () => {
         expect(assignment).toMatchObject({
           role: definition.steps[index]!.kind,
           requestedByUserId: "user-fixture",
-          projectId: "project-fixture",
+          spaceId: "space-fixture",
           workRequestId: "request-v8-acceptance",
           sessionPolicy: "durable_session",
           readOnly: definition.steps[index]!.readWritePolicy === "read_only",

@@ -11,10 +11,10 @@ export type CollaborationEventType =
 export async function publishCollaborationEvent(
   env: EventPublisherEnv,
   type: CollaborationEventType,
-  projectId: string,
+  spaceId: string,
   entityId: string,
   options: {
-    workstreamId?: string;
+    threadId?: string;
     recipientUserIds?: readonly string[];
     additionalRecipientUserIds?: readonly string[];
     mutations?: readonly D1PreparedStatement[];
@@ -23,23 +23,23 @@ export async function publishCollaborationEvent(
   const publisher = createEventPublisher(env);
   const payload = {
     entityId,
-    ...(options.workstreamId ? { workstreamId: options.workstreamId } : {}),
+    ...(options.threadId ? { threadId: options.threadId } : {}),
   };
   await publisher.publish({
     type,
-    projectId,
-    stream: { kind: "project", id: projectId },
-    workstreamId: options.workstreamId,
+    spaceId,
+    stream: { kind: "space", id: spaceId },
+    threadId: options.threadId,
     payload,
     recipientUserIds: options.recipientUserIds,
     mutations: options.mutations,
   });
-  // Invitees and removed members cannot subscribe to the Project stream.
+  // Invitees and removed members cannot subscribe to the Space stream.
   // Give them an ID-only invalidation on their own authorized, replayable stream.
   for (const userId of new Set(options.additionalRecipientUserIds ?? [])) {
     await publisher.publish({
       type,
-      projectId,
+      spaceId,
       stream: { kind: "user", id: userId },
       payload,
       recipientUserIds: [userId],

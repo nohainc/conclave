@@ -17,7 +17,7 @@ const forbidden = [
   ["StudioUsageReport", /\bStudioUsageReport\b/],
   ["StudioUsageSummary", /\bStudioUsageSummary\b/],
   ["StudioUsageRow", /\bStudioUsageRow\b/],
-  ["handleProjectUsage", /\bhandleProjectUsage\b/],
+  ["handleSpaceUsage", /\bhandleSpaceUsage\b/],
   ["handleWorkspaceUsage", /\bhandleWorkspaceUsage\b/],
   ["recordV5AssignmentUsage", /\brecordV5AssignmentUsage\b/],
   ["assertV5BudgetAvailable", /\bassertV5BudgetAvailable\b/],

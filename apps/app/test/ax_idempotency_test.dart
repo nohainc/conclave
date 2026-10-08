@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
-import 'package:conclave_app/src/features/projects/projects_pages.dart';
+import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'package:http/http.dart' as http;
 import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
@@ -30,7 +30,7 @@ class _Source extends AxFixtureDataSource {
       ];
   @override
   Future<String> createWorkRequest({
-    required String workstreamId,
+    required String threadId,
     required String workflowId,
     required String prompt,
     List<Map<String, dynamic>> attachments = const [],
@@ -46,7 +46,7 @@ class _Source extends AxFixtureDataSource {
   int validations = 0;
   @override
   Future<List<String>> validateWorkRequestEligibility({
-    required String workstreamId,
+    required String threadId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
     AxTurnExecutionSelection? executionSelection,
@@ -60,19 +60,19 @@ class _Source extends AxFixtureDataSource {
           {required String workRequestId}) async =>
       const AxWorkRequestStatus(status: 'completed');
   @override
-  Future<AxWorkstream> createWorkstream(
-      {required String projectId,
+  Future<AxThread> createThread(
+      {required String spaceId,
       required String name,
       String? idempotencyKey}) async {
     streamKeys.add(idempotencyKey);
     if (loseResponse) throw StateError('response lost');
-    return AxWorkstream.fromJson(
-        {'id': 'saved-stream', 'projectId': projectId, 'name': name});
+    return AxThread.fromJson(
+        {'id': 'saved-stream', 'spaceId': spaceId, 'name': name});
   }
 
   @override
   Future<AxDiscussionMessage> sendDiscussionMessage(
-      {required String workstreamId,
+      {required String threadId,
       required String text,
       List<String> references = const [],
       String? idempotencyKey}) async {
@@ -80,7 +80,7 @@ class _Source extends AxFixtureDataSource {
     if (loseResponse) throw StateError('response lost');
     return AxDiscussionMessage(
         id: 'saved-message',
-        workstreamId: workstreamId,
+        threadId: threadId,
         authorUserId: 'human',
         body: text,
         createdAt: 'now');
@@ -100,13 +100,13 @@ class _Client extends http.BaseClient {
             ? {
                 'message': {
                   'id': 'D',
-                  'workstreamId': 'W',
+                  'threadId': 'W',
                   'body': 'Hello',
                   'createdAt': 'now'
                 }
               }
             : {
-                'workstream': {'id': 'W', 'projectId': 'P', 'name': 'Stream'}
+                'thread': {'id': 'W', 'spaceId': 'P', 'name': 'Stream'}
               };
     return http.StreamedResponse(
         Stream.value(utf8.encode(jsonEncode(body))), 201);
@@ -123,17 +123,13 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-            body: WorkstreamPage(
+            body: ThreadPage(
       initialTab: 1,
-      project: const AxProject(
-          id: 'P',
-          name: 'Project',
-          branch: '',
-          lastActivity: '',
-          role: 'owner'),
-      workstream: const AxWorkstream(
+      space: const AxSpace(
+          id: 'P', name: 'Space', branch: '', lastActivity: '', role: 'owner'),
+      thread: const AxThread(
           id: 'W',
-          projectId: 'P',
+          spaceId: 'P',
           name: 'Stream',
           lead: '',
           status: 'active',
@@ -143,11 +139,11 @@ void main() {
       dataSource: source,
       workHistoryCache: cache,
       currentUserId: 'human',
-      onBackToProject: () {},
+      onBackToSpace: () {},
       onArchive: () {},
       onRunWork: (prompt, workflow, inputs, key, selection) =>
           source.createWorkRequest(
-              workstreamId: 'W',
+              threadId: 'W',
               workflowId: workflow,
               prompt: prompt,
               attachments: inputs,
@@ -216,19 +212,19 @@ void main() {
     final client = _Client();
     final source = AxApiClient(baseUrl: 'https://cloud.test', client: client);
     const key = 'explicit-operation-000001';
-    await source.createWorkstream(
-        projectId: 'P', name: 'Stream', idempotencyKey: key);
+    await source.createThread(
+        spaceId: 'P', name: 'Stream', idempotencyKey: key);
     await source.sendDiscussionMessage(
-        workstreamId: 'W', text: 'Hello', idempotencyKey: key);
+        threadId: 'W', text: 'Hello', idempotencyKey: key);
     await source.createWorkRequest(
-        workstreamId: 'W',
+        threadId: 'W',
         workflowId: 'direct',
         prompt: 'Work',
         idempotencyKey: key);
     expect(client.requests.every((r) => r.headers['Idempotency-Key'] == key),
         isTrue);
     await source.createWorkRequest(
-        workstreamId: 'W', workflowId: 'direct', prompt: 'Work');
+        threadId: 'W', workflowId: 'direct', prompt: 'Work');
     expect(client.requests.last.headers['Idempotency-Key'],
         matches(RegExp(r'^[a-f0-9]{64}$')));
   });
@@ -249,24 +245,24 @@ void main() {
     cache.clear();
   });
   test(
-      'Workstream creation retry retains key after loss and resets on session clear',
+      'Thread creation retry retains key after loss and resets on session clear',
       () async {
     final source = _Source();
     final store = AxStore(source);
     await expectLater(
-        store.collaboration.createWorkstream(projectId: 'P', name: 'Stream'),
+        store.collaboration.createThread(spaceId: 'P', name: 'Stream'),
         throwsStateError);
     source.loseResponse = false;
-    await store.collaboration.createWorkstream(projectId: 'P', name: 'Stream');
+    await store.collaboration.createThread(spaceId: 'P', name: 'Stream');
     expect(source.streamKeys[1], source.streamKeys[0]);
     source.loseResponse = true;
     await expectLater(
-        store.collaboration.createWorkstream(projectId: 'P', name: 'Other'),
+        store.collaboration.createThread(spaceId: 'P', name: 'Other'),
         throwsStateError);
     final failed = source.streamKeys.last;
     store.clearServerState();
     source.loseResponse = false;
-    await store.collaboration.createWorkstream(projectId: 'P', name: 'Other');
+    await store.collaboration.createThread(spaceId: 'P', name: 'Other');
     expect(source.streamKeys.last, isNot(failed));
     store.dispose();
   });

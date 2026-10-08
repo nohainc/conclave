@@ -111,7 +111,7 @@ describe("invitation domain", () => {
     it("accepts valid invitation parameters", () => {
       expect(() =>
         validateInvitationCreation({
-          projectId: "proj-1",
+          spaceId: "space-1",
           email: "ulikossnokia@gmail.com",
           role: "collaborator",
           invitedByUserId: "user-vitalii",
@@ -123,7 +123,7 @@ describe("invitation domain", () => {
     it("rejects invalid roles or missing fields", () => {
       expect(() =>
         validateInvitationCreation({
-          projectId: "",
+          spaceId: "",
           email: "valid@example.com",
           role: "collaborator",
           invitedByUserId: "u1",
@@ -132,7 +132,7 @@ describe("invitation domain", () => {
 
       expect(() =>
         validateInvitationCreation({
-          projectId: "proj-1",
+          spaceId: "space-1",
           email: "valid@example.com",
           role: "owner", // owner cannot be invited
           invitedByUserId: "u1",
@@ -141,7 +141,7 @@ describe("invitation domain", () => {
 
       expect(() =>
         validateInvitationCreation({
-          projectId: "proj-1",
+          spaceId: "space-1",
           email: "invalid-email",
           role: "collaborator",
           invitedByUserId: "u1",

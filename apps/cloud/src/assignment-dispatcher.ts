@@ -5,13 +5,13 @@ import {
   type AssignmentFailurePayload,
   type AssignmentCancelPayload,
 } from "@conclave/workspace-runtime-protocol";
-import type { WorkstreamBindingId } from "@conclave/core";
+import type { ThreadBindingId } from "@conclave/core";
 import {
   canonicalExecutionErrorCode,
   executionErrorMessage,
 } from "@conclave/protocol";
 import {
-  selectProjectExecutionTarget,
+  selectSpaceExecutionTarget,
   type ExecutionTarget,
 } from "./scheduler.js";
 import { recordExecutionWorkspaceAudit } from "./workspace-audit.js";
@@ -56,18 +56,18 @@ export interface TaskToDispatch {
   readonly sessionPolicy?: unknown;
   /** Opaque Conclave key used only for package-local session mapping. */
   readonly sessionKey?: unknown;
-  readonly projectId?: string;
+  readonly spaceId?: string;
   readonly requestedByUserId?: string;
   readonly model?: string;
   readonly reasoningEffort?: string;
   readonly requiresIndependentVerification?: boolean;
-  readonly workstreamId?: string;
+  readonly threadId?: string;
   readonly workRequestId?: string;
-  readonly workBindingId?: WorkstreamBindingId;
+  readonly workBindingId?: ThreadBindingId;
   readonly leaseId?: string;
   readonly fencingToken?: number;
-  readonly executionClass?: "stateless_read" | "stateful_workstream";
-  /** Restricts Worker/provider access while retaining a Workstream lease. */
+  readonly executionClass?: "stateless_read" | "stateful_thread";
+  /** Restricts Worker/provider access while retaining a Thread lease. */
   readonly readOnly?: boolean;
 }
 
@@ -105,10 +105,10 @@ async function dispatchWorkspaceWorkerAssignment(
   params: DispatchAssignmentParams,
 ): Promise<DispatchAssignmentResult> {
   const { runId, taskId, task } = params;
-  const target = await selectProjectExecutionTarget(
+  const target = await selectSpaceExecutionTarget(
     env.CONCLAVE_DB,
     {
-      projectId: task.projectId!,
+      spaceId: task.spaceId!,
       requesterUserId: task.requestedByUserId!,
       role: task.role,
       capabilities: task.capabilities ?? [],
@@ -119,7 +119,7 @@ async function dispatchWorkspaceWorkerAssignment(
       reasoningEffort: task.reasoningEffort,
       executionClass: task.executionClass,
       readOnly: task.readOnly,
-      workstreamId: task.workstreamId,
+      threadId: task.threadId,
       workRequestId: task.workRequestId,
       workBindingId: task.workBindingId,
     },
@@ -209,7 +209,7 @@ async function dispatchWorkspaceWorkerAssignment(
   };
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO worker_assignments
-       (id, project_id, execution_workspace_id, workspace_project_grant_id,
+       (id, space_id, execution_workspace_id, workspace_space_grant_id,
         run_id, task_id, attempt_id, requested_by_user_id, runtime_identity_id,
         worker_type_id, workspace_worker_id, engine_version,
         model, config_json, effective_permissions_json,
@@ -220,9 +220,9 @@ async function dispatchWorkspaceWorkerAssignment(
   )
     .bind(
       assignmentId,
-      target.projectId,
+      target.spaceId,
       target.workspaceId,
-      target.workspaceProjectGrantId,
+      target.workspaceSpaceGrantId,
       runId,
       taskId,
       attemptId,
@@ -281,9 +281,9 @@ async function dispatchWorkspaceWorkerAssignment(
       targetType: "worker_assignment",
       targetId: assignmentId,
       details: {
-        projectId: target.projectId,
+        spaceId: target.spaceId,
         workerId: target.workerId,
-        grantId: target.workspaceProjectGrantId,
+        grantId: target.workspaceSpaceGrantId,
       },
     });
   }
@@ -298,7 +298,7 @@ async function dispatchWorkspaceWorkerAssignment(
       objective: task.objective,
       role: task.role,
       contextArtifactIds: task.contextArtifactIds ?? [],
-      workstreamId: target.workstreamId ?? task.workstreamId,
+      threadId: target.threadId ?? task.threadId,
       workRequestId: target.workRequestId ?? task.workRequestId,
       leaseId: target.leaseId ?? task.leaseId,
       fencingToken: target.fencingToken ?? task.fencingToken,
@@ -306,7 +306,7 @@ async function dispatchWorkspaceWorkerAssignment(
       readOnly: target.readOnly,
       executionWorkspaceId: target.workspaceId,
       workspaceRuntimeId: target.workspaceRuntimeIdentityId,
-      projectId: target.projectId,
+      spaceId: target.spaceId,
       runId,
       taskId,
       attemptId,
@@ -464,9 +464,9 @@ export async function dispatchTaskAssignment(
     sessionPolicy,
     ...(sessionKey !== undefined ? { sessionKey } : {}),
   };
-  // Every assignment carries the authenticated Project requester so Workspace
+  // Every assignment carries the authenticated Space requester so Workspace
   // selection, grants, and the immutable assignment target are evaluated.
-  if (!normalizedTask.projectId || !normalizedTask.requestedByUserId) {
+  if (!normalizedTask.spaceId || !normalizedTask.requestedByUserId) {
     return {
       assignmentId: "",
       attemptId: "",
@@ -475,7 +475,7 @@ export async function dispatchTaskAssignment(
       workerCatalogId: "",
       status: "failed",
       accepted: false,
-      error: "Project execution context is required for assignment dispatch",
+      error: "Space execution context is required for assignment dispatch",
     };
   }
   return dispatchWorkspaceWorkerAssignment(env, {

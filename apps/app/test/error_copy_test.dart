@@ -10,9 +10,9 @@ import 'ax_fixture_data.dart';
 class _FailedReadModels extends AxFixtureDataSource {
   @override
   Future<AxSnapshot> loadBootstrapState(
-          {String? projectId, String? workspaceId}) async =>
+          {String? spaceId, String? workspaceId}) async =>
       throw const AxApiException(
-          'Read model failed for /api/projects/test/workstreams (400): ambiguous column name: updated_at');
+          'Read model failed for /api/spaces/test/threads (400): ambiguous column name: updated_at');
 }
 
 void main() {
@@ -37,7 +37,7 @@ void main() {
     await tester.tap(find.text('Copy error'));
     await tester.pump();
     expect(copied, contains('ambiguous column name: updated_at'));
-    expect(copied, contains('/api/projects/test/workstreams (400)'));
+    expect(copied, contains('/api/spaces/test/threads (400)'));
     expect(find.text('Error copied'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

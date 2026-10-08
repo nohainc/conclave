@@ -18,13 +18,13 @@ export interface DomainEventInput {
   readonly type: string;
   readonly workspaceId?: string;
   readonly stream?: RealtimeStream;
-  readonly workstreamId?: string;
+  readonly threadId?: string;
   /** Trusted route audience captured before a destructive mutation; never a wire field. */
   readonly recipientUserIds?: readonly string[];
   readonly additionalRecipientUserIds?: readonly string[];
   /** Optional domain writes committed in the same transaction as the signal. */
   readonly mutations?: readonly D1PreparedStatement[];
-  readonly projectId?: string;
+  readonly spaceId?: string;
   readonly runId?: string;
   readonly taskId?: string;
   readonly attemptId?: string;
@@ -64,8 +64,8 @@ function eventFromRow(row: Record<string, unknown>): RealtimeEventEnvelope {
           stream: { kind: row.stream_kind, id: row.stream_id },
         }
       : {}),
-    ...(row.workstream_id ? { workstreamId: String(row.workstream_id) } : {}),
-    ...(row.project_id ? { projectId: String(row.project_id) } : {}),
+    ...(row.thread_id ? { threadId: String(row.thread_id) } : {}),
+    ...(row.space_id ? { spaceId: String(row.space_id) } : {}),
     ...(row.run_id ? { runId: String(row.run_id) } : {}),
     ...(row.task_id ? { taskId: String(row.task_id) } : {}),
     ...(row.attempt_id ? { attemptId: String(row.attempt_id) } : {}),
@@ -109,8 +109,8 @@ export class CloudEventPublisher implements EventPublisher {
         timestamp: occurredAt,
         ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
         ...(input.stream ? { stream: input.stream } : {}),
-        ...(input.workstreamId ? { workstreamId: input.workstreamId } : {}),
-        ...(input.projectId ? { projectId: input.projectId } : {}),
+        ...(input.threadId ? { threadId: input.threadId } : {}),
+        ...(input.spaceId ? { spaceId: input.spaceId } : {}),
         ...(input.runId ? { runId: input.runId } : {}),
         ...(input.taskId ? { taskId: input.taskId } : {}),
         ...(input.attemptId ? { attemptId: input.attemptId } : {}),
@@ -148,8 +148,8 @@ export class CloudEventPublisher implements EventPublisher {
       timestamp: input.occurredAt,
       ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
       ...(input.stream ? { stream: input.stream } : {}),
-      ...(input.workstreamId ? { workstreamId: input.workstreamId } : {}),
-      ...(input.projectId ? { projectId: input.projectId } : {}),
+      ...(input.threadId ? { threadId: input.threadId } : {}),
+      ...(input.spaceId ? { spaceId: input.spaceId } : {}),
       ...(input.runId ? { runId: input.runId } : {}),
       ...(input.taskId ? { taskId: input.taskId } : {}),
       ...(input.attemptId ? { attemptId: input.attemptId } : {}),
@@ -184,13 +184,18 @@ export class CloudEventPublisher implements EventPublisher {
                AND (event_id = ?3 OR idempotency_key = ?4))
          RETURNING next_sequence - 1 AS sequence`,
         )
-        .bind(stream.kind, stream.id, input.eventId, input.idempotencyKey),
+        .bind(
+          stream.kind,
+          stream.id,
+          input.eventId,
+          input.idempotencyKey ?? null,
+        ),
       db
         .prepare(
           `INSERT INTO realtime_events
-         (event_id, workspace_id, project_id, run_id, task_id, attempt_id,
+         (event_id, workspace_id, space_id, run_id, task_id, attempt_id,
           assignment_id, workspace_runtime_id, sequence, event_type, payload_json,
-          idempotency_key, occurred_at, stream_kind, stream_id, workstream_id)
+          idempotency_key, occurred_at, stream_kind, stream_id, thread_id)
          SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, cursor.next_sequence - 1,
                 ?9, ?10, ?11, ?12, ?13, ?14, ?15
          FROM realtime_event_cursors AS cursor
@@ -203,7 +208,7 @@ export class CloudEventPublisher implements EventPublisher {
         .bind(
           input.eventId,
           input.workspaceId ?? null,
-          input.projectId ?? null,
+          input.spaceId ?? null,
           input.runId ?? null,
           input.taskId ?? null,
           input.attemptId ?? null,
@@ -211,11 +216,11 @@ export class CloudEventPublisher implements EventPublisher {
           input.workspaceRuntimeId ?? null,
           input.type,
           json(input.payload),
-          input.idempotencyKey,
+          input.idempotencyKey ?? null,
           input.occurredAt,
           stream.kind,
           stream.id,
-          input.workstreamId ?? null,
+          input.threadId ?? null,
         ),
     ]);
 
@@ -250,12 +255,12 @@ export class CloudEventPublisher implements EventPublisher {
       ? { results: recipientUserIds.map((user_id) => ({ user_id })) }
       : stream.kind === "user"
         ? { results: [{ user_id: stream.id }] }
-        : event.projectId
+        : event.spaceId
           ? await this.env.CONCLAVE_DB.prepare(
-              `SELECT user_id FROM project_memberships
-           WHERE project_id = ?1`,
+              `SELECT user_id FROM space_memberships
+           WHERE space_id = ?1`,
             )
-              .bind(event.projectId)
+              .bind(event.spaceId)
               .all<{ user_id: string }>()
           : await this.env.CONCLAVE_DB.prepare(
               `SELECT owner_user_id AS user_id FROM execution_workspaces

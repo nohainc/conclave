@@ -5,76 +5,74 @@ import 'package:conclave_app/src/ax/ax_stores.dart';
 import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
 import 'ax_fixture_data.dart';
 
-AxProject project(String id, String name) =>
-    AxProject.fromJson({'id': id, 'name': name});
-AxWorkstream stream(String id, String name) =>
-    AxWorkstream.fromJson({'id': id, 'projectId': 'P', 'name': name});
+AxSpace space(String id, String name) =>
+    AxSpace.fromJson({'id': id, 'name': name});
+AxThread stream(String id, String name) =>
+    AxThread.fromJson({'id': id, 'spaceId': 'P', 'name': name});
 
 class CollaborationSource extends AxFixtureDataSource {
-  final creates = <Completer<AxProject>>[];
-  final projectEdits = <Completer<AxProject>>[];
-  final streamCreates = <Completer<AxWorkstream>>[];
-  final streamEdits = <Completer<AxWorkstream>>[];
+  final creates = <Completer<AxSpace>>[];
+  final spaceEdits = <Completer<AxSpace>>[];
+  final streamCreates = <Completer<AxThread>>[];
+  final streamEdits = <Completer<AxThread>>[];
   final deletes = <Completer<void>>[];
   final acceptInvites = <Completer<void>>[];
   final declineInvites = <Completer<void>>[];
   @override
-  Future<void> acceptProjectInvitation({required String invitationId}) {
+  Future<void> acceptSpaceInvitation({required String invitationId}) {
     final response = Completer<void>();
     acceptInvites.add(response);
     return response.future;
   }
 
   @override
-  Future<void> declineProjectInvitation({required String invitationId}) {
+  Future<void> declineSpaceInvitation({required String invitationId}) {
     final response = Completer<void>();
     declineInvites.add(response);
     return response.future;
   }
 
   @override
-  Future<AxProject> createProject(
+  Future<AxSpace> createSpace(
       {required String name, String? description, String? instructions}) {
-    final response = Completer<AxProject>();
+    final response = Completer<AxSpace>();
     creates.add(response);
     return response.future;
   }
 
   @override
-  Future<AxProject> updateProject(
-      {required String projectId,
+  Future<AxSpace> updateSpace(
+      {required String spaceId,
       String? name,
       String? description,
       String? instructions,
       Map<String, dynamic>? settings}) {
-    final response = Completer<AxProject>();
-    projectEdits.add(response);
+    final response = Completer<AxSpace>();
+    spaceEdits.add(response);
     return response.future;
   }
 
   @override
-  Future<AxWorkstream> createWorkstream(
-      {required String projectId,
-      required String name,
-      String? idempotencyKey}) {
-    final response = Completer<AxWorkstream>();
+  Future<AxThread> createThread(
+      {required String spaceId, required String name, String? idempotencyKey}) {
+    final response = Completer<AxThread>();
     streamCreates.add(response);
     return response.future;
   }
 
   @override
-  Future<AxWorkstream> updateWorkstream(
-      {required String workstreamId,
+  Future<AxThread> updateThread(
+      {required String threadId,
       String? name,
       String? status,
       Map<String, dynamic>? workConfig}) {
-    final response = Completer<AxWorkstream>();
+    final response = Completer<AxThread>();
     streamEdits.add(response);
     return response.future;
   }
 
   @override
-  Future<void> deleteWorkstream({required String workstreamId}) {
+  Future<void> deleteThread({required String threadId}) {
     final response = Completer<void>();
     deletes.add(response);
     return response.future;
@@ -87,202 +85,198 @@ void main() {
   setUp(() {
     source = CollaborationSource();
     store = AxStore(source);
-    store.projects.replace([project('P', 'Original'), project('Q', 'Other')]);
-    store.syncEngine.update(
-        store.projectDetails.query('P'), (_) => store.projects.items.first);
-    store.syncEngine.update(store.projectWorkstreams.query('P'),
+    store.spaces.replace([space('P', 'Original'), space('Q', 'Other')]);
+    store.syncEngine
+        .update(store.spaceDetails.query('P'), (_) => store.spaces.items.first);
+    store.syncEngine.update(store.spaceThreads.query('P'),
         (_) => [stream('A', 'Alpha'), stream('B', 'Beta')]);
   });
 
   test(
-      'Project create publishes immediately, replaces temporary ID, and records details',
+      'Space create publishes immediately, replaces temporary ID, and records details',
       () async {
-    final write = store.collaboration.createProject(name: 'New');
-    final temporary = store.projects.items.last;
+    final write = store.collaboration.createSpace(name: 'New');
+    final temporary = store.spaces.items.last;
     expect(temporary.name, 'New');
-    expect(temporary.id, startsWith('local-project-'));
-    source.creates.single.complete(project('new', 'Normalized'));
+    expect(temporary.id, startsWith('local-space-'));
+    source.creates.single.complete(space('new', 'Normalized'));
     expect((await write).id, 'new');
-    expect(store.projects.items.map((p) => p.id), ['P', 'Q', 'new']);
-    expect(store.projectDetails.peek('new')?.name, 'Normalized');
+    expect(store.spaces.items.map((p) => p.id), ['P', 'Q', 'new']);
+    expect(store.spaceDetails.peek('new')?.name, 'Normalized');
   });
 
-  test('one failed Project create cannot remove another confirmed create',
+  test('one failed Space create cannot remove another confirmed create',
       () async {
-    final first = store.collaboration.createProject(name: 'Failed');
+    final first = store.collaboration.createSpace(name: 'Failed');
     final check = expectLater(first, throwsStateError);
-    final second = store.collaboration.createProject(name: 'Saved');
-    source.creates[1].complete(project('new', 'Saved'));
+    final second = store.collaboration.createSpace(name: 'Saved');
+    source.creates[1].complete(space('new', 'Saved'));
     await second;
     source.creates[0].completeError(StateError('denied'));
     await check;
-    expect(store.projects.items.map((p) => p.name),
-        ['Original', 'Other', 'Saved']);
+    expect(
+        store.spaces.items.map((p) => p.name), ['Original', 'Other', 'Saved']);
   });
 
   test(
-      'Project edit updates list and detail optimistically and reconciles server fields',
+      'Space edit updates list and detail optimistically and reconciles server fields',
       () async {
-    final write = store.collaboration.editProject(store.projects.items.first,
+    final write = store.collaboration.editSpace(store.spaces.items.first,
         name: 'Optimistic', instructions: 'New instructions');
-    expect(store.projects.items.first.name, 'Optimistic');
-    expect(store.projectDetails.peek('P')?.instructions, 'New instructions');
-    source.projectEdits.single.complete(project('P', 'Normalized')
+    expect(store.spaces.items.first.name, 'Optimistic');
+    expect(store.spaceDetails.peek('P')?.instructions, 'New instructions');
+    source.spaceEdits.single.complete(space('P', 'Normalized')
         .copyWith(instructions: 'Normalized instructions'));
     await write;
-    expect(store.projects.items.first.name, 'Normalized');
-    expect(store.projectDetails.peek('P')?.instructions,
-        'Normalized instructions');
+    expect(store.spaces.items.first.name, 'Normalized');
+    expect(
+        store.spaceDetails.peek('P')?.instructions, 'Normalized instructions');
   });
 
   test(
-      'failed Project edit restores latest realtime base and preserves other Project edits',
+      'failed Space edit restores latest realtime base and preserves other Space edits',
       () async {
-    final original = store.projects.items.first;
-    final write = store.collaboration.editProject(original, name: 'Pending');
+    final original = store.spaces.items.first;
+    final write = store.collaboration.editSpace(original, name: 'Pending');
     final check = expectLater(write, throwsStateError);
     final latest =
         original.copyWith(name: 'Remote', description: 'Remote description');
-    store.syncEngine.update(store.projectDetails.query('P'), (_) => latest);
-    store.projects.replace([latest, project('Q', 'Remote Q')]);
-    expect(store.projectDetails.peek('P')?.name, 'Pending');
-    expect(store.projectDetails.peek('P')?.description, 'Remote description');
-    expect(store.projects.items.first.description, 'Remote description');
-    source.projectEdits.single.completeError(StateError('denied'));
+    store.syncEngine.update(store.spaceDetails.query('P'), (_) => latest);
+    store.spaces.replace([latest, space('Q', 'Remote Q')]);
+    expect(store.spaceDetails.peek('P')?.name, 'Pending');
+    expect(store.spaceDetails.peek('P')?.description, 'Remote description');
+    expect(store.spaces.items.first.description, 'Remote description');
+    source.spaceEdits.single.completeError(StateError('denied'));
     await check;
-    expect(store.projectDetails.peek('P')?.name, 'Remote');
-    expect(store.projects.items.map((p) => p.name), ['Remote', 'Remote Q']);
+    expect(store.spaceDetails.peek('P')?.name, 'Remote');
+    expect(store.spaces.items.map((p) => p.name), ['Remote', 'Remote Q']);
   });
 
-  test('second write to the same Project is rejected before issuing HTTP',
+  test('second write to the same Space is rejected before issuing HTTP',
       () async {
-    final original = store.projects.items.first;
-    final first = store.collaboration.editProject(original, name: 'First');
+    final original = store.spaces.items.first;
+    final first = store.collaboration.editSpace(original, name: 'First');
     await expectLater(
-        store.collaboration.editProject(original, name: 'Duplicate'),
+        store.collaboration.editSpace(original, name: 'Duplicate'),
         throwsStateError);
-    expect(source.projectEdits.length, 1);
-    source.projectEdits.single.complete(original.copyWith(name: 'First'));
+    expect(source.spaceEdits.length, 1);
+    source.spaceEdits.single.complete(original.copyWith(name: 'First'));
     await first;
   });
 
-  test(
-      'Workstream create failure retains another create and collection ordering',
+  test('Thread create failure retains another create and collection ordering',
       () async {
     final first =
-        store.collaboration.createWorkstream(projectId: 'P', name: 'Failed');
+        store.collaboration.createThread(spaceId: 'P', name: 'Failed');
     final check = expectLater(first, throwsStateError);
     final second =
-        store.collaboration.createWorkstream(projectId: 'P', name: 'Saved');
-    expect(store.projectWorkstreams.peek('P').map((w) => w.name),
+        store.collaboration.createThread(spaceId: 'P', name: 'Saved');
+    expect(store.spaceThreads.peek('P').map((w) => w.name),
         ['Alpha', 'Beta', 'Failed', 'Saved']);
     source.streamCreates[1].complete(stream('C', 'Saved'));
     await second;
     source.streamCreates[0].completeError(StateError('denied'));
     await check;
-    expect(
-        store.projectWorkstreams.peek('P').map((w) => w.id), ['A', 'B', 'C']);
+    expect(store.spaceThreads.peek('P').map((w) => w.id), ['A', 'B', 'C']);
   });
 
-  test('Workstream edits preserve position and unrelated realtime entities',
+  test('Thread edits preserve position and unrelated realtime entities',
       () async {
-    final original = store.projectWorkstreams.peek('P').first;
-    final write = store.collaboration.editWorkstream(original, name: 'Pending');
+    final original = store.spaceThreads.peek('P').first;
+    final write = store.collaboration.editThread(original, name: 'Pending');
     store.syncEngine.update(
-        store.projectWorkstreams.query('P'),
+        store.spaceThreads.query('P'),
         (_) => [
               original,
               stream('B', 'Remote Beta'),
               stream('C', 'Remote Gamma')
             ]);
-    expect(store.projectWorkstreams.peek('P').map((w) => w.name),
+    expect(store.spaceThreads.peek('P').map((w) => w.name),
         ['Pending', 'Remote Beta', 'Remote Gamma']);
     source.streamEdits.single.complete(original.copyWith(name: 'Normalized'));
     await write;
-    expect(store.projectWorkstreams.peek('P').map((w) => w.name),
+    expect(store.spaceThreads.peek('P').map((w) => w.name),
         ['Normalized', 'Remote Beta', 'Remote Gamma']);
   });
 
-  test(
-      'failed Workstream delete restores only the removed entity from latest base',
+  test('failed Thread delete restores only the removed entity from latest base',
       () async {
-    final original = store.projectWorkstreams.peek('P').first;
-    final write = store.collaboration.deleteWorkstream(original);
+    final original = store.spaceThreads.peek('P').first;
+    final write = store.collaboration.deleteThread(original);
     final check = expectLater(write, throwsStateError);
-    expect(store.projectWorkstreams.peek('P').map((w) => w.id), ['B']);
-    store.syncEngine.update(store.projectWorkstreams.query('P'),
+    expect(store.spaceThreads.peek('P').map((w) => w.id), ['B']);
+    store.syncEngine.update(store.spaceThreads.query('P'),
         (_) => [original, stream('B', 'Remote Beta')]);
     source.deletes.single.completeError(StateError('denied'));
     await check;
-    expect(store.projectWorkstreams.peek('P').map((w) => w.name),
+    expect(store.spaceThreads.peek('P').map((w) => w.name),
         ['Alpha', 'Remote Beta']);
   });
 
-  test('confirmed Workstream delete removes its dependent queries', () async {
-    final key = AxQueryKey(['workstream', 'A', 'discussion']);
+  test('confirmed Thread delete removes its dependent queries', () async {
+    final key = AxQueryKey(['thread', 'A', 'discussion']);
     final dependent = AxQuery<int>(key: key, load: () async => 1);
     store.syncEngine.update(dependent, (_) => 1);
-    final write = store.collaboration
-        .deleteWorkstream(store.projectWorkstreams.peek('P').first);
+    final write =
+        store.collaboration.deleteThread(store.spaceThreads.peek('P').first);
     source.deletes.single.complete();
     await write;
     expect(store.syncEngine.peek(dependent).hasData, isFalse);
-    expect(store.projectWorkstreams.peek('P').map((w) => w.id), ['B']);
+    expect(store.spaceThreads.peek('P').map((w) => w.id), ['B']);
   });
 
   test(
-      'wrong response identity rolls back rather than corrupting another Project',
+      'wrong response identity rolls back rather than corrupting another Space',
       () async {
-    final write = store.collaboration.editWorkstream(
-        store.projectWorkstreams.peek('P').first,
-        name: 'Pending');
+    final write = store.collaboration
+        .editThread(store.spaceThreads.peek('P').first, name: 'Pending');
     final check = expectLater(write, throwsA(isA<Exception>()));
     source.streamEdits.single.complete(
-        AxWorkstream.fromJson({'id': 'A', 'projectId': 'Q', 'name': 'Wrong'}));
+        AxThread.fromJson({'id': 'A', 'spaceId': 'Q', 'name': 'Wrong'}));
     await check;
-    expect(store.projectWorkstreams.peek('P').first.name, 'Alpha');
+    expect(store.spaceThreads.peek('P').first.name, 'Alpha');
   });
 
   test(
-      'session clear fences Project and Workstream writes and releases temporary rows',
+      'session clear fences Space and Thread writes and releases temporary rows',
       () async {
-    final projectWrite = store.collaboration.createProject(name: 'Pending');
+    final spaceWrite = store.collaboration.createSpace(name: 'Pending');
     final streamWrite =
-        store.collaboration.createWorkstream(projectId: 'P', name: 'Pending');
+        store.collaboration.createThread(spaceId: 'P', name: 'Pending');
     final checks = Future.wait([
-      expectLater(projectWrite, throwsA(isA<AxMutationSuperseded>())),
+      expectLater(spaceWrite, throwsA(isA<AxMutationSuperseded>())),
       expectLater(streamWrite, throwsA(isA<AxMutationSuperseded>())),
     ]);
     store.clearServerState();
-    source.creates.single.complete(project('late', 'Late'));
+    source.creates.single.complete(space('late', 'Late'));
     source.streamCreates.single.complete(stream('late', 'Late'));
     await checks;
-    expect(store.projects.items, isEmpty);
-    expect(store.projectWorkstreams.peek('P'), isEmpty);
-    expect(store.projectDetails.peek('late'), isNull);
+    expect(store.spaces.items, isEmpty);
+    expect(store.spaceThreads.peek('P'), isEmpty);
+    expect(store.spaceDetails.peek('late'), isNull);
   });
 
   test(
-      'Project removal cancels the remaining list overlay without resurrecting a deleted Project',
+      'Space removal cancels the remaining list overlay without resurrecting a deleted Space',
       () async {
     final write = store.collaboration
-        .editProject(store.projects.items.first, name: 'Pending');
+        .editSpace(store.spaces.items.first, name: 'Pending');
     final check = expectLater(write, throwsA(isA<AxMutationSuperseded>()));
-    store.syncEngine.remove(store.projectDetails.query('P').key);
-    store.projects.replace([project('Q', 'Other')]);
-    expect(store.projects.items.map((p) => p.id), ['Q']);
-    source.projectEdits.single.complete(project('P', 'Late'));
+    store.syncEngine.remove(store.spaceDetails.query('P').key);
+    store.spaces.replace([space('Q', 'Other')]);
+    expect(store.spaces.items.map((p) => p.id), ['Q']);
+    source.spaceEdits.single.complete(space('P', 'Late'));
     await check;
-    expect(store.projects.items.map((p) => p.id), ['Q']);
+    expect(store.spaces.items.map((p) => p.id), ['Q']);
   });
 
   test(
-      'acceptInvitation removes invitation immediately, adds project optimistically, and confirms on server completion',
+      'acceptInvitation removes invitation immediately, adds space optimistically, and confirms on server completion',
       () async {
-    final invite = AxProjectInvitation(
+    final invite = AxSpaceInvitation(
       id: 'inv-1',
-      projectId: 'proj-new',
-      projectName: 'Alpha Project',
+      spaceId: 'proj-new',
+      spaceName: 'Alpha Space',
       email: 'user@example.com',
       role: 'member',
       status: 'pending',
@@ -291,30 +285,30 @@ void main() {
     );
     store.invitations.replace([invite]);
     expect(store.invitations.items.map((i) => i.id), ['inv-1']);
-    expect(store.projects.items.map((p) => p.id), ['P', 'Q']);
+    expect(store.spaces.items.map((p) => p.id), ['P', 'Q']);
 
     final write = store.collaboration.acceptInvitation(invite);
 
     // Optimistic state
     expect(store.invitations.items, isEmpty);
-    expect(store.projects.items.map((p) => p.id), ['P', 'Q', 'proj-new']);
-    expect(store.projects.items.last.name, 'Alpha Project');
+    expect(store.spaces.items.map((p) => p.id), ['P', 'Q', 'proj-new']);
+    expect(store.spaces.items.last.name, 'Alpha Space');
 
     // Complete server write
     source.acceptInvites.single.complete();
     await write;
 
     expect(store.invitations.items, isEmpty);
-    expect(store.projects.items.map((p) => p.id), ['P', 'Q', 'proj-new']);
+    expect(store.spaces.items.map((p) => p.id), ['P', 'Q', 'proj-new']);
   });
 
   test(
-      'failed acceptInvitation rolls back removed invitation and optimistic project',
+      'failed acceptInvitation rolls back removed invitation and optimistic space',
       () async {
-    final invite = AxProjectInvitation(
+    final invite = AxSpaceInvitation(
       id: 'inv-1',
-      projectId: 'proj-new',
-      projectName: 'Alpha Project',
+      spaceId: 'proj-new',
+      spaceName: 'Alpha Space',
       email: 'user@example.com',
       role: 'member',
       status: 'pending',
@@ -327,23 +321,23 @@ void main() {
     final check = expectLater(write, throwsA(isA<StateError>()));
 
     expect(store.invitations.items, isEmpty);
-    expect(store.projects.items.map((p) => p.id), ['P', 'Q', 'proj-new']);
+    expect(store.spaces.items.map((p) => p.id), ['P', 'Q', 'proj-new']);
 
     source.acceptInvites.single.completeError(StateError('expired'));
     await check;
 
     // Rolled back
     expect(store.invitations.items.map((i) => i.id), ['inv-1']);
-    expect(store.projects.items.map((p) => p.id), ['P', 'Q']);
+    expect(store.spaces.items.map((p) => p.id), ['P', 'Q']);
   });
 
   test(
       'declineInvitation removes invitation immediately and confirms on server completion',
       () async {
-    final invite = AxProjectInvitation(
+    final invite = AxSpaceInvitation(
       id: 'inv-1',
-      projectId: 'proj-new',
-      projectName: 'Alpha Project',
+      spaceId: 'proj-new',
+      spaceName: 'Alpha Space',
       email: 'user@example.com',
       role: 'member',
       status: 'pending',
@@ -362,10 +356,10 @@ void main() {
   });
 
   test('failed declineInvitation rolls back removed invitation', () async {
-    final invite = AxProjectInvitation(
+    final invite = AxSpaceInvitation(
       id: 'inv-1',
-      projectId: 'proj-new',
-      projectName: 'Alpha Project',
+      spaceId: 'proj-new',
+      spaceName: 'Alpha Space',
       email: 'user@example.com',
       role: 'member',
       status: 'pending',

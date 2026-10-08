@@ -19,7 +19,7 @@ void main() {
     engine = AxSyncEngine(clock: () => now);
     requests = [];
     query = AxQuery(
-        key: AxQueryKey(['project', 'P1']),
+        key: AxQueryKey(['space', 'P1']),
         load: () {
           final request = Completer<int>();
           requests.add(request);
@@ -36,17 +36,17 @@ void main() {
     var calls = 0;
     final client = MockClient((request) async {
       calls++;
-      expect(request.url.path, '/projects');
-      return http.Response(jsonEncode({'projects': []}), 200);
+      expect(request.url.path, '/spaces');
+      return http.Response(jsonEncode({'spaces': []}), 200);
     });
     addTearDown(client.close);
     final source = AxApiClient(baseUrl: 'https://example.test', client: client);
-    final projects = AxQuery<List<AxProject>>(
-        key: AxQueryKey(['projects']), load: source.loadProjects);
-    await engine.ensure(projects);
-    await engine.ensure(projects);
+    final spaces = AxQuery<List<AxSpace>>(
+        key: AxQueryKey(['spaces']), load: source.loadSpaces);
+    await engine.ensure(spaces);
+    await engine.ensure(spaces);
     expect(calls, 1);
-    expect(engine.peek(projects).hasData, isTrue);
+    expect(engine.peek(spaces).hasData, isTrue);
   });
   test('synchronous loader failure clears fetching and reports error',
       () async {
@@ -87,13 +87,13 @@ void main() {
     expect(engine.peek(query).data, 3);
   });
   test('structural immutable keys and prefixes', () {
-    final parts = ['project', 'a:b'];
+    final parts = ['space', 'a:b'];
     final key = AxQueryKey(parts);
     parts.clear();
-    expect(key, AxQueryKey(['project', 'a:b']));
-    expect(key.hashCode, AxQueryKey(['project', 'a:b']).hashCode);
-    expect(key, isNot(AxQueryKey(['project:a', 'b'])));
-    expect(key.startsWith(AxQueryKey(['project'])), isTrue);
+    expect(key, AxQueryKey(['space', 'a:b']));
+    expect(key.hashCode, AxQueryKey(['space', 'a:b']).hashCode);
+    expect(key, isNot(AxQueryKey(['space:a', 'b'])));
+    expect(key.startsWith(AxQueryKey(['space'])), isTrue);
     expect(() => key.parts.add('x'), throwsUnsupportedError);
     expect(() => AxQueryKey([]), throwsArgumentError);
     expect(() => AxQueryKey(['']), throwsArgumentError);
@@ -242,12 +242,12 @@ void main() {
   test('targeted realtime and prefix invalidation', () async {
     await seed();
     final other =
-        AxQuery<int>(key: AxQueryKey(['project', 'P2']), load: () async => 2);
+        AxQuery<int>(key: AxQueryKey(['space', 'P2']), load: () async => 2);
     await engine.ensure(other);
     AxRealtimeSync(engine).invalidate([query.key, query.key]);
     expect(engine.peek(query).isStale, isTrue);
     expect(engine.peek(other).isStale, isFalse);
-    engine.invalidate(AxQueryKey(['project']), prefix: true);
+    engine.invalidate(AxQueryKey(['space']), prefix: true);
     expect(engine.peek(other).isStale, isTrue);
   });
   for (final clear in [false, true]) {

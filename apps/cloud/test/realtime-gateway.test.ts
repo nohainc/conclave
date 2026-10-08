@@ -31,11 +31,11 @@ describe("realtime gateway contract", () => {
     expect(
       parseRealtimeClientMessage({
         type: "subscribe",
-        scope: { workspaceId: "workspace-1", projectId: "project-1" },
+        scope: { workspaceId: "workspace-1", spaceId: "space-1" },
       }),
     ).toEqual({
       type: "subscribe",
-      scope: { workspaceId: "workspace-1", projectId: "project-1" },
+      scope: { workspaceId: "workspace-1", spaceId: "space-1" },
     });
     expect(() =>
       parseRealtimeClientMessage({ type: "subscribe", scope: {} }),
@@ -70,11 +70,11 @@ describe("realtime gateway contract", () => {
           version: "1.0",
           timestamp: "2026-09-23T00:00:00.000Z",
           workspaceId: "workspace-1",
-          projectId: "project-1",
+          spaceId: "space-1",
           sequence: 1,
           payload: {},
         },
-        { workspaceId: "workspace-1", projectId: "project-1" },
+        { workspaceId: "workspace-1", spaceId: "space-1" },
       ),
     ).toBe(true);
     expect(
@@ -92,11 +92,11 @@ describe("realtime gateway contract", () => {
       ),
     ).toBe(false);
     expect(scopeKey({ workspaceId: "workspace-1" })).toBe(
-      "workspaceId=workspace-1&projectId=&runId=",
+      "workspaceId=workspace-1&spaceId=&runId=",
     );
   });
 
-  it("parses user, Project, and execution Workspace scopes", () => {
+  it("parses user, Space, and execution Workspace scopes", () => {
     expect(
       parseRealtimeClientMessage({
         type: "subscribe",
@@ -106,11 +106,11 @@ describe("realtime gateway contract", () => {
     expect(
       parseRealtimeClientMessage({
         type: "subscribe",
-        scope: { kind: "project", projectId: "project-1" },
+        scope: { kind: "space", spaceId: "space-1" },
       }),
     ).toEqual({
       type: "subscribe",
-      scope: { kind: "project", projectId: "project-1" },
+      scope: { kind: "space", spaceId: "space-1" },
     });
     expect(
       parseRealtimeClientMessage({
@@ -127,40 +127,40 @@ describe("realtime gateway contract", () => {
         executionWorkspaceId: "workspace-1",
       },
     });
-    expect(scopeKey({ kind: "project", projectId: "project-1" })).toBe(
-      "project=project-1",
+    expect(scopeKey({ kind: "space", spaceId: "space-1" })).toBe(
+      "space=space-1",
     );
-    expect(scopeKey({ kind: "workstream", workstreamId: "workstream-1" })).toBe(
-      "workstream=workstream-1",
+    expect(scopeKey({ kind: "thread", threadId: "thread-1" })).toBe(
+      "thread=thread-1",
     );
     expect(
       parseRealtimeClientMessage({
         type: "subscribe",
-        scope: { kind: "workstream", workstreamId: "workstream-1" },
+        scope: { kind: "thread", threadId: "thread-1" },
       }),
     ).toEqual({
       type: "subscribe",
-      scope: { kind: "workstream", workstreamId: "workstream-1" },
+      scope: { kind: "thread", threadId: "thread-1" },
     });
   });
 
-  it("matches scopes by Project and execution Workspace identity", () => {
+  it("matches scopes by Space and execution Workspace identity", () => {
     const event = {
       eventId: "event-1",
       type: "run.completed",
       version: "1.0",
       timestamp: "2026-09-23T00:00:00.000Z",
       workspaceId: "workspace-1",
-      projectId: "project-1",
+      spaceId: "space-1",
       sequence: 1,
       payload: {},
     } as const;
     expect(eventMatchesScope(event, { kind: "user" })).toBe(true);
     expect(
-      eventMatchesScope(event, { kind: "project", projectId: "project-1" }),
+      eventMatchesScope(event, { kind: "space", spaceId: "space-1" }),
     ).toBe(true);
     expect(
-      eventMatchesScope(event, { kind: "project", projectId: "project-2" }),
+      eventMatchesScope(event, { kind: "space", spaceId: "space-2" }),
     ).toBe(false);
     expect(
       eventMatchesScope(event, {
@@ -170,14 +170,14 @@ describe("realtime gateway contract", () => {
     ).toBe(true);
     expect(
       eventMatchesScope(
-        { ...event, workstreamId: "workstream-1" },
-        { kind: "workstream", workstreamId: "workstream-1" },
+        { ...event, threadId: "thread-1" },
+        { kind: "thread", threadId: "thread-1" },
       ),
     ).toBe(true);
     expect(
       eventMatchesScope(
-        { ...event, workstreamId: "workstream-2" },
-        { kind: "workstream", workstreamId: "workstream-1" },
+        { ...event, threadId: "thread-2" },
+        { kind: "thread", threadId: "thread-1" },
       ),
     ).toBe(false);
   });
@@ -230,7 +230,7 @@ describe("realtime gateway contract", () => {
     expect(queue.depth).toBe(1);
   });
 
-  it("requires Workspace ownership and validates active Project grants", async () => {
+  it("requires Workspace ownership and validates active Space grants", async () => {
     const queries: string[] = [];
     const db = {
       prepare(query: string) {
@@ -241,8 +241,8 @@ describe("realtime gateway contract", () => {
               first: async () => {
                 if (query.includes("execution_workspaces"))
                   return args[0] === "workspace-1" ? { owner: 1 } : null;
-                if (query.includes("workspace_project_grants"))
-                  return args[0] === "project-1" && args[1] === "workspace-1"
+                if (query.includes("workspace_space_grants"))
+                  return args[0] === "space-1" && args[1] === "workspace-1"
                     ? { granted: 1 }
                     : null;
                 return null;
@@ -255,17 +255,17 @@ describe("realtime gateway contract", () => {
     await expect(
       authorizeRealtimeScope(db, "user-1", {
         workspaceId: "workspace-1",
-        projectId: "project-1",
+        spaceId: "space-1",
       }),
     ).resolves.toEqual({ allowed: true });
     await expect(
       authorizeRealtimeScope(db, "user-1", {
         workspaceId: "workspace-1",
-        projectId: "project-2",
+        spaceId: "space-2",
       }),
-    ).resolves.toEqual({ allowed: false, reason: "project_access_denied" });
+    ).resolves.toEqual({ allowed: false, reason: "space_access_denied" });
     expect(
-      queries.some((query) => query.includes("workspace_project_grants")),
+      queries.some((query) => query.includes("workspace_space_grants")),
     ).toBe(true);
     expect(
       queries.some((query) => query.includes("workspace_memberships")),
@@ -298,7 +298,7 @@ describe("realtime gateway contract", () => {
 
 describe("independent synchronization cursor delivery", () => {
   it("accepts stream cursors alongside legacy execution Workspace cursors", () => {
-    const key = JSON.stringify(["project", "same"]);
+    const key = JSON.stringify(["space", "same"]);
     expect(
       parseRealtimeClientMessage({
         type: "realtime.hello",
@@ -311,7 +311,7 @@ describe("independent synchronization cursor delivery", () => {
     });
     for (const bad of [
       { invalid: 1 },
-      { '["project","p"]': -1 },
+      { '["space","p"]': -1 },
       { '["bogus","p"]': 1 },
     ]) {
       expect(() =>
@@ -322,25 +322,25 @@ describe("independent synchronization cursor delivery", () => {
       ).toThrow();
     }
   });
-  it("matches collaboration signals to user/Project/Workstream scopes without inventing Workspace access", () => {
+  it("matches collaboration signals to user/Space/Thread scopes without inventing Workspace access", () => {
     const event = {
       eventId: "e",
       type: "discussion.created",
       version: "1.1",
       timestamp: "2026-10-06T00:00:00.000Z",
-      stream: { kind: "project", id: "same" },
-      projectId: "same",
-      workstreamId: "w",
+      stream: { kind: "space", id: "same" },
+      spaceId: "same",
+      threadId: "w",
       sequence: 1,
-      payload: { entityId: "m", workstreamId: "w" },
+      payload: { entityId: "m", threadId: "w" },
     } as const;
     expect(eventMatchesScope(event, { kind: "user" })).toBe(true);
-    expect(
-      eventMatchesScope(event, { kind: "project", projectId: "same" }),
-    ).toBe(true);
-    expect(
-      eventMatchesScope(event, { kind: "workstream", workstreamId: "w" }),
-    ).toBe(true);
+    expect(eventMatchesScope(event, { kind: "space", spaceId: "same" })).toBe(
+      true,
+    );
+    expect(eventMatchesScope(event, { kind: "thread", threadId: "w" })).toBe(
+      true,
+    );
     expect(
       eventMatchesScope(event, {
         kind: "execution_workspace",

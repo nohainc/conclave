@@ -1,7 +1,7 @@
 import type {
   StepResult,
   BuiltinWorkflowStep,
-  WorkstreamBindingId,
+  ThreadBindingId,
 } from "@conclave/core";
 import type { TaskToDispatch } from "./assignment-dispatcher.js";
 import { workStepSessionKey } from "./work-session-key.js";
@@ -11,14 +11,14 @@ import { workStepSessionKey } from "./work-session-key.js";
 export interface WorkerStepExecutionInput {
   readonly taskId: string;
   readonly step: BuiltinWorkflowStep;
-  readonly bindingId: WorkstreamBindingId;
+  readonly bindingId: ThreadBindingId;
   readonly binding: Readonly<Record<string, unknown>>;
   readonly prompt: string;
   readonly workerInput: Readonly<Record<string, unknown>>;
   readonly scope: {
-    readonly projectId: string;
+    readonly spaceId: string;
     readonly requesterUserId: string;
-    readonly workstreamId: string;
+    readonly threadId: string;
     readonly workRequestId: string;
   };
   readonly retry: {
@@ -58,16 +58,16 @@ export function prepareWorkerStepExecution(
       sessionPolicy: "durable_session",
       sessionKey: workStepSessionKey({
         workBindingId: input.bindingId,
-        workstreamId: scope.workstreamId,
+        threadId: scope.threadId,
         workRequestId: scope.workRequestId,
         stepKind: step.kind,
         retryStepKind: input.retry.stepKind,
         retrySessionStrategy: input.retry.sessionStrategy,
         retryNumber: input.retry.number,
       }),
-      projectId: scope.projectId,
+      spaceId: scope.spaceId,
       requestedByUserId: scope.requesterUserId,
-      workstreamId: scope.workstreamId,
+      threadId: scope.threadId,
       workRequestId: scope.workRequestId,
       workBindingId: input.bindingId,
       executionClass: step.executionMode,

@@ -16,7 +16,7 @@ A Workspace is a Cloud resource with one owner. A local Worker belongs to exactl
 
 ### Logical Worker identity
 
-The Worker Type is a stable product identity used in Workstream configuration, scheduling, history, and AX. The Worker is not a provider binary or model. The supported first-party catalog and slot rules are defined by ADR-015 and [First-Party Worker Catalog v1](../specifications/FIRST_PARTY_WORKER_CATALOG_V1.md).
+The Worker Type is a stable product identity used in Thread configuration, scheduling, history, and AX. The Worker is not a provider binary or model. The supported first-party catalog and slot rules are defined by ADR-015 and [First-Party Worker Catalog v1](../specifications/FIRST_PARTY_WORKER_CATALOG_V1.md).
 
 ### Process boundary
 
@@ -26,7 +26,7 @@ The Engine and Profile contract is defined by [ADR-018](ADR-018-generic-cli-work
 
 ### Authorization and usage
 
-Cloud owns Project membership, Workspace ownership, Project-to-Workspace Grants, Workstream authorization, scheduling state, and concurrency ceilings. AX configures authorized logical Worker use in Workstreams. Workspace enforces local readiness, permissions, and concurrency limits; Cloud cannot widen those local limits.
+Cloud owns Space membership, Workspace ownership, Space-to-Workspace Grants, Thread authorization, scheduling state, and concurrency ceilings. AX configures authorized logical Worker use in Threads. Workspace enforces local readiness, permissions, and concurrency limits; Cloud cannot widen those local limits.
 
 See [ADR-016](ADR-016-ax-owned-worker-usage.md) for the AX and Cloud usage policy.
 

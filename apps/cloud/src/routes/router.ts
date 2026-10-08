@@ -479,57 +479,57 @@ export async function routeWorkerRequest(
         );
       }
     }
-    const workspaceProjectsMatch = url.pathname.match(
-      /^\/api\/workspaces\/([^/]+)\/projects$/,
+    const workspaceSpacesMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/spaces$/,
     );
-    if (request.method === "GET" && workspaceProjectsMatch?.[1]) {
-      return await handlers.handleListWorkspaceProjectGrants!(
+    if (request.method === "GET" && workspaceSpacesMatch?.[1]) {
+      return await handlers.handleListWorkspaceSpaceGrants!(
         request,
         env,
-        workspaceProjectsMatch[1],
+        workspaceSpacesMatch[1],
         ctx,
       );
     }
-    const workspaceProjectGrantMatch = url.pathname.match(
-      /^\/api\/workspaces\/([^/]+)\/projects\/([^/]+)\/grant$/,
+    const workspaceSpaceGrantMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/spaces\/([^/]+)\/grant$/,
     );
     if (
       request.method === "POST" &&
-      workspaceProjectGrantMatch?.[1] &&
-      workspaceProjectGrantMatch?.[2]
+      workspaceSpaceGrantMatch?.[1] &&
+      workspaceSpaceGrantMatch?.[2]
     ) {
-      return await handlers.handleCreateWorkspaceProjectGrant!(
+      return await handlers.handleCreateWorkspaceSpaceGrant!(
         request,
         env,
-        workspaceProjectGrantMatch[1],
-        workspaceProjectGrantMatch[2],
+        workspaceSpaceGrantMatch[1],
+        workspaceSpaceGrantMatch[2],
         ctx,
       );
     }
-    const projectWorkspacesMatch = url.pathname.match(
-      /^\/api\/projects\/([^/]+)\/workspaces$/,
+    const spaceWorkspacesMatch = url.pathname.match(
+      /^\/api\/spaces\/([^/]+)\/workspaces$/,
     );
-    if (request.method === "GET" && projectWorkspacesMatch?.[1]) {
-      return await handlers.handleListProjectWorkspaces!(
+    if (request.method === "GET" && spaceWorkspacesMatch?.[1]) {
+      return await handlers.handleListSpaceWorkspaces!(
         request,
         env,
-        projectWorkspacesMatch[1],
+        spaceWorkspacesMatch[1],
         ctx,
       );
     }
-    if (request.method === "POST" && projectWorkspacesMatch?.[1]) {
-      return await handlers.handleRequestProjectWorkspace!(
+    if (request.method === "POST" && spaceWorkspacesMatch?.[1]) {
+      return await handlers.handleRequestSpaceWorkspace!(
         request,
         env,
-        projectWorkspacesMatch[1],
+        spaceWorkspacesMatch[1],
         ctx,
       );
     }
     const grantItemMatch = url.pathname.match(
-      /^\/api\/workspace-project-grants\/([^/]+)$/,
+      /^\/api\/workspace-space-grants\/([^/]+)$/,
     );
     if (request.method === "PATCH" && grantItemMatch?.[1]) {
-      return await handlers.handleUpdateWorkspaceProjectGrant!(
+      return await handlers.handleUpdateWorkspaceSpaceGrant!(
         request,
         env,
         grantItemMatch[1],
@@ -537,7 +537,7 @@ export async function routeWorkerRequest(
       );
     }
     if (request.method === "DELETE" && grantItemMatch?.[1]) {
-      return await handlers.handleRevokeWorkspaceProjectGrant!(
+      return await handlers.handleRevokeWorkspaceSpaceGrant!(
         request,
         env,
         grantItemMatch[1],
@@ -675,120 +675,120 @@ export async function routeWorkerRequest(
       return await handlers.handleGetHomeReadModel!(request, env, ctx);
     }
 
-    if (request.method === "GET" && url.pathname === "/api/projects") {
-      return await handlers.handleListProjects!(request, env, ctx);
+    if (request.method === "GET" && url.pathname === "/api/spaces") {
+      return await handlers.handleListSpaces!(request, env, ctx);
     }
-    if (request.method === "POST" && url.pathname === "/api/projects") {
-      return await handlers.handleCreateProject!(request, env, ctx);
+    if (request.method === "POST" && url.pathname === "/api/spaces") {
+      return await handlers.handleCreateSpace!(request, env, ctx);
     }
-    const projectMembersMatch = url.pathname.match(
-      /^\/api\/projects\/([^/]+)\/members$/,
+    const spaceMembersMatch = url.pathname.match(
+      /^\/api\/spaces\/([^/]+)\/members$/,
     );
-    if (request.method === "GET" && projectMembersMatch?.[1]) {
-      return await handlers.handleListProjectMembers!(
+    if (request.method === "GET" && spaceMembersMatch?.[1]) {
+      return await handlers.handleListSpaceMembers!(
         request,
         env,
-        projectMembersMatch[1],
+        spaceMembersMatch[1],
         ctx,
       );
     }
-    const projectMemberRoleMatch = url.pathname.match(
-      /^\/api\/projects\/([^/]+)\/members\/([^/]+)\/role$/,
+    const spaceMemberRoleMatch = url.pathname.match(
+      /^\/api\/spaces\/([^/]+)\/members\/([^/]+)\/role$/,
     );
     if (
       request.method === "PATCH" &&
-      projectMemberRoleMatch?.[1] &&
-      projectMemberRoleMatch[2]
+      spaceMemberRoleMatch?.[1] &&
+      spaceMemberRoleMatch[2]
     ) {
-      return await handlers.handleChangeProjectMemberRole!(
+      return await handlers.handleChangeSpaceMemberRole!(
         request,
         env,
-        projectMemberRoleMatch[1],
-        projectMemberRoleMatch[2],
+        spaceMemberRoleMatch[1],
+        spaceMemberRoleMatch[2],
         ctx,
       );
     }
-    const projectMemberRemoveMatch = url.pathname.match(
-      /^\/api\/projects\/([^/]+)\/members\/([^/]+)\/remove$/,
+    const spaceMemberRemoveMatch = url.pathname.match(
+      /^\/api\/spaces\/([^/]+)\/members\/([^/]+)\/remove$/,
     );
     if (
       request.method === "POST" &&
-      projectMemberRemoveMatch?.[1] &&
-      projectMemberRemoveMatch[2]
+      spaceMemberRemoveMatch?.[1] &&
+      spaceMemberRemoveMatch[2]
     ) {
-      return await handlers.handleRemoveProjectMember!(
+      return await handlers.handleRemoveSpaceMember!(
         request,
         env,
-        projectMemberRemoveMatch[1],
-        projectMemberRemoveMatch[2],
+        spaceMemberRemoveMatch[1],
+        spaceMemberRemoveMatch[2],
         ctx,
       );
     }
-    const projectInvitationsMatch = url.pathname.match(
-      /^\/api\/projects\/([^/]+)\/invitations$/,
+    const spaceInvitationsMatch = url.pathname.match(
+      /^\/api\/spaces\/([^/]+)\/invitations$/,
     );
-    if (request.method === "GET" && projectInvitationsMatch?.[1]) {
-      return await handlers.handleListProjectInvitations!(
+    if (request.method === "GET" && spaceInvitationsMatch?.[1]) {
+      return await handlers.handleListSpaceInvitations!(
         request,
         env,
-        projectInvitationsMatch[1],
+        spaceInvitationsMatch[1],
         ctx,
       );
     }
-    if (request.method === "POST" && projectInvitationsMatch?.[1]) {
-      return await handlers.handleCreateProjectInvitation!(
+    if (request.method === "POST" && spaceInvitationsMatch?.[1]) {
+      return await handlers.handleCreateSpaceInvitation!(
         request,
         env,
-        projectInvitationsMatch[1],
+        spaceInvitationsMatch[1],
         ctx,
       );
     }
-    const projectAuditMatch = url.pathname.match(
-      /^\/api\/projects\/([^/]+)\/audit$/,
+    const spaceAuditMatch = url.pathname.match(
+      /^\/api\/spaces\/([^/]+)\/audit$/,
     );
-    if (request.method === "GET" && projectAuditMatch?.[1]) {
-      return await handlers.handleListProjectAudit!(
+    if (request.method === "GET" && spaceAuditMatch?.[1]) {
+      return await handlers.handleListSpaceAudit!(
         request,
         env,
-        projectAuditMatch[1],
+        spaceAuditMatch[1],
         ctx,
       );
     }
-    const projectInvitationExpireMatch = url.pathname.match(
-      /^\/api\/projects\/([^/]+)\/invitations\/([^/]+)\/expire$/,
+    const spaceInvitationExpireMatch = url.pathname.match(
+      /^\/api\/spaces\/([^/]+)\/invitations\/([^/]+)\/expire$/,
     );
     if (
       request.method === "POST" &&
-      projectInvitationExpireMatch?.[1] &&
-      projectInvitationExpireMatch[2]
+      spaceInvitationExpireMatch?.[1] &&
+      spaceInvitationExpireMatch[2]
     ) {
-      return await handlers.handleExpireProjectInvitation!(
+      return await handlers.handleExpireSpaceInvitation!(
         request,
         env,
-        projectInvitationExpireMatch[1],
-        projectInvitationExpireMatch[2],
+        spaceInvitationExpireMatch[1],
+        spaceInvitationExpireMatch[2],
         ctx,
       );
     }
-    const projectInvitationAcceptMatch = url.pathname.match(
-      /^\/api\/(?:project-)?invitations\/([^/]+)\/accept$/,
+    const spaceInvitationAcceptMatch = url.pathname.match(
+      /^\/api\/(?:space-)?invitations\/([^/]+)\/accept$/,
     );
-    if (request.method === "POST" && projectInvitationAcceptMatch?.[1]) {
-      return await handlers.handleAcceptProjectInvitation!(
+    if (request.method === "POST" && spaceInvitationAcceptMatch?.[1]) {
+      return await handlers.handleAcceptSpaceInvitation!(
         request,
         env,
-        projectInvitationAcceptMatch[1],
+        spaceInvitationAcceptMatch[1],
         ctx,
       );
     }
-    const projectInvitationDeclineMatch = url.pathname.match(
-      /^\/api\/(?:project-)?invitations\/([^/]+)\/decline$/,
+    const spaceInvitationDeclineMatch = url.pathname.match(
+      /^\/api\/(?:space-)?invitations\/([^/]+)\/decline$/,
     );
-    if (request.method === "POST" && projectInvitationDeclineMatch?.[1]) {
-      return await handlers.handleDeclineProjectInvitation!(
+    if (request.method === "POST" && spaceInvitationDeclineMatch?.[1]) {
+      return await handlers.handleDeclineSpaceInvitation!(
         request,
         env,
-        projectInvitationDeclineMatch[1],
+        spaceInvitationDeclineMatch[1],
         ctx,
       );
     }
@@ -803,86 +803,81 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
-    const projectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)$/);
-    if (request.method === "GET" && projectMatch?.[1]) {
-      return await handlers.handleGetProject!(
+    const spaceMatch = url.pathname.match(/^\/api\/spaces\/([^/]+)$/);
+    if (request.method === "GET" && spaceMatch?.[1]) {
+      return await handlers.handleGetSpace!(request, env, spaceMatch[1], ctx);
+    }
+    if (request.method === "PATCH" && spaceMatch?.[1]) {
+      return await handlers.handleUpdateSpace!(
         request,
         env,
-        projectMatch[1],
+        spaceMatch[1],
         ctx,
       );
     }
-    if (request.method === "PATCH" && projectMatch?.[1]) {
-      return await handlers.handleUpdateProject!(
+    if (request.method === "DELETE" && spaceMatch?.[1]) {
+      return await handlers.handleDeleteSpace!(
         request,
         env,
-        projectMatch[1],
-        ctx,
-      );
-    }
-    if (request.method === "DELETE" && projectMatch?.[1]) {
-      return await handlers.handleDeleteProject!(
-        request,
-        env,
-        projectMatch[1],
+        spaceMatch[1],
         ctx,
       );
     }
 
-    const projectWorkstreamsMatch = url.pathname.match(
-      /^\/api\/projects\/([^/]+)\/workstreams$/,
+    const spaceThreadsMatch = url.pathname.match(
+      /^\/api\/spaces\/([^/]+)\/threads$/,
     );
-    if (request.method === "GET" && projectWorkstreamsMatch?.[1]) {
-      return await handlers.handleListProjectWorkstreams!(
+    if (request.method === "GET" && spaceThreadsMatch?.[1]) {
+      return await handlers.handleListSpaceThreads!(
         request,
         env,
-        projectWorkstreamsMatch[1],
+        spaceThreadsMatch[1],
         ctx,
       );
     }
-    if (request.method === "POST" && projectWorkstreamsMatch?.[1]) {
-      return await handlers.handleCreateWorkstream!(
+    if (request.method === "POST" && spaceThreadsMatch?.[1]) {
+      return await handlers.handleCreateThread!(
         request,
         env,
-        projectWorkstreamsMatch[1],
-        ctx,
-      );
-    }
-
-    const workstreamMatch = url.pathname.match(/^\/api\/workstreams\/([^/]+)$/);
-    if (request.method === "PATCH" && workstreamMatch?.[1]) {
-      return await handlers.handleUpdateWorkstream!(
-        request,
-        env,
-        workstreamMatch[1],
-        ctx,
-      );
-    }
-    if (request.method === "DELETE" && workstreamMatch?.[1]) {
-      return await handlers.handleDeleteWorkstream!(
-        request,
-        env,
-        workstreamMatch[1],
+        spaceThreadsMatch[1],
         ctx,
       );
     }
 
-    const workstreamDiscussionMatch = url.pathname.match(
-      /^\/api\/workstreams\/([^/]+)\/discussion-messages$/,
+    const threadMatch = url.pathname.match(/^\/api\/threads\/([^/]+)$/);
+    if (request.method === "PATCH" && threadMatch?.[1]) {
+      return await handlers.handleUpdateThread!(
+        request,
+        env,
+        threadMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "DELETE" && threadMatch?.[1]) {
+      return await handlers.handleDeleteThread!(
+        request,
+        env,
+        threadMatch[1],
+        ctx,
+      );
+    }
+
+    const threadDiscussionMatch = url.pathname.match(
+      /^\/api\/threads\/([^/]+)\/discussion-messages$/,
     );
-    if (request.method === "GET" && workstreamDiscussionMatch?.[1]) {
+    if (request.method === "GET" && threadDiscussionMatch?.[1]) {
       return await handlers.handleListDiscussionMessages!(
         request,
         env,
-        workstreamDiscussionMatch[1],
+        threadDiscussionMatch[1],
         ctx,
       );
     }
-    if (request.method === "POST" && workstreamDiscussionMatch?.[1]) {
+    if (request.method === "POST" && threadDiscussionMatch?.[1]) {
       return await handlers.handleCreateDiscussionMessage!(
         request,
         env,
-        workstreamDiscussionMatch[1],
+        threadDiscussionMatch[1],
         ctx,
       );
     }
@@ -906,10 +901,10 @@ export async function routeWorkerRequest(
       );
     }
     const createWorkRequestMatch = url.pathname.match(
-      /^\/api\/workstreams\/([^/]+)\/work-requests$/,
+      /^\/api\/threads\/([^/]+)\/work-requests$/,
     );
     const conversationHistoryMatch = url.pathname.match(
-      /^\/api\/workstreams\/([^/]+)\/conversations\/([^/]+)\/history$/,
+      /^\/api\/threads\/([^/]+)\/conversations\/([^/]+)\/history$/,
     );
     if (
       request.method === "GET" &&
@@ -925,7 +920,7 @@ export async function routeWorkerRequest(
       );
     }
     const conversationsMatch = url.pathname.match(
-      /^\/api\/workstreams\/([^/]+)\/conversations$/,
+      /^\/api\/threads\/([^/]+)\/conversations$/,
     );
     if (request.method === "GET" && conversationsMatch?.[1]) {
       return await handlers.handleListConversations!(
@@ -936,7 +931,7 @@ export async function routeWorkerRequest(
       );
     }
     const validateWorkRequestMatch = url.pathname.match(
-      /^\/api\/workstreams\/([^/]+)\/work-requests\/validate$/,
+      /^\/api\/threads\/([^/]+)\/work-requests\/validate$/,
     );
     if (request.method === "POST" && validateWorkRequestMatch?.[1]) {
       return await handlers.handleValidateWorkRequest!(

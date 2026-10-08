@@ -3,27 +3,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/navigation/ax_navigation.dart';
 
 void main() {
-  test('parses and serializes project, Workstream, and run deep links', () {
-    final workstream = AxNavigation.fromUri(
-        Uri.parse('/projects/project-1/workstreams/workstream-2'));
-    expect(workstream.kind, AxRouteKind.workstream);
-    expect(workstream.workstreamId, 'workstream-2');
-    expect(workstream.toUri().path,
-        '/projects/project-1/workstreams/workstream-2');
+  test('parses and serializes space, Thread, and run deep links', () {
+    final thread =
+        AxNavigation.fromUri(Uri.parse('/spaces/space-1/threads/thread-2'));
+    expect(thread.kind, AxRouteKind.thread);
+    expect(thread.threadId, 'thread-2');
+    expect(thread.toUri().path, '/spaces/space-1/threads/thread-2');
 
     final legacyRun =
-        AxNavigation.fromUri(Uri.parse('/projects/project-1/runs/run-3'));
+        AxNavigation.fromUri(Uri.parse('/spaces/space-1/runs/run-3'));
     expect(legacyRun.kind, AxRouteKind.run);
-    expect(legacyRun.toUri().path, '/projects/project-1/runs/run-3');
+    expect(legacyRun.toUri().path, '/spaces/space-1/runs/run-3');
 
     final canonicalRun = AxNavigation.fromUri(
-        Uri.parse('/projects/project-1/workstreams/workstream-2/runs/run-3'));
+        Uri.parse('/spaces/space-1/threads/thread-2/runs/run-3'));
     expect(canonicalRun.kind, AxRouteKind.run);
-    expect(canonicalRun.projectId, 'project-1');
-    expect(canonicalRun.workstreamId, 'workstream-2');
+    expect(canonicalRun.spaceId, 'space-1');
+    expect(canonicalRun.threadId, 'thread-2');
     expect(canonicalRun.runId, 'run-3');
     expect(canonicalRun.toUri().path,
-        '/projects/project-1/workstreams/workstream-2/runs/run-3');
+        '/spaces/space-1/threads/thread-2/runs/run-3');
 
     final profile = AxNavigation.fromUri(Uri.parse('/settings/profile'));
     expect(profile.kind, AxRouteKind.profileSecurity);
@@ -33,7 +32,7 @@ void main() {
   test('has stable routes for every major application section', () {
     final routes = <AxNavigation>[
       const AxNavigation.home(),
-      const AxNavigation.projects(),
+      const AxNavigation.spaces(),
       const AxNavigation.workspaces(),
       const AxNavigation.profileSecurity(),
     ];

@@ -8,10 +8,10 @@ void main() {
     Map<String, Object?>? networkPolicy,
   }) =>
       {
-        'projectId': 'project-1',
+        'spaceId': 'space-1',
         'executionWorkspaceId': 'workspace-1',
         'permissionSnapshot': {
-          'projectId': 'project-1',
+          'spaceId': 'space-1',
           'workspaceId': 'workspace-1',
           'grantId': 'grant-1',
           'requesterUserId': 'user-1',

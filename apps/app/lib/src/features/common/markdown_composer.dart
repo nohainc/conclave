@@ -246,8 +246,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                           fontWeight: _preview ? FontWeight.bold : null))),
               const Spacer(),
               Tooltip(
-                message:
-                    'Workstream content is GitHub-Flavored Markdown source.',
+                message: 'Thread content is GitHub-Flavored Markdown source.',
                 child: Text('Markdown',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,

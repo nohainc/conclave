@@ -101,7 +101,7 @@ Local qualification and post-publication acceptance use the same shape validated
     "passive_probe": "passed",
     "live_probe": "passed",
     "model_selection": "not_applicable",
-    "representative_workstream_write": "not_applicable",
+    "representative_thread_write": "not_applicable",
     "durable_session_start": "passed",
     "durable_session_resume": "passed",
     "cancellation": "passed",
@@ -229,8 +229,8 @@ also execute the applicable real Engine scenarios:
   required and must be `passed`;
 - `model_selection` must be `passed` when the Profile supports model selection
   and has an allowlisted test model, otherwise `not_applicable`;
-- `representative_workstream_write` must be `passed` when the Profile declares
-  `workstream_write`, otherwise `not_applicable`;
+- `representative_thread_write` must be `passed` when the Profile declares
+  `thread_write`, otherwise `not_applicable`;
 - `durable_session_start` and `durable_session_resume` must be `passed` when
   `durable_session` is declared and `session.supported` is true, otherwise
   `not_applicable`.
@@ -258,7 +258,7 @@ As enforced by `validateToolProfileAcceptanceEvidence()` in `apps/cloud/src/tool
    - `passive_probe`
    - `live_probe`
    - `model_selection` (`passed` when model selection is supported with an allowlisted test model; otherwise `not_applicable`)
-   - `representative_workstream_write` (`passed` only when `workstream_write` is declared; otherwise `not_applicable`)
+   - `representative_thread_write` (`passed` only when `thread_write` is declared; otherwise `not_applicable`)
    - `durable_session_start` and `durable_session_resume` (`passed` only when `durable_session` is declared and `session.supported` is true; otherwise `not_applicable`)
    - `cancellation`
    - `timeout`

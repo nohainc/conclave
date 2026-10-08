@@ -85,8 +85,8 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
     'conclave-profile-acceptance-${official.definitionId}-',
   );
   final stateDirectory = await Directory('${root.path}/state').create();
-  final workstreamDirectory = await Directory(
-    '${root.path}/workstream',
+  final threadDirectory = await Directory(
+    '${root.path}/thread',
   ).create();
   final evidence = <String, Object?>{
     'formatVersion': 2,
@@ -130,7 +130,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
         profile: profile,
         digest: digest,
         stateDirectory: stateDirectory,
-        workstreamDirectory: workstreamDirectory,
+        threadDirectory: threadDirectory,
       );
       try {
         final result = await engine.exchange(
@@ -165,7 +165,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
         profile: profile,
         digest: digest,
         stateDirectory: stateDirectory,
-        workstreamDirectory: workstreamDirectory,
+        threadDirectory: threadDirectory,
       );
       try {
         final result = await engine.exchange(
@@ -201,7 +201,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
           profile: profile,
           digest: digest,
           stateDirectory: stateDirectory,
-          workstreamDirectory: workstreamDirectory,
+          threadDirectory: threadDirectory,
         );
         try {
           final result = await engine.exchange(
@@ -222,10 +222,10 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
       });
     }
 
-    if (!capabilities.contains('workstream_write')) {
-      await notApplicableScenario('representative_workstream_write');
+    if (!capabilities.contains('thread_write')) {
+      await notApplicableScenario('representative_thread_write');
     } else {
-      await scenario('representative_workstream_write', () async {
+      await scenario('representative_thread_write', () async {
         final marker =
             'profile-acceptance-${DateTime.now().microsecondsSinceEpoch}.txt';
         const markerContent = 'Conclave Profile acceptance write verified.';
@@ -236,12 +236,12 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
           profile: profile,
           digest: digest,
           stateDirectory: stateDirectory,
-          workstreamDirectory: workstreamDirectory,
+          threadDirectory: threadDirectory,
         );
         try {
           final result = await engine.exchange(
             ExecuteRequest(
-              requestId: 'accept-workstream-write',
+              requestId: 'accept-thread-write',
               assignmentId: 'profile-acceptance-write',
               prompt:
                   'In the current working directory, create $marker containing exactly this line: $markerContent. Do not modify other files. Then reply with exactly WRITE_OK.',
@@ -262,7 +262,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
             contains('WRITE_OK'),
           );
           expect(
-            (await File('${workstreamDirectory.path}/$marker').readAsString())
+            (await File('${threadDirectory.path}/$marker').readAsString())
                 .trimRight(),
             markerContent,
           );
@@ -286,7 +286,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
           profile: profile,
           digest: digest,
           stateDirectory: stateDirectory,
-          workstreamDirectory: workstreamDirectory,
+          threadDirectory: threadDirectory,
         );
         try {
           final result = await engine.exchange(
@@ -317,7 +317,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
           profile: profile,
           digest: digest,
           stateDirectory: stateDirectory,
-          workstreamDirectory: workstreamDirectory,
+          threadDirectory: threadDirectory,
         );
         try {
           final result = await engine.exchange(
@@ -351,7 +351,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
         profile: profile,
         digest: digest,
         stateDirectory: stateDirectory,
-        workstreamDirectory: workstreamDirectory,
+        threadDirectory: threadDirectory,
       );
       try {
         final result = await engine.exchange(
@@ -382,7 +382,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
         profile: profile,
         digest: digest,
         stateDirectory: stateDirectory,
-        workstreamDirectory: workstreamDirectory,
+        threadDirectory: threadDirectory,
       );
       Future<_ExchangeResult>? response;
       try {
@@ -392,7 +392,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
             requestId: 'accept-cancel',
             assignmentId: 'profile-acceptance-cancel',
             prompt:
-                'Write a detailed analysis of the current project and continue working for several minutes.',
+                'Write a detailed analysis of the current space and continue working for several minutes.',
             timeoutMs: 240000,
             sessionPolicy: WorkerSessionPolicy.stateless,
           ),
@@ -486,7 +486,7 @@ final class _EngineClient {
     required Map<String, Object?> profile,
     required String digest,
     required Directory stateDirectory,
-    required Directory workstreamDirectory,
+    required Directory threadDirectory,
   }) async {
     final process = await currentPlatformRuntime.startIsolatedProcess(
       Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
@@ -499,7 +499,7 @@ final class _EngineClient {
         '--state-directory',
         stateDirectory.path,
       ],
-      workingDirectory: workstreamDirectory.path,
+      workingDirectory: threadDirectory.path,
       includeParentEnvironment: true,
     );
     final client = _EngineClient(process);

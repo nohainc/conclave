@@ -5,7 +5,7 @@
 
 ## Context
 
-Workstreams need stable user-facing Worker identities that survive provider CLI updates and Profile release changes. Product identity must remain independent of local runtime implementation.
+Threads need stable user-facing Worker identities that survive provider CLI updates and Profile release changes. Product identity must remain independent of local runtime implementation.
 
 ## Decision
 
@@ -22,7 +22,7 @@ The official Worker Catalog is Cloud-managed and dynamically delivered.
 Additional approved Worker Types can become available without a Workspace
 application release when they can be expressed through an existing Engine
 family and supported Tool Profile schema. These IDs are the initial product
-identities used by AX, Cloud, Workstreams, scheduling, and history. Profile
+identities used by AX, Cloud, Threads, scheduling, and history. Profile
 IDs, Engine versions, and provider executable names are implementation details.
 
 ### Authentication and billing
@@ -33,15 +33,15 @@ Provider authentication and any provider subscription/API mode remain local to t
 
 Workspace owns local Worker activation and readiness. Engine plus the admitted Profile perform provider discovery and readiness checks. Activation and readiness are independent: disabling a Worker does not erase its health result, and a disabled Worker may be tested explicitly.
 
-Cloud receives only the safe Worker inventory projection. It owns scheduling state and Project/Workstream authorization but cannot modify local activation, permissions, provider credentials, or local concurrency limits.
+Cloud receives only the safe Worker inventory projection. It owns scheduling state and Space/Thread authorization but cannot modify local activation, permissions, provider credentials, or local concurrency limits.
 
 ### Assignment behavior
 
-Workstream configuration binds logical Worker IDs to the fixed Work v1 Work (`direct`)/Step slots. A binding does not contain a provider executable path, Profile payload, secret, or runtime version. Workspace resolves the selected logical Worker to an admitted Profile and runs it through the generic Engine.
+Thread configuration binds logical Worker IDs to the fixed Work v1 Work (`direct`)/Step slots. A binding does not contain a provider executable path, Profile payload, secret, or runtime version. Workspace resolves the selected logical Worker to an admitted Profile and runs it through the generic Engine.
 
 ## Consequences
 
-A Profile or provider CLI update does not change Workstream Worker IDs. Normal users select ChatGPT or Gemini and see their readiness; the Engine, Profile release, and provider CLI details remain diagnostic information.
+A Profile or provider CLI update does not change Thread Worker IDs. Normal users select ChatGPT or Gemini and see their readiness; the Engine, Profile release, and provider CLI details remain diagnostic information.
 
 ## References
 

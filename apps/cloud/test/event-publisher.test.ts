@@ -17,7 +17,7 @@ function createHarness(options: { duplicate?: boolean } = {}) {
         {
           event_id: "event-existing",
           workspace_id: "workspace-1",
-          project_id: "project-1",
+          space_id: "space-1",
           run_id: null,
           task_id: null,
           attempt_id: null,
@@ -55,7 +55,7 @@ function createHarness(options: { duplicate?: boolean } = {}) {
         async all<T>() {
           if (
             query.includes("execution_workspaces") ||
-            query.includes("project_memberships")
+            query.includes("space_memberships")
           ) {
             return {
               results: [{ user_id: "user-1" }, { user_id: "user-2" }],
@@ -73,7 +73,7 @@ function createHarness(options: { duplicate?: boolean } = {}) {
         const [
           eventId,
           workspaceId,
-          projectId,
+          spaceId,
           runId,
           taskId,
           attemptId,
@@ -97,7 +97,7 @@ function createHarness(options: { duplicate?: boolean } = {}) {
         const row = {
           event_id: eventId,
           workspace_id: workspaceId,
-          project_id: projectId,
+          space_id: spaceId,
           run_id: runId,
           task_id: taskId,
           attempt_id: attemptId,
@@ -150,7 +150,7 @@ function createHarness(options: { duplicate?: boolean } = {}) {
 const baseEvent = {
   type: "work_request.created",
   workspaceId: "workspace-1",
-  projectId: "project-1",
+  spaceId: "space-1",
   payload: { entityId: "message-1", summary: "hello" },
 };
 
@@ -344,7 +344,7 @@ describe("Cloud event publisher", () => {
         .run();
       const afterCursorLoss = await publisher.publish({
         ...baseEvent,
-        projectId: undefined,
+        spaceId: undefined,
         workspaceId: "workspace-retained",
         eventId: "event-after-retained",
         idempotencyKey: "idem-after-retained",
@@ -354,7 +354,7 @@ describe("Cloud event publisher", () => {
       await expect(
         publisher.publish({
           ...baseEvent,
-          projectId: undefined,
+          spaceId: undefined,
           workspaceId: "workspace-failed",
           eventId: "event-after-retained",
           idempotencyKey: "idem-failed-global-event-id",
@@ -362,7 +362,7 @@ describe("Cloud event publisher", () => {
       ).rejects.toThrow();
       const afterRollback = await publisher.publish({
         ...baseEvent,
-        projectId: undefined,
+        spaceId: undefined,
         workspaceId: "workspace-failed",
         eventId: "event-after-rollback",
         idempotencyKey: "idem-after-rollback",

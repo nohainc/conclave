@@ -1,8 +1,8 @@
 enum AxNotificationKind {
-  // Workstream
-  workstreamNeedsInput,
-  workstreamCompleted,
-  workstreamFailed,
+  // Thread
+  threadNeedsInput,
+  threadCompleted,
+  threadFailed,
 
   // Workflow Run
   workflowRunCompleted,
@@ -16,8 +16,8 @@ enum AxNotificationKind {
   // Workspace
   workspaceOffline,
 
-  // Project
-  projectInvitationReceived,
+  // Space
+  spaceInvitationReceived,
 
   // Backwards-compatibility aliases
   completed,
@@ -29,12 +29,12 @@ enum AxNotificationKind {
 enum AxNotificationPriority { high, normal, low }
 
 enum AxNotificationTarget {
-  workstream,
+  thread,
+  space,
   workflowRun,
   run,
   workspaces,
   workspace,
-  project,
 }
 
 /// Filters realtime noise from actionable team notifications. Progress,
@@ -45,12 +45,12 @@ bool isMeaningfulRealtimeNotification(String type) => {
       'run.approval_required',
       'workflow_run.input_required',
       'workflow_run.approval_required',
-      'workstream.needs_input',
-      'workstream.completed',
-      'workstream.failed',
-      'workstream.account.problem',
-      'workstream.grant.problem',
-      'workstream.recovery.required',
+      'thread.needs_input',
+      'thread.completed',
+      'thread.failed',
+      'thread.account.problem',
+      'thread.grant.problem',
+      'thread.recovery.required',
       'run.completed',
       'run.failed',
       'workflow_run.completed',
@@ -65,7 +65,7 @@ bool isMeaningfulRealtimeNotification(String type) => {
       'workspace.offline',
       'workspace.stale',
       'workspace.invitation.received',
-      'project.invitation.received',
+      'space.invitation.received',
       'invitation.received',
     }.contains(type);
 
@@ -77,8 +77,8 @@ class AxNotification {
     required this.message,
     required this.createdAt,
     required this.priority,
-    this.projectId,
-    this.workstreamId,
+    this.spaceId,
+    this.threadId,
     this.runId,
     this.workspaceId,
     this.workerId,
@@ -92,8 +92,8 @@ class AxNotification {
   final String message;
   final DateTime createdAt;
   final AxNotificationPriority priority;
-  final String? projectId;
-  final String? workstreamId;
+  final String? spaceId;
+  final String? threadId;
   final String? runId;
   final String? workspaceId;
   final String? workerId;
@@ -107,8 +107,8 @@ class AxNotification {
         message: message,
         createdAt: createdAt,
         priority: priority,
-        projectId: projectId,
-        workstreamId: workstreamId,
+        spaceId: spaceId,
+        threadId: threadId,
         runId: runId,
         workspaceId: workspaceId,
         workerId: workerId,
@@ -123,12 +123,19 @@ AxNotification? notificationFromRealtimeEvent(
   final type = event['type'];
   if (type is! String) return null;
   final kind = switch (type) {
-    'workstream.needs_input' => AxNotificationKind.workstreamNeedsInput,
-    'workstream.completed' => AxNotificationKind.workstreamCompleted,
-    'workstream.failed' ||
-    'workstream.grant.problem' ||
-    'workstream.recovery.required' =>
-      AxNotificationKind.workstreamFailed,
+    'thread.needs_input' ||
+    'thread.needs_input' =>
+      AxNotificationKind.threadNeedsInput,
+    'thread.completed' ||
+    'thread.completed' =>
+      AxNotificationKind.threadCompleted,
+    'thread.failed' ||
+    'thread.grant.problem' ||
+    'thread.recovery.required' ||
+    'thread.failed' ||
+    'thread.grant.problem' ||
+    'thread.recovery.required' =>
+      AxNotificationKind.threadFailed,
     'workflow_run.completed' => AxNotificationKind.workflowRunCompleted,
     'run.completed' ||
     'assignment.completed' =>
@@ -144,7 +151,7 @@ AxNotification? notificationFromRealtimeEvent(
     'run.input_required' ||
     'run.approval_required' =>
       AxNotificationKind.workflowRunNeedsApproval,
-    'workstream.account.problem' ||
+    'thread.account.problem' ||
     'account.expired' ||
     'credential.expired' ||
     'worker.credential.expired' ||
@@ -159,10 +166,10 @@ AxNotification? notificationFromRealtimeEvent(
     'worker.install.failed' ||
     'worker.install_failed' =>
       AxNotificationKind.workerInstallFailed,
-    'project.invitation.received' ||
+    'space.invitation.received' ||
     'workspace.invitation.received' ||
     'invitation.received' =>
-      AxNotificationKind.projectInvitationReceived,
+      AxNotificationKind.spaceInvitationReceived,
     _ => null,
   };
   if (kind == null) return null;
@@ -173,12 +180,12 @@ AxNotification? notificationFromRealtimeEvent(
       : const <String, dynamic>{};
   final runId =
       _optionalString(event['runId']) ?? _optionalString(payloadMap['runId']);
-  final projectId = _optionalString(event['projectId']) ??
-      _optionalString(payloadMap['projectId']);
-  final workstreamId = _optionalString(event['workstreamId']) ??
-      _optionalString(event['workstream_id']) ??
-      _optionalString(payloadMap['workstreamId']) ??
-      _optionalString(payloadMap['workstream_id']);
+  final spaceId = _optionalString(event['spaceId']) ??
+      _optionalString(payloadMap['spaceId']);
+  final threadId = _optionalString(event['threadId']) ??
+      _optionalString(event['thread_id']) ??
+      _optionalString(payloadMap['threadId']) ??
+      _optionalString(payloadMap['thread_id']);
   final workspaceId = _optionalString(event['workspaceId']) ??
       _optionalString(event['workspace_id']) ??
       _optionalString(payloadMap['workspaceId']) ??
@@ -191,12 +198,15 @@ AxNotification? notificationFromRealtimeEvent(
       _optionalString(payloadMap['summary']) ??
       _optionalString(payloadMap['error']) ??
       switch (kind) {
-        AxNotificationKind.workstreamNeedsInput =>
-          'Your input or decision is needed in the Workstream.',
-        AxNotificationKind.workstreamCompleted =>
-          'Workstream activity has completed.',
-        AxNotificationKind.workstreamFailed =>
-          'Workstream activity failed and needs attention.',
+        AxNotificationKind.threadNeedsInput ||
+        AxNotificationKind.threadNeedsInput =>
+          'Your input or decision is needed in the Thread.',
+        AxNotificationKind.threadCompleted ||
+        AxNotificationKind.threadCompleted =>
+          'Thread activity has completed.',
+        AxNotificationKind.threadFailed ||
+        AxNotificationKind.threadFailed =>
+          'Thread activity failed and needs attention.',
         AxNotificationKind.workflowRunCompleted ||
         AxNotificationKind.completed =>
           'The Workflow Run is ready to review.',
@@ -212,20 +222,23 @@ AxNotification? notificationFromRealtimeEvent(
           'A Worker connection needs to be re-authenticated.',
         AxNotificationKind.workerInstallFailed =>
           'A Worker could not connect to a Workspace.',
-        AxNotificationKind.projectInvitationReceived ||
+        AxNotificationKind.spaceInvitationReceived ||
         AxNotificationKind.invitationReceived =>
-          'You received a Project invitation.',
+          'You received a Space invitation.',
       };
   final timestamp =
       DateTime.tryParse(_optionalString(event['timestamp']) ?? '')?.toLocal() ??
           DateTime.now();
   final eventId = _optionalString(event['eventId']) ??
-      '$type:${workstreamId ?? runId ?? projectId ?? 'workspace'}:${timestamp.microsecondsSinceEpoch}';
+      '$type:${threadId ?? runId ?? spaceId ?? 'workspace'}:${timestamp.microsecondsSinceEpoch}';
   final target = switch (kind) {
-    AxNotificationKind.workstreamNeedsInput ||
-    AxNotificationKind.workstreamCompleted ||
-    AxNotificationKind.workstreamFailed =>
-      AxNotificationTarget.workstream,
+    AxNotificationKind.threadNeedsInput ||
+    AxNotificationKind.threadCompleted ||
+    AxNotificationKind.threadFailed ||
+    AxNotificationKind.threadNeedsInput ||
+    AxNotificationKind.threadCompleted ||
+    AxNotificationKind.threadFailed =>
+      AxNotificationTarget.thread,
     AxNotificationKind.workflowRunCompleted ||
     AxNotificationKind.workflowRunFailed ||
     AxNotificationKind.workflowRunNeedsApproval ||
@@ -237,18 +250,24 @@ AxNotification? notificationFromRealtimeEvent(
     AxNotificationKind.workerCredentialProblem =>
       AxNotificationTarget.workspace,
     AxNotificationKind.workerInstallFailed => AxNotificationTarget.workspace,
-    AxNotificationKind.projectInvitationReceived ||
+    AxNotificationKind.spaceInvitationReceived ||
     AxNotificationKind.invitationReceived =>
-      AxNotificationTarget.project,
+      AxNotificationTarget.space,
   };
 
   return AxNotification(
     id: eventId,
     kind: kind,
     title: switch (kind) {
-      AxNotificationKind.workstreamNeedsInput => 'Workstream needs input',
-      AxNotificationKind.workstreamCompleted => 'Workstream completed',
-      AxNotificationKind.workstreamFailed => 'Workstream failed',
+      AxNotificationKind.threadNeedsInput ||
+      AxNotificationKind.threadNeedsInput =>
+        'Thread needs input',
+      AxNotificationKind.threadCompleted ||
+      AxNotificationKind.threadCompleted =>
+        'Thread completed',
+      AxNotificationKind.threadFailed ||
+      AxNotificationKind.threadFailed =>
+        'Thread failed',
       AxNotificationKind.workflowRunCompleted ||
       AxNotificationKind.completed =>
         'Workflow Run completed',
@@ -261,15 +280,17 @@ AxNotification? notificationFromRealtimeEvent(
       AxNotificationKind.workspaceOffline => 'Workspace offline',
       AxNotificationKind.workerCredentialProblem => 'Worker connection expired',
       AxNotificationKind.workerInstallFailed => 'Worker connection failed',
-      AxNotificationKind.projectInvitationReceived ||
+      AxNotificationKind.spaceInvitationReceived ||
       AxNotificationKind.invitationReceived =>
         'Invitation received',
     },
     message: message,
     createdAt: timestamp,
     priority: switch (kind) {
-      AxNotificationKind.workstreamNeedsInput ||
-      AxNotificationKind.workstreamFailed ||
+      AxNotificationKind.threadNeedsInput ||
+      AxNotificationKind.threadFailed ||
+      AxNotificationKind.threadNeedsInput ||
+      AxNotificationKind.threadFailed ||
       AxNotificationKind.workflowRunNeedsApproval ||
       AxNotificationKind.workflowRunFailed ||
       AxNotificationKind.approvalRequired ||
@@ -278,16 +299,16 @@ AxNotification? notificationFromRealtimeEvent(
         AxNotificationPriority.high,
       AxNotificationKind.workspaceOffline ||
       AxNotificationKind.workerInstallFailed ||
-      AxNotificationKind.projectInvitationReceived ||
+      AxNotificationKind.spaceInvitationReceived ||
       AxNotificationKind.invitationReceived =>
         AxNotificationPriority.normal,
-      AxNotificationKind.workstreamCompleted ||
+      AxNotificationKind.threadCompleted ||
       AxNotificationKind.workflowRunCompleted ||
       AxNotificationKind.completed =>
         AxNotificationPriority.low,
     },
-    projectId: projectId,
-    workstreamId: workstreamId,
+    spaceId: spaceId,
+    threadId: threadId,
     runId: runId,
     workspaceId: workspaceId,
     workerId: workerId,

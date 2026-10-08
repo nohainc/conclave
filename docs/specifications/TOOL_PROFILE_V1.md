@@ -87,16 +87,16 @@ expansion tests cover the default and all compatibility override layouts, both
 fresh and resumed conversations, and preserve the existing full-access mapping.
 
 For read-only assignments, Workspace additionally requires the admitted Profile
-to declare the existing `workstream_read` capability before launching the Engine.
-This capability attests that `provider_default` enforces read-only Workstream
+to declare the existing `thread_read` capability before launching the Engine.
+This capability attests that `provider_default` enforces read-only Thread
 access; a sandbox flag or planning prompt alone is insufficient. Capability
 claims must be reviewed during official Profile qualification, not inferred from
 provider identity or CLI flag names. Writable assignments retain their existing
 policy. Older releases without this attestation fail closed for read-only tasks;
 publish a qualified successor rather than editing an immutable release.
 
-The Antigravity v1 starter deliberately does not declare `workstream_read`.
-Its `--sandbox` mapping allows project writes, while `--mode plan` supplies
+The Antigravity v1 starter deliberately does not declare `thread_read`.
+Its `--sandbox` mapping allows space writes, while `--mode plan` supplies
 planning instructions rather than a filesystem write prohibition. It remains
 available for Work but cannot execute Chat or other read-only assignments until
 a genuinely enforceable mapping is qualified. See the official
@@ -729,8 +729,8 @@ Profile declares safe product capabilities such as:
 ~~~text
 text
 local_file
-workstream_read
-workstream_write
+thread_read
+thread_write
 durable_session
 image
 audio
@@ -826,7 +826,7 @@ Once a Profile release is published beyond draft:
 
 - real installed provider CLI;
 - passive probe and explicit live probe;
-- representative assignment and Workstream write where the Profile can write
+- representative assignment and Thread write where the Profile can write
   local files;
 - durable session start and resume when the Profile supports sessions;
 - bounded timeout and assignment cancellation through the Workspace process
@@ -871,7 +871,7 @@ flutter test test/tool_profile_real_acceptance_test.dart
 
 Use `CONCLAVE_TEST_REAL_PROFILE_GEMINI=1` for the Gemini Profile. The evidence
 artifact contains version and scenario metadata only; it does not retain
-credentials, prompts, provider output, or Workstream file contents.
+credentials, prompts, provider output, or Thread file contents.
 
 ## 28. Initial official Profiles
 

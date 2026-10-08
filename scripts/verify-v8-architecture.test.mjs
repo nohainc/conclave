@@ -9,14 +9,30 @@ function violationsFor(source) {
 
 describe("v8 architecture guard rejects retired source patterns", () => {
   it.each([
-    ["WorkstreamCheckoutManager", "WorkstreamCheckoutManager"],
+    "AxProject",
+    "WorkstreamExecutionCoordinator",
+    "projectId",
+    "workstream_id",
+    "/api/projects/example",
+  ])("rejects old product identifier %s", (source) => {
+    expect(violationsFor(source)).toContain(
+      "retired Project/Workstream product identifiers",
+    );
+  });
+  it("keeps provider-native and technical project terminology valid", () => {
+    expect(
+      violationsFor("GOOGLE_CLOUD_PROJECT projectContextState project.pbxproj"),
+    ).not.toContain("retired Project/Workstream product identifiers");
+  });
+  it.each([
+    ["ThreadCheckoutManager", "ThreadCheckoutManager"],
     ["checkout_id schema columns", "checkout_id"],
-    ["Workstream checkpoint tables", "workstream_checkpoints"],
+    ["Thread checkpoint tables", "thread_checkpoints"],
     ["Checkout mutation commands", "checkout.provision"],
     ["Git rollback commands", "resetHard"],
   ])("rejects %s", (_description, source) => {
     expect(violationsFor(source)).toContain(
-      "retired Workstream Checkout architecture",
+      "retired Thread Checkout architecture",
     );
   });
 

@@ -22,7 +22,7 @@ void main() {
     engineFamily: 'cli',
     visibilityState: 'visible',
     releaseStage: 'testing',
-    capabilities: ['text', 'workstream_read'],
+    capabilities: ['text', 'thread_read'],
     sortOrder: 1,
   );
 
@@ -50,7 +50,7 @@ void main() {
       ),
     );
 
-    final inventory = projectWorkerInventory(
+    final inventory = spaceWorkerInventory(
       worker: readyWorker,
       descriptor: descriptor,
       eligibleProfile: null,
@@ -101,7 +101,7 @@ void main() {
       ),
     );
 
-    final inventory = projectWorkerInventory(
+    final inventory = spaceWorkerInventory(
       worker: readyWorker,
       descriptor: descriptor,
       eligibleProfile: eligibleProfile,
@@ -113,7 +113,7 @@ void main() {
     expect(inventory['profileReleaseVersion'], 1);
     expect(inventory['engineVersion'], '1.0.0');
     expect(inventory['capabilities'],
-        ['authorized_context_read', 'text', 'workstream_read']);
+        ['authorized_context_read', 'text', 'thread_read']);
   });
 
   test('a missing Engine also forces a non-ready inventory projection',
@@ -127,7 +127,7 @@ void main() {
       ),
     );
 
-    final inventory = projectWorkerInventory(
+    final inventory = spaceWorkerInventory(
       worker: readyWorker,
       descriptor: descriptor,
       eligibleProfile: null,

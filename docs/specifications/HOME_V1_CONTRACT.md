@@ -2,9 +2,9 @@
 
 ## Overview
 
-The Conclave AX **Home** surface is the personal collaboration and attention hub for a user across all their Projects.
+The Conclave AX **Home** surface is the personal collaboration and attention hub for a user across all their Spaces.
 
-Home is **not** a metrics dashboard of infrastructure counts (e.g. number of Projects, connected Workspaces, ready Workers, or idle execution queues). Infrastructure and entity management reside in their dedicated navigation areas (Projects, Workspaces, Workers, Runs).
+Home is **not** a metrics dashboard of infrastructure counts (e.g. number of Spaces, connected Workspaces, ready Workers, or idle execution queues). Infrastructure and entity management reside in their dedicated navigation areas (Spaces, Workspaces, Workers, Runs).
 
 Instead, Home answers three fundamental questions for the user:
 1. **What needs my attention?**
@@ -18,7 +18,7 @@ HOME
 │    └── Actionable items requiring or deserving attention
 │
 ├── 2. Continue Working
-│    └── Recent relevant Workstreams with collaboration context
+│    └── Recent relevant Threads with collaboration context
 │
 ├── 3. What's New
 │    └── Conclave product release updates and feature announcements
@@ -36,7 +36,7 @@ HOME
   - **Notification Center:** Answers *"What happened?"* Full chronological timeline of events, reads/unreads, and historic notifications.
   - **Home ("For You"):** Answers *"What should I care about?"* A strictly bounded (max ~5 items) triage surface displaying only items that demand the user's active attention or decision.
 - **Home Selection & Multi-Factor Ranking Algorithm:**
-  1. **Priority category** (Project invitations → Input/Approval required → Failed executions → Worker/credential issues → Workspace connectivity → Completed reviews → General findings/info).
+  1. **Priority category** (Space invitations → Input/Approval required → Failed executions → Worker/credential issues → Workspace connectivity → Completed reviews → General findings/info).
   2. **Unread state** (Unread items are prioritized over already-viewed items).
   3. **Actionability** (Items requiring human action/decision e.g. Accept/Decline, Review, Fix rank ahead of passive informative items).
   4. **Recency** (Newer items rank ahead of older items when category, unread state, and actionability are identical).
@@ -44,35 +44,35 @@ HOME
   - Explicit header CTA: `View all notifications →` opening the full Notification Center.
   - Category badge count showing the total number of attention items.
 - **Card Structure:**
-  - Semantic category chip (e.g. `Project invitation`, `Needs your input`, `Failed execution`, `Worker needs attention`, `Workspace offline`, `Completed`).
+  - Semantic category chip (e.g. `Space invitation`, `Needs your input`, `Failed execution`, `Worker needs attention`, `Workspace offline`, `Completed`).
   - Relative timestamp (e.g. `8 minutes ago`, `24 min ago`).
   - Item Title and contextual Subtitle (e.g. `Julia invited you to "Family Travel"`, `Owner · 8 minutes ago`).
   - Contextual action buttons (`Decline` / `Accept`, `Review →`, `Open →`, `Inspect →`, `Fix →`, `Connect →`).
 - **Absence Behavior:** If nothing requires attention, the section renders `const SizedBox.shrink()` (zero filler/empty placeholder text like `"Nothing needs your attention"`).
 
 ### 2. Continue Working (Phase 8 & Phase 9: Recent-Work Ranking)
-- **Purpose:** Fast resumption of ongoing collaborative work in context. Projects are broad; the true return destination is the active Workstream/conversation.
-- **Capacity:** Shows 3–5 recent Workstreams.
+- **Purpose:** Fast resumption of ongoing collaborative work in context. Spaces are broad; the true return destination is the active Thread/conversation.
+- **Capacity:** Shows 3–5 recent Threads.
 - **Card Structure:**
-  1. **Project Name:** Uppercase tracked label (e.g., `CONCLAVE DEVELOPMENT`, `WEBSITE`).
-  2. **Workstream Title:** Prominent bold title (e.g., `Worker Sessions`, `Landing Page`).
+  1. **Space Name:** Uppercase tracked label (e.g., `CONCLAVE DEVELOPMENT`, `WEBSITE`).
+  2. **Thread Title:** Prominent bold title (e.g., `Worker Sessions`, `Landing Page`).
   3. **Collaborators + Relative Time:** Context badge indicating who is working together and when (e.g., `ChatGPT · 23 min ago`, `You + Gemini · Yesterday`).
   4. **Last Message / Work Quote:** Italicized discussion snippet or decision quote (e.g., `"We should persist the..."`, `"The hero should..."`).
-  5. **Direct CTA:** `Continue →` button navigating straight into the Workstream conversation (`AxNavigation.workstream(projectId, workstreamId)`).
+  5. **Direct CTA:** `Continue →` button navigating straight into the Thread conversation (`AxNavigation.thread(spaceId, threadId)`).
 - **Recent-Work Ranking Engine (`AxRecentWorkRanker`):**
-  - **Does NOT use naive `updatedAt DESC`:** Background synchronization, metadata polls, or entity updates do not push irrelevant workstreams to the top.
+  - **Does NOT use naive `updatedAt DESC`:** Background synchronization, metadata polls, or entity updates do not push irrelevant threads to the top.
   - **Ranking Factors:**
-    1. **Unresolved state (+1000 pts):** Active runs or workstreams waiting for human decisions.
+    1. **Unresolved state (+1000 pts):** Active runs or threads waiting for human decisions.
     2. **Recent user participation (+500 pts):** User authored messages or direct contributions.
     3. **Recent worker response (+250 pts):** AI Workers replied to requests in this conversation.
-    4. **Direct membership (+100 pts):** User is an active collaborator/owner on the parent project.
+    4. **Direct membership (+100 pts):** User is an active collaborator/owner on the parent space.
     5. **Meaningful conversation recency decay (up to +500 pts):** Time decay applied strictly to actual human and worker messages.
   - **Exclusion Filters:**
-    - ❌ Archived Projects
-    - ❌ Archived Workstreams
+    - ❌ Archived Spaces
+    - ❌ Archived Threads
     - ❌ Deleted resources
     - ❌ Inaccessible / non-member resources
-- **Absence Behavior:** Omitted if no project or workstream history exists.
+- **Absence Behavior:** Omitted if no space or thread history exists.
 
 ### 3. What's New
 - **Purpose:** Product updates, capability announcements, and changelogs.
@@ -84,7 +84,7 @@ HOME
 
 ### 4. AI Updates
 - **Purpose:** Relevant model and capability changes for supported AI Workers.
-- **Relevance Filter:** Scoped strictly to the Workers connected or available to the user's projects (e.g., ChatGPT model upgrades shown only to users with ChatGPT Workers enabled).
+- **Relevance Filter:** Scoped strictly to the Workers connected or available to the user's spaces (e.g., ChatGPT model upgrades shown only to users with ChatGPT Workers enabled).
 - **Not Generic AI Industry News:** Covers only changes that directly affect what the user can execute inside Conclave AX (e.g., *"GPT-5 is now available in your ChatGPT Worker"* vs generic press announcements).
 
 ---
@@ -92,13 +92,13 @@ HOME
 ## Established-User Home Invariants & Removals
 
 The following legacy concepts are **prohibited** from established-user Home:
-- ❌ Projects count metric card
+- ❌ Spaces count metric card
 - ❌ Workspaces count metric card
 - ❌ Ready Workers count metric card
-- ❌ Recent Projects plain list (replaced by *Continue Working* workstreams)
+- ❌ Recent Spaces plain list (replaced by *Continue Working* threads)
 - ❌ Permanent `"No active Runs"` card
 - ❌ Static `"Nothing needs your attention"` filler
-- ❌ `"Archived Projects"` header button
+- ❌ `"Archived Spaces"` header button
 - ❌ Generic `"Your execution capacity at a glance"` subtitle
 - ❌ Onboarding / Getting Started cards mixed into the dashboard
 
@@ -109,28 +109,28 @@ The following legacy concepts are **prohibited** from established-user Home:
 ```text
 HomePage (Dispatcher)
     │
-    ├── isNewUser == true  (projects.isEmpty)
+    ├── isNewUser == true  (spaces.isEmpty)
     │     └── NewUserHome
-    │           ├── (Priority if invitations.isNotEmpty) Join a Project card
+    │           ├── (Priority if invitations.isNotEmpty) Join a Space card
     │           ├── ("or" divider if invitations.isNotEmpty)
-    │           ├── Create your first Project card
+    │           ├── Create your first Space card
     │           ├── How Conclave AX works (value foundation cards)
     │           └── Advanced local execution (Want to use AI or tools running on your computer?)
     │
-    └── isNewUser == false (projects.isNotEmpty)
+    └── isNewUser == false (spaces.isNotEmpty)
           └── EstablishedUserHome
                 ├── 1. For You (attention items + pending invitations)
                 ├── 2. Running Now (if active runs)
-                ├── 3. Continue Working (active workstreams)
+                ├── 3. Continue Working (active threads)
                 ├── 4. What's New in Conclave (product updates)
                 └── 5. AI Updates (scoped model updates)
 ```
 
 ### 1. NewUserHome
-- **Condition:** Active when `projects.isEmpty`.
+- **Condition:** Active when `spaces.isEmpty`.
 - **Experience & Onboarding Hierarchy:**
   ```text
-  Create / Join Project
+  Create / Join Space
           ↓
   Collaborate
           ↓
@@ -140,28 +140,28 @@ HomePage (Dispatcher)
   ```
   - Dedicated header: `Welcome to Conclave AX` / `Bring your people and AI together.`
   - **Priority Invitation Card** (when `invitations.isNotEmpty`):
-    - Displays `Join a Project` with count badge (*"You have N invitations."*).
+    - Displays `Join a Space` with count badge (*"You have N invitations."*).
     - Inlines invitations with direct `Accept` and `Decline` actions.
     - Followed by an `or` separator.
-  - **Primary Project Action**:
-    - `Create your first Project` (*"Start a shared space for people, conversations and AI."*).
-    - `Create Project →` action button.
+  - **Primary Space Action**:
+    - `Create your first Space` (*"Start a shared space for people, conversations and AI."*).
+    - `Create Space →` action button.
   - **How Conclave AX works** value foundation:
     - `People first`: Invite teammates, family, and collaborators to work together with shared AI.
     - `Private credentials`: Share AI access without exposing private keys.
-    - `Shared conversations`: Maintain shared project context across members.
+    - `Shared conversations`: Maintain shared space context across members.
   - **Advanced Local Execution Path** (visually secondary at bottom):
     - Title: *"Want to use AI or tools running on your computer?"*
-    - Description: *"Connect Conclave Workspace to make local Workers available to your Projects."*
+    - Description: *"Connect Conclave Workspace to make local Workers available to your Spaces."*
     - Action: `Connect Workspace →`
   - Completely omits established dashboard sections (`For you`, `Continue working`, `What's new in Conclave`, `AI updates`).
 
 ### 2. EstablishedUserHome
-- **Condition:** Active when `projects.isNotEmpty`.
+- **Condition:** Active when `spaces.isNotEmpty`.
 - **Experience:**
-  - **For You**: Prioritizes attention items, workstream input requests, and pending invitations.
+  - **For You**: Prioritizes attention items, thread input requests, and pending invitations.
   - **Running Now**: Conditionally visible when active runs exist.
-  - **Continue Working**: Contextual workstreams with collaborators, snippet, and `Continue →` button.
+  - **Continue Working**: Contextual threads with collaborators, snippet, and `Continue →` button.
   - **What's New in Conclave**: Official product updates.
   - **AI Updates**: Scoped AI capability news for available worker types.
   - Strictly omits onboarding cards and getting-started tutorials.
@@ -175,12 +175,12 @@ To keep `HomePage` and `_ForYouItemTile` decoupled from backend schemas, realtim
 ```text
 AxHomeAttentionItem
 ├── id: String
-├── type: AxHomeAttentionType (projectInvitation, needsInput, approvalRequired, executionFailed, executionCompleted, workerProblem, workspaceProblem)
+├── type: AxHomeAttentionType (spaceInvitation, needsInput, approvalRequired, executionFailed, executionCompleted, workerProblem, workspaceProblem)
 ├── priority: int? (explicit priority override or derived default order)
 ├── title: String
 ├── description: String
-├── projectId?: String
-├── workstreamId?: String
+├── spaceId?: String
+├── threadId?: String
 ├── workerId?: String
 ├── workspaceId?: String
 ├── timestamp?: DateTime
@@ -194,7 +194,7 @@ AxHomeAttentionItem
 1. **Pure Presentation Tile (`_ForYouItemTile`):**
    - The tile does not handle routing switches, invitation models, or backend-specific structures.
    - It exclusively invokes `item.primaryAction?.onPerform()` and `item.secondaryAction?.onPerform()`.
-2. **Projector Projection (`AxHomeAttentionProjector.project(...)`):**
+2. **Projector Projection (`AxHomeAttentionProjector.space(...)`):**
    - Transforms diverse inputs (invitations, background findings, system notifications) into normalized `AxHomeAttentionItem`s.
    - Binds concrete callback closures into `AxHomeAttentionAction` instances (`Accept`, `Decline`, `Review →`, `Inspect →`, `Fix →`, `Connect →`, `Open →`).
    - Applies the 4-factor prioritization algorithm (Priority Category → Unread Status → Actionability → Recency) and truncates to the top 5 items.
@@ -204,7 +204,7 @@ AxHomeAttentionItem
 ## Cached / Local Read Model Architecture (Phase 10)
 
 Home is designed as a **pure projection** of already synchronized client-side state:
-- **No Reload Storms on Navigation:** Navigating `Project A → Home → Project B → Home` consumes shared in-memory stores (`store.projects`, `store.workspaces`, `store.executionChanges`, `store.invitations`, `store.catalogs.workers`, `store.notifications`, `store.productUpdateReadStates`) via reactive `ListenableBuilder` and `AxQueryBuilder`.
+- **No Reload Storms on Navigation:** Navigating `Space A → Home → Space B → Home` consumes shared in-memory stores (`store.spaces`, `store.workspaces`, `store.executionChanges`, `store.invitations`, `store.catalogs.workers`, `store.notifications`, `store.productUpdateReadStates`) via reactive `ListenableBuilder` and `AxQueryBuilder`.
 - **Zero Independent Server Reloads:** Opening Home never triggers independent HTTP fetch bursts for entities that are already managed by Conclave's background sync engine.
 
 ---
@@ -305,8 +305,8 @@ Home filters AI updates to show **only** changes for Workers the user can actual
 ```text
 Available Worker Profiles
   ├── User Workspace Workers (e.g., local ChatGPT Worker)
-  ├── Shared Project Workstreams (e.g., project workstream with Gemini Worker lead/config)
-  └── Project Settings Worker Grants (e.g., sharedWorkers / workerGrants)
+  ├── Shared Space Threads (e.g., space thread with Gemini Worker lead/config)
+  └── Space Settings Worker Grants (e.g., sharedWorkers / workerGrants)
         ↓
 AI Capability Updates Catalog
         ↓
@@ -317,7 +317,7 @@ Home Surface
 
 ### 2. Strict Filtering Guarantees
 - **No Irrelevant Provider News:** If the user has ChatGPT only, Gemini/Claude updates are strictly omitted.
-- **Shared Access Inclusion:** If a collaborator gains access to a Worker profile through a shared Project Workstream or grant, relevant updates for that Worker automatically become visible on Home.
+- **Shared Access Inclusion:** If a collaborator gains access to a Worker profile through a shared Space Thread or grant, relevant updates for that Worker automatically become visible on Home.
 - **Zero-State Omission:** If the user has zero accessible workers or no updates match their accessible workers, the AI updates section collapses completely (`const SizedBox.shrink()`) without placeholder clutter.
 
 ---
@@ -347,9 +347,9 @@ Home avoids permanent or static "Active Runs" cards that clutter the screen when
 - **Rich Card Presentation (`_RunningNowCard`):**
   - **Objective:** Prominent title (e.g., `Landing page review`).
   - **Worker & Model Metadata:** Concise context badge (e.g., `ChatGPT · Model X · High`).
-  - **Workstream Hierarchy:** Navigation path (e.g., `Website / Landing Page`).
+  - **Thread Hierarchy:** Navigation path (e.g., `Website / Landing Page`).
   - **Duration & Progress:** Active execution time or task counts (e.g., `Running for 1m 42s` or `2/5 tasks completed`).
-  - **Direct CTA:** `Open →` button navigating directly into the executing Workstream/Run view.
+  - **Direct CTA:** `Open →` button navigating directly into the executing Thread/Run view.
 - **Zero-State Omission:** When nothing is running (`run == null` or run has reached a terminal/non-running state like `completed`, `failed`, `cancelled`), the section is completely omitted (`const SizedBox.shrink()`), preventing empty-state clutter.
 
 ---
@@ -377,15 +377,15 @@ Established Home establishes a strict visual hierarchy where actionable and oper
 Home Hierarchy Order
 ├── 1. For You          [Strongest]  (Approvals, Failures, Invitations, Offline issues)
 ├── 2. Running Now      [Dynamic]    (Active executions with live telemetry)
-├── 3. Continue Working [Primary]    (Daily workstreams and ranked recent activities)
+├── 3. Continue Working [Primary]    (Daily threads and ranked recent activities)
 ├── 4. What's New       [Secondary]  (Subdued product releases & changelog)
 └── 5. AI Updates       [Secondary]  (Subdued model availability & capability changes)
 ```
 
 ### 1. Hierarchy Rules & Visual Weight Guarantees
-- **Action Signals First:** Product news and AI model changes must never visually compete with, overshadow, or distract from an approval request, execution failure, workspace disconnection, or project invitation.
+- **Action Signals First:** Product news and AI model changes must never visually compete with, overshadow, or distract from an approval request, execution failure, workspace disconnection, or space invitation.
 - **For You Section Prominence:**
-  - Placed at the very top of Home above all executions and workstreams.
+  - Placed at the very top of Home above all executions and threads.
   - Distinct high-contrast card border and surface styling.
   - High-visibility semantic category badges (orange for approvals/input, red for execution failures, amber for offline workspaces/workers, primary for invitations).
   - Primary call-to-action buttons (`FilledButton` for primary actions like "Review →" or "Accept") ensure direct operational resolution.
@@ -404,7 +404,7 @@ Section Row Composition
 └── AI Updates:     Header -> Row [Capability] -> Divider -> Row [Capability] ...
 
 Reserved Card Surfaces
-├── Continue Working:   Rich Workstream grid cards (collaboration & snippet context)
+├── Continue Working:   Rich Thread grid cards (collaboration & snippet context)
 ├── Running Now:        Highlighted ephemeral execution card (telemetry & live CTA)
 └── Onboarding:         Welcome & initial value cards (first-time walkthrough)
 ```
@@ -412,7 +412,7 @@ Reserved Card Surfaces
 ### 1. Architectural Guidelines
 - **Clean Workspace Flow:** `For You`, `What's New`, and `AI Updates` render items as lightweight list rows directly within their section with subtle hairline dividers, eliminating visual clutter from nesting boxes inside boxes.
 - **Card Purpose Preservation:** Large cards are reserved strictly for rich content containers where multi-dimensional metadata benefits from a bounded spatial enclosure:
-  - **`Continue Working`:** Workstream title, project badge, snippet previews, collaborator identities, and jump actions.
+  - **`Continue Working`:** Thread title, space badge, snippet previews, collaborator identities, and jump actions.
   - **`Running Now`:** High-priority active execution telemetry, objective, elapsed time, and direct workspace navigation.
   - **`Onboarding`:** First-turn welcome cards and setup milestones.
 
@@ -446,14 +446,14 @@ Home is a focused attention and collaboration hub; it is not a miscellaneous lau
 
 ```text
 Archive Management Scope
-├── Navigation Context (App Menu / Sidebar): "Archived Projects" dialog & restore actions
-├── Project Context (Project / Workstream views): "Archive" / "Restore" actions
+├── Navigation Context (App Menu / Sidebar): "Archived Spaces" dialog & restore actions
+├── Space Context (Space / Thread views): "Archive" / "Restore" actions
 └── Home: Excluded (Zero utility buttons or archive shortcuts)
 ```
 
 ### 1. Architectural Rules
-- **No Archive Buttons on Home:** The legacy `"Archived Projects"` button previously located beneath the title is permanently removed from Home.
-- **Dedicated Navigation Placement:** Archive discovery and project restoration live cleanly inside the global application menu (`AppMenu`) and sidebar (`AppSidebar`), or inside the Project management surface (`ProjectPage`), preserving Home purely for active attention, active execution, active workstreams, and relevant updates.
+- **No Archive Buttons on Home:** The legacy `"Archived Spaces"` button previously located beneath the title is permanently removed from Home.
+- **Dedicated Navigation Placement:** Archive discovery and space restoration live cleanly inside the global application menu (`AppMenu`) and sidebar (`AppSidebar`), or inside the Space management surface (`SpacePage`), preserving Home purely for active attention, active execution, active threads, and relevant updates.
 
 ---
 
@@ -462,31 +462,31 @@ Archive Management Scope
 Invitations remain prominent across Conclave AX without maintaining disparate, disconnected invitation models or state pools.
 
 ```text
-AxProjectInvitation Reactive Stream
+AxSpaceInvitation Reactive Stream
                ↓
     AxCollaborationMutations
                │
   ┌────────────┼────────────┬─────────────┬──────────────┐
   ▼            ▼            ▼             ▼              ▼
-Home Card   For You     Notification   Sidebar Tree   Project
+Home Card   For You     Notification   Sidebar Tree   Space
 (New User)  (Attention)    Badge       (Pending)     Membership
 ```
 
 ### 1. Unified State & Immediate Synchronization
-- **Single Source of Truth:** `store.invitations` and `store.collaboration` own the canonical state and lifecycle for project invitations across all presentation projections.
+- **Single Source of Truth:** `store.invitations` and `store.collaboration` own the canonical state and lifecycle for space invitations across all presentation projections.
 - **Projections over the Same State:**
-  - **New-User Home:** `Join a Project` priority card.
-  - **Established-User Home:** Top-ranked `Project invitation` rows in the `For You` attention section via `AxHomeAttentionProjector`.
+  - **New-User Home:** `Join a Space` priority card.
+  - **Established-User Home:** Top-ranked `Space invitation` rows in the `For You` attention section via `AxHomeAttentionProjector`.
   - **Notification Center & Inbox:** `Pending invitations` section within `_showNotifications` dialog.
-  - **Sidebar Project Tree:** `Pending invitations (N)` group in `ProjectTree`.
+  - **Sidebar Space Tree:** `Pending invitations (N)` group in `SpaceTree`.
 - **Immediate Multi-Surface Updates:**
-  - Accepting an invitation from Home executes `store.acceptInvitation(invite)` which optimistically updates both the `invitations` and `projects` stores.
+  - Accepting an invitation from Home executes `store.acceptInvitation(invite)` which optimistically updates both the `invitations` and `spaces` stores.
   - Instantly without page reload or manual refetch:
     1. Home removes the invitation item.
     2. Notification badge decreases.
-    3. Sidebar `ProjectTree` adds the joined project and clears the pending invitation entry.
-    4. Project membership queries are refreshed.
-    5. The client transitions directly into the newly joined project conversation space.
+    3. Sidebar `SpaceTree` adds the joined space and clears the pending invitation entry.
+    4. Space membership queries are refreshed.
+    5. The client transitions directly into the newly joined space conversation space.
 
 ---
 
@@ -496,12 +496,12 @@ Home never displays passive information or dead-end cards without an obvious nex
 
 ```text
 Home Items & Canonical Deep-Link Destinations
-├── 1. Project Invitation   → Accept / Decline actions & direct Project entry
-├── 2. Needs Input / Review → Exact Workstream conversation context
-├── 3. Execution Failure    → Exact Workstream & Run failure inspector
+├── 1. Space Invitation   → Accept / Decline actions & direct Space entry
+├── 2. Needs Input / Review → Exact Thread conversation context
+├── 3. Execution Failure    → Exact Thread & Run failure inspector
 ├── 4. Worker/Workspace Prob→ Exact Workspace configuration & reconnection surface
-├── 5. Running Now          → Exact active Workstream & live execution view
-├── 6. Continue Working     → Exact Workstream conversation
+├── 5. Running Now          → Exact active Thread & live execution view
+├── 6. Continue Working     → Exact Thread conversation
 ├── 7. What's New           → Update detail dialog & changelog
 └── 8. AI Capability Update → Relevant Worker & model configuration
 ```
@@ -509,7 +509,7 @@ Home Items & Canonical Deep-Link Destinations
 ### 1. Architectural Rules
 - **No Dead-End Content:** If an item exists on Home, it must provide a direct primary action button or interactive target routing to its operational resolution.
 - **Context-Preserving Routing:**
-  - `onOpenWorkstream(projectId, workstreamId)` is prioritized over broad project landing pages for conversation turns, unresolved input requests, reviews, and recent work.
+  - `onOpenThread(spaceId, threadId)` is prioritized over broad space landing pages for conversation turns, unresolved input requests, reviews, and recent work.
   - `onOpenWorkspaces()` is directly bound to offline workspaces, worker credential faults, and AI model configurations.
 ---
 
@@ -521,7 +521,7 @@ Home avoids monolithic, all-or-nothing data fetches. Rendering progresses throug
 Progressive Rendering Flow
 ├── 1. Cached Home (Immediate render from in-memory reactive stores)
 ├── 2. Attention Refresh (Background sync for invitations, approvals, faults)
-├── 3. Recent Work Refresh (Background sync for active conversation workstreams)
+├── 3. Recent Work Refresh (Background sync for active conversation threads)
 └── 4. Updates Refresh (Changelog & AI model capability background fetches)
 ```
 
@@ -553,24 +553,24 @@ Home and the Notification Center utilize a normalized domain model structured st
 
 ```text
 Normalized Notification Domain
-├── 1. Workstream   (workstreamNeedsInput, workstreamCompleted, workstreamFailed)
+├── 1. Thread   (threadNeedsInput, threadCompleted, threadFailed)
 ├── 2. Workflow Run (workflowRunCompleted, workflowRunFailed, workflowRunNeedsApproval)
 ├── 3. Worker       (workerCredentialProblem, workerInstallFailed)
 ├── 4. Workspace    (workspaceOffline)
-└── 5. Project      (projectInvitationReceived)
+└── 5. Space      (spaceInvitationReceived)
 ```
 
 ### 1. Architectural Rules & Normalization
-- **No Ambiguous "Run" Assumptions:** Notifications distinguish between ongoing Workstream conversational turns and background Workflow Run executions.
+- **No Ambiguous "Run" Assumptions:** Notifications distinguish between ongoing Thread conversational turns and background Workflow Run executions.
 - **Accurate Navigation Target Resolution:**
-  - `AxNotificationTarget.workstream` → Deep-links directly to `AxNavigation.workstream(projectId, workstreamId)`.
-  - `AxNotificationTarget.workflowRun` → Deep-links directly to `AxNavigation.run(projectId, runId)`.
+  - `AxNotificationTarget.thread` → Deep-links directly to `AxNavigation.thread(spaceId, threadId)`.
+  - `AxNotificationTarget.workflowRun` → Deep-links directly to `AxNavigation.run(spaceId, runId)`.
   - `AxNotificationTarget.workspace` / `workspaces` → Deep-links to `AxNavigation.workspaces(workspaceId: ...)`.
-  - `AxNotificationTarget.project` → Deep-links to `AxNavigation.project(projectId)`.
+  - `AxNotificationTarget.space` → Deep-links to `AxNavigation.space(spaceId)`.
 - **Actionability & Priority Mapping:**
-  - High priority: `workstreamNeedsInput`, `workstreamFailed`, `workflowRunNeedsApproval`, `workflowRunFailed`, `workerCredentialProblem`.
-  - Normal priority: `workspaceOffline`, `workerInstallFailed`, `projectInvitationReceived`.
-  - Low priority: `workstreamCompleted`, `workflowRunCompleted`.
+  - High priority: `threadNeedsInput`, `threadFailed`, `workflowRunNeedsApproval`, `workflowRunFailed`, `workerCredentialProblem`.
+  - Normal priority: `workspaceOffline`, `workerInstallFailed`, `spaceInvitationReceived`.
+  - Low priority: `threadCompleted`, `workflowRunCompleted`.
 - **Home Triage Alignment:** `AxHomeAttentionProjector` maps normalized notification events cleanly into `AxHomeAttentionItem` triage rows with semantic action CTAs (`Review →`, `Inspect →`, `Fix →`, `Connect →`, `Open →`, `View →`).
 
 ---
@@ -581,27 +581,27 @@ Home aggregation strictly respects authorization and permission boundaries acros
 
 ```text
 Authorization Boundary on Home Aggregation
-├── Cloud Read-Model & APIs ──► Returns only authorized Projects & Workstreams for the authenticated user
-│                                (D1 queries scoped by project_memberships; 403/404 on ungranted resources)
+├── Cloud Read-Model & APIs ──► Returns only authorized Spaces & Threads for the authenticated user
+│                                (D1 queries scoped by space_memberships; 403/404 on ungranted resources)
 │
 └── Client Aggregation Projections
-    ├── For You (AxHomeAttentionProjector) ──► Strict exclusion of items referencing revoked/non-member projects
-    ├── Running Now                         ──► Active runs for revoked/non-member projects are suppressed
-    ├── Continue Working (Recent Work)      ──► Only authorized project workstreams are ranked and rendered
-    └── AI Updates (AxAiCapabilityUpdate)   ──► Filtered strictly against accessible workspace workers & member projects
+    ├── For You (AxHomeAttentionProjector) ──► Strict exclusion of items referencing revoked/non-member spaces
+    ├── Running Now                         ──► Active runs for revoked/non-member spaces are suppressed
+    ├── Continue Working (Recent Work)      ──► Only authorized space threads are ranked and rendered
+    └── AI Updates (AxAiCapabilityUpdate)   ──► Filtered strictly against accessible workspace workers & member spaces
 ```
 
 ### 1. Privacy Guarantees
-When a user's access to a Project, Workspace, or Worker is revoked, the user must **never** see:
-- Project name
-- Workstream title
+When a user's access to a Space, Workspace, or Worker is revoked, the user must **never** see:
+- Space name
+- Thread title
 - Worker activity & active run details
 - Conversation message snippets & previews
 - AI capability updates tied exclusively to inaccessible Workers
 
 ### 2. Multi-Layer Enforcement
-- **Backend / Read-Model APIs:** Cloud endpoints (`/api/projects`, `/api/projects/:id/workstreams`, `/api/projects/:id/workstreams/:wsId/conversations`) enforce SQL membership joins and `authorizeRequest` checks before returning data. Revoked projects are never returned in listing APIs.
-- **Client Projections:** Client-side projectors (`AxHomeAttentionProjector`, `EstablishedUserHome`, `AxRecentWorkRanker`, `AxAiCapabilityUpdateService`) validate every item against the user's active authorized project set (`projects.map((p) => p.id)`). Any cached or stale item referencing an unauthorized or revoked project ID is immediately filtered out before rendering.
+- **Backend / Read-Model APIs:** Cloud endpoints (`/api/spaces`, `/api/spaces/:id/threads`, `/api/spaces/:id/threads/:wsId/conversations`) enforce SQL membership joins and `authorizeRequest` checks before returning data. Revoked spaces are never returned in listing APIs.
+- **Client Projections:** Client-side projectors (`AxHomeAttentionProjector`, `EstablishedUserHome`, `AxRecentWorkRanker`, `AxAiCapabilityUpdateService`) validate every item against the user's active authorized space set (`spaces.map((p) => p.id)`). Any cached or stale item referencing an unauthorized or revoked space ID is immediately filtered out before rendering.
 
 ---
 
@@ -623,11 +623,11 @@ The response aggregates five focused slices into a single unified JSON payload:
   "attention": [
     {
       "id": "invitation-1",
-      "type": "projectInvitation",
+      "type": "spaceInvitation",
       "priority": 1,
-      "title": "Invited to Alpha Project",
-      "description": "Owner invited you to join Alpha Project as editor",
-      "projectId": "proj-1",
+      "title": "Invited to Alpha Space",
+      "description": "Owner invited you to join Alpha Space as editor",
+      "spaceId": "proj-1",
       "timestamp": "2026-10-08T06:00:00.000Z",
       "read": false
     }
@@ -635,8 +635,8 @@ The response aggregates five focused slices into a single unified JSON payload:
   "running": [
     {
       "id": "req-1",
-      "projectId": "proj-1",
-      "workstreamId": "ws-1",
+      "spaceId": "proj-1",
+      "threadId": "ws-1",
       "workerId": "codex",
       "workerType": "claude-code",
       "status": "running",
@@ -647,10 +647,10 @@ The response aggregates five focused slices into a single unified JSON payload:
   ],
   "recentWork": [
     {
-      "projectId": "proj-1",
-      "projectName": "Alpha Project",
-      "workstreamId": "ws-1",
-      "workstreamTitle": "Feature Implementation",
+      "spaceId": "proj-1",
+      "spaceName": "Alpha Space",
+      "threadId": "ws-1",
+      "threadTitle": "Feature Implementation",
       "updatedAt": "2026-10-08T06:12:00.000Z",
       "activeCollaborators": ["User A"],
       "latestSnippet": "Latest message preview"
@@ -683,8 +683,8 @@ The response aggregates five focused slices into a single unified JSON payload:
 ```
 
 ### 2. Architecture & Domain Integrity Principles
-1. **Not a Canonical Store:** `GET /api/home` does not introduce dedicated D1 tables or shadow stores. It computes a fast, read-only projection on the fly across canonical tables (`projects`, `project_memberships`, `project_invitations`, `work_requests`, `workstreams`, `discussion_messages`, and worker catalogs).
-2. **Strict Authorization Scoping:** Every entity returned in `attention`, `running`, and `recentWork` is strictly joined against the authenticated `user_id`'s active `project_memberships`. Revoked or inaccessible projects are excluded at the database query layer.
+1. **Not a Canonical Store:** `GET /api/home` does not introduce dedicated D1 tables or shadow stores. It computes a fast, read-only projection on the fly across canonical tables (`spaces`, `space_memberships`, `space_invitations`, `work_requests`, `threads`, `discussion_messages`, and worker catalogs).
+2. **Strict Authorization Scoping:** Every entity returned in `attention`, `running`, and `recentWork` is strictly joined against the authenticated `user_id`'s active `space_memberships`. Revoked or inaccessible spaces are excluded at the database query layer.
 3. **Graceful Degraded / Progressive Rendering:** Web and mobile clients can hydrate their local reactive stores using `AxHomeReadModel.fromJson(data)` upon initial launch while retaining progressive per-section refresh capabilities and offline caching resilience.
 
 ---
@@ -695,15 +695,15 @@ Home reacts dynamically and immediately to live Conclave transport and realtime 
 
 ```text
 Realtime Domain Event Flow
-├── invitation.received        ──► Appears in "For You" (and "Join a Project" card for 0-project users)
-├── workstream.needs_input     ──► Appears in "For You" with direct "Review →" workstream link
-├── workstream.completed       ──► "Running Now" card clears; review item appears in "For You" ("Open →")
+├── invitation.received        ──► Appears in "For You" (and "Join a Space" card for 0-space users)
+├── thread.needs_input     ──► Appears in "For You" with direct "Review →" thread link
+├── thread.completed       ──► "Running Now" card clears; review item appears in "For You" ("Open →")
 ├── worker.problem / offline   ──► Appears in "For You" with direct "Fix →" / "Connect →" action
 └── product.update.published   ──► Live update added to What's New; unread badge counter increments
 ```
 
 ### 1. Zero-Polling Reactive Architecture
-- `_homeView()` registers merged reactive listeners across `store.projects`, `store.workspaces`, `store.executionChanges`, `store.invitations`, `store.unreadNotifications`, `store.productUpdateReadStates`, and `store.productUpdatesNotifier`.
+- `_homeView()` registers merged reactive listeners across `store.spaces`, `store.workspaces`, `store.executionChanges`, `store.invitations`, `store.unreadNotifications`, `store.productUpdateReadStates`, and `store.productUpdatesNotifier`.
 - Background WebSocket transport messages invoke `_recordNotification(event)` and `_refreshRealtimeFeatures(type, event: event)`, immediately dispatching state updates to in-memory stores and triggering granular widget rebuilds.
 
 ---
@@ -714,16 +714,16 @@ The Conclave AX Home surface is formally verified against a 20-point canonical t
 
 | # | Scenario | Expected Behavior | Verification Status |
 |---|---|---|---|
-| 1 | **Brand-new account** | Renders `NewUserHome` onboarding hero, "Create your first Project", value cards; suppresses dashboard sections | Verified (`home_page_test.dart`) |
-| 2 | **New user with invitation** | "Join a Project" card takes top priority before "Create your first Project" | Verified (`home_page_test.dart`) |
-| 3 | **Project but no Workspace** | Normal Home dashboard renders; no setup warning banner or workspace blocker | Verified (`home_page_test.dart`) |
+| 1 | **Brand-new account** | Renders `NewUserHome` onboarding hero, "Create your first Space", value cards; suppresses dashboard sections | Verified (`home_page_test.dart`) |
+| 2 | **New user with invitation** | "Join a Space" card takes top priority before "Create your first Space" | Verified (`home_page_test.dart`) |
+| 3 | **Space but no Workspace** | Normal Home dashboard renders; no setup warning banner or workspace blocker | Verified (`home_page_test.dart`) |
 | 4 | **Invitation received realtime** | Appears immediately in "For You" with Accept / Decline actions | Verified (`home_page_test.dart`) |
-| 5 | **Invitation accepted** | Invitation item is removed from "For You" and joined Project appears in Continue Working / Projects | Verified (`home_page_test.dart`) |
-| 6 | **Workstream needs input** | Appears in "For You" with direct "Review →" action link to workstream conversation | Verified (`home_page_test.dart`) |
+| 5 | **Invitation accepted** | Invitation item is removed from "For You" and joined Space appears in Continue Working / Spaces | Verified (`home_page_test.dart`) |
+| 6 | **Thread needs input** | Appears in "For You" with direct "Review →" action link to thread conversation | Verified (`home_page_test.dart`) |
 | 7 | **Work running** | "Running now" section appears with animated progress indicator, objective, task count, and "Open →" | Verified (`home_page_test.dart`) |
 | 8 | **Work completes** | "Running now" card disappears; completion review item appears in "For You" with "Open →" | Verified (`home_page_test.dart`) |
-| 9 | **Recent Workstream** | Active unarchived workstreams render in "Continue working" with project name, title, collaborators, and snippet | Verified (`home_page_test.dart`) |
-| 10 | **Archived Workstream** | Archived workstreams (`archived: true`) and archived projects are filtered out from "Continue working" | Verified (`home_page_test.dart`) |
+| 9 | **Recent Thread** | Active unarchived threads render in "Continue working" with space name, title, collaborators, and snippet | Verified (`home_page_test.dart`) |
+| 10 | **Archived Thread** | Archived threads (`archived: true`) and archived spaces are filtered out from "Continue working" | Verified (`home_page_test.dart`) |
 | 11 | **Product update** | Published `AxProductUpdate` renders in "What's new in Conclave" and increments unread badge count | Verified (`home_page_test.dart`) |
 | 12 | **Old/read update** | Read updates (`AxUserProductUpdateState.isSeen / isRead`) do not show unread badge count | Verified (`home_page_test.dart`) |
 | 13 | **ChatGPT model added** | Relevant AI Update appears in "AI updates" when user has ChatGPT Worker configured | Verified (`home_page_test.dart`) |
@@ -731,7 +731,7 @@ The Conclave AX Home surface is formally verified against a 20-point canonical t
 | 15 | **Worker access revoked** | Related AI update disappears immediately when Worker access is revoked | Verified (`home_page_test.dart`) |
 | 16 | **Empty optional section** | Optional sections ("For you", "Running now", "AI updates") are completely hidden when empty | Verified (`home_page_test.dart`) |
 | 17 | **Offline** | Cached Home survives; displays connectivity indicator pill without replacing page content | Verified (`home_page_test.dart`) |
-| 18 | **Project permission revoked** | Attention items, runs, and recent work tied to revoked projects disappear immediately | Verified (`home_page_test.dart`) |
+| 18 | **Space permission revoked** | Attention items, runs, and recent work tied to revoked spaces disappear immediately | Verified (`home_page_test.dart`) |
 | 19 | **Realtime reconnect** | Replay/reconnect duplicate transport events are deduplicated by ID with no duplicate items | Verified (`home_page_test.dart`) |
 | 20 | **Narrow / mobile layout** | Renders cleanly on mobile viewports (e.g. 360px x 640px) with single-column responsive stacking and zero overflow | Verified (`home_page_test.dart`) |
 
@@ -747,12 +747,12 @@ The following 6 core interaction paths are measured:
 
 | Interaction Path | Telemetry Event Name | Event Payload Properties | Rationale |
 |---|---|---|---|
-| **Home → Continue Workstream** | `home.continue_workstream` | `projectId`, `workstreamId`, `projectName`, `workstreamTitle` | Measures how effectively Home accelerates return to ongoing collaborative work |
-| **Home → Accept invitation** | `home.accept_invitation` | `invitationId`, `projectId`, `role` | Measures successful onboarding and collaboration expansion |
-| **Home → Resolve attention** | `home.resolve_attention` | `itemId`, `type`, `actionLabel`, `projectId`, `workstreamId` | Measures triage efficiency for blocked runs, input requests, and worker issues |
+| **Home → Continue Thread** | `home.continue_thread` | `spaceId`, `threadId`, `spaceName`, `threadTitle` | Measures how effectively Home accelerates return to ongoing collaborative work |
+| **Home → Accept invitation** | `home.accept_invitation` | `invitationId`, `spaceId`, `role` | Measures successful onboarding and collaboration expansion |
+| **Home → Resolve attention** | `home.resolve_attention` | `itemId`, `type`, `actionLabel`, `spaceId`, `threadId` | Measures triage efficiency for blocked runs, input requests, and worker issues |
 | **Home → Open What's New** | `home.open_whats_new` | `updateId`, `unreadCount`, `source` | Measures feature awareness and changelog engagement |
 | **Home → AI Update** | `home.open_ai_update` | `updateId`, `workerProfileId`, `provider`, `type` | Measures AI capability discovery and worker configuration velocity |
-| **Home → Create Project** | `home.create_project` | `source` (`new_user_primary`, `new_user_secondary`, `home_cta`) | Measures project creation conversion from onboarding and home surfaces |
+| **Home → Create Space** | `home.create_space` | `source` (`new_user_primary`, `new_user_secondary`, `home_cta`) | Measures space creation conversion from onboarding and home surfaces |
 
 ### 2. Implementation & Design Principles
 - **Lightweight & Non-Blocking:** Telemetry recording via `AxHomeAnalytics` is fail-safe, non-blocking, and never interferes with UI responsiveness or error states.
@@ -766,12 +766,12 @@ With the completion and verification of the V2 Home experience, all obsolete V1 
 
 - **Excised Legacy Widgets & Containers:**
   - `_HomeCard` & `_MetricCard` widget definitions.
-  - Legacy metric counter cards: `Projects`, `Workspaces`, `Ready Workers`.
-  - Legacy plain `Recent Projects` list.
+  - Legacy metric counter cards: `Spaces`, `Workspaces`, `Ready Workers`.
+  - Legacy plain `Recent Spaces` list.
   - Legacy `execution-capacity` subtitle.
   - Permanent `No active Runs` placeholder card.
   - Permanent `Nothing needs your attention` placeholder card.
-  - Archived Projects Home modal action (archived project management is now housed exclusively under Project settings/navigation).
+  - Archived Spaces Home modal action (archived space management is now housed exclusively under Space settings/navigation).
   - Legacy Workspace-first onboarding ("Connect a Workspace", "No Workspace connected").
 - **No Feature Flags / Dead Paths:**
   - Zero legacy fallback flags or conditional dead-code paths remain.

@@ -1,6 +1,6 @@
 import {
   EXECUTION_PERMISSIONS,
-  isWorkspaceProjectGrantStatus,
+  isWorkspaceSpaceGrantStatus,
   resolveExecutionPermissions,
   validateWorkspaceConcurrencyPolicy,
   validateWorkspaceGrantCapabilities,
@@ -8,11 +8,11 @@ import {
   validateWorkspaceGrantWorkerIds,
   validateWorkspaceNetworkPolicy,
   type ExecutionPermission,
-  type WorkstreamBindingId,
+  type ThreadBindingId,
 } from "@conclave/core";
 
-export interface ProjectExecutionSelectionRequest {
-  readonly projectId: string;
+export interface SpaceExecutionSelectionRequest {
+  readonly spaceId: string;
   readonly requesterUserId: string;
   readonly role: string;
   readonly capabilities: readonly string[];
@@ -21,19 +21,19 @@ export interface ProjectExecutionSelectionRequest {
   readonly excludeIndependenceKeys?: readonly string[];
   readonly model?: string;
   readonly reasoningEffort?: string;
-  readonly executionClass?: "stateless_read" | "stateful_workstream";
-  /** Read-only capability policy independent of Workstream lease ownership. */
+  readonly executionClass?: "stateless_read" | "stateful_thread";
+  /** Read-only capability policy independent of Thread lease ownership. */
   readonly readOnly?: boolean;
-  readonly workstreamId?: string;
+  readonly threadId?: string;
   readonly workRequestId?: string;
-  readonly workBindingId?: WorkstreamBindingId;
+  readonly workBindingId?: ThreadBindingId;
 }
 
 export interface ExecutionTarget {
-  readonly projectId: string;
+  readonly spaceId: string;
   readonly workspaceId: string;
   readonly workspaceRuntimeIdentityId: string;
-  readonly workspaceProjectGrantId: string;
+  readonly workspaceSpaceGrantId: string;
   /** Local Worker identity selected for this assignment. */
   readonly workerId: string;
   /** Product Worker Type ID reported by Workspace and selected by policy. */
@@ -48,9 +48,9 @@ export interface ExecutionTarget {
   readonly effectivePermissions: readonly string[];
   readonly permissionSnapshot: Record<string, unknown>;
   readonly selectionExplanation: Record<string, unknown>;
-  readonly executionClass: "stateless_read" | "stateful_workstream";
+  readonly executionClass: "stateless_read" | "stateful_thread";
   readonly readOnly: boolean;
-  readonly workstreamId?: string;
+  readonly threadId?: string;
   readonly workRequestId?: string;
   readonly conversationId?: string;
   readonly baseContextRevision?: number;
@@ -94,7 +94,7 @@ function number(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function projectPermissions(role: string): ExecutionPermission[] {
+function spacePermissions(role: string): ExecutionPermission[] {
   if (role === "owner") return [...EXECUTION_PERMISSIONS];
   if (role === "collaborator") return ["repository:read", "repository:write"];
   return ["repository:read"];
@@ -119,48 +119,48 @@ function allowedByJson(row: Row, key: string, value: string): boolean {
 }
 
 /**
- * Resolves an execution target for a Project. The returned explanation is
+ * Resolves an execution target for a Space. The returned explanation is
  * persisted with the assignment.
  */
-export async function selectProjectExecutionTarget(
+export async function selectSpaceExecutionTarget(
   db: D1Database,
-  request: ProjectExecutionSelectionRequest,
+  request: SpaceExecutionSelectionRequest,
   now = new Date(),
   isWorkspaceLive?: WorkspaceLiveCheck,
 ): Promise<ExecutionTarget | null> {
   const membership = await db
     .prepare(
-      `SELECT role FROM project_memberships WHERE project_id = ?1 AND user_id = ?2`,
+      `SELECT role FROM space_memberships WHERE space_id = ?1 AND user_id = ?2`,
     )
-    .bind(request.projectId, request.requesterUserId)
+    .bind(request.spaceId, request.requesterUserId)
     .first<{ role: string }>();
   if (!membership || membership.role === "viewer") return null;
 
-  if (request.workstreamId) {
-    const workstream = await db
+  if (request.threadId) {
+    const thread = await db
       .prepare(
-        `SELECT ws.project_id, ws.lead_user_id, ws.access_policy_json
-           FROM workstreams ws
+        `SELECT ws.space_id, ws.lead_user_id, ws.access_policy_json
+           FROM threads ws
           WHERE ws.id = ?1`,
       )
-      .bind(request.workstreamId)
+      .bind(request.threadId)
       .first<Record<string, unknown>>();
     if (
-      !workstream ||
-      typeof workstream.project_id !== "string" ||
-      workstream.project_id !== request.projectId
+      !thread ||
+      typeof thread.space_id !== "string" ||
+      thread.space_id !== request.spaceId
     ) {
       return null;
     }
     if (membership.role !== "owner") {
-      const policy = object(workstream.access_policy_json);
+      const policy = object(thread.access_policy_json);
       const allowedUsers = Array.isArray(policy.allowedUserIds)
         ? policy.allowedUserIds.filter(
             (value): value is string => typeof value === "string",
           )
         : [];
-      const allowedRoles = Array.isArray(policy.allowedProjectRoles)
-        ? policy.allowedProjectRoles.filter(
+      const allowedRoles = Array.isArray(policy.allowedSpaceRoles)
+        ? policy.allowedSpaceRoles.filter(
             (value): value is string => typeof value === "string",
           )
         : [];
@@ -182,32 +182,32 @@ export async function selectProjectExecutionTarget(
 
   const executionClass = request.executionClass ?? "stateless_read";
   let statefulLease: {
-    workstreamId: string;
+    threadId: string;
     workRequestId: string;
     workspaceId: string;
     leaseId: string;
     fencingToken: number;
   } | null = null;
-  if (executionClass === "stateful_workstream") {
-    if (!request.workstreamId || !request.workRequestId) return null;
+  if (executionClass === "stateful_thread") {
+    if (!request.threadId || !request.workRequestId) return null;
     statefulLease = await db
       .prepare(
-        `SELECT wr.workstream_id AS workstreamId, wr.id AS workRequestId,
+        `SELECT wr.thread_id AS threadId, wr.id AS workRequestId,
               wr.primary_workspace_id AS workspaceId,
               l.id AS leaseId, l.fencing_token AS fencingToken
        FROM work_requests wr
-       JOIN workstream_runtime_leases l ON l.work_request_id = wr.id
-        AND l.workstream_id = wr.workstream_id AND l.status = 'active'
-       WHERE wr.id = ?1 AND wr.workstream_id = ?2
+       JOIN thread_runtime_leases l ON l.work_request_id = wr.id
+        AND l.thread_id = wr.thread_id AND l.status = 'active'
+       WHERE wr.id = ?1 AND wr.thread_id = ?2
          AND wr.mode = 'stateful' AND wr.status = 'running'
        LIMIT 1`,
       )
-      .bind(request.workRequestId, request.workstreamId)
+      .bind(request.workRequestId, request.threadId)
       .first<Record<string, unknown>>()
       .then((row) => {
         if (!row) return null;
         return {
-          workstreamId: String(row.workstreamId),
+          threadId: String(row.threadId),
           workRequestId: String(row.workRequestId),
           workspaceId: String(row.workspaceId),
           leaseId: String(row.leaseId),
@@ -223,13 +223,13 @@ export async function selectProjectExecutionTarget(
 
   const candidateRows = await db
     .prepare(
-      `SELECT g.id AS grant_id, g.project_id, g.workspace_id, g.status AS grant_status,
+      `SELECT g.id AS grant_id, g.space_id, g.workspace_id, g.status AS grant_status,
             g.allowed_worker_ids_json, g.allowed_worker_capabilities_json,
             g.allowed_permissions_json, g.network_policy_json,
             g.concurrency_json, g.expires_at,
             ep.allowed_worker_type_ids_json,
             ep.allowed_models_json,
-            usage.config_json AS workstream_work_config_json,
+            usage.config_json AS thread_work_config_json,
             wr.snapshot_json AS work_request_snapshot_json,
             (SELECT conversation_id FROM conversation_work_requests WHERE work_request_id = wr.id) AS conversation_id,
             (SELECT cr.conversation_revision - 1 FROM conversation_work_requests cr WHERE cr.work_request_id = wr.id) AS base_context_revision,
@@ -256,11 +256,11 @@ export async function selectProjectExecutionTarget(
              WHERE wa.execution_workspace_id = g.workspace_id
                AND wa.workspace_worker_id = i.worker_id
                AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments
-     FROM workspace_project_grants g
-     LEFT JOIN workstream_execution_policies ep ON ep.workstream_id = ?4
+     FROM workspace_space_grants g
+     LEFT JOIN thread_execution_policies ep ON ep.thread_id = ?4
      JOIN execution_workspaces ew ON ew.id = g.workspace_id
-     LEFT JOIN workstream_work_configs usage ON usage.workstream_id = ?4
-     LEFT JOIN work_requests wr ON wr.id = ?5 AND wr.workstream_id = ?4
+     LEFT JOIN thread_work_configs usage ON usage.thread_id = ?4
+     LEFT JOIN work_requests wr ON wr.id = ?5 AND wr.thread_id = ?4
      JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
      JOIN workspace_worker_inventory i ON i.workspace_id = ew.id
      LEFT JOIN workspace_tool_profile_channels profile_channel
@@ -279,7 +279,7 @@ export async function selectProjectExecutionTarget(
       AND definition.profile_definition_id = i.profile_definition_id
       AND definition.lifecycle_state = 'active'
      JOIN worker_scheduling vs ON vs.worker_id = i.worker_id
-     WHERE g.project_id = ?1 AND g.status = 'active'
+     WHERE g.space_id = ?1 AND g.status = 'active'
        AND (g.expires_at IS NULL OR g.expires_at > ?3)
        AND ew.status <> 'revoked'
        ${isWorkspaceLive ? "" : "AND ew.status = 'online'"}
@@ -287,10 +287,10 @@ export async function selectProjectExecutionTarget(
               active_assignments, ew.id, i.worker_id`,
     )
     .bind(
-      request.projectId,
+      request.spaceId,
       request.requesterUserId,
       now.toISOString(),
-      request.workstreamId ?? "",
+      request.threadId ?? "",
       request.workRequestId ?? "",
     )
     .all<Row>()
@@ -300,7 +300,7 @@ export async function selectProjectExecutionTarget(
   const rejected: Array<Record<string, unknown>> = [];
   const liveWorkspaceChecks = new Map<string, Promise<boolean>>();
   const bindingFor = (row: Row): Record<string, unknown> => {
-    const config = object(row.workstream_work_config_json);
+    const config = object(row.thread_work_config_json);
     const configBindings =
       config.bindings && typeof config.bindings === "object"
         ? (config.bindings as Record<string, unknown>)
@@ -384,7 +384,7 @@ export async function selectProjectExecutionTarget(
       ? typeof turnConfig.modelId === "string"
         ? turnConfig.modelId
         : null
-      : request.workstreamId &&
+      : request.threadId &&
           typeof binding.model === "string" &&
           binding.model.trim().length > 0
         ? binding.model
@@ -394,7 +394,7 @@ export async function selectProjectExecutionTarget(
       ? typeof turnConfig.effort === "string"
         ? turnConfig.effort
         : null
-      : request.workstreamId &&
+      : request.threadId &&
           typeof binding.reasoningEffort === "string" &&
           binding.reasoningEffort.trim().length > 0
         ? binding.reasoningEffort
@@ -420,7 +420,7 @@ export async function selectProjectExecutionTarget(
       validateWorkspaceConcurrencyPolicy,
     );
     const grantPolicyValid =
-      isWorkspaceProjectGrantStatus(row.grant_status) &&
+      isWorkspaceSpaceGrantStatus(row.grant_status) &&
       row.grant_status === "active" &&
       grantWorkerIds !== null &&
       grantCapabilities !== null &&
@@ -507,8 +507,8 @@ export async function selectProjectExecutionTarget(
       reject("engine_profile_unavailable");
       continue;
     }
-    if (request.workstreamId && !hasBinding) {
-      reject("workstream_step_binding_missing");
+    if (request.threadId && !hasBinding) {
+      reject("thread_step_binding_missing");
       continue;
     }
     if (request.workspaceId && request.workspaceId !== workspaceId) {
@@ -516,7 +516,7 @@ export async function selectProjectExecutionTarget(
       continue;
     }
     if (
-      request.workstreamId &&
+      request.threadId &&
       (preferredWorkerIds.length === 0 ||
         !preferredWorkerIds.includes(workerId))
     ) {
@@ -553,7 +553,7 @@ export async function selectProjectExecutionTarget(
       continue;
     }
     if (!allowedByJson(row, "allowed_worker_type_ids_json", workerTypeId)) {
-      reject("worker_type_not_allowed_by_workstream");
+      reject("worker_type_not_allowed_by_thread");
       continue;
     }
     const allowedModels = strings(row.allowed_models_json);
@@ -561,7 +561,7 @@ export async function selectProjectExecutionTarget(
       allowedModels.length > 0 &&
       (!selectedModel || !allowedModels.includes(selectedModel))
     ) {
-      reject("model_not_allowed_by_workstream");
+      reject("model_not_allowed_by_thread");
       continue;
     }
     if (excluded.has(independenceKey)) {
@@ -574,10 +574,10 @@ export async function selectProjectExecutionTarget(
     }
 
     const resolvedPermissions = resolveExecutionPermissions(
-      projectPermissions(membership.role),
+      spacePermissions(membership.role),
       grantPermissions,
     );
-    // Read-only steps may keep the active Workstream lease so they inspect its
+    // Read-only steps may keep the active Thread lease so they inspect its
     // current filesystem, while dropping repository writes. Test alone retains
     // shell execution so it can run validation commands inside the read-only
     // provider sandbox.
@@ -613,7 +613,7 @@ export async function selectProjectExecutionTarget(
     }
     const snapshotAt = now.toISOString();
     const permissionSnapshot = {
-      projectId: request.projectId,
+      spaceId: request.spaceId,
       workspaceId,
       workerId,
       workerTypeId,
@@ -636,17 +636,17 @@ export async function selectProjectExecutionTarget(
       permissions,
       networkPolicy,
       concurrency,
-      workstreamPolicy: {
+      threadPolicy: {
         allowedWorkerTypeIds: strings(row.allowed_worker_type_ids_json),
         allowedModels,
       },
       snapshotAt,
     };
     return {
-      projectId: request.projectId,
+      spaceId: request.spaceId,
       workspaceId,
       workspaceRuntimeIdentityId: String(row.runtime_identity_id),
-      workspaceProjectGrantId: String(row.grant_id),
+      workspaceSpaceGrantId: String(row.grant_id),
       workerId,
       workerTypeId,
       engineVersion: String(row.engine_version),
@@ -665,7 +665,7 @@ export async function selectProjectExecutionTarget(
       effectivePermissions: permissions,
       permissionSnapshot,
       selectionExplanation: {
-        projectMembership: membership.role,
+        spaceMembership: membership.role,
         workspace: {
           id: workspaceId,
           status: isWorkspaceLive ? "online" : row.workspace_status,
@@ -694,7 +694,7 @@ export async function selectProjectExecutionTarget(
             : "eligible_fallback",
         },
         filters: [
-          "project_authorized",
+          "space_authorized",
           "grant_active",
           "workspace_online",
           "workspace_worker_owned",
@@ -717,7 +717,7 @@ export async function selectProjectExecutionTarget(
         executionClass === "stateless_read" || request.readOnly === true,
       ...(statefulLease
         ? {
-            workstreamId: statefulLease.workstreamId,
+            threadId: statefulLease.threadId,
             workRequestId: statefulLease.workRequestId,
             leaseId: statefulLease.leaseId,
             fencingToken: statefulLease.fencingToken,

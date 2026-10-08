@@ -3,19 +3,19 @@ part of '../ax_data.dart';
 mixin _ReadModelApi on _AxApiClientCore {
   @override
   Future<AxSnapshot> loadBootstrapState(
-      {String? projectId, String? workspaceId}) async {
+      {String? spaceId, String? workspaceId}) async {
     final results = await Future.wait<Object>([
-      loadProjects(),
+      loadSpaces(),
       loadWorkspaces(),
       loadSession(),
     ]);
-    final projects = results[0] as List<AxProject>;
+    final spaces = results[0] as List<AxSpace>;
     final workspaces = results[1] as List<AxWorkspace>;
     final session = results[2] as AxSession;
     return AxSnapshot(
       workspaceId: workspaceId,
       viewer: session.viewer,
-      projects: projects,
+      spaces: spaces,
       workspaces: workspaces,
       tasks: const [],
       findings: const [],

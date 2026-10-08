@@ -74,15 +74,15 @@ void main() {
     final source =
         AxApiClient(baseUrl: 'https://cloud.test/api', client: client);
     final page = await source.loadConversationHistory(
-        workstreamId: 'W',
+        threadId: 'W',
         conversationId: 'C',
         afterSequence: 2,
         throughSequence: 4,
         limit: 1);
     expect(page.entries.single.text, text);
     expect(page.nextCursor!['throughSequence'], 4);
-    expect(client.lastRequest!.url.path,
-        '/api/workstreams/W/conversations/C/history');
+    expect(
+        client.lastRequest!.url.path, '/api/threads/W/conversations/C/history');
     expect(client.lastRequest!.url.queryParameters['afterSequence'], '2');
   });
 
@@ -146,7 +146,7 @@ void main() {
     final api =
         AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
     await api.createWorkRequest(
-        workstreamId: 'stream', workflowId: 'chat', prompt: 'Hello');
+        threadId: 'stream', workflowId: 'chat', prompt: 'Hello');
     final body = jsonDecode(client.lastBody!) as Map;
     expect(body['workflowId'], 'chat');
     expect(body.containsKey('model'), false);
@@ -160,7 +160,7 @@ void main() {
         AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
     expect(
         () => api.createWorkRequest(
-            workstreamId: 'stream', workflowId: 'chat', prompt: 'Hello'),
+            threadId: 'stream', workflowId: 'chat', prompt: 'Hello'),
         throwsA(isA<AxApiException>().having(
             (e) => e.message, 'reason', contains('Unsupported workflowId'))));
   });
@@ -170,8 +170,8 @@ void main() {
     final client = _ApiResponseClient({
       '/api/workspaces': {
         'workspaces': [
-          {'id': 'owned', 'name': 'Owned', 'activeProjectGrantCount': 30},
-          {'id': 'legacy', 'name': 'Legacy', 'projectGrantCount': 2},
+          {'id': 'owned', 'name': 'Owned', 'activeSpaceGrantCount': 30},
+          {'id': 'legacy', 'name': 'Legacy', 'spaceGrantCount': 2},
           {'id': 'empty', 'name': 'Empty'},
         ]
       }
@@ -179,7 +179,7 @@ void main() {
     final api =
         AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
     final values = await api.loadWorkspaces();
-    expect(values.map((w) => w.projectGrantCount), [30, 2, 0]);
+    expect(values.map((w) => w.spaceGrantCount), [30, 2, 0]);
     expect(client.requests, ['/api/workspaces']);
   });
   test('single Work Request details retain identity and authored result',
@@ -222,8 +222,8 @@ void main() {
       'nextCursor': {'createdAt': '2026-10-06T01:00:00Z', 'id': 'a'}
     });
     final api = AxApiClient(baseUrl: 'https://example.test', client: client);
-    final page = await api.loadWorkstreamWorkRequestPage(
-        workstreamId: 'w',
+    final page = await api.loadThreadWorkRequestPage(
+        threadId: 'w',
         limit: 40,
         beforeCreatedAt: '2026-10-07T00:00:00Z',
         beforeId: 'id+/=',
@@ -239,10 +239,9 @@ void main() {
     expect(page.nextCursor!.id, 'a');
     expect(() => page.requests.clear(), throwsUnsupportedError);
     await expectLater(
-        api.loadWorkstreamWorkRequestPage(workstreamId: 'w', beforeId: 'a'),
+        api.loadThreadWorkRequestPage(threadId: 'w', beforeId: 'a'),
         throwsArgumentError);
-    await expectLater(
-        api.loadWorkstreamWorkRequestPage(workstreamId: 'w', limit: 101),
+    await expectLater(api.loadThreadWorkRequestPage(threadId: 'w', limit: 101),
         throwsArgumentError);
   });
   for (final body in [
@@ -262,7 +261,7 @@ void main() {
     test('Work history rejects malformed page $body', () async {
       final api = AxApiClient(
           baseUrl: 'https://example.test', client: _JsonClient(body));
-      await expectLater(api.loadWorkstreamWorkRequestPage(workstreamId: 'w'),
+      await expectLater(api.loadThreadWorkRequestPage(threadId: 'w'),
           throwsA(isA<AxApiException>()));
     });
   }
@@ -275,7 +274,7 @@ void main() {
       'messages': [
         {
           'id': 'm1',
-          'workstreamId': 'w',
+          'threadId': 'w',
           'authorUserId': 'u',
           'body': '  **source**\n',
           'createdAt': '2026-10-06T00:00:00.000Z'
@@ -287,19 +286,18 @@ void main() {
     final api =
         AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
     final page = await api.loadDiscussionPage(
-        workstreamId: 'w', limit: 30, before: 'cursor+/=');
-    expect(
-        client.lastRequest!.url.path, '/api/workstreams/w/discussion-messages');
+        threadId: 'w', limit: 30, before: 'cursor+/=');
+    expect(client.lastRequest!.url.path, '/api/threads/w/discussion-messages');
     expect(client.lastRequest!.url.queryParameters,
         {'limit': '30', 'before': 'cursor+/='});
     expect(page.messages.single.body, '  **source**\n');
     expect(page.nextCursor, 'older');
     expect(page.newestCursor, 'newest');
     expect(() => page.messages.clear(), throwsUnsupportedError);
-    await expectLater(api.loadDiscussionPage(workstreamId: 'w', limit: 0),
-        throwsArgumentError);
     await expectLater(
-        api.loadDiscussionPage(workstreamId: 'w', before: 'a', after: 'b'),
+        api.loadDiscussionPage(threadId: 'w', limit: 0), throwsArgumentError);
+    await expectLater(
+        api.loadDiscussionPage(threadId: 'w', before: 'a', after: 'b'),
         throwsArgumentError);
   });
   test(
@@ -313,7 +311,7 @@ void main() {
           ]
         }, statusCode: 200));
     await expectLater(
-        api.loadDiscussionPage(workstreamId: 'w'),
+        api.loadDiscussionPage(threadId: 'w'),
         throwsA(isA<AxApiException>().having(
             (error) => error.message,
             'message',
@@ -330,59 +328,56 @@ void main() {
     {
       'schemaVersion': 1,
       'messages': [
-        {'id': 'm1', 'workstreamId': 'different'}
+        {'id': 'm1', 'threadId': 'different'}
       ]
     }
   ]) {
-    test(
-        'Discussion paging rejects malformed or cross-Workstream data $response',
+    test('Discussion paging rejects malformed or cross-Thread data $response',
         () async {
       final api = AxApiClient(
           baseUrl: 'https://conclave.test/api',
           client: _JsonClient(response, statusCode: 200));
-      await expectLater(api.loadDiscussionPage(workstreamId: 'w'),
+      await expectLater(api.loadDiscussionPage(threadId: 'w'),
           throwsA(isA<AxApiException>()));
     });
   }
 
-  test(
-      'focused Project loader uses the detail endpoint without bootstrap reads',
+  test('focused Space loader uses the detail endpoint without bootstrap reads',
       () async {
     final client = _ApiResponseClient({
-      '/api/projects/p1': {
-        'project': {
+      '/api/spaces/p1': {
+        'space': {
           'id': 'p1',
           'name': 'Details',
           'settings': {'instructions': 'Detailed instructions'},
-          'workstreams': [
-            {'id': 'w1', 'projectId': 'p1'}
+          'threads': [
+            {'id': 'w1', 'spaceId': 'p1'}
           ]
         }
       }
     });
     final api =
         AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
-    final project = await api.loadProject(projectId: 'p1');
-    expect(project.instructions, 'Detailed instructions');
-    expect(project.workstreams, isEmpty);
-    expect(client.requests, ['/api/projects/p1']);
+    final space = await api.loadSpace(spaceId: 'p1');
+    expect(space.instructions, 'Detailed instructions');
+    expect(space.threads, isEmpty);
+    expect(client.requests, ['/api/spaces/p1']);
   });
 
   for (final response in [
     <String, dynamic>{},
-    {'project': []},
+    {'space': []},
     {
-      'project': {'id': 'different', 'name': 'Wrong Project'}
+      'space': {'id': 'different', 'name': 'Wrong Space'}
     }
   ]) {
-    test(
-        'focused Project loader rejects malformed/mismatched response $response',
+    test('focused Space loader rejects malformed/mismatched response $response',
         () async {
-      final client = _ApiResponseClient({'/api/projects/p1': response});
+      final client = _ApiResponseClient({'/api/spaces/p1': response});
       final api =
           AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
       await expectLater(
-          api.loadProject(projectId: 'p1'), throwsA(isA<AxApiException>()));
+          api.loadSpace(spaceId: 'p1'), throwsA(isA<AxApiException>()));
     });
   }
 
@@ -418,7 +413,7 @@ void main() {
         client: _JsonClient({'error': 'ambiguous column name: updated_at'},
             statusCode: 400));
     await expectLater(
-        api.loadProjectWorkstreams(projectId: 'project-test'),
+        api.loadSpaceThreads(spaceId: 'space-test'),
         throwsA(isA<AxApiException>()
             .having((e) => e.statusCode, 'status', 400)
             .having((e) => e.message, 'message',
@@ -545,7 +540,7 @@ void main() {
     final snapshot = await store.loadBootstrapState();
 
     expect(snapshot.workspaceId, isNull);
-    expect(store.projects.items.first.id, 'project-auth');
+    expect(store.spaces.items.first.id, 'space-auth');
     expect(store.runs.current?.id, 'run-fixture');
     expect(store.workspaces.items.single.id, 'workspace-macbook');
     expect(store.workspaces.items, hasLength(1));
@@ -565,10 +560,10 @@ void main() {
     expect(store.auth.viewer?.id, 'user-1');
   });
 
-  test('returns the created Project from the Cloud response', () async {
+  test('returns the created Space from the Cloud response', () async {
     final client = _JsonClient({
-      'project': {
-        'id': 'project-created',
+      'space': {
+        'id': 'space-created',
         'workspaceId': 'workspace-1',
         'name': 'Authentication redesign',
         'description': 'Improve the sign-in flow',
@@ -580,23 +575,23 @@ void main() {
       client: client,
     );
 
-    final project = await api.createProject(
+    final space = await api.createSpace(
       name: 'Authentication redesign',
       description: 'Improve the sign-in flow',
     );
 
-    expect(project.id, 'project-created');
-    expect(project.name, 'Authentication redesign');
+    expect(space.id, 'space-created');
+    expect(space.name, 'Authentication redesign');
     expect(client.lastRequest?.method, 'POST');
-    expect(client.lastRequest?.url.path, '/api/projects');
+    expect(client.lastRequest?.url.path, '/api/spaces');
   });
 
-  test('persists Project instructions through the explicit update field',
+  test('persists Space instructions through the explicit update field',
       () async {
     final client = _JsonClient({
-      'project': {
-        'id': 'project-1',
-        'name': 'Project',
+      'space': {
+        'id': 'space-1',
+        'name': 'Space',
         'description': '',
         'instructions': 'Use the team conventions.',
         'settings': {'instructions': 'Use the team conventions.'},
@@ -607,8 +602,8 @@ void main() {
       client: client,
     );
 
-    final project = await api.updateProject(
-      projectId: 'project-1',
+    final space = await api.updateSpace(
+      spaceId: 'space-1',
       instructions: 'Use the team conventions.',
     );
 
@@ -616,10 +611,10 @@ void main() {
     expect(payload['instructions'], 'Use the team conventions.');
     expect((payload['settings'] as Map)['instructions'],
         'Use the team conventions.');
-    expect(project.instructions, 'Use the team conventions.');
+    expect(space.instructions, 'Use the team conventions.');
   });
 
-  test('composes AX state from current Project and Workspace APIs', () async {
+  test('composes AX state from current Space and Workspace APIs', () async {
     final client = _ApiResponseClient({
       '/api/session': {
         'authenticated': true,
@@ -629,24 +624,24 @@ void main() {
           'email': 'user@example.test',
         },
       },
-      '/api/projects': {
-        'projects': [
-          {'id': 'project-1', 'name': 'Project One', 'lastActivity': 'today'},
+      '/api/spaces': {
+        'spaces': [
+          {'id': 'space-1', 'name': 'Space One', 'lastActivity': 'today'},
         ],
       },
       '/api/workspaces': {'workspaces': []},
-      '/api/projects/project-1': {
-        'project': {
-          'id': 'project-1',
-          'name': 'Project One',
+      '/api/spaces/space-1': {
+        'space': {
+          'id': 'space-1',
+          'name': 'Space One',
           'lastActivity': 'today',
         },
       },
-      '/api/projects/project-1/workstreams': {
-        'workstreams': [
+      '/api/spaces/space-1/threads': {
+        'threads': [
           {
-            'id': 'workstream-1',
-            'projectId': 'project-1',
+            'id': 'thread-1',
+            'spaceId': 'space-1',
             'name': 'Authentication',
             'lead': 'Owner',
             'status': 'active',
@@ -665,11 +660,10 @@ void main() {
     final state = await api.loadBootstrapState(workspaceId: 'workspace-1');
 
     expect(state.viewer?.id, 'user-1');
-    expect(state.projects.single.workstreams, isEmpty);
-    expect(client.requests, contains('/api/projects'));
-    expect(client.requests, isNot(contains('/api/projects/project-1')));
-    expect(client.requests,
-        isNot(contains('/api/projects/project-1/workstreams')));
+    expect(state.spaces.single.threads, isEmpty);
+    expect(client.requests, contains('/api/spaces'));
+    expect(client.requests, isNot(contains('/api/spaces/space-1')));
+    expect(client.requests, isNot(contains('/api/spaces/space-1/threads')));
     expect(client.requests, contains('/api/workspaces'));
     expect(client.requests, contains('/api/session'));
   });
@@ -754,7 +748,7 @@ void main() {
   test('does not send obsolete Workspace security headers', () async {
     final client = _JsonClient({
       'workspaceId': 'workspace-2',
-      'projects': [],
+      'spaces': [],
       'workspaces': [],
       'tasks': [],
       'findings': [],

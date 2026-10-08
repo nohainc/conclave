@@ -193,7 +193,7 @@ describe("desktop auth and runtime transport contracts", () => {
     ).toEqual([]);
   });
 
-  it("projects degraded fallback separately from authentication failure", () => {
+  it("spaces degraded fallback separately from authentication failure", () => {
     const status = {
       state: "fallback_ready",
       activeTransport: "http_long_poll",

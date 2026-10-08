@@ -4,11 +4,11 @@ import Button from "../components/Button.astro";
 import Container from "../components/Container.astro";
 import Section from "../components/Section.astro";
 import SectionHeader from "../components/SectionHeader.astro";
-import HeroSharedProject from "../components/HeroSharedProject.astro";
-import ProjectMembersDiagram from "../components/ProjectMembersDiagram.astro";
+import HeroSharedSpace from "../components/HeroSharedSpace.astro";
+import SpaceMembersDiagram from "../components/SpaceMembersDiagram.astro";
 import CredentialPrivacyDiagram from "../components/CredentialPrivacyDiagram.astro";
 import ConversationContinuity from "../components/ConversationContinuity.astro";
-import ProjectWorkstreamShowcase from "../components/ProjectWorkstreamShowcase.astro";
+import SpaceThreadShowcase from "../components/SpaceThreadShowcase.astro";
 import ComparisonTable from "../components/ComparisonTable.astro";
 import WorkflowShowcase from "../components/WorkflowShowcase.astro";
 import AudienceCards from "../components/AudienceCards.astro";
@@ -17,7 +17,7 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
 
 <SiteLayout
   title="Conclave AX — Bring your people and AI together"
-  description="Conclave AX gives families, friends, and teams one shared place to collaborate with AI. Create projects, share AI access without sharing credentials, and keep conversations in context."
+  description="Conclave AX gives families, friends, and teams one shared place to collaborate with AI. Create spaces, share AI access without sharing credentials, and keep conversations in context."
 >
   <!-- Hero Section -->
   <Container>
@@ -26,7 +26,7 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
         <div class="eyebrow">SHARED AI WORKSPACE</div>
         <h1>Bring your people and AI together.</h1>
         <p class="lede">
-          A shared workspace where families, friends and teams can work with AI together. Bring AI Workers into shared projects, collaborate in the same conversations, and keep credentials private.
+          A shared workspace where families, friends and teams can work with AI together. Bring AI Workers into shared spaces, collaborate in the same conversations, and keep credentials private.
         </p>
         <div class="actions">
           <Button href="https://app.conclaveax.com" label="Open Conclave AX" />
@@ -38,7 +38,7 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
             <span class="trust-icon" aria-hidden="true">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             </span>
-            <span>Shared projects</span>
+            <span>Shared spaces</span>
           </div>
           <div class="trust-item">
             <span class="trust-icon" aria-hidden="true">
@@ -72,19 +72,19 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
           </div>
         </div>
       </div>
-      <HeroSharedProject />
+      <HeroSharedSpace />
     </section>
   </Container>
 
-  <!-- Section 1: Mental Model - One project. Your people. Their AI. -->
+  <!-- Section 1: Mental Model - One space. Your people. Their AI. -->
   <Section>
     <Container>
       <SectionHeader
-        eyebrow="ONE PROJECT. PEOPLE + AI."
-        title="One project. Your people. Their AI."
-        description="Everyone doesn't need the same AI setup. Project members can make their supported AI Workers available to the project, while Conclave keeps access, credentials and usage securely controlled."
+        eyebrow="ONE SPACE. PEOPLE + AI."
+        title="One space. Your people. Their AI."
+        description="Everyone doesn't need the same AI setup. Space members can make their supported AI Workers available to the space, while Conclave keeps access, credentials and usage securely controlled."
       />
-      <ProjectMembersDiagram />
+      <SpaceMembersDiagram />
     </Container>
   </Section>
 
@@ -96,12 +96,12 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
           <SectionHeader
             eyebrow="COLLABORATION IN CONTEXT"
             title="One conversation. Everyone stays in context."
-            description="AI stops being an isolated chat between one person and a bot. In Conclave AX, everyone in the project sees the prompt, the AI response, the follow-up questions and the decisions being made."
+            description="AI stops being an isolated chat between one person and a bot. In Conclave AX, everyone in the space sees the prompt, the AI response, the follow-up questions and the decisions being made."
           />
           <div class="feature-bullets">
             <div class="bullet-item">
               <strong>Change the AI, not the conversation</strong>
-              <p>Need a different perspective or specialized capability? Switch between authorized Workers in the same Workstream without losing the history of what you've already discussed.</p>
+              <p>Need a different perspective or specialized capability? Switch between authorized Workers in the same Thread without losing the history of what you've already discussed.</p>
             </div>
             <div class="bullet-item">
               <strong>Shared turn history</strong>
@@ -120,21 +120,21 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
       <SectionHeader
         eyebrow="CREDENTIALS STAY PRIVATE"
         title="Share access. Keep credentials private."
-        description="When you make an AI Worker available to a project, members can use that AI capability for project work, but no one ever sees your API keys, tokens or login secrets. Permissions can be granted, scoped or revoked at any time."
+        description="When you make an AI Worker available to a space, members can use that AI capability for space work, but no one ever sees your API keys, tokens or login secrets. Permissions can be granted, scoped or revoked at any time."
       />
       <CredentialPrivacyDiagram />
     </Container>
   </Section>
 
-  <!-- Section 4: Projects & Workstreams -->
-  <Section id="workstreams">
+  <!-- Section 4: Spaces & Threads -->
+  <Section id="threads">
     <Container>
       <SectionHeader
         eyebrow="ORGANIZATION"
         title="Keep every conversation focused."
-        description="Separate major efforts into Projects, and divide complex topics into Workstreams. Keep your vacation planning separate from your household budget, or your product research separate from your sprint backlog."
+        description="Separate major efforts into Spaces, and divide complex topics into Threads. Keep your vacation planning separate from your household budget, or your product research separate from your sprint backlog."
       />
-      <ProjectWorkstreamShowcase />
+      <SpaceThreadShowcase />
     </Container>
   </Section>
 
@@ -182,7 +182,7 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
           <SectionHeader
             eyebrow="POWER USERS & DEVELOPERS"
             title="Connect local tools and machines when you need them."
-            description="For engineering teams and technical users, Conclave Workspace connects your local computer, repositories, and command-line tools to your shared projects with isolated execution environments."
+            description="For engineering teams and technical users, Conclave Workspace connects your local computer, repositories, and command-line tools to your shared spaces with isolated execution environments."
           />
           <p class="workspace-section__copy">
             Conclave AX works out of the box in your web browser. When you want to run coding agents on local codebases or run local test suites, simply download Conclave Workspace.
@@ -208,7 +208,7 @@ import WorkspaceQuickstart from "../components/WorkspaceQuickstart.astro";
         <SectionHeader
           eyebrow="AI IS BETTER TOGETHER"
           title="Bring your people and AI together."
-          description="Create your first project in seconds. Invite your friends, family, or teammates, and collaborate with AI in one shared workspace."
+          description="Create your first space in seconds. Invite your friends, family, or teammates, and collaborate with AI in one shared workspace."
         />
         <div class="final-cta__actions">
           <Button href="https://app.conclaveax.com" label="Open Conclave AX" />

@@ -72,7 +72,7 @@ const home = await readFile(join(dist, "index.html"), "utf8");
 const requiredHomepageContent = [
   "Bring your people and AI together.",
   "SHARED AI WORKSPACE",
-  "Workstreams",
+  "Threads",
   "Share access. Keep credentials private.",
   "One conversation. Everyone stays in context.",
   "Open Conclave AX",

@@ -25,20 +25,24 @@ class CommandPaletteAction {
 class CommandPaletteDialog extends StatefulWidget {
   const CommandPaletteDialog({
     super.key,
-    required this.projects,
+    List<AxSpace>? spaces,
     required this.workspaces,
-    required this.workstreamsByProject,
+    Map<String, List<AxThread>>? threadsBySpace,
     this.run,
-    required this.onSelectProject,
+    ValueChanged<String>? onSelectSpace,
     required this.onNavigateTo,
     required this.onToggleTheme,
-  });
+  })  : spaces = spaces ?? const [],
+        threadsBySpace = threadsBySpace ?? const {},
+        onSelectSpace = onSelectSpace ?? _noopString;
 
-  final List<AxProject> projects;
+  static void _noopString(String _) {}
+
+  final List<AxSpace> spaces;
   final List<AxWorkspace> workspaces;
-  final Map<String, List<AxWorkstream>> workstreamsByProject;
+  final Map<String, List<AxThread>> threadsBySpace;
   final AxRun? run;
-  final ValueChanged<String> onSelectProject;
+  final ValueChanged<String> onSelectSpace;
   final ValueChanged<AxNavigation> onNavigateTo;
   final VoidCallback onToggleTheme;
 
@@ -113,32 +117,30 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
       ),
     ];
 
-    // Add Projects and Workstreams
-    for (final project in widget.projects) {
+    // Add Spaces and Threads
+    for (final space in widget.spaces) {
       actions.add(CommandPaletteAction(
-        title: 'Project: ${project.name}',
-        subtitle:
-            project.description.isNotEmpty ? project.description : 'Project',
+        title: 'Space: ${space.name}',
+        subtitle: space.description.isNotEmpty ? space.description : 'Space',
         icon: Icons.folder_outlined,
-        category: 'Projects',
+        category: 'Spaces',
         onSelect: () {
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-          widget.onSelectProject(project.id);
+          widget.onSelectSpace(space.id);
         },
       ));
 
-      // Add Workstreams (First-class)
-      for (final workstream in (widget.workstreamsByProject[project.id] ??
-          const <AxWorkstream>[])) {
+      // Add Threads (First-class)
+      for (final thread
+          in (widget.threadsBySpace[space.id] ?? const <AxThread>[])) {
         actions.add(CommandPaletteAction(
-          title: 'Workstream: ${workstream.name}',
-          subtitle: '${project.name} · ${workstream.status}',
+          title: 'Thread: ${thread.name}',
+          subtitle: '${space.name} · ${thread.status}',
           icon: Icons.alt_route_rounded,
-          category: 'Workstreams',
+          category: 'Threads',
           onSelect: () {
             if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-            widget.onNavigateTo(
-                AxNavigation.workstream(project.id, workstream.id));
+            widget.onNavigateTo(AxNavigation.thread(space.id, thread.id));
           },
         ));
       }
@@ -147,7 +149,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     // Add Active Run if present
     final activeRun = widget.run;
     if (activeRun != null) {
-      final projectId = widget.projects.firstOrNull?.id ?? '';
+      final spaceId = activeRun.spaceId ?? widget.spaces.firstOrNull?.id ?? '';
       actions.add(CommandPaletteAction(
         title:
             'Active Run: ${activeRun.objective.isNotEmpty ? activeRun.objective : activeRun.id}',
@@ -158,9 +160,9 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         onSelect: () {
           if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           widget.onNavigateTo(AxNavigation.run(
-            projectId,
+            spaceId,
             activeRun.id,
-            workstreamId: activeRun.workstreamId,
+            threadId: activeRun.threadId,
           ));
         },
       ));
@@ -245,7 +247,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                         isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
                   ),
                   decoration: InputDecoration(
-                    hintText: 'Type a command, project, or Workstream...',
+                    hintText: 'Type a command, space, or Thread...',
                     prefixIcon: const Icon(Icons.search_rounded, size: 20),
                     suffixIcon: Container(
                       padding: const EdgeInsets.symmetric(

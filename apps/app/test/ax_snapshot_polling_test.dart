@@ -7,22 +7,22 @@ import 'package:conclave_app/src/platform/platform_services.dart';
 import 'ax_fixture_realtime.dart';
 import 'ax_fixture_data.dart';
 import 'ax_fixture_snapshot.dart';
-import 'ax_project_navigation_test.dart' show HistoryNavigation;
+import 'ax_space_navigation_test.dart' show HistoryNavigation;
 
 class PollingSource extends AxFixtureDataSource {
-  int bootstraps = 0, sessions = 0, projects = 0, workspaces = 0;
+  int bootstraps = 0, sessions = 0, spaces = 0, workspaces = 0;
   final details = <String>[];
-  List<int> get broadCounts => [bootstraps, sessions, projects, workspaces];
+  List<int> get broadCounts => [bootstraps, sessions, spaces, workspaces];
   @override
   Future<AxSnapshot> loadBootstrapState(
-      {String? projectId, String? workspaceId}) async {
+      {String? spaceId, String? workspaceId}) async {
     bootstraps++;
     final fixture = axFixtureSnapshot();
     return AxSnapshot(
         workspaceId: 'workspace',
         run: fixture.run,
         activeRunId: fixture.activeRunId,
-        projects: fixture.projects,
+        spaces: fixture.spaces,
         workspaces: fixture.workspaces,
         tasks: fixture.tasks,
         findings: fixture.findings,
@@ -37,9 +37,9 @@ class PollingSource extends AxFixtureDataSource {
   }
 
   @override
-  Future<List<AxProject>> loadProjects({bool includeArchived = false}) {
-    projects++;
-    return super.loadProjects(includeArchived: includeArchived);
+  Future<List<AxSpace>> loadSpaces({bool includeArchived = false}) {
+    spaces++;
+    return super.loadSpaces(includeArchived: includeArchived);
   }
 
   @override
@@ -54,7 +54,7 @@ class PollingSource extends AxFixtureDataSource {
     details.add(workRequestId);
     return AxWorkRequestStatus(
         id: workRequestId,
-        workstreamId: 'workstream-auth',
+        threadId: 'thread-auth',
         status: 'completed',
         text: 'Done',
         originalRequest: 'Work',
@@ -112,7 +112,7 @@ void main() {
         'workspaceId': 'workspace',
         'payload': {
           'workRequestId': type,
-          'workstreamId': 'workstream-auth',
+          'threadId': 'thread-auth',
           'status': 'completed'
         }
       });

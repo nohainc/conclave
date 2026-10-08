@@ -1,8 +1,8 @@
 import '../ax_sync_engine.dart';
 import '../ax_discussion_cache.dart';
 import '../ax_work_history.dart';
-import '../ax_project_details.dart';
-import '../ax_project_workstreams.dart';
+import '../ax_space_details.dart';
+import '../ax_space_threads.dart';
 import '../ax_session_catalogs.dart';
 import '../../ax_data.dart';
 import '../../ax_models.dart';
@@ -12,7 +12,7 @@ import '../ax_owned_workspaces.dart';
 class AxReadCacheCodec {
   static bool serverId(String id) =>
       id.isNotEmpty && !id.startsWith('local-') && !id.startsWith('temp-');
-  Map<String, dynamic> project(AxProject value) => {
+  Map<String, dynamic> space(AxSpace value) => {
         'id': value.id,
         'name': value.name,
         'branch': value.branch,
@@ -24,16 +24,16 @@ class AxReadCacheCodec {
         'settings': {
           'instructions': value.instructions,
           'archived': value.archived,
-          if (value.settings['workstreamOrder'] is List)
-            'workstreamOrder': (value.settings['workstreamOrder'] as List)
+          if (value.settings['threadOrder'] is List)
+            'threadOrder': (value.settings['threadOrder'] as List)
                 .whereType<String>()
                 .toList()
         },
       };
-  Map<String, dynamic> workstream(AxWorkstream value) => {
+  Map<String, dynamic> thread(AxThread value) => {
         'id': value.id,
-        'projectId': value.projectId,
-        'name': value.name,
+        'spaceId': value.spaceId,
+        'title': value.title,
         'lead': value.lead,
         'status': value.status,
         'brief': value.brief,
@@ -85,11 +85,11 @@ class AxReadCacheCodec {
         'lastSeen': value.lastSeen,
         'workerCount': value.workerCount,
         'activeTaskCount': value.activeTaskCount,
-        'projectGrantCount': value.projectGrantCount,
+        'spaceGrantCount': value.spaceGrantCount,
       };
   Map<String, dynamic> message(AxDiscussionMessage value) => {
         'id': value.id,
-        'workstreamId': value.workstreamId,
+        'threadId': value.threadId,
         'authorUserId': value.authorUserId,
         'authorName': value.authorName,
         'body': value.body,
@@ -142,8 +142,8 @@ class AxReadCacheCodec {
   Map<String, dynamic> _workConfig(Map<String, dynamic> value) => {
         if (value['defaultWorkflowId'] is String)
           'defaultWorkflowId': value['defaultWorkflowId'],
-        if (value['workstreamInstructions'] is String)
-          'workstreamInstructions': value['workstreamInstructions'],
+        if (value['threadInstructions'] is String)
+          'threadInstructions': value['threadInstructions'],
         if (value['bindings'] is Map)
           'bindings': {
             for (final item in (value['bindings'] as Map).entries)
@@ -187,22 +187,22 @@ class AxReadCacheCodec {
     final value = record.data;
     Object? data;
     if (key.length == 1 &&
-        key.first == 'projects' &&
-        value is List<AxProject>) {
-      data = value.where((v) => serverId(v.id)).map(project).toList();
+        (key.first == 'spaces' || key.first == 'spaces') &&
+        value is List<AxSpace>) {
+      data = value.where((v) => serverId(v.id)).map(space).toList();
     } else if (key.length == 2 &&
-        key.first == 'project' &&
-        value is AxProject &&
+        (key.first == 'space' || key.first == 'space') &&
+        value is AxSpace &&
         value.id == key[1] &&
         serverId(value.id)) {
-      data = project(value);
+      data = space(value);
     } else if (key.length == 3 &&
-        key.first == 'project' &&
-        key.last == 'workstreams' &&
-        value is List<AxWorkstream>) {
+        (key.first == 'space' || key.first == 'space') &&
+        (key.last == 'threads' || key.last == 'threads') &&
+        value is List<AxThread>) {
       data = value
-          .where((v) => serverId(v.id) && v.projectId == key[1])
-          .map(workstream)
+          .where((v) => serverId(v.id) && v.spaceId == key[1])
+          .map(thread)
           .toList();
     } else if (key.length == 1 &&
         key.first == 'workers' &&
@@ -217,11 +217,11 @@ class AxReadCacheCodec {
         value is List<AxBuiltinWorkflow>) {
       data = value.map(workflow).toList();
     } else if (key.length == 3 &&
-        key.first == 'workstream' &&
+        (key.first == 'thread' || key.first == 'thread') &&
         key.last == 'discussion' &&
         value is AxDiscussionHistory) {
       final safe = value.messages
-          .where((m) => serverId(m.id) && m.workstreamId == key[1])
+          .where((m) => serverId(m.id) && m.threadId == key[1])
           .toList();
       final recent =
           safe.skip(safe.length > 50 ? safe.length - 50 : 0).toList();
@@ -232,7 +232,7 @@ class AxReadCacheCodec {
         'initialLoaded': value.initialLoaded && safe.length <= 50
       };
     } else if (key.length == 3 &&
-        key.first == 'workstream' &&
+        (key.first == 'thread' || key.first == 'thread') &&
         key.last == 'work-requests' &&
         value is AxWorkHistory) {
       final safe = value.requests.where((r) => serverId(r.id)).toList();
@@ -284,37 +284,39 @@ class AxReadCacheCodec {
     bool seed<T>(AxQuery<T> query, T value) =>
         engine.seed(query, value, fetched: fetched, accessed: accessed);
     final data = record['data'];
-    if (parts.length == 1 && parts.first == 'projects') {
+    if (parts.length == 1 &&
+        (parts.first == 'spaces' || parts.first == 'spaces')) {
       final values = list(data)
-          .map(AxProject.fromJson)
+          .map(AxSpace.fromJson)
           .where((v) => serverId(v.id))
-          .map((v) => AxProject.fromJson(project(v)))
+          .map((v) => AxSpace.fromJson(space(v)))
           .toList();
-      return seed<List<AxProject>>(
-          AxQuery<List<AxProject>>(
-              key: key,
-              load: () async => (await source.loadProjects())
-                  .map((p) => p.copyWith(workstreams: const []))
+      return seed<List<AxSpace>>(
+          AxQuery<List<AxSpace>>(
+              key: AxQueryKey(['spaces']),
+              load: () async => (await source.loadSpaces())
+                  .map((s) => s.copyWith(threads: const []))
                   .toList()),
           List.unmodifiable(values));
     }
-    if (parts.length == 2 && parts.first == 'project') {
-      final value = AxProject.fromJson(map(data));
+    if (parts.length == 2 &&
+        (parts.first == 'space' || parts.first == 'space')) {
+      final value = AxSpace.fromJson(map(data));
       if (value.id != parts[1]) return false;
-      return seed<AxProject>(
-          AxProjectDetails(source, engine: engine).query(parts[1]),
-          AxProject.fromJson(project(value)));
+      return seed<AxSpace>(
+          AxSpaceDetails(source, engine: engine).query(parts[1]),
+          AxSpace.fromJson(space(value)));
     }
     if (parts.length == 3 &&
-        parts.first == 'project' &&
-        parts.last == 'workstreams') {
+        (parts.first == 'space' || parts.first == 'space') &&
+        (parts.last == 'threads' || parts.last == 'threads')) {
       final values = list(data)
-          .map(AxWorkstream.fromJson)
-          .where((v) => serverId(v.id) && v.projectId == parts[1])
-          .map((v) => AxWorkstream.fromJson(workstream(v)))
+          .map(AxThread.fromJson)
+          .where((v) => serverId(v.id) && v.spaceId == parts[1])
+          .map((v) => AxThread.fromJson(thread(v)))
           .toList();
-      return seed<List<AxWorkstream>>(
-          AxProjectWorkstreams(source, engine: engine).query(parts[1]),
+      return seed<List<AxThread>>(
+          AxSpaceThreads(source, engine: engine).query(parts[1]),
           List.unmodifiable(values));
     }
     final catalogs = AxSessionCatalogs(source, engine: engine);
@@ -333,12 +335,12 @@ class AxReadCacheCodec {
           List.unmodifiable(list(data).map(AxWorkspace.fromJson)));
     }
     if (parts.length == 3 &&
-        parts.first == 'workstream' &&
+        (parts.first == 'thread' || parts.first == 'thread') &&
         parts.last == 'discussion') {
       final value = map(data);
       final messages = list(value['messages'])
           .map((m) => AxDiscussionMessage.fromJson(m, currentUserId: userId))
-          .where((m) => serverId(m.id) && m.workstreamId == parts[1]);
+          .where((m) => serverId(m.id) && m.threadId == parts[1]);
       return seed<AxDiscussionHistory>(
           AxDiscussionCache(source, engine: engine, registerRetention: false)
               .query(parts[1]),
@@ -349,7 +351,7 @@ class AxReadCacheCodec {
               initialLoaded: value['initialLoaded'] == true));
     }
     if (parts.length == 3 &&
-        parts.first == 'workstream' &&
+        (parts.first == 'thread' || parts.first == 'thread') &&
         parts.last == 'work-requests') {
       final value = map(data);
       final requests = list(value['requests'])

@@ -14,13 +14,13 @@ void main() {
       'version': '1.1',
       'timestamp': '2026-10-06T00:00:00.000Z',
       'sequence': 1,
-      'stream': {'kind': 'project', 'id': 'same'},
-      'projectId': 'same',
-      'workstreamId': 'W',
-      'payload': {'entityId': 'm', 'workstreamId': 'W'},
+      'stream': {'kind': 'space', 'id': 'same'},
+      'spaceId': 'same',
+      'threadId': 'W',
+      'payload': {'entityId': 'm', 'threadId': 'W'},
     });
     expect(event.workspaceId, isNull);
-    expect(event.streamKey, '["project","same"]');
+    expect(event.streamKey, '["space","same"]');
     expect(RealtimeEvent.parse(event.encode()).payload['entityId'], 'm');
     expect(
         () => RealtimeEvent.parse({...event.toJson(), 'workspaceId': 'same'}),
@@ -28,11 +28,7 @@ void main() {
     expect(
         () => RealtimeEvent.parse({
               ...event.toJson(),
-              'payload': {
-                'entityId': 'm',
-                'workstreamId': 'W',
-                'text': 'history'
-              }
+              'payload': {'entityId': 'm', 'threadId': 'W', 'text': 'history'}
             }),
         throwsA(isA<ProtocolException>()));
     expect(() => RealtimeEvent.parse({...event.toJson(), 'version': '1.0'}),
@@ -46,7 +42,7 @@ void main() {
       'timestamp': '2026-10-06T00:00:00.000Z',
       'workspaceId': 'same',
       'sequence': 1,
-      'payload': {'workRequestId': 'R', 'workstreamId': 'W', 'stepKind': 'test'}
+      'payload': {'workRequestId': 'R', 'threadId': 'W', 'stepKind': 'test'}
     });
     expect(event.streamKey, '["execution_workspace","same"]');
   });

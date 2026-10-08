@@ -119,7 +119,7 @@ typedef _AssignmentScenario = Future<void> Function(
     String prompt, {
     WorkerExecutionPolicy policy,
   }) run,
-  Directory workstreamDirectory,
+  Directory threadDirectory,
 );
 
 Future<void> _withRuntime(
@@ -145,7 +145,7 @@ Future<void> _withRuntime(
   final temp = await Directory.systemTemp.createTemp('assignment-acceptance-');
   try {
     final state = await Directory('${temp.path}/state').create();
-    final directory = await Directory('${temp.path}/workstream').create();
+    final directory = await Directory('${temp.path}/thread').create();
     final supervisor = CliWorkerEngineSupervisor(
       engineExecutable: Platform.environment['DART_EXECUTABLE'] ??
           Platform.resolvedExecutable,

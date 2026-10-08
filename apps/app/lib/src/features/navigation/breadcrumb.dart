@@ -23,24 +23,24 @@ class AppBreadcrumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nav = shellContext.navigation;
-    final project = shellContext.selectedProject;
-    final workstream = shellContext.selectedWorkstream;
+    final space = shellContext.selectedSpace;
+    final thread = shellContext.selectedThread;
 
     final children = switch (nav.kind) {
       AxRouteKind.home => [
           _breadcrumbText('Home', isCurrent: true),
         ],
-      AxRouteKind.projects => [
-          _breadcrumbText('Projects', isCurrent: true),
+      AxRouteKind.spaces => [
+          _breadcrumbText('Spaces', isCurrent: true),
         ],
-      AxRouteKind.project => [
-          _breadcrumbText(project?.name ?? 'Project', isCurrent: true),
+      AxRouteKind.space => [
+          _breadcrumbText(space?.name ?? 'Space', isCurrent: true),
         ],
-      AxRouteKind.workstream => [
-          if (project != null) ...[
+      AxRouteKind.thread => [
+          if (space != null) ...[
             _breadcrumbLink(
-              project.name,
-              () => onNavigateTo(AxNavigation.project(project.id)),
+              space.name,
+              () => onNavigateTo(AxNavigation.space(space.id)),
             ),
             _divider(),
           ] else ...[
@@ -50,27 +50,26 @@ class AppBreadcrumb extends StatelessWidget {
             ),
             _divider(),
           ],
-          _breadcrumbText(workstream?.name ?? 'Workstream', isCurrent: true),
+          _breadcrumbText(thread?.title ?? 'Thread', isCurrent: true),
         ],
       AxRouteKind.run => [
-          if (project != null) ...[
+          if (space != null) ...[
             _breadcrumbLink(
-              project.name,
-              () => onNavigateTo(AxNavigation.project(project.id)),
+              space.name,
+              () => onNavigateTo(AxNavigation.space(space.id)),
             ),
             _divider(),
           ] else ...[
             _breadcrumbLink(
-              'Projects',
-              () => onNavigateTo(const AxNavigation.projects()),
+              'Spaces',
+              () => onNavigateTo(const AxNavigation.spaces()),
             ),
             _divider(),
           ],
-          if (nav.workstreamId != null && project != null) ...[
+          if (nav.threadId != null && space != null) ...[
             _breadcrumbLink(
-              workstream?.name ?? 'Workstream',
-              () => onNavigateTo(
-                  AxNavigation.workstream(project.id, nav.workstreamId!)),
+              thread?.title ?? 'Thread',
+              () => onNavigateTo(AxNavigation.thread(space.id, nav.threadId!)),
             ),
             _divider(),
           ],
@@ -101,7 +100,7 @@ class AppBreadcrumb extends StatelessWidget {
       AxRouteKind.search => [
           _breadcrumbText('Search', isCurrent: true),
         ],
-      _ => [
+      AxRouteKind.login || AxRouteKind.desktopAuthApproval => [
           _breadcrumbText('Conclave AX', isCurrent: true),
         ],
     };

@@ -5,7 +5,7 @@ import '../../brand.dart';
 import '../../navigation/ax_navigation.dart';
 import '../../ax/ax_models.dart';
 import 'app_menu.dart';
-import 'project_tree.dart';
+import 'space_tree.dart';
 import 'ax_shell_context.dart';
 
 /// Canonical Application Sidebar for Conclave AX.
@@ -14,9 +14,9 @@ class AppSidebar extends StatelessWidget {
     super.key,
     required this.shellContext,
     required this.onNavigateTo,
-    required this.onToggleProjectExpanded,
-    required this.onCreateProject,
-    this.onCreateWorkstream,
+    ValueChanged<String>? onToggleSpaceExpanded,
+    VoidCallback? onCreateSpace,
+    this.onCreateThread,
     this.searchController,
     this.searchFocusNode,
     this.onSearchChanged,
@@ -28,16 +28,20 @@ class AppSidebar extends StatelessWidget {
     required this.onLogout,
     required this.onOpenAbout,
     required this.onOpenExternal,
-    this.onOpenArchivedProjects,
+    this.onOpenArchivedSpaces,
     this.onToggleCollapse,
     this.compact = false,
-  });
+  })  : onToggleSpaceExpanded = onToggleSpaceExpanded ?? _noopString,
+        onCreateSpace = onCreateSpace ?? _noopVoid;
+
+  static void _noopString(String _) {}
+  static void _noopVoid() {}
 
   final AxShellContext shellContext;
   final ValueChanged<AxNavigation> onNavigateTo;
-  final ValueChanged<String> onToggleProjectExpanded;
-  final VoidCallback onCreateProject;
-  final ValueChanged<AxProject>? onCreateWorkstream;
+  final ValueChanged<String> onToggleSpaceExpanded;
+  final VoidCallback onCreateSpace;
+  final ValueChanged<AxSpace>? onCreateThread;
   final TextEditingController? searchController;
   final FocusNode? searchFocusNode;
   final ValueChanged<String>? onSearchChanged;
@@ -49,7 +53,7 @@ class AppSidebar extends StatelessWidget {
   final VoidCallback onLogout;
   final VoidCallback onOpenAbout;
   final ValueChanged<Uri> onOpenExternal;
-  final VoidCallback? onOpenArchivedProjects;
+  final VoidCallback? onOpenArchivedSpaces;
   final VoidCallback? onToggleCollapse;
   final bool compact;
 
@@ -133,7 +137,7 @@ class AppSidebar extends StatelessWidget {
             ),
             const SizedBox(height: 10),
 
-            // Search control, Add Project icon button & Notifications Alarm button
+            // Search control, Add Space icon button & Notifications Alarm button
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
               child: Row(
@@ -231,9 +235,9 @@ class AppSidebar extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   Tooltip(
-                    message: 'New Project',
+                    message: 'New Space',
                     child: IconButton(
-                      onPressed: onCreateProject,
+                      onPressed: onCreateSpace,
                       icon: const Icon(
                         Icons.add_rounded,
                         size: 18,
@@ -280,15 +284,15 @@ class AppSidebar extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Navigation Centerpiece: Full Project Tree
+            // Navigation Centerpiece: Full Space Tree
             Expanded(
               child: SingleChildScrollView(
-                child: ProjectTree(
+                child: SpaceTree(
                   shellContext: shellContext,
                   onNavigateTo: onNavigateTo,
-                  onToggleProjectExpanded: onToggleProjectExpanded,
-                  onCreateProject: onCreateProject,
-                  onCreateWorkstream: onCreateWorkstream,
+                  onToggleSpaceExpanded: onToggleSpaceExpanded,
+                  onCreateSpace: onCreateSpace,
+                  onCreateThread: onCreateThread,
                   compact: compact,
                 ),
               ),
@@ -381,7 +385,7 @@ class AppSidebar extends StatelessWidget {
                   onOpenAbout: onOpenAbout,
                   onOpenExternal: onOpenExternal,
                   onLogout: onLogout,
-                  onOpenArchivedProjects: onOpenArchivedProjects,
+                  onOpenArchivedSpaces: onOpenArchivedSpaces,
                   compact: compact,
                 ),
               ],
@@ -468,8 +472,8 @@ class AppIconRail extends StatelessWidget {
     required this.shellContext,
     required this.onNavigateTo,
     required this.onOpenDrawer,
-    this.onCreateProject,
-    this.onCreateWorkstream,
+    this.onCreateSpace,
+    this.onCreateThread,
     this.searchController,
     this.searchFocusNode,
     this.onSearchChanged,
@@ -481,15 +485,15 @@ class AppIconRail extends StatelessWidget {
     required this.onLogout,
     required this.onOpenAbout,
     required this.onOpenExternal,
-    this.onOpenArchivedProjects,
+    this.onOpenArchivedSpaces,
     this.onToggleCollapse,
   });
 
   final AxShellContext shellContext;
   final ValueChanged<AxNavigation> onNavigateTo;
   final VoidCallback onOpenDrawer;
-  final VoidCallback? onCreateProject;
-  final ValueChanged<AxProject>? onCreateWorkstream;
+  final VoidCallback? onCreateSpace;
+  final ValueChanged<AxSpace>? onCreateThread;
   final TextEditingController? searchController;
   final FocusNode? searchFocusNode;
   final ValueChanged<String>? onSearchChanged;
@@ -501,7 +505,7 @@ class AppIconRail extends StatelessWidget {
   final VoidCallback onLogout;
   final VoidCallback onOpenAbout;
   final ValueChanged<Uri> onOpenExternal;
-  final VoidCallback? onOpenArchivedProjects;
+  final VoidCallback? onOpenArchivedSpaces;
   final VoidCallback? onToggleCollapse;
 
   Widget _railIconButton({
@@ -624,12 +628,12 @@ class AppIconRail extends StatelessWidget {
           ),
           const SizedBox(height: 6),
 
-          // Add Project icon
-          if (onCreateProject != null) ...[
+          // Add Space icon
+          if (onCreateSpace != null) ...[
             _railIconButton(
               icon: Icons.add_rounded,
-              tooltip: 'Add Project',
-              onPressed: onCreateProject,
+              tooltip: 'Add Space',
+              onPressed: onCreateSpace,
             ),
             const SizedBox(height: 6),
           ],
@@ -657,21 +661,21 @@ class AppIconRail extends StatelessWidget {
           ),
           const SizedBox(height: 6),
 
-          // Project & Workstream Switcher MenuAnchor using matching popup style
-          shellContext.watchProjectsAndWorkstreams(() => Column(children: [
+          // Space & Thread Switcher MenuAnchor using matching popup style
+          shellContext.watchSpacesAndThreads(() => Column(children: [
                 for (final group in [
                   (
-                    label: 'YOUR PROJECTS',
-                    projects: shellContext.ownedProjects,
+                    label: 'YOUR SPACES',
+                    spaces: shellContext.ownedSpaces,
                     icon: Icons.folder_outlined
                   ),
                   (
                     label: 'SHARED WITH YOU',
-                    projects: shellContext.sharedProjects,
+                    spaces: shellContext.sharedSpaces,
                     icon: Icons.folder_shared_outlined
                   ),
                 ])
-                  if (group.projects.isNotEmpty)
+                  if (group.spaces.isNotEmpty)
                     MenuAnchor(
                       style: menuStyle,
                       builder: (context, controller, child) {
@@ -688,58 +692,56 @@ class AppIconRail extends StatelessWidget {
                         );
                       },
                       menuChildren: [
-                        for (final project in group.projects) ...[
+                        for (final space in group.spaces) ...[
                           MenuItemButton(
                             style: itemStyle(),
                             leadingIcon: ConclaveFolderIcon(
                               isExpanded: true,
                               size: 16,
-                              color: shellContext.isNavActive(
-                                      AxNavigation.project(project.id))
+                              color: shellContext
+                                      .isNavActive(AxNavigation.space(space.id))
                                   ? ConclaveColors.primaryForegroundDark
                                   : (isDark ? Colors.white70 : Colors.black87),
                             ),
                             onPressed: () =>
-                                onNavigateTo(AxNavigation.project(project.id)),
+                                onNavigateTo(AxNavigation.space(space.id)),
                             child: Text(
-                              project.name,
+                              space.name,
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: shellContext.isNavActive(
-                                        AxNavigation.project(project.id))
+                                        AxNavigation.space(space.id))
                                     ? FontWeight.bold
                                     : FontWeight.w600,
                                 color: shellContext.isNavActive(
-                                        AxNavigation.project(project.id))
+                                        AxNavigation.space(space.id))
                                     ? ConclaveColors.primaryForegroundDark
                                     : (isDark ? Colors.white : Colors.black87),
                               ),
                             ),
                           ),
-                          for (final workstream in (shellContext
-                                  .projectWorkstreams
-                                  ?.peek(project.id) ??
-                              shellContext.workstreamsByProject[project.id] ??
-                              const <AxWorkstream>[]))
+                          for (final thread
+                              in (shellContext.spaceThreads?.peek(space.id) ??
+                                  shellContext.threadsBySpace[space.id] ??
+                                  const <AxThread>[]))
                             MenuItemButton(
                               style: itemStyle(),
                               onPressed: () => onNavigateTo(
-                                  AxNavigation.workstream(
-                                      project.id, workstream.id)),
+                                  AxNavigation.thread(space.id, thread.id)),
                               child: Padding(
                                 padding: const EdgeInsets.only(left: 24),
                                 child: Text(
-                                  workstream.name,
+                                  thread.title,
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: shellContext.isNavActive(
-                                            AxNavigation.workstream(
-                                                project.id, workstream.id))
+                                            AxNavigation.thread(
+                                                space.id, thread.id))
                                         ? FontWeight.bold
                                         : FontWeight.normal,
                                     color: shellContext.isNavActive(
-                                            AxNavigation.workstream(
-                                                project.id, workstream.id))
+                                            AxNavigation.thread(
+                                                space.id, thread.id))
                                         ? ConclaveColors.primaryForegroundDark
                                         : (isDark
                                             ? Colors.white70
@@ -764,7 +766,7 @@ class AppIconRail extends StatelessWidget {
             onOpenAbout: onOpenAbout,
             onOpenExternal: onOpenExternal,
             onLogout: onLogout,
-            onOpenArchivedProjects: onOpenArchivedProjects,
+            onOpenArchivedSpaces: onOpenArchivedSpaces,
           ),
           const SizedBox(height: 8),
 

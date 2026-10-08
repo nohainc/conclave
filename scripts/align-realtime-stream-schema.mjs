@@ -25,9 +25,9 @@ export function realtimeStreamAlignmentSql(baseline) {
 INSERT INTO realtime_event_cursors_stream_alignment(stream_kind, stream_id, workspace_id, next_sequence)
   SELECT 'execution_workspace', workspace_id, workspace_id, next_sequence FROM realtime_event_cursors;
 INSERT INTO realtime_events_stream_alignment
- (event_id, stream_kind, stream_id, workspace_id, project_id, run_id, task_id, attempt_id,
+ (event_id, stream_kind, stream_id, workspace_id, space_id, run_id, task_id, attempt_id,
   assignment_id, workspace_runtime_id, sequence, event_type, payload_json, idempotency_key, occurred_at)
- SELECT event_id, 'execution_workspace', workspace_id, workspace_id, project_id, run_id, task_id, attempt_id,
+ SELECT event_id, 'execution_workspace', workspace_id, workspace_id, space_id, run_id, task_id, attempt_id,
   assignment_id, workspace_runtime_id, sequence, event_type, payload_json, idempotency_key, occurred_at FROM realtime_events;
 DROP TABLE realtime_events;
 DROP TABLE realtime_event_cursors;

@@ -11,7 +11,7 @@ void main() {
       };
       expect(
           profileAllowsAssignment(readOnly, ['text', 'local_file']), isFalse);
-      expect(profileAllowsAssignment(readOnly, ['workstream_read']), isTrue);
+      expect(profileAllowsAssignment(readOnly, ['thread_read']), isTrue);
       expect(profileAllowsAssignment({'readOnly': false}, ['text']), isTrue);
     }
   });
@@ -25,14 +25,14 @@ void main() {
     expect(
         assignmentExecutionPolicy({
           'readOnly': false,
-          'executionClass': 'stateful_workstream',
+          'executionClass': 'stateful_thread',
         }),
         WorkerExecutionPolicy.restricted);
     // Both existing read-only signals independently preserve the restriction.
     expect(
         assignmentExecutionPolicy({
           'readOnly': true,
-          'executionClass': 'stateful_workstream',
+          'executionClass': 'stateful_thread',
         }),
         WorkerExecutionPolicy.providerDefault);
     expect(
@@ -56,7 +56,7 @@ void main() {
             assignmentExecutionPolicy({
               ...metadata,
               'readOnly': false,
-              'executionClass': 'stateful_workstream',
+              'executionClass': 'stateful_thread',
             }),
             WorkerExecutionPolicy.restricted);
         expect(

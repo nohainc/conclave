@@ -59,7 +59,7 @@ Future<WorkerResult> _execute(
       setup.admission,
       profileFile: setup.profileFile,
       stateDirectory: setup.state,
-      workingDirectory: setup.workstream,
+      workingDirectory: setup.thread,
       workerId: 'worker-1',
       maxConcurrentAssignments: 1,
       assignmentId: assignmentId,
@@ -86,7 +86,7 @@ Future<_Setup> _setup() async {
     channel: 'stable',
   );
   final state = await Directory('${root.path}/state').create();
-  final workstream = await Directory('${root.path}/workstream').create();
+  final thread = await Directory('${root.path}/thread').create();
   final script = File('${root.path}/fake_engine.dart')
     ..writeAsStringSync(_fakeEngineSource);
   return _Setup(
@@ -94,7 +94,7 @@ Future<_Setup> _setup() async {
     profileFile: profileFile,
     admission: admission,
     state: state,
-    workstream: workstream,
+    thread: thread,
     supervisor: CliWorkerEngineSupervisor(
       engineExecutable: Platform.environment['DART_EXECUTABLE'] ??
           Platform.environment['DART_EXECUTABLE'] ??
@@ -120,7 +120,7 @@ final class _Setup {
     required this.profileFile,
     required this.admission,
     required this.state,
-    required this.workstream,
+    required this.thread,
     required this.supervisor,
   });
 
@@ -128,7 +128,7 @@ final class _Setup {
   final File profileFile;
   final ToolProfileReleaseAdmission admission;
   final Directory state;
-  final Directory workstream;
+  final Directory thread;
   final CliWorkerEngineSupervisor supervisor;
 }
 

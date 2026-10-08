@@ -11,7 +11,7 @@ export {
 } from "../assignment-dispatcher.js";
 
 export * from "./http-security.js";
-export * from "./workstream-policy.js";
+export * from "./thread-policy.js";
 export { handleListConversations } from "./conversations.js";
 export * from "./workspace-access.js";
 export * from "./profile-admin.js";
@@ -34,22 +34,22 @@ export {
   findDesktopHumanSession,
 } from "./auth.js";
 export {
-  handleListProjects,
-  handleCreateProject,
-  handleGetProject,
-  handleUpdateProject,
-  handleDeleteProject,
-  handleListProjectMembers,
-  handleListProjectInvitations,
-  handleListProjectAudit,
-  handleCreateProjectInvitation,
-  handleChangeProjectMemberRole,
-  handleRemoveProjectMember,
-  handleExpireProjectInvitation,
-  handleAcceptProjectInvitation,
-  handleDeclineProjectInvitation,
+  handleListSpaces,
+  handleCreateSpace,
+  handleGetSpace,
+  handleUpdateSpace,
+  handleDeleteSpace,
+  handleListSpaceMembers,
+  handleListSpaceInvitations,
+  handleListSpaceAudit,
+  handleCreateSpaceInvitation,
+  handleChangeSpaceMemberRole,
+  handleRemoveSpaceMember,
+  handleExpireSpaceInvitation,
+  handleAcceptSpaceInvitation,
+  handleDeclineSpaceInvitation,
   handleListCurrentUserInvitations,
-} from "./projects.js";
+} from "./spaces.js";
 export {
   handleListWorkspaces,
   handleCheckWorkspaceOwnership,
@@ -63,23 +63,23 @@ export {
   handleExportWorkspaceAudit,
   handleUploadArtifact,
   handleGetArtifact,
-  handleListWorkspaceProjectGrants,
-  handleCreateWorkspaceProjectGrant,
-  handleListProjectWorkspaces,
-  handleRequestProjectWorkspace,
-  handleUpdateWorkspaceProjectGrant,
-  handleRevokeWorkspaceProjectGrant,
+  handleListWorkspaceSpaceGrants,
+  handleCreateWorkspaceSpaceGrant,
+  handleListSpaceWorkspaces,
+  handleRequestSpaceWorkspace,
+  handleUpdateWorkspaceSpaceGrant,
+  handleRevokeWorkspaceSpaceGrant,
 } from "./workspaces.js";
 export {
-  handleListProjectWorkstreams,
-  handleCreateWorkstream,
-  handleUpdateWorkstream,
-  handleDeleteWorkstream,
+  handleListSpaceThreads,
+  handleCreateThread,
+  handleUpdateThread,
+  handleDeleteThread,
   handleListDiscussionMessages,
   handleCreateDiscussionMessage,
   handleEditDiscussionMessage,
   handleGetDiscussionMessage,
-} from "./workstreams.js";
+} from "./threads.js";
 export {
   handleValidateWorkRequest,
   handleCreateWorkRequest,

@@ -10,27 +10,44 @@ class SearchPage extends StatelessWidget {
   const SearchPage({
     super.key,
     required this.query,
-    required this.projects,
+    required this.spaces,
     required this.workspaces,
-    required this.workstreamsByProject,
+    required this.threadsBySpace,
     this.run,
     required this.onNavigateTo,
-    required this.onSelectProject,
+    required this.onSelectSpace,
+    required this.onClearSearch,
+    this.onToggleTheme,
+    this.onCreateContextualItem,
+  });
+
+  // Compatibility constructor / parameter forwarding
+  const SearchPage.compat({
+    super.key,
+    required this.query,
+    required this.spaces,
+    required this.workspaces,
+    required this.threadsBySpace,
+    this.run,
+    required this.onNavigateTo,
+    required this.onSelectSpace,
     required this.onClearSearch,
     this.onToggleTheme,
     this.onCreateContextualItem,
   });
 
   final String query;
-  final List<AxProject> projects;
+  final List<AxSpace> spaces;
   final List<AxWorkspace> workspaces;
-  final Map<String, List<AxWorkstream>> workstreamsByProject;
+  final Map<String, List<AxThread>> threadsBySpace;
   final AxRun? run;
   final ValueChanged<AxNavigation> onNavigateTo;
-  final ValueChanged<String> onSelectProject;
+  final ValueChanged<String> onSelectSpace;
   final VoidCallback onClearSearch;
   final VoidCallback? onToggleTheme;
   final VoidCallback? onCreateContextualItem;
+
+  // Compatibility getters
 
   List<CommandPaletteAction> _buildAllActions(BuildContext context) {
     final actions = <CommandPaletteAction>[
@@ -43,6 +60,16 @@ class SearchPage extends StatelessWidget {
         onSelect: () {
           onClearSearch();
           onNavigateTo(const AxNavigation.home());
+        },
+      ),
+      CommandPaletteAction(
+        title: 'Spaces',
+        subtitle: 'Explore spaces and ongoing threads',
+        icon: Icons.folder_outlined,
+        category: 'Navigation',
+        onSelect: () {
+          onClearSearch();
+          onNavigateTo(const AxNavigation.spaces());
         },
       ),
       CommandPaletteAction(
@@ -82,7 +109,7 @@ class SearchPage extends StatelessWidget {
 
     if (onCreateContextualItem != null) {
       actions.add(CommandPaletteAction(
-        title: 'Create Project or Workstream',
+        title: 'Create Space or Thread',
         subtitle: 'Add a focused area for team discussion and Work',
         icon: Icons.add_rounded,
         category: 'Actions',
@@ -93,30 +120,28 @@ class SearchPage extends StatelessWidget {
       ));
     }
 
-    // Projects and Workstreams
-    for (final project in projects) {
+    // Spaces and Threads
+    for (final space in spaces) {
       actions.add(CommandPaletteAction(
-        title: project.name,
-        subtitle:
-            project.description.isNotEmpty ? project.description : 'Project',
+        title: space.name,
+        subtitle: space.description.isNotEmpty ? space.description : 'Space',
         icon: Icons.folder_outlined,
-        category: 'Projects',
+        category: 'Spaces',
         onSelect: () {
           onClearSearch();
-          onSelectProject(project.id);
+          onSelectSpace(space.id);
         },
       ));
 
-      for (final workstream
-          in (workstreamsByProject[project.id] ?? const <AxWorkstream>[])) {
+      for (final thread in (threadsBySpace[space.id] ?? const <AxThread>[])) {
         actions.add(CommandPaletteAction(
-          title: workstream.name,
-          subtitle: '${project.name} · ${workstream.status}',
+          title: thread.name,
+          subtitle: '${space.name} · ${thread.status}',
           icon: Icons.alt_route_rounded,
-          category: 'Workstreams',
+          category: 'Threads',
           onSelect: () {
             onClearSearch();
-            onNavigateTo(AxNavigation.workstream(project.id, workstream.id));
+            onNavigateTo(AxNavigation.thread(space.id, thread.id));
           },
         ));
       }
@@ -125,7 +150,7 @@ class SearchPage extends StatelessWidget {
     // Active Run
     final activeRun = run;
     if (activeRun != null) {
-      final projectId = projects.firstOrNull?.id ?? '';
+      final spaceId = spaces.firstOrNull?.id ?? '';
       actions.add(CommandPaletteAction(
         title: activeRun.objective.isNotEmpty
             ? activeRun.objective
@@ -137,9 +162,9 @@ class SearchPage extends StatelessWidget {
         onSelect: () {
           onClearSearch();
           onNavigateTo(AxNavigation.run(
-            projectId,
+            spaceId,
             activeRun.id,
-            workstreamId: activeRun.workstreamId,
+            threadId: activeRun.threadId,
           ));
         },
       ));
@@ -269,7 +294,7 @@ class SearchPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Try searching for project names, workstreams, workers, or navigation destinations.',
+                  'Try searching for space names, threads, workers, or navigation destinations.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,

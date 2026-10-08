@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/features/projects/projects_pages.dart';
+import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
@@ -43,14 +43,14 @@ class HistorySource extends AxFixtureDataSource {
   }
 
   @override
-  Future<AxWorkRequestPage> loadWorkstreamWorkRequestPage(
-      {required String workstreamId,
+  Future<AxWorkRequestPage> loadThreadWorkRequestPage(
+      {required String threadId,
       int limit = 50,
       String? beforeCreatedAt,
       String? beforeId,
       bool activeOnly = false}) {
     calls.add(
-        (id: workstreamId, limit: limit, before: beforeId, active: activeOnly));
+        (id: threadId, limit: limit, before: beforeId, active: activeOnly));
     final future = Completer<AxWorkRequestPage>();
     pending.add(future);
     return future.future;
@@ -269,13 +269,13 @@ void main() {
               onRun}) =>
       MaterialApp(
           home: Scaffold(
-              body: WorkstreamPage(
+              body: ThreadPage(
                   key: ValueKey(id),
-                  project: const AxProject(
-                      id: 'p', name: 'Project', branch: '', lastActivity: ''),
-                  workstream: AxWorkstream(
+                  space: const AxSpace(
+                      id: 'p', name: 'Space', branch: '', lastActivity: ''),
+                  thread: AxThread(
                       id: id,
-                      projectId: 'p',
+                      spaceId: 'p',
                       name: id,
                       lead: '',
                       status: 'active',
@@ -286,7 +286,7 @@ void main() {
                   workHistoryCache: cache,
                   onRunWork: onRun,
                   initialTab: 1,
-                  onBackToProject: () {},
+                  onBackToSpace: () {},
                   onArchive: () {})));
   Future<void> size(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1000));

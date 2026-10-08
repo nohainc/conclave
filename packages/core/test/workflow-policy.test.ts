@@ -31,7 +31,7 @@ it("allows independent manual choices for Chat and Work without continuation", (
   });
 });
 
-it("projects graph policy and per-Step selection without altering execution snapshots", () => {
+it("spaces graph policy and per-Step selection without altering execution snapshots", () => {
   const original = BUILTIN_WORKFLOW_CATALOG["implement_verify:v1"]!;
   const snapshot = JSON.stringify(original);
   const projected = workflowCatalogEntry(original);

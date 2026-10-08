@@ -5,9 +5,9 @@ import { recordAssignmentResult } from "../src/assignment-dispatcher.js";
 const { authorize } = vi.hoisted(() => ({
   authorize: vi.fn(async () => ({})),
 }));
-vi.mock("../src/routes/workstream-policy.js", async (original) => ({
+vi.mock("../src/routes/thread-policy.js", async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  authorizeWorkstreamAccess: authorize,
+  authorizeThreadAccess: authorize,
 }));
 import { handleListConversationHistory } from "../src/routes/conversation-history.js";
 import type { SecurityEnv } from "../src/routes/handlers.js";
@@ -37,7 +37,7 @@ it("records all six canonical fact kinds atomically and preserves exact response
     completedAt: "later",
   });
   f.sqlite
-    .exec(`INSERT INTO artifacts(id,project_id,assignment_id,content_digest,storage_key,created_at) VALUES('ART','P','A','digest','private-storage-key','now');
+    .exec(`INSERT INTO artifacts(id,space_id,assignment_id,content_digest,storage_key,created_at) VALUES('ART','P','A','digest','private-storage-key','now');
  UPDATE conversations SET conversation_revision = 2, context_revision = 2;`);
   const rows = f.sqlite
     .prepare(
@@ -97,7 +97,7 @@ it("scopes reads before history access and paginates against a stable high-water
   const env = { CONCLAVE_DB: f.db } as unknown as SecurityEnv;
   const req = (query = "") =>
     new Request(
-      `https://cloud.test/api/workstreams/W/conversations/${conversation}/history${query}`,
+      `https://cloud.test/api/threads/W/conversations/${conversation}/history${query}`,
     );
   const first = (await (
     await handleListConversationHistory(req("?limit=1"), env, "W", conversation)

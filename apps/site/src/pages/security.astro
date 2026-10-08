@@ -10,7 +10,7 @@ import SiteLayout from "../layouts/SiteLayout.astro";
 
 <SiteLayout
   title="Security — Conclave AX"
-  description="Conclave AX separates Project collaboration, AI Account authorization, and Workspace execution to keep your secrets private."
+  description="Conclave AX separates Space collaboration, AI Account authorization, and Workspace execution to keep your secrets private."
 >
   <Section>
     <Container>
@@ -28,32 +28,32 @@ import SiteLayout from "../layouts/SiteLayout.astro";
       <div style="margin-top: var(--space-16);">
         <SectionHeader
           eyebrow="Authorization Boundaries"
-          title="Strict separation between people, projects, and AI."
+          title="Strict separation between people, spaces, and AI."
           description="Every layer in Conclave has an independent permission boundary so access can only get narrower."
         />
 
         <div class="cards security-detail-cards">
-          <FeatureCard title="Project Membership" headingLevel={2}>
-            <p>Defines who can collaborate, participate in workstream chats, and trigger AI runs. Joining a project never automatically grants access to anyone's personal AI accounts or local machines.</p>
+          <FeatureCard title="Space Membership" headingLevel={2}>
+            <p>Defines who can collaborate, participate in thread chats, and trigger AI runs. Joining a space never automatically grants access to anyone's personal AI accounts or local machines.</p>
           </FeatureCard>
 
           <FeatureCard title="AI Account Privacy" headingLevel={2}>
-            <p>API keys and credentials remain encrypted in Conclave's secure vault. Sharing an AI account authorizes eligible project members to run queries; it never reveals the underlying secret.</p>
+            <p>API keys and credentials remain encrypted in Conclave's secure vault. Sharing an AI account authorizes eligible space members to run queries; it never reveals the underlying secret.</p>
           </FeatureCard>
 
           <FeatureCard title="Workspace Isolation" headingLevel={2}>
-            <p>For technical teams running code or CLI tools, each workstream executes in an isolated, ID-derived directory on the authorized host machine with runtime lease serialization.</p>
+            <p>For technical teams running code or CLI tools, each thread executes in an isolated, ID-derived directory on the authorized host machine with runtime lease serialization.</p>
           </FeatureCard>
 
           <FeatureCard title="Audit & Attribution" headingLevel={2}>
-            <p>Execution records can attribute requests to the requester, Worker, model and available usage metadata, giving owners visibility over project activity.</p>
+            <p>Execution records can attribute requests to the requester, Worker, model and available usage metadata, giving owners visibility over space activity.</p>
           </FeatureCard>
         </div>
       </div>
 
       <div class="security-callout" style="margin-top: var(--space-12);">
         <strong>Instant revocation with zero password churn.</strong>
-        <span>Revoking an AI account grant or removing a project collaborator immediately cuts off AI access without requiring you to regenerate API keys or reset passwords.</span>
+        <span>Revoking an AI account grant or removing a space collaborator immediately cuts off AI access without requiring you to regenerate API keys or reset passwords.</span>
       </div>
 
       <div class="actions" style="justify-content: center; margin-top: var(--space-12);">

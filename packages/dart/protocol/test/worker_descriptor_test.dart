@@ -8,7 +8,7 @@ void main() {
       'displayName': 'Claude',
       'description': 'Claude Code CLI integration',
       'engineFamily': 'cli',
-      'capabilities': ['text', 'workstream_read', 'workstream_write'],
+      'capabilities': ['text', 'thread_read', 'thread_write'],
       'profileDefinitionId': 'claude-code',
       'providerToolName': 'claude',
       'releaseStage': 'beta',

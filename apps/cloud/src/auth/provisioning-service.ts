@@ -19,7 +19,7 @@ export interface ProvisioningDatabase {
 export interface PendingInvitation {
   readonly id: string;
   readonly workspaceId: string;
-  readonly projectId: string | null;
+  readonly spaceId: string | null;
   readonly email: string;
   readonly role: "admin" | "member" | "viewer";
   readonly status: "pending";
@@ -57,8 +57,8 @@ export async function listPendingInvitations(
   const normalized = email.trim().toLowerCase();
   const rows = await db
     .prepare(
-      `SELECT id, project_id AS projectId, email, role, status, expires_at AS expiresAt
-       FROM project_invitations
+      `SELECT id, space_id AS spaceId, email, role, status, expires_at AS expiresAt
+       FROM space_invitations
        WHERE lower(email) = lower(?1) AND status = 'pending' AND expires_at > ?2
        ORDER BY created_at DESC`,
     )

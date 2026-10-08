@@ -2,15 +2,16 @@ part of '../ax_data.dart';
 
 mixin _CatalogApi on _AxApiClientCore {
   @override
-  Future<List<AxProject>> loadProjects({bool includeArchived = false}) async {
-    final uri = Uri.parse('$baseUrl/projects').replace(
+  Future<List<AxSpace>> loadSpaces({bool includeArchived = false}) async {
+    final uri = Uri.parse('$baseUrl/spaces').replace(
       queryParameters: includeArchived ? {'archived': 'true'} : null,
     );
     final body = await _getJson(uri);
-    return (body['projects'] as List? ?? const [])
+    final list = body['spaces'] ?? body['spaces'];
+    return (list as List? ?? const [])
         .whereType<Map>()
-        .map((item) => AxProject.fromJson(Map<String, dynamic>.from(item))
-            .copyWith(workstreams: const []))
+        .map((item) => AxSpace.fromJson(Map<String, dynamic>.from(item))
+            .copyWith(threads: const []))
         .toList();
   }
 
@@ -26,11 +27,11 @@ mixin _CatalogApi on _AxApiClientCore {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
-    required String projectId,
+  Future<List<Map<String, dynamic>>> loadSpaceWorkspaces({
+    required String spaceId,
   }) async {
     final body =
-        await _getJson(Uri.parse('$baseUrl/projects/$projectId/workspaces'));
+        await _getJson(Uri.parse('$baseUrl/spaces/$spaceId/workspaces'));
     return (body['workspaces'] as List? ?? const [])
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
@@ -38,13 +39,13 @@ mixin _CatalogApi on _AxApiClientCore {
   }
 
   @override
-  Future<void> requestProjectWorkspace({
-    required String projectId,
+  Future<void> requestSpaceWorkspace({
+    required String spaceId,
     required String workspaceId,
     List<String> allowedPermissions = const [],
   }) async {
     final response = await client.post(
-      Uri.parse('$baseUrl/projects/$projectId/workspaces'),
+      Uri.parse('$baseUrl/spaces/$spaceId/workspaces'),
       headers: _headers(contentType: 'application/json'),
       body: jsonEncode({
         'workspaceId': workspaceId,
@@ -61,12 +62,12 @@ mixin _CatalogApi on _AxApiClientCore {
   }
 
   @override
-  Future<void> updateWorkspaceProjectPermissions({
+  Future<void> updateWorkspaceSpacePermissions({
     required String grantId,
     required List<String> allowedPermissions,
   }) async {
     final response = await client.patch(
-      Uri.parse('$baseUrl/workspace-project-grants/$grantId'),
+      Uri.parse('$baseUrl/workspace-space-grants/$grantId'),
       headers: _headers(contentType: 'application/json'),
       body: jsonEncode({'allowedPermissions': allowedPermissions}),
     );
@@ -78,11 +79,11 @@ mixin _CatalogApi on _AxApiClientCore {
   }
 
   @override
-  Future<void> revokeWorkspaceProjectGrant({
+  Future<void> revokeWorkspaceSpaceGrant({
     required String grantId,
   }) async {
     final response = await client.delete(
-      Uri.parse('$baseUrl/workspace-project-grants/$grantId'),
+      Uri.parse('$baseUrl/workspace-space-grants/$grantId'),
       headers: _headers(),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {

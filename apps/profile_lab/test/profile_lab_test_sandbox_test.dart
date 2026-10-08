@@ -144,21 +144,21 @@ CONCLAVE_MODEL_OUTPUT
         'capabilities': ['text'],
         'session': {'supported': false},
       });
-      expect(statuses?['representative_workstream_write'], 'not_applicable');
+      expect(statuses?['representative_thread_write'], 'not_applicable');
       expect(statuses?['durable_session_start'], 'not_applicable');
       expect(statuses?['durable_session_resume'], 'not_applicable');
       expect(statuses?['model_selection'], 'not_applicable');
       expect(statuses?['passive_probe'], 'passed');
       expect(statuses?['cancellation'], 'passed');
       final capableStatuses = cloudAcceptanceScenarioStatuses({
-        'capabilities': ['workstream_write', 'durable_session'],
+        'capabilities': ['thread_write', 'durable_session'],
         'session': {'supported': true},
         'model': {
           'supported': true,
           'allowlist': ['fixture-model']
         },
       });
-      expect(capableStatuses?['representative_workstream_write'], 'passed');
+      expect(capableStatuses?['representative_thread_write'], 'passed');
       expect(capableStatuses?['durable_session_start'], 'passed');
       expect(capableStatuses?['durable_session_resume'], 'passed');
       expect(capableStatuses?['model_selection'], 'passed');
@@ -295,7 +295,7 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
             }
           ]
         },
-        'capabilities': ['workstream_write', 'durable_session'],
+        'capabilities': ['thread_write', 'durable_session'],
         'compatibilityOverrides': [],
       };
 
@@ -338,7 +338,7 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
             .join('\n'),
       );
       for (final stageId in [
-        'representative_workstream_write',
+        'representative_thread_write',
         'session_test',
         'model_selection_test',
         'cancellation_test',

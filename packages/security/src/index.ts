@@ -1,12 +1,12 @@
 /** Security primitives for current Conclave identities and resources. */
 
-export const PROJECT_ROLES = ["owner", "collaborator", "viewer"] as const;
-export type ProjectRole = (typeof PROJECT_ROLES)[number];
+export const SPACE_ROLES = ["owner", "collaborator", "viewer"] as const;
+export type SpaceRole = (typeof SPACE_ROLES)[number];
 
 export const PERMISSIONS = [
-  "projects:read",
-  "projects:write",
-  "projects:manage",
+  "spaces:read",
+  "spaces:write",
+  "spaces:manage",
   "run.start",
   "runs:control",
   "workspace:manage",
@@ -17,20 +17,18 @@ export const PERMISSIONS = [
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
-export const PROJECT_ROLE_PERMISSIONS: Record<
-  ProjectRole,
-  readonly Permission[]
-> = {
-  owner: [
-    "projects:read",
-    "projects:write",
-    "projects:manage",
-    "run.start",
-    "runs:control",
-  ],
-  collaborator: ["projects:read", "projects:write", "run.start"],
-  viewer: ["projects:read"],
-};
+export const SPACE_ROLE_PERMISSIONS: Record<SpaceRole, readonly Permission[]> =
+  {
+    owner: [
+      "spaces:read",
+      "spaces:write",
+      "spaces:manage",
+      "run.start",
+      "runs:control",
+    ],
+    collaborator: ["spaces:read", "spaces:write", "run.start"],
+    viewer: ["spaces:read"],
+  };
 
 export class AuthorizationError extends Error {
   readonly code = "FORBIDDEN";
@@ -73,42 +71,41 @@ export interface AuthenticatedUser {
   readonly status: "active" | "suspended" | "deactivated";
 }
 
-/** Request identity and current Project memberships; resource access is checked separately. */
+/** Request identity and current Space memberships; resource access is checked separately. */
 export interface SecurityContext {
   readonly userId: string;
   readonly user: AuthenticatedUser;
-  readonly projectRoles: Readonly<Record<string, ProjectRole>>;
+  readonly spaceRoles: Readonly<Record<string, SpaceRole>>;
   readonly sessionId: string;
   readonly clientType: ClientType;
   readonly audience?: string;
 }
 
-export function canAccessProject(
+export function canAccessSpace(
   context: SecurityContext,
-  projectId: string,
+  spaceId: string,
 ): boolean {
-  return context.user.status === "active" && !!context.projectRoles[projectId];
+  return context.user.status === "active" && !!context.spaceRoles[spaceId];
 }
 
 export function authorize(
   context: SecurityContext,
   permission: Permission,
-  projectId?: string,
+  spaceId?: string,
 ): void {
   if (context.user.status !== "active") {
-    throw new AuthorizationError(permission, projectId);
+    throw new AuthorizationError(permission, spaceId);
   }
-  // Unscoped Project listing/creation starts from authenticated identity and
+  // Unscoped Space listing/creation starts from authenticated identity and
   // is filtered/owned by its handler. Every other permission needs an explicit
-  // Project, Workspace owner, or Profile administrator check.
-  if (!projectId) {
-    if (permission === "projects:read" || permission === "projects:manage")
-      return;
+  // Space, Workspace owner, or Profile administrator check.
+  if (!spaceId) {
+    if (permission === "spaces:read" || permission === "spaces:manage") return;
     throw new AuthorizationError(permission);
   }
-  const role = context.projectRoles[projectId];
-  if (!role || !PROJECT_ROLE_PERMISSIONS[role]?.includes(permission)) {
-    throw new AuthorizationError(permission, projectId);
+  const role = context.spaceRoles[spaceId];
+  if (!role || !SPACE_ROLE_PERMISSIONS[role]?.includes(permission)) {
+    throw new AuthorizationError(permission, spaceId);
   }
 }
 
@@ -132,7 +129,7 @@ export interface AuthenticatedIdentity {
   readonly sessionId: string;
 }
 
-export async function resolveProjectSecurityContextFromIdentity(
+export async function resolveSpaceSecurityContextFromIdentity(
   db: DatabaseAdapter,
   identity: AuthenticatedIdentity,
   clientType: ClientType = "web",
@@ -167,51 +164,51 @@ export async function resolveProjectSecurityContextFromIdentity(
   }
   const memberships = await db
     .prepare(
-      `SELECT pm.project_id, pm.role
-       FROM project_memberships pm JOIN projects p ON p.id = pm.project_id
-       WHERE pm.user_id = ?1`,
+      `SELECT sm.space_id, sm.role
+       FROM space_memberships sm JOIN spaces s ON s.id = sm.space_id
+       WHERE sm.user_id = ?1`,
     )
     .bind(user.id)
-    .all<{ project_id: string; role: ProjectRole }>();
-  const projectRoles: Record<string, ProjectRole> = {};
+    .all<{ space_id: string; role: SpaceRole }>();
+  const spaceRoles: Record<string, SpaceRole> = {};
   for (const membership of memberships.results ?? []) {
-    if (PROJECT_ROLES.includes(membership.role)) {
-      projectRoles[membership.project_id] = membership.role;
+    if (SPACE_ROLES.includes(membership.role)) {
+      spaceRoles[membership.space_id] = membership.role;
     }
   }
   return {
     userId: user.id,
     user,
-    projectRoles,
+    spaceRoles,
     sessionId: identity.sessionId,
     clientType,
     ...(audience ? { audience } : {}),
   };
 }
 
-export async function authorizeProjectMembership(
+export async function authorizeSpaceMembership(
   db: DatabaseAdapter,
   context: Pick<SecurityContext, "userId" | "user">,
-  projectId: string,
+  spaceId: string,
   permission: Permission,
-): Promise<{ role: ProjectRole }> {
+): Promise<{ role: SpaceRole }> {
   if (context.user.status !== "active") {
-    throw new AuthorizationError(permission, projectId);
+    throw new AuthorizationError(permission, spaceId);
   }
   const membership = await db
     .prepare(
-      `SELECT pm.role FROM project_memberships pm
-       JOIN projects p ON p.id = pm.project_id
-       WHERE pm.project_id = ?1 AND pm.user_id = ?2`,
+      `SELECT sm.role FROM space_memberships sm
+       JOIN spaces s ON s.id = sm.space_id
+       WHERE sm.space_id = ?1 AND sm.user_id = ?2`,
     )
-    .bind(projectId, context.userId)
-    .first<{ role: ProjectRole }>();
+    .bind(spaceId, context.userId)
+    .first<{ role: SpaceRole }>();
   if (
     !membership ||
-    !PROJECT_ROLES.includes(membership.role) ||
-    !PROJECT_ROLE_PERMISSIONS[membership.role].includes(permission)
+    !SPACE_ROLES.includes(membership.role) ||
+    !SPACE_ROLE_PERMISSIONS[membership.role].includes(permission)
   ) {
-    throw new AuthorizationError(permission, projectId);
+    throw new AuthorizationError(permission, spaceId);
   }
   return membership;
 }
@@ -234,60 +231,60 @@ export async function authorizeWorkspaceOwner(
   if (!workspace) throw new AuthorizationError(permission, workspaceId);
 }
 
-export async function authorizeProjectOwner(
+export async function authorizeSpaceOwner(
   db: DatabaseAdapter,
   context: Pick<SecurityContext, "userId" | "user">,
-  projectId: string,
-  permission: Permission = "projects:manage",
+  spaceId: string,
+  permission: Permission = "spaces:manage",
 ): Promise<void> {
   if (context.user.status !== "active") {
-    throw new AuthorizationError(permission, projectId);
+    throw new AuthorizationError(permission, spaceId);
   }
   const owner = await db
-    .prepare("SELECT id FROM projects WHERE id = ?1 AND owner_user_id = ?2")
-    .bind(projectId, context.userId)
+    .prepare("SELECT id FROM spaces WHERE id = ?1 AND owner_user_id = ?2")
+    .bind(spaceId, context.userId)
     .first<{ id: string }>();
-  if (!owner) throw new AuthorizationError(permission, projectId);
+  if (!owner) throw new AuthorizationError(permission, spaceId);
 }
 
 export interface InvitationAuthorizationTarget {
   readonly id: string;
-  readonly projectId: string;
+  readonly spaceId: string;
   readonly email: string;
   readonly status: string;
   readonly expiresAt: string;
 }
 
-export function authorizeProjectInvitationResponse(
+export function authorizeSpaceInvitationResponse(
   context: Pick<SecurityContext, "userId" | "user">,
   invitation: InvitationAuthorizationTarget,
   now = new Date().toISOString(),
 ): void {
   if (context.user.status !== "active") {
-    throw new AuthorizationError("projects:write", invitation.projectId);
+    throw new AuthorizationError("spaces:write", invitation.spaceId);
   }
   if (
     context.user.email.trim().toLowerCase() !==
     invitation.email.trim().toLowerCase()
   ) {
-    throw new AuthorizationError("projects:write", invitation.projectId);
+    throw new AuthorizationError("spaces:write", invitation.spaceId);
   }
   if (invitation.status !== "pending") {
-    throw new AuthorizationError("projects:write", invitation.projectId);
+    throw new AuthorizationError("spaces:write", invitation.spaceId);
   }
   const expiryTime = new Date(invitation.expiresAt).getTime();
   const currentTime = new Date(now).getTime();
   if (Number.isNaN(expiryTime) || expiryTime <= currentTime) {
-    throw new AuthorizationError("projects:write", invitation.projectId);
+    throw new AuthorizationError("spaces:write", invitation.spaceId);
   }
 }
 
-export function canAccessProjectInvitation(
+export function canAccessSpaceInvitation(
   context: SecurityContext,
   invitation: InvitationAuthorizationTarget,
 ): boolean {
   if (context.user.status !== "active") return false;
-  const isOwner = context.projectRoles[invitation.projectId] === "owner";
+  const isOwner = context.spaceRoles[invitation.spaceId] === "owner";
   const isRecipient =
     context.user.email.trim().toLowerCase() ===
     invitation.email.trim().toLowerCase();

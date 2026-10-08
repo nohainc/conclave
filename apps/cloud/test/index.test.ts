@@ -34,7 +34,7 @@ const env = {
       status: "active",
     },
     workspaceId: "local-development",
-    projectRoles: {},
+    spaceRoles: {},
     sessionId: "session-local-development",
     clientType: "desktop",
   }),
@@ -75,13 +75,13 @@ describe("Worker smoke tests", () => {
   it("uses the development sign-in helper only for a real Better Auth flow", async () => {
     const response = await worker.fetch(
       new Request(
-        "https://conclave.test/api/dev/sign-in?provider=google&returnTo=/projects",
+        "https://conclave.test/api/dev/sign-in?provider=google&returnTo=/spaces",
       ),
       env,
     );
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(
-      "https://conclave.test/api/auth/sign-in/google?returnTo=%2Fprojects",
+      "https://conclave.test/api/auth/sign-in/google?returnTo=%2Fspaces",
     );
 
     const productionResponse = await worker.fetch(
@@ -133,7 +133,7 @@ describe("Worker smoke tests", () => {
       TEST_AUTHENTICATION: undefined,
     } as unknown as Env;
     const response = await worker.fetch(
-      new Request("https://conclave.test/api/projects", {
+      new Request("https://conclave.test/api/spaces", {
         method: "GET",
         headers: {
           "content-type": "application/json",

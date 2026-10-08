@@ -18,7 +18,7 @@ void main() {
     lifecycle = AxLifecycleSync(engine, onNotice: notices.add);
   });
   AxQuery<int> query(String id, Future<int> Function() load) =>
-      AxQuery(key: AxQueryKey(['project', id]), load: load);
+      AxQuery(key: AxQueryKey(['space', id]), load: load);
 
   test(
       'foreground refreshes aged active queries, keeps fresh and inactive values',
@@ -139,7 +139,7 @@ void main() {
     final chat = AxDiscussionCache(null, engine: engine);
     chat.peek('inactive');
     final page = AxQuery<int>(
-        key: AxQueryKey(['workstream', 'active', 'work-requests', 'page', '1']),
+        key: AxQueryKey(['thread', 'active', 'work-requests', 'page', '1']),
         load: () async => throw StateError('must not load page'));
     engine.seed(page, 1);
     engine.watch(page, (_) {});

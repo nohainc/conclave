@@ -32,8 +32,8 @@ const expected = {
     heading: "Bring your people and AI together.",
     content: [
       "SHARED AI WORKSPACE",
-      "Workstreams",
-      "ONE PROJECT. PEOPLE + AI.",
+      "Threads",
+      "ONE SPACE. PEOPLE + AI.",
       "Share access. Keep credentials private.",
       "One conversation. Everyone stays in context.",
       "When a chat isn't enough",
@@ -45,10 +45,10 @@ const expected = {
     title: "How Conclave AX works — Shared AI Workspace",
     heading: "From shared ideas to verified results.",
     content: [
-      "Create a Project",
+      "Create a Space",
       "Invite your people",
       "Connect & share AI",
-      "Open a Workstream",
+      "Open a Thread",
       "Collaborate in context",
       "Run Workflows when needed",
     ],
@@ -71,7 +71,7 @@ const expected = {
     title: "Security — Conclave AX",
     heading: "Share AI access without sharing your secrets.",
     content: [
-      "Project Membership",
+      "Space Membership",
       "AI Account Privacy",
       "Workspace Isolation",
       "Audit & Attribution",
@@ -81,7 +81,7 @@ const expected = {
     title: "Privacy — Conclave AX",
     heading: "Privacy follows the same boundaries as the product.",
     content: [
-      "Human identity and Projects",
+      "Human identity and Spaces",
       "Workspaces and local execution",
       "AI Accounts",
     ],
@@ -191,5 +191,5 @@ if (errors.length)
   throw new Error(`Content regression checks failed:\n${errors.join("\n")}`);
 
 console.log(
-  `Content regression checks passed: ${routes.size} critical routes, Workstream terminology, CTA targets, private-repository posture, and metadata verified.`,
+  `Content regression checks passed: ${routes.size} critical routes, Thread terminology, CTA targets, private-repository posture, and metadata verified.`,
 );

@@ -25,7 +25,7 @@ const REASONS = new Set([
   "suspended_user",
   "removed_member",
   "invalid_workspace",
-  "invalid_project",
+  "invalid_space",
   "unknown",
 ]);
 

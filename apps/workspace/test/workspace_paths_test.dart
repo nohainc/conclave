@@ -66,14 +66,14 @@ void main() {
     final runtime = _FakeMacRuntime(home.path);
     final oldWork =
         Directory('${home.path}/Library/Application Support/Conclave/Work');
-    final oldWorkFile = File('${oldWork.path}/workstream/state.txt');
+    final oldWorkFile = File('${oldWork.path}/thread/state.txt');
     await oldWorkFile.create(recursive: true);
     oldWorkFile.writeAsStringSync('preserve work');
 
     await WorkspacePaths.preserveMacWorkRoot(platform: runtime);
 
     final target = File(
-      '${home.path}/Library/Application Support/Conclave/Workspace/Work/workstream/state.txt',
+      '${home.path}/Library/Application Support/Conclave/Workspace/Work/thread/state.txt',
     );
     expect(target.readAsStringSync(), 'preserve work');
     expect(oldWork.existsSync(), isFalse);

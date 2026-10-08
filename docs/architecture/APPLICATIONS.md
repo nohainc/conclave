@@ -3,7 +3,7 @@
 **Status:** Current Architecture v8 product/application boundary.
 
 Conclave defines four primary product surfaces:
-1. **Conclave AX** (`apps/app`): Human web interface for project orchestration, workstream binding, and approvals.
+1. **Conclave AX** (`apps/app`): Human web interface for space orchestration, thread binding, and approvals.
 2. **Conclave Cloud** (`apps/cloud`): Authoritative Cloud API, database, catalog store, signature authority, and Workspace Gateway.
 3. **Conclave Workspace** (`apps/workspace`): Native machine-side desktop application and execution runtime.
 4. **Conclave Profile Lab** (`apps/profile_lab`): Internal administrative desktop engineering application for Worker catalog management, Profile authoring, sandbox testing, release promotion, and revocation.
@@ -22,10 +22,10 @@ Conclave defines four primary product surfaces:
 
 **Purpose**
 - human authentication;
-- Projects and Workstreams;
+- Spaces and Threads;
 - Discuss/Work;
 - read-only Workspace/runtime/Worker visibility;
-- Project-facing Workspace Grants and execution authorization;
+- Space-facing Workspace Grants and execution authorization;
 - approvals, evidence and artifacts.
 
 Conclave AX is the web application. It is not packaged as the machine-side executor. Native mobile clients may be added later without changing the Workspace runtime boundary.
@@ -40,19 +40,19 @@ The canonical execution-capacity destination in AX is **Workspaces**. Workers
 appear inside their owning Workspace rather than as an independent top-level
 page. See the [Workspaces UX and data contract](WORKSPACES_UX_CONTRACT.md).
 
-Home summarizes Projects, Workspaces, and locally ready Workers. Both the
+Home summarizes Spaces, Workspaces, and locally ready Workers. Both the
 Workspace count and Ready Workers count open `/workspaces`; AX does not expose
 a global Worker inventory. Getting Started guides users to add a Workspace,
-configure Workers in the Conclave Workspace desktop app, and create a Project.
+configure Workers in the Conclave Workspace desktop app, and create a Space.
 Authentication and local readiness problems direct users back to that desktop
 runtime.
 
 Workspace-owned Worker inventory remains visible in AX as operational
 readiness. Workspace registration and recovery, local Worker lifecycle,
 credentials, permissions, and runtime connection management belong to Conclave Workspace. AX owns actual
-Project/Workstream Worker use: task role, Workspace/Worker selection, model,
+Space/Thread Worker use: task role, Workspace/Worker selection, model,
 fallback policy, Cloud scheduling state, and Cloud concurrency ceilings. These
-choices live with Project and Workstream policy, not local Worker setup. See
+choices live with Space and Thread policy, not local Worker setup. See
 [ADR-016](../decisions/ADR-016-ax-owned-worker-usage.md).
 
 The Work composer and its built-in Workflow/step semantics follow the frozen
@@ -80,7 +80,7 @@ the sole authoritative catalog.
 - Workspace Gateway;
 - built-in Work catalog, logical Worker catalog, and signed Tool Profile release registry;
 - synchronized logical Worker inventory and readiness;
-- Project/Workstream Worker authorization;
+- Space/Thread Worker authorization;
 - assignment scheduling;
 - audit/evidence;
 - artifacts.
@@ -113,7 +113,7 @@ latter speaks only the Workspace Runtime Protocol with Conclave Workspace.
 - authenticated Workspace registration/recovery;
 - persistent Cloud communication with WebSocket primary and HTTPS fallback;
 - platform/architecture/runtime reporting;
-- local Work Root and Workstream directories;
+- local Work Root and Thread directories;
 - local logical Worker registry;
 - provider CLI-owned local sign-in;
 - CLI Worker Engine and signed Tool Profile cache/admission;
@@ -127,7 +127,7 @@ One normal Conclave Workspace installation runs per machine/OS-user installation
 
 Each logical Worker Type has one local Worker slot in a Workspace. Provider
 CLIs own their sign-in; safe Worker readiness is synchronized to Cloud, and AX
-Workstream policy determines how that capacity is used.
+Thread policy determines how that capacity is used.
 
 Conclave Workspace is background-first. Human desktop authentication is
 distinct from Workspace runtime participation and from Worker/provider
@@ -139,7 +139,7 @@ reauthentication. The management UI may be locally locked without stopping
 runtime execution. Signed-out and locked users do not see the normal Workspace
 or Workers management surfaces. Provider credentials remain local.
 
-Projects, Workstreams, Discuss, Work orchestration and Project administration remain in Conclave AX.
+Spaces, Threads, Discuss, Work orchestration and Space administration remain in Conclave AX.
 
 ## 4. Logical Workers, CLI Worker Engine, and Tool Profiles
 
@@ -265,4 +265,4 @@ express them.
 - request immutable signed Profile releases from Cloud;
 - manage release lifecycle promotion (`Testing` → `Beta` → `Stable`), rollback, and revocation.
 
-Conclave Profile Lab is strictly separated from Conclave Workspace and Conclave AX. It never registers as an execution Workspace, never advertises Workers to Cloud inventory, never accepts Work assignments, and never owns Project Work Roots. Provider credentials remain owned by local provider CLIs; Profile Lab never stores provider credentials. See [ADR-019](../decisions/ADR-019-conclave-profile-lab.md).
+Conclave Profile Lab is strictly separated from Conclave Workspace and Conclave AX. It never registers as an execution Workspace, never advertises Workers to Cloud inventory, never accepts Work assignments, and never owns Space Work Roots. Provider credentials remain owned by local provider CLIs; Profile Lab never stores provider credentials. See [ADR-019](../decisions/ADR-019-conclave-profile-lab.md).

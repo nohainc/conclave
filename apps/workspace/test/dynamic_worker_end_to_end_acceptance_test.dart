@@ -15,8 +15,8 @@ import 'package:conclave_workspace/tool_profile_release_store.dart';
 import 'package:conclave_workspace/worker_catalog_coordinator.dart';
 import 'package:conclave_workspace/worker_executor.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
-import 'package:conclave_workspace/workstream_directory.dart';
-import 'package:conclave_workspace/workstream_path.dart';
+import 'package:conclave_workspace/thread_directory.dart';
+import 'package:conclave_workspace/thread_path.dart';
 import 'package:conclave_workspace/workspace_worker_view.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:test/test.dart';
@@ -41,7 +41,7 @@ void main() {
         'displayName': displayName,
         'description': 'Created during the Profile Lab acceptance run.',
         'engineFamily': 'cli',
-        'capabilities': ['text', 'workstream_write', 'durable_session'],
+        'capabilities': ['text', 'thread_write', 'durable_session'],
         'profileDefinitionId': profileDefinitionId,
         'providerToolName': 'Phase 13 Fixture CLI',
         'releaseStage': 'testing',
@@ -86,7 +86,7 @@ void main() {
         description: descriptorJson['description']! as String,
         providerToolName: 'Phase 13 Fixture CLI',
         releaseStage: 'testing',
-        capabilities: ['text', 'workstream_write', 'durable_session'],
+        capabilities: ['text', 'thread_write', 'durable_session'],
         sortOrder: 9000,
       );
       expect(created['success'], isTrue);
@@ -287,11 +287,11 @@ void main() {
       expect(axWorkerProjection['readinessState'], 'ready');
 
       // AX creates the Work Request over HTTP. The test Cloud boundary applies
-      // its Workstream binding and dispatches the resulting assignment.
+      // its Thread binding and dispatches the resulting assignment.
       final workRoot = Directory('${root.path}/workspace-work-root')
         ..createSync(recursive: true);
-      final workstreamLifecycle = WorkstreamDirectoryLifecycle(
-        pathResolver: WorkstreamPathResolver(workRoot),
+      final threadLifecycle = ThreadDirectoryLifecycle(
+        pathResolver: ThreadPathResolver(workRoot),
       );
       final handler = WorkerAssignmentHandler(
         resolveLogicalWorker: (workerId) async {
@@ -313,7 +313,7 @@ void main() {
           );
         },
         defaultWorkingDirectory: Directory('${root.path}/work'),
-        workstreamDirectoryLifecycle: workstreamLifecycle,
+        threadDirectoryLifecycle: threadLifecycle,
         executeWithToolProfile:
             (logicalWorker, workingDirectory, context, payload,
                 {onProgress}) async {
@@ -358,8 +358,8 @@ void main() {
               payload: {
                 'workerId': localWorker.id,
                 'workerTypeId': workerTypeId,
-                'projectId': 'phase13-project',
-                'workstreamId': 'phase13-workstream',
+                'spaceId': 'phase13-space',
+                'threadId': 'phase13-thread',
                 'workRequestId': workRequestId,
                 'executionClass': 'stateless_read',
                 'timeoutMs': 30000,
@@ -370,7 +370,7 @@ void main() {
       final ax = AxApiClient(baseUrl: mockCloud.baseUrl);
       addTearDown(ax.client.close);
       final workRequestId = await ax.createWorkRequest(
-        workstreamId: 'phase13-workstream',
+        threadId: 'phase13-thread',
         workflowId: 'direct',
         prompt: 'Implement the Phase 13 acceptance task.',
       );
@@ -488,7 +488,7 @@ Map<String, Object?> _dynamicProfile({
           },
         ],
       },
-      'capabilities': ['text', 'workstream_write', 'durable_session'],
+      'capabilities': ['text', 'thread_write', 'durable_session'],
       'compatibilityOverrides': [],
     };
 
@@ -565,7 +565,7 @@ final class _DynamicWorkerCloud {
             jsonDecode(await utf8.decoder.bind(request).join()) as Map,
           );
     final path = request.uri.path;
-    if (path.startsWith('/workstreams/') &&
+    if ((path.startsWith('/threads/') || path.startsWith('/threads/')) &&
         path.endsWith('/work-requests') &&
         request.method == 'POST') {
       final executor = assignmentExecutor;

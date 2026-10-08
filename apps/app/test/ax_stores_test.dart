@@ -9,12 +9,12 @@ class _BootstrapSource extends AxFixtureDataSource {
 
   @override
   Future<AxSnapshot> loadBootstrapState(
-      {String? projectId, String? workspaceId}) async {
+      {String? spaceId, String? workspaceId}) async {
     final base = axFixtureSnapshot();
     return AxSnapshot(
       viewer: const AxViewer(
           id: 'user-1', displayName: 'User One', email: 'user@example.test'),
-      projects: base.projects,
+      spaces: base.spaces,
       workspaces: base.workspaces,
       tasks: base.tasks,
       findings: base.findings,
@@ -30,28 +30,27 @@ class _BootstrapSource extends AxFixtureDataSource {
 void main() {
   group('AxStore Phase 23 facade removal and projection isolation', () {
     test(
-        'loadBootstrapState initializes independent stores and strips nested workstreams',
+        'loadBootstrapState initializes independent stores and strips nested threads',
         () async {
       final source = const _BootstrapSource();
       final store = AxStore(source);
       addTearDown(store.dispose);
 
       final bootstrap = await store.loadBootstrapState(
-        projectId: 'project-auth',
+        spaceId: 'space-auth',
         workspaceId: 'workspace-fixture',
       );
 
-      expect(bootstrap.projects, isNotEmpty);
-      for (final project in bootstrap.projects) {
-        expect(project.workstreams, isEmpty,
-            reason:
-                'Bootstrap snapshot projects must discard nested workstreams');
+      expect(bootstrap.spaces, isNotEmpty);
+      for (final space in bootstrap.spaces) {
+        expect(space.threads, isEmpty,
+            reason: 'Bootstrap snapshot spaces must discard nested threads');
       }
 
-      expect(store.projects.items, isNotEmpty);
-      for (final project in store.projects.items) {
-        expect(project.workstreams, isEmpty,
-            reason: 'ProjectStore items must discard nested workstreams');
+      expect(store.spaces.items, isNotEmpty);
+      for (final space in store.spaces.items) {
+        expect(space.threads, isEmpty,
+            reason: 'SpaceStore items must discard nested threads');
       }
 
       expect(store.workspaces.items, isNotEmpty);
@@ -68,8 +67,8 @@ void main() {
 
       final exec = store.execution;
       expect(exec.run, isNotNull);
-      expect(exec.projects, isEmpty,
-          reason: 'Legacy execution projection excludes projects');
+      expect(exec.spaces, isEmpty,
+          reason: 'Legacy execution projection excludes spaces');
 
       // Check unmodifiable list guarantees
       if (exec.tasks.isNotEmpty) {
@@ -113,8 +112,8 @@ void main() {
 
       expect(executionSignals, 1);
       expect(store.execution.run?.id, snapshot.run?.id);
-      expect(store.projects.items, isEmpty,
-          reason: 'replaceExecution must not write project queries');
+      expect(store.spaces.items, isEmpty,
+          reason: 'replaceExecution must not write space queries');
       expect(store.workspaces.items, isEmpty,
           reason: 'replaceExecution must not write workspace queries');
     });
@@ -131,8 +130,8 @@ void main() {
         executionSignals++;
       });
 
-      store.projects.replace([
-        const AxProject(
+      store.spaces.replace([
+        const AxSpace(
           id: 'p1',
           name: 'P1',
           branch: 'main',
@@ -153,7 +152,7 @@ void main() {
       expect(executionSignals, 0,
           reason:
               'Query updates must not trigger execution projection signals');
-      expect(store.projects.items.length, 1);
+      expect(store.spaces.items.length, 1);
       expect(store.workspaces.items.length, 1);
     });
 
@@ -165,12 +164,12 @@ void main() {
       addTearDown(store.dispose);
 
       await store.loadBootstrapState();
-      expect(store.projects.items, isNotEmpty);
+      expect(store.spaces.items, isNotEmpty);
       expect(store.workspaces.items, isNotEmpty);
 
       store.clearServerState();
 
-      expect(store.projects.items, isEmpty);
+      expect(store.spaces.items, isEmpty);
       expect(store.workspaces.items, isEmpty);
       expect(store.security.value, isNull);
       expect(store.execution.run, isNull);
@@ -193,10 +192,10 @@ void main() {
       final store = AxStore(source);
       addTearDown(store.dispose);
 
-      const invite = AxProjectInvitation(
+      const invite = AxSpaceInvitation(
         id: 'inv-store-1',
-        projectId: 'proj-new-store',
-        projectName: 'New Store Project',
+        spaceId: 'proj-new-store',
+        spaceName: 'New Store Space',
         email: 'user@example.com',
         role: 'member',
         status: 'pending',
@@ -212,7 +211,7 @@ void main() {
 
       expect(store.invitations.items, isEmpty);
       expect(store.unreadNotifications.value, 0);
-      expect(store.projects.items.any((p) => p.id == 'proj-new-store'), isTrue);
+      expect(store.spaces.items.any((p) => p.id == 'proj-new-store'), isTrue);
     });
   });
 }

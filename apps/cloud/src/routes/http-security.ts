@@ -14,10 +14,10 @@ import {
   authorize,
   AuthorizationError,
   hashToken,
-  resolveProjectSecurityContextFromIdentity,
-  authorizeProjectMembership,
+  resolveSpaceSecurityContextFromIdentity,
+  authorizeSpaceMembership,
   authorizeWorkspaceOwner,
-  authorizeProjectOwner,
+  authorizeSpaceOwner,
   type Permission,
   type SecurityContext,
 } from "@conclave/security";
@@ -56,17 +56,17 @@ export async function recordAudit(
 ): Promise<void> {
   const auditWorkspaceId = resourceWorkspaceId;
   if (!auditWorkspaceId) {
-    const projectId =
-      typeof details.projectId === "string" ? details.projectId : null;
-    if (!projectId) return;
+    const spaceId =
+      typeof details.spaceId === "string" ? details.spaceId : null;
+    if (!spaceId) return;
     await env.CONCLAVE_DB.prepare(
-      `INSERT INTO project_audit_log
-         (id, project_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
+      `INSERT INTO space_audit_log
+         (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
        VALUES (?1, ?2, 'user', ?3, ?4, ?5, ?6, ?7, ?8)`,
     )
       .bind(
         `audit-${crypto.randomUUID()}`,
-        projectId,
+        spaceId,
         context.userId,
         action,
         targetType,
@@ -170,7 +170,7 @@ export type SecurityEnv = Env & {
   readonly CONCLAVE_EMAIL_FROM?: string;
   readonly CONCLAVE_WORKSPACE_GATEWAY?: DurableObjectNamespace;
   readonly CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
-  readonly CONCLAVE_WORKSTREAM_COORDINATOR?: DurableObjectNamespace;
+  readonly CONCLAVE_THREAD_COORDINATOR?: DurableObjectNamespace;
 };
 
 export function testAuthenticationEnabled(env: Env): boolean {
@@ -273,7 +273,7 @@ export async function securityContext(
       .bind(now, session.sessionId)
       .run();
 
-    return await resolveProjectSecurityContextFromIdentity(
+    return await resolveSpaceSecurityContextFromIdentity(
       env.CONCLAVE_DB,
       {
         userId: session.userId,
@@ -291,7 +291,7 @@ export async function securityContext(
     if (!identity) throw new HttpError(401, "Authentication required");
     try {
       await provisionConclaveUser(env.CONCLAVE_DB, identity);
-      return await resolveProjectSecurityContextFromIdentity(
+      return await resolveSpaceSecurityContextFromIdentity(
         env.CONCLAVE_DB,
         identity,
       );
@@ -321,7 +321,7 @@ export async function authorizeRequest(
   request: Request,
   env: SecurityEnv,
   permission: Permission,
-  projectId?: string,
+  spaceId?: string,
   accessContext?: ExecutionContext,
 ): Promise<SecurityContext> {
   const context = await securityContext(request, env, accessContext);
@@ -336,12 +336,12 @@ export async function authorizeRequest(
       );
     }
   }
-  if (projectId && !testAuthenticationEnabled(env)) {
+  if (spaceId && !testAuthenticationEnabled(env)) {
     try {
-      await authorizeProjectMembership(
+      await authorizeSpaceMembership(
         env.CONCLAVE_DB,
         context,
-        projectId,
+        spaceId,
         permission,
       );
     } catch (error) {
@@ -352,11 +352,11 @@ export async function authorizeRequest(
   try {
     if (
       !testAuthenticationEnabled(env) &&
-      (projectId ||
-        permission === "projects:read" ||
-        permission === "projects:manage")
+      (spaceId ||
+        permission === "spaces:read" ||
+        permission === "spaces:manage")
     ) {
-      authorize(context, permission, projectId);
+      authorize(context, permission, spaceId);
     }
   } catch (error) {
     await recordAuthAuditEvent(env.CONCLAVE_DB, {
@@ -422,7 +422,7 @@ export function artifactMetadata(
   return {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
-    projectId: String(row.project_id),
+    spaceId: String(row.space_id),
     runId: String(row.run_id),
     ...(row.task_id ? { taskId: String(row.task_id) } : {}),
     ...(row.attempt_id ? { attemptId: String(row.attempt_id) } : {}),
@@ -464,27 +464,27 @@ export function securityEnv(env: Env): SecurityEnv {
   return env as SecurityEnv;
 }
 
-export async function authorizeProjectOwnerOrThrow(
+export async function authorizeSpaceOwnerOrThrow(
   request: Request,
   env: SecurityEnv,
-  projectId: string,
+  spaceId: string,
   accessContext?: ExecutionContext,
 ): Promise<SecurityContext> {
   const context = await authorizeRequest(
     request,
     env,
-    "projects:read",
-    projectId,
+    "spaces:read",
+    spaceId,
     accessContext,
   );
   try {
-    await authorizeProjectOwner(env.CONCLAVE_DB, context, projectId);
+    await authorizeSpaceOwner(env.CONCLAVE_DB, context, spaceId);
   } catch {
-    throw new HttpError(403, "Only the Project owner can manage collaboration");
+    throw new HttpError(403, "Only the Space owner can manage collaboration");
   }
   return context;
 }
 
 // =========================================================================
-// Workstream Discuss / Work API
+// Thread Discuss / Work API
 // =========================================================================

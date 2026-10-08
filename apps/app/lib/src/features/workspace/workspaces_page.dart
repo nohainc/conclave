@@ -99,7 +99,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                       letterSpacing: -0.3)),
               const SizedBox(height: 6),
               Text(
-                'Execution capacity, Workers, project access, and recent activity.',
+                'Execution capacity, Workers, space access, and recent activity.',
                 style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
@@ -146,7 +146,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                             ],
                           ),
                           subtitle: Text(
-                            '${_machine(workspace)}  ·  ${workspace.workerCount} Workers  ·  ${_grantCount(workspace)} Project grants  ·  ${workspace.activeTaskCount} active work',
+                            '${_machine(workspace)}  ·  ${workspace.workerCount} Workers  ·  ${_grantCount(workspace)} Space grants  ·  ${workspace.activeTaskCount} active work',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -241,7 +241,7 @@ class _WorkspaceCardBody extends StatelessWidget {
                   : workspace.runtimeCapabilities.join(' · '),
             ),
             _Fact(label: 'Workers', value: '${workspace.workerCount}'),
-            _Fact(label: 'Project grants', value: '${_grantCount(workspace)}'),
+            _Fact(label: 'Space grants', value: '${_grantCount(workspace)}'),
             _Fact(label: 'Active work', value: '${workspace.activeTaskCount}'),
           ],
         ),
@@ -255,14 +255,14 @@ class _WorkspaceCardBody extends StatelessWidget {
             TextButton.icon(
               onPressed: onGrant,
               icon: const Icon(Icons.add_link),
-              label: const Text('Project access'),
+              label: const Text('Space access'),
             ),
           ],
         ),
         const Padding(
           padding: EdgeInsets.only(bottom: 8),
           child: Text(
-            'Conclave Workspace reports local readiness. Choose Workers for a Project or Workstream in its Execution settings.',
+            'Conclave Workspace reports local readiness. Choose Workers for a Space or Thread in its Execution settings.',
           ),
         ),
         if (workers.isEmpty)
@@ -472,7 +472,7 @@ class _EmptyWorkspaces extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             const Text(
-                'Register a Workspace from the Conclave Workspace desktop app. Its status and Workers will appear here for Project activity.'),
+                'Register a Workspace from the Conclave Workspace desktop app. Its status and Workers will appear here for Space activity.'),
             const SizedBox(height: 14),
             Wrap(spacing: 8, children: [
               if (onOpenDownloads != null)
@@ -517,4 +517,4 @@ String _statusLabel(AxWorkspace workspace) =>
             _ => workspace.status,
           };
 
-int _grantCount(AxWorkspace workspace) => workspace.projectGrantCount;
+int _grantCount(AxWorkspace workspace) => workspace.spaceGrantCount;

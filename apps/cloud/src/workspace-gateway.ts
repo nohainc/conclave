@@ -954,7 +954,7 @@ export class WorkspaceGateway implements DurableObject {
         });
         return;
       }
-      case "workstream.status":
+      case "thread.status":
         // Runtime readiness is logical-only. Never persist or relay a local
         // absolute path or repository clone path.
         return;
@@ -1059,9 +1059,9 @@ export class WorkspaceGateway implements DurableObject {
               wa.run_id, wa.task_id, wa.attempt_id,
               wa.idempotency_key, wa.status
        FROM worker_assignments wa
-       JOIN workspace_project_grants g
-         ON g.id = wa.workspace_project_grant_id
-        AND g.project_id = wa.project_id
+       JOIN workspace_space_grants g
+         ON g.id = wa.workspace_space_grant_id
+        AND g.space_id = wa.space_id
         AND g.workspace_id = wa.execution_workspace_id
         AND g.status = 'active'
         AND (g.expires_at IS NULL OR g.expires_at > ?2)

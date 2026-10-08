@@ -14,8 +14,8 @@ class AxSyncScope {
     if (scope is Map) {
       final kind = scope['kind'];
       final value = switch (kind) {
-        'project' => id(scope['projectId']),
-        'workstream' => id(scope['workstreamId']),
+        'space' => id(scope['spaceId']),
+        'thread' => id(scope['threadId']),
         'execution_workspace' => id(scope['workspaceId']),
         _ => null,
       };
@@ -23,7 +23,7 @@ class AxSyncScope {
     }
     // The user subscription may report a gap in a narrower durable stream.
     if (stream is Map &&
-        const {'project', 'execution_workspace'}.contains(stream['kind'])) {
+        const {'space', 'execution_workspace'}.contains(stream['kind'])) {
       final value = id(stream['id']);
       if (value != null) return AxSyncScope(stream['kind'] as String, value);
     }
@@ -36,27 +36,26 @@ class AxSyncScope {
 
   bool matches(AxQueryKey key) {
     final p = key.parts;
-    final project = p[0] == 'project' &&
+    final space = (p[0] == 'space') &&
         (p.length == 2 ||
             (p.length == 3 &&
                 const {
-                  'workstreams',
+                  'threads',
                   'workspace-grants',
                   'members',
                   'invitations',
                   'audit'
                 }.contains(p[2])));
     final discussion =
-        p.length == 3 && p[0] == 'workstream' && p[2] == 'discussion';
-    final work =
-        p.length == 3 && p[0] == 'workstream' && p[2] == 'work-requests';
+        p.length == 3 && (p[0] == 'thread') && p[2] == 'discussion';
+    final work = p.length == 3 && (p[0] == 'thread') && p[2] == 'work-requests';
     final workspace = p.length >= 2 && p[0] == 'execution_workspace';
     final workers = p.length == 1 && p[0] == 'workers';
     return switch (kind) {
-      'project' => project && p[1] == id,
-      'workstream' => (discussion || work) && p[1] == id,
+      'space' => space && p[1] == id,
+      'thread' => (discussion || work) && p[1] == id,
       'execution_workspace' => workers || (workspace && p[1] == id),
-      'user' => project || discussion || work || workspace || workers,
+      'user' => space || discussion || work || workspace || workers,
       _ => false,
     };
   }

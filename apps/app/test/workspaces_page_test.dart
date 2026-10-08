@@ -392,7 +392,7 @@ void main() {
       expect(find.textContaining('Model'), findsNothing);
       expect(
         find.text(
-            'Conclave Workspace reports local readiness. Choose Workers for a Project or Workstream in its Execution settings.'),
+            'Conclave Workspace reports local readiness. Choose Workers for a Space or Thread in its Execution settings.'),
         findsOneWidget,
       );
       expect(find.text('Authentication · browser_auth'), findsNothing);

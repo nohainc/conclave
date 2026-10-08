@@ -40,11 +40,11 @@ export const REALTIME_EVENT_ENVELOPE_FIELDS = [
   "payload",
 ] as const;
 export const REALTIME_EVENT_OPTIONAL_ENVELOPE_FIELDS = [
-  "projectId",
+  "spaceId",
   "runId",
   "taskId",
   "assignmentId",
-  "workstreamId",
+  "threadId",
   "attemptId",
   "workspaceRuntimeId",
   "workspaceId",
@@ -52,20 +52,20 @@ export const REALTIME_EVENT_OPTIONAL_ENVELOPE_FIELDS = [
 ] as const;
 export const REALTIME_STREAM_KINDS = [
   "execution_workspace",
-  "project",
+  "space",
   "user",
 ] as const;
 export const COLLABORATION_REALTIME_EVENT_TYPES = [
-  "project.created",
-  "project.updated",
-  "project.archived",
-  "project.deleted",
-  "workstream.created",
-  "workstream.updated",
-  "workstream.deleted",
+  "space.created",
+  "space.updated",
+  "space.archived",
+  "space.deleted",
+  "thread.created",
+  "thread.updated",
+  "thread.deleted",
   "discussion.created",
   "discussion.updated",
-  "project_workspace_grant.updated",
+  "workspace_space_grant.updated",
 ] as const;
 export const DURABLE_REALTIME_EVENT_TYPES = [
   "work_request.created",
@@ -88,16 +88,16 @@ export const DURABLE_REALTIME_EVENT_TYPES = [
   "assignment.failed",
   "assignment.cancelled",
   "artifact.created",
-  "project.created",
-  "project.updated",
-  "project.archived",
-  "project.deleted",
-  "workstream.created",
-  "workstream.updated",
-  "workstream.deleted",
+  "space.created",
+  "space.updated",
+  "space.archived",
+  "space.deleted",
+  "thread.created",
+  "thread.updated",
+  "thread.deleted",
   "discussion.created",
   "discussion.updated",
-  "project_workspace_grant.updated",
+  "workspace_space_grant.updated",
 ] as const;
 export const EPHEMERAL_REALTIME_EVENT_TYPES = [
   "assignment.progress",

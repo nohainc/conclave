@@ -1,7 +1,7 @@
 import 'dart:async';
 
 /// Cloud supports application ping/pong. Lack of a pong detects a silently
-/// stalled socket without treating an idle Workstream as a disconnected one.
+/// stalled socket without treating an idle Thread as a disconnected one.
 class RealtimeHealthMonitor {
   RealtimeHealthMonitor(
       {required this.ping,

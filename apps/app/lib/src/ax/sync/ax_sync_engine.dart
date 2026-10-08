@@ -39,15 +39,16 @@ class _Entry<T> {
 class AxSyncEngine {
   AxSyncEngine(
       {DateTime Function()? clock,
-      this.maxRetainedWorkstreams = 20,
+      int? maxRetainedThreads,
       this.maxRetainedHistoryItems = 200,
       this.runDetailRetention = const Duration(minutes: 5)})
-      : _clock = clock ?? DateTime.now {
-    if (maxRetainedWorkstreams < 1 || maxRetainedHistoryItems < 1) {
-      throw ArgumentError.value(maxRetainedWorkstreams);
+      : maxRetainedThreads = maxRetainedThreads ?? 20,
+        _clock = clock ?? DateTime.now {
+    if (this.maxRetainedThreads < 1 || maxRetainedHistoryItems < 1) {
+      throw ArgumentError.value(this.maxRetainedThreads);
     }
   }
-  final int maxRetainedWorkstreams;
+  final int maxRetainedThreads;
   final int maxRetainedHistoryItems;
   final Duration runDetailRetention;
   final _historyOwners = <String,
@@ -64,7 +65,7 @@ class AxSyncEngine {
 
   bool _isHistory(AxQueryKey key) =>
       key.parts.length >= 3 &&
-      key.parts[0] == 'workstream' &&
+      (key.parts[0] == 'thread' || key.parts[0] == 'thread') &&
       (key.parts[2] == 'discussion' || key.parts[2] == 'work-requests');
 
   void scheduleRetention() {
@@ -96,7 +97,7 @@ class AxSyncEngine {
         ..sort((a, b) => lastUsed(a).compareTo(lastUsed(b)));
       var remaining = groups.length;
       for (final id in oldest) {
-        if (remaining <= maxRetainedWorkstreams) break;
+        if (remaining <= maxRetainedThreads) break;
         final keys = groups[id]!;
         if (keys.any((key) {
           final entry = _entries[key]!;
@@ -110,15 +111,18 @@ class AxSyncEngine {
         }
         for (final resource in keys.map((key) => key.parts[2]).toSet()) {
           _historyOwners[resource]?.$2(id);
-          remove(AxQueryKey(['workstream', id, resource]), prefix: true);
+          remove(AxQueryKey(['thread', id, resource]), prefix: true);
         }
         remaining--;
       }
       for (final group in groups.entries) {
         for (final resource in group.value.map((key) => key.parts[2]).toSet()) {
           final owner = _historyOwners[resource];
-          final entries = _entries.entries.where((entry) => entry.key
-              .startsWith(AxQueryKey(['workstream', group.key, resource])));
+          final entries = _entries.entries.where((entry) =>
+              entry.key
+                  .startsWith(AxQueryKey(['thread', group.key, resource])) ||
+              entry.key
+                  .startsWith(AxQueryKey(['thread', group.key, resource])));
           if (owner != null &&
               !owner.$1(group.key) &&
               entries.every((entry) =>

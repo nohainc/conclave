@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:conclave_app/src/ax/sync/ax_discussion_cache.dart';
-import 'package:conclave_app/src/features/projects/projects_pages.dart';
+import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'ax_fixture_data.dart';
 import 'package:conclave_app/src/ax/sync/ax_realtime_cache_router.dart';
 
@@ -12,7 +12,7 @@ AxDiscussionMessage message(String id, String body,
         {String ws = 'w', String? editedAt}) =>
     AxDiscussionMessage(
         id: id,
-        workstreamId: ws,
+        threadId: ws,
         authorUserId: 'me',
         body: body,
         createdAt: '2026-10-06T00:00:00.000Z',
@@ -37,19 +37,19 @@ class DiscussionSource extends AxFixtureDataSource {
   List<AxDiscussionMessage> server = [];
   @override
   Future<AxDiscussionPage> loadDiscussionPage(
-      {required String workstreamId,
+      {required String threadId,
       int limit = 50,
       String? before,
       String? after}) {
-    pages.add((ws: workstreamId, before: before, after: after, limit: limit));
+    pages.add((ws: threadId, before: before, after: after, limit: limit));
     if (queuedPages.isNotEmpty) return queuedPages.removeAt(0).future;
     return Future.value(AxDiscussionPage(
-        messages: server.where((m) => m.workstreamId == workstreamId)));
+        messages: server.where((m) => m.threadId == threadId)));
   }
 
   @override
   Future<AxDiscussionMessage> sendDiscussionMessage(
-      {required String workstreamId,
+      {required String threadId,
       required String text,
       List<String> references = const [],
       String? idempotencyKey}) {
@@ -394,7 +394,7 @@ void main() {
     await write;
     expect(cache.peek('w').messages, isEmpty);
   });
-  test('Workstream observers are isolated and cancelable', () async {
+  test('Thread observers are isolated and cancelable', () async {
     var a = 0, b = 0;
     final cancel = cache.watch('w', (_) => a++);
     cache.watch('other', (_) => b++);
@@ -409,13 +409,13 @@ void main() {
   Widget page(String id, {Stream<Map<String, dynamic>>? realtime}) =>
       MaterialApp(
           home: Scaffold(
-              body: WorkstreamPage(
+              body: ThreadPage(
                   key: ValueKey(id),
-                  project: const AxProject(
-                      id: 'p', name: 'Project', branch: '', lastActivity: ''),
-                  workstream: AxWorkstream(
+                  space: const AxSpace(
+                      id: 'p', name: 'Space', branch: '', lastActivity: ''),
+                  thread: AxThread(
                       id: id,
-                      projectId: 'p',
+                      spaceId: 'p',
                       name: id,
                       lead: '',
                       status: 'active',
@@ -426,7 +426,7 @@ void main() {
                   discussionCache: cache,
                   realtimeEvents: realtime,
                   currentUserId: 'me',
-                  onBackToProject: () {},
+                  onBackToSpace: () {},
                   onArchive: () {})));
   Future<void> size(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
@@ -456,7 +456,7 @@ void main() {
     source.queuedPages.add(forward);
     events.add({
       'type': 'reconnect.required',
-      'scope': {'kind': 'workstream', 'workstreamId': 'w'}
+      'scope': {'kind': 'thread', 'threadId': 'w'}
     });
     await tester.pump();
     expect(source.pages.last.after, 'anchor');

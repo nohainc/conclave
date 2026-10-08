@@ -12,16 +12,16 @@ AxSnapshot axFixtureSnapshot() => const AxSnapshot(
         verifiedCriterionCount: 0,
         criterionCount: 2,
       ),
-      projects: [
-        AxProject(
-          id: 'project-auth',
+      spaces: [
+        AxSpace(
+          id: 'space-auth',
           name: 'Authentication',
           branch: 'main',
           lastActivity: '2 min ago',
-          workstreams: [
-            AxWorkstream(
-              id: 'workstream-auth',
-              projectId: 'project-auth',
+          threads: [
+            AxThread(
+              id: 'thread-auth',
+              spaceId: 'space-auth',
               name: 'Authentication hardening',
               lead: 'Vitalii',
               status: 'active',
@@ -32,7 +32,7 @@ AxSnapshot axFixtureSnapshot() => const AxSnapshot(
             ),
           ],
         ),
-        AxProject(
+        AxSpace(
           id: 'atlas',
           name: 'Atlas API',
           branch: 'develop',
@@ -108,9 +108,8 @@ AxSnapshot axFixtureSnapshot() => const AxSnapshot(
         ),
         AxFinding(
           id: 'F-098',
-          title: 'Show empty state for projects',
-          description:
-              'Projects without active goals need a clear next action.',
+          title: 'Show empty state for spaces',
+          description: 'Spaces without active goals need a clear next action.',
           severity: FindingSeverity.minor,
           status: FindingStatus.verified,
           taskId: 'research',

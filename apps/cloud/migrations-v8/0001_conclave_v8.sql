@@ -9,7 +9,7 @@ CREATE TABLE users (
   email_verified INTEGER NOT NULL DEFAULT 0 CHECK (email_verified IN (0, 1))
 );
 
-CREATE TABLE projects (
+CREATE TABLE spaces (
   id TEXT PRIMARY KEY,
   owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   name TEXT NOT NULL,
@@ -19,20 +19,20 @@ CREATE TABLE projects (
   settings_json TEXT NOT NULL DEFAULT '{}'
 );
 
-CREATE INDEX idx_projects_owner ON projects(owner_user_id);
+CREATE INDEX idx_spaces_owner ON spaces(owner_user_id);
 
-CREATE TABLE project_memberships (
+CREATE TABLE space_memberships (
   id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role TEXT NOT NULL CHECK (role IN ('owner', 'collaborator', 'viewer')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  UNIQUE (project_id, user_id)
+  UNIQUE (space_id, user_id)
 );
 
-CREATE UNIQUE INDEX idx_project_one_owner
-  ON project_memberships(project_id) WHERE role = 'owner';
+CREATE UNIQUE INDEX idx_space_one_owner
+  ON space_memberships(space_id) WHERE role = 'owner';
 
 CREATE TABLE execution_workspaces (
   id TEXT PRIMARY KEY,
@@ -58,9 +58,9 @@ CREATE TABLE workspace_runtime_identities (
   CHECK (installation_id IS NOT NULL OR revoked_at IS NOT NULL)
 );
 
-CREATE TABLE workstreams (
+CREATE TABLE threads (
   id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('active', 'paused', 'blocked', 'completed', 'archived')),
   access_policy_json TEXT NOT NULL DEFAULT '{}',
@@ -69,11 +69,11 @@ CREATE TABLE workstreams (
   updated_at TEXT NOT NULL
 );
 
-CREATE INDEX idx_workstreams_project ON workstreams(project_id, status);
+CREATE INDEX idx_threads_space ON threads(space_id, status);
 
 CREATE TABLE discussion_messages (
   id TEXT PRIMARY KEY,
-  workstream_id TEXT NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
+  thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
   author_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   body TEXT NOT NULL,
   references_json TEXT NOT NULL DEFAULT '[]',
@@ -81,10 +81,10 @@ CREATE TABLE discussion_messages (
   created_at TEXT NOT NULL
 );
 
-CREATE INDEX idx_discussion_messages_workstream ON discussion_messages(workstream_id, created_at);
+CREATE INDEX idx_discussion_messages_thread ON discussion_messages(thread_id, created_at);
 
-CREATE TABLE workstream_execution_policies (
-  workstream_id TEXT PRIMARY KEY REFERENCES workstreams(id) ON DELETE CASCADE,
+CREATE TABLE thread_execution_policies (
+  thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,
   mode TEXT NOT NULL CHECK (mode IN ('stateless', 'stateful')),
   primary_workspace_id TEXT REFERENCES execution_workspaces(id) ON DELETE RESTRICT,
   allowed_worker_type_ids_json TEXT NOT NULL DEFAULT '[]',
@@ -93,8 +93,8 @@ CREATE TABLE workstream_execution_policies (
 
 CREATE TABLE runs (
   id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  workstream_id TEXT REFERENCES workstreams(id) ON DELETE SET NULL,
+  space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+  thread_id TEXT REFERENCES threads(id) ON DELETE SET NULL,
   work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
   status TEXT NOT NULL CHECK (
     status IN ('created', 'running', 'paused', 'completed', 'failed', 'cancelled')
@@ -109,9 +109,9 @@ CREATE TABLE runs (
 
 CREATE TABLE worker_assignments (
   id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
   run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
-  workstream_id TEXT REFERENCES workstreams(id) ON DELETE SET NULL,
+  thread_id TEXT REFERENCES threads(id) ON DELETE SET NULL,
   work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
   execution_workspace_id TEXT NOT NULL REFERENCES execution_workspaces(id) ON DELETE RESTRICT,
   runtime_identity_id TEXT NOT NULL REFERENCES workspace_runtime_identities(id) ON DELETE RESTRICT,
@@ -121,7 +121,7 @@ CREATE TABLE worker_assignments (
   output_json TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  workspace_project_grant_id TEXT REFERENCES workspace_project_grants(id) ON DELETE SET NULL,
+  workspace_space_grant_id TEXT REFERENCES workspace_space_grants(id) ON DELETE SET NULL,
   error_json TEXT,
   requested_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   workspace_worker_id TEXT,
@@ -141,9 +141,9 @@ CREATE TABLE worker_assignments (
 
 CREATE TABLE artifacts (
   id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
   run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
-  workstream_id TEXT REFERENCES workstreams(id) ON DELETE SET NULL,
+  thread_id TEXT REFERENCES threads(id) ON DELETE SET NULL,
   work_request_id TEXT REFERENCES work_requests(id) ON DELETE SET NULL,
   assignment_id TEXT REFERENCES worker_assignments(id) ON DELETE SET NULL,
   content_digest TEXT NOT NULL,
@@ -151,15 +151,15 @@ CREATE TABLE artifacts (
   created_at TEXT NOT NULL
 );
 
-CREATE INDEX idx_runs_workstream ON runs(workstream_id, created_at);
+CREATE INDEX idx_runs_thread ON runs(thread_id, created_at);
 
 CREATE INDEX idx_assignments_work_request ON worker_assignments(work_request_id, created_at);
 
 CREATE INDEX idx_artifacts_work_request ON artifacts(work_request_id, created_at);
 
-CREATE TABLE workspace_project_grants (
+CREATE TABLE workspace_space_grants (
   id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
   workspace_id TEXT NOT NULL,
   granted_by_user_id TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active' CHECK (
@@ -173,22 +173,22 @@ CREATE TABLE workspace_project_grants (
   allowed_worker_capabilities_json TEXT NOT NULL DEFAULT '[]',
   network_policy_json TEXT NOT NULL DEFAULT '{"mode":"deny_all","allowedHosts":[]}',
   concurrency_json TEXT NOT NULL DEFAULT '{"maxConcurrentAssignments":1}',
-  UNIQUE (id, project_id, workspace_id),
+  UNIQUE (id, space_id, workspace_id),
   FOREIGN KEY (workspace_id, granted_by_user_id)
     REFERENCES execution_workspaces(id, owner_user_id)
 );
 
-CREATE INDEX idx_workspace_project_grants_project
-  ON workspace_project_grants(project_id, status);
+CREATE INDEX idx_workspace_space_grants_space
+  ON workspace_space_grants(space_id, status);
 
-CREATE TRIGGER workspace_project_grant_status_transition_valid
-BEFORE UPDATE OF status ON workspace_project_grants
+CREATE TRIGGER workspace_space_grant_status_transition_valid
+BEFORE UPDATE OF status ON workspace_space_grants
 WHEN OLD.status IS NOT NEW.status AND NOT (
   (OLD.status = 'active' AND NEW.status IN ('suspended', 'revoked', 'expired')) OR
   (OLD.status = 'suspended' AND NEW.status IN ('active', 'revoked', 'expired'))
 )
 BEGIN
-  SELECT RAISE(ABORT, 'invalid Workspace Project Grant status transition');
+  SELECT RAISE(ABORT, 'invalid Workspace Space Grant status transition');
 END;
 
 CREATE TABLE auth_accounts (
@@ -291,9 +291,9 @@ CREATE TABLE workspace_audit_log (
 CREATE INDEX idx_workspace_audit_time
   ON workspace_audit_log(workspace_id, created_at DESC);
 
-CREATE TABLE project_invitations (
+CREATE TABLE space_invitations (
   id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('collaborator', 'viewer')),
   token_hash TEXT NOT NULL UNIQUE,
@@ -308,11 +308,11 @@ CREATE TABLE project_invitations (
   updated_at TEXT NOT NULL
 );
 
-CREATE INDEX idx_project_invitations_project ON project_invitations(project_id, status);
+CREATE INDEX idx_space_invitations_space ON space_invitations(space_id, status);
 
-CREATE TABLE project_audit_log (
+CREATE TABLE space_audit_log (
   id TEXT PRIMARY KEY,
-  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  space_id TEXT REFERENCES spaces(id) ON DELETE CASCADE,
   actor_type TEXT NOT NULL CHECK (actor_type IN ('user', 'workspace_runtime', 'worker', 'system')),
   actor_id TEXT NOT NULL,
   action TEXT NOT NULL,
@@ -322,7 +322,7 @@ CREATE TABLE project_audit_log (
   created_at TEXT NOT NULL
 );
 
-CREATE INDEX idx_project_audit_log_project ON project_audit_log(project_id, created_at);
+CREATE INDEX idx_space_audit_log_space ON space_audit_log(space_id, created_at);
 
 CREATE INDEX idx_worker_assignments_requester
   ON worker_assignments(requested_by_user_id, created_at);
@@ -484,16 +484,16 @@ CREATE TABLE worker_scheduling_audit (
 CREATE INDEX idx_worker_scheduling_audit_worker
   ON worker_scheduling_audit(worker_id, requested_at);
 
-CREATE TABLE workstream_work_configs (
-  workstream_id TEXT PRIMARY KEY REFERENCES workstreams(id) ON DELETE CASCADE,
+CREATE TABLE thread_work_configs (
+  thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,
   config_json TEXT NOT NULL DEFAULT '{"defaultWorkflowId":"full_cycle","bindings":{}}',
   updated_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   updated_at TEXT NOT NULL
 );
 
-CREATE TABLE workstream_runtime_leases (
+CREATE TABLE thread_runtime_leases (
   id TEXT PRIMARY KEY,
-  workstream_id TEXT NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
+  thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
   work_request_id TEXT NOT NULL REFERENCES work_requests(id) ON DELETE CASCADE,
   workspace_id TEXT NOT NULL REFERENCES execution_workspaces(id) ON DELETE RESTRICT,
   fencing_token INTEGER NOT NULL CHECK (fencing_token > 0),
@@ -501,17 +501,17 @@ CREATE TABLE workstream_runtime_leases (
   acquired_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
   released_at TEXT,
-  UNIQUE (workstream_id, fencing_token)
+  UNIQUE (thread_id, fencing_token)
 );
 
-CREATE UNIQUE INDEX idx_workstream_one_active_runtime_lease
-  ON workstream_runtime_leases(workstream_id) WHERE status = 'active';
+CREATE UNIQUE INDEX idx_thread_one_active_runtime_lease
+  ON thread_runtime_leases(thread_id) WHERE status = 'active';
 
-CREATE INDEX idx_workstream_runtime_lease_request
-  ON workstream_runtime_leases(work_request_id, status);
+CREATE INDEX idx_thread_runtime_lease_request
+  ON thread_runtime_leases(work_request_id, status);
 
 CREATE TABLE realtime_event_cursors (
-  stream_kind TEXT NOT NULL DEFAULT 'execution_workspace' CHECK (stream_kind IN ('execution_workspace', 'project', 'user')),
+  stream_kind TEXT NOT NULL DEFAULT 'execution_workspace' CHECK (stream_kind IN ('execution_workspace', 'space', 'user')),
   stream_id TEXT,
   workspace_id TEXT,
   next_sequence INTEGER NOT NULL DEFAULT 0,
@@ -523,11 +523,11 @@ CREATE UNIQUE INDEX idx_realtime_event_cursor_stream
 
 CREATE TABLE realtime_events (
   event_id TEXT PRIMARY KEY,
-  stream_kind TEXT NOT NULL DEFAULT 'execution_workspace' CHECK (stream_kind IN ('execution_workspace', 'project', 'user')),
+  stream_kind TEXT NOT NULL DEFAULT 'execution_workspace' CHECK (stream_kind IN ('execution_workspace', 'space', 'user')),
   stream_id TEXT,
   workspace_id TEXT,
-  workstream_id TEXT,
-  project_id TEXT,
+  thread_id TEXT,
+  space_id TEXT,
   run_id TEXT,
   task_id TEXT,
   attempt_id TEXT,
@@ -919,7 +919,7 @@ CREATE UNIQUE INDEX idx_tool_profile_one_active_definition_per_worker
 
 CREATE TABLE work_requests (
   id TEXT PRIMARY KEY,
-  workstream_id TEXT NOT NULL REFERENCES workstreams(id) ON DELETE CASCADE,
+  thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
   requested_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   mode TEXT NOT NULL CHECK (mode IN ('stateless', 'stateful')),
   workflow_id TEXT NOT NULL CHECK (
@@ -938,8 +938,8 @@ CREATE TABLE work_requests (
   cancel_requested_at TEXT
 );
 
-CREATE INDEX idx_work_requests_workstream
-  ON work_requests(workstream_id, status, created_at);
+CREATE INDEX idx_work_requests_thread
+  ON work_requests(thread_id, status, created_at);
 
 CREATE TABLE workflow_tasks (
   id TEXT PRIMARY KEY,
@@ -948,7 +948,7 @@ CREATE TABLE workflow_tasks (
     step_kind IN ('research', 'plan', 'implement', 'test', 'verify')
   ),
   execution_mode TEXT NOT NULL CHECK (
-    execution_mode IN ('stateless_read', 'stateful_workstream')
+    execution_mode IN ('stateless_read', 'stateful_thread')
   ),
   timeout_ms INTEGER NOT NULL CHECK (timeout_ms >= 1000),
   prompt_profile_version TEXT NOT NULL,
@@ -976,11 +976,11 @@ CREATE INDEX idx_workflow_tasks_request
   ON workflow_tasks(work_request_id, status, created_at);
 
 CREATE TRIGGER trg_work_requests_snapshot_immutable
-BEFORE UPDATE OF workstream_id, requested_by_user_id, mode, workflow_id,
+BEFORE UPDATE OF thread_id, requested_by_user_id, mode, workflow_id,
   workflow_version, workflow_snapshot_json, snapshot_json,
   primary_workspace_id, input_json
 ON work_requests
-WHEN OLD.workstream_id IS NOT NEW.workstream_id
+WHEN OLD.thread_id IS NOT NEW.thread_id
   OR OLD.requested_by_user_id IS NOT NEW.requested_by_user_id
   OR OLD.mode IS NOT NEW.mode
   OR OLD.workflow_id IS NOT NEW.workflow_id
@@ -1007,7 +1007,7 @@ INSERT INTO worker_catalog (
     'cli',
     'visible',
     'stable',
-    '["text","local_file","workstream_read","workstream_write","durable_session"]',
+    '["text","local_file","thread_read","thread_write","durable_session"]',
     10,
     '2026-10-01T00:00:00Z',
     '2026-10-01T00:00:00Z'
@@ -1020,7 +1020,7 @@ INSERT INTO worker_catalog (
     'cli',
     'visible',
     'stable',
-    '["text","local_file","workstream_read","workstream_write","durable_session"]',
+    '["text","local_file","thread_read","thread_write","durable_session"]',
     20,
     '2026-10-01T00:00:00Z',
     '2026-10-01T00:00:00Z'
@@ -1054,7 +1054,7 @@ INSERT INTO tool_profile_definitions (
   );
 
 -- Tested v1 payloads are starter drafts, not qualified or signed releases.
-INSERT OR IGNORE INTO tool_profile_starter_templates (profile_definition_id, schema_version, profile_json, updated_at) VALUES ('chatgpt-codex', 1, '{"schemaVersion":1,"profileDefinitionId":"chatgpt-codex","releaseVersion":1,"logicalWorkerTypeId":"chatgpt","engineFamily":"cli","engineCompatibility":{"min":"1.0.0","maxExclusive":"2.0.0"},"providerTool":{"name":"Codex CLI","executableCandidates":["codex"],"discovery":{"standardLocations":["{{home}}/.local/bin","/usr/local/bin"],"allowPathSearch":true},"versionProbe":{"arguments":["--version"],"timeoutMs":10000,"source":"stdout","extract":{"kind":"regex_capture","patternId":"semver"}},"supportedVersions":[{"min":"0.158.0","maxExclusive":"0.190.0"}]},"environment":{"passthrough":["PATH","HOME","USERPROFILE","TMP","TEMP","TMPDIR","LANG","LC_ALL","SSL_CERT_FILE","SSL_CERT_DIR","CODEX_HOME","OPENAI_API_KEY"],"set":{"NO_COLOR":"1"}},"probe":{"passive":{"checks":[{"id":"authentication","arguments":["login","status"],"timeoutMs":10000,"successExitCodes":[0],"failureIssueCode":"provider_authentication_required"}],"configChecks":[]},"live":{"timeoutMs":30000,"expectedFinalText":{"kind":"exact","value":"OK"}}},"execution":{"arguments":["--ask-for-approval","never",{"sandboxPolicyMapping":true},"exec","--json","--color","never","--skip-git-repo-check","--cd","{{workingDirectory}}",{"modelArguments":true},{"ifPresent":"reasoningEffort","values":["-c","model_reasoning_effort=\"{{reasoningEffort}}\""]},{"sessionResumeArguments":true},{"ifAbsent":"sessionId","ifSessionPolicy":"stateless","values":["--ephemeral"]},{"providerTimeoutArguments":true},"-"],"stdin":{"mode":"raw_text","value":"{{prompt}}"},"output":{"mode":"jsonl"},"events":[{"when":[{"kind":"equals","selector":"$.type","value":"thread.started"}],"actions":[{"type":"set_session","selector":"$.thread_id"}]},{"when":[{"kind":"equals","selector":"$.type","value":"turn.completed"}],"actions":[{"type":"mark_success"}]},{"when":[{"kind":"equals","selector":"$.type","value":"item.completed"},{"kind":"equals","selector":"$.item.type","value":"agent_message"}],"actions":[{"type":"set_final_text","selector":"$.item.text"}]},{"when":[{"kind":"equals","selector":"$.type","value":"turn.failed"}],"actions":[{"type":"set_provider_error","selector":"$.error.message"},{"type":"mark_failure"}]},{"when":[{"kind":"equals","selector":"$.type","value":"error"}],"actions":[{"type":"set_provider_error","selector":"$.message"},{"type":"mark_failure"}]}]},"session":{"supported":true,"formatId":"codex-thread-v1","compatibleFormatIds":["codex-thread-v1"],"extract":"$.thread_id","resumeArguments":["resume","{{sessionId}}"],"requireObservedIdMatch":true},"model":{"supported":true,"arguments":["--model","{{model}}"],"unknownModelPolicy":"profile_allowlist","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"],"allowlist":["gpt-6.1-sol","gpt-6-astra","gpt-6-sol","gpt-6-luna","gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna","gpt-reserve","o3","o3-mini","o1","o1-mini","o1-preview","gpt-4.5-preview","gpt-4o","gpt-4o-mini","chatgpt-4o-latest","gpt-4-turbo","gpt-4","codex-mini","gpt-test"],"catalog":[{"id":"gpt-6.1-sol","name":"GPT-6.1 Sol","badge":"Workhorse","description":"Latest workhorse model for coding and everyday work","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-6-astra","name":"GPT-6 Astra","badge":"Frontier Reasoning","description":"Frontier intelligence for the most demanding work","defaultReasoningEffort":"medium","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-6-sol","name":"GPT-6 Sol","badge":"Workhorse","description":"Previous generation workhorse model","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-6-luna","name":"GPT-6 Luna","badge":"Fast & Affordable","description":"Fast and affordable model for easier tasks","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-5.6-sol","name":"GPT-5.6 Sol","badge":"Workhorse","description":"Older generation workhorse model","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-5.6-terra","name":"GPT-5.6 Terra","badge":"Balanced","description":"Older balanced model for straightforward work","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-5.6-luna","name":"GPT-5.6 Luna","badge":"Fast","description":"Older fast and efficient model","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-reserve","name":"GPT Reserve","badge":"Agentic","description":"Fast and affordable agentic coding model","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"o3","name":"o3","badge":"Reasoning","description":"Most powerful reasoning model for coding, science, and math","defaultReasoningEffort":"medium","supportedReasoningEfforts":["low","medium","high"]},{"id":"o3-mini","name":"o3-mini","badge":"Fast Reasoning","description":"High-speed reasoning specialized for STEM and programming","defaultReasoningEffort":"medium","supportedReasoningEfforts":["low","medium","high"]},{"id":"o1","name":"o1","badge":"Reasoning","description":"Advanced full-scale reasoning model for deep logic problems","defaultReasoningEffort":"medium","supportedReasoningEfforts":["low","medium","high"]},{"id":"o1-mini","name":"o1-mini","badge":"Fast Reasoning","description":"Efficient reasoning model for fast coding tasks","defaultReasoningEffort":"medium","supportedReasoningEfforts":["low","medium","high"]},{"id":"o1-preview","name":"o1-preview","badge":"Reasoning Preview","description":"Preview reasoning model for multi-step reasoning","defaultReasoningEffort":"medium","supportedReasoningEfforts":["low","medium","high"]},{"id":"gpt-4.5-preview","name":"GPT-4.5","badge":"Massive Knowledge","description":"Largest flagship model with broad world knowledge and deep nuance"},{"id":"gpt-4o","name":"GPT-4o","badge":"Flagship","description":"High-intelligence flagship model for complex text, code, and reasoning"},{"id":"gpt-4o-mini","name":"GPT-4o mini","badge":"Fast & Affordable","description":"Lightweight and fast for everyday coding and tasks"},{"id":"chatgpt-4o-latest","name":"ChatGPT-4o","badge":"Dynamic","description":"Continuously updated ChatGPT-4o release"},{"id":"codex-mini","name":"Codex Mini","badge":"Code Specialist","description":"Fast low-latency code generation and refactoring"},{"id":"gpt-4-turbo","name":"GPT-4 Turbo","badge":"Legacy","description":"High-capacity GPT-4 model with 128k context"},{"id":"gpt-4","name":"GPT-4","badge":"Legacy","description":"Original GPT-4 instruction following model"},{"id":"gpt-test","name":"GPT Test","badge":"Testing","description":"Test environment model"}]},"timeout":{"providerArguments":[],"providerReserveMs":2000},"sandbox":{"mappings":{"restricted":["--sandbox","workspace-write"],"provider_default":["--sandbox","read-only"],"full_access":["--dangerously-bypass-approvals-and-sandbox"]}},"progress":[{"when":[{"kind":"equals","selector":"$.type","value":"turn.started"}],"percentage":10,"messageKey":"provider_working"},{"when":[{"kind":"one_of","selector":"$.type","values":["item.started","item.updated","item.completed"]},{"kind":"one_of","selector":"$.item.type","values":["command_execution","mcp_tool_call","web_search_call"]}],"percentage":45,"messageKey":"provider_tool_started"}],"errors":{"mappings":[{"evidence":{"kind":"stderr_pattern","patternId":"session_unavailable"},"issueCode":"session_resume_failed"},{"evidence":{"kind":"stderr_pattern","patternId":"cancelled"},"issueCode":"cancelled"},{"evidence":{"kind":"stderr_pattern","patternId":"deadline_exceeded"},"issueCode":"deadline_exceeded"},{"evidence":{"kind":"stderr_pattern","patternId":"provider_authentication_required"},"issueCode":"provider_authentication_required"},{"evidence":{"kind":"stderr_pattern","patternId":"permission_denied"},"issueCode":"permission_denied"},{"evidence":{"kind":"structured_provider_error","selector":"$.error.message"},"issueCode":"provider_failure"},{"evidence":{"kind":"missing_terminal"},"issueCode":"provider_failure"}]},"capabilities":["text","local_file","durable_session","workstream_read"],"compatibilityOverrides":[{"providerVersion":{"min":"0.180.0","maxExclusive":"0.181.0"},"executionArguments":["--ask-for-approval","never","exec",{"sandboxPolicyMapping":true},{"modelArguments":true},{"ifPresent":"reasoningEffort","values":["-c","model_reasoning_effort=\"{{reasoningEffort}}\""]},{"sessionResumeArguments":true},{"providerTimeoutArguments":true},"--json","-"]}]}', '2026-10-04T00:00:00Z');
+INSERT OR IGNORE INTO tool_profile_starter_templates (profile_definition_id, schema_version, profile_json, updated_at) VALUES ('chatgpt-codex', 1, '{"schemaVersion":1,"profileDefinitionId":"chatgpt-codex","releaseVersion":1,"logicalWorkerTypeId":"chatgpt","engineFamily":"cli","engineCompatibility":{"min":"1.0.0","maxExclusive":"2.0.0"},"providerTool":{"name":"Codex CLI","executableCandidates":["codex"],"discovery":{"standardLocations":["{{home}}/.local/bin","/usr/local/bin"],"allowPathSearch":true},"versionProbe":{"arguments":["--version"],"timeoutMs":10000,"source":"stdout","extract":{"kind":"regex_capture","patternId":"semver"}},"supportedVersions":[{"min":"0.158.0","maxExclusive":"0.190.0"}]},"environment":{"passthrough":["PATH","HOME","USERPROFILE","TMP","TEMP","TMPDIR","LANG","LC_ALL","SSL_CERT_FILE","SSL_CERT_DIR","CODEX_HOME","OPENAI_API_KEY"],"set":{"NO_COLOR":"1"}},"probe":{"passive":{"checks":[{"id":"authentication","arguments":["login","status"],"timeoutMs":10000,"successExitCodes":[0],"failureIssueCode":"provider_authentication_required"}],"configChecks":[]},"live":{"timeoutMs":30000,"expectedFinalText":{"kind":"exact","value":"OK"}}},"execution":{"arguments":["--ask-for-approval","never",{"sandboxPolicyMapping":true},"exec","--json","--color","never","--skip-git-repo-check","--cd","{{workingDirectory}}",{"modelArguments":true},{"ifPresent":"reasoningEffort","values":["-c","model_reasoning_effort=\"{{reasoningEffort}}\""]},{"sessionResumeArguments":true},{"ifAbsent":"sessionId","ifSessionPolicy":"stateless","values":["--ephemeral"]},{"providerTimeoutArguments":true},"-"],"stdin":{"mode":"raw_text","value":"{{prompt}}"},"output":{"mode":"jsonl"},"events":[{"when":[{"kind":"equals","selector":"$.type","value":"thread.started"}],"actions":[{"type":"set_session","selector":"$.thread_id"}]},{"when":[{"kind":"equals","selector":"$.type","value":"turn.completed"}],"actions":[{"type":"mark_success"}]},{"when":[{"kind":"equals","selector":"$.type","value":"item.completed"},{"kind":"equals","selector":"$.item.type","value":"agent_message"}],"actions":[{"type":"set_final_text","selector":"$.item.text"}]},{"when":[{"kind":"equals","selector":"$.type","value":"turn.failed"}],"actions":[{"type":"set_provider_error","selector":"$.error.message"},{"type":"mark_failure"}]},{"when":[{"kind":"equals","selector":"$.type","value":"error"}],"actions":[{"type":"set_provider_error","selector":"$.message"},{"type":"mark_failure"}]}]},"session":{"supported":true,"formatId":"codex-thread-v1","compatibleFormatIds":["codex-thread-v1"],"extract":"$.thread_id","resumeArguments":["resume","{{sessionId}}"],"requireObservedIdMatch":true},"model":{"supported":true,"arguments":["--model","{{model}}"],"unknownModelPolicy":"profile_allowlist","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"],"allowlist":["gpt-6.1-sol","gpt-6-astra","gpt-6-sol","gpt-6-luna","gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna","gpt-reserve","o3","o3-mini","o1","o1-mini","o1-preview","gpt-4.5-preview","gpt-4o","gpt-4o-mini","chatgpt-4o-latest","gpt-4-turbo","gpt-4","codex-mini","gpt-test"],"catalog":[{"id":"gpt-6.1-sol","name":"GPT-6.1 Sol","badge":"Workhorse","description":"Latest workhorse model for coding and everyday work","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-6-astra","name":"GPT-6 Astra","badge":"Frontier Reasoning","description":"Frontier intelligence for the most demanding work","defaultReasoningEffort":"medium","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-6-sol","name":"GPT-6 Sol","badge":"Workhorse","description":"Previous generation workhorse model","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-6-luna","name":"GPT-6 Luna","badge":"Fast & Affordable","description":"Fast and affordable model for easier tasks","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-5.6-sol","name":"GPT-5.6 Sol","badge":"Workhorse","description":"Older generation workhorse model","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-5.6-terra","name":"GPT-5.6 Terra","badge":"Balanced","description":"Older balanced model for straightforward work","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-5.6-luna","name":"GPT-5.6 Luna","badge":"Fast","description":"Older fast and efficient model","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"gpt-reserve","name":"GPT Reserve","badge":"Agentic","description":"Fast and affordable agentic coding model","defaultReasoningEffort":"low","supportedReasoningEfforts":["low","medium","high","xhigh","max","ultra"]},{"id":"o3","name":"o3","badge":"Reasoning","description":"Most powerful reasoning model for coding, science, and math","defaultReasoningEffort":"medium","supportedReasoningEfforts":["low","medium","high"]},{"id":"o3-mini","name":"o3-mini","badge":"Fast Reasoning","description":"High-speed reasoning specialized for STEM and programming","defaultReasoningEffort":"medium","supportedReasoningEfforts":["low","medium","high"]},{"id":"o1","name":"o1","badge":"Reasoning","description":"Advanced full-scale reasoning model for deep logic problems","defaultReasoningEffort":"medium","supportedReasoningEfforts":["low","medium","high"]},{"id":"o1-mini","name":"o1-mini","badge":"Fast Reasoning","description":"Efficient reasoning model for fast coding tasks","defaultReasoningEffort":"medium","supportedReasoningEfforts":["low","medium","high"]},{"id":"o1-preview","name":"o1-preview","badge":"Reasoning Preview","description":"Preview reasoning model for multi-step reasoning","defaultReasoningEffort":"medium","supportedReasoningEfforts":["low","medium","high"]},{"id":"gpt-4.5-preview","name":"GPT-4.5","badge":"Massive Knowledge","description":"Largest flagship model with broad world knowledge and deep nuance"},{"id":"gpt-4o","name":"GPT-4o","badge":"Flagship","description":"High-intelligence flagship model for complex text, code, and reasoning"},{"id":"gpt-4o-mini","name":"GPT-4o mini","badge":"Fast & Affordable","description":"Lightweight and fast for everyday coding and tasks"},{"id":"chatgpt-4o-latest","name":"ChatGPT-4o","badge":"Dynamic","description":"Continuously updated ChatGPT-4o release"},{"id":"codex-mini","name":"Codex Mini","badge":"Code Specialist","description":"Fast low-latency code generation and refactoring"},{"id":"gpt-4-turbo","name":"GPT-4 Turbo","badge":"Legacy","description":"High-capacity GPT-4 model with 128k context"},{"id":"gpt-4","name":"GPT-4","badge":"Legacy","description":"Original GPT-4 instruction following model"},{"id":"gpt-test","name":"GPT Test","badge":"Testing","description":"Test environment model"}]},"timeout":{"providerArguments":[],"providerReserveMs":2000},"sandbox":{"mappings":{"restricted":["--sandbox","workspace-write"],"provider_default":["--sandbox","read-only"],"full_access":["--dangerously-bypass-approvals-and-sandbox"]}},"progress":[{"when":[{"kind":"equals","selector":"$.type","value":"turn.started"}],"percentage":10,"messageKey":"provider_working"},{"when":[{"kind":"one_of","selector":"$.type","values":["item.started","item.updated","item.completed"]},{"kind":"one_of","selector":"$.item.type","values":["command_execution","mcp_tool_call","web_search_call"]}],"percentage":45,"messageKey":"provider_tool_started"}],"errors":{"mappings":[{"evidence":{"kind":"stderr_pattern","patternId":"session_unavailable"},"issueCode":"session_resume_failed"},{"evidence":{"kind":"stderr_pattern","patternId":"cancelled"},"issueCode":"cancelled"},{"evidence":{"kind":"stderr_pattern","patternId":"deadline_exceeded"},"issueCode":"deadline_exceeded"},{"evidence":{"kind":"stderr_pattern","patternId":"provider_authentication_required"},"issueCode":"provider_authentication_required"},{"evidence":{"kind":"stderr_pattern","patternId":"permission_denied"},"issueCode":"permission_denied"},{"evidence":{"kind":"structured_provider_error","selector":"$.error.message"},"issueCode":"provider_failure"},{"evidence":{"kind":"missing_terminal"},"issueCode":"provider_failure"}]},"capabilities":["text","local_file","durable_session","thread_read"],"compatibilityOverrides":[{"providerVersion":{"min":"0.180.0","maxExclusive":"0.181.0"},"executionArguments":["--ask-for-approval","never","exec",{"sandboxPolicyMapping":true},{"modelArguments":true},{"ifPresent":"reasoningEffort","values":["-c","model_reasoning_effort=\"{{reasoningEffort}}\""]},{"sessionResumeArguments":true},{"providerTimeoutArguments":true},"--json","-"]}]}', '2026-10-04T00:00:00Z');
 INSERT OR IGNORE INTO tool_profile_starter_templates (profile_definition_id, schema_version, profile_json, updated_at) VALUES ('gemini-antigravity', 1, '{"schemaVersion":1,"profileDefinitionId":"gemini-antigravity","releaseVersion":1,"logicalWorkerTypeId":"gemini","engineFamily":"cli","engineCompatibility":{"min":"1.0.0","maxExclusive":"2.0.0"},"providerTool":{"name":"Antigravity CLI","executableCandidates":["agy"],"discovery":{"standardLocations":["{{home}}/.local/bin","{{home}}/.gemini/antigravity-cli/bin"],"allowPathSearch":true},"versionProbe":{"arguments":["--version"],"timeoutMs":10000,"source":"stdout","extract":{"kind":"regex_capture","patternId":"semver"}},"supportedVersions":[{"min":"1.0.0","maxExclusive":"2.0.0"}]},"environment":{"passthrough":["PATH","HOME","USERPROFILE","ProgramFiles","TMP","TEMP","TMPDIR","LANG","LC_ALL","SSL_CERT_FILE","SSL_CERT_DIR","AGY_ADC_AUTH","GEMINI_API_KEY","GOOGLE_API_KEY","GOOGLE_APPLICATION_CREDENTIALS","GOOGLE_CLOUD_PROJECT","GOOGLE_CLOUD_LOCATION","GOOGLE_GEMINI_BASE_URL"],"set":{}},"probe":{"passive":{"checks":[],"configChecks":[{"id":"gemini-provider-config","root":"home","relativePath":".gemini/antigravity-cli/settings.json","format":"json","maxBytes":16384,"onMissing":"warning","onInvalid":"failed","onNoMatch":{"result":"passed"},"rules":[{"when":[{"kind":"equals","selector":"$.modelProvider","value":"gemini"}],"result":"passed","requiredEnvironmentAny":["GEMINI_API_KEY"],"whenEnvironmentMissing":{"result":"failed","issueCode":"provider_authentication_required"}},{"when":[{"kind":"exists","selector":"$.modelProvider","exists":true}],"result":"failed","issueCode":"provider_failure"}]}]},"live":{"timeoutMs":30000,"expectedFinalText":{"kind":"exact","value":"OK"}}},"execution":{"arguments":["--input-format","stream-json","--output-format","stream-json",{"sandboxPolicyMapping":true},{"providerTimeoutArguments":true},{"sessionResumeArguments":true},{"modelArguments":true}],"stdin":{"mode":"json_object","value":{"event":"user","message":{"content":"{{prompt}}"}},"appendNewline":true},"output":{"mode":"jsonl"},"events":[{"when":[{"kind":"equals","selector":"$.event","value":"init"}],"actions":[{"type":"set_session","selector":"$.conversation_id"}]},{"when":[{"kind":"equals","selector":"$.event","value":"result"},{"kind":"not_equals","selector":"$.result.status","value":"SUCCESS"}],"actions":[{"type":"set_provider_error","selector":"$.result.error"},{"type":"mark_failure"}]},{"when":[{"kind":"equals","selector":"$.event","value":"result"},{"kind":"equals","selector":"$.result.status","value":"SUCCESS"}],"actions":[{"type":"set_final_text","selector":"$.result.response"},{"type":"mark_success"}]},{"when":[{"kind":"equals","selector":"$.event","value":"result"}],"actions":[{"type":"set_session","selector":"$.result.conversation_id"},{"type":"set_terminal_status","selector":"$.result.status"}]}]},"session":{"supported":true,"formatId":"antigravity-conversation-v1","compatibleFormatIds":["antigravity-conversation-v1"],"extract":"$.conversation_id","resumeArguments":["--conversation","{{sessionId}}"],"requireObservedIdMatch":true},"model":{"supported":true,"arguments":["--model","{{model}}"],"unknownModelPolicy":"pass_through"},"timeout":{"providerArguments":["--print-timeout","{{timeoutSeconds}}s"],"providerReserveMs":1500},"sandbox":{"mappings":{"restricted":["--sandbox","--mode","accept-edits"],"provider_default":["--sandbox"],"full_access":[]}},"progress":[{"when":[{"kind":"equals","selector":"$.event","value":"step_update"},{"kind":"equals","selector":"$.step_update.state","value":"ACTIVE"},{"kind":"equals","selector":"$.step_update.step_type","value":"agent_response"}],"percentage":40,"messageKey":"provider_response_received"},{"when":[{"kind":"equals","selector":"$.event","value":"step_update"},{"kind":"equals","selector":"$.step_update.state","value":"ACTIVE"},{"kind":"type_is","selector":"$.step_update.step_type","value":"string"}],"percentage":40,"messageKey":"provider_working"}],"errors":{"mappings":[{"evidence":{"kind":"stderr_pattern","patternId":"session_unavailable"},"issueCode":"session_resume_failed"},{"evidence":{"kind":"stderr_pattern","patternId":"cancelled"},"issueCode":"cancelled"},{"evidence":{"kind":"stderr_pattern","patternId":"deadline_exceeded"},"issueCode":"deadline_exceeded"},{"evidence":{"kind":"stderr_pattern","patternId":"provider_tool_unavailable"},"issueCode":"provider_tool_unavailable"},{"evidence":{"kind":"stderr_pattern","patternId":"provider_authentication_required"},"issueCode":"provider_authentication_required"},{"evidence":{"kind":"stderr_pattern","patternId":"permission_denied"},"issueCode":"permission_denied"},{"evidence":{"kind":"terminal_status","value":"ERROR"},"issueCode":"provider_failure"},{"evidence":{"kind":"missing_terminal"},"issueCode":"provider_failure"}]},"capabilities":["text","local_file","durable_session"],"compatibilityOverrides":[]}', '2026-10-04T00:00:00Z');
 
 -- Human Product Protocol v1: permanent receipts for explicit mutation retries.

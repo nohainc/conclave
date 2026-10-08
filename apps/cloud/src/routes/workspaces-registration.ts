@@ -798,7 +798,7 @@ export async function handleReleaseDesktopWorkspace(
           AND owner_user_id = ?4 AND status = 'active'`,
     ).bind(now, installationId, workspaceId, session.userId),
     env.CONCLAVE_DB.prepare(
-      `UPDATE workspace_project_grants SET status = 'revoked', updated_at = ?1
+      `UPDATE workspace_space_grants SET status = 'revoked', updated_at = ?1
         WHERE workspace_id = ?2 AND status IN ('active', 'suspended')`,
     ).bind(now, workspaceId),
     env.CONCLAVE_DB.prepare(

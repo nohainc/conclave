@@ -2,7 +2,7 @@ vi.mock("../src/collaboration-events.js", () => ({
   publishCollaborationEvent: vi.fn(async () => {}),
 }));
 import { describe, expect, it, vi } from "vitest";
-import { createWorkspaceProjectGrant } from "../src/routes/workspace-access.js";
+import { createWorkspaceSpaceGrant } from "../src/routes/workspace-access.js";
 
 function environment(
   inventoryWorkerIds: readonly string[] = [],
@@ -18,7 +18,7 @@ function environment(
           return this;
         },
         async first() {
-          if (query.includes("FROM projects")) return { id: "project-1" };
+          if (query.includes("FROM spaces")) return { id: "space-1" };
           if (query.includes("FROM execution_workspaces")) {
             return {
               id: "workspace-1",
@@ -26,11 +26,11 @@ function environment(
               status: "online",
             };
           }
-          if (query.includes("FROM project_memberships")) {
+          if (query.includes("FROM space_memberships")) {
             if (membershipError) throw membershipError;
             return null;
           }
-          if (query.includes("FROM workspace_project_grants")) return null;
+          if (query.includes("FROM workspace_space_grants")) return null;
           return null;
         },
         async all() {
@@ -57,7 +57,7 @@ function environment(
 const context = {
   userId: "owner-1",
   user: { id: "owner-1", status: "active" },
-  projectRoles: {},
+  spaceRoles: {},
   sessionId: "session-1",
   clientType: "web",
 } as never;
@@ -68,7 +68,7 @@ async function createGrant(
   membershipError?: Error,
 ) {
   const { env, writes } = environment(workerIds, membershipError);
-  await createWorkspaceProjectGrant(
+  await createWorkspaceSpaceGrant(
     new Request("https://cloud.test", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -76,7 +76,7 @@ async function createGrant(
     }),
     env,
     context,
-    "project-1",
+    "space-1",
     "workspace-1",
   );
   return writes;
@@ -92,7 +92,7 @@ describe("Workspace Grant write validation", () => {
   ])("rejects invalid %s before storing a Grant", async (_field, body) => {
     const { env, writes } = environment();
     await expect(
-      createWorkspaceProjectGrant(
+      createWorkspaceSpaceGrant(
         new Request("https://cloud.test", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -100,7 +100,7 @@ describe("Workspace Grant write validation", () => {
         }),
         env,
         context,
-        "project-1",
+        "space-1",
         "workspace-1",
       ),
     ).rejects.toMatchObject({ status: 400 });
@@ -136,7 +136,7 @@ describe("Workspace Grant write validation", () => {
     );
     expect(
       writes.some((query) =>
-        query.includes("INSERT INTO workspace_project_grants"),
+        query.includes("INSERT INTO workspace_space_grants"),
       ),
     ).toBe(true);
   });

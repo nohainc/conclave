@@ -3,9 +3,9 @@ import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import type { SecurityEnv } from "../src/routes/handlers.js";
 vi.mock("../src/routes/handlers.js", async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  authorizeWorkstreamAccess: async () => ({
+  authorizeThreadAccess: async () => ({
     context: { userId: "owner" },
-    projectId: "P",
+    spaceId: "P",
   }),
   validateWorkflowWorkerEligibility: async () => ({
     issues: [],
@@ -23,12 +23,12 @@ import { handleCreateWorkRequest } from "../src/routes/work-creation.js";
 function fixture() {
   const { sqlite, db } = sqliteD1();
   sqlite.exec(`INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES('owner','owner@test','Owner','now','now');
-    INSERT INTO projects(id,owner_user_id,name,created_at,updated_at) VALUES('P','owner','Project','now','now');
-    INSERT INTO project_memberships(id,project_id,user_id,role,created_at,updated_at) VALUES('member','P','owner','owner','now','now');
-    INSERT INTO workstreams(id,project_id,name,status,lead_user_id,created_at,updated_at) VALUES('W','P','Stream','active','owner','now','now');
+    INSERT INTO spaces(id,owner_user_id,name,created_at,updated_at) VALUES('P','owner','Space','now','now');
+    INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at) VALUES('member','P','owner','owner','now','now');
+    INSERT INTO threads(id,space_id,name,status,lead_user_id,created_at,updated_at) VALUES('W','P','Stream','active','owner','now','now');
     INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('workspace','owner','Workspace','now','now');`);
   sqlite.exec(
-    `INSERT INTO workstream_work_configs(workstream_id,config_json,updated_at) VALUES('W','{"bindings":{"direct":{"workerId":"worker-a"},"chat":{"workerId":"worker-a"}}}','now')`,
+    `INSERT INTO thread_work_configs(thread_id,config_json,updated_at) VALUES('W','{"bindings":{"direct":{"workerId":"worker-a"},"chat":{"workerId":"worker-a"}}}','now')`,
   );
   const instances = new Set<string>();
   let failDispatch = false;
@@ -46,14 +46,14 @@ function fixture() {
   const env = {
     CONCLAVE_DB: db,
     CONCLAVE_RUN_WORKFLOW: { create, get },
-    CONCLAVE_WORKSTREAM_COORDINATOR: { getByName: () => ({ fetch: enqueue }) },
+    CONCLAVE_THREAD_COORDINATOR: { getByName: () => ({ fetch: enqueue }) },
   } as unknown as SecurityEnv;
   const request = (
     prompt = "Implement this",
     key = "work-operation-000000001",
     workflowId = "direct",
   ) =>
-    new Request("https://cloud.test/workstreams/W/work-requests", {
+    new Request("https://cloud.test/threads/W/work-requests", {
       method: "POST",
       headers: { "Idempotency-Key": key },
       body: JSON.stringify({
@@ -120,7 +120,7 @@ describe("Work mutation identity through response loss", () => {
     const f = fixture();
     await expect(
       handleCreateWorkRequest(
-        new Request("https://cloud.test/workstreams/W/work-requests", {
+        new Request("https://cloud.test/threads/W/work-requests", {
           method: "POST",
           body: JSON.stringify({
             workflowId: "direct",
@@ -166,10 +166,10 @@ describe("Work mutation identity through response loss", () => {
   it("explicit next-turn selection overrides saved defaults and remains pinned", async () => {
     const f = fixture();
     f.sqlite.exec(
-      `UPDATE workstream_work_configs SET config_json = '{"bindings":{"direct":{"workerId":"old-worker","model":"old-model","reasoningEffort":"high"}}}'`,
+      `UPDATE thread_work_configs SET config_json = '{"bindings":{"direct":{"workerId":"old-worker","model":"old-model","reasoningEffort":"high"}}}'`,
     );
     await handleCreateWorkRequest(
-      new Request("https://cloud.test/workstreams/W/work-requests", {
+      new Request("https://cloud.test/threads/W/work-requests", {
         method: "POST",
         body: JSON.stringify({
           workflowId: "direct",
@@ -204,7 +204,7 @@ describe("Work mutation identity through response loss", () => {
     });
     expect(before.resolvedBindings.direct).toEqual({ workerId: "worker-a" });
     f.sqlite.exec(
-      `UPDATE workstream_work_configs SET config_json = '{"bindings":{"direct":{"workerId":"new-worker","model":"new-model"}}}'`,
+      `UPDATE thread_work_configs SET config_json = '{"bindings":{"direct":{"workerId":"new-worker","model":"new-model"}}}'`,
     );
     expect(read()).toEqual(before);
     expect(() =>
@@ -227,7 +227,7 @@ describe("Work mutation identity through response loss", () => {
     for (const table of [
       "work_requests",
       "runs",
-      "project_audit_log",
+      "space_audit_log",
       "mutation_receipts",
       "conversations",
       "conversation_work_requests",
@@ -256,7 +256,7 @@ describe("Work mutation identity through response loss", () => {
       workRequest: { id: string; conversationId: string };
     };
     f.sqlite.exec(
-      `UPDATE workstream_work_configs SET config_json = '{"bindings":{"direct":{"workerId":"another-worker","model":"another-model","reasoningEffort":"high"}}}' WHERE workstream_id = 'W'`,
+      `UPDATE thread_work_configs SET config_json = '{"bindings":{"direct":{"workerId":"another-worker","model":"another-model","reasoningEffort":"high"}}}' WHERE thread_id = 'W'`,
     );
     const second = (await (
       await f.submit("Follow up", "work-operation-000000002")

@@ -67,7 +67,7 @@ the assignment path and schema invariants.
 
 Use these terms for v8 architecture, implementation, tests, and operations:
 
-- **Logical Worker** — stable product identity selected by Workstreams and Work;
+- **Logical Worker** — stable product identity selected by Threads and Work;
 - **CLI Worker Engine** — generic isolated executable supervised by Workspace;
 - **Tool Profile Definition** — stable official provider integration identity;
 - **Tool Profile Release** — immutable signed payload for a definition;
@@ -76,11 +76,11 @@ Use these terms for v8 architecture, implementation, tests, and operations:
 - **Local Worker Protocol 4.0** — Workspace-to-Engine contract.
 
 The `@conclave/core` package organizes current domain contracts by concept
-(`project`, `workspace-grants`, `workstream`, `integration`, and
+(`space`, `workspace-grants`, `thread`, `integration`, and
 `observability`). Current source uses domain names rather than architecture
 version labels.
 
-Workspace, Worker, Worker Type, Workstream, Work Request, and Work v1 Workflow
+Workspace, Worker, Worker Type, Thread, Work Request, and Work v1 Workflow
 remain canonical product/domain terms. The generic Engine is the sole
 production CLI Worker runtime. Live provider and release acceptance are
 tracked as release gates in the current implementation roadmap.
@@ -99,7 +99,7 @@ Gemini
 -> agy
 ~~~
 
-The logical Worker identity remains stable. Workflows, Workstream bindings,
+The logical Worker identity remains stable. Workflows, Thread bindings,
 scheduling, collaboration history, and AX UX continue to target ChatGPT,
 Gemini, and future approved logical Workers rather than implementation details.
 
@@ -107,8 +107,8 @@ Gemini, and future approved logical Workers rather than implementation details.
 
 Users should understand only:
 
-> **Project** = collaboration boundary.  
-> **Workstream** = persistent unit of work.  
+> **Space** = collaboration boundary.\
+> **Thread** = persistent unit of work.\
 > **Workspace** = machine where AI can execute.  
 > **Worker** = AI/tool choice available on that Workspace.  
 > **Workflow** = Conclave-defined way to perform work.
@@ -157,9 +157,9 @@ Workspace concurrency limits.
 ### Cloud API surface
 
 Cloud's HTTP handlers are grouped by current product domain under
-`apps/cloud/src/routes/`: authentication, Projects, Workspaces, Workstreams,
+`apps/cloud/src/routes/`: authentication, Spaces, Workspaces, Threads,
 Work, Tool Profiles, and Workspace/application releases. The Workspace Gateway
-is the authenticated runtime surface. Workstream Discuss provides
+is the authenticated runtime surface. Thread Discuss provides
 collaboration; Work v1 Work Requests provide execution.
 
 ### 4.1 Conclave AX
@@ -167,11 +167,11 @@ collaboration; Work v1 Work Requests provide execution.
 AX remains the human web application.
 
 It owns:
-- Projects and Workstreams;
+- Spaces and Threads;
 - Discuss;
 - Work;
 - built-in Workflow selection;
-- Workstream logical Worker bindings;
+- Thread logical Worker bindings;
 - model selection where supported;
 - Work history/results;
 - read-only Workspace/Worker operational visibility.
@@ -184,8 +184,8 @@ raw Tool Profile configuration.
 Cloud remains the collaboration/orchestration control plane.
 
 It owns:
-- human accounts and Project membership;
-- Workstreams and Work Requests;
+- human accounts and Space membership;
+- Threads and Work Requests;
 - built-in Work v1 definitions;
 - safe Workspace/Worker inventory;
 - scheduling and assignment snapshots;
@@ -200,14 +200,14 @@ Cloud does not execute provider CLIs.
 #### Authorization boundaries
 
 Cloud request identity contains the authenticated human, session, and current
-Project membership roles. Project reads, writes, and Work execution are checked
-against the Project membership on each request. Workspace membership roles and
+Space membership roles. Space reads, writes, and Work execution are checked
+against the Space membership on each request. Workspace membership roles and
 organization aliases are not authorization principals.
 
 Execution Workspaces have one owner. Workspace operations recheck that owner
-against the Workspace row. A Project can use an Execution Workspace only
-through an active Project → Workspace Grant; Project membership alone does not
-grant machine access. Workstream access is checked separately by the Workstream
+against the Workspace row. A Space can use an Execution Workspace only
+through an active Space → Workspace Grant; Space membership alone does not
+grant machine access. Thread access is checked separately by the Thread
 policy.
 
 Desktop installation ownership is stored independently in the Cloud
@@ -224,7 +224,7 @@ installation per Workspace, and one unrevoked runtime identity per Workspace.
 Tool Profile administration and release operations use separate Cloud
 allowlists: `CONCLAVE_PROFILE_ADMIN_USER_IDS` grants catalog and draft
 administration, while `CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS` grants
-publication and rollout management. Workspace ownership and Project roles do
+publication and rollout management. Workspace ownership and Space roles do
 not grant either permission. Stable promotion, channel rollback, and release
 revocation require fresh session-bound passkey step-up authentication.
 Profile Lab stores its desktop session in the macOS Keychain and removes legacy
@@ -239,7 +239,7 @@ Workspace remains the persistent machine-side trust and execution supervisor.
 It owns:
 - human/runtime identity;
 - local Work Root;
-- Workstream directory resolution;
+- Thread directory resolution;
 - logical Worker local state;
 - local permissions;
 - engine installation/version selection;
@@ -638,7 +638,7 @@ A Profile cannot:
 - disable output/deadline limits;
 - inherit unrestricted environment;
 - select arbitrary helper programs;
-- escape Workstream/state boundaries;
+- escape Thread/state boundaries;
 - turn off session consistency validation;
 - override Workspace local permissions;
 - redefine Local Worker Protocol behavior.
@@ -794,12 +794,12 @@ Full Cycle
 Work is `direct:v2`, the current user-facing version of stable ID `direct`;
 `direct:v1` retains its immutable historical name Direct. Chat (`chat:v1`) is a
 read-only conversational Workflow: its Work Request is stateless and acquires
-no mutation lease, but its provider session is durable within the Workstream.
+no mutation lease, but its provider session is durable within the Thread.
 Work is writable, has its own durable provider session, and participates in
-Workstream mutation coordination. Research, Plan, Test and Verify keep their
+Thread mutation coordination. Research, Plan, Test and Verify keep their
 existing semantics and request/Step session scopes. Full Cycle excludes Chat.
 
-Workstream configuration binds Steps to logical Workers, not profiles:
+Thread configuration binds Steps to logical Workers, not profiles:
 
 ~~~text
 Research  -> Gemini
@@ -813,12 +813,12 @@ When Cloud schedules ChatGPT, Workspace resolves ChatGPT to Engine + official
 compatible profile locally.
 
 Research and Plan are stateless read-only Steps and may execute on any eligible
-Workspace covered by the Project grant. A Work Request containing any stateful
-Step acquires one Workstream runtime lease and holds it until the request is
-terminal. The lease serializes stateful Work Requests for that Workstream,
+Workspace covered by the Space grant. A Work Request containing any stateful
+Step acquires one Thread runtime lease and holds it until the request is
+terminal. The lease serializes stateful Work Requests for that Thread,
 selects the Primary Workspace, and carries a fencing token that Workspace
 checks before filesystem mutation. Implement may write the ID-derived
-Workstream directory; Test and Verify run against that same filesystem with
+Thread directory; Test and Verify run against that same filesystem with
 read-only effective permissions. The request-scoped lease remains held while
 stateless Research or Plan Steps in that same request run.
 
@@ -928,7 +928,7 @@ Profile release is available.
 
 Assignment permission IDs are canonical across Cloud and Workspace:
 `repository:read`, `repository:write`, `shell:execute`, and `network:use`.
-Cloud intersects Project-role permissions with the Workspace Project Grant.
+Cloud intersects Space-role permissions with the Workspace Space Grant.
 Workspace separately checks the received IDs against the local Worker ceiling
 before Engine execution; Cloud does not duplicate or simulate that local check.
 
@@ -1022,7 +1022,7 @@ a non-ready record with no Profile release identity or capabilities, so Cloud
 scheduling cannot treat stale local readiness as executable.
 
 Cloud independently enforces the same catalog boundary when selecting an
-assignment target and validating Workstream Worker bindings. It joins inventory
+assignment target and validating Thread Worker bindings. It joins inventory
 to an active, visible catalog entry eligible for the Workspace's release
 channel, and to the matching active Tool Profile Definition. A stale `ready`
 inventory record cannot execute after its Worker is retired, hidden, moved

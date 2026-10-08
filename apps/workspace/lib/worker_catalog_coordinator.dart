@@ -126,7 +126,7 @@ class WorkerCatalogCoordinator extends ChangeNotifier {
           // Invalid or unavailable local Profile evidence is non-ready.
         }
       }
-      return projectWorkerInventory(
+      return spaceWorkerInventory(
         worker: worker,
         descriptor: descriptor,
         eligibleProfile: eligibleProfile,

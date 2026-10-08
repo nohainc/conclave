@@ -158,7 +158,7 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
         expectedScenarios != null &&
         const [
           'model_selection',
-          'representative_workstream_write',
+          'representative_thread_write',
           'durable_session_start',
           'durable_session_resume',
           'cancellation',
@@ -230,7 +230,7 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
         title: 'Worker-Specific Scenario Evidence',
         description: isStablePromotion
             ? 'Cloud stored evidence ID: ${cloudRecord?['id'] ?? 'missing'}'
-            : 'Verified workstream, session, and cancellation scenario evidence',
+            : 'Verified thread, session, and cancellation scenario evidence',
         isSecurityGate: false,
         passed: gate7Passed,
         failureDetails: gate7Passed

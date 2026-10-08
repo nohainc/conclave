@@ -49,7 +49,7 @@ extension AxTaskHelpers on AxTask {
   String? get assignedWorkerId => worker.isNotEmpty ? worker : null;
 }
 
-extension AxProjectHelpers on AxProject {
+extension AxSpaceHelpers on AxSpace {
   String get title => name;
 }
 
@@ -258,10 +258,10 @@ class AxPhaseItem {
 
 typedef AxRunPhase = AxPhaseItem;
 
-class AxWorkstream {
-  const AxWorkstream({
+class AxThread {
+  const AxThread({
     required this.id,
-    required this.projectId,
+    required this.spaceId,
     required this.name,
     required this.lead,
     required this.status,
@@ -275,7 +275,7 @@ class AxWorkstream {
   });
 
   final String id;
-  final String projectId;
+  final String spaceId;
   final String name;
   final String lead;
   final String status;
@@ -287,12 +287,17 @@ class AxWorkstream {
   final bool canExecuteWork;
   final bool archived;
 
-  AxWorkstream copyWith(
-          {String? name, String? status, Map<String, dynamic>? workConfig}) =>
-      AxWorkstream(
+  String get title => name;
+
+  AxThread copyWith(
+          {String? name,
+          String? title,
+          String? status,
+          Map<String, dynamic>? workConfig}) =>
+      AxThread(
           id: id,
-          projectId: projectId,
-          name: name ?? this.name,
+          spaceId: spaceId,
+          name: name ?? title ?? this.name,
           lead: lead,
           status: status ?? this.status,
           brief: brief,
@@ -303,10 +308,10 @@ class AxWorkstream {
           canExecuteWork: canExecuteWork,
           archived: status == null ? archived : status == 'archived');
 
-  factory AxWorkstream.fromJson(Map<String, dynamic> json) => AxWorkstream(
+  factory AxThread.fromJson(Map<String, dynamic> json) => AxThread(
         id: _string(json, 'id'),
-        projectId: _string(json, 'projectId'),
-        name: _string(json, 'name'),
+        spaceId: _string(json, 'spaceId'),
+        name: _string(json, 'name', _string(json, 'title')),
         lead: _string(json, 'lead', _string(json, 'leadName', 'Unassigned')),
         status: _string(json, 'status', 'active'),
         brief: _string(json, 'brief', ''),
@@ -336,7 +341,7 @@ class AxDiscussionPage {
 class AxDiscussionMessage {
   const AxDiscussionMessage({
     required this.id,
-    required this.workstreamId,
+    required this.threadId,
     required this.authorUserId,
     this.authorName,
     required this.body,
@@ -347,7 +352,7 @@ class AxDiscussionMessage {
   });
 
   final String id;
-  final String workstreamId;
+  final String threadId;
   final String authorUserId;
   final String? authorName;
   final String body;
@@ -359,7 +364,7 @@ class AxDiscussionMessage {
   AxDiscussionMessage copyWith({String? id, String? body, String? editedAt}) =>
       AxDiscussionMessage(
           id: id ?? this.id,
-          workstreamId: workstreamId,
+          threadId: threadId,
           authorUserId: authorUserId,
           authorName: authorName,
           body: body ?? this.body,
@@ -385,8 +390,8 @@ class AxDiscussionMessage {
         : <String>[];
     return AxDiscussionMessage(
       id: _string(json, 'id'),
-      workstreamId:
-          _string(json, 'workstreamId', _string(json, 'workstream_id')),
+      threadId: _string(json, 'threadId',
+          _string(json, 'threadId', _string(json, 'thread_id'))),
       authorUserId: authorId,
       authorName: author,
       body: _string(json, 'body', _string(json, 'content')),
@@ -400,13 +405,13 @@ class AxDiscussionMessage {
   }
 }
 
-class AxProject {
-  const AxProject({
+class AxSpace {
+  const AxSpace({
     required this.id,
     required this.name,
     required this.branch,
     required this.lastActivity,
-    this.workstreams = const [],
+    this.threads = const [],
     this.description = '',
     this.instructions = '',
     this.archived = false,
@@ -418,21 +423,21 @@ class AxProject {
   final String name;
   final String branch;
   final String lastActivity;
-  final List<AxWorkstream> workstreams;
+  final List<AxThread> threads;
   final String description;
   final String instructions;
   final bool archived;
   final String role;
   final Map<String, dynamic> settings;
 
-  factory AxProject.fromJson(Map<String, dynamic> json) => AxProject(
+  factory AxSpace.fromJson(Map<String, dynamic> json) => AxSpace(
         id: _string(json, 'id'),
         name: _string(json, 'name'),
         branch: _string(json, 'branch'),
         lastActivity: _string(json, 'lastActivity'),
-        workstreams: (json['workstreams'] as List? ?? const [])
+        threads: (json['threads'] as List? ?? const [])
             .map((item) =>
-                AxWorkstream.fromJson(Map<String, dynamic>.from(item as Map)))
+                AxThread.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList(),
         description: _string(json, 'description', ''),
         instructions: _string(
@@ -451,24 +456,24 @@ class AxProject {
             : const {},
       );
 
-  AxProject copyWith({
+  AxSpace copyWith({
     String? id,
     String? name,
     String? branch,
     String? lastActivity,
-    List<AxWorkstream>? workstreams,
+    List<AxThread>? threads,
     String? description,
     String? instructions,
     bool? archived,
     String? role,
     Map<String, dynamic>? settings,
   }) =>
-      AxProject(
+      AxSpace(
         id: id ?? this.id,
         name: name ?? this.name,
         branch: branch ?? this.branch,
         lastActivity: lastActivity ?? this.lastActivity,
-        workstreams: workstreams ?? this.workstreams,
+        threads: threads ?? this.threads,
         description: description ?? this.description,
         instructions: instructions ?? this.instructions,
         archived: archived ?? this.archived,
@@ -695,10 +700,10 @@ class AxArtifact {
 class AxRun {
   const AxRun({
     required this.id,
-    this.projectId,
-    this.projectName,
-    this.workstreamId,
-    this.workstreamTitle,
+    this.spaceId,
+    this.spaceName,
+    this.threadId,
+    this.threadTitle,
     required this.status,
     required this.objective,
     required this.taskCount,
@@ -714,10 +719,10 @@ class AxRun {
   });
 
   final String id;
-  final String? projectId;
-  final String? projectName;
-  final String? workstreamId;
-  final String? workstreamTitle;
+  final String? spaceId;
+  final String? spaceName;
+  final String? threadId;
+  final String? threadTitle;
   final RunStatus status;
   final String objective;
   final int taskCount;
@@ -736,10 +741,10 @@ class AxRun {
 
   AxRun copyWith({
     String? id,
-    String? projectId,
-    String? projectName,
-    String? workstreamId,
-    String? workstreamTitle,
+    String? spaceId,
+    String? spaceName,
+    String? threadId,
+    String? threadTitle,
     RunStatus? status,
     String? objective,
     int? taskCount,
@@ -755,10 +760,10 @@ class AxRun {
   }) {
     return AxRun(
       id: id ?? this.id,
-      projectId: projectId ?? this.projectId,
-      projectName: projectName ?? this.projectName,
-      workstreamId: workstreamId ?? this.workstreamId,
-      workstreamTitle: workstreamTitle ?? this.workstreamTitle,
+      spaceId: spaceId ?? this.spaceId,
+      spaceName: spaceName ?? this.spaceName,
+      threadId: threadId ?? this.threadId,
+      threadTitle: threadTitle ?? this.threadTitle,
       status: status ?? this.status,
       objective: objective ?? this.objective,
       taskCount: taskCount ?? this.taskCount,
@@ -777,10 +782,10 @@ class AxRun {
 
   factory AxRun.fromJson(Map<String, dynamic> json) => AxRun(
         id: _string(json, 'id'),
-        projectId: json['projectId'] as String?,
-        projectName: json['projectName'] as String?,
-        workstreamId: json['workstreamId'] as String?,
-        workstreamTitle: json['workstreamTitle'] as String?,
+        spaceId: (json['spaceId'] ?? json['spaceId']) as String?,
+        spaceName: (json['spaceName'] ?? json['spaceName']) as String?,
+        threadId: (json['threadId'] ?? json['threadId']) as String?,
+        threadTitle: (json['threadTitle'] ?? json['threadTitle']) as String?,
         status: RunStatus.values.firstWhere(
           (value) => value.name == json['status'],
           orElse: () => RunStatus.running,
@@ -802,10 +807,10 @@ class AxRun {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        if (projectId != null) 'projectId': projectId,
-        if (projectName != null) 'projectName': projectName,
-        if (workstreamId != null) 'workstreamId': workstreamId,
-        if (workstreamTitle != null) 'workstreamTitle': workstreamTitle,
+        if (spaceId != null) 'spaceId': spaceId,
+        if (spaceName != null) 'spaceName': spaceName,
+        if (threadId != null) 'threadId': threadId,
+        if (threadTitle != null) 'threadTitle': threadTitle,
         'status': status.name,
         'objective': objective,
         'taskCount': taskCount,
@@ -961,7 +966,7 @@ class AxWorkspace {
     this.lastSeen = '—',
     this.workerCount = 0,
     this.activeTaskCount = 0,
-    this.projectGrantCount = 0,
+    this.spaceGrantCount = 0,
   });
 
   final String id;
@@ -982,7 +987,7 @@ class AxWorkspace {
   final String lastSeen;
   final int workerCount;
   final int activeTaskCount;
-  final int projectGrantCount;
+  final int spaceGrantCount;
 
   factory AxWorkspace.fromJson(Map<String, dynamic> json) => AxWorkspace(
         id: _string(json, 'id'),
@@ -1006,15 +1011,17 @@ class AxWorkspace {
             json, 'lastSeen', json['factsUpdatedAt']?.toString() ?? '—'),
         workerCount: json['workerCount'] as int? ?? 0,
         activeTaskCount: json['activeTaskCount'] as int? ?? 0,
-        projectGrantCount: (json['activeProjectGrantCount'] ??
-                json['projectGrantCount']) as int? ??
+        spaceGrantCount: (json['activeSpaceGrantCount'] ??
+                json['spaceGrantCount'] ??
+                json['activeSpaceGrantCount'] ??
+                json['spaceGrantCount']) as int? ??
             0,
       );
 
   AxWorkspace copyWith({
     int? workerCount,
     int? activeTaskCount,
-    int? projectGrantCount,
+    int? spaceGrantCount,
     String? lastSeen,
   }) =>
       AxWorkspace(
@@ -1036,7 +1043,7 @@ class AxWorkspace {
         lastSeen: lastSeen ?? this.lastSeen,
         workerCount: workerCount ?? this.workerCount,
         activeTaskCount: activeTaskCount ?? this.activeTaskCount,
-        projectGrantCount: projectGrantCount ?? this.projectGrantCount,
+        spaceGrantCount: spaceGrantCount ?? this.spaceGrantCount,
       );
 }
 
@@ -1096,8 +1103,8 @@ class AxWorkspaceInvitation {
       );
 }
 
-class AxProjectMember {
-  const AxProjectMember({
+class AxSpaceMember {
+  const AxSpaceMember({
     required this.userId,
     required this.displayName,
     required this.email,
@@ -1111,8 +1118,7 @@ class AxProjectMember {
   final String role;
   final String createdAt;
 
-  factory AxProjectMember.fromJson(Map<String, dynamic> json) =>
-      AxProjectMember(
+  factory AxSpaceMember.fromJson(Map<String, dynamic> json) => AxSpaceMember(
         userId: _string(json, 'userId'),
         displayName: _string(json, 'displayName', _string(json, 'email')),
         email: _string(json, 'email'),
@@ -1121,11 +1127,11 @@ class AxProjectMember {
       );
 }
 
-class AxProjectInvitation {
-  const AxProjectInvitation({
+class AxSpaceInvitation {
+  const AxSpaceInvitation({
     required this.id,
-    this.projectId = '',
-    this.projectName = '',
+    this.spaceId = '',
+    this.spaceName = '',
     required this.email,
     required this.role,
     required this.status,
@@ -1137,8 +1143,8 @@ class AxProjectInvitation {
   });
 
   final String id;
-  final String projectId;
-  final String projectName;
+  final String spaceId;
+  final String spaceName;
   final String email;
   final String role;
   final String status;
@@ -1155,11 +1161,11 @@ class AxProjectInvitation {
     return 'Unknown';
   }
 
-  factory AxProjectInvitation.fromJson(Map<String, dynamic> json) =>
-      AxProjectInvitation(
+  factory AxSpaceInvitation.fromJson(Map<String, dynamic> json) =>
+      AxSpaceInvitation(
         id: _string(json, 'id'),
-        projectId: _string(json, 'projectId'),
-        projectName: _string(json, 'projectName'),
+        spaceId: _string(json, 'spaceId'),
+        spaceName: _string(json, 'spaceName'),
         email: _string(json, 'email'),
         role: _string(json, 'role', 'viewer'),
         status: _string(json, 'status', 'pending'),
@@ -1172,8 +1178,8 @@ class AxProjectInvitation {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'projectId': projectId,
-        'projectName': projectName,
+        'spaceId': spaceId,
+        'spaceName': spaceName,
         'email': email,
         'role': role,
         'status': status,
@@ -1215,7 +1221,7 @@ class AxSnapshot {
     this.viewer,
     this.activeRunId,
     this.run,
-    required this.projects,
+    required this.spaces,
     this.workspaces = const [],
     required this.tasks,
     required this.findings,
@@ -1229,7 +1235,7 @@ class AxSnapshot {
   final String? activeRunId;
   final AxViewer? viewer;
   final AxRun? run;
-  final List<AxProject> projects;
+  final List<AxSpace> spaces;
   final List<AxWorkspace> workspaces;
   final List<AxTask> tasks;
   final List<AxFinding> findings;
@@ -1239,7 +1245,7 @@ class AxSnapshot {
   final AxSynthesisDecision? synthesisDecision;
 
   AxSnapshot copyWith({
-    List<AxProject>? projects,
+    List<AxSpace>? spaces,
     List<AxWorkspace>? workspaces,
   }) =>
       AxSnapshot(
@@ -1247,7 +1253,7 @@ class AxSnapshot {
         viewer: viewer,
         activeRunId: activeRunId,
         run: run,
-        projects: projects ?? this.projects,
+        spaces: spaces ?? this.spaces,
         workspaces: workspaces ?? this.workspaces,
         tasks: tasks,
         findings: findings,
@@ -1258,7 +1264,7 @@ class AxSnapshot {
       );
 
   static AxSnapshot empty() => const AxSnapshot(
-      projects: [],
+      spaces: [],
       workspaces: [],
       tasks: [],
       findings: [],
@@ -1275,9 +1281,9 @@ class AxSnapshot {
         run: json['run'] == null
             ? null
             : AxRun.fromJson(Map<String, dynamic>.from(json['run'] as Map)),
-        projects: (json['projects'] as List? ?? const [])
+        spaces: (json['spaces'] as List? ?? const [])
             .map((item) =>
-                AxProject.fromJson(Map<String, dynamic>.from(item as Map)))
+                AxSpace.fromJson(Map<String, dynamic>.from(item as Map)))
             .toList(),
         workspaces: (json['workspaces'] as List? ?? const [])
             .map((item) =>
@@ -1311,7 +1317,7 @@ class AxSnapshot {
 }
 
 enum AxHomeAttentionType {
-  projectInvitation,
+  spaceInvitation,
   needsInput,
   approvalRequired,
   executionFailed,
@@ -1320,7 +1326,7 @@ enum AxHomeAttentionType {
   workspaceProblem;
 
   // Backward-compatible aliases
-  static const AxHomeAttentionType invitation = projectInvitation;
+  static const AxHomeAttentionType invitation = spaceInvitation;
   static const AxHomeAttentionType failedExecution = executionFailed;
   static const AxHomeAttentionType completed = executionCompleted;
   static const AxHomeAttentionType finding = needsInput;
@@ -1349,8 +1355,8 @@ class AxHomeAttentionItem {
     required this.title,
     String? description,
     String? subtitle,
-    this.projectId,
-    this.workstreamId,
+    this.spaceId,
+    this.threadId,
     this.workerId,
     this.workspaceId,
     this.timestamp,
@@ -1377,8 +1383,8 @@ class AxHomeAttentionItem {
   final int? priority;
   final String title;
   final String description;
-  final String? projectId;
-  final String? workstreamId;
+  final String? spaceId;
+  final String? threadId;
   final String? workerId;
   final String? workspaceId;
   final DateTime? timestamp;
@@ -1387,7 +1393,7 @@ class AxHomeAttentionItem {
   final AxHomeAttentionAction? secondaryAction;
   final bool read;
   final String? categoryLabel;
-  final AxProjectInvitation? invitation;
+  final AxSpaceInvitation? invitation;
   final String? actionLabel;
   final AxHomeAttentionType? kind;
   final String severity;
@@ -1409,7 +1415,7 @@ class AxHomeAttentionItem {
   int get priorityOrder {
     if (priority != null) return priority!;
     return switch (effectiveType) {
-      AxHomeAttentionType.projectInvitation => 1,
+      AxHomeAttentionType.spaceInvitation => 1,
       AxHomeAttentionType.needsInput => 2,
       AxHomeAttentionType.approvalRequired => 2,
       AxHomeAttentionType.executionFailed => 3,
@@ -1423,7 +1429,10 @@ class AxHomeAttentionItem {
       AxHomeAttentionItem(
         id: _string(json, 'id'),
         type: AxHomeAttentionType.values.firstWhere(
-          (t) => t.name == json['type'],
+          (t) =>
+              t.name == json['type'] ||
+              (json['type'] == 'spaceInvitation' &&
+                  t == AxHomeAttentionType.spaceInvitation),
           orElse: () => AxHomeAttentionType.needsInput,
         ),
         priority:
@@ -1431,8 +1440,8 @@ class AxHomeAttentionItem {
         title: _string(json, 'title'),
         description: json['description']?.toString(),
         subtitle: json['subtitle']?.toString(),
-        projectId: json['projectId']?.toString(),
-        workstreamId: json['workstreamId']?.toString(),
+        spaceId: (json['spaceId'] ?? json['spaceId'])?.toString(),
+        threadId: (json['threadId'] ?? json['threadId'])?.toString(),
         workerId: json['workerId']?.toString(),
         workspaceId: json['workspaceId']?.toString(),
         timestamp: json['createdAt'] != null
@@ -1444,7 +1453,7 @@ class AxHomeAttentionItem {
         categoryLabel: json['categoryLabel']?.toString(),
         actionLabel: json['actionLabel']?.toString(),
         invitation: json['invitation'] is Map
-            ? AxProjectInvitation.fromJson(
+            ? AxSpaceInvitation.fromJson(
                 Map<String, dynamic>.from(json['invitation'] as Map))
             : null,
         read: json['read'] == true,
@@ -1463,8 +1472,8 @@ class AxHomeAttentionItem {
         'title': title,
         'description': description,
         if (subtitle.isNotEmpty) 'subtitle': subtitle,
-        if (projectId != null) 'projectId': projectId,
-        if (workstreamId != null) 'workstreamId': workstreamId,
+        if (spaceId != null) 'spaceId': spaceId,
+        if (threadId != null) 'threadId': threadId,
         if (workerId != null) 'workerId': workerId,
         if (workspaceId != null) 'workspaceId': workspaceId,
         if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
@@ -1480,10 +1489,10 @@ class AxHomeAttentionItem {
 
 class AxContinueWorkItem {
   const AxContinueWorkItem({
-    required this.projectId,
-    required this.projectName,
-    required this.workstreamId,
-    required this.workstreamTitle,
+    String? spaceId,
+    String? spaceName,
+    String? threadId,
+    String? threadTitle,
     required this.collaboratorsDisplay,
     required this.lastMessageSnippet,
     required this.lastActivityDisplay,
@@ -1493,12 +1502,15 @@ class AxContinueWorkItem {
     this.hasUnresolvedState = false,
     this.isDirectMember = true,
     this.archived = false,
-  });
+  })  : spaceId = spaceId ?? '',
+        spaceName = spaceName ?? '',
+        threadId = threadId ?? '',
+        threadTitle = threadTitle ?? '';
 
-  final String projectId;
-  final String projectName;
-  final String workstreamId;
-  final String workstreamTitle;
+  final String spaceId;
+  final String spaceName;
+  final String threadId;
+  final String threadTitle;
   final String collaboratorsDisplay;
   final String lastMessageSnippet;
   final String lastActivityDisplay;
@@ -1511,10 +1523,10 @@ class AxContinueWorkItem {
 
   factory AxContinueWorkItem.fromJson(Map<String, dynamic> json) =>
       AxContinueWorkItem(
-        projectId: _string(json, 'projectId'),
-        projectName: _string(json, 'projectName'),
-        workstreamId: _string(json, 'workstreamId'),
-        workstreamTitle: _string(json, 'workstreamTitle'),
+        spaceId: _string(json, 'spaceId'),
+        spaceName: _string(json, 'spaceName'),
+        threadId: _string(json, 'threadId'),
+        threadTitle: _string(json, 'threadTitle'),
         collaboratorsDisplay: _string(json, 'collaboratorsDisplay'),
         lastMessageSnippet: _string(json, 'lastMessageSnippet'),
         lastActivityDisplay: _string(json, 'lastActivityDisplay'),
@@ -1531,10 +1543,10 @@ class AxContinueWorkItem {
       );
 
   Map<String, dynamic> toJson() => {
-        'projectId': projectId,
-        'projectName': projectName,
-        'workstreamId': workstreamId,
-        'workstreamTitle': workstreamTitle,
+        'spaceId': spaceId,
+        'spaceName': spaceName,
+        'threadId': threadId,
+        'threadTitle': threadTitle,
         'collaboratorsDisplay': collaboratorsDisplay,
         'lastMessageSnippet': lastMessageSnippet,
         'lastActivityDisplay': lastActivityDisplay,
@@ -1549,10 +1561,10 @@ class AxContinueWorkItem {
       };
 
   AxContinueWorkItem copyWith({
-    String? projectId,
-    String? projectName,
-    String? workstreamId,
-    String? workstreamTitle,
+    String? spaceId,
+    String? spaceName,
+    String? threadId,
+    String? threadTitle,
     String? collaboratorsDisplay,
     String? lastMessageSnippet,
     String? lastActivityDisplay,
@@ -1564,10 +1576,10 @@ class AxContinueWorkItem {
     bool? archived,
   }) =>
       AxContinueWorkItem(
-        projectId: projectId ?? this.projectId,
-        projectName: projectName ?? this.projectName,
-        workstreamId: workstreamId ?? this.workstreamId,
-        workstreamTitle: workstreamTitle ?? this.workstreamTitle,
+        spaceId: spaceId ?? this.spaceId,
+        spaceName: spaceName ?? this.spaceName,
+        threadId: threadId ?? this.threadId,
+        threadTitle: threadTitle ?? this.threadTitle,
         collaboratorsDisplay: collaboratorsDisplay ?? this.collaboratorsDisplay,
         lastMessageSnippet: lastMessageSnippet ?? this.lastMessageSnippet,
         lastActivityDisplay: lastActivityDisplay ?? this.lastActivityDisplay,
@@ -1583,7 +1595,7 @@ class AxContinueWorkItem {
 }
 
 class AxRecentWorkRanker {
-  /// Computes a composite ranking score for a Workstream item based on meaningful conversation activity.
+  /// Computes a composite ranking score for a Thread item based on meaningful conversation activity.
   ///
   /// Factors:
   /// - Unresolved state (+1000 pts)
@@ -1634,7 +1646,7 @@ class AxRecentWorkRanker {
     return score;
   }
 
-  /// Filters out archived, deleted, and inaccessible workstreams,
+  /// Filters out archived, deleted, and inaccessible threads,
   /// ranks remaining items using meaningful activity scores,
   /// and returns up to [limit] (default: 5).
   static List<AxContinueWorkItem> rank(
@@ -2267,11 +2279,11 @@ typedef AiCapabilityUpdate = AxAiCapabilityUpdate;
 class AxAiCapabilityUpdateService {
   /// Resolves the set of worker profile and provider identifiers accessible to the user:
   /// 1. Directly owned/connected workspace workers (`workerTypeId`, `profileDefinitionId`, `providerToolName`)
-  /// 2. Shared project workers in workstream configurations (`workConfig['worker']`, `workConfig['workerTypeId']`, `ws.lead`)
-  /// 3. Shared project worker grants and settings (`project.settings['sharedWorkers']`, `project.settings['workerGrants']`)
+  /// 2. Shared space workers in thread configurations (`workConfig['worker']`, `workConfig['workerTypeId']`, `ws.lead`)
+  /// 3. Shared space worker grants and settings (`space.settings['sharedWorkers']`, `space.settings['workerGrants']`)
   static Set<String> resolveAccessibleWorkerProfileIds({
     required List<AxWorker> workers,
-    List<AxProject> projects = const [],
+    List<AxSpace> spaces = const [],
   }) {
     final accessible = <String>{};
 
@@ -2287,10 +2299,10 @@ class AxAiCapabilityUpdateService {
       }
     }
 
-    for (final p in projects) {
-      if (p.archived) continue;
-      // Project settings / worker grants
-      final settings = p.settings;
+    for (final s in spaces) {
+      if (s.archived) continue;
+      // Space settings / worker grants
+      final settings = s.settings;
       if (settings['sharedWorkers'] is List) {
         for (final item in (settings['sharedWorkers'] as List)) {
           final id = item is Map
@@ -2316,9 +2328,9 @@ class AxAiCapabilityUpdateService {
         }
       }
 
-      for (final ws in p.workstreams) {
-        if (ws.archived) continue;
-        final cfg = ws.workConfig;
+      for (final th in s.threads) {
+        if (th.archived) continue;
+        final cfg = th.workConfig;
         final workerInConfig = (cfg['workerTypeId'] ??
                 cfg['workerProfileId'] ??
                 cfg['worker'] ??
@@ -2328,7 +2340,7 @@ class AxAiCapabilityUpdateService {
           accessible.add(workerInConfig.toLowerCase());
         }
         // Check standard worker designations in lead (e.g. 'ChatGPT', 'Gemini', 'Claude', 'Ollama')
-        final lead = ws.lead.toLowerCase();
+        final lead = th.lead.toLowerCase();
         if (lead.contains('chatgpt') || lead.contains('openai')) {
           accessible.add('chatgpt');
           accessible.add('openai');
@@ -2351,17 +2363,17 @@ class AxAiCapabilityUpdateService {
   }
 
   /// Filters AI capability updates to only those applicable to the user's accessible workers/profiles.
-  /// If the user has zero accessible workers or projects, returns an empty list (cleanly omitted).
+  /// If the user has zero accessible workers or spaces, returns an empty list (cleanly omitted).
   /// Irrelevant updates for ungranted/unaccessible models or providers are strictly excluded.
   static List<AxAiCapabilityUpdate> getRelevantUpdates({
     required List<AxAiCapabilityUpdate> updates,
     required List<AxWorker> workers,
-    List<AxProject> projects = const [],
+    List<AxSpace> spaces = const [],
     int? limit,
   }) {
     final accessibleProfileIds = resolveAccessibleWorkerProfileIds(
       workers: workers,
-      projects: projects,
+      spaces: spaces,
     );
 
     if (accessibleProfileIds.isEmpty) {

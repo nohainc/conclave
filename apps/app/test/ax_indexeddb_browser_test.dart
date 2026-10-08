@@ -9,7 +9,7 @@ import 'package:conclave_app/src/ax/sync/persistence/ax_read_cache_platform_web.
 
 void main() {
   test(
-      'native structured cache hydrates typed Project state then clears on logout',
+      'native structured cache hydrates typed Space state then clears on logout',
       () async {
     final user = 'typed-browser-${DateTime.now().microsecondsSinceEpoch}';
     final first = AxStore(const AxFixtureDataSource());
@@ -18,18 +18,15 @@ void main() {
         authenticated: true,
         viewer: AxViewer(id: user, displayName: 'User', email: 'private@test'));
     await first.hydrateReadCache();
-    first.projects.replace([
-      const AxProject(
-          id: 'P',
-          name: 'Persisted Project',
-          branch: 'main',
-          lastActivity: 'now')
+    first.spaces.replace([
+      const AxSpace(
+          id: 'P', name: 'Persisted Space', branch: 'main', lastActivity: 'now')
     ]);
     await first.persistence.flush();
     final second = AxStore(const AxFixtureDataSource());
     second.auth.session = first.auth.session;
     expect(await second.hydrateReadCache(), isTrue);
-    expect(second.projects.items.single.name, 'Persisted Project');
+    expect(second.spaces.items.single.name, 'Persisted Space');
     await second.logout();
     final check = IndexedDbAxReadCacheBackend();
     expect((await check.read(user)).records, isEmpty);
@@ -47,7 +44,7 @@ void main() {
     final records = [
       {
         'version': 1,
-        'key': ['projects'],
+        'key': ['spaces'],
         'data': [
           {'id': 'P', 'name': 'Cached'}
         ]

@@ -20,7 +20,7 @@ import {
 
 import {
   HttpError,
-  authorizeWorkstreamAccess,
+  authorizeThreadAccess,
   json,
   parseJson,
   resolveWorkflowInstanceId,
@@ -50,36 +50,36 @@ export async function handleRetryWorkRequest(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const parent = await env.CONCLAVE_DB.prepare(
-    "SELECT workstream_id AS workstreamId FROM work_requests WHERE id = ?1",
+    "SELECT thread_id AS threadId FROM work_requests WHERE id = ?1",
   )
     .bind(workRequestId)
-    .first<{ workstreamId: string }>();
+    .first<{ threadId: string }>();
   if (!parent) throw new HttpError(404, "Work Request not found");
-  const { context, projectId } = await authorizeWorkstreamAccess(
+  const { context, spaceId } = await authorizeThreadAccess(
     request,
     env,
-    parent.workstreamId,
+    parent.threadId,
     "execute",
     accessContext,
   );
   const membership = await env.CONCLAVE_DB.prepare(
-    "SELECT role FROM project_memberships WHERE project_id = ?1 AND user_id = ?2",
+    "SELECT role FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
   )
-    .bind(projectId, context.userId)
+    .bind(spaceId, context.userId)
     .first<{ role: string }>();
   if (!membership || membership.role === "viewer")
     throw new HttpError(
       403,
-      "Project membership with execute access is required",
+      "Space membership with execute access is required",
     );
   const row = await env.CONCLAVE_DB.prepare(
-    `SELECT wr.workstream_id AS workstreamId, wr.mode, wr.status,
+    `SELECT wr.thread_id AS threadId, wr.mode, wr.status,
             wr.workflow_id AS workflowId, wr.workflow_version AS workflowVersion,
             wr.workflow_snapshot_json AS workflowSnapshotJson,
             wr.snapshot_json AS snapshotJson, (SELECT text FROM conversation_history_entries h WHERE h.work_request_id = wr.id AND h.kind = 'user_message' LIMIT 1) AS canonicalUserText, wr.input_json AS inputJson,
             wr.primary_workspace_id AS primaryWorkspaceId,
-            ws.project_id AS projectId
-       FROM work_requests wr JOIN workstreams ws ON ws.id = wr.workstream_id
+            ws.space_id AS spaceId
+       FROM work_requests wr JOIN threads ws ON ws.id = wr.thread_id
       WHERE wr.id = ?1`,
   )
     .bind(workRequestId)
@@ -149,8 +149,8 @@ export async function handleRetryWorkRequest(
   );
   const eligibility = await validateWorkflowWorkerEligibility(
     env,
-    String(row.projectId),
-    String(row.workstreamId),
+    String(row.spaceId),
+    String(row.threadId),
     { ...workflow, steps: [step] },
     bindings,
     Array.isArray(attachmentInput.attachments)
@@ -209,13 +209,13 @@ export async function handleRetryWorkRequest(
       ).bind(now, workRequestId, stepKind),
       env.CONCLAVE_DB.prepare(
         `INSERT INTO runs
-       (id, project_id, workstream_id, work_request_id,
+       (id, space_id, thread_id, work_request_id,
         policy_snapshot_json, status, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, 'created', ?6, ?6)`,
       ).bind(
         runId,
-        projectId,
-        String(row.workstreamId),
+        spaceId,
+        String(row.threadId),
         workRequestId,
         JSON.stringify(retryPolicy),
         now,
@@ -231,29 +231,23 @@ export async function handleRetryWorkRequest(
   }
 
   if (row.mode === "stateful") {
-    if (!env.CONCLAVE_WORKSTREAM_COORDINATOR)
-      throw new HttpError(
-        503,
-        "Workstream runtime coordination is unavailable",
-      );
-    const coordinator = env.CONCLAVE_WORKSTREAM_COORDINATOR.getByName(
-      String(row.workstreamId),
+    if (!env.CONCLAVE_THREAD_COORDINATOR)
+      throw new HttpError(503, "Thread runtime coordination is unavailable");
+    const coordinator = env.CONCLAVE_THREAD_COORDINATOR.getByName(
+      String(row.threadId),
     );
     const response = await coordinator.fetch(
-      new Request("https://workstream-coordinator/enqueue", {
+      new Request("https://thread-coordinator/enqueue", {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-workstream-id": String(row.workstreamId),
+          "x-thread-id": String(row.threadId),
         },
         body: JSON.stringify({ workRequestId }),
       }),
     );
     if (!response.ok)
-      throw new HttpError(
-        503,
-        "Workstream runtime coordination is unavailable",
-      );
+      throw new HttpError(503, "Thread runtime coordination is unavailable");
   }
 
   await createOrGetRun(env, {
@@ -262,8 +256,8 @@ export async function handleRetryWorkRequest(
     idempotencyKey: `${workRequestId}-retry-${retryNumber}`,
     organizationId: String(row.primaryWorkspaceId),
     workRequestId,
-    workstreamId: String(row.workstreamId),
-    projectId,
+    threadId: String(row.threadId),
+    spaceId,
     builtinWorkflow: workflow,
     input: attachmentInput,
     retryStepKind: stepKind as StepKind,
@@ -285,7 +279,7 @@ export async function handleGetWorkRequest(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const row = await env.CONCLAVE_DB.prepare(
-    `SELECT wr.id, wr.workstream_id AS workstreamId,
+    `SELECT wr.id, wr.thread_id AS threadId,
             wr.requested_by_user_id AS requestedByUserId,
             (SELECT conversation_id FROM conversation_work_requests WHERE work_request_id = wr.id) AS conversationId,
             u.display_name AS requestedByName,
@@ -299,10 +293,10 @@ export async function handleGetWorkRequest(
     .bind(workRequestId)
     .first<Record<string, unknown>>();
   if (!row) throw new HttpError(404, "Work Request not found");
-  await authorizeWorkstreamAccess(
+  await authorizeThreadAccess(
     request,
     env,
-    String(row.workstreamId),
+    String(row.threadId),
     "view",
     accessContext,
   );
@@ -575,16 +569,10 @@ export async function handleGetWorkRequest(
 export async function handleListWorkRequests(
   request: Request,
   env: SecurityEnv,
-  workstreamId: string,
+  threadId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeWorkstreamAccess(
-    request,
-    env,
-    workstreamId,
-    "view",
-    accessContext,
-  );
+  await authorizeThreadAccess(request, env, threadId, "view", accessContext);
   const url = new URL(request.url);
   const rawLimit = Number(url.searchParams.get("limit") ?? 100);
   const limit = Number.isInteger(rawLimit)
@@ -604,13 +592,13 @@ export async function handleListWorkRequests(
             wr.status, wr.created_at AS createdAt, wr.updated_at AS updatedAt
        FROM work_requests wr
        JOIN users u ON u.id = wr.requested_by_user_id
-      WHERE wr.workstream_id = ?1
+      WHERE wr.thread_id = ?1
         AND (?2 IS NULL OR wr.created_at < ?2 OR (wr.created_at = ?2 AND wr.id < ?3))
         AND (?4 = 0 OR wr.status IN ('queued', 'running', 'waiting') OR wr.updated_at >= ?5)
       ORDER BY wr.created_at DESC, wr.id DESC LIMIT ?6`,
   )
     .bind(
-      workstreamId,
+      threadId,
       beforeCreatedAt,
       beforeId,
       activeOnly ? 1 : 0,
@@ -911,20 +899,20 @@ export async function handleCancelWorkRequest(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const row = await env.CONCLAVE_DB.prepare(
-    "SELECT workstream_id AS workstreamId, mode, status, cancel_requested_at AS cancelRequestedAt FROM work_requests WHERE id = ?1",
+    "SELECT thread_id AS threadId, mode, status, cancel_requested_at AS cancelRequestedAt FROM work_requests WHERE id = ?1",
   )
     .bind(workRequestId)
     .first<{
-      workstreamId: string;
+      threadId: string;
       mode: string;
       status: string;
       cancelRequestedAt: string | null;
     }>();
   if (!row) throw new HttpError(404, "Work Request not found");
-  await authorizeWorkstreamAccess(
+  await authorizeThreadAccess(
     request,
     env,
-    row.workstreamId,
+    row.threadId,
     "execute",
     accessContext,
   );
@@ -949,17 +937,15 @@ export async function handleCancelWorkRequest(
     return json({ workRequestId, status: "cancelled" });
   }
   if (row.status === "queued" && row.mode === "stateful") {
-    if (!env.CONCLAVE_WORKSTREAM_COORDINATOR)
-      throw new HttpError(503, "Workstream execution coordinator unavailable");
-    const coordinator = env.CONCLAVE_WORKSTREAM_COORDINATOR.getByName(
-      row.workstreamId,
-    );
+    if (!env.CONCLAVE_THREAD_COORDINATOR)
+      throw new HttpError(503, "Thread execution coordinator unavailable");
+    const coordinator = env.CONCLAVE_THREAD_COORDINATOR.getByName(row.threadId);
     return coordinator.fetch(
-      new Request("https://workstream-coordinator/cancel", {
+      new Request("https://thread-coordinator/cancel", {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-workstream-id": row.workstreamId,
+          "x-thread-id": row.threadId,
         },
         body: JSON.stringify({ workRequestId }),
       }),

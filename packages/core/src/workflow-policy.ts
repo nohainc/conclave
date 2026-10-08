@@ -1,7 +1,4 @@
-import type {
-  BuiltinWorkflowDefinition,
-  WorkstreamBindingId,
-} from "./workstream.js";
+import type { BuiltinWorkflowDefinition, ThreadBindingId } from "./thread.js";
 
 /** Product controls, independent of Worker/tool capabilities and authorization. */
 export interface WorkflowCapabilities {
@@ -37,7 +34,7 @@ export const WORKFLOW_CONTROL_POLICIES: Readonly<
     string,
     {
       readonly executionPolicy: WorkflowCapabilities;
-      readonly composerBindingId: WorkstreamBindingId | null;
+      readonly composerBindingId: ThreadBindingId | null;
     }
   >
 > = {
@@ -76,7 +73,7 @@ export function workflowCatalogEntry(
   definition: BuiltinWorkflowDefinition,
 ): BuiltinWorkflowDefinition & {
   readonly executionPolicy: WorkflowCapabilities;
-  readonly composerBindingId: WorkstreamBindingId | null;
+  readonly composerBindingId: ThreadBindingId | null;
 } {
   const controls =
     WORKFLOW_CONTROL_POLICIES[`${definition.id}:v${definition.version}`];

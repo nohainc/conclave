@@ -61,8 +61,8 @@
         "class_name": "RealtimeGateway",
       },
       {
-        "name": "CONCLAVE_WORKSTREAM_COORDINATOR",
-        "class_name": "WorkstreamExecutionCoordinator",
+        "name": "CONCLAVE_THREAD_COORDINATOR",
+        "class_name": "ThreadExecutionCoordinator",
       },
     ],
   },
@@ -76,8 +76,8 @@
       "new_sqlite_classes": ["RealtimeGateway"],
     },
     {
-      "tag": "v6-workstream-coordinator",
-      "new_sqlite_classes": ["WorkstreamExecutionCoordinator"],
+      "tag": "v6-thread-coordinator",
+      "new_sqlite_classes": ["ThreadExecutionCoordinator"],
     },
   ],
 }

@@ -7,7 +7,7 @@ it("preserves legacy event identity, idempotency, payloads and retained sequence
   const db = new DatabaseSync(":memory:");
   try {
     db.exec(`CREATE TABLE realtime_event_cursors(workspace_id TEXT PRIMARY KEY, next_sequence INTEGER);
-      CREATE TABLE realtime_events(event_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, project_id TEXT,
+      CREATE TABLE realtime_events(event_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, space_id TEXT,
       run_id TEXT, task_id TEXT, attempt_id TEXT, assignment_id TEXT, workspace_runtime_id TEXT,
       sequence INTEGER NOT NULL, event_type TEXT, payload_json TEXT, idempotency_key TEXT, occurred_at TEXT,
       UNIQUE(workspace_id, sequence), UNIQUE(workspace_id, idempotency_key));
@@ -43,13 +43,13 @@ it("preserves legacy event identity, idempotency, payloads and retained sequence
       db.prepare("SELECT next_sequence FROM realtime_event_cursors").get()
         .next_sequence,
     ).toBe(90);
-    db.exec(`INSERT INTO realtime_events(event_id, stream_kind, stream_id, project_id, sequence, event_type, payload_json, idempotency_key, occurred_at)
-      VALUES('new', 'project', 'same', 'same', 7, 'project.updated', '{"entityId":"same"}', 'idem', 'now');`);
+    db.exec(`INSERT INTO realtime_events(event_id, stream_kind, stream_id, space_id, sequence, event_type, payload_json, idempotency_key, occurred_at)
+      VALUES('new', 'space', 'same', 'same', 7, 'space.updated', '{"entityId":"same"}', 'idem', 'now');`);
     expect(
       db.prepare("SELECT COUNT(*) AS n FROM realtime_events").get().n,
     ).toBe(2);
     expect(() =>
-      db.exec(`INSERT INTO realtime_events SELECT 'duplicate', stream_kind, stream_id, workspace_id, workstream_id, project_id,
+      db.exec(`INSERT INTO realtime_events SELECT 'duplicate', stream_kind, stream_id, workspace_id, thread_id, space_id,
       run_id, task_id, attempt_id, assignment_id, workspace_runtime_id, sequence, event_type, payload_json, idempotency_key, occurred_at
       FROM realtime_events WHERE event_id = 'new'`),
     ).toThrow();

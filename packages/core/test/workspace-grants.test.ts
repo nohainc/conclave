@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  canTransitionWorkspaceProjectGrantStatus,
+  canTransitionWorkspaceSpaceGrantStatus,
   resolveExecutionPermissions,
   validateWorkspaceConcurrencyPolicy,
   validateWorkspaceGrantCapabilities,
@@ -10,7 +10,7 @@ import {
 } from "../src/index.js";
 
 describe("Workspace Grant execution permissions", () => {
-  it("intersects the Project role with the Workspace Grant", () => {
+  it("intersects the Space role with the Workspace Grant", () => {
     expect(
       resolveExecutionPermissions(
         ["repository:read", "repository:write", "shell:execute"],
@@ -81,19 +81,19 @@ describe("Workspace Grant execution permissions", () => {
   });
 
   it("allows only reversible active/suspended status transitions", () => {
-    expect(
-      canTransitionWorkspaceProjectGrantStatus("active", "suspended"),
-    ).toBe(true);
-    expect(
-      canTransitionWorkspaceProjectGrantStatus("suspended", "active"),
-    ).toBe(true);
-    expect(canTransitionWorkspaceProjectGrantStatus("active", "revoked")).toBe(
+    expect(canTransitionWorkspaceSpaceGrantStatus("active", "suspended")).toBe(
       true,
     );
-    expect(canTransitionWorkspaceProjectGrantStatus("revoked", "active")).toBe(
+    expect(canTransitionWorkspaceSpaceGrantStatus("suspended", "active")).toBe(
+      true,
+    );
+    expect(canTransitionWorkspaceSpaceGrantStatus("active", "revoked")).toBe(
+      true,
+    );
+    expect(canTransitionWorkspaceSpaceGrantStatus("revoked", "active")).toBe(
       false,
     );
-    expect(canTransitionWorkspaceProjectGrantStatus("expired", "revoked")).toBe(
+    expect(canTransitionWorkspaceSpaceGrantStatus("expired", "revoked")).toBe(
       false,
     );
   });

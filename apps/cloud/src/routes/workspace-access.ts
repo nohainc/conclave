@@ -1,7 +1,7 @@
 import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
   AuthorizationError,
-  authorizeProjectMembership,
+  authorizeSpaceMembership,
   authorizeWorkspaceOwner,
   type SecurityContext,
 } from "@conclave/security";
@@ -59,12 +59,12 @@ export async function getWorkspaceGatewayStatus(
   }
 }
 
-export function workspaceProjectGrantMetadata(
+export function workspaceSpaceGrantMetadata(
   row: Record<string, unknown>,
 ): Record<string, unknown> {
   return {
     id: String(row.id),
-    projectId: String(row.project_id),
+    spaceId: String(row.space_id),
     workspaceId: String(row.workspace_id),
     workspaceName:
       row.workspace_name == null ? null : String(row.workspace_name),
@@ -86,13 +86,13 @@ export function workspaceProjectGrantMetadata(
   };
 }
 
-export async function loadWorkspaceProjectGrant(
+export async function loadWorkspaceSpaceGrant(
   env: SecurityEnv,
   grantId: string,
 ): Promise<Record<string, unknown> | null> {
   return env.CONCLAVE_DB.prepare(
     `SELECT g.*, ew.name AS workspace_name, ew.owner_user_id
-     FROM workspace_project_grants g
+     FROM workspace_space_grants g
      JOIN execution_workspaces ew ON ew.id = g.workspace_id
      WHERE g.id = ?1`,
   )
@@ -160,11 +160,11 @@ export function grantExpiry(value: unknown, now: Date): string | null {
   return new Date(timestamp).toISOString();
 }
 
-export async function createWorkspaceProjectGrant(
+export async function createWorkspaceSpaceGrant(
   request: Request,
   env: SecurityEnv,
   context: SecurityContext,
-  projectId: string,
+  spaceId: string,
   workspaceId: string,
 ): Promise<Response> {
   const body = recordBody(await request.json().catch(() => null), [
@@ -186,12 +186,12 @@ export async function createWorkspaceProjectGrant(
   if (body.workspaceId !== undefined && body.workspaceId !== workspaceId) {
     throw new HttpError(400, "workspaceId does not match the grant target");
   }
-  const project = await env.CONCLAVE_DB.prepare(
-    "SELECT id FROM projects WHERE id = ?1",
+  const space = await env.CONCLAVE_DB.prepare(
+    "SELECT id FROM spaces WHERE id = ?1",
   )
-    .bind(projectId)
+    .bind(spaceId)
     .first<{ id: string }>();
-  if (!project) throw new HttpError(404, "Project not found");
+  if (!space) throw new HttpError(404, "Space not found");
   const workspace = await env.CONCLAVE_DB.prepare(
     "SELECT id, owner_user_id, status FROM execution_workspaces WHERE id = ?1",
   )
@@ -209,16 +209,16 @@ export async function createWorkspaceProjectGrant(
   }
   let membership: { role: string } | null = null;
   try {
-    membership = await authorizeProjectMembership(
+    membership = await authorizeSpaceMembership(
       env.CONCLAVE_DB,
       context,
-      projectId,
-      "projects:write",
+      spaceId,
+      "spaces:write",
     );
   } catch (error) {
     if (!(error instanceof AuthorizationError)) throw error;
-    // A Workspace owner may grant their own Workspace to a Project without
-    // becoming a Project collaborator; the Project still controls use.
+    // A Workspace owner may grant their own Workspace to a Space without
+    // becoming a Space collaborator; the Space still controls use.
   }
   await authorizeWorkspaceOwner(
     env.CONCLAVE_DB,
@@ -227,17 +227,17 @@ export async function createWorkspaceProjectGrant(
     "workspace:manage",
   );
   const existingGrant = await env.CONCLAVE_DB.prepare(
-    `SELECT id FROM workspace_project_grants
-     WHERE project_id = ?1 AND workspace_id = ?2
+    `SELECT id FROM workspace_space_grants
+     WHERE space_id = ?1 AND workspace_id = ?2
        AND status IN ('active', 'suspended')
      LIMIT 1`,
   )
-    .bind(projectId, workspaceId)
+    .bind(spaceId, workspaceId)
     .first<{ id: string }>();
   if (existingGrant) {
     throw new HttpError(
       409,
-      "This Workspace is already connected to the Project",
+      "This Workspace is already connected to the Space",
     );
   }
   if (
@@ -297,20 +297,20 @@ export async function createWorkspaceProjectGrant(
   }
   const concurrency = JSON.stringify(concurrencyValue);
   const expiresAt = grantExpiry(body.expiresAt, new Date(now));
-  const id = `workspace-project-grant-${crypto.randomUUID().slice(0, 16)}`;
+  const id = `workspace-space-grant-${crypto.randomUUID().slice(0, 16)}`;
   await env.CONCLAVE_DB.prepare(
-    `INSERT INTO workspace_project_grants
-       (id, project_id, workspace_id, granted_by_user_id, status,
+    `INSERT INTO workspace_space_grants
+       (id, space_id, workspace_id, granted_by_user_id, status,
         allowed_worker_ids_json,
         allowed_worker_capabilities_json, allowed_permissions_json,
         network_policy_json, concurrency_json,
         expires_at, created_at, updated_at)
      VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11)
-     ON CONFLICT(id, project_id, workspace_id) DO NOTHING`,
+     ON CONFLICT(id, space_id, workspace_id) DO NOTHING`,
   )
     .bind(
       id,
-      projectId,
+      spaceId,
       workspaceId,
       context.userId,
       allowedWorkerIds,
@@ -325,27 +325,27 @@ export async function createWorkspaceProjectGrant(
   await recordAudit(
     env,
     context,
-    "workspace.project_grant.created",
-    "workspace_project_grant",
+    "workspace.space_grant.created",
+    "workspace_space_grant",
     id,
     {
-      projectId,
+      spaceId,
       workspaceId,
     },
   );
   await publishCollaborationEvent(
     env,
-    "project_workspace_grant.updated",
-    projectId,
+    "workspace_space_grant.updated",
+    spaceId,
     id,
     { additionalRecipientUserIds: [context.userId] },
   );
-  const grant = await loadWorkspaceProjectGrant(env, id);
+  const grant = await loadWorkspaceSpaceGrant(env, id);
   return json(
     {
       grant: grant
-        ? workspaceProjectGrantMetadata(grant)
-        : { id, projectId, workspaceId },
+        ? workspaceSpaceGrantMetadata(grant)
+        : { id, spaceId, workspaceId },
     },
     { status: 201 },
   );

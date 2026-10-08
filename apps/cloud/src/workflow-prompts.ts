@@ -18,11 +18,11 @@ export interface WorkStepPromptInputs {
   readonly originalRequest: string;
   readonly workRequestId?: string;
   readonly attachments?: readonly WorkPromptAttachment[];
-  readonly projectInstructions?: string;
-  readonly workstreamInstructions?: string;
+  readonly spaceInstructions?: string;
+  readonly threadInstructions?: string;
   readonly stepInstructions?: Partial<Record<StepKind, string>>;
   readonly stepResults?: Partial<Record<StepKind, StepResult>>;
-  readonly currentWorkstreamContext?: string;
+  readonly currentThreadContext?: string;
 }
 
 const MAX_SECTION_CHARS = 24_000;
@@ -45,8 +45,8 @@ const profileInstructions: Readonly<
   chat: {
     version: "chat:v1",
     instructions: [
-      "Answer the user's request conversationally using the authorized Workstream context.",
-      "You may inspect files and existing repository state in the current Workstream directory when useful, and run provider-supported read-only commands.",
+      "Answer the user's request conversationally using the authorized Thread context.",
+      "You may inspect files and existing repository state in the current Thread directory when useful, and run provider-supported read-only commands.",
       "This is a read-only interaction:",
       "- Do not create files.",
       "- Do not modify files.",
@@ -61,7 +61,7 @@ const profileInstructions: Readonly<
   research: {
     version: "research:v1",
     instructions:
-      "Research the request using the authorized Workstream context. Return a clear, evidence-based report with sections for Findings, Sources and references (when available), Constraints, Uncertainties, and Recommended next actions. Cite relevant paths or references when available. This is a read-only step: do not edit files, create files, or make requested changes. Return natural-language text; do not force the report into JSON.",
+      "Research the request using the authorized Thread context. Return a clear, evidence-based report with sections for Findings, Sources and references (when available), Constraints, Uncertainties, and Recommended next actions. Cite relevant paths or references when available. This is a read-only step: do not edit files, create files, or make requested changes. Return natural-language text; do not force the report into JSON.",
   },
   plan: {
     version: "plan:v1",
@@ -71,17 +71,17 @@ const profileInstructions: Readonly<
   implement: {
     version: "implement:v1",
     instructions:
-      "Implement the requested change in the authorized Workstream. Use the writable Workstream filesystem available to this assignment. Follow the plan when provided, explain material deviations, and report the resulting changes.",
+      "Implement the requested change in the authorized Thread. Use the writable Thread filesystem available to this assignment. Follow the plan when provided, explain material deviations, and report the resulting changes.",
   },
   test: {
     version: "test:v1",
     instructions:
-      "Check the current implementation without fixing it. Inspect the current Workstream, then run relevant existing tests and available build, lint, or typecheck commands. Report commands, results, and failures. Do not edit or add application, test, configuration, or dependency files; do not fix failures or install/update dependencies. Validation tools may produce their normal generated output.",
+      "Check the current implementation without fixing it. Inspect the current Thread, then run relevant existing tests and available build, lint, or typecheck commands. Report commands, results, and failures. Do not edit or add application, test, configuration, or dependency files; do not fix failures or install/update dependencies. Validation tools may produce their normal generated output.",
   },
   verify: {
     version: "verify:v1",
     instructions:
-      "Independently inspect the current Workstream filesystem in read-only mode and compare it with the original request, plan, implementation, and tests. Use a fresh isolated assignment; do not inherit or rely on the implementer's conversational session. Report confirmed outcomes, gaps, and risks. Do not modify files.",
+      "Independently inspect the current Thread filesystem in read-only mode and compare it with the original request, plan, implementation, and tests. Use a fresh isolated assignment; do not inherit or rely on the implementer's conversational session. Report confirmed outcomes, gaps, and risks. Do not modify files.",
   },
 };
 
@@ -135,12 +135,12 @@ export function renderWorkStepPrompt(
       boundedText(inputs.originalRequest, 20_000),
       attachmentReferences(inputs),
       section(
-        "Project instructions",
-        boundedText(inputs.projectInstructions, MAX_SECTION_CHARS),
+        "Space instructions",
+        boundedText(inputs.spaceInstructions, MAX_SECTION_CHARS),
       ),
       section(
-        "Workstream instructions",
-        boundedText(inputs.workstreamInstructions, MAX_SECTION_CHARS),
+        "Thread instructions",
+        boundedText(inputs.threadInstructions, MAX_SECTION_CHARS),
       ),
       section(
         workflow.version === 1
@@ -151,7 +151,7 @@ export function renderWorkStepPrompt(
     ].filter((value) => value.length > 0);
     return [
       ...sections,
-      "Carry out the request in the current Workstream using the permissions provided for this assignment. Return the result directly.",
+      "Carry out the request in the current Thread using the permissions provided for this assignment. Return the result directly.",
     ]
       .join("\n\n")
       .slice(0, MAX_PROMPT_CHARS);
@@ -160,12 +160,12 @@ export function renderWorkStepPrompt(
   const sections = [
     `${step.kind.toUpperCase()}\n${profile.instructions}`,
     section(
-      "Project instructions",
-      boundedText(inputs.projectInstructions, MAX_SECTION_CHARS),
+      "Space instructions",
+      boundedText(inputs.spaceInstructions, MAX_SECTION_CHARS),
     ),
     section(
-      "Workstream instructions",
-      boundedText(inputs.workstreamInstructions, MAX_SECTION_CHARS),
+      "Thread instructions",
+      boundedText(inputs.threadInstructions, MAX_SECTION_CHARS),
     ),
     section(
       `Additional ${stepLabels[step.kind]} instructions`,
@@ -227,8 +227,8 @@ export function renderWorkStepPrompt(
   if (step.kind === "test" || step.kind === "verify") {
     sections.push(
       section(
-        "Current Workstream filesystem",
-        boundedText(inputs.currentWorkstreamContext, MAX_SECTION_CHARS),
+        "Current Thread filesystem",
+        boundedText(inputs.currentThreadContext, MAX_SECTION_CHARS),
       ),
     );
   }
@@ -328,10 +328,10 @@ export function workStepPromptInputs(
       ? { workRequestId: input.workRequestId }
       : {}),
     attachments,
-    projectInstructions: stringValue("projectInstructions"),
-    workstreamInstructions: stringValue("workstreamInstructions"),
+    spaceInstructions: stringValue("spaceInstructions"),
+    threadInstructions: stringValue("threadInstructions"),
     stepInstructions,
     stepResults,
-    currentWorkstreamContext: stringValue("currentWorkstreamContext"),
+    currentThreadContext: stringValue("currentThreadContext"),
   };
 }

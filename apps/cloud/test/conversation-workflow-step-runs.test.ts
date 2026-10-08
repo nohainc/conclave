@@ -8,7 +8,7 @@ import {
   recordAssignmentResult,
 } from "../src/assignment-dispatcher.js";
 
-it("one Work StepRun snapshots pending choices and projects actual provider defaults without guessing", async () => {
+it("one Work StepRun snapshots pending choices and spaces actual provider defaults without guessing", async () => {
   const f = await conversationFixture();
   try {
     const snapshot = JSON.stringify({
@@ -22,7 +22,7 @@ it("one Work StepRun snapshots pending choices and projects actual provider defa
     });
     f.sqlite
       .prepare(
-        `INSERT INTO work_requests(id,workstream_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,snapshot_json,status,input_json,created_at,updated_at)
+        `INSERT INTO work_requests(id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,snapshot_json,status,input_json,created_at,updated_at)
     VALUES('WORK','W','U','stateful','direct',2,'{}',?,'queued','{}','now','now')`,
       )
       .run(snapshot);
@@ -36,7 +36,7 @@ it("one Work StepRun snapshots pending choices and projects actual provider defa
       ),
     );
     f.sqlite.exec(
-      `INSERT INTO workflow_tasks(id,work_request_id,step_kind,execution_mode,timeout_ms,prompt_profile_version,status,created_at,updated_at) VALUES('IMPLEMENT','WORK','implement','stateful_workstream',1000,'implement:v1','queued','now','now')`,
+      `INSERT INTO workflow_tasks(id,work_request_id,step_kind,execution_mode,timeout_ms,prompt_profile_version,status,created_at,updated_at) VALUES('IMPLEMENT','WORK','implement','stateful_thread',1000,'implement:v1','queued','now','now')`,
     );
     const pending = (
       await loadConversationWorkflowRuns(f.db as unknown as D1Database, [
@@ -64,7 +64,7 @@ it("one Work StepRun snapshots pending choices and projects actual provider defa
       result: null,
     });
     f.sqlite
-      .exec(`INSERT INTO worker_assignments(id,project_id,execution_workspace_id,runtime_identity_id,worker_type_id,workspace_worker_id,task_id,status,session_policy,permission_snapshot_json,created_at,updated_at)
+      .exec(`INSERT INTO worker_assignments(id,space_id,execution_workspace_id,runtime_identity_id,worker_type_id,workspace_worker_id,task_id,status,session_policy,permission_snapshot_json,created_at,updated_at)
     VALUES('WORKER','P','WS','RT','chatgpt','actual-worker','IMPLEMENT','created','durable_session','{"profileDefinitionId":"chatgpt-codex","profileReleaseVersion":1,"workerSessionId":"logical-session"}','now','now')`);
     const actual = (
       await loadConversationWorkflowRuns(f.db as unknown as D1Database, [

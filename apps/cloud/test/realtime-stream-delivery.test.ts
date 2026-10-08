@@ -25,7 +25,7 @@ function harness(member = true) {
         async first() {
           return query.includes("FROM users")
             ? { status: "active" }
-            : member && query.includes("project_memberships")
+            : member && query.includes("space_memberships")
               ? { member: 1 }
               : null;
         },
@@ -53,18 +53,18 @@ function harness(member = true) {
       }),
     );
   const event = (
-    kind: "project" | "execution_workspace",
+    kind: "space" | "execution_workspace",
     sequence: number,
   ): RealtimeEventEnvelope => ({
     eventId: `${kind}-${sequence}`,
     timestamp: "2026-10-06T00:00:00.000Z",
     sequence,
     payload: { entityId: "same" },
-    ...(kind === "project"
+    ...(kind === "space"
       ? {
-          type: "project.updated",
+          type: "space.updated",
           version: "1.1",
-          projectId: "same",
+          spaceId: "same",
           stream: { kind, id: "same" },
         }
       : { type: "run.completed", version: "1.0", workspaceId: "same" }),
@@ -73,11 +73,11 @@ function harness(member = true) {
 }
 
 describe("durable stream delivery", () => {
-  it("isolates execution and Project sequences, scopes gaps, and never regresses cursors", async () => {
+  it("isolates execution and Space sequences, scopes gaps, and never regresses cursors", async () => {
     const f = harness();
     for (const event of [
       f.event("execution_workspace", 1),
-      f.event("project", 1),
+      f.event("space", 1),
       f.event("execution_workspace", 2),
     ])
       expect((await f.publish(event)).ok).toBe(true);
@@ -85,17 +85,17 @@ describe("durable stream delivery", () => {
     expect(f.frames.some((frame) => frame.type === "reconnect.required")).toBe(
       false,
     );
-    await f.publish(f.event("project", 3));
+    await f.publish(f.event("space", 3));
     expect(f.frames.at(-1)).toMatchObject({
       type: "reconnect.required",
-      scope: { kind: "project", projectId: "same" },
-      stream: { kind: "project", id: "same" },
+      scope: { kind: "space", spaceId: "same" },
+      stream: { kind: "space", id: "same" },
       lastDurableSequence: 1,
       nextSequence: 3,
     });
     expect(f.frames.at(-1)).not.toHaveProperty("workspaceId");
-    await f.publish(f.event("project", 2));
-    expect(f.cursors.get('["project","same"]')).toBe(3);
+    await f.publish(f.event("space", 2));
+    expect(f.cursors.get('["space","same"]')).toBe(3);
     expect(f.cursors.get('["execution_workspace","same"]')).toBe(2);
     await f.publish(f.event("execution_workspace", 4));
     expect(f.frames.at(-1)).toMatchObject({
@@ -104,23 +104,23 @@ describe("durable stream delivery", () => {
       stream: { kind: "execution_workspace", id: "same" },
     });
   });
-  it("does not deliver a live Project signal to a removed member on user scope", async () => {
+  it("does not deliver a live Space signal to a removed member on user scope", async () => {
     const f = harness(false);
-    await f.publish(f.event("project", 1));
+    await f.publish(f.event("space", 1));
     expect(f.frames).toHaveLength(0);
   });
-  it("delivers Project deletion to an active user after its focused membership disappears", async () => {
+  it("delivers Space deletion to an active user after its focused membership disappears", async () => {
     const f = harness();
     const client = f.clients.get("client") as {
       subscriptions: Map<string, unknown>;
     };
-    client.subscriptions.set("project", { kind: "project", projectId: "same" });
-    const event = { ...f.event("project", 1), type: "project.deleted" };
+    client.subscriptions.set("space", { kind: "space", spaceId: "same" });
+    const event = { ...f.event("space", 1), type: "space.deleted" };
     expect((await f.publish(event)).ok).toBe(true);
     expect(f.frames.at(-1)).toMatchObject({
       type: "event",
-      event: { type: "project.deleted" },
+      event: { type: "space.deleted" },
     });
-    expect(client.subscriptions.has("project")).toBe(false);
+    expect(client.subscriptions.has("space")).toBe(false);
   });
 });

@@ -11,7 +11,7 @@ class AxFixtureDataSource implements AxDataSource {
 
   @override
   Future<String> createWorkRequest({
-    required String workstreamId,
+    required String threadId,
     required String workflowId,
     required String prompt,
     List<Map<String, dynamic>> attachments = const [],
@@ -22,7 +22,7 @@ class AxFixtureDataSource implements AxDataSource {
 
   @override
   Future<List<String>> validateWorkRequestEligibility({
-    required String workstreamId,
+    required String threadId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
     AxTurnExecutionSelection? executionSelection,
@@ -31,7 +31,7 @@ class AxFixtureDataSource implements AxDataSource {
 
   @override
   Future<AxConversationHistoryPage> loadConversationHistory(
-          {required String workstreamId,
+          {required String threadId,
           required String conversationId,
           int afterSequence = 0,
           int? throughSequence,
@@ -50,18 +50,18 @@ class AxFixtureDataSource implements AxDataSource {
       throw UnimplementedError('Work Request fixture is not configured');
 
   @override
-  Future<AxWorkRequestPage> loadWorkstreamWorkRequestPage(
-          {required String workstreamId,
+  Future<AxWorkRequestPage> loadThreadWorkRequestPage(
+          {required String threadId,
           int limit = 50,
           String? beforeCreatedAt,
           String? beforeId,
           bool activeOnly = false}) async =>
       AxWorkRequestPage(
           requests: await workRequestRows(
-              workstreamId: workstreamId, activeOnly: activeOnly));
+              threadId: threadId, activeOnly: activeOnly));
 
   Future<List<AxWorkRequest>> workRequestRows({
-    required String workstreamId,
+    required String threadId,
     bool activeOnly = false,
   }) async =>
       const [];
@@ -106,70 +106,69 @@ class AxFixtureDataSource implements AxDataSource {
   }) async {}
 
   @override
-  Future<AxProject> createProject(
+  Future<AxSpace> createSpace(
           {required String name,
           String? description,
           String? instructions}) async =>
-      AxProject(
-        id: 'project-created',
+      AxSpace(
+        id: 'space-created',
         name: name,
         branch: '',
         lastActivity: 'Just now',
       );
 
   @override
-  Future<AxProject> updateProject({
-    required String projectId,
+  Future<AxSpace> updateSpace({
+    required String spaceId,
     String? name,
     String? description,
     String? instructions,
     Map<String, dynamic>? settings,
   }) async {
-    final project = axFixtureSnapshot()
-        .projects
-        .where((item) => item.id == projectId)
+    final space = axFixtureSnapshot()
+        .spaces
+        .where((item) => item.id == spaceId)
         .firstOrNull;
-    return AxProject(
-      id: projectId,
-      name: name ?? project?.name ?? 'Updated project',
-      branch: project?.branch ?? '',
+    return AxSpace(
+      id: spaceId,
+      name: name ?? space?.name ?? 'Updated space',
+      branch: space?.branch ?? '',
       lastActivity: 'Just now',
-      description: description ?? project?.description ?? '',
-      instructions: instructions ?? project?.instructions ?? '',
-      settings: settings ?? project?.settings ?? const {},
+      description: description ?? space?.description ?? '',
+      instructions: instructions ?? space?.instructions ?? '',
+      settings: settings ?? space?.settings ?? const {},
     );
   }
 
   @override
-  Future<void> archiveProject({required String projectId}) async {}
+  Future<void> archiveSpace({required String spaceId}) async {}
 
   @override
-  Future<void> deleteProject({required String projectId}) async {}
+  Future<void> deleteSpace({required String spaceId}) async {}
 
   @override
   Future<AxDiscussionPage> loadDiscussionPage(
-          {required String workstreamId,
+          {required String threadId,
           int limit = 50,
           String? before,
           String? after}) async =>
-      AxDiscussionPage(
-          messages: await discussionRows(workstreamId: workstreamId));
+      AxDiscussionPage(messages: await discussionRows(threadId: threadId));
 
   Future<List<AxDiscussionMessage>> discussionRows({
-    required String workstreamId,
+    required String threadId,
   }) async =>
       const [];
 
   @override
   Future<AxDiscussionMessage> sendDiscussionMessage({
-    required String workstreamId,
+    required String threadId,
     required String text,
     List<String> references = const [],
     String? idempotencyKey,
   }) async =>
       AxDiscussionMessage(
         id: 'msg-${DateTime.now().microsecondsSinceEpoch}',
-        workstreamId: workstreamId,
+        threadId: threadId,
         authorUserId: 'user-owner',
         authorName: 'Vitalii',
         body: text,
@@ -192,7 +191,7 @@ class AxFixtureDataSource implements AxDataSource {
   }) async =>
       AxDiscussionMessage(
         id: messageId,
-        workstreamId: 'workstream-1',
+        threadId: 'thread-1',
         authorUserId: 'user-owner',
         authorName: 'Vitalii',
         body: text,
@@ -203,11 +202,11 @@ class AxFixtureDataSource implements AxDataSource {
       );
 
   @override
-  Future<List<AxProjectMember>> loadProjectMembers({
-    required String projectId,
+  Future<List<AxSpaceMember>> loadSpaceMembers({
+    required String spaceId,
   }) async =>
       const [
-        AxProjectMember(
+        AxSpaceMember(
           userId: 'user-owner',
           displayName: 'Vitalii',
           email: 'owner@example.com',
@@ -217,45 +216,45 @@ class AxFixtureDataSource implements AxDataSource {
       ];
 
   @override
-  Future<List<AxProjectInvitation>> loadProjectInvitations({
-    required String projectId,
+  Future<List<AxSpaceInvitation>> loadSpaceInvitations({
+    required String spaceId,
   }) async =>
       const [];
 
   @override
-  Future<List<AxAuditEntry>> loadProjectAudit({
-    required String projectId,
+  Future<List<AxAuditEntry>> loadSpaceAudit({
+    required String spaceId,
   }) async =>
       const [];
 
   @override
-  Future<void> inviteProjectMember({
-    required String projectId,
+  Future<void> inviteSpaceMember({
+    required String spaceId,
     required String email,
     required String role,
   }) async {}
 
   @override
-  Future<void> changeProjectMemberRole({
-    required String projectId,
+  Future<void> changeSpaceMemberRole({
+    required String spaceId,
     required String userId,
     required String role,
   }) async {}
 
   @override
-  Future<void> removeProjectMember({
-    required String projectId,
+  Future<void> removeSpaceMember({
+    required String spaceId,
     required String userId,
   }) async {}
 
   @override
-  Future<void> expireProjectInvitation({
-    required String projectId,
+  Future<void> expireSpaceInvitation({
+    required String spaceId,
     required String invitationId,
   }) async {}
 
   @override
-  Future<void> revokeWorkspaceProjectGrant({
+  Future<void> revokeWorkspaceSpaceGrant({
     required String grantId,
   }) async {}
 
@@ -323,57 +322,57 @@ class AxFixtureDataSource implements AxDataSource {
       ];
 
   @override
-  Future<List<AxProject>> loadProjects({bool includeArchived = false}) async =>
-      axFixtureSnapshot().projects;
+  Future<List<AxSpace>> loadSpaces({bool includeArchived = false}) async =>
+      axFixtureSnapshot().spaces;
 
   @override
-  Future<AxProject> loadProject({required String projectId}) async {
-    final project =
-        (await loadProjects()).where((p) => p.id == projectId).firstOrNull;
-    if (project == null) {
-      throw const AxApiException('Project not found', statusCode: 404);
+  Future<AxSpace> loadSpace({required String spaceId}) async {
+    final space =
+        (await loadSpaces()).where((p) => p.id == spaceId).firstOrNull;
+    if (space == null) {
+      throw const AxApiException('Space not found', statusCode: 404);
     }
-    return project.copyWith(workstreams: const []);
+    return space.copyWith(threads: const []);
   }
 
   @override
-  Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
-    required String projectId,
+  Future<List<Map<String, dynamic>>> loadSpaceWorkspaces({
+    required String spaceId,
   }) async =>
       const [];
 
   @override
-  Future<void> requestProjectWorkspace({
-    required String projectId,
+  Future<void> requestSpaceWorkspace({
+    required String spaceId,
     required String workspaceId,
     List<String> allowedPermissions = const [],
   }) async {}
 
   @override
-  Future<void> updateWorkspaceProjectPermissions({
+  Future<void> updateWorkspaceSpacePermissions({
     required String grantId,
     required List<String> allowedPermissions,
   }) async {}
 
   @override
-  Future<List<AxWorkstream>> loadProjectWorkstreams({
-    required String projectId,
+  Future<List<AxThread>> loadSpaceThreads({
+    required String spaceId,
   }) async =>
       axFixtureSnapshot()
-          .projects
-          .where((project) => project.id == projectId)
-          .expand((project) => project.workstreams)
+          .spaces
+          .where((space) => space.id == spaceId)
+          .expand((space) => space.threads)
           .toList();
 
   @override
-  Future<AxWorkstream> createWorkstream({
-    required String projectId,
+  Future<AxThread> createThread({
+    required String spaceId,
     required String name,
     String? idempotencyKey,
   }) async =>
-      AxWorkstream(
-        id: 'workstream-created',
-        projectId: projectId,
+      AxThread(
+        id: 'thread-created',
+        spaceId: spaceId,
         name: name,
         lead: 'You',
         status: 'active',
@@ -383,16 +382,16 @@ class AxFixtureDataSource implements AxDataSource {
       );
 
   @override
-  Future<AxWorkstream> updateWorkstream({
-    required String workstreamId,
+  Future<AxThread> updateThread({
+    required String threadId,
     String? name,
     String? status,
     Map<String, dynamic>? workConfig,
   }) async =>
-      AxWorkstream(
-        id: workstreamId,
-        projectId: 'project-1',
-        name: name ?? 'Updated Workstream',
+      AxThread(
+        id: threadId,
+        spaceId: 'space-1',
+        name: name ?? 'Updated Thread',
         lead: 'You',
         status: status ?? 'active',
         brief: '',
@@ -406,7 +405,7 @@ class AxFixtureDataSource implements AxDataSource {
       );
 
   @override
-  Future<void> deleteWorkstream({required String workstreamId}) async {}
+  Future<void> deleteThread({required String threadId}) async {}
 
   @override
   Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => const [];
@@ -481,7 +480,7 @@ class AxFixtureDataSource implements AxDataSource {
 
   @override
   Future<AxSnapshot> loadBootstrapState(
-          {String? projectId, String? workspaceId}) async =>
+          {String? spaceId, String? workspaceId}) async =>
       axFixtureSnapshot();
 
   @override
@@ -494,40 +493,40 @@ class AxFixtureDataSource implements AxDataSource {
   Future<void> revokeWorkspace({required String workspaceId}) async {}
 
   @override
-  Future<List<AxProjectInvitation>> loadCurrentUserInvitations() async =>
+  Future<List<AxSpaceInvitation>> loadCurrentUserInvitations() async =>
       const [];
 
   @override
-  Future<void> acceptProjectInvitation({
+  Future<void> acceptSpaceInvitation({
     required String invitationId,
   }) async {}
 
   @override
-  Future<void> declineProjectInvitation({
+  Future<void> declineSpaceInvitation({
     required String invitationId,
   }) async {}
 }
 
 /// Stateful fixture used by the empty-workspace onboarding test. It mirrors
-/// the production API flow closely enough to verify the shell, project
+/// the production API flow closely enough to verify the shell, space
 /// creation and subsequent data refresh together.
 class EmptyWorkspaceFixtureDataSource extends AxFixtureDataSource {
   EmptyWorkspaceFixtureDataSource() : super();
 
-  bool hasProject = false;
+  bool hasSpace = false;
 
   @override
   Future<AxSnapshot> loadBootstrapState(
-      {String? projectId, String? workspaceId}) async {
+      {String? spaceId, String? workspaceId}) async {
     return _snapshot();
   }
 
   @override
-  Future<AxProject> createProject(
+  Future<AxSpace> createSpace(
       {required String name, String? description, String? instructions}) async {
-    hasProject = true;
-    return AxProject(
-      id: 'project-created',
+    hasSpace = true;
+    return AxSpace(
+      id: 'space-created',
       name: name,
       branch: '',
       lastActivity: 'Just now',
@@ -535,14 +534,14 @@ class EmptyWorkspaceFixtureDataSource extends AxFixtureDataSource {
   }
 
   AxSnapshot _snapshot() {
-    const project = AxProject(
-      id: 'project-created',
-      name: 'My first project',
+    const space = AxSpace(
+      id: 'space-created',
+      name: 'My first space',
       branch: '',
       lastActivity: 'Just now',
     );
     return axFixtureSnapshot().copyWith(
-      projects: hasProject ? [project] : const [],
+      spaces: hasSpace ? [space] : const [],
     );
   }
 }

@@ -4,10 +4,7 @@ import type {
   WorkerEffortOptions,
 } from "@conclave/core";
 /** Expose selection metadata only, never CLI commands or credential configuration. */
-export function projectModelOptions(
-  payload: unknown,
-  providerVersion?: unknown,
-) {
+export function spaceModelOptions(payload: unknown, providerVersion?: unknown) {
   let profile: Record<string, unknown>;
   try {
     profile = JSON.parse(String(payload));
@@ -79,7 +76,7 @@ export function projectModelOptions(
 }
 
 /** Normalized, versioned public capabilities; provider mappings remain signed/local. */
-export function projectWorkerExecutionOptions(
+export function spaceWorkerExecutionOptions(
   payload: unknown,
   providerVersion?: unknown,
 ): WorkerExecutionOptions | null {
@@ -97,7 +94,7 @@ export function projectWorkerExecutionOptions(
     (declared.schemaVersion !== 1 || declared.discovery !== "profile_catalog")
   )
     return null;
-  const projection = projectModelOptions(payload, providerVersion);
+  const projection = spaceModelOptions(payload, providerVersion);
   const normalizeEffort = (
     values: unknown,
     defaultValue: unknown,

@@ -45,7 +45,7 @@ class WorkRootResolver {
     }
     if (overridePath != null && hasActiveWork) {
       throw const WorkRootViolation(
-          'Work Root cannot change while active Workstream work exists');
+          'Work Root cannot change while active Thread work exists');
     }
 
     final requested = Directory(path);

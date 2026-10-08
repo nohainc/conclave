@@ -370,7 +370,7 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
                   'This computer will stop accepting Cloud work.\n\n'
                   'Active assignments will finish before it disconnects.\n\n'
                   'This keeps the installation owned by your Conclave account. Another account cannot connect it until you release it.\n\n'
-                  'Local Worker credentials, configurations, and Workstream files remain on this machine unless '
+                  'Local Worker credentials, configurations, and Thread files remain on this machine unless '
                   'you explicitly choose to remove them.\n\n'
                   'You can reconnect to this Workspace with the same account at any time.',
                 ),

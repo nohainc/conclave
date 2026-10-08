@@ -186,7 +186,7 @@ describe("Tool Profile v1 pure interpreter", () => {
 
   it("does not attest Gemini sandbox as enforceable read-only execution", () => {
     const profile = loadProfile("gemini-antigravity.v1");
-    expect(profile.capabilities).not.toContain("workstream_read");
+    expect(profile.capabilities).not.toContain("thread_read");
     expect(
       expandExecutionArguments(
         profile,

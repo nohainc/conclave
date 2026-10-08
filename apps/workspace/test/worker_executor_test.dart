@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:conclave_workspace/worker_executor.dart';
-import 'package:conclave_workspace/workstream_directory.dart';
-import 'package:conclave_workspace/workstream_path.dart';
+import 'package:conclave_workspace/thread_directory.dart';
+import 'package:conclave_workspace/thread_path.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:test/test.dart';
 
@@ -15,13 +15,13 @@ void main() {
     addTearDown(() => root.delete(recursive: true));
     var executions = 0;
     final handler = WorkerAssignmentHandler(
-      workstreamDirectoryLifecycle: WorkstreamDirectoryLifecycle(
-          pathResolver: WorkstreamPathResolver(root)),
+      threadDirectoryLifecycle:
+          ThreadDirectoryLifecycle(pathResolver: ThreadPathResolver(root)),
       resolveLogicalWorker: (id) => assignmentWorker(id),
       executeWithToolProfile: (worker, directory, context, payload,
           {onProgress}) async {
         executions++;
-        expect(directory.path, contains('workstream-1'));
+        expect(directory.path, contains('thread-1'));
         return WorkerResult(
             requestId: 'result-1',
             assignmentId: context.assignmentId,
@@ -40,16 +40,16 @@ void main() {
           payload: {
             'workerId': 'worker-1',
             'workerTypeId': 'test-worker',
-            'projectId': 'project-1',
-            'workstreamId': 'workstream-1',
-            'executionClass': 'stateful_workstream',
+            'spaceId': 'space-1',
+            'threadId': 'thread-1',
+            'executionClass': 'stateful_thread',
             'leaseId': 'lease-1',
             'fencingToken': fence,
           },
         );
     expect((await handler.call(context(2))).output?['text'], 'Work completed');
     await expectLater(
-        handler.call(context(1)), throwsA(isA<WorkstreamMutationViolation>()));
+        handler.call(context(1)), throwsA(isA<ThreadMutationViolation>()));
     expect(executions, 1);
   });
   test('assignment execution uses the Tool Profile Engine runner', () async {
@@ -91,12 +91,12 @@ void main() {
     expect(result.output?['text'], 'explain the change');
   });
 
-  test('resolves process CWD from Project and Workstream IDs', () async {
+  test('resolves process CWD from Space and Thread IDs', () async {
     final root = await Directory.systemTemp.createTemp('cwd-root-');
     addTearDown(() => root.delete(recursive: true));
     final handler = WorkerAssignmentHandler(
-      workstreamDirectoryLifecycle: WorkstreamDirectoryLifecycle(
-        pathResolver: WorkstreamPathResolver(root),
+      threadDirectoryLifecycle: ThreadDirectoryLifecycle(
+        pathResolver: ThreadPathResolver(root),
       ),
       resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
     );
@@ -112,8 +112,8 @@ void main() {
       payload: {
         'workerId': 'cwd-worker',
         'workerTypeId': 'test-worker',
-        'projectId': 'project-1',
-        'workstreamId': 'workstream-1',
+        'spaceId': 'space-1',
+        'threadId': 'thread-1',
         'workRequestId': 'request-1',
         'executionClass': 'stateless_read',
       },
@@ -121,11 +121,11 @@ void main() {
 
     final scope = await handler.prepareAssignmentScope(context);
     final expected = await Directory(
-      '${root.path}${Platform.pathSeparator}project-1${Platform.pathSeparator}workstream-1',
+      '${root.path}${Platform.pathSeparator}space-1${Platform.pathSeparator}thread-1',
     ).resolveSymbolicLinks();
     expect(scope.workingDirectory.path, expected);
 
-    final sameWorkstream = await handler.prepareAssignmentScope(
+    final sameThread = await handler.prepareAssignmentScope(
       context.copyWith(
         workerId: 'claude-worker',
         payload: {
@@ -135,19 +135,19 @@ void main() {
         },
       ),
     );
-    final otherWorkstream = await handler.prepareAssignmentScope(
+    final otherThread = await handler.prepareAssignmentScope(
       context.copyWith(
         payload: {
           ...context.payload,
-          'workstreamId': 'workstream-2',
+          'threadId': 'thread-2',
         },
       ),
     );
-    expect(sameWorkstream.workingDirectory.path, expected);
-    expect(otherWorkstream.workingDirectory.path, isNot(expected));
+    expect(sameThread.workingDirectory.path, expected);
+    expect(otherThread.workingDirectory.path, isNot(expected));
   });
 
-  test('requires Workstream identity for stateful process CWD', () async {
+  test('requires Thread identity for stateful process CWD', () async {
     final handler = WorkerAssignmentHandler(
       resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
     );
@@ -165,11 +165,11 @@ void main() {
         payload: {
           'workerId': 'worker',
           'workerTypeId': 'test-worker',
-          'executionClass': 'stateful_workstream',
+          'executionClass': 'stateful_thread',
         },
       )),
       throwsA(predicate(
-          (error) => error.toString().contains('projectId is required'))),
+          (error) => error.toString().contains('spaceId is required'))),
     );
   });
 
@@ -217,8 +217,8 @@ void main() {
         payload: {
           'workerId': 'cwd-worker',
           'workerTypeId': 'test-worker',
-          'projectId': 'project-1',
-          'workstreamId': 'workstream-1',
+          'spaceId': 'space-1',
+          'threadId': 'thread-1',
           'cwd': '/tmp/escape',
         },
       )),

@@ -41,9 +41,9 @@ extension _AxAppShellViews on _AxAppStateMixin {
                             child: AxSidebar(
                               shellContext: shell,
                               onNavigateTo: _navigateTo,
-                              onToggleProjectExpanded: _toggleProjectExpanded,
-                              onCreateProject: _createProject,
-                              onCreateWorkstream: _createWorkstream,
+                              onToggleSpaceExpanded: _toggleSpaceExpanded,
+                              onCreateSpace: _createSpace,
+                              onCreateThread: _createThread,
                               searchController: _searchQueryController,
                               searchFocusNode: _searchFocusNode,
                               onClearSearch: _clearSearch,
@@ -56,7 +56,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                   unawaited(_showAboutConclave()),
                               onOpenExternal: (uri) =>
                                   browserNavigation.openExternal(uri),
-                              onOpenArchivedProjects: _showArchivedProjects,
+                              onOpenArchivedSpaces: _showArchivedSpaces,
                               compact: true,
                             ),
                           )
@@ -69,8 +69,8 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                   shellContext: shell,
                                   onNavigateTo: _navigateTo,
                                   onOpenDrawer: () {},
-                                  onCreateProject: _createProject,
-                                  onCreateWorkstream: _createWorkstream,
+                                  onCreateSpace: _createSpace,
+                                  onCreateThread: _createThread,
                                   searchController: _searchQueryController,
                                   searchFocusNode: _searchFocusNode,
                                   onSearchChanged: (_) =>
@@ -85,7 +85,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                       unawaited(_showAboutConclave()),
                                   onOpenExternal: (uri) =>
                                       browserNavigation.openExternal(uri),
-                                  onOpenArchivedProjects: _showArchivedProjects,
+                                  onOpenArchivedSpaces: _showArchivedSpaces,
                                   onToggleCollapse: () => _updateState(
                                       () => _desktopSidebarCollapsed = false),
                                 )
@@ -94,10 +94,9 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                   child: AxSidebar(
                                     shellContext: shell,
                                     onNavigateTo: _navigateTo,
-                                    onToggleProjectExpanded:
-                                        _toggleProjectExpanded,
-                                    onCreateProject: _createProject,
-                                    onCreateWorkstream: _createWorkstream,
+                                    onToggleSpaceExpanded: _toggleSpaceExpanded,
+                                    onCreateSpace: _createSpace,
+                                    onCreateThread: _createThread,
                                     searchController: _searchQueryController,
                                     searchFocusNode: _searchFocusNode,
                                     onClearSearch: _clearSearch,
@@ -110,8 +109,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                         unawaited(_showAboutConclave()),
                                     onOpenExternal: (uri) =>
                                         browserNavigation.openExternal(uri),
-                                    onOpenArchivedProjects:
-                                        _showArchivedProjects,
+                                    onOpenArchivedSpaces: _showArchivedSpaces,
                                     onToggleCollapse: () => _updateState(
                                         () => _desktopSidebarCollapsed = true),
                                   ),
@@ -199,7 +197,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                 ? 'Enter your email and we will send a reset link if an account exists.'
                                 : authSignUp
                                     ? 'Create an account to start using Conclave AX.'
-                                    : 'Sign in securely to access your Projects, Workspaces, and Workers.',
+                                    : 'Sign in securely to access your Spaces, Workspaces, and Workers.',
                         textAlign: TextAlign.center),
                     const SizedBox(height: 20),
                     if (!resetPassword && authSignUp) ...[
@@ -516,42 +514,42 @@ extension _AxAppShellViews on _AxAppStateMixin {
           ),
         ),
       );
-  Widget _workstreamContextBuilder(Widget Function() build) {
-    final projectId = navigation.projectId;
-    if (projectId == null) return build();
-    return AxQueryBuilder<List<AxWorkstream>>(
-      engine: store.projectWorkstreams.engine,
-      query: store.projectWorkstreams.query(projectId),
+  Widget _threadContextBuilder(Widget Function() build) {
+    final spaceId = navigation.spaceId;
+    if (spaceId == null) return build();
+    return AxQueryBuilder<List<AxThread>>(
+      engine: store.spaceThreads.engine,
+      query: store.spaceThreads.query(spaceId),
       builder: (context, state) => build(),
     );
   }
 
-  Widget _projectContextBuilder(Widget Function() build) {
-    final projectId = navigation.projectId;
-    if (projectId == null) return build();
-    return AxQueryBuilder<AxProject>(
-      key: ValueKey('project-context-$projectId'),
+  Widget _spaceContextBuilder(Widget Function() build) {
+    final spaceId = navigation.spaceId;
+    if (spaceId == null) return build();
+    return AxQueryBuilder<AxSpace>(
+      key: ValueKey('space-context-$spaceId'),
       engine: store.syncEngine,
-      query: store.projectDetails.query(projectId),
+      query: store.spaceDetails.query(spaceId),
       builder: (context, state) {
-        if (selectedProject != null) return build();
+        if (selectedSpace != null) return build();
         return Center(
             child: state.error != null
                 ? TextButton(
-                    onPressed: () => store.projectDetails
-                        .ensure(projectId)
+                    onPressed: () => store.spaceDetails
+                        .ensure(spaceId)
                         .then<void>((_) {},
                             onError: (Object _, StackTrace __) {}),
-                    child: const Text('Retry Project'))
-                : const Text('Loading Project…'));
+                    child: const Text('Retry Space'))
+                : const Text('Loading Space…'));
       },
     );
   }
 
   Widget _content({required bool compact, required bool showTopHud}) {
-    return _projectContextBuilder(() => Column(children: [
+    return _spaceContextBuilder(() => Column(children: [
           if (showTopHud)
-            _workstreamContextBuilder(() => ListenableBuilder(
+            _threadContextBuilder(() => ListenableBuilder(
                 listenable: Listenable.merge([
                   store.workspaces,
                   store.executionChanges,
@@ -588,10 +586,10 @@ extension _AxAppShellViews on _AxAppStateMixin {
                 ]);
               }),
           Expanded(
-            child: navigation.kind == AxRouteKind.workstream
+            child: navigation.kind == AxRouteKind.thread
                 ? Padding(
                     padding: EdgeInsets.zero,
-                    child: _workstreamView(),
+                    child: _threadView(),
                   )
                 : SingleChildScrollView(
                     padding: EdgeInsets.fromLTRB(

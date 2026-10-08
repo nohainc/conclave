@@ -314,7 +314,7 @@ class AxWorkRequestStatus {
     this.executionConfig,
     this.turns = const [],
     this.workflowRun,
-    this.workstreamId,
+    this.threadId,
     required this.status,
     this.text,
     this.error,
@@ -335,7 +335,7 @@ class AxWorkRequestStatus {
   final AxTurnExecutionConfig? executionConfig;
   final List<AxConversationTurn> turns;
   final AxWorkflowRun? workflowRun;
-  final String? workstreamId;
+  final String? threadId;
   final String status;
   final String? text;
   final String? error;
@@ -633,64 +633,64 @@ abstract interface class AxDataSource {
     required String token,
     required String password,
   });
-  Future<AxProject> createProject({
+  Future<AxSpace> createSpace({
     required String name,
     String? description,
     String? instructions,
   });
-  Future<AxProject> updateProject({
-    required String projectId,
+  Future<AxSpace> updateSpace({
+    required String spaceId,
     String? name,
     String? description,
     String? instructions,
     Map<String, dynamic>? settings,
   });
-  Future<void> archiveProject({required String projectId});
-  Future<void> deleteProject({required String projectId});
-  Future<List<AxProjectMember>> loadProjectMembers({
-    required String projectId,
+  Future<void> archiveSpace({required String spaceId});
+  Future<void> deleteSpace({required String spaceId});
+  Future<List<AxSpaceMember>> loadSpaceMembers({
+    required String spaceId,
   }) async =>
-      throw UnimplementedError('Project collaboration is not available');
-  Future<List<AxProjectInvitation>> loadProjectInvitations({
-    required String projectId,
+      throw UnimplementedError('Space collaboration is not available');
+  Future<List<AxSpaceInvitation>> loadSpaceInvitations({
+    required String spaceId,
   }) async =>
-      throw UnimplementedError('Project collaboration is not available');
-  Future<List<AxAuditEntry>> loadProjectAudit({
-    required String projectId,
+      throw UnimplementedError('Space collaboration is not available');
+  Future<List<AxAuditEntry>> loadSpaceAudit({
+    required String spaceId,
   }) async =>
-      throw UnimplementedError('Project collaboration is not available');
-  Future<void> inviteProjectMember({
-    required String projectId,
+      throw UnimplementedError('Space collaboration is not available');
+  Future<void> inviteSpaceMember({
+    required String spaceId,
     required String email,
     required String role,
   }) async =>
-      throw UnimplementedError('Project collaboration is not available');
-  Future<void> changeProjectMemberRole({
-    required String projectId,
+      throw UnimplementedError('Space collaboration is not available');
+  Future<void> changeSpaceMemberRole({
+    required String spaceId,
     required String userId,
     required String role,
   }) async =>
-      throw UnimplementedError('Project collaboration is not available');
-  Future<void> removeProjectMember({
-    required String projectId,
+      throw UnimplementedError('Space collaboration is not available');
+  Future<void> removeSpaceMember({
+    required String spaceId,
     required String userId,
   }) async =>
-      throw UnimplementedError('Project collaboration is not available');
-  Future<void> expireProjectInvitation({
-    required String projectId,
+      throw UnimplementedError('Space collaboration is not available');
+  Future<void> expireSpaceInvitation({
+    required String spaceId,
     required String invitationId,
   }) async =>
-      throw UnimplementedError('Project collaboration is not available');
-  Future<List<AxProjectInvitation>> loadCurrentUserInvitations() async =>
+      throw UnimplementedError('Space collaboration is not available');
+  Future<List<AxSpaceInvitation>> loadCurrentUserInvitations() async =>
       const [];
-  Future<void> acceptProjectInvitation({
+  Future<void> acceptSpaceInvitation({
     required String invitationId,
   }) async =>
-      throw UnimplementedError('Project collaboration is not available');
-  Future<void> declineProjectInvitation({
+      throw UnimplementedError('Space collaboration is not available');
+  Future<void> declineSpaceInvitation({
     required String invitationId,
   }) async =>
-      throw UnimplementedError('Project collaboration is not available');
+      throw UnimplementedError('Space collaboration is not available');
   Future<AxAccountSecurity> loadAccountSecurity();
   Future<void> revokeAccountSession(String token);
   Future<Uri> beginAccountLink(String provider, Uri returnTo);
@@ -704,40 +704,40 @@ abstract interface class AxDataSource {
       {required String intentId});
   Future<void> denyDesktopAuthIntent({required String intentId});
   Future<List<AxWorkspace>> loadWorkspaces();
-  Future<List<AxProject>> loadProjects({bool includeArchived = false});
-  Future<AxProject> loadProject({required String projectId});
-  Future<List<Map<String, dynamic>>> loadProjectWorkspaces({
-    required String projectId,
+  Future<List<AxSpace>> loadSpaces({bool includeArchived = false});
+  Future<AxSpace> loadSpace({required String spaceId});
+  Future<List<Map<String, dynamic>>> loadSpaceWorkspaces({
+    required String spaceId,
   });
-  Future<void> requestProjectWorkspace({
-    required String projectId,
+  Future<void> requestSpaceWorkspace({
+    required String spaceId,
     required String workspaceId,
     List<String> allowedPermissions = const [],
   });
-  Future<void> updateWorkspaceProjectPermissions({
+  Future<void> updateWorkspaceSpacePermissions({
     required String grantId,
     required List<String> allowedPermissions,
   });
-  Future<void> revokeWorkspaceProjectGrant({
+  Future<void> revokeWorkspaceSpaceGrant({
     required String grantId,
   });
-  Future<List<AxWorkstream>> loadProjectWorkstreams({
-    required String projectId,
+  Future<List<AxThread>> loadSpaceThreads({
+    required String spaceId,
   });
-  Future<AxWorkstream> createWorkstream({
-    required String projectId,
+  Future<AxThread> createThread({
+    required String spaceId,
     required String name,
     String? idempotencyKey,
   });
-  Future<AxWorkstream> updateWorkstream({
-    required String workstreamId,
+  Future<AxThread> updateThread({
+    required String threadId,
     String? name,
     String? status,
     Map<String, dynamic>? workConfig,
   });
-  Future<void> deleteWorkstream({required String workstreamId});
+  Future<void> deleteThread({required String threadId});
   Future<String> createWorkRequest({
-    required String workstreamId,
+    required String threadId,
     required String workflowId,
     required String prompt,
     List<Map<String, dynamic>> attachments = const [],
@@ -746,14 +746,14 @@ abstract interface class AxDataSource {
   }) async =>
       throw UnimplementedError('Work Request execution is not available');
   Future<List<String>> validateWorkRequestEligibility({
-    required String workstreamId,
+    required String threadId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
     AxTurnExecutionSelection? executionSelection,
   }) async =>
       const [];
   Future<AxConversationHistoryPage> loadConversationHistory(
-          {required String workstreamId,
+          {required String threadId,
           required String conversationId,
           int afterSequence = 0,
           int? throughSequence,
@@ -773,20 +773,20 @@ abstract interface class AxDataSource {
     required String workRequestId,
   }) async =>
       throw UnimplementedError('Work Request cancellation is not available');
-  Future<AxWorkRequestPage> loadWorkstreamWorkRequestPage({
-    required String workstreamId,
+  Future<AxWorkRequestPage> loadThreadWorkRequestPage({
+    required String threadId,
     int limit = 50,
     String? beforeCreatedAt,
     String? beforeId,
     bool activeOnly = false,
   });
   Future<AxDiscussionPage> loadDiscussionPage(
-      {required String workstreamId,
+      {required String threadId,
       int limit = 50,
       String? before,
       String? after});
   Future<AxDiscussionMessage> sendDiscussionMessage({
-    required String workstreamId,
+    required String threadId,
     required String text,
     List<String> references = const [],
     String? idempotencyKey,
@@ -833,9 +833,8 @@ abstract interface class AxDataSource {
   });
 
   /// Application bootstrap/recovery state, never a navigation loader.
-  /// Project details and Workstreams are separate focused resource queries.
-  Future<AxSnapshot> loadBootstrapState(
-      {String? projectId, String? workspaceId});
+  /// Space details and Threads are separate focused resource queries.
+  Future<AxSnapshot> loadBootstrapState({String? spaceId, String? workspaceId});
   Future<void> controlRun(String runId, String command);
   Future<void> respondToRunPrompt(String runId, String response);
   Future<void> revokeWorkspace({required String workspaceId});

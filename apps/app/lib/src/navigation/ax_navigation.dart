@@ -1,8 +1,8 @@
 enum AxRouteKind {
   home,
-  projects,
-  project,
-  workstream,
+  spaces,
+  space,
+  thread,
   run,
   workspaces,
   profileSecurity,
@@ -14,8 +14,8 @@ enum AxRouteKind {
 class AxNavigation {
   const AxNavigation._({
     required this.kind,
-    this.projectId,
-    this.workstreamId,
+    this.spaceId,
+    this.threadId,
     this.runId,
     this.workspaceId,
     this.loginReturnTo,
@@ -25,23 +25,20 @@ class AxNavigation {
 
   const AxNavigation.home() : this._(kind: AxRouteKind.home);
 
-  const AxNavigation.projects() : this._(kind: AxRouteKind.projects);
+  const AxNavigation.spaces() : this._(kind: AxRouteKind.spaces);
 
-  const AxNavigation.project(String projectId)
-      : this._(kind: AxRouteKind.project, projectId: projectId);
+  const AxNavigation.space(String spaceId)
+      : this._(kind: AxRouteKind.space, spaceId: spaceId);
 
-  const AxNavigation.workstream(String projectId, String workstreamId)
-      : this._(
-            kind: AxRouteKind.workstream,
-            projectId: projectId,
-            workstreamId: workstreamId);
+  const AxNavigation.thread(String spaceId, String threadId)
+      : this._(kind: AxRouteKind.thread, spaceId: spaceId, threadId: threadId);
 
-  const AxNavigation.run(String projectId, String runId, {String? workstreamId})
+  const AxNavigation.run(String spaceId, String runId, {String? threadId})
       : this._(
           kind: AxRouteKind.run,
-          projectId: projectId,
+          spaceId: spaceId,
           runId: runId,
-          workstreamId: workstreamId,
+          threadId: threadId,
         );
 
   const AxNavigation.workspaces({String? workspaceId})
@@ -65,13 +62,15 @@ class AxNavigation {
             desktopAuthIntentId: intentId);
 
   final AxRouteKind kind;
-  final String? projectId;
-  final String? workstreamId;
+  final String? spaceId;
+  final String? threadId;
   final String? runId;
   final String? workspaceId;
   final String? loginReturnTo;
   final String? searchQuery;
   final String? desktopAuthIntentId;
+
+  // Convenient alias getters for backwards compatibility if needed internally
 
   factory AxNavigation.fromUri(Uri uri) {
     final segments = uri.pathSegments.where((segment) => segment.isNotEmpty);
@@ -88,7 +87,7 @@ class AxNavigation {
     if (parts case ['settings', 'profile']) {
       return const AxNavigation.profileSecurity();
     }
-    if (parts case ['projects']) return const AxNavigation.projects();
+    if (parts case ['spaces'] || ['spaces']) return const AxNavigation.spaces();
     if (parts.length == 1 && parts[0] == 'workspaces') {
       return const AxNavigation.workspaces();
     }
@@ -103,25 +102,25 @@ class AxNavigation {
     }
     if (parts
         case [
-          'projects',
-          final pId,
-          'workstreams',
-          final wsId,
+          'spaces' || 'spaces',
+          final sId,
+          'threads' || 'threads',
+          final tId,
           'runs',
           final rId
         ]) {
-      return AxNavigation.run(pId, rId, workstreamId: wsId);
+      return AxNavigation.run(sId, rId, threadId: tId);
     }
-    if (parts.length >= 4 && parts[0] == 'projects') {
-      if (parts[2] == 'workstreams') {
-        return AxNavigation.workstream(parts[1], parts[3]);
+    if (parts.length >= 4 && (parts[0] == 'spaces' || parts[0] == 'spaces')) {
+      if (parts[2] == 'threads' || parts[2] == 'threads') {
+        return AxNavigation.thread(parts[1], parts[3]);
       }
       if (parts[2] == 'runs') {
         return AxNavigation.run(parts[1], parts[3]);
       }
     }
-    if (parts.length == 2 && parts[0] == 'projects') {
-      return AxNavigation.project(parts[1]);
+    if (parts.length == 2 && (parts[0] == 'spaces' || parts[0] == 'spaces')) {
+      return AxNavigation.space(parts[1]);
     }
     return const AxNavigation.home();
   }
@@ -129,15 +128,12 @@ class AxNavigation {
   Uri toUri() {
     return switch (kind) {
       AxRouteKind.home => Uri(path: '/'),
-      AxRouteKind.projects => Uri(path: '/projects'),
-      AxRouteKind.project => Uri(path: '/projects/$projectId'),
-      AxRouteKind.workstream =>
-        Uri(path: '/projects/$projectId/workstreams/$workstreamId'),
-      AxRouteKind.run => workstreamId != null
-          ? Uri(
-              path:
-                  '/projects/$projectId/workstreams/$workstreamId/runs/$runId')
-          : Uri(path: '/projects/$projectId/runs/$runId'),
+      AxRouteKind.spaces => Uri(path: '/spaces'),
+      AxRouteKind.space => Uri(path: '/spaces/$spaceId'),
+      AxRouteKind.thread => Uri(path: '/spaces/$spaceId/threads/$threadId'),
+      AxRouteKind.run => threadId != null
+          ? Uri(path: '/spaces/$spaceId/threads/$threadId/runs/$runId')
+          : Uri(path: '/spaces/$spaceId/runs/$runId'),
       AxRouteKind.workspaces => workspaceId != null
           ? Uri(path: '/workspaces/$workspaceId')
           : Uri(path: '/workspaces'),
@@ -165,8 +161,8 @@ class AxNavigation {
   bool operator ==(Object other) =>
       other is AxNavigation &&
       other.kind == kind &&
-      other.projectId == projectId &&
-      other.workstreamId == workstreamId &&
+      other.spaceId == spaceId &&
+      other.threadId == threadId &&
       other.runId == runId &&
       other.workspaceId == workspaceId &&
       other.loginReturnTo == loginReturnTo &&
@@ -174,6 +170,6 @@ class AxNavigation {
       other.desktopAuthIntentId == desktopAuthIntentId;
 
   @override
-  int get hashCode => Object.hash(kind, projectId, workstreamId, runId,
-      workspaceId, loginReturnTo, searchQuery, desktopAuthIntentId);
+  int get hashCode => Object.hash(kind, spaceId, threadId, runId, workspaceId,
+      loginReturnTo, searchQuery, desktopAuthIntentId);
 }

@@ -110,7 +110,7 @@ the Better Auth HttpOnly session cookie and same-origin `/api` requests.
 ## Release validation
 
 Validate both execution modes after applying migrations and deploying compatible
-clients. In AX's Work composer, Chat should resume the Workstream's Chat provider
+clients. In AX's Work composer, Chat should resume the Thread's Chat provider
 conversation with read-only Profile policy and no mutation lease. Work should
 resume a separate conversation with writable policy and lease/fencing. Confirm
 that old `direct:v1` history still displays Direct and new `direct:v2` displays

@@ -3,13 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 
 const authorize = vi.fn(async () => ({
   context: { userId: "owner" },
-  projectId: "p",
+  spaceId: "p",
 }));
 vi.mock("../src/routes/handlers.js", async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  authorizeWorkstreamAccess: (...args: unknown[]) => authorize(...(args as [])),
+  authorizeThreadAccess: (...args: unknown[]) => authorize(...(args as [])),
 }));
-import { handleListDiscussionMessages } from "../src/routes/workstreams.js";
+import { handleListDiscussionMessages } from "../src/routes/threads.js";
 
 type Page = {
   schemaVersion: number;
@@ -20,9 +20,9 @@ type Page = {
 
 function fixture(count = 7) {
   const sqlite = new DatabaseSync(":memory:");
-  sqlite.exec(`CREATE TABLE discussion_messages(id TEXT PRIMARY KEY, workstream_id TEXT,
+  sqlite.exec(`CREATE TABLE discussion_messages(id TEXT PRIMARY KEY, thread_id TEXT,
     author_user_id TEXT, body TEXT, references_json TEXT, edited_at TEXT, created_at TEXT);
-    CREATE INDEX discussion_time ON discussion_messages(workstream_id, created_at);`);
+    CREATE INDEX discussion_time ON discussion_messages(thread_id, created_at);`);
   const insert = sqlite.prepare(
     "INSERT INTO discussion_messages VALUES(?, ?, 'owner', ?, '[]', NULL, ?)",
   );
@@ -55,7 +55,7 @@ function fixture(count = 7) {
   async function page(parameters = "", id = "w") {
     const response = await handleListDiscussionMessages(
       new Request(
-        `https://conclave.test/api/workstreams/${id}/discussion-messages${parameters}`,
+        `https://conclave.test/api/threads/${id}/discussion-messages${parameters}`,
       ),
       env,
       id,
@@ -141,7 +141,7 @@ describe("Discussion paging contract 1", () => {
       sqlite.close();
     }
   });
-  it("rejects invalid limits, malformed and cross-Workstream cursors", async () => {
+  it("rejects invalid limits, malformed and cross-Thread cursors", async () => {
     const { sqlite, page } = fixture();
     try {
       for (const query of [

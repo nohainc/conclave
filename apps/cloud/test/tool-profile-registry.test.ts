@@ -137,7 +137,7 @@ describe("approved logical Worker catalog projection", () => {
         engine_family: "cli",
         visibility_state: "visible",
         release_stage: "testing",
-        capabilities_json: '["text","workstream_read"]',
+        capabilities_json: '["text","thread_read"]',
         sort_order: 15,
         profile_definition_id: "claude-code",
         provider_tool_name: "claude",
@@ -159,7 +159,7 @@ describe("approved logical Worker catalog projection", () => {
         engineFamily: "cli",
         visibilityState: "visible",
         releaseStage: "testing",
-        capabilities: ["text", "workstream_read"],
+        capabilities: ["text", "thread_read"],
         sortOrder: 15,
         profileDefinitionId: "claude-code",
         providerToolName: "claude",
@@ -215,7 +215,7 @@ describe("stable Tool Profile acceptance evidence", () => {
       passive_probe: "passed",
       live_probe: "passed",
       model_selection: "not_applicable",
-      representative_workstream_write: "not_applicable",
+      representative_thread_write: "not_applicable",
       durable_session_start: "not_applicable",
       durable_session_resume: "not_applicable",
       cancellation: "passed",
@@ -449,20 +449,20 @@ describe("stable Tool Profile acceptance evidence", () => {
       }),
     ).toMatchObject(modelEvidence);
 
-    const workstreamProfile = structuredClone(profile) as ToolProfileV1;
-    (workstreamProfile.capabilities as string[]).push("workstream_write");
+    const threadProfile = structuredClone(profile) as ToolProfileV1;
+    (threadProfile.capabilities as string[]).push("thread_write");
     const applicableEvidence = {
       ...evidence,
       scenarios: {
         ...evidence.scenarios,
-        representative_workstream_write: "passed",
+        representative_thread_write: "passed",
       },
     };
     expect(
       validateToolProfileAcceptanceEvidence(applicableEvidence, {
         identity,
         payloadDigest: "a".repeat(64),
-        profile: workstreamProfile,
+        profile: threadProfile,
       }),
     ).toMatchObject(applicableEvidence);
 
@@ -491,7 +491,7 @@ describe("stable Tool Profile acceptance evidence", () => {
           ...evidence,
           scenarios: {
             ...evidence.scenarios,
-            representative_workstream_write: "passed",
+            representative_thread_write: "passed",
           },
         },
         { identity, payloadDigest: "a".repeat(64), profile },
@@ -806,7 +806,7 @@ describe("Phase 7 Profile Admin read models and operations", () => {
         passive_probe: "passed",
         live_probe: "passed",
         model_selection: "not_applicable",
-        representative_workstream_write: "not_applicable",
+        representative_thread_write: "not_applicable",
         durable_session_start: "not_applicable",
         durable_session_resume: "not_applicable",
         cancellation: "passed",
@@ -893,7 +893,7 @@ describe("Phase 7 Profile Admin read models and operations", () => {
         passive_probe: "passed",
         live_probe: "passed",
         model_selection: "not_applicable",
-        representative_workstream_write: "not_applicable",
+        representative_thread_write: "not_applicable",
         durable_session_start: "not_applicable",
         durable_session_resume: "not_applicable",
         cancellation: "passed",

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/features/projects/projects_pages.dart';
+import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/ax/ax_data.dart';
@@ -39,7 +39,7 @@ class WorkCreationSource extends AxFixtureDataSource {
   AxWorkRequestStatus details = const AxWorkRequestStatus(status: 'running');
   @override
   Future<List<String>> validateWorkRequestEligibility({
-    required String workstreamId,
+    required String threadId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
     AxTurnExecutionSelection? executionSelection,
@@ -57,8 +57,8 @@ class WorkCreationSource extends AxFixtureDataSource {
   }
 
   @override
-  Future<AxWorkRequestPage> loadWorkstreamWorkRequestPage(
-      {required String workstreamId,
+  Future<AxWorkRequestPage> loadThreadWorkRequestPage(
+      {required String threadId,
       bool activeOnly = false,
       int limit = 40,
       String? beforeCreatedAt,
@@ -94,24 +94,24 @@ void main() {
         return post.future;
       });
 
-  testWidgets('submission survives destroying and reopening the Workstream',
+  testWidgets('submission survives destroying and reopening the Thread',
       (tester) async {
     post = Completer<String>();
     await tester.binding.setSurfaceSize(const Size(900, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     Widget page() => MaterialApp(
             home: Scaffold(
-                body: WorkstreamPage(
+                body: ThreadPage(
           initialTab: 1,
-          project: const AxProject(
+          space: const AxSpace(
               id: 'P',
-              name: 'Project',
+              name: 'Space',
               branch: '',
               lastActivity: '',
               role: 'owner'),
-          workstream: const AxWorkstream(
+          thread: const AxThread(
               id: 'W',
-              projectId: 'P',
+              spaceId: 'P',
               name: 'Stream',
               lead: '',
               status: 'active',
@@ -121,7 +121,7 @@ void main() {
           dataSource: source,
           workHistoryCache: cache,
           currentUserId: 'human',
-          onBackToProject: () {},
+          onBackToSpace: () {},
           onArchive: () {},
           onRunWork: (_, __, ___, key, selection) {
             posts++;
@@ -223,7 +223,7 @@ void main() {
     await cache.refresh('W', activeOnly: true);
     await AxRealtimeCacheRouter(cache.engine).handle({
       'type': 'reconnect.required',
-      'scope': {'kind': 'workstream', 'workstreamId': 'W'}
+      'scope': {'kind': 'thread', 'threadId': 'W'}
     });
     await cache.refresh('W');
     await drain();
@@ -290,7 +290,7 @@ void main() {
     cancelNew();
   });
 
-  test('clearing or removing a Workstream during validation prevents POST',
+  test('clearing or removing a Thread during validation prevents POST',
       () async {
     for (final clearSession in [true, false]) {
       source = WorkCreationSource()..validation = Completer();
@@ -302,7 +302,7 @@ void main() {
         cache.clear();
         cache.engine.clear();
       } else {
-        cache.engine.remove(AxQueryKey(['workstream', 'W']), prefix: true);
+        cache.engine.remove(AxQueryKey(['thread', 'W']), prefix: true);
       }
       source.validation!.complete([]);
       await check;

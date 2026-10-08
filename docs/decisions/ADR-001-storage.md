@@ -16,7 +16,7 @@ Use Cloudflare D1 as the initial relational system of record and Cloudflare R2 f
 
 ## D1 stores
 - organizations/users/memberships;
-- projects;
+- spaces;
 - worker definitions, capabilities, roles, and configuration metadata;
 - workflow/verification policies;
 - goals, runs, phases, tasks, dependencies, attempts;

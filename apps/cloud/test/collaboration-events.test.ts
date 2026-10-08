@@ -9,20 +9,20 @@ import {
 } from "../src/realtime-gateway.js";
 import { parseRealtimeEvent } from "@conclave/protocol";
 import {
-  handleCreateProject,
-  handleListProjects,
-  handleGetProject,
-  handleUpdateProject,
-  handleDeleteProject,
-  handleCreateWorkstream,
-  handleUpdateWorkstream,
-  handleDeleteWorkstream,
+  handleCreateSpace,
+  handleListSpaces,
+  handleGetSpace,
+  handleUpdateSpace,
+  handleDeleteSpace,
+  handleCreateThread,
+  handleUpdateThread,
+  handleDeleteThread,
   handleCreateDiscussionMessage,
   handleEditDiscussionMessage,
   handleGetDiscussionMessage,
-  handleCreateWorkspaceProjectGrant,
-  handleUpdateWorkspaceProjectGrant,
-  handleRevokeWorkspaceProjectGrant,
+  handleCreateWorkspaceSpaceGrant,
+  handleUpdateWorkspaceSpaceGrant,
+  handleRevokeWorkspaceSpaceGrant,
 } from "../src/routes/handlers.js";
 import type { SecurityEnv } from "../src/routes/handlers.js";
 
@@ -56,7 +56,7 @@ function fixture() {
         status: "active",
       },
       workspaceId: "",
-      projectRoles: {},
+      spaceRoles: {},
       sessionId: "session",
       clientType: "web",
     }),
@@ -74,53 +74,53 @@ function fixture() {
 }
 
 describe("collaboration durable signals", () => {
-  it("project list preserves the viewer's owner and shared membership roles", async () => {
+  it("space list preserves the viewer's owner and shared membership roles", async () => {
     const f = fixture();
     try {
-      await handleCreateProject(f.request({ name: "Owned" }), f.env);
+      await handleCreateSpace(f.request({ name: "Owned" }), f.env);
       f.sqlite.exec(
-        "INSERT INTO projects(id,name,owner_user_id,created_at,updated_at) VALUES('shared','Shared','member','now','now'); INSERT INTO project_memberships(id,project_id,user_id,role,created_at,updated_at) VALUES('shared-access','shared','owner','collaborator','now','now');",
+        "INSERT INTO spaces(id,name,owner_user_id,created_at,updated_at) VALUES('shared','Shared','member','now','now'); INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at) VALUES('shared-access','shared','owner','collaborator','now','now');",
       );
-      const response = await handleListProjects(
-        new Request("https://cloud.test/api/projects"),
+      const response = await handleListSpaces(
+        new Request("https://cloud.test/api/spaces"),
         f.env,
       );
       const body = (await response.json()) as {
-        projects: { name: string; role: string }[];
+        spaces: { name: string; role: string }[];
       };
-      expect(body.projects).toEqual(
+      expect(body.spaces).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ name: "Owned", role: "owner" }),
           expect.objectContaining({ name: "Shared", role: "collaborator" }),
         ]),
       );
-      const detail = await handleGetProject(
-        new Request("https://cloud.test/api/projects/shared"),
+      const detail = await handleGetSpace(
+        new Request("https://cloud.test/api/spaces/shared"),
         f.env,
         "shared",
       );
       expect(await detail.json()).toMatchObject({
-        project: { role: "collaborator" },
+        space: { role: "collaborator" },
       });
     } finally {
       f.sqlite.close();
     }
   });
-  it("delivers a durable recipient signal without granting Project membership", async () => {
+  it("delivers a durable recipient signal without granting Space membership", async () => {
     const f = fixture();
     try {
-      const response = await handleCreateProject(
-        f.request({ name: "Private project" }),
+      const response = await handleCreateSpace(
+        f.request({ name: "Private space" }),
         f.env,
       );
-      const { project } = (await response.json()) as {
-        project: { id: string };
+      const { space } = (await response.json()) as {
+        space: { id: string };
       };
       f.deliveries.length = 0;
       await publishCollaborationEvent(
         f.env,
-        "project.updated",
-        project.id,
+        "space.updated",
+        space.id,
         "invitation",
         { additionalRecipientUserIds: ["outsider", "outsider"] },
       );
@@ -137,7 +137,7 @@ describe("collaboration durable signals", () => {
           await authorizeRealtimeScope(
             f.db as unknown as D1Database,
             "outsider",
-            { kind: "project", projectId: project.id },
+            { kind: "space", spaceId: space.id },
           )
         ).allowed,
       ).toBe(false);
@@ -166,7 +166,7 @@ describe("collaboration durable signals", () => {
       expect(
         f.sqlite
           .prepare(
-            "SELECT count(*) AS n FROM project_memberships WHERE user_id='outsider'",
+            "SELECT count(*) AS n FROM space_memberships WHERE user_id='outsider'",
           )
           .get(),
       ).toEqual({ n: 0 });
@@ -177,37 +177,33 @@ describe("collaboration durable signals", () => {
   it("publishes all collaboration CRUD signals with real authorization and no execution Workspace", async () => {
     const f = fixture();
     try {
-      const created = await handleCreateProject(
-        f.request({ name: "Project" }),
+      const created = await handleCreateSpace(
+        f.request({ name: "Space" }),
         f.env,
       );
-      const { project } = (await created.json()) as { project: { id: string } };
-      const p = project.id;
+      const { space } = (await created.json()) as { space: { id: string } };
+      const p = space.id;
       f.sqlite
         .prepare(
-          "INSERT INTO project_memberships VALUES('member-p', ?, 'member', 'collaborator', 'now', 'now')",
+          "INSERT INTO space_memberships VALUES('member-p', ?, 'member', 'collaborator', 'now', 'now')",
         )
         .run(p);
-      await handleUpdateProject(
+      await handleUpdateSpace(
         f.request({ name: "Renamed" }, "PATCH"),
         f.env,
         p,
       );
-      await handleUpdateProject(
-        f.request({ archived: true }, "PATCH"),
-        f.env,
-        p,
-      );
-      const streamResponse = await handleCreateWorkstream(
+      await handleUpdateSpace(f.request({ archived: true }, "PATCH"), f.env, p);
+      const streamResponse = await handleCreateThread(
         f.request({ name: "Stream" }),
         f.env,
         p,
       );
-      const { workstream } = (await streamResponse.json()) as {
-        workstream: { id: string };
+      const { thread } = (await streamResponse.json()) as {
+        thread: { id: string };
       };
-      const w = workstream.id;
-      await handleUpdateWorkstream(
+      const w = thread.id;
+      await handleUpdateThread(
         f.request({ name: "New Stream" }, "PATCH"),
         f.env,
         w,
@@ -234,29 +230,29 @@ describe("collaboration durable signals", () => {
         message: {
           id: message.id,
           body: "Edited text",
-          workstreamId: w,
+          threadId: w,
           references: [],
         },
       });
-      await handleDeleteWorkstream(f.request({}, "DELETE"), f.env, w);
-      await handleDeleteProject(f.request({}, "DELETE"), f.env, p);
+      await handleDeleteThread(f.request({}, "DELETE"), f.env, w);
+      await handleDeleteSpace(f.request({}, "DELETE"), f.env, p);
       const events = f.events();
       expect(events.map((row) => row.event_type)).toEqual([
-        "project.created",
-        "project.updated",
-        "project.archived",
-        "workstream.created",
-        "workstream.updated",
+        "space.created",
+        "space.updated",
+        "space.archived",
+        "thread.created",
+        "thread.updated",
         "discussion.created",
         "discussion.updated",
-        "workstream.deleted",
-        "project.deleted",
+        "thread.deleted",
+        "space.deleted",
       ]);
       expect(events.map((row) => row.sequence)).toEqual([
         1, 2, 3, 4, 5, 6, 7, 8, 9,
       ]);
       for (const row of events) {
-        expect(row.stream_kind).toBe("project");
+        expect(row.stream_kind).toBe("space");
         expect(row.stream_id).toBe(p);
         expect(row.workspace_id).toBeNull();
         expect(Object.keys(JSON.parse(String(row.payload_json)))).toEqual(
@@ -271,7 +267,7 @@ describe("collaboration durable signals", () => {
       ).toBe(0);
       expect(
         f.deliveries
-          .filter((item) => item.event.type === "project.deleted")
+          .filter((item) => item.event.type === "space.deleted")
           .map((item) => item.user)
           .sort(),
       ).toEqual(["user:member", "user:owner"]);
@@ -279,39 +275,36 @@ describe("collaboration durable signals", () => {
         false,
       );
       expect(
-        f.sqlite.prepare("SELECT COUNT(*) AS n FROM project_memberships").get()!
+        f.sqlite.prepare("SELECT COUNT(*) AS n FROM space_memberships").get()!
           .n,
       ).toBe(0);
     } finally {
       f.sqlite.close();
     }
   });
-  it("signals grant creation, editing and revocation on the Project stream", async () => {
+  it("signals grant creation, editing and revocation on the Space stream", async () => {
     const f = fixture();
     try {
-      const response = await handleCreateProject(
-        f.request({ name: "P" }),
-        f.env,
-      );
-      const { project } = (await response.json()) as {
-        project: { id: string };
+      const response = await handleCreateSpace(f.request({ name: "P" }), f.env);
+      const { space } = (await response.json()) as {
+        space: { id: string };
       };
       f.sqlite.exec(
         "INSERT INTO execution_workspaces VALUES('ws','owner','Workspace','online','now','now')",
       );
-      const granted = await handleCreateWorkspaceProjectGrant(
+      const granted = await handleCreateWorkspaceSpaceGrant(
         f.request({ allowedPermissions: ["repository:read"] }),
         f.env,
         "ws",
-        project.id,
+        space.id,
       );
       const { grant } = (await granted.json()) as { grant: { id: string } };
-      await handleUpdateWorkspaceProjectGrant(
+      await handleUpdateWorkspaceSpaceGrant(
         f.request({ status: "suspended" }, "PATCH"),
         f.env,
         grant.id,
       );
-      await handleRevokeWorkspaceProjectGrant(
+      await handleRevokeWorkspaceSpaceGrant(
         f.request({}, "DELETE"),
         f.env,
         grant.id,
@@ -320,35 +313,35 @@ describe("collaboration durable signals", () => {
         .events()
         .filter(
           (row) =>
-            row.event_type === "project_workspace_grant.updated" &&
-            row.stream_kind === "project",
+            row.event_type === "workspace_space_grant.updated" &&
+            row.stream_kind === "space",
         );
       expect(grants).toHaveLength(3);
       expect(
         grants.every(
           (row) =>
-            row.stream_kind === "project" &&
+            row.stream_kind === "space" &&
             row.workspace_id === null &&
-            row.stream_id === project.id,
+            row.stream_id === space.id,
         ),
       ).toBe(true);
     } finally {
       f.sqlite.close();
     }
   });
-  it("isolates same-named execution, Project and user streams and idempotency keys", async () => {
+  it("isolates same-named execution, Space and user streams and idempotency keys", async () => {
     const f = fixture();
     try {
       const publisher = new CloudEventPublisher({ CONCLAVE_DB: f.db });
       const input = {
-        type: "project.updated",
-        projectId: "same",
+        type: "space.updated",
+        spaceId: "same",
         payload: { entityId: "same" },
         idempotencyKey: "same-key",
       };
       const p = await publisher.publish({
         ...input,
-        stream: { kind: "project", id: "same" },
+        stream: { kind: "space", id: "same" },
       });
       const u = await publisher.publish({
         ...input,
@@ -362,7 +355,7 @@ describe("collaboration durable signals", () => {
       });
       const duplicate = await publisher.publish({
         ...input,
-        stream: { kind: "project", id: "same" },
+        stream: { kind: "space", id: "same" },
       });
       expect([
         p.event.sequence,
@@ -376,21 +369,21 @@ describe("collaboration durable signals", () => {
       const next = await publisher.publish({
         ...input,
         idempotencyKey: "next",
-        stream: { kind: "project", id: "same" },
+        stream: { kind: "space", id: "same" },
       });
       expect(next.event.sequence).toBe(2);
     } finally {
       f.sqlite.close();
     }
   });
-  it("retains Project sequence counters after expired events are pruned", async () => {
+  it("retains Space sequence counters after expired events are pruned", async () => {
     const f = fixture();
     try {
       const publisher = new CloudEventPublisher({ CONCLAVE_DB: f.db });
       const input = {
-        type: "project.updated",
-        projectId: "p",
-        stream: { kind: "project", id: "p" } as const,
+        type: "space.updated",
+        spaceId: "p",
+        stream: { kind: "space", id: "p" } as const,
         payload: { entityId: "p" },
       };
       await publisher.publish({
@@ -408,24 +401,20 @@ describe("collaboration durable signals", () => {
       f.sqlite.close();
     }
   });
-  it("denies message reads/edits without Workstream access or authorship and emits no signal", async () => {
+  it("denies message reads/edits without Thread access or authorship and emits no signal", async () => {
     const f = fixture();
     try {
-      const { project } = (await (
-        await handleCreateProject(f.request({ name: "P" }), f.env)
-      ).json()) as { project: { id: string } };
-      const { workstream } = (await (
-        await handleCreateWorkstream(
-          f.request({ name: "W" }),
-          f.env,
-          project.id,
-        )
-      ).json()) as { workstream: { id: string } };
+      const { space } = (await (
+        await handleCreateSpace(f.request({ name: "P" }), f.env)
+      ).json()) as { space: { id: string } };
+      const { thread } = (await (
+        await handleCreateThread(f.request({ name: "W" }), f.env, space.id)
+      ).json()) as { thread: { id: string } };
       const { message } = (await (
         await handleCreateDiscussionMessage(
           f.request({ body: "Private" }),
           f.env,
-          workstream.id,
+          thread.id,
         )
       ).json()) as { message: { id: string } };
       const count = f.events().length;
@@ -443,9 +432,9 @@ describe("collaboration durable signals", () => {
       ).rejects.toMatchObject({ status: 403 });
       f.sqlite
         .prepare(
-          "INSERT INTO project_memberships VALUES('member-p',?,'member','collaborator','now','now')",
+          "INSERT INTO space_memberships VALUES('member-p',?,'member','collaborator','now','now')",
         )
-        .run(project.id);
+        .run(space.id);
       Object.assign(f.env, {
         TEST_AUTHENTICATION: async () => ({ userId: "member" }),
       });
@@ -473,10 +462,10 @@ describe("collaboration durable signals", () => {
         "CREATE TRIGGER fail_realtime BEFORE INSERT ON realtime_events BEGIN SELECT RAISE(ABORT, 'test failure'); END;",
       );
       await expect(
-        handleCreateProject(f.request({ name: "P" }), f.env),
+        handleCreateSpace(f.request({ name: "P" }), f.env),
       ).rejects.toThrow("test failure");
       expect(
-        f.sqlite.prepare("SELECT COUNT(*) AS n FROM projects").get()!.n,
+        f.sqlite.prepare("SELECT COUNT(*) AS n FROM spaces").get()!.n,
       ).toBe(0);
       expect(
         f.sqlite

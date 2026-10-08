@@ -24,7 +24,7 @@ describe("v8 clean D1 schema acceptance", () => {
     expect(
       apply(`
       PRAGMA foreign_keys = OFF;
-      INSERT INTO work_requests (id, workstream_id, requested_by_user_id, mode,
+      INSERT INTO work_requests (id, thread_id, requested_by_user_id, mode,
         workflow_id, workflow_version, workflow_snapshot_json, status, created_at, updated_at)
       VALUES ('old', 'stream', 'user', 'stateful', 'direct', 1, '{"name":"Direct"}', 'completed', 'now', 'now'),
         ('chat', 'stream', 'user', 'stateless', 'chat', 1, '{"name":"Chat"}', 'queued', 'now', 'now');
@@ -54,14 +54,14 @@ describe("v8 clean D1 schema acceptance", () => {
     expect(tableNames).toEqual(
       expect.arrayContaining([
         "users",
-        "projects",
-        "project_memberships",
+        "spaces",
+        "space_memberships",
         "execution_workspaces",
-        "workspace_project_grants",
+        "workspace_space_grants",
         "workspace_releases",
         "worker_scheduling",
         "worker_scheduling_audit",
-        "workstreams",
+        "threads",
         "work_requests",
         "worker_assignments",
         "worker_catalog",
@@ -79,18 +79,18 @@ describe("v8 clean D1 schema acceptance", () => {
     expect(tableNames).not.toContain("v7_adapter_releases");
     expect(tableNames).not.toContain("ai_accounts");
     expect(tableNames).not.toContain("host_workspace_bindings");
-    expect(tableNames).not.toContain("project_account_grants");
-    expect(tableNames).not.toContain("chat_workstream_migrations");
+    expect(tableNames).not.toContain("space_account_grants");
+    expect(tableNames).not.toContain("chat_thread_migrations");
     expect(tableNames).not.toContain("workspace_worker_installations");
-    expect(tableNames).not.toContain("workstream_memberships");
+    expect(tableNames).not.toContain("thread_memberships");
     expect(tableNames).not.toContain("worker_attribution_audit_archive");
     expect(tableNames).not.toContain("run_external_executions");
-    expect(tableNames).not.toContain("workstream_execution_leases");
-    expect(tableNames).not.toContain("workstream_integrations");
-    expect(tableNames).not.toContain("workstream_audit_log");
-    expect(tableNames).not.toContain("workstream_observability_metrics");
+    expect(tableNames).not.toContain("thread_execution_leases");
+    expect(tableNames).not.toContain("thread_integrations");
+    expect(tableNames).not.toContain("thread_audit_log");
+    expect(tableNames).not.toContain("thread_observability_metrics");
     const grantColumns = apply(
-      "PRAGMA table_info(workspace_project_grants);",
+      "PRAGMA table_info(workspace_space_grants);",
     ) as {
       name: string;
     }[];
@@ -115,7 +115,7 @@ describe("v8 clean D1 schema acceptance", () => {
       )?.notnull,
     ).toBe(1);
     const policyColumns = apply(
-      "PRAGMA table_info(workstream_execution_policies);",
+      "PRAGMA table_info(thread_execution_policies);",
     ) as {
       name: string;
     }[];
@@ -148,26 +148,26 @@ describe("v8 clean D1 schema acceptance", () => {
 
   it("enforces Workspace Grant status transitions in the database", () => {
     const activeToSuspended = apply(`
-      INSERT INTO workspace_project_grants
-        (id, project_id, workspace_id, granted_by_user_id, created_at, updated_at)
-      VALUES ('grant-transition', 'project', 'workspace', 'owner', 'now', 'now');
-      UPDATE workspace_project_grants SET status = 'suspended'
+      INSERT INTO workspace_space_grants
+        (id, space_id, workspace_id, granted_by_user_id, created_at, updated_at)
+      VALUES ('grant-transition', 'space', 'workspace', 'owner', 'now', 'now');
+      UPDATE workspace_space_grants SET status = 'suspended'
         WHERE id = 'grant-transition';
-      UPDATE workspace_project_grants SET status = 'active'
+      UPDATE workspace_space_grants SET status = 'active'
         WHERE id = 'grant-transition';
-      UPDATE workspace_project_grants SET status = 'revoked'
+      UPDATE workspace_space_grants SET status = 'revoked'
         WHERE id = 'grant-transition';
-      SELECT status FROM workspace_project_grants WHERE id = 'grant-transition';
+      SELECT status FROM workspace_space_grants WHERE id = 'grant-transition';
     `) as { status: string }[];
     expect(activeToSuspended).toEqual([{ status: "revoked" }]);
     expect(() =>
       apply(`
-        INSERT INTO workspace_project_grants
-          (id, project_id, workspace_id, granted_by_user_id, created_at, updated_at)
-        VALUES ('grant-terminal', 'project', 'workspace', 'owner', 'now', 'now');
-        UPDATE workspace_project_grants SET status = 'revoked'
+        INSERT INTO workspace_space_grants
+          (id, space_id, workspace_id, granted_by_user_id, created_at, updated_at)
+        VALUES ('grant-terminal', 'space', 'workspace', 'owner', 'now', 'now');
+        UPDATE workspace_space_grants SET status = 'revoked'
           WHERE id = 'grant-terminal';
-        UPDATE workspace_project_grants SET status = 'active'
+        UPDATE workspace_space_grants SET status = 'active'
           WHERE id = 'grant-terminal';
       `),
     ).toThrow();

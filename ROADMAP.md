@@ -15,7 +15,7 @@ Conclave AX
 
 Work v1 remains the constrained, product-owned collaboration and execution model. Its Steps, built-in Workflows, bindings, snapshots, and user-visible behavior are defined by the [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md).
 
-Projects and Workstreams define collaboration. Workspaces provide machine execution. Logical Workers remain stable user-facing identities; the Engine and signed Tool Profiles implement them locally.
+Spaces and Threads define collaboration. Workspaces provide machine execution. Logical Workers remain stable user-facing identities; the Engine and signed Tool Profiles implement them locally.
 
 ## Release declaration
 

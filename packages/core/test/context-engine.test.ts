@@ -111,7 +111,7 @@ it("selects changed state, workflow progress, missed turns and late foreign repl
   expect(delta.context.workflowState).toEqual(state.workflowState);
   expect(engine.delta(input, 2, 10, "own").history).toEqual([]);
 });
-it("projects only versioned Conclave facts, never claims inside worker text", () => {
+it("spaces only versioned Conclave facts, never claims inside worker text", () => {
   expect(projectContextState(history)).toEqual(emptyContextState());
   const committed: ContextHistoryFact = {
     sequence: 3,
