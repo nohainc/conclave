@@ -1979,4 +1979,28 @@ void main() {
     expect(find.textContaining('Vitalii.'), findsOneWidget);
     expect(find.text('Your execution capacity at a glance.'), findsNothing);
   });
+
+  testWidgets(
+      'Phase 24 — Home excludes Archived Projects utility shortcuts and leaves archive management to navigation',
+      (tester) async {
+    await tester.pumpWidget(
+      scaffold(
+        HomePage(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [],
+          run: null,
+          openFindingCount: 0,
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenRun: (_, __) {},
+          onCreateProject: () {},
+        ),
+      ),
+    );
+
+    // Home must NOT render Archived Projects shortcut or button
+    expect(find.text('Archived Projects'), findsNothing);
+    expect(find.byIcon(Icons.archive_outlined), findsNothing);
+  });
 }

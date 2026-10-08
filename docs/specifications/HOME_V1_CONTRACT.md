@@ -438,6 +438,23 @@ Established Home Header
     - Hour `18..23`: `Good evening, <userName>.`
   - When neither `greeting` nor `userName` is supplied, `Home` renders cleanly as a standalone title without residual spacing or empty subtitle lines.
 
+---
+
+## Archive Management in Navigation Context & Exclusion from Home (Phase 24)
+
+Home is a focused attention and collaboration hub; it is not a miscellaneous launchpad for administrative utility buttons or secondary shortcuts.
+
+```text
+Archive Management Scope
+├── Navigation Context (App Menu / Sidebar): "Archived Projects" dialog & restore actions
+├── Project Context (Project / Workstream views): "Archive" / "Restore" actions
+└── Home: Excluded (Zero utility buttons or archive shortcuts)
+```
+
+### 1. Architectural Rules
+- **No Archive Buttons on Home:** The legacy `"Archived Projects"` button previously located beneath the title is permanently removed from Home.
+- **Dedicated Navigation Placement:** Archive discovery and project restoration live cleanly inside the global application menu (`AppMenu`) and sidebar (`AppSidebar`), or inside the Project management surface (`ProjectPage`), preserving Home purely for active attention, active execution, active workstreams, and relevant updates.
+
 
 
 

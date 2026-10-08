@@ -99,7 +99,6 @@ extension _AxAppViews on _AxAppStateMixin {
                 onOpenRun: (projectId, runId) =>
                     _navigateTo(AxNavigation.run(projectId, runId)),
                 onCreateProject: _createProject,
-                onOpenArchivedProjects: _showArchivedProjects,
                 onOpenNotifications: _showNotifications,
                 onOpenWhatsNew: () => AxWhatsNewDialog.show(
                   context,

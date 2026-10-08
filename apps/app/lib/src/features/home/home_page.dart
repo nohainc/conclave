@@ -15,7 +15,6 @@ class HomePage extends StatelessWidget {
     required this.onOpenProject,
     required this.onOpenRun,
     required this.onCreateProject,
-    this.onOpenArchivedProjects,
     this.invitations = const [],
     this.attentionItems = const [],
     this.continueWorkItems = const [],
@@ -42,7 +41,6 @@ class HomePage extends StatelessWidget {
   final ValueChanged<String> onOpenProject;
   final void Function(String projectId, String runId) onOpenRun;
   final VoidCallback onCreateProject;
-  final VoidCallback? onOpenArchivedProjects;
   final List<AxProjectInvitation> invitations;
   final List<AxHomeAttentionItem> attentionItems;
   final List<AxContinueWorkItem> continueWorkItems;
