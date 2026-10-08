@@ -1,3 +1,4 @@
+import { renameArtifacts } from "./rename-hygiene.mjs";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { forbiddenArchitecture } from "./v8-architecture-rules.mjs";
 
@@ -173,6 +174,11 @@ function* sourceFiles(directory) {
 for (const root of sourceRoots) {
   for (const path of sourceFiles(root)) {
     const source = readFileSync(path, "utf8");
+    for (const artifact of renameArtifacts(source)) {
+      failures.push(
+        `${path}:${artifact.line}: redundant operand: ${artifact.expression}`,
+      );
+    }
     for (const [label, pattern] of forbiddenArchitecture) {
       if (
         label === "Profile Lab draft class under Workspace" &&
@@ -484,6 +490,11 @@ const profileLabOrDraftPattern =
 for (const root of desktopAppLibRoots) {
   for (const path of sourceFiles(root)) {
     const source = readFileSync(path, "utf8");
+    for (const artifact of renameArtifacts(source)) {
+      failures.push(
+        `${path}:${artifact.line}: redundant operand: ${artifact.expression}`,
+      );
+    }
     const permittedDevelopmentAdapter =
       path === "apps/workspace/lib/development_tool_profiles.dart";
     const restrictedSource = permittedDevelopmentAdapter
@@ -538,6 +549,11 @@ const privateKeySigningPattern =
 for (const root of allDesktopLibRoots) {
   for (const path of sourceFiles(root)) {
     const source = readFileSync(path, "utf8");
+    for (const artifact of renameArtifacts(source)) {
+      failures.push(
+        `${path}:${artifact.line}: redundant operand: ${artifact.expression}`,
+      );
+    }
     if (privateKeySigningPattern.test(source)) {
       failures.push(
         `${path} contains signing private-key material under a desktop application library.`,

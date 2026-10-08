@@ -782,10 +782,10 @@ class AxRun {
 
   factory AxRun.fromJson(Map<String, dynamic> json) => AxRun(
         id: _string(json, 'id'),
-        spaceId: (json['spaceId'] ?? json['spaceId']) as String?,
-        spaceName: (json['spaceName'] ?? json['spaceName']) as String?,
-        threadId: (json['threadId'] ?? json['threadId']) as String?,
-        threadTitle: (json['threadTitle'] ?? json['threadTitle']) as String?,
+        spaceId: (json['spaceId']) as String?,
+        spaceName: (json['spaceName']) as String?,
+        threadId: (json['threadId']) as String?,
+        threadTitle: (json['threadTitle']) as String?,
         status: RunStatus.values.firstWhere(
           (value) => value.name == json['status'],
           orElse: () => RunStatus.running,
@@ -1440,8 +1440,8 @@ class AxHomeAttentionItem {
         title: _string(json, 'title'),
         description: json['description']?.toString(),
         subtitle: json['subtitle']?.toString(),
-        spaceId: (json['spaceId'] ?? json['spaceId'])?.toString(),
-        threadId: (json['threadId'] ?? json['threadId'])?.toString(),
+        spaceId: (json['spaceId'])?.toString(),
+        threadId: (json['threadId'])?.toString(),
         workerId: json['workerId']?.toString(),
         workspaceId: json['workspaceId']?.toString(),
         timestamp: json['createdAt'] != null

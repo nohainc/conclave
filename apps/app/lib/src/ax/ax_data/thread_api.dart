@@ -7,7 +7,7 @@ mixin _ThreadApi on _AxApiClientCore {
   }) async {
     final body = await _getJson(Uri.parse('$baseUrl/spaces/$spaceId/threads'),
         conditional: true);
-    final list = body['threads'] ?? body['threads'];
+    final list = body['threads'];
     return (list as List? ?? const [])
         .whereType<Map>()
         .map((item) => AxThread.fromJson(Map<String, dynamic>.from(item)))
@@ -44,7 +44,7 @@ mixin _ThreadApi on _AxApiClientCore {
       );
     }
     final body = jsonDecode(response.body);
-    final thread = body is Map ? (body['thread'] ?? body['thread']) : null;
+    final thread = body is Map ? (body['thread']) : null;
     if (thread is! Map) {
       throw const AxApiException('Thread creation response is malformed');
     }
@@ -83,7 +83,7 @@ mixin _ThreadApi on _AxApiClientCore {
       );
     }
     final body = jsonDecode(response.body);
-    final thread = body is Map ? (body['thread'] ?? body['thread']) : null;
+    final thread = body is Map ? (body['thread']) : null;
     if (thread is! Map) {
       throw const AxApiException('Thread update response is malformed');
     }
@@ -282,7 +282,7 @@ mixin _ThreadApi on _AxApiClientCore {
           ? AxTurnExecutionConfig.fromJson(
               Map<String, dynamic>.from(requestMap['executionConfig'] as Map))
           : null,
-      threadId: (requestMap['threadId'] ?? requestMap['threadId']) as String?,
+      threadId: (requestMap['threadId']) as String?,
       status: requestMap['status']?.toString() ?? 'unknown',
       text: resultMap['text']?.toString(),
       errorCode: body['errorCode']?.toString(),

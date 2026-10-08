@@ -79,8 +79,7 @@ class AxPersistentReadCache {
         final value = codec.encode(record);
         if (value == null) continue;
         final key = record.key.parts;
-        if (key.length == 3 &&
-            (key.first == 'thread' || key.first == 'thread')) {
+        if (key.length == 3 && (key.first == 'thread')) {
           if (!histories.contains(key[1]) && histories.length >= 20) continue;
           histories.add(key[1]);
         }

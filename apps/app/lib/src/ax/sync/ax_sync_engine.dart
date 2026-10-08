@@ -65,7 +65,7 @@ class AxSyncEngine {
 
   bool _isHistory(AxQueryKey key) =>
       key.parts.length >= 3 &&
-      (key.parts[0] == 'thread' || key.parts[0] == 'thread') &&
+      (key.parts[0] == 'thread') &&
       (key.parts[2] == 'discussion' || key.parts[2] == 'work-requests');
 
   void scheduleRetention() {

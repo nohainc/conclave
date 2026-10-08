@@ -49,6 +49,38 @@ class _ApiResponseClient extends http.BaseClient {
 }
 
 void main() {
+  test('Space and Thread API paths consume only current product envelopes',
+      () async {
+    final client = _ApiResponseClient({
+      '/api/spaces': {
+        'spaces': [
+          {'id': 'S', 'name': 'Team'}
+        ]
+      },
+      '/api/spaces/S': {
+        'space': {'id': 'S', 'name': 'Team'}
+      },
+      '/api/spaces/S/threads': {
+        'threads': [
+          {'id': 'T', 'spaceId': 'S', 'name': 'Work'}
+        ]
+      },
+    });
+    final api = AxApiClient(baseUrl: 'https://cloud.test/api', client: client);
+    expect((await api.loadSpaces()).single.id, 'S');
+    expect((await api.loadSpace(spaceId: 'S')).id, 'S');
+    expect((await api.loadSpaceThreads(spaceId: 'S')).single.id, 'T');
+    expect(client.requests,
+        ['/api/spaces', '/api/spaces/S', '/api/spaces/S/threads']);
+    final stale = AxApiClient(
+        baseUrl: 'https://cloud.test/api',
+        client: _JsonClient({
+          'project': {'id': 'S'}
+        }));
+    await expectLater(
+        stale.loadSpace(spaceId: 'S'), throwsA(isA<AxApiException>()));
+  });
+
   test('canonical history loader preserves complete text and scoped pagination',
       () async {
     final text = 'x' * 26000;

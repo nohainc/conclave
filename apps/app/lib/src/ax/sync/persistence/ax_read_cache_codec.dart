@@ -186,19 +186,17 @@ class AxReadCacheCodec {
     final key = record.key.parts;
     final value = record.data;
     Object? data;
-    if (key.length == 1 &&
-        (key.first == 'spaces' || key.first == 'spaces') &&
-        value is List<AxSpace>) {
+    if (key.length == 1 && (key.first == 'spaces') && value is List<AxSpace>) {
       data = value.where((v) => serverId(v.id)).map(space).toList();
     } else if (key.length == 2 &&
-        (key.first == 'space' || key.first == 'space') &&
+        (key.first == 'space') &&
         value is AxSpace &&
         value.id == key[1] &&
         serverId(value.id)) {
       data = space(value);
     } else if (key.length == 3 &&
-        (key.first == 'space' || key.first == 'space') &&
-        (key.last == 'threads' || key.last == 'threads') &&
+        (key.first == 'space') &&
+        (key.last == 'threads') &&
         value is List<AxThread>) {
       data = value
           .where((v) => serverId(v.id) && v.spaceId == key[1])
@@ -217,7 +215,7 @@ class AxReadCacheCodec {
         value is List<AxBuiltinWorkflow>) {
       data = value.map(workflow).toList();
     } else if (key.length == 3 &&
-        (key.first == 'thread' || key.first == 'thread') &&
+        (key.first == 'thread') &&
         key.last == 'discussion' &&
         value is AxDiscussionHistory) {
       final safe = value.messages
@@ -232,7 +230,7 @@ class AxReadCacheCodec {
         'initialLoaded': value.initialLoaded && safe.length <= 50
       };
     } else if (key.length == 3 &&
-        (key.first == 'thread' || key.first == 'thread') &&
+        (key.first == 'thread') &&
         key.last == 'work-requests' &&
         value is AxWorkHistory) {
       final safe = value.requests.where((r) => serverId(r.id)).toList();
@@ -284,8 +282,7 @@ class AxReadCacheCodec {
     bool seed<T>(AxQuery<T> query, T value) =>
         engine.seed(query, value, fetched: fetched, accessed: accessed);
     final data = record['data'];
-    if (parts.length == 1 &&
-        (parts.first == 'spaces' || parts.first == 'spaces')) {
+    if (parts.length == 1 && (parts.first == 'spaces')) {
       final values = list(data)
           .map(AxSpace.fromJson)
           .where((v) => serverId(v.id))
@@ -299,8 +296,7 @@ class AxReadCacheCodec {
                   .toList()),
           List.unmodifiable(values));
     }
-    if (parts.length == 2 &&
-        (parts.first == 'space' || parts.first == 'space')) {
+    if (parts.length == 2 && (parts.first == 'space')) {
       final value = AxSpace.fromJson(map(data));
       if (value.id != parts[1]) return false;
       return seed<AxSpace>(
@@ -308,8 +304,8 @@ class AxReadCacheCodec {
           AxSpace.fromJson(space(value)));
     }
     if (parts.length == 3 &&
-        (parts.first == 'space' || parts.first == 'space') &&
-        (parts.last == 'threads' || parts.last == 'threads')) {
+        (parts.first == 'space') &&
+        (parts.last == 'threads')) {
       final values = list(data)
           .map(AxThread.fromJson)
           .where((v) => serverId(v.id) && v.spaceId == parts[1])
@@ -335,7 +331,7 @@ class AxReadCacheCodec {
           List.unmodifiable(list(data).map(AxWorkspace.fromJson)));
     }
     if (parts.length == 3 &&
-        (parts.first == 'thread' || parts.first == 'thread') &&
+        (parts.first == 'thread') &&
         parts.last == 'discussion') {
       final value = map(data);
       final messages = list(value['messages'])
@@ -351,7 +347,7 @@ class AxReadCacheCodec {
               initialLoaded: value['initialLoaded'] == true));
     }
     if (parts.length == 3 &&
-        (parts.first == 'thread' || parts.first == 'thread') &&
+        (parts.first == 'thread') &&
         parts.last == 'work-requests') {
       final value = map(data);
       final requests = list(value['requests'])

@@ -82,7 +82,7 @@ class AxRealtimeCacheRouter {
         type.startsWith('invitation.')) {
       final affected = spaceId ?? id(payload['entityId']);
       if (affected == null) return;
-      if (type == 'space.deleted' || type == 'space.deleted') {
+      if (type == 'space.deleted') {
         spaceRemoved?.call(affected);
         engine.remove(AxQueryKey(['space', affected]), prefix: true);
         await engine.revalidateWhere((key) => key == AxQueryKey(['spaces']));

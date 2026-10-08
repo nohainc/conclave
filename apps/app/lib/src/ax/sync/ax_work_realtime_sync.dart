@@ -264,7 +264,7 @@ class AxWorkRealtimeSync {
     if (raw is! Map) return;
     final payload = Map<String, dynamic>.from(raw);
     final id = payload['workRequestId'];
-    final threadId = payload['threadId'] ?? payload['threadId'];
+    final threadId = payload['threadId'];
     if (id is! String ||
         id.isEmpty ||
         threadId is! String ||

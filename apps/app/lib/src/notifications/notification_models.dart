@@ -123,15 +123,8 @@ AxNotification? notificationFromRealtimeEvent(
   final type = event['type'];
   if (type is! String) return null;
   final kind = switch (type) {
-    'thread.needs_input' ||
-    'thread.needs_input' =>
-      AxNotificationKind.threadNeedsInput,
-    'thread.completed' ||
-    'thread.completed' =>
-      AxNotificationKind.threadCompleted,
-    'thread.failed' ||
-    'thread.grant.problem' ||
-    'thread.recovery.required' ||
+    'thread.needs_input' => AxNotificationKind.threadNeedsInput,
+    'thread.completed' => AxNotificationKind.threadCompleted,
     'thread.failed' ||
     'thread.grant.problem' ||
     'thread.recovery.required' =>
@@ -198,13 +191,9 @@ AxNotification? notificationFromRealtimeEvent(
       _optionalString(payloadMap['summary']) ??
       _optionalString(payloadMap['error']) ??
       switch (kind) {
-        AxNotificationKind.threadNeedsInput ||
         AxNotificationKind.threadNeedsInput =>
           'Your input or decision is needed in the Thread.',
-        AxNotificationKind.threadCompleted ||
-        AxNotificationKind.threadCompleted =>
-          'Thread activity has completed.',
-        AxNotificationKind.threadFailed ||
+        AxNotificationKind.threadCompleted => 'Thread activity has completed.',
         AxNotificationKind.threadFailed =>
           'Thread activity failed and needs attention.',
         AxNotificationKind.workflowRunCompleted ||
@@ -259,15 +248,9 @@ AxNotification? notificationFromRealtimeEvent(
     id: eventId,
     kind: kind,
     title: switch (kind) {
-      AxNotificationKind.threadNeedsInput ||
-      AxNotificationKind.threadNeedsInput =>
-        'Thread needs input',
-      AxNotificationKind.threadCompleted ||
-      AxNotificationKind.threadCompleted =>
-        'Thread completed',
-      AxNotificationKind.threadFailed ||
-      AxNotificationKind.threadFailed =>
-        'Thread failed',
+      AxNotificationKind.threadNeedsInput => 'Thread needs input',
+      AxNotificationKind.threadCompleted => 'Thread completed',
+      AxNotificationKind.threadFailed => 'Thread failed',
       AxNotificationKind.workflowRunCompleted ||
       AxNotificationKind.completed =>
         'Workflow Run completed',

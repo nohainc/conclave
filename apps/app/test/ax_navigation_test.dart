@@ -3,6 +3,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/navigation/ax_navigation.dart';
 
 void main() {
+  test('retired product deep links do not masquerade as renamed routes', () {
+    for (final path in [
+      '/projects/S',
+      '/projects/S/workstreams/T',
+      '/spaces/S/workstreams/T'
+    ]) {
+      expect(AxNavigation.fromUri(Uri.parse(path)).kind, AxRouteKind.home);
+    }
+    expect(AxNavigation.fromUri(Uri.parse('/spaces/S/threads/T')).toUri().path,
+        '/spaces/S/threads/T');
+  });
   test('parses and serializes space, Thread, and run deep links', () {
     final thread =
         AxNavigation.fromUri(Uri.parse('/spaces/space-1/threads/thread-2'));

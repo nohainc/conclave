@@ -5,7 +5,7 @@ mixin _SpaceApi on _AxApiClientCore {
   Future<AxSpace> loadSpace({required String spaceId}) async {
     final response = await _getJson(Uri.parse('$baseUrl/spaces/$spaceId'),
         conditional: true);
-    final value = response['space'] ?? response['space'];
+    final value = response['space'];
     if (value is! Map) {
       throw const AxApiException('Space response is malformed');
     }
@@ -49,7 +49,7 @@ mixin _SpaceApi on _AxApiClientCore {
       );
     }
     final body = jsonDecode(response.body);
-    final space = body is Map ? (body['space'] ?? body['space']) : null;
+    final space = body is Map ? (body['space']) : null;
     if (space is! Map) {
       throw const AxApiException('Space creation response is malformed');
     }
@@ -99,7 +99,7 @@ mixin _SpaceApi on _AxApiClientCore {
           statusCode: response.statusCode);
     }
     final body = jsonDecode(response.body);
-    final space = body is Map ? (body['space'] ?? body['space']) : null;
+    final space = body is Map ? (body['space']) : null;
     if (space is! Map) {
       throw const AxApiException('Space update response is malformed');
     }

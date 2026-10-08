@@ -7,7 +7,7 @@ mixin _CatalogApi on _AxApiClientCore {
       queryParameters: includeArchived ? {'archived': 'true'} : null,
     );
     final body = await _getJson(uri);
-    final list = body['spaces'] ?? body['spaces'];
+    final list = body['spaces'];
     return (list as List? ?? const [])
         .whereType<Map>()
         .map((item) => AxSpace.fromJson(Map<String, dynamic>.from(item))

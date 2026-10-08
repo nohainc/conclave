@@ -80,3 +80,72 @@ security, analytics privacy, release, accessibility, responsive and performance
 checks passed. `git diff --check` passed. Live provider behavior and migration of
 an already initialized remote environment remain separate release checks; no
 remote deployment was performed.
+
+## Follow-up review — 2026-10-08
+
+The review's duplicated fallback examples were confirmed and removed. The audit
+also removed repeated comparison/pattern alternatives from navigation, realtime
+notifications, cache retention and persisted read-cache encoding. Current API
+clients use only `spaces` / `space` and `threads` / `thread` envelopes. API and
+navigation regression tests cover the renamed paths, response identities and
+rejection of obsolete product paths/envelopes. The architecture guard additionally
+rejects redundant operands without mistaking `page.cursor ?? cursor` or
+`spaceId ?? this.spaceId` for duplicate expressions. Provider-native and Xcode
+names remain valid; no old product endpoint aliases were introduced.
+
+The GitHub CI run for `ca6464b199` completed successfully, including all eight
+validation jobs, both native macOS builds and the final acceptance gate:
+[CI evidence](https://github.com/nohainc/conclave/actions/runs/37763559782).
+This is executable evidence for the rename and CI commits, not evidence that
+production has adopted their database contract.
+
+Read-only inspection of the configured `conclave-v8-production` database found
+71 schema tables, including `projects`, `workstreams` and older runtime
+entities. The required `spaces`, `threads`, `space_memberships`,
+`space_invitations` and `workspace_space_grants` tables were absent. Applied
+migration names extend through `0016_workflow_step_runs.sql`, confirming why
+replaying edited migration files would not perform the cutover. Its foreign-key
+check returned zero violations in the existing schema; that does not establish
+compatibility with the current runtime. A copied snapshot of the existing local
+D1 store likewise had 55 schema tables with old product names and zero
+foreign-key violations. No user rows were modified, no databases were reset,
+and no database or application was deployed during this review.
+
+`scripts/space-thread-schema-preflight.mjs` now checks the inspected schema before
+production migration preparation/application. It rejects missing renamed tables/identity columns,
+retired tables/columns, mixed states and failed inspection responses. The observed
+production schema is rejected. This is a deployment prerequisite check, not a
+conversion migration and not a replacement for reviewing pending schema changes.
+
+### Required cutover before activating the renamed runtime
+
+1. Suspend writes/executions and capture a restorable D1 backup and local metadata
+   backup. Record entity IDs, row counts, memberships/invitations, history sequence
+   bounds, execution/session ownership and foreign-key consistency.
+2. Inventory the actual deployed schema, persisted JSON scope/event identifiers,
+   signed Profile placeholders, Worker versions and Durable Object migration
+   history. This environment contains older runtime entities as well as old
+   terminology; a five-table rename alone is insufficient.
+3. Rehearse an explicit data-preserving conversion against a copy of that exact
+   schema. Preserve collaboration/history/attribution and stable directory IDs;
+   reconcile older runtime entities according to the current v8 contract. Do not
+   add legacy API aliases or rewrite already-signed Profile releases.
+4. Compare counts, IDs, history revisions and foreign keys against the backup.
+   Validate grants and invitation access and execute Chat/Work and session-resume
+   acceptance against the converted copy. Verify the coordinator namespace's
+   state-preserving migration independently.
+5. Apply the reviewed conversion during a coordinated Cloud/client/Workspace
+   cutover; clear obsolete read caches, convert local markers and restart clients.
+   Run the schema preflight and post-cutover access/execution checks before
+   reopening writes. Keep the backup and rollback plan until verification passes.
+
+A production conversion is still required and has not been applied. A disposable
+environment reset is a separate, explicit choice; this review does not authorize
+or perform one. The renamed implementation must not be described as production
+migration complete until this cutover has executable evidence.
+
+Follow-up verification: the full composed `pnpm check` passed locally (699 main
+TypeScript/script tests, 16 explicit Cloud fixture tests, all Dart/Flutter suites,
+332 Workspace tests, 144 Profile Lab tests and 591 AX tests). Ten opt-in live
+provider tests were skipped. Additional schema-preflight/hygiene regression tests
+pass; the production inspection fails the cutover preflight as intended.

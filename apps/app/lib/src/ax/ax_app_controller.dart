@@ -66,9 +66,8 @@ extension _AxAppController on _AxAppStateMixin {
           authRequired = false;
           isLoading = false;
           loadError = null;
-          selectedSpaceId = navigation.spaceId ??
-              navigation.spaceId ??
-              store.spaces.items.firstOrNull?.id;
+          selectedSpaceId =
+              navigation.spaceId ?? store.spaces.items.firstOrNull?.id;
           _applySpaceNavigation();
         });
         _startRealtime();
@@ -406,7 +405,6 @@ extension _AxAppController on _AxAppStateMixin {
           type.startsWith('space.invitation.') ||
           type.startsWith('invitation.') ||
           type.startsWith('space.') ||
-          type == 'space_workspace_grant.updated' ||
           type == 'space_workspace_grant.updated') {
         await Future.wait([
           store.spaces.refresh(),

@@ -70,8 +70,6 @@ class AxNavigation {
   final String? searchQuery;
   final String? desktopAuthIntentId;
 
-  // Convenient alias getters for backwards compatibility if needed internally
-
   factory AxNavigation.fromUri(Uri uri) {
     final segments = uri.pathSegments.where((segment) => segment.isNotEmpty);
     final parts = segments.toList(growable: false);
@@ -101,25 +99,18 @@ class AxNavigation {
       return AxNavigation.search(uri.queryParameters['q']);
     }
     if (parts
-        case [
-          'spaces' || 'spaces',
-          final sId,
-          'threads' || 'threads',
-          final tId,
-          'runs',
-          final rId
-        ]) {
+        case ['spaces', final sId, 'threads', final tId, 'runs', final rId]) {
       return AxNavigation.run(sId, rId, threadId: tId);
     }
-    if (parts.length >= 4 && (parts[0] == 'spaces' || parts[0] == 'spaces')) {
-      if (parts[2] == 'threads' || parts[2] == 'threads') {
+    if (parts.length >= 4 && (parts[0] == 'spaces')) {
+      if (parts[2] == 'threads') {
         return AxNavigation.thread(parts[1], parts[3]);
       }
       if (parts[2] == 'runs') {
         return AxNavigation.run(parts[1], parts[3]);
       }
     }
-    if (parts.length == 2 && (parts[0] == 'spaces' || parts[0] == 'spaces')) {
+    if (parts.length == 2 && (parts[0] == 'spaces')) {
       return AxNavigation.space(parts[1]);
     }
     return const AxNavigation.home();
