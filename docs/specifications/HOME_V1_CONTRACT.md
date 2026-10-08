@@ -488,6 +488,31 @@ Home Card   For You     Notification   Sidebar Tree   Project
     4. Project membership queries are refreshed.
     5. The client transitions directly into the newly joined project conversation space.
 
+---
+
+## Actionable Deep-Link Destinations for Every Home Item (Phase 26)
+
+Home never displays passive information or dead-end cards without an obvious next action. Every item on Home resolves to an exact, concrete destination:
+
+```text
+Home Items & Canonical Deep-Link Destinations
+├── 1. Project Invitation   → Accept / Decline actions & direct Project entry
+├── 2. Needs Input / Review → Exact Workstream conversation context
+├── 3. Execution Failure    → Exact Workstream & Run failure inspector
+├── 4. Worker/Workspace Prob→ Exact Workspace configuration & reconnection surface
+├── 5. Running Now          → Exact active Workstream & live execution view
+├── 6. Continue Working     → Exact Workstream conversation
+├── 7. What's New           → Update detail dialog & changelog
+└── 8. AI Capability Update → Relevant Worker & model configuration
+```
+
+### 1. Architectural Rules
+- **No Dead-End Content:** If an item exists on Home, it must provide a direct primary action button or interactive target routing to its operational resolution.
+- **Context-Preserving Routing:**
+  - `onOpenWorkstream(projectId, workstreamId)` is prioritized over broad project landing pages for conversation turns, unresolved input requests, reviews, and recent work.
+  - `onOpenWorkspaces()` is directly bound to offline workspaces, worker credential faults, and AI model configurations.
+  - `onOpenUpdateDetail(update)` or `onOpenWhatsNew()` is bound to product announcements.
+
 
 
 

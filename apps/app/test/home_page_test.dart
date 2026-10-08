@@ -2003,4 +2003,143 @@ void main() {
     expect(find.text('Archived Projects'), findsNothing);
     expect(find.byIcon(Icons.archive_outlined), findsNothing);
   });
+
+  testWidgets(
+      'Phase 26 — Deep-link every Home item to its exact actionable destination',
+      (tester) async {
+    String? openedProject;
+    String? openedWorkstream;
+    var openedWorkspaces = false;
+    AxProductUpdate? openedUpdate;
+    AxAiCapabilityUpdate? openedAiUpdate;
+
+    const attentionItems = [
+      AxHomeAttentionItem(
+        id: 'att-input-1',
+        type: AxHomeAttentionType.needsInput,
+        title: 'Landing Page Approval Required',
+        description: 'Review updated copy for launch',
+        projectId: 'project-1',
+        workstreamId: 'ws-landing',
+        actionLabel: 'Review →',
+        isUnread: true,
+        isActionable: true,
+      ),
+      AxHomeAttentionItem(
+        id: 'att-ws-problem',
+        type: AxHomeAttentionType.workspaceProblem,
+        title: 'Mac Studio is offline',
+        description: 'Reconnect Workspace to resume execution',
+        actionLabel: 'Connect →',
+        isUnread: true,
+        isActionable: true,
+      ),
+    ];
+
+    const continueItems = [
+      AxContinueWorkItem(
+        projectId: 'project-1',
+        projectName: 'Alpha Project',
+        workstreamId: 'ws-landing',
+        workstreamTitle: 'Landing Page',
+        collaboratorsDisplay: 'You + ChatGPT',
+        lastMessageSnippet: 'Ready for deployment review.',
+        lastActivityDisplay: '10m ago',
+      ),
+    ];
+
+    const updates = [
+      AxProductUpdate(
+        id: 'up-1',
+        slug: 'project-invitations',
+        title: 'Project Invitations',
+        summary: 'Invite collaborators to shared projects.',
+        category: AxProductUpdateCategory.collaboration,
+        publishedAt: '2026-10-07T00:00:00Z',
+        dateDisplay: 'Oct 7',
+        status: AxProductUpdateStatus.published,
+      ),
+    ];
+
+    const aiUpdates = [
+      AxAiCapabilityUpdate(
+        id: 'ai-1',
+        workerProfileId: 'chatgpt',
+        workerDisplayName: 'ChatGPT Worker',
+        type: AxAiCapabilityUpdateType.modelAdded,
+        title: 'GPT-5 Model Available',
+        summary: 'GPT-5 is now available for your ChatGPT Worker.',
+        publishedAt: '2026-10-07T00:00:00Z',
+        dateDisplay: 'Oct 7',
+        source: AxAiCapabilityUpdateSource.editorial,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      scaffold(
+        HomePage(
+          projects: const [project],
+          workspaces: const [],
+          workers: const [
+            AxWorker(
+              id: 'w-chatgpt',
+              workspaceId: 'ws-local',
+              workspaceName: 'Local Workspace',
+              workerTypeId: 'chatgpt',
+              displayName: 'ChatGPT Worker',
+              status: 'ready',
+              readinessState: 'ready',
+              localConcurrencyLimit: 1,
+              capabilities: ['work', 'chat'],
+            ),
+          ],
+          attentionItems: attentionItems,
+          continueWorkItems: continueItems,
+          productUpdates: updates,
+          aiUpdates: aiUpdates,
+          run: null,
+          openFindingCount: 0,
+          onOpenWorkspaces: () => openedWorkspaces = true,
+          onOpenProject: (pId) => openedProject = pId,
+          onOpenWorkstream: (pId, wsId) {
+            openedProject = pId;
+            openedWorkstream = wsId;
+          },
+          onOpenRun: (_, __) {},
+          onCreateProject: () {},
+          onOpenUpdateDetail: (u) => openedUpdate = u,
+          onOpenAiUpdate: (u) => openedAiUpdate = u,
+        ),
+      ),
+    );
+
+    // 1. Needs Input -> exact Workstream deep-link
+    expect(find.text('Landing Page Approval Required'), findsOneWidget);
+    await tester.tap(find.text('Review →'));
+    expect(openedProject, 'project-1');
+    expect(openedWorkstream, 'ws-landing');
+
+    // 2. Workspace problem -> exact Workspaces deep-link
+    await tester.ensureVisible(find.text('Connect →'));
+    await tester.tap(find.text('Connect →'));
+    expect(openedWorkspaces, isTrue);
+
+    // 3. Continue Working -> exact Workstream deep-link
+    openedProject = null;
+    openedWorkstream = null;
+    await tester.ensureVisible(find.text('Continue →'));
+    await tester.tap(find.text('Continue →'));
+    expect(openedProject, 'project-1');
+    expect(openedWorkstream, 'ws-landing');
+
+    // 4. What's New -> update detail deep-link
+    await tester.ensureVisible(find.text('Learn more →'));
+    await tester.tap(find.text('Learn more →'));
+    expect(openedUpdate?.id, 'up-1');
+
+    // 5. AI Update -> Worker / Model config deep-link
+    await tester.ensureVisible(find.text('Configure →'));
+    await tester.tap(find.text('Configure →'));
+    expect(openedAiUpdate?.id, 'ai-1');
+  });
 }

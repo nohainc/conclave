@@ -30,6 +30,7 @@ class HomePage extends StatelessWidget {
     this.onOpenWhatsNew,
     this.onOpenUpdateDetail,
     this.onDismissUpdate,
+    this.onOpenAiUpdate,
   });
 
   final List<AxProject> projects;
@@ -56,6 +57,7 @@ class HomePage extends StatelessWidget {
   final VoidCallback? onOpenWhatsNew;
   final ValueChanged<AxProductUpdate>? onOpenUpdateDetail;
   final ValueChanged<AxProductUpdate>? onDismissUpdate;
+  final ValueChanged<AxAiCapabilityUpdate>? onOpenAiUpdate;
 
   /// New-user experience is active when user has zero projects.
   bool get isNewUser => projects.isEmpty;
@@ -93,6 +95,7 @@ class HomePage extends StatelessWidget {
           onOpenWhatsNew: onOpenWhatsNew,
           onOpenUpdateDetail: onOpenUpdateDetail,
           onDismissUpdate: onDismissUpdate,
+          onOpenAiUpdate: onOpenAiUpdate,
         );
 }
 
@@ -587,6 +590,7 @@ class EstablishedUserHome extends StatelessWidget {
     this.onOpenWhatsNew,
     this.onOpenUpdateDetail,
     this.onDismissUpdate,
+    this.onOpenAiUpdate,
   });
 
   final List<AxProject> projects;
@@ -612,6 +616,7 @@ class EstablishedUserHome extends StatelessWidget {
   final VoidCallback? onOpenWhatsNew;
   final ValueChanged<AxProductUpdate>? onOpenUpdateDetail;
   final ValueChanged<AxProductUpdate>? onDismissUpdate;
+  final ValueChanged<AxAiCapabilityUpdate>? onOpenAiUpdate;
 
   List<AxProductUpdate> get _effectiveProductUpdates =>
       AxProductUpdateService.getHomeUpdates(
@@ -898,7 +903,16 @@ class EstablishedUserHome extends StatelessWidget {
             Column(
               children: [
                 for (var i = 0; i < aiUpdatesToShow.length; i++) ...[
-                  _AiUpdateRow(update: aiUpdatesToShow[i]),
+                  _AiUpdateRow(
+                    update: aiUpdatesToShow[i],
+                    onOpen: () {
+                      if (onOpenAiUpdate != null) {
+                        onOpenAiUpdate!(aiUpdatesToShow[i]);
+                      } else {
+                        onOpenWorkspaces();
+                      }
+                    },
+                  ),
                   if (i < aiUpdatesToShow.length - 1)
                     Divider(
                       height: 1,
@@ -1001,12 +1015,22 @@ class AxHomeAttentionProjector {
       AxHomeAttentionAction? primary = raw.primaryAction;
       final secondary = raw.secondaryAction;
 
-      if (primary == null &&
-          raw.actionLabel != null &&
-          raw.actionLabel!.isNotEmpty) {
-        final label = raw.actionLabel!;
+      if (primary == null) {
+        final label = (raw.actionLabel != null && raw.actionLabel!.isNotEmpty)
+            ? raw.actionLabel!
+            : switch (raw.effectiveType) {
+                AxHomeAttentionType.projectInvitation => 'View →',
+                AxHomeAttentionType.needsInput ||
+                AxHomeAttentionType.approvalRequired =>
+                  'Review →',
+                AxHomeAttentionType.executionFailed => 'Inspect →',
+                AxHomeAttentionType.executionCompleted => 'Open →',
+                AxHomeAttentionType.workerProblem => 'Fix →',
+                AxHomeAttentionType.workspaceProblem => 'Connect →',
+              };
         VoidCallback action = () {};
-        if (raw.effectiveType == AxHomeAttentionType.workspaceProblem) {
+        if (raw.effectiveType == AxHomeAttentionType.workspaceProblem ||
+            raw.effectiveType == AxHomeAttentionType.workerProblem) {
           if (onOpenWorkspaces != null) {
             action = onOpenWorkspaces;
           }
@@ -1904,9 +1928,11 @@ const defaultProductUpdates = [
 class _AiUpdateRow extends StatelessWidget {
   const _AiUpdateRow({
     required this.update,
+    this.onOpen,
   });
 
   final AxAiCapabilityUpdate update;
+  final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -1988,6 +2014,18 @@ class _AiUpdateRow extends StatelessWidget {
               ],
             ),
           ),
+          if (onOpen != null) ...[
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: onOpen,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              ),
+              child: const Text('Configure →'),
+            ),
+          ],
         ],
       ),
     );
