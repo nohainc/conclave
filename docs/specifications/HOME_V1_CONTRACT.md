@@ -573,3 +573,33 @@ Normalized Notification Domain
   - Low priority: `workstreamCompleted`, `workflowRunCompleted`.
 - **Home Triage Alignment:** `AxHomeAttentionProjector` maps normalized notification events cleanly into `AxHomeAttentionItem` triage rows with semantic action CTAs (`Review →`, `Inspect →`, `Fix →`, `Connect →`, `Open →`, `View →`).
 
+---
+
+## Privacy & Authorization Enforcement on Home Aggregation (Phase 30)
+
+Home aggregation strictly respects authorization and permission boundaries across all sections and data sources.
+
+```text
+Authorization Boundary on Home Aggregation
+├── Cloud Read-Model & APIs ──► Returns only authorized Projects & Workstreams for the authenticated user
+│                                (D1 queries scoped by project_memberships; 403/404 on ungranted resources)
+│
+└── Client Aggregation Projections
+    ├── For You (AxHomeAttentionProjector) ──► Strict exclusion of items referencing revoked/non-member projects
+    ├── Running Now                         ──► Active runs for revoked/non-member projects are suppressed
+    ├── Continue Working (Recent Work)      ──► Only authorized project workstreams are ranked and rendered
+    └── AI Updates (AxAiCapabilityUpdate)   ──► Filtered strictly against accessible workspace workers & member projects
+```
+
+### 1. Privacy Guarantees
+When a user's access to a Project, Workspace, or Worker is revoked, the user must **never** see:
+- Project name
+- Workstream title
+- Worker activity & active run details
+- Conversation message snippets & previews
+- AI capability updates tied exclusively to inaccessible Workers
+
+### 2. Multi-Layer Enforcement
+- **Backend / Read-Model APIs:** Cloud endpoints (`/api/projects`, `/api/projects/:id/workstreams`, `/api/projects/:id/workstreams/:wsId/conversations`) enforce SQL membership joins and `authorizeRequest` checks before returning data. Revoked projects are never returned in listing APIs.
+- **Client Projections:** Client-side projectors (`AxHomeAttentionProjector`, `EstablishedUserHome`, `AxRecentWorkRanker`, `AxAiCapabilityUpdateService`) validate every item against the user's active authorized project set (`projects.map((p) => p.id)`). Any cached or stale item referencing an unauthorized or revoked project ID is immediately filtered out before rendering.
+

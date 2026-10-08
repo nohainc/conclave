@@ -316,7 +316,7 @@ void main() {
         subtitle: 'Project One',
         timestampDisplay: '15 min ago',
         actionLabel: 'Inspect →',
-        projectId: 'proj-1',
+        projectId: 'project-1',
       ),
       const AxHomeAttentionItem(
         id: 'worker-prob-1',
@@ -335,7 +335,7 @@ void main() {
         subtitle: 'Conclave',
         timestampDisplay: '24 min ago',
         actionLabel: 'Open',
-        projectId: 'proj-1',
+        projectId: 'project-1',
         workstreamId: 'ws-auth',
       ),
       const AxHomeAttentionItem(
@@ -411,7 +411,7 @@ void main() {
 
     // Test action navigation on attention item
     await tester.tap(find.text('Open'));
-    expect(openedProject, 'proj-1');
+    expect(openedProject, 'project-1');
     expect(openedWorkstream, 'ws-auth');
   });
 
@@ -671,7 +671,44 @@ void main() {
     ];
 
     await tester.pumpWidget(scaffold(HomePage(
-      projects: const [project],
+      projects: const [
+        AxProject(
+          id: 'proj-conclave',
+          name: 'Conclave Development',
+          branch: 'main',
+          lastActivity: 'Today',
+        ),
+        AxProject(
+          id: 'proj-web',
+          name: 'Website',
+          branch: 'main',
+          lastActivity: 'Today',
+        ),
+        AxProject(
+          id: 'proj-docs',
+          name: 'Documentation',
+          branch: 'main',
+          lastActivity: 'Today',
+        ),
+        AxProject(
+          id: 'proj-cloud',
+          name: 'Cloud Services',
+          branch: 'main',
+          lastActivity: 'Today',
+        ),
+        AxProject(
+          id: 'proj-mobile',
+          name: 'Mobile App',
+          branch: 'main',
+          lastActivity: 'Today',
+        ),
+        AxProject(
+          id: 'proj-extra',
+          name: 'Extra Project',
+          branch: 'main',
+          lastActivity: 'Today',
+        ),
+      ],
       workspaces: const [],
       workers: const [],
       invitations: const [],
@@ -1418,6 +1455,13 @@ void main() {
     String? openedProjectId;
     String? openedRunId;
 
+    const activeRunProject = AxProject(
+      id: 'proj-landing',
+      name: 'Website',
+      branch: 'main',
+      lastActivity: 'Today',
+    );
+
     const activeRun = AxRun(
       id: 'run-101',
       projectId: 'proj-landing',
@@ -1440,7 +1484,7 @@ void main() {
     await tester.pumpWidget(
       scaffold(
         EstablishedUserHome(
-          projects: const [project],
+          projects: const [activeRunProject],
           workspaces: const [],
           workers: const [],
           invitations: const [],
@@ -2328,5 +2372,151 @@ void main() {
     expect(find.text('Welcome to Conclave AX'), findsOneWidget);
     expect(find.text('Offline · Cached data'), findsOneWidget);
     expect(find.text('How Conclave AX works'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Phase 30 — Privacy and permissions: Home aggregation omits project name, workstream title, worker activity, conversation preview, and inaccessible AI updates after project access revocation',
+      (tester) async {
+    const authorizedProject = AxProject(
+      id: 'proj-auth',
+      name: 'Authorized Project',
+      branch: 'main',
+      lastActivity: 'Today',
+    );
+
+    // Attention items: one from authorized project, one from revoked project
+    final attentionItems = [
+      AxHomeAttentionItem(
+        id: 'att-auth',
+        projectId: 'proj-auth',
+        type: AxHomeAttentionType.needsInput,
+        title: 'Review Authorized Spec',
+        description: 'Input needed on authorized workstream',
+        createdAt: DateTime.parse('2026-10-08T09:00:00Z'),
+      ),
+      AxHomeAttentionItem(
+        id: 'att-revoked',
+        projectId: 'proj-revoked',
+        type: AxHomeAttentionType.approvalRequired,
+        title: 'Secret Proposal in Revoked Project',
+        description: 'Confidential preview of revoked workstream',
+        createdAt: DateTime.parse('2026-10-08T09:30:00Z'),
+      ),
+    ];
+
+    // Continue work items: one from authorized project, one from revoked project
+    const continueItems = [
+      AxContinueWorkItem(
+        projectId: 'proj-auth',
+        projectName: 'Authorized Project',
+        workstreamId: 'ws-auth',
+        workstreamTitle: 'Active Authorized Workstream',
+        collaboratorsDisplay: 'You + ChatGPT',
+        lastMessageSnippet: 'Authorized discussion snippet.',
+        lastActivityDisplay: 'Just now',
+      ),
+      AxContinueWorkItem(
+        projectId: 'proj-revoked',
+        projectName: 'Revoked Secret Project',
+        workstreamId: 'ws-revoked',
+        workstreamTitle: 'Revoked Confidential Workstream',
+        collaboratorsDisplay: 'Alice + Claude',
+        lastMessageSnippet: 'Revoked confidential message preview.',
+        lastActivityDisplay: '10 min ago',
+      ),
+    ];
+
+    // Running now: tied to revoked project
+    const revokedRun = AxRun(
+      id: 'run-revoked',
+      projectId: 'proj-revoked',
+      projectName: 'Revoked Secret Project',
+      workstreamTitle: 'Revoked Confidential Workstream',
+      objective: 'Execute confidential task in revoked project',
+      workerName: 'Secret Worker',
+      status: RunStatus.running,
+      taskCount: 1,
+      completedTaskCount: 0,
+      openFindingCount: 0,
+      verifiedCriterionCount: 0,
+      criterionCount: 1,
+    );
+
+    // AI Updates: one accessible (ChatGPT), one inaccessible (Ollama only available in revoked project)
+    const aiUpdates = [
+      AxAiCapabilityUpdate(
+        id: 'ai-chatgpt',
+        workerProfileId: 'chatgpt',
+        provider: 'openai',
+        type: AxAiCapabilityUpdateType.modelAdded,
+        title: 'ChatGPT 4.5 Turbo Enabled',
+        summary: 'New ChatGPT model is available for your projects.',
+        publishedAt: '2026-10-08T00:00:00Z',
+      ),
+      AxAiCapabilityUpdate(
+        id: 'ai-ollama',
+        workerProfileId: 'ollama',
+        provider: 'ollama',
+        type: AxAiCapabilityUpdateType.modelAdded,
+        title: 'Llama 3.3 Available for Private Server',
+        summary: 'Local models updated for inaccessible cluster.',
+        publishedAt: '2026-10-08T00:00:00Z',
+      ),
+    ];
+
+    // Workspace worker only supports ChatGPT
+    const localWorker = AxWorker(
+      id: 'w-chatgpt',
+      workspaceId: 'ws-1',
+      workspaceName: 'Local Workspace',
+      workerTypeId: 'chatgpt',
+      displayName: 'ChatGPT Worker',
+      status: 'ready',
+      readinessState: 'ready',
+      localConcurrencyLimit: 1,
+      capabilities: ['code'],
+    );
+
+    await tester.pumpWidget(
+      scaffold(
+        HomePage(
+          projects: const [authorizedProject],
+          workspaces: const [],
+          workers: const [localWorker],
+          attentionItems: attentionItems,
+          continueWorkItems: continueItems,
+          aiUpdates: aiUpdates,
+          run: revokedRun,
+          openFindingCount: 0,
+          onOpenWorkspaces: () {},
+          onOpenProject: (_) {},
+          onOpenRun: (_, __) {},
+          onCreateProject: () {},
+        ),
+      ),
+    );
+
+    // 1. Authorized resources MUST render
+    expect(find.text('AUTHORIZED PROJECT'), findsOneWidget);
+    expect(find.text('Active Authorized Workstream'), findsOneWidget);
+    expect(find.text('"Authorized discussion snippet."'), findsOneWidget);
+    expect(find.text('Review Authorized Spec'), findsOneWidget);
+    expect(find.text('ChatGPT 4.5 Turbo Enabled'), findsOneWidget);
+
+    // 2. Revoked project resources MUST NEVER appear on Home
+    expect(find.text('AUTHORIZED PROJECT'), findsOneWidget);
+    expect(find.text('REVOKED SECRET PROJECT'), findsNothing);
+    expect(find.text('Revoked Secret Project'), findsNothing);
+    expect(find.text('Revoked Confidential Workstream'), findsNothing);
+    expect(find.text('Revoked confidential message preview.'), findsNothing);
+    expect(find.text('Secret Proposal in Revoked Project'), findsNothing);
+    expect(
+        find.text('Confidential preview of revoked workstream'), findsNothing);
+    expect(find.text('Execute confidential task in revoked project'),
+        findsNothing);
+    expect(find.text('Running now'), findsNothing);
+
+    // 3. AI Update tied to inaccessible worker MUST NEVER appear
+    expect(find.text('Llama 3.3 Available for Private Server'), findsNothing);
   });
 }

@@ -733,13 +733,20 @@ class EstablishedUserHome extends StatelessWidget {
       effectiveAttentionItems = const [];
     }
     final hasAttentionItems = effectiveAttentionItems.isNotEmpty;
-    final isRunningNow = run != null && run!.isRunning;
+    final authorizedProjectIds = projects.map((p) => p.id).toSet();
+    final isRunAuthorized = run != null &&
+        (run!.projectId == null ||
+            run!.projectId!.isEmpty ||
+            authorizedProjectIds.contains(run!.projectId));
+    final isRunningNow = isRunAuthorized && run!.isRunning;
     List<AxContinueWorkItem> effectiveRecentWork;
     try {
       effectiveRecentWork = AxRecentWorkRanker.rank(
-        continueWorkItems.isNotEmpty
+        (continueWorkItems.isNotEmpty
             ? continueWorkItems
-            : _deriveDefaultContinueWorkItems(projects),
+                .where((item) => authorizedProjectIds.contains(item.projectId))
+                .toList()
+            : _deriveDefaultContinueWorkItems(projects)),
         limit: 5,
       );
     } catch (_) {
@@ -1069,6 +1076,9 @@ class AxHomeAttentionProjector {
     VoidCallback? onOpenWorkspaces,
   }) {
     final list = <AxHomeAttentionItem>[];
+    final authorizedProjectIds = projects.map((p) => p.id).toSet();
+    final pendingInvitationProjectIds =
+        invitations.map((i) => i.projectId).toSet();
 
     // 1. Invitations
     for (final inv in invitations) {
@@ -1111,6 +1121,13 @@ class AxHomeAttentionProjector {
 
     // 2. Attention items (derive action closures if not already set)
     for (final raw in rawAttentionItems) {
+      if (raw.projectId != null &&
+          !authorizedProjectIds.contains(raw.projectId) &&
+          !pendingInvitationProjectIds.contains(raw.projectId)) {
+        // Enforce privacy and authorization boundary: never surface attention items
+        // referencing revoked, non-member, or unauthorized projects.
+        continue;
+      }
       AxHomeAttentionAction? primary = raw.primaryAction;
       final secondary = raw.secondaryAction;
 
