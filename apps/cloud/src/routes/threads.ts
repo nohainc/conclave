@@ -17,7 +17,6 @@ import {
   authorizeRequest,
   authorizeThreadAccess,
   discussionReferences,
-  findUnapprovedThreadWorkerIds,
   json,
   normalizeThreadWorkConfig,
   parseJson,
@@ -231,106 +230,8 @@ export async function handleUpdateThread(
   }
   const rawWorkConfig = body.workConfig;
   let workConfig: Record<string, unknown> | undefined;
-  const schedulableWorkerIds = new Set<string>();
-  if (rawWorkConfig !== undefined) {
-    const normalized = normalizeThreadWorkConfig(rawWorkConfig);
-    workConfig = normalized.config;
-    if (normalized.workerIds.length > 0) {
-      const placeholders = normalized.workerIds
-        .map((_, index) => `?${index + 1}`)
-        .join(", ");
-      const knownWorkers = await env.CONCLAVE_DB.prepare(
-        `SELECT i.worker_id, catalog.display_name, ew.name AS workspace_name
-           FROM workspace_worker_inventory i
-           JOIN execution_workspaces ew ON ew.id = i.workspace_id
-           LEFT JOIN worker_catalog catalog
-             ON catalog.worker_type_id = i.worker_type_id
-          WHERE i.worker_id IN (${placeholders})`,
-      )
-        .bind(...normalized.workerIds)
-        .all<{
-          worker_id: string;
-          display_name: string | null;
-          workspace_name: string;
-        }>();
-      const labelsByWorkerId = new Map(
-        (knownWorkers.results ?? []).map((worker) => [
-          worker.worker_id,
-          {
-            displayName: worker.display_name ?? worker.worker_id,
-            workspaceName: worker.workspace_name,
-          },
-        ]),
-      );
-      const bindings = workConfig.bindings as Record<
-        string,
-        Record<string, unknown>
-      >;
-      for (const binding of Object.values(bindings)) {
-        if (!binding || typeof binding !== "object") continue;
-        if (
-          typeof binding.workerId === "string" &&
-          binding.workerLabel === undefined
-        ) {
-          const label = labelsByWorkerId.get(binding.workerId);
-          if (label) binding.workerLabel = label;
-        }
-        if (
-          typeof binding.fallbackWorkerId === "string" &&
-          binding.fallbackWorkerLabel === undefined
-        ) {
-          const label = labelsByWorkerId.get(binding.fallbackWorkerId);
-          if (label) binding.fallbackWorkerLabel = label;
-        }
-      }
-      const grants = await env.CONCLAVE_DB.prepare(
-        `SELECT i.worker_id FROM workspace_worker_inventory i
-         JOIN workspace_space_grants g ON g.workspace_id = i.workspace_id
-         WHERE g.space_id = ?1 AND g.status = 'active'
-           AND (g.expires_at IS NULL OR g.expires_at > ?2)`,
-      )
-        .bind(thread.spaceId, new Date().toISOString())
-        .all<{ worker_id: string }>();
-      const eligibleIds = new Set(
-        (grants.results ?? []).map((row) => row.worker_id),
-      );
-      for (const workerId of eligibleIds) schedulableWorkerIds.add(workerId);
-      const previousConfigRow = await env.CONCLAVE_DB.prepare(
-        "SELECT config_json FROM thread_work_configs WHERE thread_id = ?1",
-      )
-        .bind(threadId)
-        .first<{ config_json: string }>();
-      const previouslyBoundIds = new Set<string>();
-      if (previousConfigRow?.config_json) {
-        try {
-          const previousConfig = JSON.parse(previousConfigRow.config_json) as {
-            bindings?: Record<string, Record<string, unknown>>;
-          };
-          for (const binding of Object.values(previousConfig.bindings ?? {})) {
-            if (!binding || typeof binding !== "object") continue;
-            if (typeof binding.workerId === "string")
-              previouslyBoundIds.add(binding.workerId);
-            if (typeof binding.fallbackWorkerId === "string")
-              previouslyBoundIds.add(binding.fallbackWorkerId);
-          }
-        } catch {
-          // A malformed old config must not authorize new Worker references.
-        }
-      }
-      if (
-        findUnapprovedThreadWorkerIds(
-          normalized.workerIds,
-          eligibleIds,
-          previouslyBoundIds,
-        ).length > 0
-      ) {
-        throw new HttpError(
-          409,
-          "Selected Workers must belong to a Workspace with an active Space grant",
-        );
-      }
-    }
-  }
+  if (rawWorkConfig !== undefined)
+    workConfig = normalizeThreadWorkConfig(rawWorkConfig).config;
   if (name.trim().toLowerCase() !== thread.name.trim().toLowerCase()) {
     const duplicate = await env.CONCLAVE_DB.prepare(
       `SELECT id FROM threads
@@ -366,36 +267,6 @@ export async function handleUpdateThread(
          updated_by_user_id = excluded.updated_by_user_id, updated_at = excluded.updated_at`,
       ).bind(threadId, JSON.stringify(workConfig), context.userId, now),
     );
-    const bindings = workConfig.bindings as Record<
-      string,
-      Record<string, unknown>
-    >;
-    const selectedWorkerIds = new Set<string>();
-    for (const binding of Object.values(bindings)) {
-      if (typeof binding.workerId === "string")
-        selectedWorkerIds.add(binding.workerId);
-      if (typeof binding.fallbackWorkerId === "string")
-        selectedWorkerIds.add(binding.fallbackWorkerId);
-    }
-    for (const workerId of selectedWorkerIds) {
-      if (!schedulableWorkerIds.has(workerId)) continue;
-      mutations.push(
-        env.CONCLAVE_DB.prepare(
-          `INSERT INTO worker_scheduling (worker_id, state, updated_by_user_id, updated_at)
-         VALUES (?1, 'enabled', ?2, ?3)
-         ON CONFLICT(worker_id) DO UPDATE SET state = 'enabled',
-           updated_by_user_id = excluded.updated_by_user_id, updated_at = excluded.updated_at,
-           drain_requested_by_user_id = NULL, drain_requested_at = NULL, drain_completed_at = NULL`,
-        ).bind(workerId, context.userId, now),
-      );
-      mutations.push(
-        env.CONCLAVE_DB.prepare(
-          `INSERT INTO worker_scheduling_audit
-           (id, worker_id, actor_user_id, action, requested_at, completed_at)
-         VALUES (?1, ?2, ?3, 'enabled', ?4, ?4)`,
-        ).bind(crypto.randomUUID(), workerId, context.userId, now),
-      );
-    }
   }
   const savedWorkConfigJson =
     workConfig === undefined

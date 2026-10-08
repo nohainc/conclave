@@ -18,6 +18,20 @@ describe("realtime event contract", () => {
     payload: { entityId: "run-1", status: "completed", summary: "Done" },
   };
 
+  it("preserves the acceptance submission correlation ID", () => {
+    const accepted = {
+      ...event,
+      type: "work_request.created",
+      payload: {
+        workRequestId: "request",
+        threadId: "thread",
+        submissionId: "opaque-submission",
+        status: "queued",
+      },
+    };
+    expect(parseRealtimeEvent(accepted)).toEqual(accepted);
+  });
+
   it("accepts current durable and ephemeral events", () => {
     expect(parseRealtimeEvent(JSON.stringify(event))).toEqual(event);
     expect(isDurableRealtimeEventType("run.completed")).toBe(true);

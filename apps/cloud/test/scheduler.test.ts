@@ -97,7 +97,15 @@ function db(
             return {
               workflowId: "direct",
               requesterUserId: "user-a",
-              threadId: lease?.threadId,
+              threadId:
+                lease?.threadId ??
+                (rows.some((row) =>
+                  String(row.work_request_snapshot_json).includes(
+                    "resolvedBindings",
+                  ),
+                )
+                  ? "thread-a"
+                  : undefined),
             } as T;
           if (query.includes("thread_runtime_leases")) return lease as T;
           if (query.includes("FROM threads ws")) return thread as T;
@@ -197,11 +205,11 @@ describe("Space execution scheduler", () => {
     ).resolves.toBeNull();
   });
 
-  it("uses the AX Step binding for Worker and model", async () => {
+  it("uses the accepted Step snapshot for Worker and model", async () => {
     const configured = candidate({
-      thread_work_config_json: JSON.stringify({
+      work_request_snapshot_json: JSON.stringify({
         defaultWorkflowId: "full_cycle",
-        bindings: {
+        resolvedBindings: {
           implement: {
             workerId: "worker-a",
             model: "gpt-5.6-codex",
@@ -215,6 +223,7 @@ describe("Space execution scheduler", () => {
       role: "Implementer",
       capabilities: ["repository"],
       threadId: "thread-a",
+      workRequestId: "request-a",
       workBindingId: "implement" as const,
     });
     expect(result).toMatchObject({
@@ -255,6 +264,7 @@ describe("Space execution scheduler", () => {
         role: "implementer",
         capabilities: ["repository"],
         threadId: "thread-a",
+        workRequestId: "request-a",
         workBindingId: "implement",
       },
     );
@@ -268,9 +278,11 @@ describe("Space execution scheduler", () => {
       profile_definition_id: "dynamic-test-cli",
       current_profile_definition_id: "dynamic-test-cli",
       provider_tool_name: "Fixture CLI",
-      thread_work_config_json: JSON.stringify({
+      work_request_snapshot_json: JSON.stringify({
         defaultWorkflowId: "direct",
-        bindings: { implement: { workerId: "workspace-worker-dynamic" } },
+        resolvedBindings: {
+          implement: { workerId: "workspace-worker-dynamic" },
+        },
       }),
     });
 
@@ -280,6 +292,7 @@ describe("Space execution scheduler", () => {
       role: "implementer",
       capabilities: ["repository"],
       threadId: "thread-a",
+      workRequestId: "request-a",
       workBindingId: "implement",
     });
 
@@ -299,9 +312,11 @@ describe("Space execution scheduler", () => {
       profile_definition_id: "dynamic-test-cli",
       current_profile_definition_id: "dynamic-test-cli",
       provider_tool_name: "Fixture CLI",
-      thread_work_config_json: JSON.stringify({
+      work_request_snapshot_json: JSON.stringify({
         defaultWorkflowId: "direct",
-        bindings: { implement: { workerId: "workspace-worker-dynamic" } },
+        resolvedBindings: {
+          implement: { workerId: "workspace-worker-dynamic" },
+        },
       }),
     });
 
@@ -311,6 +326,7 @@ describe("Space execution scheduler", () => {
       role: "implementer",
       capabilities: ["repository"],
       threadId: "thread-a",
+      workRequestId: "request-a",
       workBindingId: "implement",
     });
 
@@ -324,6 +340,7 @@ describe("Space execution scheduler", () => {
       role: "reviewer",
       capabilities: ["repository"],
       threadId: "thread-a",
+      workRequestId: "request-a",
       workBindingId: "verify",
     });
     expect(result).toBeNull();
@@ -346,9 +363,9 @@ describe("Space execution scheduler", () => {
   it("treats Thread Worker Type policy as product IDs", async () => {
     const configured = {
       ...candidate(),
-      thread_work_config_json: JSON.stringify({
+      work_request_snapshot_json: JSON.stringify({
         defaultWorkflowId: "full_cycle",
-        bindings: { implement: { workerId: "worker-a" } },
+        resolvedBindings: { implement: { workerId: "worker-a" } },
       }),
     };
     const request = {
@@ -357,6 +374,7 @@ describe("Space execution scheduler", () => {
       role: "implementer",
       capabilities: ["repository"],
       threadId: "thread-a",
+      workRequestId: "request-a",
       workBindingId: "implement" as const,
     };
     const legacyPackageIdPolicy = await selectSpaceExecutionTarget(
@@ -737,63 +755,75 @@ describe("Space execution scheduler", () => {
   });
 });
 
-it("refuses silently replacing an accepted turn Profile release", async () => {
-  const target = await selectSpaceExecutionTarget(
-    db([
-      candidate({
-        work_request_snapshot_json: JSON.stringify({
-          turnExecutionConfig: {
-            schemaVersion: 1,
-            workerId: "worker-a",
-            profileId: "chatgpt-codex",
-            profileReleaseVersion: 2,
-            modelId: null,
-            effort: null,
-          },
+it.each(["turn", "step"])(
+  "refuses silently replacing an accepted %s Profile release",
+  async (kind) => {
+    const target = await selectSpaceExecutionTarget(
+      db([
+        candidate({
+          work_request_snapshot_json: JSON.stringify({
+            ...((config: object) =>
+              kind === "step"
+                ? { stepExecutionConfigs: { collaborator: config } }
+                : { turnExecutionConfig: config })({
+              schemaVersion: 1,
+              workerId: "worker-a",
+              profileId: "chatgpt-codex",
+              profileReleaseVersion: 2,
+              modelId: null,
+              effort: null,
+            }),
+          }),
         }),
-      }),
-    ]),
-    {
-      spaceId: "space-a",
-      requesterUserId: "user-a",
-      role: "collaborator",
-      capabilities: ["repository"],
-      workRequestId: "request-a",
-    },
-  );
-  expect(target).toBeNull();
-});
+      ]),
+      {
+        spaceId: "space-a",
+        requesterUserId: "user-a",
+        role: "collaborator",
+        capabilities: ["repository"],
+        workRequestId: "request-a",
+      },
+    );
+    expect(target).toBeNull();
+  },
+);
 
-it("dispatches accepted Default model and effort even when later defaults differ", async () => {
-  const target = await selectSpaceExecutionTarget(
-    db([
-      candidate({
-        work_request_snapshot_json: JSON.stringify({
-          turnExecutionConfig: {
-            schemaVersion: 1,
-            workerId: "worker-a",
-            profileId: "chatgpt-codex",
-            profileReleaseVersion: 3,
-            modelId: null,
-            effort: null,
-          },
+it.each(["turn", "step"])(
+  "dispatches accepted %s Default model and effort even when later defaults differ",
+  async (kind) => {
+    const target = await selectSpaceExecutionTarget(
+      db([
+        candidate({
+          work_request_snapshot_json: JSON.stringify({
+            ...((config: object) =>
+              kind === "step"
+                ? { stepExecutionConfigs: { collaborator: config } }
+                : { turnExecutionConfig: config })({
+              schemaVersion: 1,
+              workerId: "worker-a",
+              profileId: "chatgpt-codex",
+              profileReleaseVersion: 3,
+              modelId: null,
+              effort: null,
+            }),
+          }),
         }),
-      }),
-    ]),
-    {
-      spaceId: "space-a",
-      requesterUserId: "user-a",
-      role: "collaborator",
-      capabilities: ["repository"],
-      workRequestId: "request-a",
-      model: "later-model",
-      reasoningEffort: "high",
-    },
-  );
-  expect(target).not.toBeNull();
-  expect(target!.model).toBeNull();
-  expect(target!.reasoningEffort).toBeNull();
-});
+      ]),
+      {
+        spaceId: "space-a",
+        requesterUserId: "user-a",
+        role: "collaborator",
+        capabilities: ["repository"],
+        workRequestId: "request-a",
+        model: "later-model",
+        reasoningEffort: "high",
+      },
+    );
+    expect(target).not.toBeNull();
+    expect(target!.model).toBeNull();
+    expect(target!.reasoningEffort).toBeNull();
+  },
+);
 
 it("rechecks granular rights and the Space Work switch at dispatch", async () => {
   const request = {

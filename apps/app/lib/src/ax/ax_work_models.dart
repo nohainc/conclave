@@ -1,28 +1,5 @@
 import 'ax_models.dart';
 
-class AxTurnExecutionSelection {
-  const AxTurnExecutionSelection(
-      {required this.workerId,
-      required this.workflowVersion,
-      this.profileId,
-      this.profileReleaseVersion,
-      this.modelId,
-      this.effort});
-  final String workerId;
-  final int workflowVersion;
-  final String? profileId;
-  final int? profileReleaseVersion;
-  final String? modelId;
-  final String? effort;
-  Map<String, dynamic> toJson() => {
-        'workerId': workerId,
-        'profileId': profileId,
-        'profileReleaseVersion': profileReleaseVersion,
-        'modelId': modelId,
-        'effort': effort,
-      };
-}
-
 class AxTurnExecutionConfig {
   AxTurnExecutionConfig.fromJson(Map<String, dynamic> json)
       : schemaVersion = json['schemaVersion'] as int,
@@ -54,10 +31,15 @@ class AxTurnExecutionConfig {
 }
 
 class AxWorkflowStepRun {
+  final AxTurnExecutionConfig? executionConfig;
   AxWorkflowStepRun.fromJson(Map<String, dynamic> json)
       : schemaVersion = json['schemaVersion'] as int,
         id = json['id'] as String,
         workflowRunId = json['workflowRunId'] as String,
+        executionConfig = json['executionConfig'] is Map
+            ? AxTurnExecutionConfig.fromJson(
+                Map<String, dynamic>.from(json['executionConfig'] as Map))
+            : null,
         taskId = json['taskId'] as String,
         stepId = json['stepId'] as String,
         role = json['role'] as String,
@@ -86,6 +68,8 @@ class AxWorkflowStepRun {
         'schemaVersion': schemaVersion,
         'id': id,
         'workflowRunId': workflowRunId,
+        if (executionConfig != null)
+          'executionConfig': executionConfig!.toJson(),
         'taskId': taskId,
         'stepId': stepId,
         'role': role,
@@ -103,8 +87,15 @@ class AxWorkflowStepRun {
 }
 
 class AxWorkflowRun {
+  final Map<String, AxTurnExecutionConfig> executionConfigs;
   AxWorkflowRun.fromJson(Map<String, dynamic> json)
-      : schemaVersion = json['schemaVersion'] as int,
+      : executionConfigs = Map.unmodifiable(
+            (json['executionConfigs'] as Map? ?? const {}).map((key, value) =>
+                MapEntry(
+                    key.toString(),
+                    AxTurnExecutionConfig.fromJson(
+                        Map<String, dynamic>.from(value as Map))))),
+        schemaVersion = json['schemaVersion'] as int,
         id = json['id'] as String,
         conversationId = json['conversationId'] as String,
         userMessageId = json['userMessageId'] as String,
@@ -152,6 +143,9 @@ class AxWorkflowRun {
         'triggerMessageId': triggerMessageId,
         'startedAt': startedAt,
         'completedAt': completedAt,
+        if (executionConfigs.isNotEmpty)
+          'executionConfigs': executionConfigs
+              .map((key, value) => MapEntry(key, value.toJson())),
         'stepRuns': stepRuns.map((step) => step.toJson()).toList(),
         'runtimeRunIds': runtimeRunIds,
         'workerTurnIds': workerTurnIds,
@@ -763,14 +757,12 @@ abstract interface class AxDataSource {
     required String prompt,
     List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
-    AxTurnExecutionSelection? executionSelection,
   }) async =>
       throw UnimplementedError('Work Request execution is not available');
   Future<List<String>> validateWorkRequestEligibility({
     required String threadId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
-    AxTurnExecutionSelection? executionSelection,
   }) async =>
       const [];
   Future<AxConversationHistoryPage> loadConversationHistory(

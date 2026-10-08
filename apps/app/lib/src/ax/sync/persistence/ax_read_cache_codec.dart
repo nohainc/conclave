@@ -149,14 +149,7 @@ class AxReadCacheCodec {
             for (final item in (value['bindings'] as Map).entries)
               if (item.key is String && item.value is Map)
                 item.key as String: {
-                  for (final field in [
-                    'workerId',
-                    'workerLabel',
-                    'model',
-                    'fallbackWorkerId',
-                    'fallbackWorkerLabel',
-                    'additionalInstructions'
-                  ])
+                  for (final field in ['additionalInstructions'])
                     if (item.value[field] is String) field: item.value[field],
                 },
           },

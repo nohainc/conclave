@@ -308,6 +308,20 @@ class AppSidebar extends StatelessWidget {
 
             const SizedBox(height: 6),
 
+            _navItem(
+              icon: Icons.account_tree_outlined,
+              label: 'Workflows',
+              target: const AxNavigation.workflows(),
+              context: sidebarContext,
+            ),
+            _navItem(
+              icon: Icons.computer_outlined,
+              label: 'Workspaces',
+              target: const AxNavigation.workspaces(),
+              context: sidebarContext,
+            ),
+            const SizedBox(height: 6),
+
             // Bottom Profile Button + ⋯ Global Application Menu
             Row(
               children: [
@@ -756,6 +770,18 @@ class AppIconRail extends StatelessWidget {
               ])),
 
           const Spacer(),
+
+          _railIconButton(
+            icon: Icons.account_tree_outlined,
+            tooltip: 'Workflows',
+            onPressed: () => onNavigateTo(const AxNavigation.workflows()),
+          ),
+          _railIconButton(
+            icon: Icons.computer_outlined,
+            tooltip: 'Workspaces',
+            onPressed: () => onNavigateTo(const AxNavigation.workspaces()),
+          ),
+          const SizedBox(height: 8),
 
           // Application menu icon above user avatar
           GlobalAppMenu(

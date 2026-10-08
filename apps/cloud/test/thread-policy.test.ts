@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   eligibilityMessage,
-  findUnapprovedThreadWorkerIds,
   inputCapabilityMessage,
   normalizeThreadWorkConfig,
 } from "../src/routes/thread-policy.js";
@@ -57,113 +56,45 @@ describe("catalog-backed Worker validation messages", () => {
   });
 });
 
-describe("Thread Worker label snapshots", () => {
-  it("admits an independent Chat default and binding", () => {
-    const normalized = normalizeThreadWorkConfig({
-      defaultWorkflowId: "chat",
-      bindings: {
-        chat: { workerId: "dynamic-chat-worker", model: "chat-model" },
-        direct: { workerId: "dynamic-work-worker", model: "work-model" },
-      },
-    });
-    expect(normalized.config.defaultWorkflowId).toBe("chat");
-    expect(normalized.config.bindings).toMatchObject({
-      chat: { workerId: "dynamic-chat-worker", model: "chat-model" },
-      direct: { workerId: "dynamic-work-worker", model: "work-model" },
-    });
-    expect(normalized.workerIds).toEqual([
-      "dynamic-chat-worker",
-      "dynamic-work-worker",
-    ]);
-  });
-  it("preserves bounded primary and fallback labels without changing identities", () => {
-    const normalized = normalizeThreadWorkConfig({
-      defaultWorkflowId: "full_cycle",
-      bindings: {
-        implement: {
-          workerId: "worker-primary",
-          workerLabel: {
-            displayName: " Claude ",
-            workspaceName: " Vitalii's MacBook Pro ",
-          },
-          fallbackWorkerId: "worker-fallback",
-          fallbackWorkerLabel: {
-            displayName: "Gemini",
-            workspaceName: "Linux workstation",
-          },
-        },
-      },
-    });
-
-    expect(normalized.workerIds).toEqual(["worker-primary", "worker-fallback"]);
-    expect(normalized.config).toMatchObject({
-      bindings: {
-        implement: {
-          workerId: "worker-primary",
-          workerLabel: {
-            displayName: "Claude",
-            workspaceName: "Vitalii's MacBook Pro",
-          },
-          fallbackWorkerId: "worker-fallback",
-          fallbackWorkerLabel: {
-            displayName: "Gemini",
-            workspaceName: "Linux workstation",
-          },
-        },
-      },
-    });
-  });
-
-  it("rejects malformed or unbounded presentation snapshots", () => {
-    for (const workerLabel of [
-      null,
-      { displayName: "Claude", workspaceName: "Mac", extra: "ignored?" },
-      { displayName: " ", workspaceName: "Mac" },
-      { displayName: "x".repeat(161), workspaceName: "Mac" },
-    ]) {
-      expect(() =>
-        normalizeThreadWorkConfig({
-          defaultWorkflowId: "full_cycle",
-          bindings: {
-            implement: { workerId: "worker-primary", workerLabel },
-          },
-        }),
-      ).toThrow("workConfig workerLabel is invalid");
-    }
-  });
-
-  it("allows unchanged stale bindings but rejects new unavailable Workers", () => {
+describe("Thread authored context", () => {
+  it("normalizes instructions without execution preferences", () => {
     expect(
-      findUnapprovedThreadWorkerIds(
-        ["worker-current", "worker-retired", "worker-unknown"],
-        new Set(["worker-current"]),
-        new Set(["worker-retired"]),
-      ),
-    ).toEqual(["worker-unknown"]);
-  });
-});
-
-describe("profile reasoning configuration", () => {
-  it("preserves effort while omission remains the default", () => {
-    const result = normalizeThreadWorkConfig({
+      normalizeThreadWorkConfig({
+        defaultWorkflowId: "chat",
+        threadInstructions: " Context ",
+        bindings: {
+          chat: { additionalInstructions: " Focus " },
+          direct: { additionalInstructions: " " },
+        },
+      }).config,
+    ).toEqual({
       defaultWorkflowId: "chat",
-      bindings: {
-        chat: { workerId: "worker", reasoningEffort: " high " },
-        direct: { workerId: "worker" },
-      },
-    });
-    expect(result.config.bindings).toEqual({
-      chat: { workerId: "worker", reasoningEffort: "high" },
-      direct: { workerId: "worker" },
+      threadInstructions: "Context",
+      bindings: { chat: { additionalInstructions: "Focus" } },
     });
   });
-  it.each(["", " ", 123, "x".repeat(65)])(
-    "rejects malformed effort %s",
-    (reasoningEffort) => {
+  it.each([
+    "workerId",
+    "workerLabel",
+    "model",
+    "reasoningEffort",
+    "fallbackWorkerId",
+    "fallbackWorkerLabel",
+  ])("rejects obsolete %s preferences", (key) => {
+    expect(() =>
+      normalizeThreadWorkConfig({
+        defaultWorkflowId: "chat",
+        bindings: { chat: { [key]: "old" } },
+      }),
+    ).toThrow("use Workflows");
+  });
+  it.each([null, 123, "x".repeat(4001)])(
+    "rejects malformed instructions %s",
+    (instructions) => {
       expect(() =>
         normalizeThreadWorkConfig({
           defaultWorkflowId: "chat",
-          bindings: { chat: { workerId: "worker", reasoningEffort } },
+          bindings: { chat: { additionalInstructions: instructions } },
         }),
       ).toThrow();
     },

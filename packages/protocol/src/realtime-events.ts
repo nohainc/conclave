@@ -22,6 +22,7 @@ export const RealtimeEventPayloadSchema = z
     tool: id.optional(),
     artifactId: id.optional(),
     workRequestId: id.optional(),
+    submissionId: id.optional(),
     threadId: id.optional(),
     stepKind: id.optional(),
     leaseId: id.optional(),

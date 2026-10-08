@@ -1,5 +1,13 @@
 # Multi-Worker Conversation Continuity v1
 
+**Current execution configuration:** [ADR-019](../decisions/ADR-019-per-user-workflow-execution-configuration.md)
+and [User Workflow Configuration v1](USER_WORKFLOW_CONFIGURATION_V1.md) supersede
+historical phases describing Thread execution bindings and next-turn overrides.
+The composer retains its layout as a display of global preferences. New requests
+resolve global user defaults/step overrides; `executionSelection` and Thread
+execution writes are removed. Thread and composer override layers are future work.
+Historical phase notes below describe completed iterations, not current API aliases.
+
 **Status:** implemented through Phase 30, including legacy-assumption cleanup, the continuity regression matrix, context/revision evidence, concurrency guards and execution boundaries.
 **Boundary:** Conclave Core and Human Product Protocol. **Contract version:** 1.
 
@@ -160,21 +168,13 @@ unchanged; this phase performs no production deployment.
 
 ## Phase 3 — Next-turn defaults and accepted configuration
 
-Composer selections are next-turn defaults. AX captures an immutable
-`executionSelection` before asynchronous readiness checks or submission. Manual
-Chat/Work requests carry Worker, selected model and effort explicitly, including
-null for Default, together with the selected Workflow version. Saved Thread
-bindings remain defaults for future requests; they do not change accepted turns.
-
-Cloud validates the selection and resolves the authoritative signed Tool Profile
-identity and release. A stale supplied Profile claim returns 409 for refresh.
-The immutable Work Request snapshot contains `turnExecutionConfig` schema version
-1: `workerId`, `profileId`, `profileReleaseVersion`, `modelId`, `effort`,
-`workflowId`, and `workflowVersion`. History list/detail responses expose this as
-`executionConfig`, retained by AX and its authenticated read cache. Profile and
-Workflow versions pin interpretation of the turn. Null model/effort means the CLI
-Default was requested; it does not claim to know which model the provider actually
-used. Assignment evidence continues to record observed execution metadata.
+Current execution defaults come from User Workflow Configuration, resolved by Cloud
+at acceptance. Each step freezes Worker, Profile identity/release, model, effort,
+and Workflow identity/version in immutable `stepExecutionConfigs`. Manual history
+also retains `turnExecutionConfig` as accepted evidence. Run/Step read models and
+AX typed caches expose the same snapshot. Null model/effort means Profile/CLI
+Default, not an inferred actual provider model. Assignment evidence records actual
+invocation metadata. No new request reads old Thread bindings or composer overrides.
 
 Scheduling honors the accepted Worker/Profile release and model/effort snapshot,
 including explicit Default. If that Worker/Profile release becomes unavailable,

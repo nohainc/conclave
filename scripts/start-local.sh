@@ -27,12 +27,13 @@ API_HOST="${API_HOST:-localhost}"
 DEVICE="${DEVICE:-chrome}"
 WEB_PORT="${WEB_PORT:-3000}"
 ISOLATED=false
+WEB_BUILD_MODE=debug
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 usage() {
-  echo "Usage: pnpm start:local [--isolated] [-p port] [-d device] [-i ip] [--web-port port] [--api-host host]"
+  echo "Usage: pnpm start:local [--isolated] [--web-release] [-p port] [-d device] [-i ip] [--web-port port] [--api-host host]"
 }
 
 option_value() {
@@ -47,6 +48,10 @@ option_value() {
 # Parse optional arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --web-release)
+      WEB_BUILD_MODE=release
+      shift
+      ;;
     --isolated)
       ISOLATED=true
       shift
@@ -127,14 +132,19 @@ EOF
 chmod +x "${RUNNER_API}"
 
 # 2. Runner Script for Frontend Web App
+if [[ "$WEB_BUILD_MODE" == release ]]; then
+  WEB_CONTROLS="Release rendering | [q] Quit | stop and relaunch to rebuild"
+else
+  WEB_CONTROLS="Controls: [r] Reload | [R] Restart | [q] Quit"
+fi
 RUNNER_FLUTTER="/tmp/conclave-flutter-dev-${PORT}.sh"
 cat << EOF > "${RUNNER_FLUTTER}"
 #!/usr/bin/env bash
 set -euo pipefail
 cd "${ROOT_DIR}/apps/app"
-echo -e "\033[1m\033[0;32m[Conclave AX Flutter Web]\033[0m Controls: [r] Reload | [R] Restart | [q] Quit\n"
+echo -e "\033[1m\033[0;32m[Conclave AX Flutter Web]\033[0m ${WEB_CONTROLS}\n"
 export FLUTTER_PREBUILT_ENGINE_VERSION="${FLUTTER_ENGINE_VERSION}"
-exec "${FLUTTER_BIN}" run -d "${DEVICE}" --web-port="${WEB_PORT}" --dart-define="CONCLAVE_API_URL=${API_URL}/api"
+exec "${FLUTTER_BIN}" run --${WEB_BUILD_MODE} -d "${DEVICE}" --web-port="${WEB_PORT}" --dart-define="CONCLAVE_API_URL=${API_URL}/api"
 EOF
 chmod +x "${RUNNER_FLUTTER}"
 

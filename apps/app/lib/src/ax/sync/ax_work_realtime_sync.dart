@@ -282,6 +282,10 @@ class AxWorkRealtimeSync {
       if (!_eventIds.add(eventId)) return;
       if (_eventIds.length > 1000) _eventIds.remove(_eventIds.first);
     }
+    final submissionId = payload['submissionId'];
+    if (type == 'work_request.created' && submissionId is String) {
+      cache.acceptSubmission(threadId, submissionId, id);
+    }
     final full = payload['workRequest'];
     if (full is Map &&
         full['id'] == id &&

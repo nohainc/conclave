@@ -44,6 +44,7 @@ void main() {
     final routes = <AxNavigation>[
       const AxNavigation.home(),
       const AxNavigation.spaces(),
+      const AxNavigation.workflows(),
       const AxNavigation.workspaces(),
       const AxNavigation.profileSecurity(),
     ];

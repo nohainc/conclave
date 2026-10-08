@@ -17,6 +17,15 @@ the original source; copying a text selection copies the visible text.
 
 Work history updates automatically; the composer has no manual history refresh
 control. Error-specific retry actions remain available when synchronization fails.
+Rendered messages retain their request identity during progress, submission
+reconciliation, and history insertion, including their selection state.
+The optional `submissionId` on `work_request.created` echoes the submission's
+Idempotency-Key. AX reconciles the matching temporary entry before the HTTP
+response arrives, preserving earlier responses and newer server state. Prompt
+text is never used to correlate entries. No database migration is required.
+
+A response renderer is scoped to its request and exact displayed text; changing
+progress replaces that renderer without reusing another message’s Markdown state.
 
 Chat and Work history open at the latest message and follow updates while the
 reader is at the bottom. Scrolling up pauses following until the reader returns
@@ -25,8 +34,9 @@ a request is preparing or awaiting completion, failure or cancellation.
 The input remains editable throughout preparation, submission, and execution so
 the user can draft the next request while sending stays disabled. The composer
 explains when an unfinished request blocks Send and offers cancellation of pending
-requests. Profiles allowing custom models expose a model-ID entry option alongside
-Default and their declared catalog; catalog-only profiles do not expose that option.
+requests. The Workflows editor exposes Profile-supported models, custom model IDs when
+allowed, and model-specific efforts. The existing composer displays these global
+choices without a local execution override.
 
 Thread content is capped at 800 logical pixels per pane. At available widths
 of 1000 pixels or more, Chat and Work appear side by side with a vertical divider;
@@ -93,11 +103,11 @@ Conclave defines canonical Steps
       ↓
 Conclave defines valid built-in Workflows
       ↓
-Thread assigns Workers to Steps
+User Workflow Configuration supplies execution defaults and step overrides
       ↓
 User selects a Workflow and enters a request
       ↓
-Cloud snapshots the request and composes Step prompts
+Cloud resolves execution, freezes WorkflowRun/StepRun configuration, and composes Step prompts
       ↓
 Workers execute
 ~~~
@@ -875,3 +885,15 @@ The creation response includes management/execution capabilities immediately,
 without waiting for a collection refresh. Existing update/delete authorization
 continues to reject cross-lead writes; UI visibility is not the security boundary.
 No schema migration is required. Lead transfers are not exposed by this change.
+
+## Global execution configuration
+
+[User Workflow Configuration v1](USER_WORKFLOW_CONFIGURATION_V1.md) and
+[ADR-019](../decisions/ADR-019-per-user-workflow-execution-configuration.md) establish
+Definition → User Workflow Configuration → Execution Resolution → WorkflowRun →
+StepRun. User preferences belong to neither Space nor Thread. Global defaults and
+sparse fixed-step overrides resolve at acceptance, then Worker/Profile release,
+model, and effort are immutable execution evidence. Reset means Automatic.
+Thread preference and Composer override are future layers; old Thread execution
+fields and `executionSelection` are rejected rather than treated as compatibility
+inputs. Apply v8 migrations 0018 and 0019; historical accepted snapshots are untouched.

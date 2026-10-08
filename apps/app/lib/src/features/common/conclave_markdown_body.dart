@@ -47,9 +47,11 @@ class ConclaveMarkdownBody extends StatelessWidget {
     super.key,
     required this.data,
     this.openLink = _launchMarkdownLink,
+    this.fitContent = false,
   });
 
   final String data;
+  final bool fitContent;
 
   /// Receives only validated web URLs; injectable for deterministic testing.
   final Future<bool> Function(Uri uri) openLink;
@@ -77,6 +79,7 @@ class ConclaveMarkdownBody extends StatelessWidget {
   Widget build(BuildContext context) => SelectionArea(
           child: MarkdownBody(
         data: data,
+        fitContent: fitContent,
         extensionSet: md.ExtensionSet.gitHubFlavored,
         // One selection region joins paragraphs, lists and code blocks.
         selectable: false,

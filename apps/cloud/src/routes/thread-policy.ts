@@ -25,13 +25,12 @@ import { authorizeRequest } from "./http-security.js";
 
 import { HttpError, parseJson } from "./http-security.js";
 
+/** Thread configuration owns authored context, never global execution choices. */
 export function normalizeThreadWorkConfig(value: unknown): {
   config: Record<string, unknown>;
-  workerIds: string[];
 } {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
     throw new HttpError(400, "workConfig must be an object");
-  }
   const input = value as Record<string, unknown>;
   if (
     Object.keys(input).some(
@@ -43,159 +42,42 @@ export function normalizeThreadWorkConfig(value: unknown): {
     !input.bindings ||
     typeof input.bindings !== "object" ||
     Array.isArray(input.bindings)
-  ) {
+  )
     throw new HttpError(400, "workConfig is invalid");
-  }
-  const bindings = input.bindings as Record<string, unknown>;
-  if (
-    Object.keys(bindings).some(
-      (bindingId) =>
-        !THREAD_BINDING_IDS.includes(
-          bindingId as (typeof THREAD_BINDING_IDS)[number],
-        ),
+  const text = (value: unknown): string | undefined => {
+    if (value === undefined) return undefined;
+    if (typeof value !== "string" || value.length > 4000)
+      throw new HttpError(400, "workConfig instructions are invalid");
+    return value.trim() || undefined;
+  };
+  const threadInstructions = text(input.threadInstructions);
+  const bindings: Record<string, { additionalInstructions: string }> = {};
+  for (const [id, raw] of Object.entries(
+    input.bindings as Record<string, unknown>,
+  )) {
+    if (
+      !(THREAD_BINDING_IDS as readonly string[]).includes(id) ||
+      !raw ||
+      typeof raw !== "object" ||
+      Array.isArray(raw)
     )
-  ) {
-    throw new HttpError(400, "workConfig contains an unsupported binding");
-  }
-  const workerIds = new Set<string>();
-  const normalizedBindings: Record<string, Record<string, unknown>> = {};
-  let threadInstructions: string | undefined;
-  if (input.threadInstructions !== undefined) {
-    if (
-      typeof input.threadInstructions !== "string" ||
-      input.threadInstructions.length > 4000
-    ) {
-      throw new HttpError(400, "workConfig threadInstructions is invalid");
-    }
-    const instructions = input.threadInstructions.trim();
-    if (instructions) threadInstructions = instructions;
-  }
-  for (const [bindingId, rawBinding] of Object.entries(bindings)) {
-    if (
-      !rawBinding ||
-      typeof rawBinding !== "object" ||
-      Array.isArray(rawBinding)
-    ) {
-      throw new HttpError(400, `workConfig ${bindingId} binding is invalid`);
-    }
-    const binding = rawBinding as Record<string, unknown>;
-    const normalized: Record<string, unknown> = {};
-    if (
-      Object.keys(binding).some(
-        (key) =>
-          ![
-            "workerId",
-            "workerLabel",
-            "model",
-            "reasoningEffort",
-            "fallbackWorkerId",
-            "fallbackWorkerLabel",
-            "additionalInstructions",
-          ].includes(key),
-      )
-    ) {
+      throw new HttpError(400, "workConfig binding is invalid");
+    const binding = raw as Record<string, unknown>;
+    if (Object.keys(binding).some((key) => key !== "additionalInstructions"))
       throw new HttpError(
         400,
-        `workConfig ${bindingId} has unsupported fields`,
+        "Thread execution preferences are not supported; use Workflows",
       );
-    }
-    for (const key of ["workerLabel", "fallbackWorkerLabel"] as const) {
-      const rawLabel = binding[key];
-      if (rawLabel === undefined) continue;
-      if (
-        !rawLabel ||
-        typeof rawLabel !== "object" ||
-        Array.isArray(rawLabel)
-      ) {
-        throw new HttpError(400, `workConfig ${key} is invalid`);
-      }
-      const label = rawLabel as Record<string, unknown>;
-      if (
-        Object.keys(label).some(
-          (labelKey) => !["displayName", "workspaceName"].includes(labelKey),
-        ) ||
-        typeof label.displayName !== "string" ||
-        label.displayName.trim().length === 0 ||
-        label.displayName.length > 160 ||
-        typeof label.workspaceName !== "string" ||
-        label.workspaceName.trim().length === 0 ||
-        label.workspaceName.length > 160
-      ) {
-        throw new HttpError(400, `workConfig ${key} is invalid`);
-      }
-      normalized[key] = {
-        displayName: label.displayName.trim(),
-        workspaceName: label.workspaceName.trim(),
-      };
-    }
-    for (const key of [
-      "workerId",
-      "model",
-      "reasoningEffort",
-      "fallbackWorkerId",
-    ] as const) {
-      if (binding[key] !== undefined) {
-        const max =
-          key === "model" ? 160 : key === "reasoningEffort" ? 64 : 200;
-        if (
-          typeof binding[key] !== "string" ||
-          binding[key].length > max ||
-          (binding[key] as string).trim().length === 0
-        ) {
-          throw new HttpError(400, `workConfig ${key} is invalid`);
-        }
-        normalized[key] = binding[key].trim();
-      }
-    }
-    if (typeof normalized.workerId !== "string") {
-      throw new HttpError(400, `workConfig ${bindingId} requires workerId`);
-    }
-    workerIds.add(normalized.workerId);
-    if (
-      normalized.workerId &&
-      normalized.workerId === normalized.fallbackWorkerId
-    ) {
-      throw new HttpError(
-        400,
-        "A fallback Worker must differ from its primary",
-      );
-    }
-    if (binding.additionalInstructions !== undefined) {
-      if (
-        typeof binding.additionalInstructions !== "string" ||
-        binding.additionalInstructions.length > 4000
-      ) {
-        throw new HttpError(
-          400,
-          "workConfig additionalInstructions is invalid",
-        );
-      }
-      const instructions = binding.additionalInstructions.trim();
-      if (instructions) normalized.additionalInstructions = instructions;
-    }
-    if (typeof normalized.fallbackWorkerId === "string")
-      workerIds.add(normalized.fallbackWorkerId);
-    normalizedBindings[bindingId] = normalized;
+    const instructions = text(binding.additionalInstructions);
+    if (instructions) bindings[id] = { additionalInstructions: instructions };
   }
   return {
     config: {
       defaultWorkflowId: input.defaultWorkflowId,
       ...(threadInstructions ? { threadInstructions } : {}),
-      bindings: normalizedBindings,
+      bindings,
     },
-    workerIds: [...workerIds],
   };
-}
-
-export function findUnapprovedThreadWorkerIds(
-  workerIds: readonly string[],
-  eligibleIds: ReadonlySet<string>,
-  previouslyBoundIds: ReadonlySet<string>,
-): string[] {
-  return workerIds.filter(
-    (workerId) =>
-      !eligibleIds.has(workerId) && !previouslyBoundIds.has(workerId),
-  );
 }
 
 export function threadMetadata(

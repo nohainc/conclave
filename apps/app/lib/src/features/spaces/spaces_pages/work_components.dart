@@ -64,29 +64,7 @@ List<AxModelOption> _modelsForWorker(AxWorker worker) {
         .toList();
   }
 
-  // Older or partially published profiles can expose the normalized
-  // execution envelope without its catalog. Keep the legacy capability
-  // projection as a compatibility fallback so the composer still offers the
-  // worker's actual model choices.
-  final catalog = worker.modelOptions['catalog'];
-  if (catalog is! List) return const [];
-  return catalog
-      .whereType<Map>()
-      .where((entry) => entry['id'] is String)
-      .map((entry) => AxModelOption(
-            id: entry['id'] as String,
-            name: entry['name']?.toString() ?? entry['id'] as String,
-            badge: entry['badge']?.toString() ?? '',
-            description: entry['description']?.toString() ?? '',
-            defaultReasoningEffort: entry['defaultReasoningEffort']?.toString(),
-            supportedReasoningEfforts:
-                entry['supportedReasoningEfforts'] is List
-                    ? (entry['supportedReasoningEfforts'] as List)
-                        .whereType<String>()
-                        .toList()
-                    : const [],
-          ))
-      .toList();
+  return const [];
 }
 
 String _modelDisplayName(String? modelId, {AxWorker? worker}) {
@@ -141,53 +119,6 @@ String _reasoningEffortDisplayName(String? effort) {
     'ultra' => 'Ultra',
     _ => effort,
   };
-}
-
-String _reasoningEffortDescription(String effort) =>
-    switch (effort.trim().toLowerCase()) {
-      'low' => 'Fast turnarounds and concise logic',
-      'medium' => 'Balanced depth and speed',
-      'high' => 'Deep analysis and thorough verification',
-      'xhigh' || 'extra-high' => 'Extensive exploration of edge cases',
-      'max' => 'Exhaustive reasoning effort',
-      'ultra' => 'Unbounded reasoning limit',
-      _ => 'Custom reasoning level',
-    };
-
-Widget _buildModelBadge(BuildContext context, String badge) {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-  Color bg;
-  Color fg;
-  if (badge.contains('Reasoning') || badge.contains('Thinking')) {
-    bg = ConclaveColors.primarySoftColor(isDark);
-    fg = ConclaveColors.primaryForeground(isDark);
-  } else if (badge.contains('Flagship') || badge.contains('Knowledge')) {
-    bg = ConclaveColors.infoSoft(isDark);
-    fg = ConclaveColors.info;
-  } else if (badge.contains('Fast') || badge.contains('Smart')) {
-    bg = ConclaveColors.successSoft(isDark);
-    fg = ConclaveColors.success;
-  } else if (badge.contains('Code')) {
-    bg = isDark ? const Color(0xff133238) : const Color(0xffccfbf1);
-    fg = isDark ? const Color(0xff5eead4) : const Color(0xff115e59);
-  } else if (badge.contains('Multimodal')) {
-    bg = ConclaveColors.warningSoft(isDark);
-    fg = ConclaveColors.warning;
-  } else {
-    bg = ConclaveColors.surfaceHover(isDark);
-    fg = ConclaveColors.textSecondary(isDark);
-  }
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
-      color: bg,
-      borderRadius: BorderRadius.circular(ConclaveRadius.xs),
-    ),
-    child: Text(
-      badge,
-      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg),
-    ),
-  );
 }
 
 Future<T?> _showAnchoredMenu<T>({
@@ -274,9 +205,6 @@ class _WorkComposer extends StatelessWidget {
     required this.onRetryStep,
     required this.onCancelRun,
     required this.onWorkflowChanged,
-    this.onWorkerChanged,
-    this.onModelChanged,
-    this.onReasoningEffortChanged,
     this.onOpenSettings,
     required this.onRun,
   });
@@ -314,10 +242,6 @@ class _WorkComposer extends StatelessWidget {
   final Future<void> Function(String, AxWorkRequestStep)? onRetryStep;
   final Future<void> Function(String)? onCancelRun;
   final ValueChanged<String> onWorkflowChanged;
-  final void Function(String stepKind, String workerId)? onWorkerChanged;
-  final void Function(String stepKind, String model)? onModelChanged;
-  final void Function(String stepKind, String reasoningEffort)?
-      onReasoningEffortChanged;
   final VoidCallback? onOpenSettings;
   final Future<void> Function() onRun;
 
@@ -398,6 +322,12 @@ class _WorkComposer extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: workTimeline.length,
+              // Preserve render and selection state by request when entries move.
+              findItemIndexCallback: (key) {
+                if (key is! ValueKey<String>) return null;
+                final index = workTimeline.indexWhere((r) => r.id == key.value);
+                return index < 0 ? null : index;
+              },
               separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final request = workTimeline[index];
@@ -478,226 +408,161 @@ class _WorkComposer extends StatelessWidget {
     final selectedModel = binding['model']?.toString().trim() ?? '';
     final selectedReasoningEffort =
         binding['reasoningEffort']?.toString().trim() ?? '';
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final availableModels = assignedWorker != null
-        ? _modelsForWorker(assignedWorker)
-        : const <AxModelOption>[];
-    final currentModelOption =
-        availableModels.where((m) => m.id == selectedModel).firstOrNull;
-    final normalizedEffort = assignedWorker?.executionOptions
+    final effortOptions = assignedWorker?.executionOptions
         ?.effortsForModel(selectedModel.isEmpty ? null : selectedModel);
-    final normalizedValues = normalizedEffort?.supported == true
-        ? normalizedEffort!.values
+    final supportedEfforts = effortOptions?.supported == true
+        ? effortOptions!.values
         : const <String>[];
-    final supportedEfforts = normalizedValues.isNotEmpty
-        ? normalizedValues
-        : (currentModelOption?.supportedReasoningEfforts.isNotEmpty == true
-            ? currentModelOption!.supportedReasoningEfforts
-            : (selectedModel.isEmpty &&
-                    assignedWorker?.modelOptions['supportedReasoningEfforts']
-                        is List
-                ? (assignedWorker!.modelOptions['supportedReasoningEfforts']
-                        as List)
-                    .whereType<String>()
-                    .toList()
-                : const <String>[]));
-
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-
-            Builder(
-              builder: (buttonContext) => IconButton(
-                tooltip: 'Add attachments',
-                icon: const Icon(Icons.add, size: 18),
-                onPressed: () async {
-                  final value = await _showAnchoredMenu<String>(
-                    buttonContext: buttonContext,
-                    inputKey: inputKey,
-                    itemHeight: 48.0,
-                    items: [
-                      PopupMenuItem(
-                        value: 'files',
-                        enabled: canExecute && !submitting,
-                        child: const ListTile(
-                          dense: true,
-                          leading: Icon(Icons.attach_file, size: 18),
-                          title: Text('Add files'),
-                        ),
+          Builder(
+            builder: (buttonContext) => IconButton(
+              tooltip: 'Add attachments',
+              icon: const Icon(Icons.add, size: 18),
+              onPressed: () async {
+                final value = await _showAnchoredMenu<String>(
+                  buttonContext: buttonContext,
+                  inputKey: inputKey,
+                  itemHeight: 48.0,
+                  items: [
+                    PopupMenuItem(
+                      value: 'files',
+                      enabled: canExecute && !submitting,
+                      child: const ListTile(
+                        dense: true,
+                        leading: Icon(Icons.attach_file, size: 18),
+                        title: Text('Add files'),
                       ),
-                      PopupMenuItem(
-                        value: 'link',
-                        enabled: canExecute && !submitting,
-                        child: const ListTile(
-                          dense: true,
-                          leading: Icon(Icons.link, size: 18),
-                          title: Text('Add link'),
-                        ),
-                      ),
-                    ],
-                  );
-                  if (!buttonContext.mounted || value == null) return;
-                  if (value == 'files') {
-                    onAddFiles();
-                  } else if (value == 'link') {
-                    onAddReference();
-                  }
-                },
-              ),
-            ),
-            if (onOpenSettings != null)
-              IconButton(
-                tooltip: 'Work settings',
-                onPressed: onOpenSettings,
-                icon: const Icon(Icons.tune_rounded, size: 18),
-              ),
-            const SizedBox(width: 4),
-            Builder(
-              builder: (workflowBtnContext) => Tooltip(
-                message: 'Choose workflow',
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: canExecute && !submitting && workflowCatalog.isNotEmpty
-                      ? () async {
-                          final versions =
-                              _currentWorkflowVersions(workflowCatalog);
-                          final value = await _showAnchoredMenu<String>(
-                            buttonContext: workflowBtnContext,
-                            inputKey: inputKey,
-                            itemHeight: 48.0,
-                            items: [
-                              for (final item in versions)
-                                CheckedPopupMenuItem(
-                                  value: item.reference,
-                                  checked: item.reference == workflow,
-                                  enabled: canExecute && !submitting,
-                                  child: Tooltip(
-                                    message: item.description,
-                                    child: Text(item.name),
-                                  ),
-                                ),
-                            ],
-                          );
-                          if (!workflowBtnContext.mounted || value == null) {
-                            return;
-                          }
-                          onWorkflowChanged(value);
-                        }
-                      : null,
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 130),
-                          child: Text(
-                            selectedWorkflow?.name ?? 'Choose workflow',
-                            overflow: TextOverflow.ellipsis,
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                          ),
-                        ),
-                        const SizedBox(width: 2),
-                        const Icon(Icons.keyboard_arrow_down, size: 14),
-                      ],
                     ),
+                    PopupMenuItem(
+                      value: 'link',
+                      enabled: canExecute && !submitting,
+                      child: const ListTile(
+                        dense: true,
+                        leading: Icon(Icons.link, size: 18),
+                        title: Text('Add link'),
+                      ),
+                    ),
+                  ],
+                );
+                if (!buttonContext.mounted || value == null) return;
+                if (value == 'files') {
+                  onAddFiles();
+                } else if (value == 'link') {
+                  onAddReference();
+                }
+              },
+            ),
+          ),
+          if (onOpenSettings != null)
+            IconButton(
+              tooltip: 'Work settings',
+              onPressed: onOpenSettings,
+              icon: const Icon(Icons.tune_rounded, size: 18),
+            ),
+          const SizedBox(width: 4),
+          Builder(
+            builder: (workflowBtnContext) => Tooltip(
+              message: 'Choose workflow',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: canExecute && !submitting && workflowCatalog.isNotEmpty
+                    ? () async {
+                        final versions =
+                            _currentWorkflowVersions(workflowCatalog);
+                        final value = await _showAnchoredMenu<String>(
+                          buttonContext: workflowBtnContext,
+                          inputKey: inputKey,
+                          itemHeight: 48.0,
+                          items: [
+                            for (final item in versions)
+                              CheckedPopupMenuItem(
+                                value: item.reference,
+                                checked: item.reference == workflow,
+                                enabled: canExecute && !submitting,
+                                child: Tooltip(
+                                  message: item.description,
+                                  child: Text(item.name),
+                                ),
+                              ),
+                          ],
+                        );
+                        if (!workflowBtnContext.mounted || value == null) {
+                          return;
+                        }
+                        onWorkflowChanged(value);
+                      }
+                    : null,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 130),
+                        child: Text(
+                          selectedWorkflow?.name ?? 'Choose workflow',
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.keyboard_arrow_down, size: 14),
+                    ],
                   ),
                 ),
               ),
             ),
+          ),
           if (stepKind != null && policy.userSelectsWorker) ...[
             const SizedBox(width: 4),
             Builder(
-                  builder: (workerContext) => Tooltip(
-                        message: 'Choose worker',
-                        child: InkWell(
-                          key: const ValueKey('work-composer-worker'),
-                          borderRadius: BorderRadius.circular(8),
-                          onTap: canExecute &&
-                                  !submitting &&
-                                  onWorkerChanged != null
-                              ? () async {
-                                  final value = await _showAnchoredMenu<String>(
-                                    buttonContext: workerContext,
-                                    inputKey: inputKey,
-                                    itemHeight: 52,
-                                    items: [
-                                      if (eligibleWorkers.isEmpty)
-                                        const PopupMenuItem<String>(
-                                            enabled: false,
-                                            child: Text('No eligible workers')),
-                                      for (final worker in eligibleWorkers)
-                                        CheckedPopupMenuItem<String>(
-                                          value: worker.id,
-                                          checked:
-                                              worker.id == assignedWorker?.id,
-                                          child: Row(children: [
-                                            _workerIcon(context, worker),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                                child: Column(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: [
-                                                  Text(worker.displayName,
-                                                      overflow: TextOverflow
-                                                          .ellipsis),
-                                                  Text(worker.workspaceName,
-                                                      style: Theme.of(context)
-                                                          .textTheme
-                                                          .bodySmall,
-                                                      overflow: TextOverflow
-                                                          .ellipsis),
-                                                ])),
-                                          ]),
-                                        ),
-                                    ],
-                                  );
-                                  if (workerContext.mounted && value != null) {
-                                    onWorkerChanged?.call(stepKind, value);
-                                  }
-                                }
-                              : null,
-                          child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 4),
-                              child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (assignedWorker != null) ...[
-                                      _workerIcon(context, assignedWorker),
-                                      const SizedBox(width: 4)
-                                    ],
-                                    ConstrainedBox(
-                                        constraints:
-                                            const BoxConstraints(maxWidth: 140),
-                                        child: Text(
-                                          assignedWorker?.displayName ??
-                                              'No worker assigned',
-                                          overflow: TextOverflow.ellipsis,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                  fontWeight: FontWeight.w600,
-                                                  color: isWorkerAssigned
-                                                      ? null
-                                                      : colors.error),
-                                        )),
-                                    const Icon(Icons.keyboard_arrow_down,
-                                        size: 14),
-                                  ])),
-                        ),
-                      )),
+                builder: (workerContext) => Tooltip(
+                      message: 'Worker · configured in Workflows',
+                      child: InkWell(
+                        key: const ValueKey('work-composer-worker'),
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: null,
+                        child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 4),
+                            child:
+                                Row(mainAxisSize: MainAxisSize.min, children: [
+                              if (assignedWorker != null) ...[
+                                _workerIcon(context, assignedWorker),
+                                const SizedBox(width: 4)
+                              ],
+                              ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 140),
+                                  child: Text(
+                                    assignedWorker?.displayName ??
+                                        (binding['workerId'] == null
+                                            ? 'Automatic'
+                                            : 'Unavailable Worker'),
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                            color:
+                                                binding['workerId'] == null ||
+                                                        isWorkerAssigned
+                                                    ? null
+                                                    : colors.error),
+                                  )),
+                              const Icon(Icons.keyboard_arrow_down, size: 14),
+                            ])),
+                      ),
+                    )),
           ],
           if (stepKind != null && isWorkerAssigned) ...[
             if (policy.userSelectsModel &&
@@ -705,332 +570,86 @@ class _WorkComposer extends StatelessWidget {
                     true)) ...[
               const SizedBox(width: 4),
               Builder(
-                  builder: (modelBtnContext) => Tooltip(
-                    message: 'Choose model',
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: canExecute && !submitting && onModelChanged != null
-                          ? () async {
-                              final menuItems = <PopupMenuEntry<String>>[
-                                CheckedPopupMenuItem<String>(
-                                  value: '',
-                                  checked: selectedModel.isEmpty,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12),
-                                  child: SizedBox(
-                                    height: 46,
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        const Text(
-                                          'Default model',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Uses the worker’s configured model',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: isDark
-                                                ? Colors.white60
-                                                : Colors.black54,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                builder: (modelBtnContext) => Tooltip(
+                  message: 'Model · configured in Workflows',
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: null,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 130),
+                            child: Text(
+                              _modelDisplayName(selectedModel,
+                                          worker: assignedWorker)
+                                      .isEmpty
+                                  ? 'Default model'
+                                  : _modelDisplayName(selectedModel,
+                                      worker: assignedWorker),
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
                                   ),
-                                ),
-                                if (availableModels.isNotEmpty)
-                                  const PopupMenuDivider(),
-                                for (final model in availableModels)
-                                  CheckedPopupMenuItem<String>(
-                                    value: model.id,
-                                    checked: selectedModel == model.id,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12),
-                                    child: SizedBox(
-                                      height: 46,
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                model.name,
-                                                style: const TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              _buildModelBadge(
-                                                  context, model.badge),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            model.description,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: isDark
-                                                  ? Colors.white60
-                                                  : Colors.black54,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                if (assignedWorker?.executionOptions
-                                        ?.allowsCustomModel ==
-                                    true)
-                                  const PopupMenuItem<String>(
-                                    value: '__enter_model_id__',
-                                    child: Text('Enter model ID…'),
-                                  ),
-                              ];
-                              final value = await _showAnchoredMenu<String>(
-                                buttonContext: modelBtnContext,
-                                inputKey: inputKey,
-                                items: menuItems,
-                                itemHeight: 52.0,
-                                dividerCount:
-                                    availableModels.isNotEmpty ? 1 : 0,
-                              );
-                              if (!modelBtnContext.mounted || value == null) {
-                                return;
-                              }
-                              if (value == '__enter_model_id__') {
-                                var enteredModel = selectedModel;
-                                final model = await showDialog<String>(
-                                  context: modelBtnContext,
-                                  builder: (dialogContext) => AlertDialog(
-                                    title: const Text('Choose model'),
-                                    content: TextFormField(
-                                      initialValue: selectedModel,
-                                      onChanged: (value) => enteredModel = value,
-                                      autofocus: true,
-                                      decoration: const InputDecoration(
-                                          labelText: 'Model ID'),
-                                      onFieldSubmitted: (value) =>
-                                          Navigator.pop(dialogContext,
-                                              value.trim()),
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(dialogContext),
-                                        child: const Text('Cancel'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(
-                                            dialogContext,
-                                            enteredModel.trim()),
-                                        child: const Text('Use model'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                                if (!modelBtnContext.mounted || model == null) {
-                                  return;
-                                }
-                                onModelChanged?.call(stepKind, model);
-                                return;
-                              }
-                              onModelChanged?.call(stepKind, value);
-                            }
-                          : null,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 130),
-                              child: Text(
-                                _modelDisplayName(selectedModel,
-                                            worker: assignedWorker)
-                                        .isEmpty
-                                    ? 'Default model'
-                                    : _modelDisplayName(selectedModel,
-                                        worker: assignedWorker),
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
                             ),
-                            const SizedBox(width: 2),
-                            const Icon(Icons.keyboard_arrow_down, size: 14),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 2),
+                          const Icon(Icons.keyboard_arrow_down, size: 14),
+                        ],
                       ),
                     ),
                   ),
                 ),
+              ),
             ],
             if (policy.userSelectsEffort && supportedEfforts.isNotEmpty) ...[
-                const SizedBox(width: 4),
-                Builder(
-                  builder: (reasoningBtnContext) => Tooltip(
-                    message: 'Choose reasoning effort',
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: canExecute &&
-                              !submitting &&
-                              onReasoningEffortChanged != null
-                          ? () async {
-                              final menuItems = <PopupMenuEntry<String>>[
-                                CheckedPopupMenuItem<String>(
-                                  value: '',
-                                  checked: selectedReasoningEffort.isEmpty,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12),
-                                  child: SizedBox(
-                                    height: 46,
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        const Text(
-                                          'Default effort',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Uses the model’s default reasoning effort',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: isDark
-                                                ? Colors.white60
-                                                : Colors.black54,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+              const SizedBox(width: 4),
+              Builder(
+                builder: (reasoningBtnContext) => Tooltip(
+                  message: 'Effort · configured in Workflows',
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: null,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 110),
+                            child: Text(
+                              selectedReasoningEffort.isEmpty
+                                  ? 'Default effort'
+                                  : '${_reasoningEffortDisplayName(selectedReasoningEffort)} effort',
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
                                   ),
-                                ),
-                                const PopupMenuDivider(),
-                                for (final effort in supportedEfforts)
-                                  CheckedPopupMenuItem<String>(
-                                    value: effort,
-                                    checked: selectedReasoningEffort == effort,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12),
-                                    child: SizedBox(
-                                      height: 46,
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                _reasoningEffortDisplayName(
-                                                    effort),
-                                                style: const TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              _buildModelBadge(
-                                                  context, 'Reasoning'),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            _reasoningEffortDescription(effort),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: isDark
-                                                  ? Colors.white60
-                                                  : Colors.black54,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                              ];
-                              final value = await _showAnchoredMenu<String>(
-                                buttonContext: reasoningBtnContext,
-                                inputKey: inputKey,
-                                items: menuItems,
-                                itemHeight: 52.0,
-                                dividerCount: 1,
-                              );
-                              if (!reasoningBtnContext.mounted ||
-                                  value == null) {
-                                return;
-                              }
-                              onReasoningEffortChanged?.call(stepKind, value);
-                            }
-                          : null,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 110),
-                              child: Text(
-                                selectedReasoningEffort.isEmpty
-                                    ? 'Default effort'
-                                    : '${_reasoningEffortDisplayName(selectedReasoningEffort)} effort',
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
                             ),
-                            const SizedBox(width: 2),
-                            const Icon(Icons.keyboard_arrow_down, size: 14),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 2),
+                          const Icon(Icons.keyboard_arrow_down, size: 14),
+                        ],
                       ),
                     ),
                   ),
                 ),
-              ],
+              ),
             ],
           ],
-        ),
-      );
+        ],
+      ),
+    );
   }
 
   Widget _buildComposerInput(
@@ -1047,8 +666,7 @@ class _WorkComposer extends StatelessWidget {
           MarkdownComposer(
             controller: requestController,
             chatStyle: true,
-            sendInToolbar: true,
-            minLines: 2,
+            minLines: 1,
             maxLines: 6,
             enabled: canExecute,
             onSend: () => onRun(),
@@ -1371,259 +989,282 @@ class _WorkTimelineCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // User prompt bubble
-        Align(
-          alignment:
-              isOwnRequest ? Alignment.centerRight : Alignment.centerLeft,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: Container(
-              decoration: BoxDecoration(
-                color: isOwnRequest
-                    ? ConclaveColors.primarySoftColor(isDark)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              padding: EdgeInsets.fromLTRB(isOwnRequest ? 14 : 0, 10, 14, 10),
-              child: Column(
-                crossAxisAlignment: isOwnRequest
-                    ? CrossAxisAlignment.end
-                    : CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (showRequesterIdentity) ...[
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircleAvatar(
-                          radius: 12,
-                          backgroundColor:
-                              ConclaveColors.primarySoftColor(isDark),
-                          child: Text(
-                            requesterInitials,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: ConclaveColors.primaryForeground(isDark),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          effectiveRequesterName,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white : Colors.black87,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                  ],
-                  ConclaveMarkdownBody(data: request.prompt),
-                  const SizedBox(height: 6),
-                  Row(
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final maxBubbleWidth = math.min(640.0, constraints.maxWidth * 0.9);
+            return Align(
+              alignment:
+                  isOwnRequest ? Alignment.centerRight : Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isOwnRequest
+                        ? ConclaveColors.primarySoftColor(isDark)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding:
+                      EdgeInsets.fromLTRB(isOwnRequest ? 14 : 0, 10, 14, 10),
+                  child: Column(
+                    crossAxisAlignment: isOwnRequest
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (timeLabel.isNotEmpty) ...[
-                        Text(
-                          timeLabel,
-                          style: TextStyle(fontSize: 11, color: metaColor),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      Tooltip(
-                        message: 'Copy Markdown',
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(4),
-                          onTap: () {
-                            Clipboard.setData(
-                                ClipboardData(text: request.prompt));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Prompt copied to clipboard'),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(2),
-                            child: Icon(
-                              Icons.copy_rounded,
-                              size: 14,
-                              color: metaColor,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ].orderedForMessage(isOwnRequest),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        // AI Execution & response bubble
-        Align(
-          alignment: Alignment.centerLeft,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 680),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              padding: const EdgeInsets.fromLTRB(0, 14, 14, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      senderAvatar,
-                      const SizedBox(width: 6),
-                      Text(
-                        senderName,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      if (isWorkerResponse && formattedModelInfo != null) ...[
-                        const SizedBox(width: 6),
-                        Tooltip(
-                          message: formattedModelInfo,
-                          triggerMode: TooltipTriggerMode.tap,
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Icon(Icons.info_outline_rounded,
-                                size: 14, color: metaColor),
-                          ),
-                        ),
-                      ],
-                      if (metadataString.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            metadataString,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 12, color: metaColor),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Builder(builder: (context) {
-                    final failedStep = request.steps
-                        .where((step) => step.status == 'failed')
-                        .firstOrNull;
-                    final message = error?.isNotEmpty == true
-                        ? error!
-                        : response?.isNotEmpty == true
-                            ? response!
-                            : request.status == 'cancelled'
-                                ? 'Request cancelled.'
-                                : progressText ??
-                                    switch (request.status) {
-                                      'running' => 'Working on your request…',
-                                      'waiting' => 'Waiting to continue…',
-                                      'completed' => 'Request completed.',
-                                      'failed' =>
-                                        'Your request could not be completed.',
-                                      _ => 'Preparing your request…',
-                                    };
-                    final isError = error?.isNotEmpty == true;
-                    Widget compactAction({
-                      required String tooltip,
-                      required IconData icon,
-                      required VoidCallback onPressed,
-                    }) =>
-                        Tooltip(
-                          message: tooltip,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(4),
-                            onTap: onPressed,
-                            child: Padding(
-                              padding: const EdgeInsets.all(3),
-                              child: Icon(
-                                icon,
-                                size: 15,
-                                color: metaColor,
-                              ),
-                            ),
-                          ),
-                        );
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (isError)
-                          SelectableText(
-                            message,
-                            style: ConclaveMessageTypography.fromTheme(
-                                    Theme.of(context))
-                                .copyWith(color: colors.error),
-                          )
-                        else
-                          ConclaveMarkdownBody(data: message),
-                        const SizedBox(height: 8),
+                      if (showRequesterIdentity) ...[
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (response?.isNotEmpty == true ||
-                                error?.isNotEmpty == true)
-                              compactAction(
-                                tooltip:
-                                    isError ? 'Copy error' : 'Copy Markdown',
-                                icon: Icons.copy_outlined,
-                                onPressed: () {
-                                  Clipboard.setData(ClipboardData(
-                                    text: isError ? error! : response!,
-                                  ));
-                                },
-                              ),
-                            if (onShowRunDetails != null)
-                              compactAction(
-                                tooltip: 'View request details',
-                                icon: Icons.info_outline,
-                                onPressed: () => onShowRunDetails!(request.id),
-                              ),
-                            if (request.status == 'failed' &&
-                                failedStep != null &&
-                                onRetryStep != null)
-                              compactAction(
-                                tooltip: 'Retry request',
-                                icon: Icons.refresh,
-                                onPressed: () =>
-                                    onRetryStep!(request.id, failedStep),
-                              ),
-                            if ((request.status == 'queued' ||
-                                    request.status == 'running') &&
-                                onCancelRun != null)
-                              compactAction(
-                                tooltip: 'Cancel request',
-                                icon: Icons.cancel_outlined,
-                                onPressed: () => onCancelRun!(request.id),
-                              ),
-                            const SizedBox(width: 8),
-                            if (timeLabel.isNotEmpty)
-                              Text(
-                                timeLabel,
+                            CircleAvatar(
+                              radius: 12,
+                              backgroundColor:
+                                  ConclaveColors.primarySoftColor(isDark),
+                              child: Text(
+                                requesterInitials,
                                 style: TextStyle(
                                   fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color:
+                                      ConclaveColors.primaryForeground(isDark),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              effectiveRequesterName,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                      ConclaveMarkdownBody(
+                        data: request.prompt,
+                        fitContent: true,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (timeLabel.isNotEmpty) ...[
+                            Text(
+                              timeLabel,
+                              style: TextStyle(fontSize: 11, color: metaColor),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Tooltip(
+                            message: 'Copy Markdown',
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(4),
+                              onTap: () {
+                                Clipboard.setData(
+                                    ClipboardData(text: request.prompt));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Prompt copied to clipboard'),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(2),
+                                child: Icon(
+                                  Icons.copy_rounded,
+                                  size: 14,
                                   color: metaColor,
                                 ),
                               ),
-                          ],
-                        ),
-                      ],
-                    );
-                  }),
-                ],
+                            ),
+                          ),
+                        ].orderedForMessage(isOwnRequest),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        // AI Execution & response bubble
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final maxBubbleWidth = math.min(680.0, constraints.maxWidth * 0.9);
+            return Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(0, 14, 14, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          senderAvatar,
+                          const SizedBox(width: 6),
+                          Text(
+                            senderName,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                          if (isWorkerResponse &&
+                              formattedModelInfo != null) ...[
+                            const SizedBox(width: 6),
+                            Tooltip(
+                              message: formattedModelInfo,
+                              triggerMode: TooltipTriggerMode.tap,
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: Icon(Icons.info_outline_rounded,
+                                    size: 14, color: metaColor),
+                              ),
+                            ),
+                          ],
+                          if (metadataString.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                metadataString,
+                                overflow: TextOverflow.ellipsis,
+                                style:
+                                    TextStyle(fontSize: 12, color: metaColor),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Builder(builder: (context) {
+                        final failedStep = request.steps
+                            .where((step) => step.status == 'failed')
+                            .firstOrNull;
+                        final message = error?.isNotEmpty == true
+                            ? error!
+                            : response?.isNotEmpty == true
+                                ? response!
+                                : request.status == 'cancelled'
+                                    ? 'Request cancelled.'
+                                    : progressText ??
+                                        switch (request.status) {
+                                          'running' =>
+                                            'Working on your request…',
+                                          'waiting' => 'Waiting to continue…',
+                                          'completed' => 'Request completed.',
+                                          'failed' =>
+                                            'Your request could not be completed.',
+                                          _ => 'Preparing your request…',
+                                        };
+                        final isError = error?.isNotEmpty == true;
+                        Widget compactAction({
+                          required String tooltip,
+                          required IconData icon,
+                          required VoidCallback onPressed,
+                        }) =>
+                            Tooltip(
+                              message: tooltip,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(4),
+                                onTap: onPressed,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(3),
+                                  child: Icon(
+                                    icon,
+                                    size: 15,
+                                    color: metaColor,
+                                  ),
+                                ),
+                              ),
+                            );
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (isError)
+                              SelectableText(
+                                message,
+                                style: ConclaveMessageTypography.fromTheme(
+                                        Theme.of(context))
+                                    .copyWith(color: colors.error),
+                              )
+                            else
+                              ConclaveMarkdownBody(
+                                key: ValueKey((request.id, message)),
+                                data: message,
+                              ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (response?.isNotEmpty == true ||
+                                    error?.isNotEmpty == true)
+                                  compactAction(
+                                    tooltip: isError
+                                        ? 'Copy error'
+                                        : 'Copy Markdown',
+                                    icon: Icons.copy_outlined,
+                                    onPressed: () {
+                                      Clipboard.setData(ClipboardData(
+                                        text: isError ? error! : response!,
+                                      ));
+                                    },
+                                  ),
+                                if (onShowRunDetails != null)
+                                  compactAction(
+                                    tooltip: 'View request details',
+                                    icon: Icons.info_outline,
+                                    onPressed: () =>
+                                        onShowRunDetails!(request.id),
+                                  ),
+                                if (request.status == 'failed' &&
+                                    failedStep != null &&
+                                    onRetryStep != null)
+                                  compactAction(
+                                    tooltip: 'Retry request',
+                                    icon: Icons.refresh,
+                                    onPressed: () =>
+                                        onRetryStep!(request.id, failedStep),
+                                  ),
+                                if ((request.status == 'queued' ||
+                                        request.status == 'running') &&
+                                    onCancelRun != null)
+                                  compactAction(
+                                    tooltip: 'Cancel request',
+                                    icon: Icons.cancel_outlined,
+                                    onPressed: () => onCancelRun!(request.id),
+                                  ),
+                                const SizedBox(width: 8),
+                                if (timeLabel.isNotEmpty)
+                                  Text(
+                                    timeLabel,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: metaColor,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ],
     );
@@ -1915,137 +1556,146 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
         : 'U';
 
     final metaColor = isDark ? Colors.white38 : Colors.black45;
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
-        child: Container(
-          decoration: BoxDecoration(
-            color: isMe
-                ? ConclaveColors.primarySoftColor(isDark)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          padding: EdgeInsets.fromLTRB(isMe ? 14 : 0, 10, 14, 10),
-          child: Column(
-            crossAxisAlignment:
-                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!isMe) ...[
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircleAvatar(
-                      radius: 12,
-                      backgroundColor: ConclaveColors.primarySoftColor(isDark),
-                      child: Text(
-                        initials,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: ConclaveColors.primaryForeground(isDark),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      widget.item.author,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-              ],
-              if (_isEditing) ...[
-                MarkdownComposer(
-                  controller: _editController,
-                  compact: true,
-                  maxLines: 6,
-                  autofocus: true,
-                  chatStyle: true,
-                  onSubmit: _saveEdit,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextButton(
-                      onPressed: () => setState(() {
-                        _editController.text = widget.item.text;
-                        _isEditing = false;
-                      }),
-                      child: const Text('Cancel'),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: _saveEdit,
-                      child: const Text('Save'),
-                    ),
-                  ],
-                ),
-              ] else ...[
-                ConclaveMarkdownBody(data: widget.item.text),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (widget.item.sentAt != null) ...[
-                      Text(
-                        widget.item.sentAt!,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: metaColor,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    if (!widget.item.id.startsWith('temp-'))
-                      Tooltip(
-                        message: 'Edit message',
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(4),
-                          onTap: () => setState(() {
-                            _editController.text = widget.item.text;
-                            _isEditing = true;
-                          }),
-                          child: Padding(
-                            padding: const EdgeInsets.all(2),
-                            child: Icon(
-                              Icons.edit_outlined,
-                              size: 14,
-                              color: metaColor,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxBubbleWidth = math.min(640.0, constraints.maxWidth * 0.9);
+        return Align(
+          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+            child: Container(
+              decoration: BoxDecoration(
+                color: isMe
+                    ? ConclaveColors.primarySoftColor(isDark)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: EdgeInsets.fromLTRB(isMe ? 14 : 0, 10, 14, 10),
+              child: Column(
+                crossAxisAlignment:
+                    isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!isMe) ...[
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircleAvatar(
+                          radius: 12,
+                          backgroundColor:
+                              ConclaveColors.primarySoftColor(isDark),
+                          child: Text(
+                            initials,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: ConclaveColors.primaryForeground(isDark),
                             ),
                           ),
                         ),
-                      ),
-                    const SizedBox(width: 6),
-                    Tooltip(
-                      message: 'Copy Markdown',
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(4),
-                        onTap: widget.onCopy,
-                        child: Padding(
-                          padding: const EdgeInsets.all(2),
-                          child: Icon(
-                            Icons.copy_rounded,
-                            size: 14,
-                            color: metaColor,
+                        const SizedBox(width: 6),
+                        Text(
+                          widget.item.author,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : Colors.black87,
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                  ].orderedForMessage(isMe),
-                ),
-              ],
-            ],
+                    const SizedBox(height: 6),
+                  ],
+                  if (_isEditing) ...[
+                    MarkdownComposer(
+                      controller: _editController,
+                      compact: true,
+                      maxLines: 6,
+                      autofocus: true,
+                      chatStyle: true,
+                      onSubmit: _saveEdit,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextButton(
+                          onPressed: () => setState(() {
+                            _editController.text = widget.item.text;
+                            _isEditing = false;
+                          }),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: _saveEdit,
+                          child: const Text('Save'),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    ConclaveMarkdownBody(
+                      data: widget.item.text,
+                      fitContent: true,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.item.sentAt != null) ...[
+                          Text(
+                            widget.item.sentAt!,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: metaColor,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        if (!widget.item.id.startsWith('temp-'))
+                          Tooltip(
+                            message: 'Edit message',
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(4),
+                              onTap: () => setState(() {
+                                _editController.text = widget.item.text;
+                                _isEditing = true;
+                              }),
+                              child: Padding(
+                                padding: const EdgeInsets.all(2),
+                                child: Icon(
+                                  Icons.edit_outlined,
+                                  size: 14,
+                                  color: metaColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: 'Copy Markdown',
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(4),
+                            onTap: widget.onCopy,
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: Icon(
+                                Icons.copy_rounded,
+                                size: 14,
+                                color: metaColor,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ].orderedForMessage(isMe),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

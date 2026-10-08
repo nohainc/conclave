@@ -12,6 +12,7 @@ export async function loadConversationWorkflowRuns(
       `SELECT wfr.id, wfr.conversation_id AS conversationId,
     wfr.user_message_id AS userMessageId, wfr.user_message_id AS triggerMessageId, wfr.work_request_id AS workRequestId,
     wfr.workflow_id AS workflowId, wfr.workflow_version AS workflowVersion,
+    json_extract(wr.snapshot_json, '$.stepExecutionConfigs') AS executionConfigsJson,
     wr.status, wfr.created_at AS createdAt, wr.updated_at AS updatedAt,
     wfr.started_at AS startedAt, wfr.completed_at AS completedAt,
     (SELECT json_group_array(id) FROM (SELECT id FROM runs WHERE work_request_id=wfr.work_request_id ORDER BY created_at,id)) AS runtimeRunIdsJson,
@@ -25,6 +26,7 @@ export async function loadConversationWorkflowRuns(
         WorkflowRun,
         "schemaVersion" | "runtimeRunIds" | "workerTurnIds" | "stepRuns"
       > & {
+        executionConfigsJson: string | null;
         runtimeRunIdsJson: string;
         workerTurnIdsJson: string;
       }
@@ -32,12 +34,20 @@ export async function loadConversationWorkflowRuns(
   const steps = await loadConversationWorkflowStepRuns(db, workRequestIds);
   return new Map(
     (rows.results ?? []).map(
-      ({ runtimeRunIdsJson, workerTurnIdsJson, ...row }) => [
+      ({
+        runtimeRunIdsJson,
+        workerTurnIdsJson,
+        executionConfigsJson,
+        ...row
+      }) => [
         row.workRequestId,
         {
           ...row,
           schemaVersion: 1,
           stepRuns: steps.get(row.id) ?? [],
+          ...(executionConfigsJson
+            ? { executionConfigs: JSON.parse(executionConfigsJson) }
+            : {}),
           runtimeRunIds: JSON.parse(runtimeRunIdsJson) as string[],
           workerTurnIds: JSON.parse(workerTurnIdsJson) as string[],
         },

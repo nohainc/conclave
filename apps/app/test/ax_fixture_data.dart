@@ -16,7 +16,6 @@ class AxFixtureDataSource implements AxDataSource {
     required String prompt,
     List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
-    AxTurnExecutionSelection? executionSelection,
   }) async =>
       throw UnimplementedError('Work Request fixture is not configured');
 
@@ -25,7 +24,6 @@ class AxFixtureDataSource implements AxDataSource {
     required String threadId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
-    AxTurnExecutionSelection? executionSelection,
   }) async =>
       const [];
 

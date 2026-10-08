@@ -117,6 +117,7 @@ export interface WorkflowRun {
   readonly startedAt: string | null;
   readonly completedAt: string | null;
   readonly stepRuns: readonly WorkflowStepRun[];
+  readonly executionConfigs?: Readonly<Record<string, TurnExecutionConfig>>;
   readonly workRequestId: string;
   readonly workflowId: WorkflowId;
   readonly workflowVersion: number;
@@ -129,6 +130,9 @@ export interface WorkflowRun {
 
 /** One logical workflow step, independent of retry/Worker invocation count. */
 export interface WorkflowStepRun {
+  readonly executionConfig?: TurnExecutionConfig;
+  readonly profileId?: string | null;
+  readonly profileReleaseVersion?: number | null;
   readonly schemaVersion: 1;
   readonly id: string;
   readonly workflowRunId: string;

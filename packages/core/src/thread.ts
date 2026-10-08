@@ -83,6 +83,9 @@ export interface WorkRequest {
 }
 
 export interface WorkRequestSnapshot {
+  readonly stepExecutionConfigs?: Readonly<
+    Partial<Record<StepKind, TurnExecutionConfig>>
+  >;
   readonly turnExecutionConfig?: TurnExecutionConfig;
   readonly schemaVersion: 1;
   readonly originalRequest: string;
@@ -91,7 +94,7 @@ export interface WorkRequestSnapshot {
   readonly workflowVersion: number;
   readonly workflowSnapshot: BuiltinWorkflowDefinition;
   readonly resolvedBindings: Readonly<
-    Partial<Record<ThreadBindingId, ThreadStepBinding>>
+    Partial<Record<ThreadBindingId, WorkflowExecutionBinding>>
   >;
   readonly spaceInstructions: string;
   readonly threadInstructions: string;
@@ -143,29 +146,22 @@ export type WorkflowId = (typeof WORKFLOW_IDS)[number];
 export const THREAD_BINDING_IDS = ["direct", ...STEP_KINDS] as const;
 export type ThreadBindingId = (typeof THREAD_BINDING_IDS)[number];
 
-export interface ThreadWorkerLabel {
-  readonly displayName: string;
-  readonly workspaceName: string;
-}
-
-export interface ThreadStepBinding {
+/** Frozen resolved execution input; global preferences are stored separately. */
+export interface WorkflowExecutionBinding {
   readonly workerId?: string;
-  /** Presentation snapshot used when the bound Worker is no longer available. */
-  readonly workerLabel?: ThreadWorkerLabel;
   readonly model?: string;
   readonly reasoningEffort?: string;
-  readonly fallbackWorkerId?: string;
-  /** Presentation snapshot used when the fallback Worker is unavailable. */
-  readonly fallbackWorkerLabel?: ThreadWorkerLabel;
   readonly additionalInstructions?: string;
 }
 
-/** Fixed Thread execution choices; arbitrary task roles are not allowed. */
+/** Thread-authored context. Execution preferences belong to the user. */
 export interface ThreadWorkConfig {
   readonly defaultWorkflowId: WorkflowId;
   readonly threadInstructions?: string;
   readonly bindings: Readonly<
-    Partial<Record<ThreadBindingId, ThreadStepBinding>>
+    Partial<
+      Record<ThreadBindingId, { readonly additionalInstructions?: string }>
+    >
   >;
 }
 

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import type { SecurityEnv } from "../src/routes/handlers.js";
@@ -16,12 +17,22 @@ vi.mock("../src/routes/handlers.js", async (original) => ({
     },
   }),
 }));
+const publish = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("../src/event-publisher.js", () => ({
-  createEventPublisher: () => ({ publish: async () => {} }),
+  createEventPublisher: () => ({ publish }),
 }));
 import { handleCreateWorkRequest } from "../src/routes/work-creation.js";
 function fixture() {
   const { sqlite, db } = sqliteD1();
+  sqlite.exec(
+    readFileSync(
+      new URL(
+        "../migrations-v8/0018_user_workflow_configurations.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   sqlite.exec(`INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES('owner','owner@test','Owner','now','now');
     INSERT INTO spaces(id,owner_user_id,name,created_at,updated_at) VALUES('P','owner','Space','now','now');
     INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at) VALUES('member','P','owner','owner','now','now');
@@ -30,6 +41,8 @@ function fixture() {
   sqlite.exec(
     `INSERT INTO thread_work_configs(thread_id,config_json,updated_at) VALUES('W','{"bindings":{"direct":{"workerId":"worker-a"},"chat":{"workerId":"worker-a"}}}','now')`,
   );
+  sqlite.exec(`INSERT INTO workspace_worker_inventory(worker_id,workspace_id,owner_user_id,worker_type_id,activation_state,readiness_state,local_concurrency_limit,revision,created_at,updated_at,last_seen_at)
+    VALUES('worker-a','workspace','owner','chatgpt','enabled','ready',1,1,'now','now','now');`);
   const instances = new Set<string>();
   let failDispatch = false;
   const enqueue = vi.fn(async () => new Response("{}"));
@@ -89,6 +102,15 @@ it.each(["chat", "direct"])(
       );
       expect(first.status).toBe(202);
       const body = (await first.json()) as { workRequest: { id: string } };
+      expect(publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "work_request.created",
+          payload: expect.objectContaining({
+            workRequestId: body.workRequest.id,
+            submissionId: "phase19-operation-000001",
+          }),
+        }),
+      );
       const step = f.sqlite
         .prepare(
           `SELECT s.id,s.step_id,s.role,t.status FROM conversation_workflow_step_runs s
@@ -161,55 +183,6 @@ describe("Work mutation identity through response loss", () => {
       { workflow_id: "chat", conversation_revision: 1 },
       { workflow_id: "work", conversation_revision: 1 },
     ]);
-    f.sqlite.close();
-  });
-  it("explicit next-turn selection overrides saved defaults and remains pinned", async () => {
-    const f = fixture();
-    f.sqlite.exec(
-      `UPDATE thread_work_configs SET config_json = '{"bindings":{"direct":{"workerId":"old-worker","model":"old-model","reasoningEffort":"high"}}}'`,
-    );
-    await handleCreateWorkRequest(
-      new Request("https://cloud.test/threads/W/work-requests", {
-        method: "POST",
-        body: JSON.stringify({
-          workflowId: "direct",
-          input: { originalRequest: "Test" },
-          executionSelection: {
-            workerId: "worker-a",
-            modelId: null,
-            effort: null,
-          },
-        }),
-      }),
-      f.env,
-      "W",
-    );
-    const read = () =>
-      JSON.parse(
-        String(
-          f.sqlite.prepare("SELECT snapshot_json FROM work_requests").get()!
-            .snapshot_json,
-        ),
-      );
-    const before = read();
-    expect(before.turnExecutionConfig).toEqual({
-      schemaVersion: 1,
-      workerId: "worker-a",
-      profileId: "chatgpt-codex",
-      profileReleaseVersion: 1,
-      modelId: null,
-      effort: null,
-      workflowId: "direct",
-      workflowVersion: 2,
-    });
-    expect(before.resolvedBindings.direct).toEqual({ workerId: "worker-a" });
-    f.sqlite.exec(
-      `UPDATE thread_work_configs SET config_json = '{"bindings":{"direct":{"workerId":"new-worker","model":"new-model"}}}'`,
-    );
-    expect(read()).toEqual(before);
-    expect(() =>
-      f.sqlite.exec("UPDATE work_requests SET snapshot_json = '{}'"),
-    ).toThrow("snapshots are immutable");
     f.sqlite.close();
   });
   it("concurrent and later explicit retries create one request, Run, audit record and runtime instance", async () => {
@@ -320,4 +293,168 @@ describe("Work mutation identity through response loss", () => {
     expect(f.enqueue).not.toHaveBeenCalled();
     f.sqlite.close();
   });
+});
+
+it("global workflow choices beat stale Thread values and freeze Profile and step history", async () => {
+  const f = fixture();
+  try {
+    f.sqlite.exec(
+      `INSERT INTO workspace_worker_inventory(worker_id,workspace_id,owner_user_id,worker_type_id,activation_state,readiness_state,local_concurrency_limit,revision,created_at,updated_at,last_seen_at) VALUES('global-worker','workspace','owner','chatgpt','enabled','ready',1,1,'now','now','now')`,
+    );
+    const preference = {
+      schemaVersion: 1,
+      workflowId: "direct",
+      enabled: true,
+      defaults: {
+        worker: "global-worker",
+        model: "global-model",
+        effort: "high",
+      },
+      stepOverrides: { implement: { effort: "low" } },
+    };
+    f.sqlite
+      .prepare(
+        "INSERT INTO user_workflow_configurations VALUES('owner','direct',1,?,'now')",
+      )
+      .run(JSON.stringify(preference));
+    await handleCreateWorkRequest(
+      new Request("https://cloud.test/threads/W/work-requests", {
+        method: "POST",
+        headers: { "Idempotency-Key": "global-preferences-00001" },
+        body: JSON.stringify({
+          workflowId: "direct",
+          input: { originalRequest: "Global" },
+        }),
+      }),
+      f.env,
+      "W",
+    );
+    const read = () =>
+      JSON.parse(
+        String(
+          f.sqlite.prepare("SELECT snapshot_json FROM work_requests").get()!
+            .snapshot_json,
+        ),
+      );
+    const before = read();
+    expect(before.resolvedBindings.direct).toEqual({
+      workerId: "global-worker",
+      model: "global-model",
+      reasoningEffort: "low",
+    });
+    expect(before.stepExecutionConfigs.implement).toMatchObject({
+      workerId: "global-worker",
+      profileId: "chatgpt-codex",
+      profileReleaseVersion: 1,
+      modelId: "global-model",
+      effort: "low",
+    });
+    const { loadConversationWorkflowRuns } =
+      await import("../src/routes/conversation-workflow-runs.js");
+    const id = String(
+      f.sqlite.prepare("SELECT id FROM work_requests").get()!.id,
+    );
+    const history = (await loadConversationWorkflowRuns(f.db, [id])).get(id)!;
+    expect(history.executionConfigs?.implement).toEqual(
+      before.stepExecutionConfigs.implement,
+    );
+    expect(history.stepRuns[0]!.executionConfig).toEqual(
+      before.stepExecutionConfigs.implement,
+    );
+    expect(history.stepRuns[0]!.profileReleaseVersion).toBe(1);
+    f.sqlite.exec(
+      "UPDATE workspace_worker_inventory SET profile_definition_id='future-profile',profile_release_version=99 WHERE worker_id='global-worker'",
+    );
+    const { identityService } = await import("../src/auth/identity-service.js");
+    const identity = vi.spyOn(identityService, "resolve").mockResolvedValue({
+      userId: "owner",
+      email: "owner@test",
+      name: "Owner",
+      sessionId: "test-session",
+    });
+    f.env.BETTER_AUTH_SECRET = "test-secret";
+    const { handleGetWorkRequest, handleListWorkRequests } =
+      await import("../src/routes/work-lifecycle.js");
+    const detail = (await (
+      await handleGetWorkRequest(
+        new Request("https://cloud.test/work"),
+        f.env,
+        id,
+      )
+    ).json()) as {
+      steps: { profileDefinitionId: string; profileReleaseVersion: number }[];
+    };
+    const list = (await (
+      await handleListWorkRequests(
+        new Request("https://cloud.test/work"),
+        f.env,
+        "W",
+      )
+    ).json()) as {
+      workRequests: {
+        steps: { profileDefinitionId: string; profileReleaseVersion: number }[];
+      }[];
+    };
+    for (const step of [detail.steps[0]!, list.workRequests[0]!.steps[0]!]) {
+      expect(step.profileDefinitionId).toBe("chatgpt-codex");
+      expect(step.profileReleaseVersion).toBe(1);
+    }
+    identity.mockRestore();
+    f.sqlite.exec("DELETE FROM user_workflow_configurations");
+    expect(read()).toEqual(before);
+    expect((await loadConversationWorkflowRuns(f.db, [id])).get(id)).toEqual(
+      history,
+    );
+  } finally {
+    f.sqlite.close();
+  }
+});
+it("disabled user workflow cannot create execution even with a composer selection", async () => {
+  const f = fixture();
+  try {
+    f.sqlite
+      .prepare(
+        "INSERT INTO user_workflow_configurations VALUES('owner','direct',1,?,'now')",
+      )
+      .run(
+        JSON.stringify({
+          schemaVersion: 1,
+          workflowId: "direct",
+          enabled: false,
+          defaults: {},
+          stepOverrides: {},
+        }),
+      );
+    await expect(f.submit()).rejects.toMatchObject({ status: 422 });
+    expect(
+      f.sqlite.prepare("SELECT count(*) n FROM work_requests").get()!.n,
+    ).toBe(0);
+  } finally {
+    f.sqlite.close();
+  }
+});
+
+it("rejects obsolete composer overrides even without saved global preferences", async () => {
+  const f = fixture();
+  try {
+    await expect(
+      handleCreateWorkRequest(
+        new Request("https://cloud.test/work", {
+          method: "POST",
+          body: JSON.stringify({
+            workflowId: "direct",
+            input: { originalRequest: "Request" },
+            executionSelection: { workerId: "worker-a" },
+          }),
+        }),
+        f.env,
+        "W",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(
+      f.sqlite.prepare("SELECT count(*) n FROM work_requests").get()!.n,
+    ).toBe(0);
+  } finally {
+    f.sqlite.close();
+  }
 });

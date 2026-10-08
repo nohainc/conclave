@@ -21,14 +21,14 @@ are normative and checked by `scripts/verify-v8-architecture.mjs`.
 
 ## Product model
 
-- **Conclave AX** is the human application for Spaces, Threads, team Chat, AI execution through Work Requests, Workspace grants, Worker bindings, results, and audit.
+- **Conclave AX** is the human application for Spaces, Threads, team Chat, AI execution through Work Requests, Workspace grants, user Workflow configuration, results, and audit.
 - **Conclave Cloud** owns collaboration and scheduling state, the logical Worker catalog, Profile releases, and authorization. Provider credentials stay local.
 - **Conclave Workspace** owns the local Work Root, Worker readiness, Profile verification and cache, Engine supervision, cancellation, and diagnostics.
 - **Logical Workers** such as ChatGPT and Gemini are stable product identities. The Engine and Profile resolve each identity to a supported provider CLI.
 
 ## Work v1
 
-Conclave owns the built-in Steps and Workflows defined by the [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md). Threads bind logical Workers to Work (`direct:v2`) and individual Steps. Historical `direct:v1` snapshots retain the name Direct. A Work Request snapshots its Workflow, bindings, models, instructions, attachment references, and prompt-profile versions.
+Conclave owns the built-in Steps and Workflows defined by the [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md). Users configure logical Workers for Work (`direct:v2`) and individual Steps on the global Workflows page. Historical `direct:v1` snapshots retain the name Direct. A Work Request snapshots its Workflow, bindings, models, instructions, attachment references, and prompt-profile versions.
 
 | Workflow | Filesystem authority | Provider session | Mutation coordination |
 | --- | --- | --- | --- |
@@ -48,7 +48,7 @@ See the [operator workflow guide](docs/operations/THREAD_EXECUTION.md) and
 The runtime implementation stays below the logical Worker boundary:
 
 ~~~text
-Thread binding -> logical Worker -> Profile resolution -> CLI Worker Engine -> provider CLI
+User Workflow Configuration -> execution resolution -> logical Worker -> signed Profile -> CLI Worker Engine -> provider CLI
 ~~~
 
 ## Conversation Workflow ownership
@@ -178,3 +178,40 @@ to avoid retransmitting unchanged representations after authorization.
 AX Discussion history uses shared, paginated in-memory state with per-message
 optimistic writes; see [server-state ownership](docs/architecture/AX_SERVER_STATE.md)
 and the [v1 paging contract](docs/specifications/DISCUSSION_PAGING.md).
+
+## Global Workflow configuration
+
+Global per-user Workflow preferences are separate from Conclave-owned definitions
+and Space/Thread state. Workflows is the sole global execution editor. Thread
+configuration retains authored context, and the existing composer displays global
+choices without submitting an execution override.
+
+```text
+Workflow Definition
+       ↓
+User Workflow Configuration
+       ↓
+Execution Resolution
+       ↓
+WorkflowRun
+       ↓
+StepRun
+```
+
+Cloud freezes Worker/Profile release/model/effort per accepted step. Scheduler
+retries consume this immutable snapshot; current preferences and catalog changes
+cannot rewrite historical WorkflowRun/StepRun configuration. Auto model and effort
+remain null, preserving the signed Profile/CLI default without provider assumptions.
+
+```text
+User Workflow Configuration
+       ↓
+Thread preference       [future]
+       ↓
+Composer override       [future]
+```
+
+Those future overlays can use the existing sparse selection type; neither exists
+in the current runtime. See [ADR-019](docs/decisions/ADR-019-per-user-workflow-execution-configuration.md)
+and [User Workflow Configuration v1](docs/specifications/USER_WORKFLOW_CONFIGURATION_V1.md)
+for persistence, migration, resolution, security, cache, and validation boundaries.

@@ -111,7 +111,6 @@ mixin _ThreadApi on _AxApiClientCore {
     required String prompt,
     List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
-    AxTurnExecutionSelection? executionSelection,
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/threads/$threadId/work-requests'),
@@ -121,10 +120,6 @@ mixin _ThreadApi on _AxApiClientCore {
       },
       body: jsonEncode({
         'workflowId': workflowId,
-        if (executionSelection != null)
-          'workflowVersion': executionSelection.workflowVersion,
-        if (executionSelection != null)
-          'executionSelection': executionSelection.toJson(),
         'input': {'originalRequest': prompt, 'attachments': attachments},
       }),
     );
@@ -179,17 +174,12 @@ mixin _ThreadApi on _AxApiClientCore {
     required String threadId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
-    AxTurnExecutionSelection? executionSelection,
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/threads/$threadId/work-requests/validate'),
       headers: _headers(contentType: 'application/json'),
       body: jsonEncode({
         'workflowId': workflowId,
-        if (executionSelection != null)
-          'workflowVersion': executionSelection.workflowVersion,
-        if (executionSelection != null)
-          'executionSelection': executionSelection.toJson(),
         'attachments': attachments
             .map((attachment) => {
                   'kind': attachment['kind'],

@@ -60,6 +60,15 @@ production authentication secrets stay on Cloud. This mode tests local AX UI
 changes against deployed Cloud behavior, rather than executing local backend changes.
 Stop previous frontend/backend processes before restarting the launcher.
 
+For browser acceptance testing, use `./scripts/start-local.sh --web-release`.
+This runs the production web rendering path against the same configured API,
+without hot reload/restart. Stop the Flutter runner and close its browser window
+before switching modes; stop and relaunch to rebuild after code changes. Debug
+mode remains the default for development. Flutter web hot restart can leave a
+stale view and report “Trying to render a disposed EngineFlutterView”; a fresh
+release session helps distinguish that engine failure from application updates.
+See [Flutter's tracked web restart issue](https://github.com/flutter/flutter/issues/182377).
+
 Use `./scripts/start-local.sh --isolated` to test local backend changes with
 the local v8 D1 database and separate accounts. In this mode the launcher
 generates a persistent local authentication secret in the ignored

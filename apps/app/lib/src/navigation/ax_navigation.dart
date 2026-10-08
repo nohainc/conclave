@@ -4,6 +4,7 @@ enum AxRouteKind {
   space,
   thread,
   run,
+  workflows,
   workspaces,
   profileSecurity,
   login,
@@ -40,6 +41,8 @@ class AxNavigation {
           runId: runId,
           threadId: threadId,
         );
+
+  const AxNavigation.workflows() : this._(kind: AxRouteKind.workflows);
 
   const AxNavigation.workspaces({String? workspaceId})
       : this._(kind: AxRouteKind.workspaces, workspaceId: workspaceId);
@@ -86,6 +89,7 @@ class AxNavigation {
       return const AxNavigation.profileSecurity();
     }
     if (parts case ['spaces'] || ['spaces']) return const AxNavigation.spaces();
+    if (parts case ['workflows']) return const AxNavigation.workflows();
     if (parts.length == 1 && parts[0] == 'workspaces') {
       return const AxNavigation.workspaces();
     }
@@ -125,6 +129,7 @@ class AxNavigation {
       AxRouteKind.run => threadId != null
           ? Uri(path: '/spaces/$spaceId/threads/$threadId/runs/$runId')
           : Uri(path: '/spaces/$spaceId/runs/$runId'),
+      AxRouteKind.workflows => Uri(path: '/workflows'),
       AxRouteKind.workspaces => workspaceId != null
           ? Uri(path: '/workspaces/$workspaceId')
           : Uri(path: '/workspaces'),

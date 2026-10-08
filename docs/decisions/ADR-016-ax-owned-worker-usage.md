@@ -1,6 +1,8 @@
 # ADR-016: AX-Owned Worker Usage Policy
 
-**Status:** Accepted for implementation  
+**Status:** Workspace/readiness policy retained; Thread execution configuration
+superseded by [ADR-019](ADR-019-per-user-workflow-execution-configuration.md).
+The Thread binding examples below record the original decision, not current APIs.
 **Date:** 2026-09-28  
 **Builds on:** ADR-012, ADR-014, ADR-015  
 **Supersedes:** AX Workspaces read-only operational guidance only where it

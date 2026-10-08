@@ -216,7 +216,7 @@ void main() {
     expect(source.grantReads, 1);
   });
   testWidgets(
-      'inventory change updates an open settings dialog without a page reload',
+      'inventory change keeps Thread settings free of execution editors',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -225,8 +225,8 @@ void main() {
     await tester.pumpWidget(page('A', source, store.catalogs, initialTab: 2));
     await tester.pumpAndSettle();
     const notice =
-        'Connect a Workspace and create a ready logical Worker before assigning Steps.';
-    expect(find.text(notice), findsNothing);
+        'Worker, model, and effort defaults are configured on the Workflows page.';
+    expect(find.text(notice), findsOneWidget);
     source.workers = [];
     await store.realtimeCacheRouter
         .handle({'type': 'worker.inventory.updated'});
@@ -254,7 +254,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
         find.text(
-            'Connect a Workspace and create a ready logical Worker before assigning Steps.'),
+            'Worker, model, and effort defaults are configured on the Workflows page.'),
         findsOneWidget);
     expect(source.workerReads, 2);
   });

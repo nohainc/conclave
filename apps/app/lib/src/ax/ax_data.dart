@@ -1,3 +1,5 @@
+import 'ax_workflow_configuration.dart';
+export 'ax_workflow_configuration.dart';
 import 'dart:convert';
 import 'sync/ax_idempotency.dart';
 
@@ -141,6 +143,7 @@ class AxApiClient extends _AxApiClientCore
         _AuthApi,
         _WorkspaceApi,
         _SpaceApi,
-        _ReadModelApi {
+        _ReadModelApi
+    implements AxWorkflowConfigurationDataSource {
   AxApiClient({super.baseUrl, super.client});
 }

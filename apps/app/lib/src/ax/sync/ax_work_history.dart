@@ -38,6 +38,7 @@ class _HistoryContext {
   Object? olderError;
   final revisions = <String, int>{};
   final localProgress = <String, String>{};
+  final pendingSubmissions = <String, String?>{};
   final details = <String, _RequestRead>{};
   final detailErrors = <String, Object>{};
   final listeners = <void Function()>[];
@@ -277,6 +278,41 @@ class AxWorkHistoryCache {
     _emit(context);
   }
 
+  /// Replace the optimistic entry using exact submission identity, never text.
+  void acceptSubmission(
+      String threadId, String submissionId, String requestId) {
+    final context = _context(threadId);
+    if (!context.pendingSubmissions.containsKey(submissionId) ||
+        requestId.isEmpty ||
+        requestId.startsWith('local-')) {
+      return;
+    }
+    final accepted = context.pendingSubmissions[submissionId];
+    if (accepted != null && accepted != requestId) return;
+    context.pendingSubmissions[submissionId] = requestId;
+    final localId = 'local-$submissionId';
+    final local = request(threadId, localId);
+    if (local == null) return;
+    context.localProgress.remove(localId);
+    final history = peek(threadId);
+    replace(threadId, [
+      for (final item in history.requests)
+        if (item.id != localId) item,
+      if (!history.requests.any((item) => item.id == requestId))
+        AxWorkRequest(
+            id: requestId,
+            requestedByName: local.requestedByName,
+            requestedByUserId: local.requestedByUserId,
+            prompt: local.prompt,
+            workflowId: local.workflowId,
+            workflowVersion: local.workflowVersion,
+            workflowName: local.workflowName,
+            status: 'queued',
+            createdAt: local.createdAt,
+            steps: const []),
+    ]);
+  }
+
   /// A local request and progress belong to shared history, not a mounted form.
   /// There is no automatic retry/reconnect replay of the submission POST.
   Future<String> createRequest(
@@ -289,7 +325,6 @@ class AxWorkHistoryCache {
     String? requestedByUserId,
     String? requestedByName,
     List<Map<String, dynamic>> attachments = const [],
-    AxTurnExecutionSelection? executionSelection,
     required Future<String> Function(
             String, String, List<Map<String, dynamic>>, String)
         execute,
@@ -305,8 +340,6 @@ class AxWorkHistoryCache {
     final input = {
       'workflowId': workflowId,
       'workflowVersion': workflowVersion,
-      if (executionSelection != null)
-        'executionSelection': executionSelection.toJson(),
       'prompt': prompt,
       'attachments': inputs
     };
@@ -350,10 +383,7 @@ class AxWorkHistoryCache {
           if (source != null && !retrySubmission) {
             progress('Checking that everything is ready…');
             final issues = await source!.validateWorkRequestEligibility(
-                threadId: id,
-                workflowId: workflowId,
-                attachments: inputs,
-                executionSelection: executionSelection);
+                threadId: id, workflowId: workflowId, attachments: inputs);
             if (!current(context)) throw const AxMutationSuperseded();
             if (issues.isNotEmpty) {
               throw AxApiException(
@@ -364,7 +394,15 @@ class AxWorkHistoryCache {
           progress('Sending your request…');
           attemptedPost = true;
           _attempts.markSubmitted(key);
-          final savedId = await execute(prompt, workflowId, inputs, key);
+          context.pendingSubmissions[key] = null;
+          String savedId;
+          try {
+            savedId = await execute(prompt, workflowId, inputs, key);
+          } catch (_) {
+            final accepted = context.pendingSubmissions[key];
+            if (accepted == null) rethrow;
+            savedId = accepted;
+          }
           if (savedId.isEmpty || savedId.startsWith('local-')) {
             throw const AxApiException(
                 'Work Request response identity does not match');
@@ -432,6 +470,7 @@ class AxWorkHistoryCache {
         invalidate: (savedId, _) => refreshRequest(id, savedId),
       ));
     } finally {
+      context.pendingSubmissions.remove(key);
       if (current(context)) _emit(context);
     }
   }

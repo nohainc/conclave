@@ -1,0 +1,93 @@
+import { expect, it, vi } from "vitest";
+import { BUILTIN_WORKFLOWS } from "@conclave/core";
+import type { SecurityEnv } from "../src/routes/http-security.js";
+const admission = vi.hoisted(() => vi.fn());
+vi.mock("../src/routes/handlers.js", () => ({
+  validateWorkflowWorkerEligibility: admission,
+}));
+import { resolveWorkflowExecutionBindings } from "../src/routes/workflow-execution-configuration.js";
+
+function fixture(defaults: object = {}, stepOverrides: object = {}) {
+  const inventory = [
+    { workerId: "a", workspaceId: "first" },
+    { workerId: "b", workspaceId: "second" },
+  ];
+  const configuration = {
+    schemaVersion: 1,
+    workflowId: "implement_verify",
+    enabled: true,
+    defaults,
+    stepOverrides,
+  };
+  const env = {
+    CONCLAVE_DB: {
+      prepare(sql: string) {
+        return {
+          bind(user: string) {
+            expect(user).toBe("user");
+            return this;
+          },
+          async first() {
+            expect(sql).toContain("user_id = ?1");
+            return { configuration_json: JSON.stringify(configuration) };
+          },
+          async all() {
+            expect(sql).toContain("owner_user_id = ?1");
+            return { results: inventory };
+          },
+        };
+      },
+    },
+  } as unknown as SecurityEnv;
+  const resolve = () =>
+    resolveWorkflowExecutionBindings(
+      env,
+      "user",
+      "space",
+      "thread",
+      BUILTIN_WORKFLOWS.implement_verify,
+      {},
+      [],
+    );
+  admission.mockImplementation(
+    async (_env, _space, _thread, definition, bindings) => {
+      const binding = Object.values(bindings)[0] as { workerId: string };
+      const supports =
+        binding.workerId === "b" || definition.steps[0].kind === "implement";
+      return {
+        issues: supports ? [] : [{ message: "Unsupported capability" }],
+        primaryWorkspaceId: binding.workerId === "b" ? "second" : "first",
+        workerProfiles: {},
+      };
+    },
+  );
+  return { configuration, resolve };
+}
+it("resolves Auto across the whole workflow instead of greedily freezing the first Workspace", async () => {
+  const f = fixture(
+    { model: "model", effort: "medium" },
+    { verify: { effort: "high" } },
+  );
+  expect(await f.resolve()).toEqual({
+    implement: { workerId: "b", model: "model", reasoningEffort: "medium" },
+    verify: { workerId: "b", model: "model", reasoningEffort: "high" },
+  });
+});
+it("retains an explicit Worker and fails admission without silently choosing another", async () => {
+  const f = fixture({ worker: "a" });
+  await expect(f.resolve()).rejects.toMatchObject({
+    status: 422,
+    message: "Unsupported capability",
+  });
+});
+it("rejects a saved Worker missing from current user ownership", async () => {
+  const f = fixture({ worker: "foreign" });
+  await expect(f.resolve()).rejects.toMatchObject({ status: 422 });
+});
+it("rejects disabled workflows before admission", async () => {
+  const f = fixture();
+  f.configuration.enabled = false;
+  admission.mockClear();
+  await expect(f.resolve()).rejects.toMatchObject({ status: 422 });
+  expect(admission).not.toHaveBeenCalled();
+});

@@ -5,6 +5,7 @@ import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
+import 'package:conclave_app/src/ax/sync/ax_work_realtime_sync.dart';
 import 'ax_fixture_data.dart';
 
 AxWorkRequest request(String id, {String status = 'completed'}) =>
@@ -69,6 +70,48 @@ void main() {
     source.pending.last.complete(AxWorkRequestPage(
         requests: [request('30', status: status)], nextCursor: older));
     await load;
+  }
+
+  for (final loseResponse in [false, true]) {
+    test(
+        'acceptance before POST reconciles one entry (lost response: $loseResponse)',
+        () async {
+      final history = AxWorkHistoryCache(null);
+      final previous = request('previous');
+      history.replace('w', [previous]);
+      final response = Completer<String>();
+      final sending = history.createRequest('w',
+          prompt: 'Next request',
+          workflowId: 'direct',
+          idempotencyKey: 'submission',
+          execute: (_, __, ___, ____) => response.future);
+      await Future<void>.delayed(Duration.zero);
+      history.acceptSubmission('w', 'unrelated', 'wrong');
+      expect(history.peek('w').requests.last.id, 'local-submission');
+      await AxWorkRealtimeSync(history).handle({
+        'type': 'work_request.created',
+        'payload': {
+          'threadId': 'w',
+          'workRequestId': 'saved',
+          'submissionId': 'submission',
+          'status': 'queued'
+        },
+      });
+      history.patchRequest('w', request('saved', status: 'running'));
+      expect(
+          history.peek('w').requests.map((r) => r.id), ['previous', 'saved']);
+      expect(history.request('w', 'previous'), same(previous));
+      expect(history.localProgress('w'), isEmpty);
+      if (loseResponse) {
+        response.completeError(Exception('Response lost'));
+      } else {
+        response.complete('saved');
+      }
+      expect(await sending, 'saved');
+      expect(history.peek('w').requests.length, 2);
+      expect(history.request('w', 'saved')!.status, 'running');
+      history.clear();
+    });
   }
 
   test('initial load requests one page of 50 and shares a future', () async {
@@ -264,8 +307,8 @@ void main() {
   });
 
   Widget page(String id,
-          {Future<String> Function(String, String, List<Map<String, dynamic>>,
-                  String, AxTurnExecutionSelection?)?
+          {Future<String> Function(
+                  String, String, List<Map<String, dynamic>>, String)?
               onRun}) =>
       MaterialApp(
           home: Scaffold(
@@ -345,8 +388,8 @@ void main() {
       (tester) async {
     await size(tester);
     final submit = Completer<String>();
-    await tester.pumpWidget(
-        page('w', onRun: (_, __, ___, key, selection) => submit.future));
+    await tester
+        .pumpWidget(page('w', onRun: (_, __, ___, key) => submit.future));
     source.pending.last.complete(AxWorkRequestPage(requests: []));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Send this Work');

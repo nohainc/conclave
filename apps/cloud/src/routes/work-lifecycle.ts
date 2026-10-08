@@ -402,6 +402,10 @@ export async function handleGetWorkRequest(
         typeof bindingValue === "object" && bindingValue !== null
           ? (bindingValue as Record<string, unknown>)
           : {};
+      const executionConfig = (
+        snapshot.stepExecutionConfigs as
+          Record<string, Record<string, unknown>> | undefined
+      )?.[kind];
       const output = parseJson<Record<string, unknown>>(
         typeof task?.outputJson === "string" ? task.outputJson : null,
         {},
@@ -479,12 +483,12 @@ export async function handleGetWorkRequest(
             ? typeof permissionSnapshot.profileDefinitionId === "string"
               ? permissionSnapshot.profileDefinitionId
               : null
-            : null,
+            : (executionConfig?.profileId ?? null),
           profileReleaseVersion: hasAssignment
             ? Number.isSafeInteger(permissionSnapshot.profileReleaseVersion)
               ? permissionSnapshot.profileReleaseVersion
               : null
-            : null,
+            : (executionConfig?.profileReleaseVersion ?? null),
           model: hasAssignment
             ? (task?.assignedModel ?? null)
             : typeof binding.model === "string"
@@ -728,6 +732,10 @@ export async function handleListWorkRequests(
           typeof bindingValue === "object" && bindingValue !== null
             ? (bindingValue as Record<string, unknown>)
             : {};
+        const executionConfig = (
+          snapshot.stepExecutionConfigs as
+            Record<string, Record<string, unknown>> | undefined
+        )?.[kind];
         const desiredWorker =
           typeof binding.workerId === "string"
             ? desiredWorkers.get(binding.workerId)
@@ -797,12 +805,12 @@ export async function handleListWorkRequests(
               ? typeof permissionSnapshot.profileDefinitionId === "string"
                 ? permissionSnapshot.profileDefinitionId
                 : null
-              : (desiredWorker?.profileDefinitionId ?? null),
+              : (executionConfig?.profileId ?? null),
             profileReleaseVersion: hasAssignment
               ? Number.isSafeInteger(permissionSnapshot.profileReleaseVersion)
                 ? permissionSnapshot.profileReleaseVersion
                 : null
-              : (desiredWorker?.profileReleaseVersion ?? null),
+              : (executionConfig?.profileReleaseVersion ?? null),
             model: hasAssignment
               ? (task?.assignedModel ?? null)
               : typeof binding.model === "string"

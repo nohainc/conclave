@@ -42,7 +42,6 @@ class WorkCreationSource extends AxFixtureDataSource {
     required String threadId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
-    AxTurnExecutionSelection? executionSelection,
   }) {
     validations++;
     return validation?.future ?? Future.value([]);
@@ -123,7 +122,7 @@ void main() {
           currentUserId: 'human',
           onBackToSpace: () {},
           onArchive: () {},
-          onRunWork: (_, __, ___, key, selection) {
+          onRunWork: (_, __, ___, key) {
             posts++;
             return post.future;
           },

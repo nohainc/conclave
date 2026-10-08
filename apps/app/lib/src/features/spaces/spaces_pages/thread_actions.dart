@@ -56,33 +56,6 @@ extension _ThreadActions on _ThreadPageState {
     final workflowId = _effectiveWorkflow.split(':').first;
     final workflowVersion =
         int.tryParse(_effectiveWorkflow.split(':v').last) ?? 1;
-    final selectedWorkflow = _availableWorkflows
-        .where((w) => w.reference == _effectiveWorkflow)
-        .firstOrNull;
-    final bindingId = selectedWorkflow?.composerBindingId;
-    final bindings = _composerWorkConfig['bindings'];
-    final rawBinding =
-        bindings is Map && bindingId != null ? bindings[bindingId] : null;
-    final binding = rawBinding is Map
-        ? Map<String, dynamic>.from(rawBinding)
-        : <String, dynamic>{};
-    final workerId = binding['workerId']?.toString();
-    final worker = [..._eligibleWorkers, ..._spaceWorkers]
-        .where((w) => w.id == workerId)
-        .firstOrNull;
-    String? optional(dynamic value) =>
-        value is String && value.trim().isNotEmpty ? value.trim() : null;
-    final executionSelection =
-        workerId == null || workerId.isEmpty || bindingId == null
-            ? null
-            : AxTurnExecutionSelection(
-                workerId: workerId,
-                workflowVersion: workflowVersion,
-                profileId: worker?.profileDefinitionId,
-                profileReleaseVersion: worker?.profileReleaseVersion,
-                modelId: optional(binding['model']),
-                effort: optional(binding['reasoningEffort']),
-              );
     final threadId = widget.thread.id;
     final workCache = _workHistoryCache;
     final workflowName = _currentWorkflows
@@ -103,9 +76,8 @@ extension _ThreadActions on _ThreadPageState {
           workflowName: workflowName,
           requestedByUserId: widget.currentUserId,
           attachments: attachments,
-          executionSelection: executionSelection,
           execute: (prompt, workflow, inputs, key) =>
-              submit(prompt, workflow, inputs, key, executionSelection));
+              submit(prompt, workflow, inputs, key));
     } catch (error) {
       if (!mounted ||
           widget.thread.id != threadId ||

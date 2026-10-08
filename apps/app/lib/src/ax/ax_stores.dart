@@ -1,3 +1,4 @@
+import 'sync/ax_workflow_configurations.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'sync/persistence/ax_persistent_read_cache.dart';
@@ -205,6 +206,7 @@ class AxStore {
     lifecycle.dispose();
     lifecycleNotice.dispose();
     persistence.dispose();
+    workflowConfigurations.clear();
     _disposed = true;
     _sessionGeneration++;
     spaces.dispose();
@@ -224,6 +226,8 @@ class AxStore {
   final AxSyncEngine syncEngine = AxSyncEngine();
   late final UserInvitationsStore invitations =
       UserInvitationsStore(dataSource, engine: syncEngine);
+  late final workflowConfigurations =
+      AxWorkflowConfigurations(dataSource, engine: syncEngine);
   late final AxSessionCatalogs catalogs =
       AxSessionCatalogs(dataSource, engine: syncEngine);
   late final AxSpaceTabQueries spaceTabs =
@@ -294,6 +298,7 @@ class AxStore {
       (source as AxConditionalReadCache).clearConditionalReads();
     }
     lifecycle.reset();
+    workflowConfigurations.clear();
     unawaited(persistence.clearUser());
     _sessionGeneration++;
     spaces.clear();

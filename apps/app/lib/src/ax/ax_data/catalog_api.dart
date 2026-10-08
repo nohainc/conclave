@@ -1,6 +1,45 @@
 part of '../ax_data.dart';
 
 mixin _CatalogApi on _AxApiClientCore {
+  Future<List<AxUserWorkflowConfiguration>> loadWorkflowConfigurations() async {
+    final body =
+        await _getJson(Uri.parse('$baseUrl/user/workflow-configurations'));
+    return (body['configurations'] as List)
+        .map((value) => AxUserWorkflowConfiguration.fromJson(
+            Map<String, dynamic>.from(value as Map)))
+        .toList();
+  }
+
+  Future<AxUserWorkflowConfiguration> saveWorkflowConfiguration(
+      AxUserWorkflowConfiguration configuration) async {
+    final response = await client.put(
+        Uri.parse(
+            '$baseUrl/user/workflow-configurations/${Uri.encodeComponent(configuration.workflowId)}'),
+        headers: _headers(contentType: 'application/json'),
+        body: jsonEncode(configuration.toJson()));
+    return _configurationResponse(response);
+  }
+
+  Future<AxUserWorkflowConfiguration> resetWorkflowConfiguration(
+      String workflowId) async {
+    final response = await client.delete(
+        Uri.parse(
+            '$baseUrl/user/workflow-configurations/${Uri.encodeComponent(workflowId)}'),
+        headers: _headers());
+    return _configurationResponse(response);
+  }
+
+  AxUserWorkflowConfiguration _configurationResponse(http.Response response) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException(
+          'Workflow configuration failed (${response.statusCode}): ${response.body}',
+          statusCode: response.statusCode);
+    }
+    final body = jsonDecode(response.body) as Map;
+    return AxUserWorkflowConfiguration.fromJson(
+        Map<String, dynamic>.from(body['configuration'] as Map));
+  }
+
   @override
   Future<List<AxSpace>> loadSpaces({bool includeArchived = false}) async {
     final uri = Uri.parse('$baseUrl/spaces').replace(

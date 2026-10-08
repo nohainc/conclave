@@ -114,11 +114,15 @@ void main() {
       expect(find.text('VN'), findsOneWidget); // User avatar initials
       expect(find.byTooltip('Application menu'), findsOneWidget); // ⋯ menu
 
+      expect(find.text('Workflows'), findsOneWidget);
+      expect(find.text('Workspaces'), findsOneWidget);
+      expect(tester.getTopLeft(find.text('Workflows')).dy,
+          lessThan(tester.getTopLeft(find.text('Workspaces')).dy));
+
       // FORBIDDEN permanent sidebar items:
       expect(find.text('Home'), findsNothing);
       expect(find.text('Spaces'), findsNothing);
       expect(find.text('SPACES'), findsNothing);
-      expect(find.text('Workspaces'), findsNothing);
       expect(find.text('Workers'), findsNothing);
       expect(find.text('Usage'), findsNothing);
       expect(find.text('Profile & Security'), findsNothing);

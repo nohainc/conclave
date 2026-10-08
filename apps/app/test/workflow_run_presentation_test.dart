@@ -78,6 +78,28 @@ AxConversationTurn turn(
     });
 
 void main() {
+  test('run and step execution snapshots survive typed cache round trips', () {
+    final config = <String, dynamic>{
+      'schemaVersion': 1,
+      'workerId': 'saved-worker',
+      'profileId': 'signed-profile',
+      'profileReleaseVersion': 4,
+      'modelId': null,
+      'effort': 'high',
+      'workflowId': 'implement_verify',
+      'workflowVersion': 1,
+    };
+    final json = runJson();
+    json['executionConfigs'] = {'implement': config};
+    (json['stepRuns'] as List).last['executionConfig'] = config;
+    final restored =
+        AxWorkflowRun.fromJson(AxWorkflowRun.fromJson(json).toJson());
+    expect(restored.executionConfigs['implement']!.profileReleaseVersion, 4);
+    expect(restored.stepRuns.last.executionConfig!.toJson(), config);
+    expect(restored.executionConfigs['implement']!.modelId, isNull);
+    expect(() => restored.executionConfigs.clear(), throwsUnsupportedError);
+  });
+
   test(
       'requires explicit enablement and multi-step policy even when metadata has many steps',
       () {

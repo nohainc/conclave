@@ -321,6 +321,7 @@ extension _AxAppViews on _AxAppStateMixin {
         }
         return ThreadPage(
           catalogs: store.catalogs,
+          workflowConfigurations: store.workflowConfigurations,
           mutations: store.collaboration,
           workspaceGrants: store.spaceWorkspaceGrants,
           discussionCache: store.discussion,
@@ -354,15 +355,13 @@ extension _AxAppViews on _AxAppStateMixin {
               if (mounted) _showSnackBar(error.toString());
             }
           },
-          onRunWork: (prompt, workflowId, attachments, idempotencyKey,
-                  executionSelection) =>
+          onRunWork: (prompt, workflowId, attachments, idempotencyKey) =>
               widget.dataSource.createWorkRequest(
             threadId: thread.id,
             workflowId: workflowId,
             prompt: prompt,
             attachments: attachments,
             idempotencyKey: idempotencyKey,
-            executionSelection: executionSelection,
           ),
         );
       },

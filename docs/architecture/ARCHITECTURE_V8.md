@@ -99,7 +99,7 @@ Gemini
 -> agy
 ~~~
 
-The logical Worker identity remains stable. Workflows, Thread bindings,
+The logical Worker identity remains stable. Workflows, user execution preferences,
 scheduling, collaboration history, and AX UX continue to target ChatGPT,
 Gemini, and future approved logical Workers rather than implementation details.
 
@@ -171,7 +171,7 @@ It owns:
 - Discuss;
 - Work;
 - built-in Workflow selection;
-- Thread logical Worker bindings;
+- user Workflow execution preferences;
 - model selection where supported;
 - Work history/results;
 - read-only Workspace/Worker operational visibility.
@@ -799,18 +799,21 @@ Work is writable, has its own durable provider session, and participates in
 Thread mutation coordination. Research, Plan, Test and Verify keep their
 existing semantics and request/Step session scopes. Full Cycle excludes Chat.
 
-Thread configuration binds Steps to logical Workers, not profiles:
+User Workflow configuration supplies sparse execution defaults and step overrides.
+Cloud resolves the owned logical Worker and signed Profile release at acceptance,
+freezing nullable model/effort and identity/version per step. Workspace executes
+that admitted Worker under the signed Profile through the generic Engine.
 
-~~~text
-Research  -> Gemini
-Plan      -> Gemini
-Implement -> ChatGPT
-Test      -> ChatGPT
-Verify    -> Gemini
-~~~
+```text
+Workflow Definition → User Workflow Configuration → Execution Resolution
+                     → WorkflowRun → StepRun
+```
 
-When Cloud schedules ChatGPT, Workspace resolves ChatGPT to Engine + official
-compatible profile locally.
+Thread preference and Composer override are future layers, not current runtime
+inputs. Workflows is the sole global execution editor; Thread configuration keeps
+only authored context and initial Workflow selection. See
+[ADR-019](../decisions/ADR-019-per-user-workflow-execution-configuration.md) and
+[User Workflow Configuration v1](../specifications/USER_WORKFLOW_CONFIGURATION_V1.md).
 
 Research and Plan are stateless read-only Steps and may execute on any eligible
 Workspace covered by the Space grant. A Work Request containing any stateful
@@ -1022,7 +1025,7 @@ a non-ready record with no Profile release identity or capabilities, so Cloud
 scheduling cannot treat stale local readiness as executable.
 
 Cloud independently enforces the same catalog boundary when selecting an
-assignment target and validating Thread Worker bindings. It joins inventory
+assignment target and validating resolved Workflow execution configuration. It joins inventory
 to an active, visible catalog entry eligible for the Workspace's release
 channel, and to the matching active Tool Profile Definition. A stale `ready`
 inventory record cannot execute after its Worker is retired, hidden, moved

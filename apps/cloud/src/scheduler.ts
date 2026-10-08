@@ -254,7 +254,6 @@ export async function selectSpaceExecutionTarget(
             g.concurrency_json, g.expires_at,
             ep.allowed_worker_type_ids_json,
             ep.allowed_models_json,
-            usage.config_json AS thread_work_config_json,
             wr.snapshot_json AS work_request_snapshot_json,
             (SELECT conversation_id FROM conversation_work_requests WHERE work_request_id = wr.id) AS conversation_id,
             (SELECT cr.conversation_revision - 1 FROM conversation_work_requests cr WHERE cr.work_request_id = wr.id) AS base_context_revision,
@@ -284,7 +283,6 @@ export async function selectSpaceExecutionTarget(
      FROM workspace_space_grants g
      LEFT JOIN thread_execution_policies ep ON ep.thread_id = ?4
      JOIN execution_workspaces ew ON ew.id = g.workspace_id
-     LEFT JOIN thread_work_configs usage ON usage.thread_id = ?4
      LEFT JOIN work_requests wr ON wr.id = ?5 AND wr.thread_id = ?4
      JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
      JOIN workspace_worker_inventory i ON i.workspace_id = ew.id
@@ -325,17 +323,12 @@ export async function selectSpaceExecutionTarget(
   const rejected: Array<Record<string, unknown>> = [];
   const liveWorkspaceChecks = new Map<string, Promise<boolean>>();
   const bindingFor = (row: Row): Record<string, unknown> => {
-    const config = object(row.thread_work_config_json);
-    const configBindings =
-      config.bindings && typeof config.bindings === "object"
-        ? (config.bindings as Record<string, unknown>)
-        : {};
     const snapshot = object(row.work_request_snapshot_json);
     const snapshotBindings =
       snapshot.resolvedBindings && typeof snapshot.resolvedBindings === "object"
         ? (snapshot.resolvedBindings as Record<string, unknown>)
         : {};
-    const bindings = request.workRequestId ? snapshotBindings : configBindings;
+    const bindings = request.workRequestId ? snapshotBindings : {};
     const raw = request.workBindingId
       ? bindings[request.workBindingId]
       : undefined;
@@ -348,9 +341,6 @@ export async function selectSpaceExecutionTarget(
       const value = bindingFor(row);
       const preferred = [
         ...(typeof value.workerId === "string" ? [value.workerId] : []),
-        ...(typeof value.fallbackWorkerId === "string"
-          ? [value.fallbackWorkerId]
-          : []),
       ];
       const index = preferred.indexOf(String(row.worker_id));
       return index < 0 ? Number.MAX_SAFE_INTEGER : index;
@@ -369,10 +359,22 @@ export async function selectSpaceExecutionTarget(
     const workerId = String(row.worker_id);
     const workerTypeId = String(row.worker_type_id);
     const binding = bindingFor(row);
+    const acceptedSnapshot = object(row.work_request_snapshot_json);
+    const stepConfigs = acceptedSnapshot.stepExecutionConfigs as
+      Record<string, unknown> | undefined;
     const turnConfig = request.workRequestId
-      ? (object(row.work_request_snapshot_json).turnExecutionConfig as
+      ? ((stepConfigs?.[request.role] ??
+          acceptedSnapshot.turnExecutionConfig) as
           Record<string, unknown> | undefined)
       : undefined;
+    if (stepConfigs && !stepConfigs[request.role]) {
+      rejected.push({
+        workspaceId,
+        workerId,
+        reason: "step_configuration_unavailable",
+      });
+      continue;
+    }
     if (
       turnConfig &&
       (turnConfig.schemaVersion !== 1 ||
@@ -391,9 +393,6 @@ export async function selectSpaceExecutionTarget(
     const hasBinding = Object.keys(binding).length > 0;
     const preferredWorkerIds = [
       ...(typeof binding.workerId === "string" ? [binding.workerId] : []),
-      ...(typeof binding.fallbackWorkerId === "string"
-        ? [binding.fallbackWorkerId]
-        : []),
     ];
     const capabilities = strings(row.capabilities_json).map((value) =>
       value.toLowerCase(),

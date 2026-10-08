@@ -874,3 +874,53 @@ Sidebar group labels use uppercase text. Shared Space pages omit the empty
 instructions section while continuing to show configured instructions. The
 Members tab retains cached rows and an inline loading-failure notice without a
 Retry Members button; reopening the tab retries its stale query.
+
+## Global Workflows page
+
+`/workflows` is a user-wide destination above Workspaces in the sidebar, collapsed
+rail and application menu. It has no Space/Thread route arguments. It renders the
+newest version per stable catalog ID; historical definitions remain available to
+execution history. Cards combine definitions with typed user preferences and
+owned Worker presentation metadata, including unavailable selections.
+
+`AxStore.workflowConfigurations` owns the session query
+`['user-workflow-configurations']`. The page uses cache-first ensures on entry:
+cold concurrent consumers share one read, and returning to the page retains even
+stale preferences without a navigation-triggered read. Space, Thread and sidebar
+changes do not invalidate this query. Catalog definitions use the existing shared
+catalog query. Worker inventory retains its existing 30-second freshness policy.
+
+Preference freshness is 45 minutes. Explicit Refresh revalidates page resources;
+the existing foreground/network recovery refreshes active stale queries. No
+preference polling, new realtime event, bootstrap reload or Space-scoped query is
+introduced. Save/reset commit authoritative API results through the shared query,
+not through a subsequent GET. Failed reads retain cached data with an inline
+notice; cold failure is unavailable rather than Automatic. Failed writes preserve
+prior preferences. Concurrent preference writes are rejected while pending.
+Session clearing fences pending reads/writes, including writes waiting for their
+initial read; account changes cannot repopulate preferences from a prior session.
+Preferences remain memory-only, outside the persistent read-cache allowlist.
+
+Edit exposes workflow defaults and optional step overrides using Profile-owned
+model/effort metadata. Automatic step choices inherit workflow defaults. Offline
+Worker selections remain visible. Cloud resolves these preferences at execution admission; new Thread/composer
+resolution layers remain deferred. The
+[configuration contract](../specifications/USER_WORKFLOW_CONFIGURATION_V1.md)
+continues to own persistence and API semantics. No Phase 2 migration is required.
+
+`workflows_page_test.dart` covers query sharing, stale return reuse, mutation
+updates/failure retention, reset, session races, latest-version cards, cold error
+recovery, and full-shell Space/Thread navigation without preference reloads.
+
+The Phase 3 Workflow editor subscribes to the shared Worker inventory while open;
+refresh revalidates the unsaved draft without rewriting selections. Default and
+step edits stay local until Save. Workflow and step resets retain the existing
+shared-query mutation boundary. Workflow selection/card clicks do not reload
+preferences. Advanced controls remain confined to this global page.
+
+Thread controls observe the same `AxStore.workflowConfigurations` session query
+as the Workflows page. They project global choices without owning a second draft
+or submitting an execution override. Save/reset updates those displays reactively;
+Thread recreation does not reload preferences. Authored Thread configuration keeps
+instructions and the initial Workflow only. Immutable Run/Step configurations stay
+in typed history models through cache round trips, independent of this live query.

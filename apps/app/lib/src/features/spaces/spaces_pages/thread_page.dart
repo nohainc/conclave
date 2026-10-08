@@ -9,6 +9,7 @@ class ThreadPage extends StatefulWidget {
     this.discussionCache,
     this.workHistoryCache,
     this.catalogs,
+    this.workflowConfigurations,
     this.mutations,
     this.workspaceGrants,
     this.currentUserId,
@@ -27,6 +28,7 @@ class ThreadPage extends StatefulWidget {
   final AxDiscussionCache? discussionCache;
   final AxWorkHistoryCache? workHistoryCache;
   final AxSessionCatalogs? catalogs;
+  final AxWorkflowConfigurations? workflowConfigurations;
   final AxCollaborationMutations? mutations;
   final AxSpaceWorkspaceGrants? workspaceGrants;
   final String? currentUserId;
@@ -34,12 +36,8 @@ class ThreadPage extends StatefulWidget {
   final VoidCallback onBackToSpace;
   final VoidCallback onArchive;
   final Future<void> Function(String name)? onRename;
-  final Future<String> Function(
-      String prompt,
-      String workflowId,
-      List<Map<String, dynamic>> attachments,
-      String idempotencyKey,
-      AxTurnExecutionSelection? executionSelection)? onRunWork;
+  final Future<String> Function(String prompt, String workflowId,
+      List<Map<String, dynamic>> attachments, String idempotencyKey)? onRunWork;
   final Stream<Map<String, dynamic>>? realtimeEvents;
   final int initialTab;
 
@@ -156,85 +154,50 @@ class _ThreadPageState extends State<ThreadPage>
   List<AxWorker> _spaceWorkers = const [];
   List<AxWorker> _eligibleWorkers = const [];
   late Map<String, dynamic> _workConfig;
-  final Map<String, Map<String, dynamic>> _composerBindings = {};
-  // Execution preferences are scoped to this form and composer binding, never
-  // persisted as Conversation state or copied into another Thread.
-  final Map<String, Map<String, Map<String, dynamic>>> _workerPreferences = {};
-
-  void _rememberWorkerSelection(
-      String bindingId, Map<String, dynamic> binding) {
-    final workerId = binding['workerId']?.toString();
-    if (workerId == null || workerId.isEmpty) return;
-    final value = _reconcileComposerBinding(binding);
-    (_workerPreferences[bindingId] ??= {})[workerId] = {
-      if (value['model'] != null) 'model': value['model'],
-      if (value['reasoningEffort'] != null)
-        'reasoningEffort': value['reasoningEffort'],
+  AxWorkflowConfigurations? _workflowConfigurations;
+  void Function()? _cancelWorkflowConfigurations;
+  List<AxUserWorkflowConfiguration> _userWorkflowConfigurations = const [];
+  Map<String, dynamic> get _composerWorkConfig {
+    final id = _effectiveWorkflow.split(':').first;
+    final definition = _availableWorkflows
+        .where((workflow) => workflow.reference == _effectiveWorkflow)
+        .firstOrNull;
+    final configuration = _userWorkflowConfigurations
+        .where((value) => value.workflowId == id)
+        .firstOrNull;
+    return {
+      'bindings': {
+        for (final step in definition?.steps ?? const <AxBuiltinWorkflowStep>[])
+          (id == 'direct' ? 'direct' : step.kind): {
+            if (configuration?.selectionFor(step.kind).worker != null)
+              'workerId': configuration!.selectionFor(step.kind).worker,
+            if (configuration?.selectionFor(step.kind).model != null)
+              'model': configuration!.selectionFor(step.kind).model,
+            if (configuration?.selectionFor(step.kind).effort != null)
+              'reasoningEffort': configuration!.selectionFor(step.kind).effort,
+          }
+      }
     };
   }
 
-  Map<String, dynamic> get _composerWorkConfig => {
-        ..._workConfig,
-        'bindings': {
-          if (_workConfig['bindings'] is Map)
-            ...Map<String, dynamic>.from(_workConfig['bindings'] as Map).map(
-                (key, value) => MapEntry(
-                    key,
-                    value is Map
-                        ? _reconcileComposerBinding(
-                            Map<String, dynamic>.from(value))
-                        : value)),
-          ..._composerBindings.map(
-              (key, value) => MapEntry(key, _reconcileComposerBinding(value))),
-        },
-      };
-  Map<String, dynamic> _reconcileComposerBinding(Map<String, dynamic> value) {
-    final binding = Map<String, dynamic>.from(value);
-    final workerId = binding['workerId'];
-    final worker = _spaceWorkers.where((w) => w.id == workerId).firstOrNull;
-    final options = worker?.executionOptions;
-    if (options == null) return binding;
-    final selection = options.reconcileSelection(
-      model: binding['model']?.toString(),
-      effort: binding['reasoningEffort']?.toString(),
-    );
-    binding.remove('model');
-    binding.remove('reasoningEffort');
-    if (selection.model != null) binding['model'] = selection.model;
-    if (selection.effort != null) binding['reasoningEffort'] = selection.effort;
-    return binding;
+  void _subscribeWorkflowConfigurations() {
+    final ds = widget.dataSource;
+    _workflowConfigurations = widget.workflowConfigurations ??
+        (ds is AxWorkflowConfigurationDataSource
+            ? AxWorkflowConfigurations(ds!, engine: _workHistoryCache.engine)
+            : null);
+    final cache = _workflowConfigurations;
+    if (cache == null) return;
+    _cancelWorkflowConfigurations = cache.engine.watch(cache.query, (state) {
+      if (!mounted) return;
+      _updateWorkSettings(
+          () => _userWorkflowConfigurations = state.data ?? const []);
+    });
+    unawaited(cache
+        .ensure()
+        .catchError((Object error) => <AxUserWorkflowConfiguration>[]));
   }
 
-  Map<String, dynamic> _composerBinding(String bindingId) {
-    final bindings = _composerWorkConfig['bindings'] as Map;
-    return Map<String, dynamic>.from(bindings[bindingId] as Map? ?? const {});
-  }
-
-  void _setComposerBinding(String bindingId, Map<String, dynamic> binding) =>
-      _updateWorkSettings(() {
-        final reconciled = _reconcileComposerBinding(binding);
-        _composerBindings[bindingId] = reconciled;
-        _rememberWorkerSelection(bindingId, reconciled);
-      });
-  void _onWorkerChanged(String bindingId, String workerId) {
-    final worker =
-        _eligibleWorkers.where((worker) => worker.id == workerId).firstOrNull;
-    if (worker == null) return;
-    final current = _composerBinding(bindingId);
-    if (current['workerId'] == workerId) return;
-    _rememberWorkerSelection(bindingId, current);
-    final binding = current
-      ..remove('model')
-      ..remove('reasoningEffort')
-      ..remove('fallbackWorkerId')
-      ..remove('fallbackWorkerLabel')
-      ..['workerId'] = workerId
-      ..['workerLabel'] = _workerLabel(worker);
-    binding.addAll(_workerPreferences[bindingId]?[workerId] ?? const {});
-    _setComposerBinding(bindingId, binding);
-  }
-
-  bool _loadingWorkChoices = true;
   bool _savingWorkConfig = false;
   final _workSettingsChanges = ValueNotifier<int>(0);
   final _workHistoryChanges = ValueNotifier<int>(0);
@@ -305,7 +268,10 @@ class _ThreadPageState extends State<ThreadPage>
           '',
     );
     _refreshWorkTimeline();
+    _requestController.addListener(_alignComposers);
+    _discussionController.addListener(_alignComposers);
     _subscribeToWorkEvents();
+    _subscribeWorkflowConfigurations();
     _subscribeCatalogs();
     _subscribeGrants();
     _loadWorkChoices();
@@ -323,23 +289,6 @@ class _ThreadPageState extends State<ThreadPage>
             worker.catalogLifecycleState == 'active' &&
             worker.catalogVisibilityState == 'visible')
         .toList();
-    for (final entry in _workerPreferences.entries) {
-      for (final workerId in entry.value.keys.toList()) {
-        _rememberWorkerSelection(
-            entry.key, {'workerId': workerId, ...entry.value[workerId]!});
-      }
-    }
-    final bindings = _composerWorkConfig['bindings'] as Map;
-    for (final entry in bindings.entries) {
-      if (entry.value is Map) {
-        final binding = Map<String, dynamic>.from(entry.value as Map);
-        final workerId = binding['workerId'];
-        if (_spaceWorkers.any((worker) =>
-            worker.id == workerId && worker.executionOptions != null)) {
-          _composerBindings[entry.key.toString()] = binding;
-        }
-      }
-    }
   }
 
   void _subscribeCatalogs() {
@@ -437,12 +386,10 @@ class _ThreadPageState extends State<ThreadPage>
         AxSpaceWorkspaceGrants.forSource(widget.dataSource);
     final state = _grants.peek(widget.space.id);
     _applyGrants(state.data ?? const []);
-    _loadingWorkChoices = !state.hasData;
     _cancelGrants = _grants.watch(widget.space.id, (state) {
       if (!mounted) return;
       _updateWorkSettings(() {
         _applyGrants(state.data ?? const []);
-        if (state.hasData) _loadingWorkChoices = false;
       });
     });
   }
@@ -454,7 +401,6 @@ class _ThreadPageState extends State<ThreadPage>
     final grantsCache = _grants;
     final spaceId = widget.space.id;
     if (ds == null) {
-      _updateWorkSettings(() => _loadingWorkChoices = false);
       return;
     }
     try {
@@ -467,12 +413,9 @@ class _ThreadPageState extends State<ThreadPage>
       if (grantsCache != _grants || spaceId != widget.space.id) return;
       _updateWorkSettings(() {
         _applyGrants(grantsCache.peek(spaceId).data ?? const []);
-        _loadingWorkChoices = false;
       });
     } catch (_) {
-      if (mounted && generation == _choicesGeneration) {
-        _updateWorkSettings(() => _loadingWorkChoices = false);
-      }
+      // The shared queries retain their last valid data on refresh failure.
     }
   }
 
@@ -483,9 +426,12 @@ class _ThreadPageState extends State<ThreadPage>
         oldWidget.space.id != widget.space.id ||
         oldWidget.currentUserId != widget.currentUserId ||
         oldWidget.dataSource != widget.dataSource) {
-      _composerBindings.clear();
-      _workerPreferences.clear();
       _workConfig = Map<String, dynamic>.from(widget.thread.workConfig);
+    }
+    if (oldWidget.workflowConfigurations != widget.workflowConfigurations ||
+        oldWidget.dataSource != widget.dataSource) {
+      _cancelWorkflowConfigurations?.call();
+      _subscribeWorkflowConfigurations();
     }
     if (oldWidget.catalogs != widget.catalogs ||
         oldWidget.dataSource != widget.dataSource) {
@@ -516,7 +462,6 @@ class _ThreadPageState extends State<ThreadPage>
       unawaited(_refreshWorkTimeline());
     }
     if (oldWidget.thread.id != widget.thread.id) {
-      _composerBindings.clear();
       _discussionController.clear();
       _followWork = _followChat = true;
     }
@@ -578,6 +523,7 @@ class _ThreadPageState extends State<ThreadPage>
 
   @override
   void dispose() {
+    _cancelWorkflowConfigurations?.call();
     _cancelWorkflows?.call();
     _cancelWorkers?.call();
     _cancelGrants?.call();
@@ -585,6 +531,8 @@ class _ThreadPageState extends State<ThreadPage>
     _cancelWorkRealtime?.call();
     _workEventSubscription?.cancel();
     _tabController.dispose();
+    _requestController.removeListener(_alignComposers);
+    _discussionController.removeListener(_alignComposers);
     _requestController.dispose();
     _workHistoryController.dispose();
     _chatHistoryController.dispose();
@@ -885,44 +833,6 @@ class _ThreadPageState extends State<ThreadPage>
         ],
       );
 
-  void _onModelChanged(String stepKind, String model) {
-    if ((_composerBinding(stepKind)['model']?.toString().trim() ?? '') ==
-        model.trim()) {
-      return;
-    }
-    final bindings = _composerWorkConfig['bindings'] is Map
-        ? Map<String, dynamic>.from(_composerWorkConfig['bindings'] as Map)
-        : <String, dynamic>{};
-    final rawBinding = bindings[stepKind];
-    final binding = rawBinding is Map
-        ? Map<String, dynamic>.from(rawBinding)
-        : <String, dynamic>{};
-    final updated = Map<String, dynamic>.from(binding);
-    if (model.trim().isEmpty) {
-      updated.remove('model');
-    } else {
-      updated['model'] = model.trim();
-    }
-    _setComposerBinding(stepKind, updated);
-  }
-
-  void _onReasoningEffortChanged(String stepKind, String reasoningEffort) {
-    final bindings = _composerWorkConfig['bindings'] is Map
-        ? Map<String, dynamic>.from(_composerWorkConfig['bindings'] as Map)
-        : <String, dynamic>{};
-    final rawBinding = bindings[stepKind];
-    final binding = rawBinding is Map
-        ? Map<String, dynamic>.from(rawBinding)
-        : <String, dynamic>{};
-    final updated = Map<String, dynamic>.from(binding);
-    if (reasoningEffort.trim().isEmpty) {
-      updated.remove('reasoningEffort');
-    } else {
-      updated['reasoningEffort'] = reasoningEffort.trim();
-    }
-    _setComposerBinding(stepKind, updated);
-  }
-
   _WorkComposer _workComposer() => _WorkComposer(
         composerKey: _workComposerKey,
         requestController: _requestController,
@@ -961,9 +871,6 @@ class _ThreadPageState extends State<ThreadPage>
             widget.dataSource == null ? null : _cancelFailedWorkRequest,
         onWorkflowChanged: (value) =>
             _updateWorkSettings(() => _workflow = value),
-        onWorkerChanged: _onWorkerChanged,
-        onModelChanged: _onModelChanged,
-        onReasoningEffortChanged: _onReasoningEffortChanged,
         onOpenSettings: () => _openWorkSettings(context),
         onRun: _runWork,
       );

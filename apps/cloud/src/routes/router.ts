@@ -1,3 +1,4 @@
+import { handleWorkflowConfigurations } from "./workflow-configurations.js";
 import { conditionalJson } from "./conditional-read.js";
 import {
   BUILTIN_WORKFLOW_CATALOG,
@@ -185,6 +186,19 @@ export async function routeWorkerRequest(
     }
     if (request.method === "GET" && url.pathname === "/api/workspaces") {
       return await handlers.handleListWorkspaces!(request, env, ctx);
+    }
+    const workflowConfigurationMatch = url.pathname.match(
+      /^\/api\/user\/workflow-configurations(?:\/([^/]+))?$/,
+    );
+    if (workflowConfigurationMatch) {
+      return await handleWorkflowConfigurations(
+        request,
+        env,
+        workflowConfigurationMatch[1]
+          ? decodeURIComponent(workflowConfigurationMatch[1])
+          : undefined,
+        ctx,
+      );
     }
     if (request.method === "GET" && url.pathname === "/api/workflows/catalog") {
       return conditionalJson(request, {

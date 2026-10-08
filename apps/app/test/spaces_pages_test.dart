@@ -1,4 +1,3 @@
-import 'package:conclave_app/src/features/common/markdown_composer.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -7,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/sync/ax_session_catalogs.dart';
 import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
 
 import 'ax_fixture_data.dart';
@@ -330,8 +328,7 @@ void main() {
     });
   }
 
-  testWidgets(
-      'composer choices follow policy and binding metadata for any workflow',
+  testWidgets('composer does not resurrect obsolete Thread execution choices',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -372,10 +369,9 @@ void main() {
         onArchive: _noop,
       ))));
       await tester.pumpAndSettle();
-      expect(find.byTooltip('Choose model'),
-          choices.$1 && choices.$3 ? findsOneWidget : findsNothing);
-      expect(find.byTooltip('Choose reasoning effort'),
-          choices.$2 && choices.$3 ? findsOneWidget : findsNothing);
+      expect(find.text('o3'), findsNothing);
+      expect(find.byTooltip('Choose model'), findsNothing);
+      expect(find.byTooltip('Choose reasoning effort'), findsNothing);
     }
   });
   testWidgets('history names remain accurate without a loaded catalog',
@@ -440,7 +436,7 @@ void main() {
       dataSource: data,
       onBackToSpace: _noop,
       onArchive: _noop,
-      onRunWork: (source, workflow, _, key, selection) {
+      onRunWork: (source, workflow, _, key) {
         sentSource = source;
         sentWorkflow = workflow;
         return submission.future;
@@ -494,115 +490,6 @@ void main() {
     submission.complete('chat-saved');
     await tester.pump();
   });
-  testWidgets('Chat and Work independently save dynamic Workers and models',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(900, 1400));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final data = _IndependentBindingsDataSource();
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            body: SizedBox(
-                height: 600,
-                child: ThreadPage(
-                  initialTab: 2,
-                  space: const AxSpace(
-                      id: 'space-1',
-                      name: 'Space',
-                      branch: '',
-                      lastActivity: '',
-                      role: 'owner'),
-                  thread: const AxThread(
-                      id: 'stream-1',
-                      spaceId: 'space-1',
-                      name: 'Stream',
-                      lead: '',
-                      status: 'active',
-                      brief: '',
-                      primaryWorkspace: '',
-                      queueStatus: ''),
-                  dataSource: data,
-                  onBackToSpace: _noop,
-                  onArchive: _noop,
-                )))));
-    await tester.pumpAndSettle();
-    expect(find.text('Direct'), findsNothing);
-    final workflowDropdown = tester.widget<DropdownButton<String>>(
-        find.byType(DropdownButton<String>).first);
-    expect(workflowDropdown.items!.map((item) => item.value), [
-      'chat',
-      'direct',
-      'research',
-      'plan_implement',
-      'implement_verify',
-      'full_cycle',
-    ]);
-    for (final label in [
-      'Chat',
-      'Work',
-      'Research',
-      'Plan',
-      'Implement',
-      'Test',
-      'Verify'
-    ]) {
-      expect(find.text(label), findsWidgets);
-    }
-    for (final id in [
-      'chat',
-      'direct',
-      'research',
-      'plan',
-      'implement',
-      'test',
-      'verify'
-    ]) {
-      expect(find.byKey(ValueKey('worker-binding-$id')), findsOneWidget);
-    }
-    for (final choice in [
-      ['chat', 'Dynamic Test Worker · Vitalii’s MacBook Pro'],
-      ['direct', 'Other Dynamic Worker · Vitalii’s MacBook Pro'],
-    ]) {
-      final selector = find.byKey(ValueKey('worker-binding-${choice[0]}'));
-      await tester.ensureVisible(selector);
-      await tester.tap(selector);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(choice[1]).last);
-      await tester.pumpAndSettle();
-    }
-    await tester.ensureVisible(find.text('Advanced'));
-    await tester.tap(find.text('Advanced'));
-    await tester.pumpAndSettle();
-    for (final id in ['chat', 'direct']) {
-      final configure = find.byKey(ValueKey('configure-binding-$id'));
-      await tester.ensureVisible(configure);
-      await tester.tap(configure);
-      await tester.pumpAndSettle();
-      expect(find.text(id == 'chat' ? 'Chat settings' : 'Work settings'),
-          findsWidgets);
-      final fields = find.descendant(
-          of: find.byType(AlertDialog), matching: find.byType(TextField));
-      await tester.enterText(fields.first, '$id-model');
-      await tester.enterText(fields.last, '$id instructions');
-      await tester.tap(find.text('Save').last);
-      await tester.pumpAndSettle();
-    }
-    await tester.ensureVisible(find.text('Save Work settings'));
-    await tester.tap(find.text('Save Work settings'));
-    await tester.pumpAndSettle();
-    expect(data.savedWorkConfig?['bindings']['chat'],
-        containsPair('workerId', 'local-worker-dynamic-test'));
-    expect(data.savedWorkConfig?['bindings']['chat'],
-        containsPair('model', 'chat-model'));
-    expect(data.savedWorkConfig?['bindings']['direct'],
-        containsPair('workerId', 'local-worker-other'));
-    expect(data.savedWorkConfig?['bindings']['direct'],
-        containsPair('model', 'direct-model'));
-    expect(data.savedWorkConfig?['bindings']['chat'],
-        containsPair('additionalInstructions', 'chat instructions'));
-    expect(data.savedWorkConfig?['bindings']['direct'],
-        containsPair('additionalInstructions', 'direct instructions'));
-  });
-
   testWidgets('current Work selection preserves historical Direct labels',
       (tester) async {
     final submission = Completer<String>();
@@ -629,7 +516,7 @@ void main() {
       dataSource: _VersionedWorkflowDataSource(),
       onBackToSpace: _noop,
       onArchive: _noop,
-      onRunWork: (_, workflow, ___, key, selection) {
+      onRunWork: (_, workflow, ___, key) {
         sentWorkflow = workflow;
         return submission.future;
       },
@@ -751,6 +638,18 @@ void main() {
       (tester) async {
     for (final reject in [false, true]) {
       final data = _SlowSubmissionDataSource();
+      const previous = AxWorkRequest(
+        id: 'previous-response',
+        requestedByName: 'You',
+        prompt: 'Earlier request',
+        workflowId: 'direct',
+        workflowVersion: 1,
+        status: 'completed',
+        createdAt: '2026-10-05T10:00:00Z',
+        steps: [],
+        finalText: 'Earlier completed response',
+      );
+      data.requests = [previous];
       final submitted = Completer<String>();
       var sends = 0;
       await tester.pumpWidget(MaterialApp(
@@ -777,12 +676,29 @@ void main() {
         currentUserId: 'user-owner',
         onBackToSpace: _noop,
         onArchive: _noop,
-        onRunWork: (_, __, ___, key, selection) {
+        onRunWork: (_, __, ___, key) {
           sends++;
           return submitted.future;
         },
       ))));
       await tester.pumpAndSettle();
+      final previousBody = find
+          .descendant(
+            of: find.byKey(const ValueKey('previous-response')),
+            matching: find.byType(ConclaveMarkdownBody),
+          )
+          .last;
+      final previousElement = tester.element(previousBody);
+      void expectPreviousUnchanged() {
+        expect(tester.element(previousBody), same(previousElement));
+        expect(tester.widget<ConclaveMarkdownBody>(previousBody).data,
+            'Earlier completed response');
+        expect(
+            tester.widget<ConclaveMarkdownBody>(previousBody).key,
+            const ValueKey(
+                ('previous-response', 'Earlier completed response')));
+      }
+
       await tester.enterText(
           find.byType(TextField).first, '**Immediate request**');
       await tester.tap(find.byTooltip('Send request'));
@@ -803,6 +719,24 @@ void main() {
               (element.widget as ConclaveMarkdownBody).data ==
               'Checking that everything is ready…'),
           isTrue);
+      expectPreviousUnchanged();
+      // A concurrent history insertion moves the completed response while the
+      // new request is still displaying progress.
+      AxWorkHistoryCache.forSource(data).patchRequest(
+          'thread-1',
+          const AxWorkRequest(
+            id: 'older-response',
+            requestedByName: 'You',
+            prompt: 'Older request',
+            workflowId: 'direct',
+            workflowVersion: 1,
+            status: 'completed',
+            createdAt: '2026-10-04T10:00:00Z',
+            steps: [],
+            finalText: 'Older completed response',
+          ));
+      await tester.pump();
+      expectPreviousUnchanged();
       expect(sends, 0);
       expect(find.byTooltip('Refresh Work history'), findsNothing);
       final pendingInput =
@@ -853,6 +787,7 @@ void main() {
                 'Sending your request…'),
             isTrue);
         data.requests = [
+          previous,
           const AxWorkRequest(
               id: 'saved-1',
               requestedByName: 'You',
@@ -867,7 +802,9 @@ void main() {
         ];
         submitted.complete('saved-1');
         await tester.pumpAndSettle();
-        expect(find.textContaining('A previous request is still in progress.'), findsOneWidget);
+        expectPreviousUnchanged();
+        expect(find.textContaining('A previous request is still in progress.'),
+            findsOneWidget);
         expect(find.text('Cancel pending request'), findsOneWidget);
         expect(
             tester
@@ -891,6 +828,7 @@ void main() {
         await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         expect(sends, 1);
         data.requests = [
+          previous,
           const AxWorkRequest(
             id: 'saved-1',
             requestedByName: 'You',
@@ -1181,7 +1119,7 @@ void main() {
         dataSource: _WorkFormDataSource(),
         onBackToSpace: _noop,
         onArchive: _noop,
-        onRunWork: (_, __, ___, key, selection) async =>
+        onRunWork: (_, __, ___, key) async =>
             throw const AxApiException(message),
         initialTab: 1,
       ),
@@ -1408,7 +1346,7 @@ void main() {
             dataSource: _WorkFormDataSource(),
             onBackToSpace: _noop,
             onArchive: _noop,
-            onRunWork: (work, workflowId, attachments, key, selection) async {
+            onRunWork: (work, workflowId, attachments, key) async {
               submittedWork = work;
               return 'request-1';
             },
@@ -1476,8 +1414,7 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets(
-      'Thread selects a Worker unknown to AX by Cloud name and local ID',
+  testWidgets('Thread settings direct execution configuration to Workflows',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1200));
     final dataSource = _GenericWorkerConfigDataSource();
@@ -1518,127 +1455,13 @@ void main() {
       of: find.byType(Dialog),
       matching: find.byType(DropdownButtonFormField<String>),
     );
-    expect(selectors, findsNWidgets(8));
-    await tester.tap(
-        selectors.at(5)); // Workflow, then Chat/Work/Research/Plan/Implement
-    await tester.pumpAndSettle();
-    expect(find.text('Dynamic Test Worker · Vitalii’s MacBook Pro'),
+    expect(selectors, findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('worker-binding-implement')), findsNothing);
+    expect(
+        find.text(
+            'Worker, model, and effort defaults are configured on the Workflows page.'),
         findsOneWidget);
-    expect(find.text('Codex'), findsNothing);
-    expect(find.text('Antigravity'), findsNothing);
-    await tester
-        .tap(find.text('Dynamic Test Worker · Vitalii’s MacBook Pro').last);
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Save Work settings'));
-    await tester.tap(find.text('Save Work settings'));
-    await tester.pumpAndSettle();
-
-    expect(
-      dataSource.savedWorkConfig?['bindings']['implement']['workerId'],
-      'local-worker-dynamic-test',
-    );
-    await tester.binding.setSurfaceSize(null);
-  });
-
-  testWidgets('retired dynamic Worker bindings remain explicit',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(900, 1400));
-    final dataSource = _RetiredWorkerConfigDataSource();
-    const staleConfig = {
-      'defaultWorkflowId': 'direct',
-      'bindings': {
-        'implement': {
-          'workerId': 'local-worker-dynamic-test',
-          'workerLabel': {
-            'displayName': 'Dynamic Test Worker',
-            'workspaceName': 'Vitalii’s MacBook Pro',
-          },
-          'fallbackWorkerId': 'retired-fallback',
-          'fallbackWorkerLabel': {
-            'displayName': 'Gemini',
-            'workspaceName': 'Linux workstation',
-          },
-        },
-      },
-    };
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: SizedBox(
-          height: 600,
-          child: ThreadPage(
-            space: const AxSpace(
-              id: 'space-1',
-              name: 'Space One',
-              branch: '',
-              lastActivity: 'today',
-              role: 'collaborator',
-            ),
-            thread: const AxThread(
-              id: 'thread-1',
-              spaceId: 'space-1',
-              name: 'Implementation',
-              lead: 'Owner',
-              status: 'active',
-              brief: '',
-              primaryWorkspace: 'Not selected',
-              queueStatus: 'Idle',
-              canConfigureWork: true,
-              workConfig: staleConfig,
-            ),
-            dataSource: dataSource,
-            onBackToSpace: _noop,
-            onArchive: _noop,
-            initialTab: 2,
-          ),
-        ),
-      ),
-    ));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Worker unavailable'), findsOneWidget);
-    expect(
-      find.text('Previously: Dynamic Test Worker — Vitalii’s MacBook Pro'),
-      findsOneWidget,
-    );
-    expect(find.text('Select Worker'), findsNWidgets(2));
-    expect(
-        find.text('Dynamic Test Worker · Vitalii’s MacBook Pro'), findsNothing);
-
-    await tester.ensureVisible(find.text('Save Work settings'));
-    await tester.tap(find.text('Save Work settings'));
-    await tester.pumpAndSettle();
-    expect(
-      dataSource.savedWorkConfig?['bindings']['implement']['workerId'],
-      'local-worker-dynamic-test',
-    );
-    expect(
-      dataSource.savedWorkConfig?['bindings']['implement']['fallbackWorkerId'],
-      'retired-fallback',
-    );
-
-    await tester.ensureVisible(find.text('Advanced'));
-    await tester.tap(find.text('Advanced'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Step settings'));
-    final configureButtons = find.widgetWithText(TextButton, 'Configure');
-    await tester.tap(configureButtons.at(4));
-    await tester.pumpAndSettle();
-    expect(
-      find.text(
-          'Fallback Worker unavailable. Previously: Gemini — Linux workstation'),
-      findsOneWidget,
-    );
-    await tester.tap(find.text('Save').last);
-    await tester.pumpAndSettle();
-    await tester.tap(configureButtons.at(4));
-    await tester.pumpAndSettle();
-    expect(
-      find.text(
-          'Fallback Worker unavailable. Previously: Gemini — Linux workstation'),
-      findsOneWidget,
-    );
-    await tester.tap(find.text('Cancel').last);
-    await tester.pumpAndSettle();
     await tester.binding.setSurfaceSize(null);
   });
 
@@ -2577,381 +2400,6 @@ void main() {
 
     await tester.binding.setSurfaceSize(null);
   });
-
-  testWidgets(
-      'Work tab allows selecting workflow, models per worker, and displays No worker assigned when unassigned',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1200, 1000));
-    final dataSource = _ModelSelectionTestDataSource();
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: ThreadPage(
-          initialTab: 1,
-          space: const AxSpace(
-            id: 'space-1',
-            name: 'Space',
-            branch: '',
-            lastActivity: '',
-            role: 'owner',
-          ),
-          thread: const AxThread(
-            id: 'stream-1',
-            spaceId: 'space-1',
-            name: 'Implementation',
-            lead: 'Vitalii',
-            status: 'active',
-            brief: '',
-            primaryWorkspace: 'Workspace',
-            queueStatus: 'idle',
-            workConfig: {
-              'bindings': {
-                'direct': {
-                  'workerId': 'w-chatgpt',
-                  'model': 'gpt-4o',
-                },
-              },
-            },
-          ),
-          onBackToSpace: _noop,
-          onArchive: _noop,
-          dataSource: dataSource,
-        ),
-      ),
-    ));
-    await tester.pumpAndSettle();
-
-    // 1. Verify '+' menu has only 'Add files' and 'Add link'
-    expect(find.byTooltip('Add attachments'), findsOneWidget);
-    await tester.tap(find.byTooltip('Add attachments'));
-    await tester.pumpAndSettle();
-    expect(find.text('Add files'), findsOneWidget);
-    expect(find.text('Add link'), findsOneWidget);
-    expect(
-        find.descendant(
-            of: find.byType(PopupMenuItem), matching: find.text('Work')),
-        findsNothing);
-    await tester.tapAt(Offset.zero);
-    await tester.pumpAndSettle();
-
-    // 2. Verify model selector shows display name 'GPT-4o'
-    expect(find.text('GPT-4o'), findsOneWidget);
-    await tester.tap(find.byTooltip('Choose model'));
-    await tester.pumpAndSettle();
-
-    // Verify chatgpt models are present
-    expect(find.text('Default model'), findsOneWidget);
-    expect(find.text('o3'), findsWidgets);
-    expect(find.text('o3-mini'), findsNothing);
-    expect(find.text('GPT-4.5'), findsNothing);
-
-    // Select 'o3'
-    final o3Option = find.descendant(
-      of: find.byType(CheckedPopupMenuItem<String>),
-      matching: find.text('o3'),
-    );
-    await tester.ensureVisible(o3Option);
-    await tester.pumpAndSettle();
-    await tester.tap(find.ancestor(
-      of: o3Option,
-      matching: find.byType(CheckedPopupMenuItem<String>),
-    ));
-    await tester.pumpAndSettle();
-
-    expect(find.text('o3'), findsWidgets);
-    expect(dataSource.savedWorkConfig, isNull);
-    expect(find.byTooltip('Choose worker'), findsOneWidget);
-
-    // Dismiss SnackBar if present
-    ScaffoldMessenger.of(tester.element(find.byType(Scaffold).first))
-        .hideCurrentSnackBar();
-    await tester.pumpAndSettle();
-
-    // 3. Switch workflow to 'Research' which has no worker assigned
-    expect(find.byTooltip('Choose workflow'), findsOneWidget);
-    await tester.tap(find.byTooltip('Choose workflow'));
-    await tester.pumpAndSettle();
-    final researchOption = find.descendant(
-      of: find.byType(CheckedPopupMenuItem<String>),
-      matching: find.text('Research'),
-    );
-    await tester.ensureVisible(researchOption);
-    await tester.pumpAndSettle();
-    await tester.tap(find.ancestor(
-      of: researchOption,
-      matching: find.byType(CheckedPopupMenuItem<String>),
-    ));
-    await tester.pumpAndSettle();
-
-    // 4. Verify 'No worker assigned' is shown with error styling
-    expect(find.text('No worker assigned'), findsOneWidget);
-    final errorTextWidget =
-        tester.widget<Text>(find.text('No worker assigned'));
-    expect(errorTextWidget.style?.color, isNotNull);
-
-    // An unassigned workflow can select its Worker directly beside Send.
-    await tester.tap(find.text('No worker assigned'));
-    await tester.pumpAndSettle();
-    expect(find.text('ChatGPT'), findsOneWidget);
-    expect(find.text('Save Work settings'), findsNothing);
-    await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is CheckedPopupMenuItem<String> && widget.value == 'w-chatgpt'));
-    await tester.pumpAndSettle();
-    expect(find.text('No worker assigned'), findsNothing);
-    expect(dataSource.savedWorkConfig, isNull);
-
-    await tester.binding.setSurfaceSize(null);
-  });
-
-  for (final workflow in ['direct:v2', 'chat:v1']) {
-    testWidgets('$workflow switches worker without a continuity warning',
-        (tester) async {
-      await tester.binding.setSurfaceSize(const Size(1200, 1000));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      final data = _WorkerSwitchDataSource();
-      AxTurnExecutionSelection? sent;
-      String? sentWorkflow;
-      await tester.pumpWidget(MaterialApp(
-          home: Scaffold(
-              body: ThreadPage(
-        initialTab: 1,
-        space: const AxSpace(
-            id: 'space-1',
-            name: 'Space',
-            branch: '',
-            lastActivity: '',
-            role: 'collaborator'),
-        thread: const AxThread(
-            id: 'stream-1',
-            spaceId: 'space-1',
-            name: 'Stream',
-            lead: '',
-            status: 'active',
-            brief: '',
-            primaryWorkspace: '',
-            queueStatus: '',
-            canExecuteWork: true,
-            workConfig: {
-              'bindings': {
-                'direct': {
-                  'workerId': 'w-chatgpt',
-                  'model': 'typed-model',
-                  'workerLabel': {'displayName': 'ChatGPT'},
-                  'fallbackWorkerId': 'old-fallback',
-                  'fallbackWorkerLabel': {'displayName': 'Old fallback'}
-                },
-                'chat': {'workerId': 'w-chatgpt', 'model': 'typed-model'}
-              }
-            }),
-        dataSource: data,
-        onBackToSpace: _noop,
-        onArchive: _noop,
-        onRunWork: (_, selectedWorkflow, ___, key, selection) async {
-          sentWorkflow = selectedWorkflow;
-          sent = selection;
-          return 'switch-request';
-        },
-      ))));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Choose workflow'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byWidgetPredicate((widget) =>
-          widget is CheckedPopupMenuItem<String> && widget.value == workflow));
-      await tester.pumpAndSettle();
-      for (final workerId in ['w-second', 'w-chatgpt', 'w-second']) {
-        await tester.tap(find.byTooltip('Choose worker'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.byWidgetPredicate((widget) =>
-            widget is CheckedPopupMenuItem<String> &&
-            widget.value == workerId));
-        await tester.pumpAndSettle();
-        expect(find.byType(AlertDialog), findsNothing);
-        expect(find.textContaining('context synchronized'), findsNothing);
-        expect(find.textContaining('Are you sure'), findsNothing);
-      }
-      expect(find.text('Second Worker'), findsOneWidget);
-      expect(find.byTooltip('Choose model'), findsNothing);
-      final composer = find.byType(MarkdownComposer).last;
-      await tester.enterText(
-          find.descendant(of: composer, matching: find.byType(TextField)),
-          'Continue with this worker');
-      await tester.tap(find.byTooltip('Send request'));
-      await tester.pumpAndSettle();
-      expect(sent?.workerId, 'w-second');
-      expect(sent?.modelId, isNull);
-      expect(sent?.effort, isNull);
-      expect(sentWorkflow, workflow.split(':').first);
-      expect(data.savedWorkConfig, isNull);
-      expect(tester.takeException(), isNull);
-    });
-  }
-
-  testWidgets('pass-through profile accepts a custom next-turn model', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1200, 1000));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final data = _ComposerOptionsDataSource()..allowsCustomModel = true;
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ThreadPage(
-      initialTab: 1,
-      space: const AxSpace(id: 'space-1', name: 'Space', branch: '', lastActivity: '', role: 'owner'),
-      thread: const AxThread(id: 'stream-1', spaceId: 'space-1', name: 'Stream', lead: '', status: 'active', brief: '', primaryWorkspace: '', queueStatus: '', workConfig: {
-        'bindings': {'direct': {'workerId': 'w-chatgpt'}}
-      }),
-      dataSource: data, onBackToSpace: _noop, onArchive: _noop,
-    ))));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Choose model'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Enter model ID…'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextFormField), 'provider-model');
-    await tester.tap(find.text('Use model'));
-    await tester.pumpAndSettle();
-    expect(find.text('provider-model'), findsOneWidget);
-    expect(data.savedWorkConfig, isNull);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-      'composer uses normalized capabilities and snapshots local next-turn choices',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1200, 1000));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final data = _ComposerOptionsDataSource();
-    AxTurnExecutionSelection? sent;
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            body: ThreadPage(
-      initialTab: 1,
-      space: const AxSpace(
-          id: 'space-1',
-          name: 'Space',
-          branch: '',
-          lastActivity: '',
-          role: 'collaborator'),
-      thread: const AxThread(
-          id: 'stream-1',
-          spaceId: 'space-1',
-          name: 'Stream',
-          lead: '',
-          status: 'active',
-          brief: '',
-          primaryWorkspace: '',
-          queueStatus: '',
-          canExecuteWork: true,
-          workConfig: {
-            'bindings': {
-              'direct': {'workerId': 'w-chatgpt', 'model': 'typed-model'}
-            }
-          }),
-      dataSource: data,
-      onBackToSpace: _noop,
-      onArchive: _noop,
-      onRunWork: (_, __, ___, key, selection) async {
-        sent = selection;
-        return 'phase8-request';
-      },
-    ))));
-    await tester.pumpAndSettle();
-    expect(find.text('Profile model'), findsOneWidget);
-    expect(find.text('Legacy model'), findsNothing);
-    expect(tester.getCenter(find.byTooltip('Choose worker')).dy,
-        tester.getCenter(find.byTooltip('Send request')).dy);
-    await tester.ensureVisible(find.byTooltip('Choose reasoning effort'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Choose reasoning effort'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is CheckedPopupMenuItem<String> && widget.value == 'deep'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Choose model'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is CheckedPopupMenuItem<String> &&
-        widget.value == 'simple-model'));
-    await tester.pumpAndSettle();
-    expect(find.text('Simple model'), findsOneWidget);
-    expect(find.byTooltip('Choose reasoning effort'), findsNothing);
-    await tester.tap(find.byTooltip('Choose model'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is CheckedPopupMenuItem<String> &&
-        widget.value == 'typed-model'));
-    await tester.pumpAndSettle();
-    expect(find.text('Default effort'), findsOneWidget);
-    await tester.ensureVisible(find.byTooltip('Choose reasoning effort'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Choose reasoning effort'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is CheckedPopupMenuItem<String> && widget.value == 'deep'));
-    await tester.pumpAndSettle();
-    final composer = find.byType(MarkdownComposer).last;
-    final field =
-        find.descendant(of: composer, matching: find.byType(TextField));
-    await tester.enterText(field, 'Use the selected configuration');
-    await tester.tap(find.byTooltip('Send request'));
-    await tester.pumpAndSettle();
-    expect(sent?.workerId, 'w-chatgpt');
-    expect(sent?.modelId, 'typed-model');
-    expect(sent?.effort, 'deep');
-    expect(data.savedWorkConfig, isNull);
-    await tester.tap(find.byTooltip('Choose worker'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is CheckedPopupMenuItem<String> && widget.value == 'w-second'));
-    await tester.pumpAndSettle();
-    expect(find.byTooltip('Choose model'), findsNothing);
-    expect(find.byTooltip('Choose reasoning effort'), findsNothing);
-    expect(find.text('Second Worker'), findsOneWidget);
-    await tester.tap(find.byTooltip('Choose worker'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is CheckedPopupMenuItem<String> && widget.value == 'w-chatgpt'));
-    await tester.pumpAndSettle();
-    expect(find.text('Profile model'), findsOneWidget);
-    expect(find.text('deep effort'), findsOneWidget);
-    // An explicit Default also replaces the remembered effort.
-    await tester.ensureVisible(find.byTooltip('Choose reasoning effort'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Choose reasoning effort'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is CheckedPopupMenuItem<String> && widget.value == ''));
-    await tester.pumpAndSettle();
-    for (final workerId in ['w-second', 'w-chatgpt']) {
-      await tester.tap(find.byTooltip('Choose worker'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byWidgetPredicate((widget) =>
-          widget is CheckedPopupMenuItem<String> && widget.value == workerId));
-      await tester.pumpAndSettle();
-    }
-    expect(find.text('Profile model'), findsOneWidget);
-    expect(find.text('Default effort'), findsOneWidget);
-    await tester.ensureVisible(find.byTooltip('Choose reasoning effort'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Choose reasoning effort'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is CheckedPopupMenuItem<String> && widget.value == 'deep'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Choose worker'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is CheckedPopupMenuItem<String> && widget.value == 'w-second'));
-    await tester.pumpAndSettle();
-    data.supportsDeep = false;
-    await AxSessionCatalogs.forSource(data).refreshWorkers();
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Choose worker'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is CheckedPopupMenuItem<String> && widget.value == 'w-chatgpt'));
-    await tester.pumpAndSettle();
-    expect(find.text('Profile model'), findsOneWidget);
-    expect(find.text('Default effort'), findsOneWidget);
-    expect(sent?.workerId, 'w-chatgpt');
-    expect(sent?.effort, 'deep');
-    expect(data.savedWorkConfig, isNull);
-  });
 }
 
 class _WorkspaceTestDataSource extends AxFixtureDataSource {
@@ -3214,52 +2662,6 @@ class _GenericWorkerConfigDataSource extends _WorkFormDataSource {
   }
 }
 
-class _RetiredWorkerConfigDataSource extends _GenericWorkerConfigDataSource {
-  @override
-  Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => [
-        const AxWorker(
-          id: 'local-worker-dynamic-test',
-          workspaceId: 'workspace-retired-1',
-          workspaceName: 'Vitalii’s MacBook Pro',
-          workerTypeId: 'dynamic-test-worker',
-          displayName: 'Dynamic Test Worker',
-          catalogLifecycleState: 'retired',
-          status: 'ready',
-          readinessState: 'ready',
-          localConcurrencyLimit: 1,
-          capabilities: [],
-        ),
-        const AxWorker(
-          id: 'retired-fallback',
-          workspaceId: 'workspace-retired-2',
-          workspaceName: 'Linux workstation',
-          workerTypeId: 'gemini',
-          displayName: 'Gemini',
-          catalogLifecycleState: 'retired',
-          status: 'ready',
-          readinessState: 'ready',
-          localConcurrencyLimit: 1,
-          capabilities: [],
-        ),
-      ];
-}
-
-AxWorkRequest _workRequest(String id, String prompt,
-        {String status = 'completed'}) =>
-    AxWorkRequest(
-      id: id,
-      requestedByName: 'Owner',
-      requestedByUserId: 'user-owner',
-      prompt: prompt,
-      workflowId: 'direct',
-      workflowVersion: 1,
-      status: status,
-      createdAt: '2026-10-01T10:00:00.000Z',
-      steps: const [],
-    );
-
-void _noop() {}
-
 class _PinnedHistoryDataSource extends _WorkHistoryDataSource {
   _PinnedHistoryDataSource()
       : super(List.generate(
@@ -3312,7 +2714,6 @@ class _SlowSubmissionDataSource extends _WorkFormDataSource {
     required String threadId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
-    AxTurnExecutionSelection? executionSelection,
   }) =>
       ready.future;
   @override
@@ -3431,26 +2832,6 @@ class _SnapshotHistoryDataSource extends AxFixtureDataSource {
             'prompt': 'History request',
             'finalText': 'History answer',
           }),
-      ];
-}
-
-class _IndependentBindingsDataSource extends _GenericWorkerConfigDataSource {
-  @override
-  Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() =>
-      _CurrentWorkflowUiDataSource().loadBuiltinWorkflowCatalog();
-  @override
-  Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => [
-        ...await super.loadWorkspaceWorkerInventory(),
-        const AxWorker(
-            id: 'local-worker-other',
-            workspaceId: 'workspace-1',
-            workspaceName: 'Vitalii’s MacBook Pro',
-            workerTypeId: 'another-dynamic-worker',
-            displayName: 'Other Dynamic Worker',
-            status: 'ready',
-            readinessState: 'ready',
-            localConcurrencyLimit: 1,
-            capabilities: []),
       ];
 }
 
@@ -3604,70 +2985,6 @@ class _MembersTabTestDataSource extends AxFixtureDataSource {
   }
 }
 
-class _ComposerOptionsDataSource extends _ModelSelectionTestDataSource {
-  bool supportsDeep = true;
-  bool allowsCustomModel = false;
-  @override
-  Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => [
-        for (final first in [true, false])
-          AxWorker.fromJson({
-            'id': first ? 'w-chatgpt' : 'w-second',
-            'workspaceId': 'workspace-1',
-            'workspaceName': 'MacBook Pro',
-            'workerTypeId': first ? 'chatgpt' : 'gemini',
-            'displayName': first ? 'ChatGPT' : 'Second Worker',
-            'status': 'ready',
-            'readinessState': 'ready',
-            'localConcurrencyLimit': 1,
-            'modelOptions': {
-              'catalog': [
-                if (!allowsCustomModel) {'id': 'legacy', 'name': 'Legacy model'}
-              ]
-            },
-            'executionOptions': {
-              'schemaVersion': 1,
-              'models': {
-                'supported': first,
-                'discovery': 'profile_catalog',
-                'allowsCustomModel': allowsCustomModel,
-                'allowedModelIds':
-                    first && !allowsCustomModel ? ['typed-model', 'simple-model'] : <String>[],
-                'defaultModelId': null,
-                'options': first && !allowsCustomModel
-                    ? [
-                        {
-                          'id': 'typed-model',
-                          'name': 'Profile model',
-                          'effort': {
-                            'supported': true,
-                            'values': ['brief', if (supportsDeep) 'deep'],
-                            'defaultValue': 'brief'
-                          }
-                        },
-                        {
-                          'id': 'simple-model',
-                          'name': 'Simple model',
-                          'effort': {
-                            'supported': false,
-                            'values': <String>[],
-                            'defaultValue': null
-                          }
-                        }
-                      ]
-                    : <Map>[]
-              },
-              'modelSwitch': {'supported': true},
-              'effort': {
-                'supported': first,
-                'values':
-                    first ? ['brief', if (supportsDeep) 'deep'] : <String>[],
-                'defaultValue': first ? 'brief' : null
-              },
-            },
-          }),
-      ];
-}
-
 class _SimpleConversationDataSource extends _WorkHistoryDataSource {
   _SimpleConversationDataSource(this.request) : super([request]);
   final AxWorkRequest request;
@@ -3690,12 +3007,6 @@ class _SimpleConversationDataSource extends _WorkHistoryDataSource {
           requestedByName: request.requestedByName);
 }
 
-class _WorkerSwitchDataSource extends _ComposerOptionsDataSource {
-  @override
-  Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() =>
-      _CurrentWorkflowUiDataSource().loadBuiltinWorkflowCatalog();
-}
-
 class _ContinuityFailureDataSource extends _WorkHistoryDataSource {
   _ContinuityFailureDataSource(this.request, this.step) : super([request]);
   final AxWorkRequest request;
@@ -3710,3 +3021,19 @@ class _ContinuityFailureDataSource extends _WorkHistoryDataSource {
           errorMessage: step.errorMessage,
           steps: [step]);
 }
+
+AxWorkRequest _workRequest(String id, String prompt,
+        {String status = 'completed'}) =>
+    AxWorkRequest(
+      id: id,
+      requestedByName: 'Owner',
+      requestedByUserId: 'user-owner',
+      prompt: prompt,
+      workflowId: 'direct',
+      workflowVersion: 1,
+      status: status,
+      createdAt: '2026-10-01T10:00:00.000Z',
+      steps: const [],
+    );
+
+void _noop() {}

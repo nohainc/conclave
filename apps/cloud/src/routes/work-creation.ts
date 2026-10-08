@@ -1,10 +1,8 @@
+import { resolveWorkflowExecutionBindings } from "./workflow-execution-configuration.js";
 import { requireWorkflowPermission } from "./space-permissions.js";
 import { initialConversationTaskStatements } from "./conversation-workflow-step-runs.js";
 import { MutationIdempotency } from "./mutation-idempotency.js";
-import {
-  parseTurnExecutionSelection,
-  resolveTurnExecutionConfig,
-} from "./turn-execution-config.js";
+import { resolveWorkflowStepExecutionConfig } from "./workflow-step-execution-config.js";
 import {
   conversationId,
   conversationSubmissionStatements,
@@ -79,6 +77,11 @@ export async function handleValidateWorkRequest(
     bindings: {},
   });
   const body = (await request.json()) as Record<string, unknown>;
+  if (body.executionSelection !== undefined)
+    throw new HttpError(
+      400,
+      "Execution overrides are not supported; configure execution in Workflows",
+    );
   const workflowId = requiredString(
     body.workflowId ?? config.defaultWorkflowId,
     "workflowId",
@@ -90,56 +93,22 @@ export async function handleValidateWorkRequest(
     throw new HttpError(400, "attachments must be an array");
   }
   const attachments = Array.isArray(body.attachments) ? body.attachments : [];
-  const executionSelection = parseTurnExecutionSelection(
-    body.executionSelection,
-    workflow,
-  );
   if (attachments.length > 10)
     throw new HttpError(400, "At most 10 attachments are allowed");
-  const rawBindings =
-    config.bindings &&
-    typeof config.bindings === "object" &&
-    !Array.isArray(config.bindings)
-      ? (config.bindings as Record<string, unknown>)
-      : {};
-  const bindings: Record<
-    string,
-    { workerId?: string; model?: string; reasoningEffort?: string }
-  > = {};
-  for (const [key, value] of Object.entries(rawBindings)) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const candidate = value as Record<string, unknown>;
-    bindings[key] = {
-      ...(typeof candidate.workerId === "string"
-        ? { workerId: candidate.workerId }
-        : {}),
-      ...(typeof candidate.model === "string"
-        ? { model: candidate.model }
-        : {}),
-      ...(typeof candidate.reasoningEffort === "string"
-        ? { reasoningEffort: candidate.reasoningEffort }
-        : {}),
-    };
-  }
   const { issues } = await validateWorkflowWorkerEligibility(
     env,
     spaceId,
     threadId,
     workflow,
-    executionSelection
-      ? {
-          ...bindings,
-          [workflow.id === "direct" ? "direct" : "chat"]: {
-            workerId: executionSelection.workerId,
-            ...(executionSelection.modelId
-              ? { model: executionSelection.modelId }
-              : {}),
-            ...(executionSelection.effort
-              ? { reasoningEffort: executionSelection.effort }
-              : {}),
-          },
-        }
-      : bindings,
+    await resolveWorkflowExecutionBindings(
+      env,
+      context.userId,
+      spaceId,
+      threadId,
+      workflow,
+      {},
+      attachments,
+    ),
     attachments,
   );
   if (
@@ -179,6 +148,11 @@ export async function handleCreateWorkRequest(
     accessContext,
   );
   const body = (await request.json()) as Record<string, unknown>;
+  if (body.executionSelection !== undefined)
+    throw new HttpError(
+      400,
+      "Execution overrides are not supported; configure execution in Workflows",
+    );
   const receipt = await MutationIdempotency.from(
     request,
     env.CONCLAVE_DB,
@@ -375,72 +349,32 @@ export async function handleCreateWorkRequest(
     !Array.isArray(workConfig.bindings)
       ? (workConfig.bindings as Record<string, unknown>)
       : {};
-  const executionSelection = parseTurnExecutionSelection(
-    body.executionSelection,
-    workflowSnapshot,
-  );
-  const resolvedBindings: Record<
-    string,
-    {
-      workerId?: string;
-      model?: string;
-      reasoningEffort?: string;
-      fallbackWorkerId?: string;
-      additionalInstructions?: string;
-    }
-  > = {};
   const stepAdditionalInstructions: WorkRequestSnapshot["stepAdditionalInstructions"] =
     {};
   const promptProfileVersions: WorkRequestSnapshot["promptProfileVersions"] =
     {};
+  const instructions: Record<string, { additionalInstructions?: string }> = {};
   for (const step of workflowSnapshot.steps) {
-    const bindingId = workflowId === "direct" ? "direct" : step.kind;
-    const rawBinding = configuredBindings[bindingId];
-    const configuredBinding = {
-      ...(rawBinding &&
-      typeof rawBinding === "object" &&
-      !Array.isArray(rawBinding)
-        ? (rawBinding as Record<string, unknown>)
-        : {}),
-    };
-    if (executionSelection) {
-      configuredBinding.workerId = executionSelection.workerId;
-      delete configuredBinding.model;
-      delete configuredBinding.reasoningEffort;
-      delete configuredBinding.fallbackWorkerId;
-      if (executionSelection.modelId !== null)
-        configuredBinding.model = executionSelection.modelId;
-      if (executionSelection.effort !== null)
-        configuredBinding.reasoningEffort = executionSelection.effort;
+    const id = workflowId === "direct" ? "direct" : step.kind;
+    const binding = configuredBindings[id] as
+      Record<string, unknown> | undefined;
+    if (typeof binding?.additionalInstructions === "string") {
+      instructions[id] = {
+        additionalInstructions: binding.additionalInstructions,
+      };
+      stepAdditionalInstructions[step.kind] = binding.additionalInstructions;
     }
-    const resolvedBinding: {
-      workerId?: string;
-      model?: string;
-      reasoningEffort?: string;
-      fallbackWorkerId?: string;
-      additionalInstructions?: string;
-    } = {};
-    if (typeof configuredBinding.workerId === "string") {
-      resolvedBinding.workerId = configuredBinding.workerId;
-    }
-    if (typeof configuredBinding.model === "string") {
-      resolvedBinding.model = configuredBinding.model;
-    }
-    if (typeof configuredBinding.reasoningEffort === "string") {
-      resolvedBinding.reasoningEffort = configuredBinding.reasoningEffort;
-    }
-    if (typeof configuredBinding.fallbackWorkerId === "string") {
-      resolvedBinding.fallbackWorkerId = configuredBinding.fallbackWorkerId;
-    }
-    if (typeof configuredBinding.additionalInstructions === "string") {
-      resolvedBinding.additionalInstructions =
-        configuredBinding.additionalInstructions;
-      stepAdditionalInstructions[step.kind] =
-        configuredBinding.additionalInstructions;
-    }
-    resolvedBindings[bindingId] = resolvedBinding;
     promptProfileVersions[step.kind] = step.promptProfileVersion;
   }
+  const resolvedBindings = await resolveWorkflowExecutionBindings(
+    env,
+    context.userId,
+    spaceId,
+    threadId,
+    workflowSnapshot,
+    instructions,
+    normalizedAttachments,
+  );
   const eligibility = await validateWorkflowWorkerEligibility(
     env,
     spaceId,
@@ -495,18 +429,33 @@ export async function handleCreateWorkRequest(
     manualWorkflow?.execution.workflowId === "direct" ? "direct" : "chat";
   const manualBinding = resolvedBindings[manualBindingId];
   const executionConfig = manualWorkflow
-    ? resolveTurnExecutionConfig(
+    ? resolveWorkflowStepExecutionConfig(
         workflowSnapshot,
         manualBinding?.workerId ?? "",
         eligibility.workerProfiles?.[manualBindingId],
         manualBinding?.model ?? null,
         manualBinding?.reasoningEffort ?? null,
-        executionSelection,
       )
     : undefined;
+  const stepExecutionConfigs: Record<
+    string,
+    import("@conclave/core").TurnExecutionConfig
+  > = {};
+  for (const step of workflowSnapshot.steps) {
+    const bindingId = workflowId === "direct" ? "direct" : step.kind;
+    const binding = resolvedBindings[bindingId]!;
+    stepExecutionConfigs[step.kind] = resolveWorkflowStepExecutionConfig(
+      workflowSnapshot,
+      binding.workerId ?? "",
+      eligibility.workerProfiles[bindingId],
+      binding.model ?? null,
+      binding.reasoningEffort ?? null,
+    );
+  }
   const snapshot: WorkRequestSnapshot = {
     ...(executionConfig ? { turnExecutionConfig: executionConfig } : {}),
     schemaVersion: 1,
+    stepExecutionConfigs,
     originalRequest,
     attachmentReferences,
     workflowId,
@@ -662,6 +611,9 @@ export async function handleCreateWorkRequest(
         workRequestId: workRequest.id,
         threadId,
         status: "queued",
+        ...(request.headers.get("Idempotency-Key")
+          ? { submissionId: request.headers.get("Idempotency-Key")! }
+          : {}),
       },
     });
   } catch (error) {

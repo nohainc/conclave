@@ -54,6 +54,11 @@ function fixture(coordinatorAvailable = true) {
               };
             return null;
           },
+          async all() {
+            return {
+              results: [{ workerId: "worker-a", workspaceId: "workspace" }],
+            };
+          },
           async run() {
             writes.push({ sql, values: this.values });
             return {};

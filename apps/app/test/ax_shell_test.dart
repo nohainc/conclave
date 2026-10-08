@@ -287,7 +287,11 @@ void main() {
       // Tap ⋯ Application menu at bottom of sidebar
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Workspaces'), findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byType(MenuItemButton),
+              matching: find.text('Workspaces')),
+          findsOneWidget);
       expect(find.text('Archived Spaces'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
@@ -298,7 +302,8 @@ void main() {
       expect(find.text('Website'), findsNothing);
 
       // Tap Execution in Application menu
-      await tester.tap(find.text('Workspaces'));
+      await tester.tap(find.descendant(
+          of: find.byType(MenuItemButton), matching: find.text('Workspaces')));
       await tester.pumpAndSettle();
       expect(navigatedTo?.kind, AxRouteKind.workspaces);
     });
@@ -337,7 +342,11 @@ void main() {
       // 1. Tapping the avatar specifically navigates to /settings/profile and does not open menu
       await tester.tap(find.text('VN'));
       expect(navigatedTo?.kind, AxRouteKind.profileSecurity);
-      expect(find.text('Workspaces'), findsNothing);
+      expect(
+          find.descendant(
+              of: find.byType(MenuItemButton),
+              matching: find.text('Workspaces')),
+          findsNothing);
 
       // Reset
       navigatedTo = null;
@@ -345,7 +354,11 @@ void main() {
       // 2. Tapping the user name specifically navigates to /settings/profile and does not open menu
       await tester.tap(find.text('Vitalii Noha'));
       expect(navigatedTo?.kind, AxRouteKind.profileSecurity);
-      expect(find.text('Workspaces'), findsNothing);
+      expect(
+          find.descendant(
+              of: find.byType(MenuItemButton),
+              matching: find.text('Workspaces')),
+          findsNothing);
 
       // Reset
       navigatedTo = null;
@@ -354,7 +367,11 @@ void main() {
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
       expect(navigatedTo, isNull);
-      expect(find.text('Workspaces'), findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byType(MenuItemButton),
+              matching: find.text('Workspaces')),
+          findsOneWidget);
       expect(find.text('Archived Spaces'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);

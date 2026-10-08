@@ -48,6 +48,7 @@
     "protocol:boundaries-check": "node scripts/verify-protocol-boundaries.mjs",
     "start:local": "./scripts/start-local.sh",
     "db:migrate:production": "./scripts/migrate-production-d1.sh",
+    "deploy:api": "./scripts/deploy-api.sh",
     "protocol:generate": "node scripts/generate-protocol-bindings.mjs",
     "protocol:check": "node scripts/verify-protocol-bindings.mjs",
     "check:static": "pnpm brand:check && pnpm cloud:schema-check && pnpm v8:architecture-check && pnpm protocol:boundaries-check && pnpm protocol:check && pnpm usage:architecture-guard && pnpm docs:check && pnpm cloud:execution-boundary-check && pnpm production:preflight && pnpm auth:access-guard && pnpm format:check && pnpm lint",

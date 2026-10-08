@@ -35,7 +35,6 @@ class _Source extends AxFixtureDataSource {
     required String prompt,
     List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
-    AxTurnExecutionSelection? executionSelection,
   }) async {
     workKeys.add(idempotencyKey);
     if (loseResponse) throw StateError('response lost');
@@ -49,7 +48,6 @@ class _Source extends AxFixtureDataSource {
     required String threadId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
-    AxTurnExecutionSelection? executionSelection,
   }) async {
     validations++;
     return [];
@@ -141,13 +139,12 @@ void main() {
       currentUserId: 'human',
       onBackToSpace: () {},
       onArchive: () {},
-      onRunWork: (prompt, workflow, inputs, key, selection) =>
-          source.createWorkRequest(
-              threadId: 'W',
-              workflowId: workflow,
-              prompt: prompt,
-              attachments: inputs,
-              idempotencyKey: key),
+      onRunWork: (prompt, workflow, inputs, key) => source.createWorkRequest(
+          threadId: 'W',
+          workflowId: workflow,
+          prompt: prompt,
+          attachments: inputs,
+          idempotencyKey: key),
     ))));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'Implement this');

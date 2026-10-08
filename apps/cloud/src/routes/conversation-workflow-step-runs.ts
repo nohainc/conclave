@@ -12,7 +12,7 @@ export async function loadConversationWorkflowStepRuns(
   if (!workRequestIds.length) return new Map();
   const rows = await db
     .prepare(
-      `SELECT s.id, s.workflow_run_id AS workflowRunId, s.task_id AS taskId,
+      `SELECT json_extract(wr.snapshot_json, '$.stepExecutionConfigs.' || s.step_id) AS executionConfigJson, s.id, s.workflow_run_id AS workflowRunId, s.task_id AS taskId,
     s.step_id AS stepId, s.role, t.status,
     CASE WHEN ct.id IS NOT NULL THEN ct.worker_id ELSE json_extract(wr.snapshot_json,'$.resolvedBindings.' || CASE WHEN wr.workflow_id='direct' THEN 'direct' ELSE t.step_kind END || '.workerId') END AS workerId,
     CASE WHEN ct.id IS NOT NULL THEN ct.model_id ELSE json_extract(wr.snapshot_json,'$.resolvedBindings.' || CASE WHEN wr.workflow_id='direct' THEN 'direct' ELSE t.step_kind END || '.model') END AS modelId,
@@ -33,14 +33,29 @@ export async function loadConversationWorkflowStepRuns(
     .all<
       Omit<WorkflowStepRun, "schemaVersion" | "workerTurnIds"> & {
         workerTurnIdsJson: string;
+        executionConfigJson: string | null;
       }
     >();
   const result = new Map<string, WorkflowStepRun[]>();
-  for (const { workerTurnIdsJson, ...row } of rows.results ?? []) {
+  for (const {
+    workerTurnIdsJson,
+    executionConfigJson,
+    ...row
+  } of rows.results ?? []) {
+    const executionConfig = executionConfigJson
+      ? JSON.parse(executionConfigJson)
+      : undefined;
     const steps = result.get(row.workflowRunId) ?? [];
     steps.push({
       ...row,
       schemaVersion: 1,
+      ...(executionConfig
+        ? {
+            executionConfig,
+            profileId: executionConfig.profileId,
+            profileReleaseVersion: executionConfig.profileReleaseVersion,
+          }
+        : {}),
       workerTurnIds: JSON.parse(workerTurnIdsJson) as string[],
     });
     result.set(row.workflowRunId, steps);
