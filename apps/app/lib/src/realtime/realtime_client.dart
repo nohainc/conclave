@@ -12,10 +12,11 @@ Uri realtimeEndpointForApi(String apiBaseUrl) {
   final path = base.path.endsWith('/api')
       ? '${base.path}/realtime'
       : '${base.path.replaceFirst(RegExp(r'\/$'), '')}/api/realtime';
-  return base.replace(
-    scheme: base.scheme == 'https' ? 'wss' : 'ws',
-    path: path,
-    query: '',
-    fragment: '',
-  );
+  return base
+      .replace(
+        scheme: base.scheme == 'https' ? 'wss' : 'ws',
+        path: path,
+        query: '',
+      )
+      .removeFragment();
 }

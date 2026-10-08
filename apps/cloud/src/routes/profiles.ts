@@ -65,17 +65,21 @@ export async function handleListWorkspaceWorkerInventory(
             catalog.description AS catalog_description,
             catalog.lifecycle_state AS catalog_lifecycle_state,
             catalog.visibility_state AS catalog_visibility_state,
-            release.payload_json AS model_profile_json
+            -- The starter is only a capability projection fallback. Worker
+            -- admission and execution still require a published release.
+            COALESCE(release.payload_json, starter.profile_json) AS model_profile_json
        FROM workspace_worker_inventory i
        JOIN execution_workspaces ew ON ew.id = i.workspace_id
        LEFT JOIN worker_catalog catalog
          ON catalog.worker_type_id = i.worker_type_id
-       LEFT JOIN tool_profile_releases release
+      LEFT JOIN tool_profile_releases release
          ON release.profile_definition_id = i.profile_definition_id
         AND release.release_version = i.profile_release_version
         AND release.worker_type_id = i.worker_type_id
         AND release.published_at IS NOT NULL
         AND release.lifecycle_state <> 'revoked'
+      LEFT JOIN tool_profile_starter_templates starter
+        ON starter.profile_definition_id = i.profile_definition_id
       WHERE i.owner_user_id = ?1
         AND (?2 IS NULL OR i.workspace_id = ?2)
       ORDER BY i.workspace_id, i.worker_type_id, i.worker_id`,

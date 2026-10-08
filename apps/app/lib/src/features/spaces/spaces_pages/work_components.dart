@@ -450,8 +450,7 @@ class _WorkComposer extends StatelessWidget {
       Theme.of(context).brightness == Brightness.dark,
       Theme.of(context).colorScheme);
 
-  Widget _additionalControls(BuildContext context, GlobalKey inputKey,
-      {bool executionChoices = false}) {
+  Widget _additionalControls(BuildContext context, GlobalKey inputKey) {
     final colors = Theme.of(context).colorScheme;
     final selectedWorkflow = workflowCatalog
             .where((item) => item.reference == workflow)
@@ -503,7 +502,7 @@ class _WorkComposer extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (!executionChoices) ...[
+
             Builder(
               builder: (buttonContext) => IconButton(
                 tooltip: 'Add attachments',
@@ -612,11 +611,9 @@ class _WorkComposer extends StatelessWidget {
                 ),
               ),
             ),
+          if (stepKind != null && policy.userSelectsWorker) ...[
             const SizedBox(width: 4),
-          ],
-          if (executionChoices) ...[
-            if (stepKind != null && policy.userSelectsWorker)
-              Builder(
+            Builder(
                   builder: (workerContext) => Tooltip(
                         message: 'Choose worker',
                         child: InkWell(
@@ -701,11 +698,13 @@ class _WorkComposer extends StatelessWidget {
                                   ])),
                         ),
                       )),
-            if (stepKind != null && isWorkerAssigned) ...[
-              if (policy.userSelectsModel &&
-                  (assignedWorker?.executionOptions?.modelSelectionSupported ??
-                      true))
-                Builder(
+          ],
+          if (stepKind != null && isWorkerAssigned) ...[
+            if (policy.userSelectsModel &&
+                (assignedWorker?.executionOptions?.modelSelectionSupported ??
+                    true)) ...[
+              const SizedBox(width: 4),
+              Builder(
                   builder: (modelBtnContext) => Tooltip(
                     message: 'Choose model',
                     child: InkWell(
@@ -843,7 +842,8 @@ class _WorkComposer extends StatelessWidget {
                     ),
                   ),
                 ),
-              if (policy.userSelectsEffort && supportedEfforts.isNotEmpty) ...[
+            ],
+            if (policy.userSelectsEffort && supportedEfforts.isNotEmpty) ...[
                 const SizedBox(width: 4),
                 Builder(
                   builder: (reasoningBtnContext) => Tooltip(
@@ -985,9 +985,8 @@ class _WorkComposer extends StatelessWidget {
               ],
             ],
           ],
-        ],
-      ),
-    );
+        ),
+      );
   }
 
   Widget _buildComposerInput(
@@ -1004,7 +1003,6 @@ class _WorkComposer extends StatelessWidget {
           MarkdownComposer(
             controller: requestController,
             chatStyle: true,
-            sendInToolbar: true,
             minLines: 2,
             maxLines: 6,
             enabled: canExecute,
@@ -1017,8 +1015,6 @@ class _WorkComposer extends StatelessWidget {
                 workflowCatalogError == null,
             additionalControlsBuilder: (inputKey) =>
                 _additionalControls(context, inputKey),
-            executionControlsBuilder: (inputKey) =>
-                _additionalControls(context, inputKey, executionChoices: true),
           ),
           if (attachments.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -1179,8 +1175,7 @@ class _WorkTimelineCard extends StatelessWidget {
             normalizedCurrentName.isNotEmpty &&
             (normalizedRequesterName == normalizedCurrentName ||
                 rawRequesterName.toLowerCase() == normalizedCurrentName));
-    final showRequesterIdentity =
-        !isOwnRequest && request.requestedByUserId?.trim().isNotEmpty == true;
+    final showRequesterIdentity = !isOwnRequest;
 
     final failedStep =
         request.steps.where((step) => step.status == 'failed').firstOrNull;

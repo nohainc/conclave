@@ -240,151 +240,172 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   void _updateState(VoidCallback callback) => setState(callback);
 
   @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.space.name.isNotEmpty
-                            ? widget.space.name
-                            : 'Untitled Space',
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.3,
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) => Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 840),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Stack(
+                      alignment: Alignment.topCenter,
+                      children: [
+                        Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                widget.space.name.isNotEmpty
+                                    ? widget.space.name
+                                    : 'Untitled Space',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                              if (widget.space.description
+                                  .trim()
+                                  .isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  widget.space.description.trim(),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                      ),
-                    ),
-                    if (isOwner)
-                      PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert),
-                        tooltip: 'Space actions',
-                        splashRadius: 18,
-                        onSelected: (action) {
-                          if (action == 'edit') {
-                            if (widget.onEdit != null) {
-                              widget.onEdit!();
-                            } else {
-                              _editSpaceDialog();
-                            }
-                          } else if (action == 'archive') {
-                            widget.onArchive();
-                          } else if (action == 'delete') {
-                            widget.onDelete();
-                          }
-                        },
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(
-                            value: 'edit',
-                            child: Row(
+                        Align(
+                          alignment: Alignment.topRight,
+                          child: isOwner
+                              ? PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert),
+                                  tooltip: 'Space actions',
+                                  splashRadius: 18,
+                                  onSelected: (action) {
+                                    if (action == 'edit') {
+                                      if (widget.onEdit != null) {
+                                        widget.onEdit!();
+                                      } else {
+                                        _editSpaceDialog();
+                                      }
+                                    } else if (action == 'archive') {
+                                      widget.onArchive();
+                                    } else if (action == 'delete') {
+                                      widget.onDelete();
+                                    }
+                                  },
+                                  itemBuilder: (context) => const [
+                                    PopupMenuItem(
+                                      value: 'edit',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.edit_outlined, size: 18),
+                                          SizedBox(width: 8),
+                                          Text('Edit'),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'archive',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.archive_outlined,
+                                              size: 18),
+                                          SizedBox(width: 8),
+                                          Text('Archive'),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'delete',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.delete_outline,
+                                              size: 18,
+                                              color: ConclaveColors.error),
+                                          SizedBox(width: 8),
+                                          Text('Delete',
+                                              style: TextStyle(
+                                                  color: ConclaveColors.error)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                        if (widget.space.instructions.trim().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 62),
+                            child: Column(
                               children: [
-                                Icon(Icons.edit_outlined, size: 18),
-                                SizedBox(width: 8),
-                                Text('Edit'),
+                                Text(
+                                  'Space Instructions',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(widget.space.instructions.trim(),
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(fontSize: 13)),
                               ],
                             ),
                           ),
-                          PopupMenuItem(
-                            value: 'archive',
-                            child: Row(
-                              children: [
-                                Icon(Icons.archive_outlined, size: 18),
-                                SizedBox(width: 8),
-                                Text('Archive'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete_outline,
-                                    size: 18, color: ConclaveColors.error),
-                                SizedBox(width: 8),
-                                Text('Delete',
-                                    style:
-                                        TextStyle(color: ConclaveColors.error)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-                if (widget.space.description.trim().isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.space.description.trim(),
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ],
                     ),
                   ),
-                ],
-                if (widget.space.instructions.trim().isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Space Instructions',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.space.instructions.trim(),
-                        style: const TextStyle(
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
 
-          // 3 Tabs: Threads, Workspaces, Members aligned by center
-          AnimatedBuilder(
-            animation: _tabController,
-            builder: (context, _) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: TabBar(
-                    controller: _tabController,
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.center,
-                    tabs: const [
-                      Tab(text: 'Threads'),
-                      Tab(text: 'Workspaces'),
-                      Tab(text: 'Members'),
-                    ],
+                  // 3 Tabs: Threads, Workspaces, Members aligned by center
+                  AnimatedBuilder(
+                    animation: _tabController,
+                    builder: (context, _) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Center(
+                          child: TabBar(
+                            controller: _tabController,
+                            isScrollable: true,
+                            tabAlignment: TabAlignment.center,
+                            tabs: const [
+                              Tab(text: 'Threads'),
+                              Tab(text: 'Workspaces'),
+                              Tab(text: 'Members'),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        if (_tabController.index == 0)
+                          _threadsTab()
+                        else if (_tabController.index == 1)
+                          _workspacesTab()
+                        else
+                          _membersTab(),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                if (_tabController.index == 0)
-                  _threadsTab()
-                else if (_tabController.index == 1)
-                  _workspacesTab()
-                else
-                  _membersTab(),
-              ],
+                ],
+              ),
             ),
           ),
-        ],
+        ),
       );
 }

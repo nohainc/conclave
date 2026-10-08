@@ -161,15 +161,6 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Allow Work workflows'),
-              subtitle: const Text(
-                  'When turned off, members can use Chat only. Existing work and workspace connections are kept.'),
-              value: allowWork,
-              onChanged: isOwner && !_savingWorkSetting ? _setAllowWork : null,
-            ),
-            const SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -246,6 +237,21 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                   );
                 }).toList(),
               ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Allow Work workflows'),
+                Transform.scale(
+                  scale: 0.82,
+                  child: Switch.adaptive(
+                    value: allowWork,
+                    onChanged:
+                        isOwner && !_savingWorkSetting ? _setAllowWork : null,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       );
@@ -264,6 +270,30 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
       return raw;
     }
   }
+
+  DataColumn _permissionColumn(IconData icon, String label) => DataColumn(
+        numeric: true,
+        label: Tooltip(
+          message: label,
+          child: SizedBox(
+            width: 20,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Icon(icon, size: 18),
+            ),
+          ),
+        ),
+      );
+
+  Widget _permissionLegendItem(IconData icon, String label) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon,
+              size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          const SizedBox(width: 5),
+          Text(label, style: const TextStyle(fontSize: 12)),
+        ],
+      );
 
   Widget _membersTab() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -301,99 +331,163 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
             const LinearProgressIndicator()
           else ...[
             if (members.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.only(top: 8, bottom: 4),
-                child: Text(
-                  'Members (${members.length})',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+              LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: constraints.maxWidth,
+                    child: DataTable(
+                      horizontalMargin: 0,
+                      columnSpacing: 20,
+                      dataRowMinHeight: 56,
+                      dataRowMaxHeight: 64,
+                      columns: [
+                        const DataColumn(label: SizedBox.shrink()),
+                        _permissionColumn(Icons.chat_bubble_outline, 'Chat'),
+                        _permissionColumn(Icons.work_outline, 'Work'),
+                        _permissionColumn(Icons.forum_outlined, 'Own threads'),
+                        _permissionColumn(
+                            Icons.laptop_mac_outlined, 'Attach workspace'),
+                        _permissionColumn(
+                            Icons.person_add_alt_1_outlined, 'Invite members'),
+                        const DataColumn(
+                          numeric: true,
+                          label: Tooltip(
+                            message: 'Remove member',
+                            child: SizedBox(
+                              width: 20,
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: Icon(Icons.person_remove_outlined,
+                                    size: 18),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      rows: members
+                          .map((member) => DataRow(cells: [
+                                DataCell(Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(member.displayName.isNotEmpty
+                                                ? member.displayName
+                                                : member.email),
+                                            if (member.role == 'owner') ...[
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: ConclaveColors
+                                                      .primarySoftColor(isDark),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  'Owner',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: ConclaveColors
+                                                        .primaryForeground(
+                                                            isDark),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ]),
+                                      if (member.displayName != member.email)
+                                        Text(member.email,
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurfaceVariant)),
+                                    ])),
+                                for (final entry in member.effectivePermissions
+                                    .toJson()
+                                    .entries)
+                                  DataCell(Align(
+                                    alignment: Alignment.centerRight,
+                                    child: SizedBox(
+                                      width: 20,
+                                      child: Align(
+                                        alignment: Alignment.centerRight,
+                                        child: Checkbox(
+                                          key: ValueKey(
+                                              'permission-${member.userId}-${entry.key}'),
+                                          value: entry.value,
+                                          materialTapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                          visualDensity: VisualDensity.compact,
+                                          onChanged: isOwner &&
+                                                  member.role != 'owner' &&
+                                                  !_savingMembers
+                                                      .contains(member.userId)
+                                              ? (value) => _setMemberPermission(
+                                                  member,
+                                                  entry.key,
+                                                  value == true)
+                                              : null,
+                                        ),
+                                      ),
+                                    ),
+                                  )),
+                                DataCell(Align(
+                                  alignment: Alignment.centerRight,
+                                  child: SizedBox(
+                                    width: 20,
+                                    child: isOwner && member.role != 'owner'
+                                        ? IconButton(
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                            splashRadius: 16,
+                                            icon: const Icon(
+                                                Icons.person_remove_outlined,
+                                                size: 18),
+                                            tooltip: 'Remove from Space',
+                                            onPressed: () =>
+                                                _removeMember(member))
+                                        : const SizedBox.shrink(),
+                                  ),
+                                )),
+                              ]))
+                          .toList(),
+                    ),
                   ),
                 ),
               ),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  horizontalMargin: 0,
-                  columnSpacing: 20,
-                  dataRowMinHeight: 56,
-                  dataRowMaxHeight: 64,
-                  columns: const [
-                    DataColumn(label: Text('Member')),
-                    DataColumn(label: Text('Chat')),
-                    DataColumn(label: Text('Work')),
-                    DataColumn(label: Text('Own threads')),
-                    DataColumn(label: Text('Attach workspace')),
-                    DataColumn(label: Text('Invite members')),
-                    DataColumn(label: Text('')),
-                  ],
-                  rows: members
-                      .map((member) => DataRow(cells: [
-                            DataCell(Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(member.displayName.isNotEmpty
-                                            ? member.displayName
-                                            : member.email),
-                                        if (member.role == 'owner') ...[
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: ConclaveColors
-                                                  .primarySoftColor(isDark),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              'Owner',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
-                                                color: ConclaveColors
-                                                    .primaryForeground(isDark),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ]),
-                                  if (member.displayName != member.email)
-                                    Text(member.email,
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant)),
-                                ])),
-                            for (final entry
-                                in member.effectivePermissions.toJson().entries)
-                              DataCell(Checkbox(
-                                key: ValueKey(
-                                    'permission-${member.userId}-${entry.key}'),
-                                value: entry.value,
-                                onChanged: isOwner &&
-                                        member.role != 'owner' &&
-                                        !_savingMembers.contains(member.userId)
-                                    ? (value) => _setMemberPermission(
-                                        member, entry.key, value == true)
-                                    : null,
-                              )),
-                            DataCell(isOwner && member.role != 'owner'
-                                ? IconButton(
-                                    icon: const Icon(
-                                        Icons.person_remove_outlined),
-                                    tooltip: 'Remove from Space',
-                                    onPressed: () => _removeMember(member))
-                                : const SizedBox.shrink()),
-                          ]))
-                      .toList(),
+              const SizedBox(height: 8),
+              Text(
+                'Permissions',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 16,
+                runSpacing: 6,
+                children: [
+                  _permissionLegendItem(
+                      Icons.chat_bubble_outline, 'Chat workflows'),
+                  _permissionLegendItem(Icons.work_outline, 'Work workflows'),
+                  _permissionLegendItem(Icons.forum_outlined, 'Own threads'),
+                  _permissionLegendItem(
+                      Icons.laptop_mac_outlined, 'Add workspace'),
+                  _permissionLegendItem(
+                      Icons.person_add_alt_1_outlined, 'Invite members'),
+                ],
               ),
             ] else
               const Padding(

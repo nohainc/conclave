@@ -2419,7 +2419,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify distinct sections
-    expect(find.text('Members (1)'), findsOneWidget);
+    expect(find.text('Members (1)'), findsNothing);
     expect(find.text('Vitalii Noha'), findsOneWidget);
     expect(find.text('Owner'), findsOneWidget);
 

@@ -143,11 +143,10 @@ void main() {
     await tester.tap(find.text('Workspaces'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Edit Workspace access'), findsNothing);
-    await tester.tap(find.byType(SwitchListTile));
+    await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
     expect(source.savedAllowWork, isFalse);
-    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
-        isFalse);
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
   });
   testWidgets('member actions follow explicit rights, not collaborator role',
       (tester) async {
@@ -167,8 +166,7 @@ void main() {
     await tester.tap(find.text('Workspaces'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Connect Workspace'), findsNothing);
-    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged,
-        isNull);
+    expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
     await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Share Space'), findsOneWidget);

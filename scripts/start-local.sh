@@ -90,6 +90,16 @@ done
 
 API_URL="http://${API_HOST}:${PORT}"
 WEB_URL="http://localhost:${WEB_PORT}"
+FLUTTER_BIN="${FLUTTER_BIN:-$(command -v flutter || true)}"
+if [[ -z "${FLUTTER_BIN}" && -x "/Users/${USER}/development/flutter/bin/flutter" ]]; then
+  FLUTTER_BIN="/Users/${USER}/development/flutter/bin/flutter"
+fi
+if [[ -z "${FLUTTER_BIN}" || ! -x "${FLUTTER_BIN}" ]]; then
+  echo "Error: Flutter SDK was not found. Set FLUTTER_BIN to its flutter executable." >&2
+  exit 1
+fi
+FLUTTER_ROOT="$(cd "$(dirname "${FLUTTER_BIN}")/.." && pwd)"
+FLUTTER_ENGINE_VERSION="$(<"${FLUTTER_ROOT}/bin/internal/engine.version")"
 if [[ "$ISOLATED" == true ]]; then
   node "$ROOT_DIR/scripts/setup-development-auth.mjs"
   node "$ROOT_DIR/scripts/setup-development-profile-signing.mjs"
@@ -123,7 +133,8 @@ cat << EOF > "${RUNNER_FLUTTER}"
 set -euo pipefail
 cd "${ROOT_DIR}/apps/app"
 echo -e "\033[1m\033[0;32m[Conclave AX Flutter Web]\033[0m Controls: [r] Reload | [R] Restart | [q] Quit\n"
-exec flutter run -d "${DEVICE}" --web-port="${WEB_PORT}" --dart-define="CONCLAVE_API_URL=${API_URL}/api"
+export FLUTTER_PREBUILT_ENGINE_VERSION="${FLUTTER_ENGINE_VERSION}"
+exec "${FLUTTER_BIN}" run -d "${DEVICE}" --web-port="${WEB_PORT}" --dart-define="CONCLAVE_API_URL=${API_URL}/api"
 EOF
 chmod +x "${RUNNER_FLUTTER}"
 
