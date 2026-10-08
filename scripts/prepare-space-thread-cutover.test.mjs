@@ -1,7 +1,10 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { spaceThreadCutoverSql } from "./prepare-space-thread-cutover.mjs";
+import {
+  spaceThreadCutoverSql,
+  spaceThreadCutoverMigrationName,
+} from "./prepare-space-thread-cutover.mjs";
 import { assertSpaceThreadSchema } from "./space-thread-schema-preflight.mjs";
 const objects = (db) =>
   db
@@ -149,6 +152,74 @@ it("stops atomically when execution is active", () => {
     );
     expect(() => apply(db, spaceThreadCutoverSql(objects(db)))).toThrow();
     expect(db.prepare("SELECT COUNT(*) AS n FROM projects").get().n).toBe(1);
+  } finally {
+    db.close();
+  }
+});
+it("repairs the deployed execution-mode constraint after table names are already canonical without losing task references or snapshots", () => {
+  const db = fixture();
+  try {
+    apply(db, spaceThreadCutoverSql(objects(db)));
+    db.exec(`CREATE TABLE workflow_tasks(id TEXT PRIMARY KEY, work_request_id TEXT REFERENCES work_requests(id), execution_mode TEXT CHECK(execution_mode IN ('stateless_read','stateful_workstream')), output_json TEXT);
+      CREATE TABLE workflow_task_dependencies(task_id TEXT REFERENCES workflow_tasks(id) ON DELETE CASCADE, depends_on_task_id TEXT REFERENCES workflow_tasks(id) ON DELETE RESTRICT);
+      CREATE TABLE workflow_step_runs(id TEXT PRIMARY KEY, task_id TEXT REFERENCES workflow_tasks(id) ON DELETE CASCADE, snapshot_json TEXT);
+      CREATE INDEX idx_tasks_mode ON workflow_tasks(execution_mode);
+      INSERT INTO workflow_tasks VALUES('implement','W','stateful_workstream','{"result":"unchanged"}'),('read','W','stateless_read',NULL);
+      INSERT INTO workflow_task_dependencies VALUES('implement','read');
+      INSERT INTO workflow_step_runs VALUES('step','implement','{"model":"historical-model"}');`);
+    expect(spaceThreadCutoverMigrationName(objects(db))).toBe(
+      "0021_workflow_execution_mode_alignment.sql",
+    );
+    const before = db
+      .prepare("SELECT input_json,snapshot_json FROM work_requests")
+      .get();
+    expect(() =>
+      db.exec(
+        "INSERT INTO workflow_tasks VALUES('next','W','stateful_thread',NULL)",
+      ),
+    ).toThrow(/CHECK/);
+    expect(() =>
+      assertSpaceThreadSchema([{ success: true, results: objects(db) }]),
+    ).toThrow(/execution_mode/);
+    apply(db, spaceThreadCutoverSql(objects(db)));
+    assertSpaceThreadSchema([{ success: true, results: objects(db) }]);
+    db.exec(
+      "INSERT INTO workflow_tasks VALUES('next','W','stateful_thread',NULL)",
+    );
+    expect(
+      db
+        .prepare(
+          "SELECT execution_mode,output_json FROM workflow_tasks WHERE id='implement'",
+        )
+        .get(),
+    ).toEqual({
+      execution_mode: "stateful_thread",
+      output_json: '{"result":"unchanged"}',
+    });
+    expect(
+      db.prepare("SELECT * FROM workflow_task_dependencies").all(),
+    ).toEqual([{ task_id: "implement", depends_on_task_id: "read" }]);
+    expect(db.prepare("SELECT * FROM workflow_step_runs").all()).toEqual([
+      {
+        id: "step",
+        task_id: "implement",
+        snapshot_json: '{"model":"historical-model"}',
+      },
+    ]);
+    expect(
+      db.prepare("SELECT input_json,snapshot_json FROM work_requests").get(),
+    ).toEqual(before);
+    expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    expect(
+      db
+        .prepare("SELECT name FROM sqlite_schema WHERE name='idx_tasks_mode'")
+        .get(),
+    ).toBeTruthy();
+    expect(() =>
+      db.exec(
+        "INSERT INTO workflow_tasks VALUES('obsolete','W','stateful_workstream',NULL)",
+      ),
+    ).toThrow(/CHECK/);
   } finally {
     db.close();
   }

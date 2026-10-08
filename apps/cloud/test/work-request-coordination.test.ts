@@ -35,6 +35,8 @@ function fixture(coordinatorAvailable = true) {
             return this;
           },
           async first() {
+            if (sql.includes("owner_user_id AS ownerUserId FROM spaces"))
+              return { ownerUserId: "owner" };
             if (sql.includes("SELECT wc.config_json"))
               return {
                 configJson: JSON.stringify({
@@ -55,6 +57,7 @@ function fixture(coordinatorAvailable = true) {
             return null;
           },
           async all() {
+            if (sql.includes("UNION ALL")) return { results: [] };
             return {
               results: [{ workerId: "worker-a", workspaceId: "workspace" }],
             };

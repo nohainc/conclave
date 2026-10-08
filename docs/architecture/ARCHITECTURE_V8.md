@@ -805,7 +805,8 @@ freezing nullable model/effort and identity/version per step. Workspace executes
 that admitted Worker under the signed Profile through the generic Engine.
 
 ```text
-Workflow Definition → User Workflow Configuration → Execution Resolution
+Workflow Definition → User Workflow Configuration (Space owner)
+                     → Space Workflow Configuration → Execution Resolution
                      → WorkflowRun → StepRun
 ```
 
@@ -1235,3 +1236,27 @@ builds and remote Cloud connections reject the development path. This exception
 supersedes blanket draft exclusions only for local development; other
 architecture exclusions and browser-based human authentication remain intact.
 See [Profile Lab development access and execution](../specifications/PROFILE_LAB.md#development-access-and-unsigned-execution).
+
+### Operational execution-mode alignment
+
+The canonical task `execution_mode` values are `stateless_read` and
+`stateful_thread`. Some previously renamed hosted databases retained the old
+`stateful_workstream` CHECK constraint. This is deployed-schema drift, not a
+supported execution mode or an API compatibility contract. It causes stateful
+request acceptance to fail even when Worker and workflow preferences are valid.
+
+Production schema preflight checks the complete `workflow_tasks` definition.
+Space/Thread preflight also detects the obsolete enum after table/column names
+have already been converted. The inspected, data-preserving cutover generator
+normalizes this storage value and its constraint, preserving task IDs, dependency
+and StepRun references, outputs, and historical request/StepRun snapshots. For an
+affected database it emits `0021_workflow_execution_mode_alignment.sql`, so the
+repair is not skipped when `0017_space_thread_cutover.sql` was already applied.
+This is an operational alignment generated from that database's inspected schema,
+not a compatibility migration added to the fresh-start v8 baseline.
+
+Use the existing `pnpm db:migrate:production` workflow with a private verified
+backup and its explicit production/cutover confirmations. Rehearse generated SQL
+on the backup before applying it. Active Work Requests/assignments or schema drift
+stop the conversion; do not bypass these assertions. No runtime code accepts or
+writes the retired value, and schema generation does not itself modify remote D1.

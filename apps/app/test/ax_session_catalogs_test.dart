@@ -225,7 +225,7 @@ void main() {
     await tester.pumpWidget(page('A', source, store.catalogs, initialTab: 2));
     await tester.pumpAndSettle();
     const notice =
-        'Worker, model, and effort defaults are configured on the Workflows page.';
+        'Worker, model, and effort defaults are configured in this Space’s Workflows tab.';
     expect(find.text(notice), findsOneWidget);
     source.workers = [];
     await store.realtimeCacheRouter
@@ -254,7 +254,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
         find.text(
-            'Worker, model, and effort defaults are configured on the Workflows page.'),
+            'Worker, model, and effort defaults are configured in this Space’s Workflows tab.'),
         findsOneWidget);
     expect(source.workerReads, 2);
   });

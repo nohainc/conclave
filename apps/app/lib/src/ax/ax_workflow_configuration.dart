@@ -68,3 +68,12 @@ abstract interface class AxWorkflowConfigurationDataSource {
   Future<AxUserWorkflowConfiguration> resetWorkflowConfiguration(
       String workflowId);
 }
+
+abstract interface class AxSpaceWorkflowConfigurationDataSource {
+  Future<List<AxUserWorkflowConfiguration>> loadSpaceWorkflowConfigurations(
+      String spaceId);
+  Future<AxUserWorkflowConfiguration> saveSpaceWorkflowConfiguration(
+      String spaceId, AxUserWorkflowConfiguration configuration);
+  Future<AxUserWorkflowConfiguration> resetSpaceWorkflowConfiguration(
+      String spaceId, String workflowId);
+}

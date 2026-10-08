@@ -3,8 +3,8 @@
 **Current execution configuration:** [ADR-019](../decisions/ADR-019-per-user-workflow-execution-configuration.md)
 and [User Workflow Configuration v1](USER_WORKFLOW_CONFIGURATION_V1.md) supersede
 historical phases describing Thread execution bindings and next-turn overrides.
-The composer retains its layout as a display of global preferences. New requests
-resolve global user defaults/step overrides; `executionSelection` and Thread
+The composer retains its layout as a display of Space preferences. New requests
+resolve owner-global defaults plus shared Space workflow overrides; `executionSelection` and Thread
 execution writes are removed. Thread and composer override layers are future work.
 Historical phase notes below describe completed iterations, not current API aliases.
 

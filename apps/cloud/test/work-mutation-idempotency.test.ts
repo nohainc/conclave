@@ -43,6 +43,9 @@ function fixture() {
   );
   sqlite.exec(`INSERT INTO workspace_worker_inventory(worker_id,workspace_id,owner_user_id,worker_type_id,activation_state,readiness_state,local_concurrency_limit,revision,created_at,updated_at,last_seen_at)
     VALUES('worker-a','workspace','owner','chatgpt','enabled','ready',1,1,'now','now','now');`);
+  sqlite.exec(
+    "INSERT INTO workspace_space_grants(id,space_id,workspace_id,granted_by_user_id,status,created_at,updated_at) VALUES('grant','P','workspace','owner','active','now','now')",
+  );
   const instances = new Set<string>();
   let failDispatch = false;
   const enqueue = vi.fn(async () => new Response("{}"));

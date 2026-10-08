@@ -1,3 +1,4 @@
+import { loadSpaceWorkflowConfigurations } from "./space-workflow-configurations.js";
 import {
   BUILTIN_WORKFLOW_CATALOG,
   DomainInvariantError,
@@ -28,11 +29,40 @@ export async function handleWorkflowConfigurations(
   env: SecurityEnv,
   workflowId?: string,
   ctx?: ExecutionContext,
+  spaceId?: string,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   const db = env.CONCLAVE_DB;
+  if (spaceId) {
+    const membership = await db
+      .prepare(
+        `SELECT s.owner_user_id AS ownerUserId FROM spaces s JOIN space_memberships m ON m.space_id = s.id JOIN users u ON u.id = m.user_id WHERE s.id = ?1 AND m.user_id = ?2 AND u.status = 'active'`,
+      )
+      .bind(spaceId, context.userId)
+      .first<{ ownerUserId: string }>();
+    if (!membership) throw new HttpError(403, "Space membership required");
+    if (request.method !== "GET" && membership.ownerUserId !== context.userId)
+      throw new HttpError(403, "Only the Space owner can configure workflows");
+  }
+  const table = spaceId
+    ? "space_workflow_configurations"
+    : "user_workflow_configurations";
+  const key = spaceId ? "space_id" : "user_id";
+  const owner = spaceId ?? context.userId;
+
   if (request.method === "GET") {
     if (workflowId) definitionFor(workflowId);
+    if (spaceId) {
+      const effective = await loadSpaceWorkflowConfigurations(
+        env,
+        spaceId,
+        workflowId,
+      );
+      return json({
+        schemaVersion: 1,
+        configurations: effective.configurations,
+      });
+    }
     const rows = await db
       .prepare(
         `SELECT configuration_json FROM user_workflow_configurations
@@ -52,14 +82,30 @@ export async function handleWorkflowConfigurations(
   const definition = definitionFor(workflowId);
   const reset = async () => {
     await db
-      .prepare(
-        "DELETE FROM user_workflow_configurations WHERE user_id = ?1 AND workflow_id = ?2",
-      )
-      .bind(context.userId, workflowId)
+      .prepare(`DELETE FROM ${table} WHERE ${key} = ?1 AND workflow_id = ?2`)
+      .bind(owner, workflowId)
       .run();
   };
   if (request.method === "DELETE") {
     await reset();
+    if (spaceId) {
+      const inherited = await loadSpaceWorkflowConfigurations(
+        env,
+        spaceId,
+        workflowId,
+      );
+      return json({
+        configuration:
+          inherited.configurations[0] ??
+          parseUserWorkflowConfiguration(definition, {
+            schemaVersion: 1,
+            workflowId,
+            enabled: true,
+            defaults: {},
+            stepOverrides: {},
+          }),
+      });
+    }
     return json({
       configuration: parseUserWorkflowConfiguration(definition, {
         schemaVersion: 1,
@@ -94,13 +140,16 @@ export async function handleWorkflowConfigurations(
   };
   const previous = await db
     .prepare(
-      "SELECT configuration_json FROM user_workflow_configurations WHERE user_id = ?1 AND workflow_id = ?2",
+      `SELECT configuration_json FROM ${table} WHERE ${key} = ?1 AND workflow_id = ?2`,
     )
-    .bind(context.userId, workflowId)
+    .bind(owner, workflowId)
     .first<{ configuration_json: string }>();
   const priorConfiguration: UserWorkflowConfiguration | undefined = previous
     ? JSON.parse(previous.configuration_json)
-    : undefined;
+    : spaceId
+      ? (await loadSpaceWorkflowConfigurations(env, spaceId, workflowId))
+          .configurations[0]
+      : undefined;
   const old: Record<
     string,
     import("@conclave/core").WorkflowSelection | undefined
@@ -164,6 +213,7 @@ export async function handleWorkflowConfigurations(
     if (error) throw new HttpError(400, error);
   }
   if (
+    !spaceId &&
     configuration.enabled &&
     !Object.keys(configuration.defaults).length &&
     !Object.keys(configuration.stepOverrides).length
@@ -172,12 +222,12 @@ export async function handleWorkflowConfigurations(
   } else {
     await db
       .prepare(
-        `INSERT INTO user_workflow_configurations
-      (user_id, workflow_id, schema_version, configuration_json, updated_at) VALUES (?1, ?2, 1, ?3, ?4)
-      ON CONFLICT(user_id, workflow_id) DO UPDATE SET configuration_json = excluded.configuration_json, updated_at = excluded.updated_at`,
+        `INSERT INTO ${table}
+      (${key}, workflow_id, schema_version, configuration_json, updated_at) VALUES (?1, ?2, 1, ?3, ?4)
+      ON CONFLICT(${key}, workflow_id) DO UPDATE SET configuration_json = excluded.configuration_json, updated_at = excluded.updated_at`,
       )
       .bind(
-        context.userId,
+        owner,
         workflowId,
         JSON.stringify(configuration),
         new Date().toISOString(),

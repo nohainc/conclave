@@ -1,6 +1,6 @@
 # ADR-019: Per-user Workflow execution configuration
 
-**Status:** Accepted  
+**Status:** Accepted; extended by shared Space overrides (see configuration specification)
 **Date:** 2026-10-08  
 **Supersedes:** ADR-016's Thread execution bindings and fallback policy. Workspace
 readiness, Space grants, scheduling permissions, and local safety ownership remain.
@@ -11,7 +11,9 @@ Workflows execute globally, independent of Space and Thread selection.
 ```text
 Workflow Definition
        ↓
-User Workflow Configuration
+User Workflow Configuration (Space owner)
+       ↓
+Space Workflow Configuration
        ↓
 Execution Resolution
        ↓
@@ -27,7 +29,7 @@ made editable. Profile capabilities determine allowed model/effort combinations.
 Offline Workers remain configured; execution admission independently rechecks
 ownership, readiness, capabilities, grants, permissions, and Workspace eligibility.
 
-Cloud resolves these choices at request acceptance. Automatic Worker selection
+Cloud resolves owner-global defaults plus shared Space overrides at request acceptance. Automatic Worker selection
 must admit the entire workflow in one Workspace. Automatic model/effort means
 null (Profile/CLI default), not a guessed provider choice. Each accepted step
 freezes Worker, signed Profile identity/release, nullable model/effort, and Workflow
@@ -40,7 +42,7 @@ rewrites accepted history.
 Workflows is the sole global execution editor. Thread settings retain authored
 context and the initial Workflow selection, with no Worker/model/effort/fallback
 writes or scheduling side effects. The current composer's layout is retained as
-a display of global choices; it submits authored content and Workflow identity,
+a display of Space choices; it submits authored content and Workflow identity,
 not execution overrides. Reset always resolves Automatic without consulting old
 Thread or composer settings.
 
@@ -48,6 +50,8 @@ The future extension is explicit and not implemented:
 
 ```text
 User Workflow Configuration
+       ↓
+Space Workflow Configuration
        ↓
 Thread preference       [future]
        ↓
@@ -68,3 +72,10 @@ has no compatibility API for the removed configuration forms.
 Validation is scoped to AX, Cloud, and directly affected shared Core/security
 contracts. Workspace, Profile Lab, Public Site, and full repository validation
 are unnecessary because this decision changes no local Engine or provider protocol.
+
+The Space Workflows tab initializes from owner-global defaults. Saving replaces
+one whole workflow for that Space; Reset restores inheritance. Every Thread and
+requester uses this shared configuration. Only the Space owner may mutate it;
+Space members may read it. Migration 0020 adds its persistence, without rewriting
+accepted snapshots. Global Workflows and Workspaces are accessed through the
+application menu rather than dedicated sidebar or rail buttons.

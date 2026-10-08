@@ -54,6 +54,7 @@ describe("production Workspace Gateway smoke schema gate", () => {
       "0002_desktop_auth_multi_audience.sql",
       "0003_workspace_installations.sql",
       "0004_workspace_runtime_identity_uniqueness.sql",
+      "0006_chat_workflow_admission.sql",
       "0009_realtime_stream_alignment.sql",
       "0010_conversation_workflows.sql",
       "0011_conversation_turns.sql",
@@ -195,6 +196,15 @@ describe("production Workspace Gateway smoke schema gate", () => {
     database.exec(
       readFileSync(
         new URL(
+          "../apps/cloud/migrations-v8/0006_chat_workflow_admission.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    database.exec(
+      readFileSync(
+        new URL(
           "../apps/cloud/migrations-v8/0009_realtime_stream_alignment.sql",
           import.meta.url,
         ),
@@ -244,9 +254,10 @@ describe("production Workspace Gateway smoke schema gate", () => {
     const definitions = Object.fromEntries(
       database
         .prepare(
-          "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .all(
+          "workflow_tasks",
           "execution_workspaces",
           "workspace_installations",
           "workspace_runtime_identities",
@@ -406,4 +417,28 @@ describe("production Workspace Gateway smoke schema gate", () => {
       "BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}",
     );
   });
+});
+
+it("detects deployed workflow execution-mode constraint drift before accepting production schema", () => {
+  const definitions = {
+    ...canonicalDefinitions,
+    workflow_tasks: canonicalDefinitions.workflow_tasks.replaceAll(
+      "stateful_thread",
+      "stateful_workstream",
+    ),
+  };
+  const columns = Object.fromEntries(
+    Object.entries(requiredProductionSmokeColumns).map(([name, values]) => [
+      name,
+      values,
+    ]),
+  );
+  expect(
+    productionSmokeSchemaIssues(
+      Object.keys(columns),
+      columns,
+      definitions,
+      canonicalIndexes,
+    ).join(" "),
+  ).toMatch(/workflow_tasks/);
 });

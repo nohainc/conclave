@@ -10,7 +10,11 @@ import 'workflow_editor.dart';
 
 class WorkflowsPage extends StatefulWidget {
   const WorkflowsPage(
-      {super.key, required this.catalogs, required this.configurations});
+      {super.key,
+      required this.catalogs,
+      required this.configurations,
+      this.canEdit = true});
+  final bool canEdit;
   final AxSessionCatalogs catalogs;
   final AxWorkflowConfigurations configurations;
   @override
@@ -97,7 +101,10 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                               : _refresh,
                           icon: const Icon(Icons.refresh)),
                     ]),
-                    Text('Configure how Conclave performs tasks by default.',
+                    Text(
+                        widget.configurations.spaceId == null
+                            ? 'Configure how Conclave performs tasks by default.'
+                            : 'All Threads use these workflows. Start with global defaults; customize them for this Space.',
                         style: TextStyle(
                             color: Theme.of(context)
                                 .colorScheme
@@ -151,7 +158,8 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
         margin: const EdgeInsets.only(bottom: 12),
         child: InkWell(
             key: ValueKey('open-workflow-${definition.id}'),
-            onTap: () => _edit(definition, configuration),
+            onTap:
+                widget.canEdit ? () => _edit(definition, configuration) : null,
             borderRadius: BorderRadius.circular(12),
             child: Padding(
               padding: const EdgeInsets.all(18),
@@ -198,7 +206,9 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                         alignment: Alignment.centerRight,
                         child: TextButton.icon(
                           key: ValueKey('edit-${definition.id}'),
-                          onPressed: () => _edit(definition, configuration),
+                          onPressed: widget.canEdit
+                              ? () => _edit(definition, configuration)
+                              : null,
                           label: const Text('Edit'),
                           icon: const Icon(Icons.arrow_forward, size: 16),
                           iconAlignment: IconAlignment.end,

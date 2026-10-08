@@ -182,10 +182,13 @@ class _ThreadPageState extends State<ThreadPage>
 
   void _subscribeWorkflowConfigurations() {
     final ds = widget.dataSource;
-    _workflowConfigurations = widget.workflowConfigurations ??
-        (ds is AxWorkflowConfigurationDataSource
-            ? AxWorkflowConfigurations(ds!, engine: _workHistoryCache.engine)
-            : null);
+    _workflowConfigurations =
+        widget.workflowConfigurations?.spaceId == widget.space.id
+            ? widget.workflowConfigurations
+            : ds is AxSpaceWorkflowConfigurationDataSource
+                ? AxWorkflowConfigurations(ds!,
+                    engine: _workHistoryCache.engine, spaceId: widget.space.id)
+                : null;
     final cache = _workflowConfigurations;
     if (cache == null) return;
     _cancelWorkflowConfigurations = cache.engine.watch(cache.query, (state) {
@@ -429,7 +432,8 @@ class _ThreadPageState extends State<ThreadPage>
       _workConfig = Map<String, dynamic>.from(widget.thread.workConfig);
     }
     if (oldWidget.workflowConfigurations != widget.workflowConfigurations ||
-        oldWidget.dataSource != widget.dataSource) {
+        oldWidget.dataSource != widget.dataSource ||
+        oldWidget.space.id != widget.space.id) {
       _cancelWorkflowConfigurations?.call();
       _subscribeWorkflowConfigurations();
     }

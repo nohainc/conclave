@@ -1,3 +1,4 @@
+import { loadSpaceWorkflowConfigurations } from "./space-workflow-configurations.js";
 import {
   parseUserWorkflowConfiguration,
   resolveUserWorkflowConfiguration,
@@ -21,29 +22,23 @@ export async function resolveWorkflowExecutionBindings(
   >,
   attachments: readonly unknown[],
 ) {
-  const row = await env.CONCLAVE_DB.prepare(
-    "SELECT configuration_json FROM user_workflow_configurations WHERE user_id = ?1 AND workflow_id = ?2",
-  )
-    .bind(userId, definition.id)
-    .first<{ configuration_json: string }>();
-  const configuration = row
-    ? parseUserWorkflowConfiguration(
-        definition,
-        JSON.parse(row.configuration_json),
-      )
+  const space = await loadSpaceWorkflowConfigurations(
+    env,
+    spaceId,
+    definition.id,
+  );
+  const configuration = space.configurations[0]
+    ? parseUserWorkflowConfiguration(definition, space.configurations[0])
     : undefined;
   const effective = resolveUserWorkflowConfiguration(definition, configuration);
   if (!effective.enabled)
-    throw new HttpError(
-      422,
-      "Workflow is disabled in your Workflows preferences",
-    );
+    throw new HttpError(422, "Workflow is disabled in this Space");
   const inventory = await env.CONCLAVE_DB.prepare(
     `SELECT i.worker_id AS workerId, i.workspace_id AS workspaceId FROM workspace_worker_inventory i
-    JOIN execution_workspaces w ON w.id = i.workspace_id
-    WHERE w.owner_user_id = ?1 ORDER BY i.workspace_id, i.worker_id`,
+    JOIN workspace_space_grants g ON g.workspace_id = i.workspace_id
+    WHERE g.space_id = ?1 AND g.status = 'active' ORDER BY i.workspace_id, i.worker_id`,
   )
-    .bind(userId)
+    .bind(spaceId)
     .all<{ workerId: string; workspaceId: string }>();
   const requested: Record<
     string,
@@ -67,7 +62,7 @@ export async function resolveWorkflowExecutionBindings(
     )
       throw new HttpError(
         422,
-        `${step.kind}: Configured Worker is unavailable for the current user`,
+        `${step.kind}: Configured Worker is unavailable for this Space`,
       );
     const value = {
       ...(selection.worker ? { workerId: selection.worker } : {}),
@@ -141,6 +136,6 @@ export async function resolveWorkflowExecutionBindings(
   }
   throw new HttpError(
     422,
-    "No eligible owned Workers support this workflow configuration in one Workspace",
+    "No eligible Space Workers support this workflow configuration in one Workspace",
   );
 }

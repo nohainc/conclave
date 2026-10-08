@@ -38,9 +38,19 @@ export function assertSpaceThreadSchema(response) {
         row.name,
       ) || /\b(?:project_id|workstream_id)\b/.test(row.sql ?? ""),
   );
-  if (missing.length || missingColumns.length || retired.length) {
+  const retiredExecutionModes = tables.filter(
+    (row) =>
+      row.name === "workflow_tasks" &&
+      /'stateful_workstream'/.test(row.sql ?? ""),
+  );
+  if (
+    missing.length ||
+    missingColumns.length ||
+    retired.length ||
+    retiredExecutionModes.length
+  ) {
     throw new Error(
-      `Space/Thread cutover required before v8 migrations. Missing: ${missing.join(", ") || "none"}; missing identity columns: ${missingColumns.join(", ") || "none"}; retired tables/columns: ${retired.map((row) => row.name).join(", ") || "none"}. Back up and convert the existing schema and persisted contracts; do not replay the edited fresh-start baseline or reset data.`,
+      `Space/Thread cutover required before v8 migrations. Missing: ${missing.join(", ") || "none"}; missing identity columns: ${missingColumns.join(", ") || "none"}; retired tables/columns: ${[...retired.map((row) => row.name), ...retiredExecutionModes.map((row) => `${row.name}.execution_mode=stateful_workstream`)].join(", ") || "none"}. Back up and convert the existing schema and persisted contracts; do not replay the edited fresh-start baseline or reset data.`,
     );
   }
 }

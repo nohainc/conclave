@@ -1460,7 +1460,7 @@ void main() {
         find.byKey(const ValueKey('worker-binding-implement')), findsNothing);
     expect(
         find.text(
-            'Worker, model, and effort defaults are configured on the Workflows page.'),
+            'Worker, model, and effort defaults are configured in this Space’s Workflows tab.'),
         findsOneWidget);
     await tester.binding.setSurfaceSize(null);
   });

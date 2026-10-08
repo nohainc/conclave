@@ -29,6 +29,33 @@ mixin _CatalogApi on _AxApiClientCore {
     return _configurationResponse(response);
   }
 
+  Future<List<AxUserWorkflowConfiguration>> loadSpaceWorkflowConfigurations(
+      String spaceId) async {
+    final body = await _getJson(Uri.parse(
+        '$baseUrl/spaces/${Uri.encodeComponent(spaceId)}/workflow-configurations'));
+    return (body['configurations'] as List)
+        .map((value) => AxUserWorkflowConfiguration.fromJson(
+            Map<String, dynamic>.from(value as Map)))
+        .toList();
+  }
+
+  Future<AxUserWorkflowConfiguration> saveSpaceWorkflowConfiguration(
+      String spaceId, AxUserWorkflowConfiguration configuration) async {
+    return _configurationResponse(await client.put(
+        Uri.parse(
+            '$baseUrl/spaces/${Uri.encodeComponent(spaceId)}/workflow-configurations/${Uri.encodeComponent(configuration.workflowId)}'),
+        headers: _headers(contentType: 'application/json'),
+        body: jsonEncode(configuration.toJson())));
+  }
+
+  Future<AxUserWorkflowConfiguration> resetSpaceWorkflowConfiguration(
+      String spaceId, String workflowId) async {
+    return _configurationResponse(await client.delete(
+        Uri.parse(
+            '$baseUrl/spaces/${Uri.encodeComponent(spaceId)}/workflow-configurations/${Uri.encodeComponent(workflowId)}'),
+        headers: _headers()));
+  }
+
   AxUserWorkflowConfiguration _configurationResponse(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AxApiException(

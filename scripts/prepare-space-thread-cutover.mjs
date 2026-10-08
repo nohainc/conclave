@@ -7,7 +7,7 @@ import { assertSpaceThreadSchema } from "./space-thread-schema-preflight.mjs";
 const quote = (name) => `"${name.replaceAll('"', '""')}"`;
 const literal = (value) => `'${value.replaceAll("'", "''")}'`;
 const rename = (text) =>
-  text.replace(
+  text.replaceAll("'stateful_workstream'", "'stateful_thread'").replace(
     /\bprojects\b|\bproject(?=_)|\bworkspace_project(?=_)|\bworkstreams\b|\bworkstream(?=_)|\b(project|workstream)\b/g,
     (word) =>
       ({
@@ -39,17 +39,60 @@ const metadata = new Set([
 // One-off operational conversion, instantiated from the inspected database.
 // Historical extra columns/tables remain; fresh-start baseline files are untouched.
 export function spaceThreadCutoverSql(objects) {
-  const tables = objects.filter(
+  const inspectedTables = objects.filter(
     (o) => o.type === "table" && o.name !== "d1_migrations",
   );
+  let tables = inspectedTables;
+  const preRename =
+    tables.some((t) => t.name === "projects") &&
+    !tables.some((t) => /^(spaces|threads)/.test(t.name));
+  const executionModeRepair =
+    [
+      "spaces",
+      "threads",
+      "space_memberships",
+      "space_invitations",
+      "workspace_space_grants",
+    ].every((name) => tables.some((t) => t.name === name)) &&
+    !tables.some((t) =>
+      /^(projects|project_|workstreams|workstream_|workspace_project_grants)/.test(
+        t.name,
+      ),
+    ) &&
+    tables.some(
+      (t) => t.name === "workflow_tasks" && /'stateful_workstream'/.test(t.sql),
+    );
   if (
-    !tables.some((t) => t.name === "projects") ||
-    tables.some((t) => /^(spaces|threads|__cutover_)/.test(t.name))
+    (!preRename && !executionModeRepair) ||
+    tables.some((t) => t.name.startsWith("__cutover_"))
   )
-    throw new Error("Expected an unmixed pre-rename schema.");
+    throw new Error(
+      "Expected an unmixed pre-rename schema or inspected workflow execution-mode drift.",
+    );
   const db = new DatabaseSync(":memory:");
   try {
-    for (const table of tables) db.exec(table.sql);
+    for (const table of inspectedTables) db.exec(table.sql);
+    if (executionModeRepair) {
+      const affected = new Set(["workflow_tasks"]);
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (const table of inspectedTables) {
+          if (
+            !affected.has(table.name) &&
+            db
+              .prepare(`PRAGMA foreign_key_list(${quote(table.name)})`)
+              .all()
+              .some((f) => affected.has(f.table))
+          ) {
+            affected.add(table.name);
+            expanded = true;
+          }
+        }
+      }
+      tables = inspectedTables.filter((table) => affected.has(table.name));
+    }
+    const affectedNames = new Set(tables.map((table) => table.name));
     const parents = new Map(
       tables.map((t) => [
         t.name,
@@ -70,7 +113,8 @@ export function spaceThreadCutoverSql(objects) {
         );
       if (!parents.has(name)) throw new Error(`Missing parent ${name}`);
       active.add(name);
-      for (const parent of parents.get(name)) visit(parent);
+      for (const parent of parents.get(name))
+        if (affectedNames.has(parent)) visit(parent);
       active.delete(name);
       seen.add(name);
       order.push(name);
@@ -94,7 +138,7 @@ export function spaceThreadCutoverSql(objects) {
         `(SELECT COUNT(*) FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> '__cutover_assert')=${objects.length}`,
       ),
     );
-    for (const table of tables) {
+    for (const table of inspectedTables) {
       const columns = db
         .prepare(`PRAGMA table_info(${quote(table.name)})`)
         .all();
@@ -128,7 +172,9 @@ export function spaceThreadCutoverSql(objects) {
     // Descendants first prevents cascading changes to copied parent rows.
     for (const name of [...order].reverse())
       out.push(`DROP TABLE ${quote(name)};`);
-    const transformed = [];
+    const transformed = inspectedTables.filter(
+      (table) => !affectedNames.has(table.name),
+    );
     for (const name of order) {
       const table = tables.find((t) => t.name === name),
         target = rename(name);
@@ -141,6 +187,8 @@ export function spaceThreadCutoverSql(objects) {
         .map((c) => c.name);
       const expressions = columns.map((column) => {
         const value = quote(column);
+        if (name === "workflow_tasks" && column === "execution_mode")
+          return `CASE ${value} WHEN 'stateful_workstream' THEN 'stateful_thread' ELSE ${value} END`;
         if (column === "stream_kind")
           return `CASE ${value} WHEN 'project' THEN 'space' WHEN 'workstream' THEN 'thread' ELSE ${value} END`;
         if (metadata.has(name) && column.endsWith("_json")) {
@@ -175,7 +223,11 @@ export function spaceThreadCutoverSql(objects) {
         ),
       );
     }
-    for (const object of objects.filter((o) => o.type !== "table"))
+    for (const object of objects.filter(
+      (o) =>
+        o.type === "view" ||
+        (o.type !== "table" && affectedNames.has(o.tbl_name)),
+    ))
       out.push(rename(object.sql) + ";");
     out.push(assertion("NOT EXISTS (SELECT 1 FROM pragma_foreign_key_check)"));
     for (const name of order) out.push(`DROP TABLE ${backup(name)};`);
@@ -185,6 +237,17 @@ export function spaceThreadCutoverSql(objects) {
   } finally {
     db.close();
   }
+}
+
+export function spaceThreadCutoverMigrationName(objects) {
+  return objects.some(
+    (row) =>
+      row.type === "table" &&
+      row.name === "workflow_tasks" &&
+      /'stateful_workstream'/.test(row.sql ?? ""),
+  )
+    ? "0021_workflow_execution_mode_alignment.sql"
+    : "0017_space_thread_cutover.sql";
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -204,7 +267,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     throw new Error("Invalid D1 config.");
   mkdirSync(join(directory, "migrations"), { recursive: true, mode: 0o700 });
   writeFileSync(
-    join(directory, "migrations/0017_space_thread_cutover.sql"),
+    join(
+      directory,
+      "migrations",
+      spaceThreadCutoverMigrationName(snapshot[0].results),
+    ),
     spaceThreadCutoverSql(snapshot[0].results),
     { mode: 0o600 },
   );

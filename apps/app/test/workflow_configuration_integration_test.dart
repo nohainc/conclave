@@ -10,7 +10,35 @@ import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'workflows_page_test.dart' show WorkflowSource;
 import 'workflow_editor_test.dart' show worker;
 
-class IntegrationSource extends WorkflowSource {
+class IntegrationSource extends WorkflowSource
+    implements AxSpaceWorkflowConfigurationDataSource {
+  final spaceValues = <String, Map<String, AxUserWorkflowConfiguration>>{};
+  int spaceReads = 0;
+  @override
+  Future<List<AxUserWorkflowConfiguration>> loadSpaceWorkflowConfigurations(
+      String spaceId) async {
+    spaceReads++;
+    return {
+      ...{for (final c in values) c.workflowId: c},
+      ...?spaceValues[spaceId]
+    }.values.toList();
+  }
+
+  @override
+  Future<AxUserWorkflowConfiguration> saveSpaceWorkflowConfiguration(
+      String spaceId, AxUserWorkflowConfiguration configuration) async {
+    (spaceValues[spaceId] ??= {})[configuration.workflowId] = configuration;
+    return configuration;
+  }
+
+  @override
+  Future<AxUserWorkflowConfiguration> resetSpaceWorkflowConfiguration(
+      String spaceId, String workflowId) async {
+    spaceValues[spaceId]?.remove(workflowId);
+    return values.where((c) => c.workflowId == workflowId).firstOrNull ??
+        AxUserWorkflowConfiguration(workflowId: workflowId);
+  }
+
   @override
   Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async =>
       (await super.loadBuiltinWorkflowCatalog())
@@ -132,6 +160,7 @@ void main() {
     await tester.pumpWidget(page('two'));
     await tester.pumpAndSettle();
     expect(source.reads, 1);
+    expect(source.spaceReads, 3);
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
@@ -167,7 +196,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
         find.text(
-            'Worker, model, and effort defaults are configured on the Workflows page.'),
+            'Worker, model, and effort defaults are configured in this Space’s Workflows tab.'),
         findsOneWidget);
     expect(find.byKey(const ValueKey('worker-binding-direct')), findsNothing);
     await tester.tap(find.text('Advanced'));

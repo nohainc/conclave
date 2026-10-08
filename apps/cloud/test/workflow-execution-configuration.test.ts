@@ -7,7 +7,11 @@ vi.mock("../src/routes/handlers.js", () => ({
 }));
 import { resolveWorkflowExecutionBindings } from "../src/routes/workflow-execution-configuration.js";
 
-function fixture(defaults: object = {}, stepOverrides: object = {}) {
+function fixture(
+  defaults: object = {},
+  stepOverrides: object = {},
+  spaceDefaults?: object,
+) {
   const inventory = [
     { workerId: "a", workspaceId: "first" },
     { workerId: "b", workspaceId: "second" },
@@ -24,27 +28,43 @@ function fixture(defaults: object = {}, stepOverrides: object = {}) {
       prepare(sql: string) {
         return {
           bind(user: string) {
-            expect(user).toBe("user");
+            expect(user).toBe(
+              sql.includes("WHERE id = ?1") ||
+                sql.includes("workspace_space_grants")
+                ? "space"
+                : "user",
+            );
             return this;
           },
           async first() {
-            expect(sql).toContain("user_id = ?1");
-            return { configuration_json: JSON.stringify(configuration) };
+            return { ownerUserId: "user" };
           },
           async all() {
-            expect(sql).toContain("owner_user_id = ?1");
-            return { results: inventory };
+            return {
+              results: sql.includes("UNION ALL")
+                ? [
+                    {
+                      workflow_id: configuration.workflowId,
+                      configuration_json: JSON.stringify(
+                        spaceDefaults
+                          ? { ...configuration, defaults: spaceDefaults }
+                          : configuration,
+                      ),
+                    },
+                  ]
+                : inventory,
+            };
           },
         };
       },
     },
   } as unknown as SecurityEnv;
-  const resolve = () =>
+  const resolve = (requester = "user", threadId = "thread") =>
     resolveWorkflowExecutionBindings(
       env,
-      "user",
+      requester,
       "space",
-      "thread",
+      threadId,
       BUILTIN_WORKFLOWS.implement_verify,
       {},
       [],
@@ -90,4 +110,20 @@ it("rejects disabled workflows before admission", async () => {
   admission.mockClear();
   await expect(f.resolve()).rejects.toMatchObject({ status: 422 });
   expect(admission).not.toHaveBeenCalled();
+});
+
+it("uses shared Space defaults for every requester and Thread rather than each requester's globals", async () => {
+  const f = fixture(
+    { model: "global-model" },
+    {},
+    { worker: "b", model: "space-model", effort: "high" },
+  );
+  const owner = await f.resolve();
+  expect(owner).toEqual({
+    implement: { workerId: "b", model: "space-model", reasoningEffort: "high" },
+    verify: { workerId: "b", model: "space-model", reasoningEffort: "high" },
+  });
+  expect(await f.resolve("another-member", "another-thread")).toEqual(owner);
+  f.configuration.defaults = { model: "changed-global-model" };
+  expect(await f.resolve("another-member", "another-thread")).toEqual(owner);
 });

@@ -97,6 +97,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   Object? threadsError;
   Object? membersError;
   late AxSpaceTabQueries _queries;
+  late AxWorkflowConfigurations _workflowConfigurations;
   late AxSpaceThreads _streams;
   late AxCollaborationMutations _collaboration;
   final _tabCancels = <void Function()>[];
@@ -117,7 +118,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _configureQueries();
     _tabController.addListener(_onTabChanged);
     _onTabChanged();
@@ -131,6 +132,8 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
         AxCollaborationMutations(widget.dataSource, engine: _streams.engine);
     _grants = widget.workspaceGrants ??
         AxSpaceWorkspaceGrants.forSource(widget.dataSource);
+    _workflowConfigurations = AxWorkflowConfigurations(widget.dataSource,
+        engine: _streams.engine, spaceId: widget.space.id);
     threads = _streams.peek(widget.space.id);
   }
 
@@ -183,7 +186,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
       unawaited(_grants
           .ensure(id)
           .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-    } else {
+    } else if (_activeTab == 2) {
       final membersQuery = _queries.members(id);
       final invitationsQuery = _queries.invitations(id);
       void apply() {
@@ -374,7 +377,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
                     ),
                   ),
 
-                  // 3 Tabs: Threads, Workspaces, Members aligned by center
+                  // Space resource tabs share session caches.
                   AnimatedBuilder(
                     animation: _tabController,
                     builder: (context, _) => Column(
@@ -389,6 +392,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
                               Tab(text: 'Threads'),
                               Tab(text: 'Workspaces'),
                               Tab(text: 'Members'),
+                              Tab(text: 'Workflows'),
                             ],
                           ),
                         ),
@@ -397,8 +401,14 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
                           _threadsTab()
                         else if (_tabController.index == 1)
                           _workspacesTab()
+                        else if (_tabController.index == 2)
+                          _membersTab()
                         else
-                          _membersTab(),
+                          WorkflowsPage(
+                              catalogs: AxSessionCatalogs.forSource(
+                                  widget.dataSource),
+                              configurations: _workflowConfigurations,
+                              canEdit: widget.space.role == 'owner'),
                       ],
                     ),
                   ),

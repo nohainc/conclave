@@ -187,6 +187,19 @@ export async function routeWorkerRequest(
     if (request.method === "GET" && url.pathname === "/api/workspaces") {
       return await handlers.handleListWorkspaces!(request, env, ctx);
     }
+    const spaceWorkflowMatch = url.pathname.match(
+      /^\/api\/spaces\/([^/]+)\/workflow-configurations(?:\/([^/]+))?$/,
+    );
+    if (spaceWorkflowMatch)
+      return await handleWorkflowConfigurations(
+        request,
+        env,
+        spaceWorkflowMatch[2]
+          ? decodeURIComponent(spaceWorkflowMatch[2])
+          : undefined,
+        ctx,
+        decodeURIComponent(spaceWorkflowMatch[1]!),
+      );
     const workflowConfigurationMatch = url.pathname.match(
       /^\/api\/user\/workflow-configurations(?:\/([^/]+))?$/,
     );

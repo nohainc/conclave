@@ -52,6 +52,7 @@ export function sqliteD1() {
     "0014_exact_history_context.sql",
     "0015_conversation_workflow_runs.sql",
     "0016_workflow_step_runs.sql",
+    "0020_space_workflow_configurations.sql",
   ]) {
     sqlite.exec(
       readFileSync(

@@ -92,7 +92,7 @@ extension _ThreadConfiguration on _ThreadPageState {
           ),
         const SizedBox(height: 12),
         const Text(
-            'Worker, model, and effort defaults are configured on the Workflows page.'),
+            'Worker, model, and effort defaults are configured in this Space’s Workflows tab.'),
         const SizedBox(height: 12),
         ExpansionTile(
           tilePadding: EdgeInsets.zero,

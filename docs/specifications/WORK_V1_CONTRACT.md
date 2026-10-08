@@ -35,7 +35,7 @@ The input remains editable throughout preparation, submission, and execution so
 the user can draft the next request while sending stays disabled. The composer
 explains when an unfinished request blocks Send and offers cancellation of pending
 requests. The Workflows editor exposes Profile-supported models, custom model IDs when
-allowed, and model-specific efforts. The existing composer displays these global
+allowed, and model-specific efforts. The existing composer displays its Space’s
 choices without a local execution override.
 
 Thread content is capped at 800 logical pixels per pane. At available widths
@@ -897,3 +897,8 @@ model, and effort are immutable execution evidence. Reset means Automatic.
 Thread preference and Composer override are future layers; old Thread execution
 fields and `executionSelection` are rejected rather than treated as compatibility
 inputs. Apply v8 migrations 0018 and 0019; historical accepted snapshots are untouched.
+
+Space Workflows provides shared execution overrides initialized from its owner's
+global defaults. All Threads use the Space configuration. Saving forks a workflow;
+resetting restores owner-global inheritance. Advanced execution controls remain
+on global Workflows and this Space tab. Run snapshots retain accepted choices.

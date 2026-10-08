@@ -1,9 +1,15 @@
 import '../ax_data.dart';
 import 'ax_sync_engine.dart';
 
-/// Session-owned preferences. Navigation never forces a preference refresh.
+/// Session-owned global or Space preferences. Navigation reuses the scoped query.
 class AxWorkflowConfigurations {
-  AxWorkflowConfigurations(this.source, {required this.engine});
+  AxWorkflowConfigurations(this.source, {required this.engine, this.spaceId});
+  final String? spaceId;
+  AxQueryKey get queryKey => spaceId == null
+      ? key
+      : AxQueryKey(['space-workflow-configurations', spaceId!]);
+  AxSpaceWorkflowConfigurationDataSource get _spaceApi =>
+      source as AxSpaceWorkflowConfigurationDataSource;
   final AxDataSource source;
   final AxSyncEngine engine;
   static final key = AxQueryKey(['user-workflow-configurations']);
@@ -15,10 +21,11 @@ class AxWorkflowConfigurations {
   }
 
   late final query = AxQuery<List<AxUserWorkflowConfiguration>>(
-      key: key,
+      key: queryKey,
       staleTime: const Duration(minutes: 45),
-      load: () async =>
-          List.unmodifiable(await _api.loadWorkflowConfigurations()));
+      load: () async => List.unmodifiable(spaceId == null
+          ? await _api.loadWorkflowConfigurations()
+          : await _spaceApi.loadSpaceWorkflowConfigurations(spaceId!)));
 
   Future<List<AxUserWorkflowConfiguration>> ensure() =>
       engine.ensure(query, policy: AxCachePolicy.cacheFirst);
@@ -29,13 +36,19 @@ class AxWorkflowConfigurations {
   void clear() {
     _sessionEpoch++;
     _writeLease = null;
-    engine.remove(key);
+    engine.remove(queryKey);
   }
 
-  Future<void> save(AxUserWorkflowConfiguration value) =>
-      _write(value.workflowId, () => _api.saveWorkflowConfiguration(value));
-  Future<void> reset(String workflowId) =>
-      _write(workflowId, () => _api.resetWorkflowConfiguration(workflowId));
+  Future<void> save(AxUserWorkflowConfiguration value) => _write(
+      value.workflowId,
+      () => spaceId == null
+          ? _api.saveWorkflowConfiguration(value)
+          : _spaceApi.saveSpaceWorkflowConfiguration(spaceId!, value));
+  Future<void> reset(String workflowId) => _write(
+      workflowId,
+      () => spaceId == null
+          ? _api.resetWorkflowConfiguration(workflowId)
+          : _spaceApi.resetSpaceWorkflowConfiguration(spaceId!, workflowId));
 
   Future<void> _write(String workflowId,
       Future<AxUserWorkflowConfiguration> Function() execute) async {
@@ -62,6 +75,14 @@ class AxWorkflowConfigurations {
               result,
             ]);
           }));
+      if (spaceId == null) {
+        engine.invalidate(AxQueryKey(['space-workflow-configurations']),
+            prefix: true);
+        await engine
+            .refreshStaleWhere((key) =>
+                key.startsWith(AxQueryKey(['space-workflow-configurations'])))
+            .then<void>((_) {}, onError: (Object _, StackTrace __) {});
+      }
     } finally {
       if (identical(_writeLease, lease)) {
         _writeLease = null;

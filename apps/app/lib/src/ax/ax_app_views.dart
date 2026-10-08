@@ -321,7 +321,8 @@ extension _AxAppViews on _AxAppStateMixin {
         }
         return ThreadPage(
           catalogs: store.catalogs,
-          workflowConfigurations: store.workflowConfigurations,
+          workflowConfigurations: AxWorkflowConfigurations(widget.dataSource,
+              engine: store.syncEngine, spaceId: space.id),
           mutations: store.collaboration,
           workspaceGrants: store.spaceWorkspaceGrants,
           discussionCache: store.discussion,

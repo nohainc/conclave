@@ -346,7 +346,7 @@ void main() {
     expect(source.reads, 2);
   });
   testWidgets(
-      'global navigation is ordered above Workspaces and page returns do not reload preferences',
+      'global navigation stays in the application menu and page returns do not reload preferences',
       (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
@@ -361,14 +361,16 @@ void main() {
         realtimeClient: TestRealtime()));
     await tester.pumpAndSettle();
     expect(find.byType(WorkflowsPage), findsOneWidget);
-    final workflows = find.text('Workflows').first;
-    final workspaces = find.text('Workspaces').first;
-    expect(tester.getTopLeft(workflows).dy,
-        lessThan(tester.getTopLeft(workspaces).dy));
+    expect(find.text('Workspaces'), findsNothing);
     expect(source.reads, 1);
     await tester.tap(find.byTooltip('Hide sidebar'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Workflows'));
+    expect(find.byTooltip('Workflows'), findsNothing);
+    expect(find.byTooltip('Workspaces'), findsNothing);
+    await tester.tap(find.byTooltip('Application menu'));
+    await tester.pumpAndSettle();
+    expect(find.text('Workflows'), findsNWidgets(2));
+    await tester.tap(find.text('Workflows').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Expand sidebar'));
     await tester.pumpAndSettle();

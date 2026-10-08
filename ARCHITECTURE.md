@@ -28,7 +28,7 @@ are normative and checked by `scripts/verify-v8-architecture.mjs`.
 
 ## Work v1
 
-Conclave owns the built-in Steps and Workflows defined by the [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md). Users configure logical Workers for Work (`direct:v2`) and individual Steps on the global Workflows page. Historical `direct:v1` snapshots retain the name Direct. A Work Request snapshots its Workflow, bindings, models, instructions, attachment references, and prompt-profile versions.
+Conclave owns the built-in Steps and Workflows defined by the [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md). Users configure logical Workers for Work (`direct:v2`) and individual Steps globally, with shared overrides in each Space’s Workflows tab. Historical `direct:v1` snapshots retain the name Direct. A Work Request snapshots its Workflow, bindings, models, instructions, attachment references, and prompt-profile versions.
 
 | Workflow | Filesystem authority | Provider session | Mutation coordination |
 | --- | --- | --- | --- |
@@ -183,13 +183,17 @@ and the [v1 paging contract](docs/specifications/DISCUSSION_PAGING.md).
 
 Global per-user Workflow preferences are separate from Conclave-owned definitions
 and Space/Thread state. Workflows is the sole global execution editor. Thread
-configuration retains authored context, and the existing composer displays global
-choices without submitting an execution override.
+configuration retains authored context, and the existing composer displays its Space’s
+choices without submitting an execution override. Each Space inherits its owner’s
+global defaults until that workflow is customized; a Space override applies to
+every Thread and requester. Reset restores inheritance.
 
 ```text
 Workflow Definition
        ↓
-User Workflow Configuration
+User Workflow Configuration (Space owner)
+       ↓
+Space Workflow Configuration
        ↓
 Execution Resolution
        ↓
@@ -205,6 +209,8 @@ remain null, preserving the signed Profile/CLI default without provider assumpti
 
 ```text
 User Workflow Configuration
+       ↓
+Space Workflow Configuration
        ↓
 Thread preference       [future]
        ↓

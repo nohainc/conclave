@@ -51,7 +51,7 @@ its authenticated API client. Phase 2 adds the global Workflows page and session
 Phase 4 applies this resolution at preflight and request acceptance. Disabled
 Workflows cannot execute. Thread bindings no longer provide execution defaults.
 
-Future Thread and composer layers can overlay the same sparse selection type
+Space overrides now sit between owner-global defaults and execution. Future Thread and composer layers can overlay the same sparse selection type
 at the resolver boundary without changing user preference storage. Neither
 future layer is introduced here. Effective configurations are frozen at acceptance; historical requests are never
 rewritten when preferences change.
@@ -102,9 +102,10 @@ preferences. Phase 3 introduces no schema or API migration.
 
 ## Execution resolution and snapshots
 
-Cloud resolves current-user preferences for both validation and submission.
-Defaults are overlaid by sparse step overrides. Auto Worker is chosen from owned
-inventory through existing Space grants, Thread permissions, Profile capability,
+Cloud resolves the Space owner’s global defaults plus a shared Space workflow override
+for both validation and submission, regardless of the requester.
+Defaults are overlaid by sparse step overrides. Auto Worker is chosen from active
+Space-granted inventory through existing Space grants, Thread permissions, Profile capability,
 readiness, and Workspace eligibility rules. Resolution tests whole-workflow
 feasibility in one Workspace before freezing Auto choices. An explicit offline,
 missing, or incompatible Worker fails admission; it is never silently replaced.
@@ -124,7 +125,7 @@ model/effort even when null. Profile changes or revocation fail admission rather
 than substituting a release. Existing historical requests remain unchanged; no
 missing Profile identity is reconstructed from today's inventory.
 
-The composer's existing layout displays global execution choices without editing
+The composer's existing layout displays Space execution choices without editing
 or submitting an override. AX sends the authored request, attachments, Workflow
 identity, and idempotency key. Cloud rejects the removed `executionSelection`
 claim. Unconfigured Workflows and reset resolve Automatic consistently, with no
@@ -154,7 +155,9 @@ Historical read-only fields remain evidence, not a source for new execution defa
 ```text
 Workflow Definition
        ↓
-User Workflow Configuration
+User Workflow Configuration (Space owner)
+       ↓
+Space Workflow Configuration
        ↓
 Execution Resolution
        ↓
@@ -165,6 +168,8 @@ StepRun
 
 ```text
 User Workflow Configuration
+       ↓
+Space Workflow Configuration
        ↓
 Thread preference       [future]
        ↓
@@ -186,3 +191,27 @@ reset/inherit, inventory changes, navigation, session isolation, query deduplica
 cache reuse, and global preference projection into retained Thread controls.
 Component validation is AX + Cloud and direct shared contracts. No Workspace,
 Profile Lab, Public Site, native packaging, or full-repository run is required.
+
+## Shared Space configuration
+
+Every Space has a Workflows tab. Its initial effective configuration inherits the
+Space owner's global settings, ensuring all members and Threads share execution
+choices. `GET /api/spaces/:spaceId/workflow-configurations[/:workflowId]` returns
+these effective preferences. Membership is required to read; only the owner may
+PUT a complete workflow override or DELETE it to restore global inheritance.
+Payloads reuse the versioned execution preference shape and reject ownership fields.
+
+Editing starts with the effective global values. Save forks that entire workflow
+for the Space; omitted fields then mean Automatic, and step fields inherit the
+Space workflow defaults. Other workflows continue inheriting global settings.
+Even an all-Automatic override is persisted, allowing a Space to replace explicit
+or disabled globals. Reset deletes the override and returns current owner defaults.
+Space updates never modify user preferences or another Space. Global changes affect
+inherited workflows, while saved Space overrides remain independent.
+
+Migration `0020_space_workflow_configurations.sql` adds a Space-owned table with
+cascading deletion and a composite Space/workflow key. It performs no eager copying
+or historical backfill. Apply it before updated Cloud/AX. Execution resolves from active Space-granted inventory using existing
+Thread permissions and readiness checks; saved explicit Workers still require
+a valid Space grant, and Automatic can use a contributor’s granted Workspace; request authorization still uses the actual requester. All new
+runs snapshot their resolved choices as before. No Thread execution override exists.

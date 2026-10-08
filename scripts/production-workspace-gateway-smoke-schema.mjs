@@ -5,6 +5,22 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 export const requiredProductionSmokeColumns = Object.freeze({
+  workflow_tasks: [
+    "id",
+    "work_request_id",
+    "step_kind",
+    "execution_mode",
+    "timeout_ms",
+    "prompt_profile_version",
+    "status",
+    "attempt",
+    "output_json",
+    "error",
+    "created_at",
+    "updated_at",
+    "started_at",
+    "finished_at",
+  ],
   conversation_workflow_step_runs: [
     "id",
     "workflow_run_id",
@@ -183,6 +199,10 @@ export const requiredProductionSmokeColumns = Object.freeze({
 });
 
 const tableDefinitionSources = Object.freeze({
+  workflow_tasks: [
+    "apps/cloud/migrations-v8/0006_chat_workflow_admission.sql",
+    "workflow_tasks",
+  ],
   conversation_workflow_step_runs: [
     "apps/cloud/migrations-v8/0016_workflow_step_runs.sql",
     "conversation_workflow_step_runs",

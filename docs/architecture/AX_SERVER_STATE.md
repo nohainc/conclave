@@ -877,8 +877,8 @@ Retry Members button; reopening the tab retries its stale query.
 
 ## Global Workflows page
 
-`/workflows` is a user-wide destination above Workspaces in the sidebar, collapsed
-rail and application menu. It has no Space/Thread route arguments. It renders the
+`/workflows` is a user-wide destination in the application menu. Workflows and
+Workspaces have no dedicated sidebar or collapsed-rail buttons. It has no Space/Thread route arguments. It renders the
 newest version per stable catalog ID; historical definitions remain available to
 execution history. Cards combine definitions with typed user preferences and
 owned Worker presentation metadata, including unavailable selections.
@@ -892,8 +892,7 @@ catalog query. Worker inventory retains its existing 30-second freshness policy.
 
 Preference freshness is 45 minutes. Explicit Refresh revalidates page resources;
 the existing foreground/network recovery refreshes active stale queries. No
-preference polling, new realtime event, bootstrap reload or Space-scoped query is
-introduced. Save/reset commit authoritative API results through the shared query,
+preference polling, new realtime event, or bootstrap reload is introduced. Save/reset commit authoritative API results through the shared query,
 not through a subsequent GET. Failed reads retain cached data with an inline
 notice; cold failure is unavailable rather than Automatic. Failed writes preserve
 prior preferences. Concurrent preference writes are rejected while pending.
@@ -916,11 +915,19 @@ The Phase 3 Workflow editor subscribes to the shared Worker inventory while open
 refresh revalidates the unsaved draft without rewriting selections. Default and
 step edits stay local until Save. Workflow and step resets retain the existing
 shared-query mutation boundary. Workflow selection/card clicks do not reload
-preferences. Advanced controls remain confined to this global page.
+preferences. Advanced controls remain confined to global Workflows and the Space Workflows tab.
 
-Thread controls observe the same `AxStore.workflowConfigurations` session query
-as the Workflows page. They project global choices without owning a second draft
-or submitting an execution override. Save/reset updates those displays reactively;
-Thread recreation does not reload preferences. Authored Thread configuration keeps
-instructions and the initial Workflow only. Immutable Run/Step configurations stay
-in typed history models through cache round trips, independent of this live query.
+Space Workflows and Thread controls share the session query
+`['space-workflow-configurations', spaceId]`. The Space endpoint returns effective
+preferences: saved whole-workflow Space overrides replace owner-global defaults;
+absent workflows inherit those defaults. No workflow definitions are copied.
+Each tab returns to its cached data. Save/reset update the query reactively across
+Threads without a follow-up GET. Global mutations invalidate and refresh cached
+Space queries so inherited choices reflect the new defaults. Space mutations do
+not alter globals or another Space. Owner-only editing is enforced both in AX and
+Cloud; other members can view the effective configuration. Active stale queries
+refresh through existing lifecycle recovery or explicit Refresh.
+
+Thread controls project these Space choices without a second draft or an execution
+override. Authored Thread configuration retains instructions and initial Workflow
+selection. Immutable Run/Step configurations remain independent of live preferences.

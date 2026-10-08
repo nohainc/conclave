@@ -144,6 +144,8 @@ class AxApiClient extends _AxApiClientCore
         _WorkspaceApi,
         _SpaceApi,
         _ReadModelApi
-    implements AxWorkflowConfigurationDataSource {
+    implements
+        AxWorkflowConfigurationDataSource,
+        AxSpaceWorkflowConfigurationDataSource {
   AxApiClient({super.baseUrl, super.client});
 }

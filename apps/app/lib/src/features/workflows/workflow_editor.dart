@@ -157,7 +157,9 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
                 TextButton(
                     key: const ValueKey('reset-workflow'),
                     onPressed: busy ? null : () => _save(reset: true),
-                    child: const Text('Reset')),
+                    child: Text(widget.cache.spaceId == null
+                        ? 'Reset'
+                        : 'Use global defaults')),
                 TextButton(
                     onPressed: busy ? null : () => Navigator.pop(context),
                     child: const Text('Cancel')),
