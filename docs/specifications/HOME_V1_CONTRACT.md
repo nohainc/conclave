@@ -758,6 +758,21 @@ The following 6 core interaction paths are measured:
 - **Lightweight & Non-Blocking:** Telemetry recording via `AxHomeAnalytics` is fail-safe, non-blocking, and never interferes with UI responsiveness or error states.
 - **Pluggable Sink (`AxHomeAnalytics.setSink`):** Telemetry sinks can be plugged in by client applications or tests to inspect and route events without coupling to third-party vendor SDKs.
 
+---
 
+## Obsolete Dashboard Removal & Clean-Room Architecture (Phase 35)
 
+With the completion and verification of the V2 Home experience, all obsolete V1 dashboard artifacts have been excised:
 
+- **Excised Legacy Widgets & Containers:**
+  - `_HomeCard` & `_MetricCard` widget definitions.
+  - Legacy metric counter cards: `Projects`, `Workspaces`, `Ready Workers`.
+  - Legacy plain `Recent Projects` list.
+  - Legacy `execution-capacity` subtitle.
+  - Permanent `No active Runs` placeholder card.
+  - Permanent `Nothing needs your attention` placeholder card.
+  - Archived Projects Home modal action (archived project management is now housed exclusively under Project settings/navigation).
+  - Legacy Workspace-first onboarding ("Connect a Workspace", "No Workspace connected").
+- **No Feature Flags / Dead Paths:**
+  - Zero legacy fallback flags or conditional dead-code paths remain.
+  - Strict compile-time and runtime invariant tests assert the total absence of legacy cards across both established-user and new-user states.

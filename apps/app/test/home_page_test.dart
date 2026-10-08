@@ -3875,4 +3875,70 @@ void main() {
       expect(event.properties['source'], 'new_user_primary');
     });
   });
+
+  group('Phase 35 — Obsolete Dashboard Removal & Clean-Room Assertions', () {
+    testWidgets(
+        'Established user Home does not contain legacy metric counters or execution capacity subtitle',
+        (tester) async {
+      const project = AxProject(
+        id: 'project-1',
+        name: 'Alpha Project',
+        branch: 'main',
+        lastActivity: 'Today',
+      );
+
+      await tester.pumpWidget(scaffold(HomePage(
+        projects: const [project],
+        workspaces: const [],
+        workers: const [],
+        invitations: const [],
+        run: null,
+        openFindingCount: 0,
+        onOpenWorkspaces: () {},
+        onOpenProject: (_) {},
+        onOpenRun: (_, __) {},
+        onCreateProject: () {},
+      )));
+
+      // Assert legacy metric cards are absent
+      expect(find.text('Projects'), findsNothing);
+      expect(find.text('Workspaces'), findsNothing);
+      expect(find.text('Ready Workers'), findsNothing);
+      expect(find.text('execution-capacity'), findsNothing);
+      expect(find.text('Execution capacity'), findsNothing);
+
+      // Assert permanent empty-state cards from legacy Home are absent
+      expect(find.text('No active Runs'), findsNothing);
+      expect(find.text('Nothing needs your attention'), findsNothing);
+      expect(find.text('Recent Projects'), findsNothing);
+    });
+
+    testWidgets(
+        'New user Home uses Project-first onboarding and omits old workspace-first dashboard',
+        (tester) async {
+      await tester.pumpWidget(scaffold(HomePage(
+        projects: const [],
+        workspaces: const [],
+        workers: const [],
+        invitations: const [],
+        run: null,
+        openFindingCount: 0,
+        onOpenWorkspaces: () {},
+        onOpenProject: (_) {},
+        onOpenRun: (_, __) {},
+        onCreateProject: () {},
+      )));
+
+      // Assert legacy dashboard widgets are not rendered
+      expect(find.text('Projects'), findsNothing);
+      expect(find.text('Workspaces'), findsNothing);
+      expect(find.text('Ready Workers'), findsNothing);
+      expect(find.text('No active Runs'), findsNothing);
+      expect(find.text('Nothing needs your attention'), findsNothing);
+
+      // Assert project-first onboarding is rendered
+      expect(find.text('Create your first Project'), findsOneWidget);
+      expect(find.text('Create Project →'), findsOneWidget);
+    });
+  });
 }
