@@ -50,7 +50,7 @@ export function spaceMemberPermissions(
     parseSpaceSettings(settings).memberPermissions,
   );
   const override = map[userId];
-  if (!override) return defaults;
+  if (!Object.hasOwn(map, userId)) return defaults;
   // Stored overrides fail closed: missing or malformed values grant no rights.
   const value = parseSpaceSettings(override);
   return {

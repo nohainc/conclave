@@ -9,7 +9,7 @@ Cloud resolves the authenticated Better Auth session to an active Conclave user.
 Space roles are `owner`, `collaborator`, and `viewer`. Their permission sets are defined in `packages/security/src/index.ts`:
 
 - Owners can read, write, and manage their Space, start Work, and control Runs.
-- Collaborators can read and write Space content and start Work.
+- Collaborators default to reading, Chat, Work, and management of their own Threads. Owners can refine these rights individually.
 - Viewers can read Space content.
 
 Cloud checks membership at the resource boundary. A missing, suspended, or deactivated user is denied.
@@ -28,7 +28,7 @@ Workspace Runtime Protocol, Workspace, and Engine admission:
 - `shell:execute`
 - `network:use`
 
-Cloud intersects only the permissions allowed by the requester's Space role
+Cloud intersects only the permissions allowed by the requester's Space member rights
 with `workspace_space_grants.allowed_permissions_json`, then applies the
 request's read-only Step policy. Cloud does not pretend to know the local
 Worker permission set. Workspace compares the exact permission IDs in the
@@ -72,3 +72,64 @@ The reconciliation is audited; ambiguous state requires operator investigation.
 ## Secret boundary
 
 Provider credentials stay in the local provider CLI configuration. Runtime credentials are stored in the operating system secure store. Cloud persistence, assignment messages, diagnostics, audit records, and artifacts must not contain plaintext secrets.
+
+## Space member rights v1
+
+Space membership remains the boundary for reading. Owners retain all member
+rights and control Space settings and every Thread. For other members, the
+owner can set five explicit booleans: `chat`, `work`, `manageOwnThreads`,
+`attachWorkspace`, and `inviteMembers`. The Members tab shows these in a
+checkbox grid; only the owner can edit it, and the Owner badge appears beside
+the owner's name. Thread lists show the creator's email below the title when
+that person is not the Space owner. The current Thread creation identity is
+its immutable creation-time `lead_user_id`; the API does not reassign this field.
+
+The v1 rights map lives at `spaces.settings_json.memberPermissions[userId]`.
+Missing maps preserve role defaults: collaborators have Chat, Work and own
+Thread management; viewers can read; owners have all rights. Workspace
+attachment and member invitations require explicit grants for non-owners.
+Malformed stored overrides fail closed. Removing a member removes their override
+and revokes their contributed Workspace Grants.
+
+`PATCH /api/spaces/:id/members/:userId/permissions` accepts
+`{ permissions: { chat, work, manageOwnThreads, attachWorkspace, inviteMembers } }`.
+All five fields must be booleans; extra fields are rejected. Owner rights cannot
+be changed. Existing role presets remain available through the role endpoint
+and reset the member's explicit rights to that preset. Space and member read
+models include effective `permissions`. Ordinary Space responses omit the internal member and invitation permission maps. General Space settings writes cannot
+change the member or invitation permission maps.
+
+`settings.allowWork` defaults to true. Only the Space owner can change it.
+When false, the composer offers only the permitted Chat workflow. Work
+submission, validation and each new assignment dispatch enforce both this
+setting and current member rights, including queued/retried steps. Chat remains
+subject to Chat permission. Existing history, Thread settings and Workspace
+attachments are preserved. Already-running provider calls are not cancelled
+by a rights change.
+
+Own Thread management permits creation and management of Threads created by
+that member, while the owner can manage every Thread. It does not grant rights
+to execute Chat or Work. Composer choices configure the next turn and do not
+change historical execution metadata.
+
+A member with `attachWorkspace` can attach only a Workspace they own and must
+explicitly authorize the contribution. Workspace ownership is checked
+independently of Space rights. The Space owner or Workspace owner may revoke
+the attachment; only the Workspace owner manages the Workspace itself.
+The Space UI replaces the technical grant-permission editor with the Work
+switch. New UI attachments allow repository reads/writes and shell execution,
+subject to the Workspace's local Worker permission ceiling. Existing grant
+restrictions and network policy still apply. Work rights provide the execution
+ceiling, intersected with the grant and the request's read-only Step policy.
+
+Members with `inviteMembers` may invite people with a subset of their own
+rights, including read-only invitations. `POST /api/spaces/:id/invitations`
+accepts the same optional `permissions` object. Invitation rights are
+snapshotted in `settings.invitationPermissions[invitationId]` and intersected
+with the inviter's current rights at acceptance. Revoked invitation authority
+prevents acceptance. Delegated inviters see and revoke only their own pending
+invitations. Invitation acceptance cannot rewrite an existing member's rights.
+
+These are additive API/settings changes; no D1 migration or runtime protocol
+change is needed. Deploy Cloud before the updated AX app. Older clients retain
+role defaults, but their technical controls cannot bypass current member rights.

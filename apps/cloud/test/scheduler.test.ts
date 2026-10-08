@@ -82,6 +82,7 @@ function db(
     lead_user_id: "user-a",
     access_policy_json: JSON.stringify({ allowedPermissions: ["execute"] }),
   },
+  settings: Record<string, unknown> = {},
 ) {
   return {
     prepare(query: string) {
@@ -100,7 +101,9 @@ function db(
             } as T;
           if (query.includes("thread_runtime_leases")) return lease as T;
           if (query.includes("FROM threads ws")) return thread as T;
-          return query.includes("space_memberships") ? ({ role } as T) : null;
+          return query.includes("space_memberships")
+            ? ({ role, settingsJson: JSON.stringify(settings) } as T)
+            : null;
         },
         async all<T>() {
           return { results: rows as T[] };
@@ -790,4 +793,48 @@ it("dispatches accepted Default model and effort even when later defaults differ
   expect(target).not.toBeNull();
   expect(target!.model).toBeNull();
   expect(target!.reasoningEffort).toBeNull();
+});
+
+it("rechecks granular rights and the Space Work switch at dispatch", async () => {
+  const request = {
+    spaceId: "space-a",
+    requesterUserId: "user-a",
+    role: "collaborator",
+    capabilities: ["repository"],
+  };
+  const chatOnly = {
+    memberPermissions: {
+      "user-a": {
+        chat: true,
+        work: false,
+        manageOwnThreads: false,
+        attachWorkspace: false,
+        inviteMembers: false,
+      },
+    },
+  };
+  expect(
+    await selectSpaceExecutionTarget(
+      db([candidate()], "collaborator", null, undefined, chatOnly),
+      request,
+    ),
+  ).toBeNull();
+  expect(
+    await selectSpaceExecutionTarget(
+      db([candidate()], "collaborator", null, undefined, chatOnly),
+      { ...request, workBindingId: "chat" },
+    ),
+  ).not.toBeNull();
+  expect(
+    await selectSpaceExecutionTarget(
+      db([candidate()], "owner", null, undefined, { allowWork: false }),
+      request,
+    ),
+  ).toBeNull();
+  expect(
+    await selectSpaceExecutionTarget(
+      db([candidate()], "owner", null, undefined, { allowWork: false }),
+      { ...request, workBindingId: "chat" },
+    ),
+  ).not.toBeNull();
 });

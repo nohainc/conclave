@@ -24,8 +24,19 @@ class PermissionSource extends AxFixtureDataSource {
   bool? savedAllowWork;
   bool failSave = false;
   @override
-  Future<List<AxThread>> loadSpaceThreads({required String spaceId}) async =>
-      [memberThread, memberThread.copyWith(name: 'Owner thread')];
+  Future<List<AxThread>> loadSpaceThreads({required String spaceId}) async => [
+        memberThread,
+        const AxThread(
+            id: 'owner-thread',
+            spaceId: 'S',
+            name: 'Owner thread',
+            lead: 'owner',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: '',
+            queueStatus: '',
+            creatorEmail: 'owner@example.test')
+      ];
   @override
   Future<List<AxSpaceMember>> loadSpaceMembers(
           {required String spaceId}) async =>
@@ -98,7 +109,7 @@ void main() {
     final source = PermissionSource();
     await tester.pumpWidget(page(source));
     await tester.pumpAndSettle();
-    expect(find.text('Created by member@example.test'), findsNWidgets(2));
+    expect(find.text('Created by member@example.test'), findsOneWidget);
     await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
     expect(find.text('Owner'), findsOneWidget);
@@ -121,6 +132,7 @@ void main() {
                 find.byKey(const ValueKey('permission-member-chat')))
             .value,
         isTrue);
+    await tester.pump(const Duration(seconds: 5));
   });
   testWidgets(
       'Space Work switch persists and replaces technical access controls',

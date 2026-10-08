@@ -35,6 +35,13 @@ function spaceSettings(value: unknown): Record<string, unknown> {
   return settings;
 }
 
+function publicSpaceSettings(value: unknown): Record<string, unknown> {
+  const settings = spaceSettings(value);
+  delete settings.memberPermissions;
+  delete settings.invitationPermissions;
+  return settings;
+}
+
 // =========================================================================
 // Spaces API Handlers
 // =========================================================================
@@ -75,7 +82,7 @@ export async function handleListSpaces(
       }>();
 
     const spaces = (rows.results ?? []).map((row) => {
-      const settings = spaceSettings(row.settingsJson);
+      const settings = publicSpaceSettings(row.settingsJson);
       return {
         id: row.id,
         name: row.name,
@@ -215,7 +222,7 @@ export async function handleGetSpace(
       updatedAt: string;
     }>();
   if (!row) throw new HttpError(404, "Space not found");
-  const settings = spaceSettings(row.settingsJson);
+  const settings = publicSpaceSettings(row.settingsJson);
   return conditionalJson(request, {
     space: {
       id: row.id,
@@ -369,6 +376,7 @@ export async function handleUpdateSpace(
   return json({
     space: {
       ...space,
+      settings: publicSpaceSettings(JSON.stringify(space.settings)),
       instructions:
         typeof space.settings.instructions === "string"
           ? space.settings.instructions
@@ -937,25 +945,27 @@ export async function handleAcceptSpaceInvitation(
     .first();
   if (existingMember)
     throw new HttpError(409, "You are already a member of this Space");
+  const membershipId = `pm-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.batch([
     env.CONCLAVE_DB.prepare(
-      "UPDATE spaces SET settings_json = json_remove(json_set(settings_json, ?1, json(?2)), ?3), updated_at = ?4 WHERE id = ?5",
+      `INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5) ON CONFLICT(space_id, user_id) DO NOTHING`,
+    ).bind(
+      membershipId,
+      invitation.spaceId,
+      context.userId,
+      invitation.role,
+      now,
+    ),
+    env.CONCLAVE_DB.prepare(
+      "UPDATE spaces SET settings_json = json_remove(json_set(settings_json, ?1, json(?2)), ?3), updated_at = ?4 WHERE id = ?5 AND EXISTS (SELECT 1 FROM space_memberships WHERE id = ?6)",
     ).bind(
       permissionJsonPath("memberPermissions", context.userId),
       JSON.stringify(permissions),
       permissionJsonPath("invitationPermissions", invitation.id),
       now,
       invitation.spaceId,
-    ),
-    env.CONCLAVE_DB.prepare(
-      `INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5) ON CONFLICT(space_id, user_id) DO NOTHING`,
-    ).bind(
-      `pm-${crypto.randomUUID()}`,
-      invitation.spaceId,
-      context.userId,
-      invitation.role,
-      now,
+      membershipId,
     ),
     env.CONCLAVE_DB.prepare(
       `UPDATE space_invitations SET status = 'accepted', accepted_by_user_id = ?1, accepted_at = ?2, updated_at = ?2 WHERE id = ?3 AND status = 'pending'`,
@@ -1019,6 +1029,12 @@ export async function handleDeclineSpaceInvitation(
     throw new HttpError(403, "Invitation email does not match signed-in user");
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      "UPDATE spaces SET settings_json = json_remove(settings_json, ?1) WHERE id = ?2",
+    ).bind(
+      permissionJsonPath("invitationPermissions", invitation.id),
+      invitation.spaceId,
+    ),
     env.CONCLAVE_DB.prepare(
       `UPDATE space_invitations SET status = 'declined', updated_at = ?1 WHERE id = ?2 AND status = 'pending'`,
     ).bind(now, invitation.id),

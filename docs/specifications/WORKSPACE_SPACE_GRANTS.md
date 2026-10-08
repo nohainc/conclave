@@ -62,3 +62,15 @@ case. AX tests cover one-request response parsing, zero grant-counting reads wit
 30 Spaces, cache isolation and optimistic mutation races. Live production
 migration/deployment and browser event delivery are outside this deterministic
 verification.
+
+## Space UI member rights (v1)
+
+Space settings expose an owner-only **Allow Work workflows** switch in place
+of the technical grant editor. Turning it off preserves attachments and history;
+only Chat is offered and permitted for members with Chat rights. Each attachment
+row also exposes `canOpenWorkspace` and `canRevoke`, derived from current
+ownership and membership. Members may attach their own Workspace only with the
+explicit `attachWorkspace` right and contribution confirmation. Space owners
+can revoke attachments without acquiring ownership of the Workspace.
+See [Space member rights](AUTHORIZATION_MODEL.md#space-member-rights-v1) for
+submission/dispatch enforcement and deployment ordering.

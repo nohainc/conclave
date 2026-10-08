@@ -126,7 +126,12 @@ export async function handleCreateThread(
     spaceId,
     accessContext,
   );
-  await requireSpaceRight(env, context, spaceId, "manageOwnThreads");
+  const creatorPolicy = await requireSpaceRight(
+    env,
+    context,
+    spaceId,
+    "manageOwnThreads",
+  );
   const body = (await request.json().catch(() => ({}))) as Record<
     string,
     unknown
@@ -175,6 +180,8 @@ export async function handleCreateThread(
         status: "active",
         accessPolicyJson: JSON.stringify(accessPolicy),
         leadUserId: context.userId,
+        creatorEmail: context.user.email,
+        creatorIsOwner: creatorPolicy.role === "owner" ? 1 : 0,
         createdAt: now,
         updatedAt: now,
       }),
@@ -406,6 +413,16 @@ export async function handleUpdateThread(
   )
     .bind(thread.spaceId, context.userId)
     .first<SpaceMembership>();
+  const policy = await loadSpacePermissions(
+    env,
+    context.userId,
+    thread.spaceId,
+  );
+  const creator = await env.CONCLAVE_DB.prepare(
+    "SELECT u.email, s.owner_user_id AS ownerUserId FROM users u JOIN spaces s ON s.id = ?1 WHERE u.id = ?2",
+  )
+    .bind(thread.spaceId, thread.lead.userId)
+    .first<{ email: string; ownerUserId: string }>();
   const updatedThread: Thread = {
     ...thread,
     name,
@@ -430,11 +447,17 @@ export async function handleUpdateThread(
         accessPolicyJson: JSON.stringify(accessPolicy),
         workConfigJson: savedWorkConfigJson,
         leadUserId: thread.lead.userId,
+        creatorEmail: creator?.email,
+        creatorIsOwner: creator?.ownerUserId === thread.lead.userId ? 1 : 0,
         createdAt: thread.createdAt,
         updatedAt: now,
       }),
       canConfigureWork: true,
-      canExecuteWork: canExecuteThread(context.userId, member, updatedThread),
+      canExecuteWork: canExecuteThread(
+        context.userId,
+        member ? { ...member, permissions: policy.rights } : null,
+        updatedThread,
+      ),
     },
     updatedByUserId: context.userId,
   });

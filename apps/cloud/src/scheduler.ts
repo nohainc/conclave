@@ -124,7 +124,7 @@ export async function selectSpaceExecutionTarget(
 ): Promise<ExecutionTarget | null> {
   const membership = await db
     .prepare(
-      `SELECT sm.role, s.settings_json AS settingsJson FROM space_memberships sm JOIN spaces s ON s.id = sm.space_id WHERE sm.space_id = ?1 AND sm.user_id = ?2`,
+      `SELECT sm.role, s.settings_json AS settingsJson FROM space_memberships sm JOIN spaces s ON s.id = sm.space_id JOIN users u ON u.id = sm.user_id WHERE u.status = 'active' AND sm.space_id = ?1 AND sm.user_id = ?2`,
     )
     .bind(request.spaceId, request.requesterUserId)
     .first<{ role: string; settingsJson: string }>();

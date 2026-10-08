@@ -3,6 +3,7 @@ import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import {
   handleChangeSpaceMemberRole,
   handleListSpaceMembers,
+  handleGetSpace,
   handleCreateSpaceInvitation,
   handleAcceptSpaceInvitation,
   handleUpdateSpace,
@@ -11,6 +12,7 @@ import {
   handleUpdateThread,
   handleValidateWorkRequest,
   handleRequestSpaceWorkspace,
+  handleRevokeWorkspaceSpaceGrant,
   type SecurityEnv,
 } from "../src/routes/handlers.js";
 import {
@@ -86,7 +88,7 @@ describe("Space member permissions contract v1", () => {
     const data = (await (
       await handleListSpaceMembers(req("owner", {}, "GET"), env, "S")
     ).json()) as {
-      members: Array<{ userId: string; permissions: SpacePermissionRights }>;
+      members: Array<{ userId: string; permissions: typeof all }>;
     };
     expect(
       data.members.find((m) => m.userId === "member")?.permissions,
@@ -158,6 +160,20 @@ describe("Space member permissions contract v1", () => {
   });
   it("disables Work Space-wide while preserving history and member rights; settings edits preserve permission overrides", async () => {
     await rights("member", { ...none, chat: true, work: true });
+    const publicRead = (await (
+      await handleGetSpace(req("member", {}, "GET"), env, "S")
+    ).json()) as {
+      space: { settings: Record<string, unknown>; permissions: typeof all };
+    };
+    expect(publicRead.space.permissions).toMatchObject({
+      chat: true,
+      work: true,
+    });
+    expect(publicRead.space.settings).not.toHaveProperty("memberPermissions");
+    expect(publicRead.space.settings).not.toHaveProperty(
+      "invitationPermissions",
+    );
+
     await handleUpdateSpace(
       req("owner", { settings: { allowWork: false } }, "PATCH"),
       env,
@@ -228,6 +244,54 @@ describe("Space member permissions contract v1", () => {
         "S",
       ),
     ).rejects.toMatchObject({ status: 403 });
+  });
+  it("allows an authorized member to contribute their own Workspace and lets the Space owner revoke it", async () => {
+    store.sqlite.exec(
+      "INSERT INTO execution_workspaces(id,owner_user_id,name,status,created_at,updated_at) VALUES('W','member','Member workspace','online','now','now')",
+    );
+    await rights("member", { ...none, attachWorkspace: true });
+    await expect(
+      handleRequestSpaceWorkspace(
+        req("member", { workspaceId: "W" }),
+        env,
+        "S",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    const response = await handleRequestSpaceWorkspace(
+      req("member", {
+        workspaceId: "W",
+        confirmContribution: true,
+        allowedPermissions: [
+          "repository:read",
+          "repository:write",
+          "shell:execute",
+        ],
+      }),
+      env,
+      "S",
+    );
+    expect(response.status).toBe(201);
+    const grant = store.sqlite
+      .prepare(
+        "SELECT id, status FROM workspace_space_grants WHERE space_id='S' AND workspace_id='W'",
+      )
+      .get() as { id: string; status: string };
+    expect(grant.status).toBe("active");
+    await handleRevokeWorkspaceSpaceGrant(
+      req("owner", {}, "DELETE"),
+      env,
+      grant.id,
+    );
+    expect(
+      store.sqlite
+        .prepare("SELECT status FROM workspace_space_grants WHERE id=?")
+        .get(grant.id),
+    ).toEqual({ status: "revoked" });
+    expect(
+      store.sqlite
+        .prepare("SELECT owner_user_id FROM execution_workspaces WHERE id='W'")
+        .get(),
+    ).toEqual({ owner_user_id: "member" });
   });
   it("allows delegated invitations without privilege escalation and clamps grants when the inviter loses a right", async () => {
     await rights("member", {

@@ -178,6 +178,9 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Text(
+                    'Authorize Space members to use workers on your workspace, according to their permissions.'),
+                const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: selectedId,
                   decoration: InputDecoration(
@@ -592,7 +595,8 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
 
           return AlertDialog(
             title: const Text('Share Space'),
-            content: Column(
+            content: SingleChildScrollView(
+                child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
@@ -627,7 +631,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
                               () => selected[entry.key] = value == true)
                           : null),
               ],
-            ),
+            )),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
