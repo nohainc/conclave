@@ -186,7 +186,12 @@ export async function handleWorkflowConfigurations(
     defaults: configuration.defaults,
   })) {
     if (!selection.worker) {
-      // Auto Worker resolves later; check choices against at least one owned Profile.
+      if (configuration.enabled)
+        throw new HttpError(
+          400,
+          `${stepId === "defaults" ? "Workflow" : stepId}: Select a Worker for every enabled Workflow step`,
+        );
+      // Disabled Workflows may retain model/effort intent until they are enabled.
       if (!selection.model && !selection.effort) continue;
       if (
         inventory.workers.some(

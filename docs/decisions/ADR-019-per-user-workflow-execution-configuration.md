@@ -22,16 +22,18 @@ WorkflowRun
 StepRun
 ```
 
-User preferences store enabled state, sparse Worker/model/effort defaults, and
-sparse fixed-step overrides. Omission means Automatic/inheritance. Definitions,
+User preferences store enabled state, explicit Worker defaults, sparse model/effort
+defaults, and sparse fixed-step overrides. A step may omit Worker to inherit the
+workflow default; model and effort omission means `Auto`. Definitions,
 structure, prompts, and internal contracts are never copied into preferences or
 made editable. Profile capabilities determine allowed model/effort combinations.
 Offline Workers remain configured; execution admission independently rechecks
 ownership, readiness, capabilities, grants, permissions, and Workspace eligibility.
 
-Cloud resolves owner-global defaults plus shared Space overrides at request acceptance. Automatic Worker selection
-must admit the entire workflow in one Workspace. Automatic model/effort means
-null (Profile/CLI default), not a guessed provider choice. Each accepted step
+Cloud resolves owner-global defaults plus shared Space overrides at request acceptance.
+Every enabled step must name a Worker in one Workspace; Cloud never chooses a
+replacement Worker. `Auto` model/effort means null (Profile/CLI default), not a
+guessed provider choice. Each accepted step
 freezes Worker, signed Profile identity/release, nullable model/effort, and Workflow
 identity/version in the immutable request snapshot. WorkflowRun and StepRun expose
 that accepted configuration; Worker turns record actual invocation evidence.
@@ -44,7 +46,8 @@ authored context and the initial Workflow selection, with no Worker/model/effort
 fallback writes or scheduling side effects. For a one-step Workflow, the current
 composer may submit a transient Worker/model/effort selection for that request;
 Cloud validates and snapshots it without changing Space or user settings. Global
-reset resolves Automatic without consulting old Thread or composer settings.
+reset clears the Worker and uses `Auto` for model and effort without consulting
+old Thread or composer settings.
 
 The future Thread extension is explicit; the one-step composer layer is already
 implemented as a current-request-only overlay:

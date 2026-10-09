@@ -305,7 +305,7 @@ class _TaskNodeCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    task.assignedWorkerId ?? 'Auto Worker',
+                    task.assignedWorkerId ?? 'Unassigned Worker',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

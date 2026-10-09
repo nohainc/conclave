@@ -23,6 +23,7 @@ class AxWorkflowSelectionOptions {
               options.allowedModelIds.contains(model)));
 
   Map<String, String> models(String? workerId) {
+    if (workerId == null) return const {};
     final result = <String, String>{};
     for (final candidate in _candidates(workerId)) {
       final options = candidate.executionOptions;
@@ -38,6 +39,7 @@ class AxWorkflowSelectionOptions {
   }
 
   List<String> efforts(AxWorkflowSelection effective) {
+    if (effective.worker == null) return const [];
     final result = <String>{};
     for (final candidate in _candidates(effective.worker)) {
       final options = candidate.executionOptions;
@@ -70,15 +72,7 @@ class AxWorkflowSelectionOptions {
     final same = value.worker == saved.worker &&
         value.model == saved.model &&
         value.effort == saved.effort;
-    if (value.worker == null) {
-      if (value.model == null && value.effort == null) return null;
-      if (workers.any((candidate) =>
-          candidate.executionOptions != null &&
-          _validateProfile(candidate.executionOptions!, value) == null)) {
-        return null;
-      }
-      return 'No Worker Profile supports this model and effort combination.';
-    }
+    if (value.worker == null) return 'Select a Worker.';
     final selected = worker(value.worker);
     if ((selected == null || selected.executionOptions == null) && same) {
       return null;

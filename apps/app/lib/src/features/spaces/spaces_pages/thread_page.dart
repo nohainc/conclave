@@ -8,6 +8,7 @@ class ThreadPage extends StatefulWidget {
     this.dataSource,
     this.discussionCache,
     this.workHistoryCache,
+    this.threadViewStateStore,
     this.catalogs,
     this.workflowConfigurations,
     this.currentUserId,
@@ -26,6 +27,7 @@ class ThreadPage extends StatefulWidget {
   final AxDataSource? dataSource;
   final AxDiscussionCache? discussionCache;
   final AxWorkHistoryCache? workHistoryCache;
+  final AxThreadViewStateStore? threadViewStateStore;
   final AxSessionCatalogs? catalogs;
   final AxWorkflowConfigurations? workflowConfigurations;
   final String? currentUserId;
@@ -53,6 +55,12 @@ class ThreadPage extends StatefulWidget {
 class _ThreadPageState extends State<ThreadPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  late final AxThreadViewStateStore _threadViewStateStore =
+      widget.threadViewStateStore ?? MemoryAxThreadViewStateStore();
+  Timer? _threadViewStateSaveTimer;
+  int _threadViewStateGeneration = 0;
+  bool _threadViewStateRestored = false;
+  AxThreadViewState? _pendingThreadViewState;
   final _requestController = TextEditingController();
   final _workHistoryController = ScrollController();
   final _chatHistoryController = ScrollController();
@@ -155,6 +163,125 @@ class _ThreadPageState extends State<ThreadPage>
   void Function()? _cancelWorkflowDefault;
   String? _workflowDefaultId;
   List<AxUserWorkflowConfiguration> _userWorkflowConfigurations = const [];
+
+  void _scheduleThreadViewStateSave() {
+    if (!_threadViewStateRestored || widget.currentUserId == null) return;
+    _threadViewStateSaveTimer?.cancel();
+    _threadViewStateSaveTimer = Timer(const Duration(milliseconds: 180), () {
+      _threadViewStateSaveTimer = null;
+      unawaited(_saveThreadViewState());
+    });
+  }
+
+  String? _selectionValue(String key) {
+    if (_workExecutionSelection.containsKey(key)) {
+      final value = _workExecutionSelection[key];
+      return value is String && value.isNotEmpty ? value : null;
+    }
+    final bindings = _composerWorkConfig['bindings'];
+    if (bindings is! Map) return null;
+    final definition = _availableWorkflows
+        .where((item) => item.reference == _effectiveWorkflow)
+        .firstOrNull;
+    final stepKind = definition?.composerBindingId;
+    final binding = stepKind == null ? null : bindings[stepKind];
+    if (binding is! Map) return null;
+    final value = binding[key];
+    return value is String && value.isNotEmpty ? value : null;
+  }
+
+  AxThreadViewState _currentThreadViewState() => AxThreadViewState(
+        tabIndex: _tabController.index,
+        workflowReference:
+            _effectiveWorkflow.isEmpty ? null : _effectiveWorkflow,
+        workerId: _selectionValue('workerId'),
+        model: _selectionValue('model'),
+        reasoningEffort: _selectionValue('reasoningEffort'),
+        chatDraft: _discussionController.text,
+        workDraft: _requestController.text,
+      );
+
+  Future<void> _saveThreadViewState() async {
+    final userId = widget.currentUserId;
+    if (!_threadViewStateRestored || userId == null || userId.isEmpty) return;
+    await _threadViewStateStore.save(
+      userId: userId,
+      threadId: widget.thread.id,
+      state: _currentThreadViewState(),
+    );
+  }
+
+  void _reconcilePendingThreadViewState() {
+    final saved = _pendingThreadViewState;
+    if (saved == null || _availableWorkflows.isEmpty) return;
+    if (saved.workerId != null &&
+        !_catalogs.engine.peek(_catalogs.workers).hasData) {
+      return;
+    }
+    final workflow = _availableWorkflows
+        .where((item) => item.reference == saved.workflowReference)
+        .firstOrNull;
+    if (workflow == null) {
+      if (!_loadingWorkflows) _pendingThreadViewState = null;
+      return;
+    }
+    _workflow = workflow.reference;
+    final worker = _eligibleWorkers
+        .where((candidate) => candidate.id == saved.workerId)
+        .firstOrNull;
+    final selection = <String, dynamic>{
+      if (worker != null) 'workerId': worker.id,
+    };
+    if (worker?.executionOptions != null) {
+      final values = worker!.executionOptions!.reconcileSelection(
+        model: saved.model,
+        effort: saved.reasoningEffort,
+      );
+      if (values.model != null) selection['model'] = values.model;
+      if (values.effort != null) {
+        selection['reasoningEffort'] = values.effort;
+      }
+    }
+    _workExecutionSelection = selection;
+    _pendingThreadViewState = null;
+    _updateComposerState(() {});
+  }
+
+  Future<void> _restoreThreadViewState() async {
+    final userId = widget.currentUserId;
+    final threadId = widget.thread.id;
+    final generation = ++_threadViewStateGeneration;
+    _threadViewStateRestored = false;
+    _pendingThreadViewState = null;
+    if (userId == null || userId.isEmpty) {
+      _threadViewStateRestored = true;
+      return;
+    }
+    final saved = await _threadViewStateStore.load(
+      userId: userId,
+      threadId: threadId,
+    );
+    if (!mounted ||
+        generation != _threadViewStateGeneration ||
+        widget.thread.id != threadId ||
+        widget.currentUserId != userId) {
+      return;
+    }
+    _threadViewStateRestored = true;
+    if (saved != null) {
+      _discussionController.text = saved.chatDraft;
+      _requestController.text = saved.workDraft;
+      _pendingThreadViewState = saved;
+      _tabController.animateTo(saved.tabIndex);
+      _reconcilePendingThreadViewState();
+    }
+    _scheduleThreadViewStateSave();
+  }
+
+  void _onThreadTabChanged() {
+    if (!_tabController.indexIsChanging) _scheduleThreadViewStateSave();
+  }
+
   Map<String, dynamic> get _composerWorkConfig {
     final id = _effectiveWorkflow.split(':').first;
     final definition = _availableWorkflows
@@ -194,7 +321,9 @@ class _ThreadPageState extends State<ThreadPage>
       if (!mounted) return;
       _updateComposerState(() {
         _userWorkflowConfigurations = state.data ?? const [];
-        _workExecutionSelection = {};
+        if (!_threadViewStateRestored || widget.currentUserId == null) {
+          _workExecutionSelection = {};
+        }
       });
     });
     _workflowDefaultId = cache.engine.peek(cache.defaultQuery).data;
@@ -203,8 +332,11 @@ class _ThreadPageState extends State<ThreadPage>
       if (state.hasData) {
         _updateComposerState(() {
           _workflowDefaultId = state.data;
-          _workExecutionSelection = {};
-          if (_workflowCatalog.isNotEmpty) {
+          if (!_threadViewStateRestored || widget.currentUserId == null) {
+            _workExecutionSelection = {};
+          }
+          if ((!_threadViewStateRestored || widget.currentUserId == null) &&
+              _workflowCatalog.isNotEmpty) {
             _workflow = _threadDefaultReference(_workflowCatalog,
                 preferredId: _workflowDefaultId);
           }
@@ -267,15 +399,19 @@ class _ThreadPageState extends State<ThreadPage>
       initialIndex: widget.initialTab == 2 ? 1 : widget.initialTab.clamp(0, 1),
       vsync: this,
     );
+    _tabController.addListener(_onThreadTabChanged);
     _refreshWorkTimeline();
     _requestController.addListener(_alignComposers);
+    _requestController.addListener(_scheduleThreadViewStateSave);
     _discussionController.addListener(_alignComposers);
+    _discussionController.addListener(_scheduleThreadViewStateSave);
     _subscribeToWorkEvents();
     _subscribeWorkflowConfigurations();
     _subscribeCatalogs();
     _subscribeWorkflowWorkspace();
     _loadWorkChoices();
     _loadWorkflowCatalog();
+    unawaited(_restoreThreadViewState());
   }
 
   void _applyWorkers(List<AxWorker> workers) {
@@ -313,6 +449,7 @@ class _ThreadPageState extends State<ThreadPage>
             _workflow = _threadDefaultReference(_workflowCatalog,
                 preferredId: _workflowDefaultId);
           }
+          _reconcilePendingThreadViewState();
         }
         _loadingWorkflows = !state.hasData && state.isFetching;
         _workflowCatalogError = state.error != null
@@ -354,6 +491,7 @@ class _ThreadPageState extends State<ThreadPage>
             ? ''
             : _threadDefaultReference(workflows,
                 preferredId: _workflowDefaultId);
+        _reconcilePendingThreadViewState();
       });
     } catch (_) {
       if (!mounted || catalogs != _catalogs) return;
@@ -401,6 +539,7 @@ class _ThreadPageState extends State<ThreadPage>
         _selectedWorkflowWorkspaceId = state.data?.workspaceId;
         _applyWorkers(
             _catalogs.engine.peek(_catalogs.workers).data ?? const []);
+        _reconcilePendingThreadViewState();
       });
     });
   }
@@ -427,6 +566,7 @@ class _ThreadPageState extends State<ThreadPage>
             .data
             ?.workspaceId;
         _applyWorkers(catalogs.engine.peek(catalogs.workers).data ?? const []);
+        _reconcilePendingThreadViewState();
       });
     } catch (_) {
       // The shared queries retain their last valid data on refresh failure.
@@ -436,9 +576,21 @@ class _ThreadPageState extends State<ThreadPage>
   @override
   void didUpdateWidget(ThreadPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.thread.id != widget.thread.id &&
+        _threadViewStateRestored &&
+        oldWidget.currentUserId != null &&
+        oldWidget.currentUserId == widget.currentUserId) {
+      _threadViewStateSaveTimer?.cancel();
+      unawaited(_threadViewStateStore.save(
+        userId: oldWidget.currentUserId!,
+        threadId: oldWidget.thread.id,
+        state: _currentThreadViewState(),
+      ));
+    }
     if (oldWidget.thread.id != widget.thread.id ||
         oldWidget.space.id != widget.space.id ||
-        oldWidget.dataSource != widget.dataSource) {
+        oldWidget.dataSource != widget.dataSource ||
+        oldWidget.currentUserId != widget.currentUserId) {
       _workExecutionSelection = {};
     }
     if (oldWidget.workflowConfigurations != widget.workflowConfigurations ||
@@ -475,8 +627,17 @@ class _ThreadPageState extends State<ThreadPage>
       unawaited(_refreshWorkTimeline());
     }
     if (oldWidget.thread.id != widget.thread.id) {
+      _threadViewStateGeneration++;
+      _threadViewStateRestored = false;
+      _pendingThreadViewState = null;
       _discussionController.clear();
+      _requestController.clear();
+      _workExecutionSelection = {};
+      _workflow = '';
       _followWork = _followChat = true;
+      unawaited(_restoreThreadViewState());
+    } else if (oldWidget.currentUserId != widget.currentUserId) {
+      unawaited(_restoreThreadViewState());
     }
     if (oldWidget.initialTab != widget.initialTab) {
       final targetIndex =
@@ -524,9 +685,14 @@ class _ThreadPageState extends State<ThreadPage>
     _cancelWorkHistory?.call();
     _cancelWorkRealtime?.call();
     _workEventSubscription?.cancel();
+    _threadViewStateSaveTimer?.cancel();
+    unawaited(_saveThreadViewState());
     _tabController.dispose();
     _requestController.removeListener(_alignComposers);
+    _requestController.removeListener(_scheduleThreadViewStateSave);
     _discussionController.removeListener(_alignComposers);
+    _discussionController.removeListener(_scheduleThreadViewStateSave);
+    _tabController.removeListener(_onThreadTabChanged);
     _requestController.dispose();
     _workHistoryController.dispose();
     _chatHistoryController.dispose();
@@ -855,11 +1021,13 @@ class _ThreadPageState extends State<ThreadPage>
         attachments: _workAttachments,
         onAddFiles: _addWorkFiles,
         executionSelection: _workExecutionSelection,
-        onExecutionSelectionChanged: (selection) => _updateState(() =>
-            _workExecutionSelection = {
-              ..._workExecutionSelection,
-              ...selection
-            }),
+        onExecutionSelectionChanged: (selection) {
+          _updateState(() => _workExecutionSelection = {
+                ..._workExecutionSelection,
+                ...selection
+              });
+          _scheduleThreadViewStateSave();
+        },
         onRemoveAttachment: (index) => _updateState(() {
           _workAttachments.removeAt(index);
         }),
@@ -870,10 +1038,13 @@ class _ThreadPageState extends State<ThreadPage>
         onShowRunDetails: widget.dataSource == null ? null : _showRunDetails,
         onRetryStep: widget.dataSource == null ? null : _retryWorkRequestStep,
         onCancelRun: widget.dataSource == null ? null : _cancelWorkRequest,
-        onWorkflowChanged: (value) => _updateState(() {
-          _workflow = value;
-          _workExecutionSelection = {};
-        }),
+        onWorkflowChanged: (value) {
+          _updateState(() {
+            _workflow = value;
+            _workExecutionSelection = {};
+          });
+          _scheduleThreadViewStateSave();
+        },
         onRun: _runWork,
       );
 }

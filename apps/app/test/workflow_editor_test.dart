@@ -194,12 +194,12 @@ void main() {
     expect(source.writes, 2);
     expect(source.reads, 1);
   });
-  test(
-      'Auto Worker options and validation require a coherent model/effort on one Profile',
-      () {
+  test('Worker selection is required before model and effort validation', () {
     final options = AxWorkflowSelectionOptions([worker('a'), worker('b')]);
-    expect(options.models(null).keys, ['analysis', 'review', 'other']);
-    expect(options.efforts(const AxWorkflowSelection(model: 'analysis')),
+    expect(options.models(null), isEmpty);
+    expect(
+        options
+            .efforts(const AxWorkflowSelection(worker: 'a', model: 'analysis')),
         ['low', 'high']);
     expect(
         options.validate(
@@ -210,7 +210,7 @@ void main() {
         options.validate(
             const AxWorkflowSelection(model: 'review', effort: 'thorough'),
             saved: const AxWorkflowSelection()),
-        isNull);
+        isNotNull);
     expect(
         options.validate(
             const AxWorkflowSelection(worker: 'b', model: 'analysis'),
@@ -248,6 +248,8 @@ void main() {
       'Worker and model changes refresh dependent choices and clear explicit downstream values',
       (tester) async {
     final source = await mount(tester, configuration());
+    expect(choices(tester, 'defaults', 'Worker'), ['', 'a', 'b']);
+    expect(choices(tester, 'defaults', 'Worker').contains('Auto'), isFalse);
     expect(choices(tester, 'defaults', 'Effort'), ['', 'low', 'high']);
     await choose(tester, 'defaults', 'Model', 'Review model');
     expect(choices(tester, 'defaults', 'Effort'), ['', 'thorough']);
@@ -347,7 +349,7 @@ void main() {
     expect(source.values.single.defaults.toJson(), defaultSelection.toJson());
   });
   testWidgets(
-      'missing saved Worker is visible and retained, and full reset restores Automatic',
+      'missing saved Worker is visible and retained, and full reset clears Worker',
       (tester) async {
     final saved = configuration(
         defaults: const AxWorkflowSelection(

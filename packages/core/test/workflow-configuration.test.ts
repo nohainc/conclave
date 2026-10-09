@@ -14,7 +14,7 @@ const input = {
   defaults: {},
   stepOverrides: {},
 };
-it("keeps definitions separate, defaults to Auto and overlays steps without mutating preferences", () => {
+it("keeps definitions separate, requires an explicit Worker and overlays steps without mutating preferences", () => {
   const config = parseUserWorkflowConfiguration(definition, {
     ...input,
     defaults: { worker: "offline", model: "m" },
@@ -34,14 +34,23 @@ it("keeps definitions separate, defaults to Auto and overlays steps without muta
   expect(resolveUserWorkflowConfiguration(definition).enabled).toBe(true);
   expect(resolveUserWorkflowConfiguration(definition).steps.verify).toEqual({});
 });
-it("normalizes Auto and rejects public contract extensions and invalid step identities", () => {
+it("normalizes Model/Effort Auto and rejects Worker Auto plus invalid identities", () => {
   expect(
     parseUserWorkflowConfiguration(definition, {
       ...input,
-      defaults: { worker: "Auto", model: null },
+      defaults: { worker: "offline", model: "Auto" },
       stepOverrides: { verify: { effort: "Auto" } },
     }),
-  ).toEqual(input);
+  ).toEqual({
+    ...input,
+    defaults: { worker: "offline" },
+  });
+  expect(() =>
+    parseUserWorkflowConfiguration(definition, {
+      ...input,
+      defaults: { worker: "Auto" },
+    }),
+  ).toThrow(/Worker must be selected explicitly/);
   for (const extra of [
     { userId: "other" },
     { schemaVersion: 2 },

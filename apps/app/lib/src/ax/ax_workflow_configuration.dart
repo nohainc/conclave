@@ -1,4 +1,5 @@
-/// Auto/inheritance is represented by null and omitted from the wire payload.
+/// A Worker is explicit; null Worker means unresolved or inherited for a step.
+/// Null model/effort values represent Auto and are omitted from the wire payload.
 class AxWorkflowSelection {
   const AxWorkflowSelection({this.worker, this.model, this.effort});
   final String? worker, model, effort;

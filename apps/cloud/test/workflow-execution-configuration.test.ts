@@ -5,7 +5,26 @@ const admission = vi.hoisted(() => vi.fn());
 vi.mock("../src/routes/handlers.js", () => ({
   validateWorkflowWorkerEligibility: admission,
 }));
-import { resolveWorkflowExecutionBindings } from "../src/routes/workflow-execution-configuration.js";
+import {
+  parseWorkflowExecutionSelection,
+  resolveWorkflowExecutionBindings,
+} from "../src/routes/workflow-execution-configuration.js";
+
+it("accepts Auto only for transient model and effort overrides", () => {
+  expect(
+    parseWorkflowExecutionSelection({
+      workerId: "b",
+      model: "Auto",
+      reasoningEffort: "Auto",
+    }),
+  ).toEqual({ workerId: "b", model: null, reasoningEffort: null });
+  expect(() => parseWorkflowExecutionSelection({ workerId: "Auto" })).toThrow(
+    "Worker must be selected explicitly",
+  );
+  expect(() =>
+    parseWorkflowExecutionSelection({ model: "Automatic" }),
+  ).toThrow("Use Auto for model and effort defaults");
+});
 
 function fixture(
   defaults: object = {},
@@ -96,9 +115,9 @@ function fixture(
   );
   return { configuration, resolve };
 }
-it("resolves Auto only within the selected Workspace across the whole workflow", async () => {
+it("uses the explicitly configured Worker across the whole workflow", async () => {
   const f = fixture(
-    { model: "model", effort: "medium" },
+    { worker: "b", model: "model", effort: "medium" },
     { verify: { effort: "high" } },
   );
   expect(await f.resolve()).toEqual({
@@ -141,12 +160,12 @@ it("uses shared Space defaults for every requester and Thread rather than each r
   expect(await f.resolve("another-member", "another-thread")).toEqual(owner);
 });
 
-it("does not fall back to another Workspace for Auto or an explicit Worker", async () => {
+it("requires an explicit Worker and does not fall back to another Workspace", async () => {
   await expect(
     fixture({}, {}, undefined, "first").resolve(),
   ).rejects.toMatchObject({
     status: 422,
-    message: expect.stringContaining("Unsupported capability"),
+    message: expect.stringContaining("Select a Worker"),
   });
   await expect(
     fixture({ worker: "b" }, {}, undefined, "first").resolve(),

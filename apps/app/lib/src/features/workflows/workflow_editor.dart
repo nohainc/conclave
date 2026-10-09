@@ -46,6 +46,7 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
       );
   Map<String, String> _issues(AxWorkflowSelectionOptions options) {
     final result = <String, String>{};
+    if (!enabled) return result;
     final defaultError =
         options.validate(defaults, saved: widget.configuration.defaults);
     if (defaultError != null) result['defaults'] = defaultError;
@@ -240,7 +241,8 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
                   enabled: !busy),
             ])),
         if (custom) ...[
-          const Text('Automatic inherits the corresponding workflow default.'),
+          const Text(
+              'Auto model and effort values inherit the workflow defaults.'),
           const SizedBox(height: 12),
           _selection(step.kind, selection, defaults, options,
               (value) => overrides[step.kind] = value),
@@ -324,10 +326,16 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
       decoration: InputDecoration(
           labelText: label,
           helperText: scope != 'defaults' && value == null
-              ? 'Inherited: ${inherited == null ? 'Automatic' : choices[inherited] ?? _title(inherited)}'
+              ? 'Inherited: ${inherited == null ? (label == 'Worker' ? 'Select Worker...' : 'Auto') : choices[inherited] ?? _title(inherited)}'
               : null),
       items: [
-        const DropdownMenuItem(value: '', child: Text('Automatic')),
+        DropdownMenuItem(
+            value: '',
+            child: Text(label == 'Worker'
+                ? (scope == 'defaults' || inherited == null
+                    ? 'Select Worker...'
+                    : 'Inherit workflow Worker')
+                : 'Auto')),
         for (final entry in available.entries)
           DropdownMenuItem(
               value: entry.key,

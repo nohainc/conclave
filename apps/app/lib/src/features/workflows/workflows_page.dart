@@ -331,11 +331,18 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
       ('Effort', _label(selection.effort)),
     ];
     final colors = Theme.of(context).colorScheme;
+    final unresolvedWorker = definition.steps.any((step) {
+      final workerId = configuration.selectionFor(step.kind).worker;
+      return workerId == null ||
+          !workers.any((worker) => worker.id == workerId);
+    });
     final status = !hasWorkspace
         ? 'Select a Workspace'
         : definition.id != 'chat' && !configuration.enabled
             ? 'Disabled'
-            : null;
+            : unresolvedWorker
+                ? 'Select a Worker'
+                : null;
     return Opacity(
         opacity: hasWorkspace ? 1 : 0.58,
         child: ConstrainedBox(
@@ -388,9 +395,9 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
-                                        color: hasWorkspace
-                                            ? colors.surfaceContainerHighest
-                                            : colors.errorContainer,
+                                        color: !hasWorkspace || unresolvedWorker
+                                            ? colors.errorContainer
+                                            : colors.surfaceContainerHighest,
                                         borderRadius:
                                             BorderRadius.circular(999)),
                                     child: Text(status,
@@ -398,9 +405,10 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                                             .textTheme
                                             .labelSmall
                                             ?.copyWith(
-                                                color: hasWorkspace
-                                                    ? colors.onSurfaceVariant
-                                                    : colors.onErrorContainer,
+                                                color: !hasWorkspace ||
+                                                        unresolvedWorker
+                                                    ? colors.onErrorContainer
+                                                    : colors.onSurfaceVariant,
                                                 fontWeight: FontWeight.w700)))
                             ]),
                             const SizedBox(height: 4),
@@ -453,7 +461,7 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                       inherit ? 'Reset Space workflows?' : 'Change Workspace?'),
                   content: Text(inherit
                       ? 'This will discard this Space’s workflow settings and use the global user workflow settings. Existing runs will keep their recorded settings.'
-                      : 'All workflows will reset to enabled with Automatic Worker, model, effort, and inherited steps. Existing runs will keep their recorded settings.${widget.configurations.spaceId == null ? ' Spaces using the global Workspace will also reset.' : ' The selected Workspace will be authorized to execute Work in this Space.'}'),
+                      : 'All workflows will reset with explicit Worker selections, Auto model and effort defaults, and inherited steps. Existing runs will keep their recorded settings.${widget.configurations.spaceId == null ? ' Spaces using the global Workspace will also reset.' : ' The selected Workspace will be authorized to execute Work in this Space.'}'),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(context, false),
@@ -498,11 +506,10 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
   }
 }
 
-String _label(String? value) => value == null
-    ? 'Automatic'
-    : '${value[0].toUpperCase()}${value.substring(1)}';
+String _label(String? value) =>
+    value == null ? 'Auto' : '${value[0].toUpperCase()}${value.substring(1)}';
 String _workerName(String? id, List<AxWorker> workers) {
-  if (id == null) return 'Automatic';
+  if (id == null) return 'Select Worker...';
   for (final worker in workers) {
     if (worker.id == id) {
       return '${worker.displayName}${worker.isReady ? '' : ' · Unavailable'}';
@@ -512,7 +519,7 @@ String _workerName(String? id, List<AxWorker> workers) {
 }
 
 String _modelName(String? id, String? workerId, List<AxWorker> workers) {
-  if (id == null) return 'Automatic';
+  if (id == null) return 'Auto';
   for (final worker
       in workers.where((worker) => workerId == null || worker.id == workerId)) {
     for (final model

@@ -25,7 +25,7 @@ export async function loadSpaceWorkflowConfigurations(
   )
     .bind(space.ownerUserId, workflowId ?? null, spaceId)
     .all<{ workflow_id: string; configuration_json: string }>();
-  // Space rows deliberately replace an entire workflow, including Automatic fields.
+  // Space rows deliberately replace an entire workflow, including Worker and Auto model/effort fields.
   const configurations = new Map(
     rows.results.map((row) => [
       row.workflow_id,

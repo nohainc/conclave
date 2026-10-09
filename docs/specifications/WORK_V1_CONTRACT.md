@@ -894,7 +894,8 @@ No schema migration is required. Lead transfers are not exposed by this change.
 Definition → User Workflow Configuration → Execution Resolution → WorkflowRun →
 StepRun. User preferences belong to neither Space nor Thread. Global defaults and
 sparse fixed-step overrides resolve at acceptance, then Worker/Profile release,
-model, and effort are immutable execution evidence. Reset means Automatic.
+model, and effort are immutable execution evidence. Reset clears the Worker and
+uses `Auto` for model and effort.
 Thread preference remains a future layer. A transient `executionSelection` may be
 submitted only for a one-step Work request; it is capability-validated, overlaid
 at acceptance, and never persisted as a preference. Apply v8 migrations 0018 and
@@ -906,8 +907,8 @@ resetting restores owner-global inheritance. Advanced execution controls remain
 on global Workflows and this Space tab. Run snapshots retain accepted choices.
 
 Workflow admission is restricted to the global or Space-selected Workspace.
-Automatic Worker selection cannot fall back to a different granted Workspace;
-explicit Workers must also belong to the selection. A confirmed Workspace change
+Every Workflow step must name an explicit Worker from that Workspace; Cloud never
+selects a replacement Worker. A confirmed Workspace change
 resets scope preferences but leaves accepted execution snapshots and retries
 unchanged. Workspace selection, grant authorization, and migration 0022 are
 specified in [User Workflow Configuration v1](USER_WORKFLOW_CONFIGURATION_V1.md#workspace-selection).

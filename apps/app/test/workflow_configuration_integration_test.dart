@@ -6,6 +6,8 @@ import 'package:conclave_app/src/ax/sync/ax_session_catalogs.dart';
 import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
 import 'package:conclave_app/src/ax/sync/ax_workflow_configurations.dart';
 import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
+import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state.dart';
+import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state_store.dart';
 import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'workflows_page_test.dart' show WorkflowSource;
 import 'workflow_editor_test.dart' show worker;
@@ -172,7 +174,7 @@ void main() {
     await tester.pumpWidget(page('one'));
     await tester.pumpAndSettle();
     expect(find.text('First'), findsOneWidget);
-    expect(find.text('Analysis model'), findsOneWidget);
+    expect(find.text('Analysis model (High)'), findsOneWidget);
     expect(find.text('obsolete-model'), findsNothing);
     expect(
         tester
@@ -193,12 +195,12 @@ void main() {
     expect(find.text('Second'), findsOneWidget);
     await cache.reset('direct');
     await tester.pumpAndSettle();
-    expect(find.text('Auto'), findsOneWidget);
+    expect(find.text('Select Worker...'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('work-composer-worker')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Second').last);
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Run with Automatic');
+    await tester.enterText(find.byType(TextField).last, 'Run with Auto');
     await tester.tap(find.byTooltip('Send request'));
     await tester.pumpAndSettle();
     expect(submitted, 1);
@@ -245,6 +247,85 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(Dialog), findsNothing);
     expect(find.byTooltip('Work settings'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+      'Thread restores local tab, workflow, execution choices and drafts',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final source = IntegrationSource()
+      ..defaultWorkflow = 'direct'
+      ..workers = [worker('a'), worker('b')]
+      ..values = [
+        AxUserWorkflowConfiguration(
+            workflowId: 'direct',
+            defaults: const AxWorkflowSelection(
+                worker: 'a', model: 'analysis', effort: 'high'))
+      ];
+    final engine = AxSyncEngine();
+    final store = MemoryAxThreadViewStateStore();
+    final catalogs = AxSessionCatalogs(source, engine: engine);
+    final cache = AxWorkflowConfigurations(source, engine: engine);
+    final history = AxWorkHistoryCache(source, engine: engine);
+    await store.save(
+      userId: 'user',
+      threadId: 'thread',
+      state: const AxThreadViewState(
+        tabIndex: 1,
+        workflowReference: 'direct:v1',
+        workerId: 'b',
+        model: 'other',
+        reasoningEffort: 'careful',
+        chatDraft: 'remember this chat',
+        workDraft: 'remember this work',
+      ),
+    );
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+                initialTab: 0,
+                space: const AxSpace(
+                    id: 's',
+                    name: 'Space',
+                    branch: '',
+                    lastActivity: '',
+                    role: 'owner'),
+                thread: const AxThread(
+                    id: 'thread',
+                    spaceId: 's',
+                    name: 'Thread',
+                    lead: '',
+                    status: 'active',
+                    brief: '',
+                    primaryWorkspace: '',
+                    queueStatus: '',
+                    canExecuteWork: true),
+                currentUserId: 'user',
+                dataSource: source,
+                catalogs: catalogs,
+                workflowConfigurations: cache,
+                workHistoryCache: history,
+                threadViewStateStore: store,
+                onBackToSpace: () {},
+                onArchive: () {}))));
+    await tester.pumpAndSettle();
+    expect(find.text('Second'), findsOneWidget);
+    expect(find.textContaining('Other model'), findsOneWidget);
+    expect(find.textContaining('careful'), findsOneWidget);
+    expect(find.text('remember this work'), findsOneWidget);
+    await tester.tap(find.text('Chat'));
+    await tester.pumpAndSettle();
+    expect(find.text('remember this chat'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'updated chat draft');
+    await tester.pump(const Duration(milliseconds: 250));
+    final saved = await store.load(userId: 'user', threadId: 'thread');
+    expect(saved?.tabIndex, 0);
+    expect(saved?.chatDraft, 'updated chat draft');
+    expect(saved?.workDraft, 'remember this work');
     await tester.pumpWidget(const SizedBox());
   });
 }

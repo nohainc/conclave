@@ -5,7 +5,7 @@ import type {
   StepKind,
 } from "./thread.js";
 
-/** Omission means Auto/inherit. Preferences never contain definition metadata. */
+/** Worker is explicit when present; model and effort may be Auto/omitted. */
 export interface WorkflowSelection {
   readonly worker?: string;
   readonly model?: string;
@@ -48,7 +48,7 @@ export function resolveUserWorkflowConfiguration(
   };
 }
 
-/** Strict versioned write boundary. null/Auto normalize to omission. */
+/** Strict versioned write boundary. null/Auto normalize to omission for model/effort. */
 export function parseUserWorkflowConfiguration(
   definition: BuiltinWorkflowDefinition,
   input: unknown,
@@ -68,8 +68,14 @@ export function parseUserWorkflowConfiguration(
     const result: Record<string, string> = {};
     for (const key of ["worker", "model", "effort"] as const) {
       const choice = value[key];
-      if (choice === undefined || choice === null || choice === "Auto")
+      if (choice === undefined || choice === null) continue;
+      if (choice === "Auto" || choice === "Automatic") {
+        if (key === "worker")
+          throw new DomainInvariantError("Worker must be selected explicitly");
+        if (choice === "Automatic")
+          throw new DomainInvariantError("Use Auto for model and effort defaults");
         continue;
+      }
       if (typeof choice !== "string" || !choice.trim() || choice.length > 200)
         throw new DomainInvariantError(`Invalid ${key} selection`);
       result[key] = choice.trim();

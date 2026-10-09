@@ -107,15 +107,17 @@ it("persists only user overrides, isolates users, retains offline choices, reset
         .prepare("SELECT count(*) n FROM user_workflow_configurations")
         .get()!.n,
     ).toBe(0);
-    await handleWorkflowConfigurations(
-      request("PUT", "U", {
-        ...configuration,
-        enabled: true,
-        defaults: { worker: "Auto" },
-      }),
-      env,
-      "chat",
-    );
+    await expect(
+      handleWorkflowConfigurations(
+        request("PUT", "U", {
+          ...configuration,
+          enabled: true,
+          defaults: { worker: "Auto" },
+        }),
+        env,
+        "chat",
+      ),
+    ).rejects.toThrow("Worker must be selected explicitly");
     expect(
       sqlite
         .prepare("SELECT count(*) n FROM user_workflow_configurations")
@@ -187,12 +189,16 @@ it("persists only user overrides, isolates users, retains offline choices, reset
       handleWorkflowConfigurations(
         request("PUT", "U", {
           ...configuration,
-          defaults: { model: "elsewhere-model", effort: "elsewhere-effort" },
+          defaults: {
+            worker: "capable",
+            model: "elsewhere-model",
+            effort: "elsewhere-effort",
+          },
         }),
         env,
         "chat",
       ),
-    ).rejects.toThrow("No owned Worker supports");
+    ).rejects.toThrow("selected model is not available");
     const choices = {
       ...configuration,
       defaults: { worker: "capable", model: "m", effort: "low" },
@@ -225,7 +231,7 @@ it("persists only user overrides, isolates users, retains offline choices, reset
     await handleWorkflowConfigurations(
       request("PUT", "U", {
         ...choices,
-        defaults: { model: "m", effort: "low" },
+        defaults: { worker: "capable", model: "m", effort: "low" },
       }),
       env,
       "chat",

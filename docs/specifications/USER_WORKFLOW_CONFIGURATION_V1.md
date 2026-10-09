@@ -16,12 +16,15 @@ and capabilities are never copied into preferences.
 }
 ```
 
-Omitted selections mean Auto/inherit. Writes normalize null and `Auto` to
-omission and remove empty step overrides. An absent row means enabled with all
-choices Auto. Step overrides inherit each omitted field from workflow defaults.
-Auto in a step clears that step's explicit choice and inherits the default; it
-does not bypass an explicit workflow default. Effort strings are Profile-owned,
-not a fixed provider enum. Worker IDs identify user-owned inventory entries.
+Model and effort omissions mean `Auto`; a step override may omit Worker to
+inherit the workflow's explicit Worker. Workflow defaults must name a Worker
+when enabled. An absent row means enabled with no Worker configured and `Auto`
+model/effort, so it is unresolved until the user selects a Worker. Writes
+normalize null and `Auto` to omission for model/effort and remove empty step
+overrides. `Auto` in a step clears that step's model or effort choice and
+inherits the default; it does not bypass an explicit Worker. Effort strings are
+Profile-owned, not a fixed provider enum. Worker IDs identify user-owned
+inventory entries.
 
 ## Authenticated human API
 
@@ -35,9 +38,9 @@ not a fixed provider enum. Worker IDs identify user-owned inventory entries.
 
 No user ID is accepted in the payload. Existing human authentication and cookie
 mutation origin protection apply. Model/effort validation uses owned Worker
-inventory and published, non-revoked Profile capabilities. Auto Worker plus an
-explicit model/effort requires at least one supporting owned Worker. Offline
-readiness does not invalidate preferences. Unchanged selections are retained
+inventory and published, non-revoked Profile capabilities. Every enabled
+Workflow step must resolve to an explicit owned Worker. Offline readiness does
+not invalidate preferences. Unchanged selections are retained
 when inventory/Profile metadata is unavailable; execution must still perform
 its own current authorization, grant, capability and readiness checks.
 
@@ -69,22 +72,24 @@ Selecting a card or Edit opens the Workflow editor on the global Workflows page.
 Default execution contains Worker, model, and effort pickers. Advanced contains
 a numbered list of the definition's fixed steps in definition order. Each row
 summarizes inheritance or its explicit execution choices, and expands to
-Execution controls: Use workflow defaults or Override. Per-field Automatic
-inherits the corresponding workflow default, with the inherited value shown.
+Execution controls: Use workflow defaults or Override. Model and effort `Auto`
+values inherit the corresponding workflow defaults, with the inherited value
+shown. Worker selection is explicit; a step override may omit Worker only to
+inherit the workflow's explicit Worker.
 An effort-only override does not copy the default Worker or model into storage.
 Empty overrides are omitted rather than recording an override-mode flag.
 
 Changing Worker clears explicit model and effort choices; changing model clears
 explicit effort. Inherited fields remain inherited. Options and validation use
 owned Worker/Profile metadata, including model-specific supported efforts.
-Auto Worker choices require a coherent model/effort combination on at least one
-Worker Profile. Incompatible effective defaults or step choices are identified
-inline and block Save; a default change may require correcting a step override.
+Missing Workers and incompatible effective defaults or step choices are
+identified inline and block Save; a default change may require correcting a
+step override.
 Cloud independently validates each write through the existing v1 API.
 
 Offline readiness is separate from capability compatibility. Offline Workers
 remain selectable and labeled. Missing saved Workers and model/effort choices
-remain visible instead of silently reverting to Automatic. Unchanged selections
+remain visible instead of silently reverting to `Auto` or another Worker. Unchanged selections
 with missing inventory or Profile metadata can be preserved, matching the Cloud
 intent rule. Removing a step override can also restore already-saved workflow
 defaults while metadata is unavailable; changed combinations require supported
@@ -106,13 +111,13 @@ preferences. Phase 3 introduces no schema or API migration.
 
 Cloud resolves the Space owner’s global defaults plus a shared Space workflow override
 for both validation and submission, regardless of the requester.
-Defaults are overlaid by sparse step overrides. Auto Worker is chosen from the
-selected Space Workflow Workspace inventory; Cloud's internal execution grant,
-Thread permissions, Profile capability, readiness, and Workspace eligibility
-rules still apply. Resolution tests whole-workflow
-feasibility in one Workspace before freezing Auto choices. An explicit offline,
-missing, or incompatible Worker fails admission; it is never silently replaced.
-Auto model and effort remain null, meaning the signed Profile/provider CLI default;
+Defaults are overlaid by sparse step overrides. Every step must name an explicit
+Worker from the selected Space Workflow Workspace inventory; Cloud's internal
+execution grant, Thread permissions, Profile capability, readiness, and
+Workspace eligibility rules still apply. Resolution verifies every configured
+Worker in one Workspace before freezing the request. A missing, offline, or
+incompatible Worker fails admission; it is never silently replaced. `Auto`
+model and effort remain null, meaning the signed Profile/provider CLI default;
 Conclave does not guess a provider model or effort.
 
 Every new accepted Work Request stores `stepExecutionConfigs` keyed by definition
@@ -133,8 +138,9 @@ edit Worker, model, and effort locally. AX sends that transient selection with
 the authored request, attachments, Workflow identity, and idempotency key;
 Cloud validates it and includes the resolved values in the immutable snapshot
 without changing saved preferences. Multi-step Workflows do not accept this
-override. Unconfigured Workflows and reset resolve Automatic consistently, with
-no legacy Thread binding or persistent composer fallback. Thread settings retain authored
+override. Unconfigured Workflows and reset leave the Worker unresolved with
+`Auto` model and effort defaults, so execution remains blocked until a Worker is
+selected, with no legacy Thread binding or persistent composer fallback. Thread settings retain authored
 instructions and initial Workflow selection, but no execution configuration or
 implicit Worker scheduling writes. Generic Settings remains account/application
 configuration. Workflows is the authoritative global execution editor.
@@ -147,7 +153,8 @@ Apply `0018_user_workflow_configurations.sql` and
 choices/labels/fallbacks from mutable Thread configuration, preserving authored
 Thread and step instructions and initial Workflow selection. Shared Thread choices
 cannot be assigned unambiguously to one user, so they are not copied into global
-preferences. With no saved user preferences, execution resolves Automatic.
+preferences. With no saved user preferences, execution has no configured Worker
+and cannot execute until one is selected.
 
 Accepted request snapshots and historical runs are never migrated or backfilled.
 The snapshot's versioned execution data remains immutable. Old API clients trying
@@ -219,10 +226,11 @@ PUT a complete workflow override or DELETE it to restore global inheritance.
 Payloads reuse the versioned execution preference shape and reject ownership fields.
 
 Editing starts with the effective global values. Save forks that entire workflow
-for the Space; omitted fields then mean Automatic, and step fields inherit the
-Space workflow defaults. Other workflows continue inheriting global settings.
-Even an all-Automatic override is persisted, allowing a Space to replace explicit
-or disabled globals. Reset deletes the override and returns current owner defaults.
+for the Space; omitted model/effort fields then mean `Auto`, and step fields
+inherit the Space workflow defaults. Other workflows continue inheriting global
+settings. A Space override may preserve an explicit Worker or remain unresolved
+until one is selected. Reset deletes the override and returns current owner
+defaults.
 Space updates never modify user preferences or another Space. Global changes affect
 inherited workflows, while saved Space overrides remain independent.
 
@@ -241,7 +249,7 @@ not copy workflow definitions or execution selections.
 
 Global Workflows and the Space Workflows tab select one Workspace before editing
 or executing workflows. Only its Workers and signed Profile capabilities are
-available to the editor, write validation, and runtime Auto resolution. An
+available to the editor, write validation, and runtime Worker resolution. An
 explicit Worker outside that Workspace is rejected. Offline Workers in the
 selected Workspace retain their saved choices; execution still requires readiness.
 With no selection, new execution is unavailable until a Workspace is chosen.
@@ -258,12 +266,13 @@ selected Workspace metadata.
 
 A Workspace change requires a visible confirmation and an explicit API reset
 confirmation. Settings and preference deletion commit in one D1 batch. All
-workflows become enabled with Automatic Worker/model/effort and inherited steps.
+workflows become enabled with no configured Worker, `Auto` model/effort, and
+inherited steps; each must be assigned a Worker before execution.
 Global changes also reset overrides in owned Spaces that inherit the Workspace;
 Spaces with an explicit Workspace keep their configurations. A Space selection
 forks the entire scope, suppressing global workflow preferences so explicit
-Space defaults are independent. Resetting a workflow in this scope means
-Automatic; returning to the global Workspace deletes the scope setting and
+Space defaults are independent. Resetting a workflow in this scope clears its
+Worker and uses `Auto` for model and effort; returning to the global Workspace deletes the scope setting and
 restores current global preferences for all workflows.
 
 Selecting an owned Workspace authorizes its execution in the owner's Space,

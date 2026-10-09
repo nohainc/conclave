@@ -38,6 +38,9 @@ function fixture() {
     INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at) VALUES('member','P','owner','owner','now','now');
     INSERT INTO threads(id,space_id,name,status,lead_user_id,created_at,updated_at) VALUES('W','P','Stream','active','owner','now','now');
     INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('workspace','owner','Workspace','now','now'); INSERT INTO user_workflow_settings VALUES('owner','workspace','now');`);
+  sqlite.exec(`INSERT INTO user_workflow_configurations(user_id,workflow_id,schema_version,configuration_json,updated_at)
+    VALUES('owner','chat',1,'{"schemaVersion":1,"workflowId":"chat","enabled":true,"defaults":{"worker":"worker-a"},"stepOverrides":{}}','now'),
+    ('owner','direct',1,'{"schemaVersion":1,"workflowId":"direct","enabled":true,"defaults":{"worker":"worker-a"},"stepOverrides":{}}','now');`);
   sqlite.exec(
     `INSERT INTO thread_work_configs(thread_id,config_json,updated_at) VALUES('W','{"bindings":{"direct":{"workerId":"worker-a"},"chat":{"workerId":"worker-a"}}}','now')`,
   );
@@ -68,6 +71,7 @@ function fixture() {
     prompt = "Implement this",
     key = "work-operation-000000001",
     workflowId = "direct",
+    executionSelection?: Record<string, unknown>,
   ) =>
     new Request("https://cloud.test/threads/W/work-requests", {
       method: "POST",
@@ -75,10 +79,20 @@ function fixture() {
       body: JSON.stringify({
         workflowId,
         input: { originalRequest: prompt },
+        ...(executionSelection ? { executionSelection } : {}),
       }),
     });
-  const submit = (prompt?: string, key?: string, workflowId?: string) =>
-    handleCreateWorkRequest(request(prompt, key, workflowId), env, "W");
+  const submit = (
+    prompt?: string,
+    key?: string,
+    workflowId?: string,
+    executionSelection?: Record<string, unknown>,
+  ) =>
+    handleCreateWorkRequest(
+      request(prompt, key, workflowId, executionSelection),
+      env,
+      "W",
+    );
   return {
     sqlite,
     db,
@@ -317,7 +331,7 @@ it("global workflow choices beat stale Thread values and freeze Profile and step
     };
     f.sqlite
       .prepare(
-        "INSERT INTO user_workflow_configurations VALUES('owner','direct',1,?,'now')",
+        "UPDATE user_workflow_configurations SET configuration_json=? WHERE user_id='owner' AND workflow_id='direct'",
       )
       .run(JSON.stringify(preference));
     await handleCreateWorkRequest(
@@ -417,7 +431,7 @@ it("disabled user workflow cannot create execution even with a composer selectio
   try {
     f.sqlite
       .prepare(
-        "INSERT INTO user_workflow_configurations VALUES('owner','direct',1,?,'now')",
+        "UPDATE user_workflow_configurations SET configuration_json=? WHERE user_id='owner' AND workflow_id='direct'",
       )
       .run(
         JSON.stringify({
@@ -464,7 +478,11 @@ it("accepts one-step composer overrides without changing saved preferences", asy
           "SELECT configuration_json FROM user_workflow_configurations WHERE user_id='owner' AND workflow_id='direct'",
         )
         .get(),
-    ).toBeUndefined();
+    ).toEqual(
+      expect.objectContaining({
+        configuration_json: expect.stringContaining('"worker":"worker-a"'),
+      }),
+    );
   } finally {
     f.sqlite.close();
   }
@@ -484,7 +502,12 @@ it("Workspace changes use the new Workspace for every Thread request while prese
       INSERT INTO workspace_worker_inventory(worker_id,workspace_id,owner_user_id,worker_type_id,activation_state,readiness_state,local_concurrency_limit,revision,created_at,updated_at,last_seen_at) VALUES('new-worker','new-workspace','owner','chatgpt','enabled','ready',1,1,'now','now','now');
       INSERT INTO workspace_space_grants(id,space_id,workspace_id,granted_by_user_id,status,created_at,updated_at) VALUES('new-grant','P','new-workspace','owner','active','now','now');
       INSERT INTO space_workflow_settings VALUES('P','new-workspace','now');`);
-    const second = await f.submit("After switch", "workspace-after-000001");
+    const second = await f.submit(
+      "After switch",
+      "workspace-after-000001",
+      "direct",
+      { workerId: "new-worker" },
+    );
     expect(second.status).toBe(202);
     const nextId = ((await second.json()) as { workRequest: { id: string } })
       .workRequest.id;

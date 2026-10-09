@@ -455,7 +455,7 @@ supporting coordinated rollout. No remote build or deployment was performed.
 The composer reconciles the displayed model and effort against the selected
 Worker's versioned execution options, including its model allowlist and
 model-specific effort capabilities. Unsupported configured values are displayed
-as unavailable until the Space Workflow is corrected. Automatic remains an
+as unavailable until the Space Workflow is corrected. `Auto` remains an
 absent override, allowing Profile/Engine defaults to apply.
 
 Inventory refreshes reconcile the displayed Space Workflow values without
@@ -472,12 +472,17 @@ No migration, public API change, or remote deployment is required. Workflows
 remains the authoritative configuration surface.
 
 
-## Phase 10 — No Thread-level execution preferences
+## Phase 10 — Local Thread view state
 
-Threads do not remember Worker/model/effort choices. The Workflows page owns
-those values, and the composer displays the current effective Space Workflow
-configuration. There is no Thread migration or local preference store for these
-values. WorkflowRun and StepRun snapshots remain the historical authority.
+Threads do not write Worker/model/effort preferences to Cloud. The Workflows
+page remains the authoritative shared configuration surface, while the local
+Thread view remembers its active tab, selected Workflow, and currently
+available one-step Worker/model/effort choices so the page can reopen where the
+user left it. Chat and Work draft text is also stored locally per authenticated
+user and Thread; it is never included in Cloud state until the user submits it.
+Unavailable or capability-incompatible selections are discarded during restore,
+and attachments are not persisted. WorkflowRun and StepRun snapshots remain the
+historical authority.
 
 
 ## Phase 11 — Conversation Router
@@ -930,12 +935,14 @@ remain deferred until multi-step Conversation workflows are enabled.
 
 ## Phase 22 — Worker switch UX
 
-Chat and Work apply composer Worker changes immediately to next-turn preferences,
-without confirmation dialogs or context-synchronization messages. Sending retains
-the same Thread and selected workflow; routing, bootstrap, resume and delta
-synchronization remain below the UI boundary. Existing turns retain their recorded
-Worker attribution. No extra timeline event is needed while the selected Worker
-is already visible beside Send.
+Chat and Work apply composer Worker changes immediately to the current local
+next-turn selection, without confirmation dialogs or context-synchronization
+messages. The selection is restored locally for that Thread when it remains
+available, but is never written to Cloud preferences. Sending retains the same
+Thread and selected workflow; routing, bootstrap, resume and delta
+synchronization remain below the UI boundary. Existing turns retain their
+recorded Worker attribution. No extra timeline event is needed while the
+selected Worker is already visible beside Send.
 
 Switching clears the prior Worker's model/effort before reconciling the target
 Profile's capabilities and restoring its remembered choices. It also refreshes

@@ -6,7 +6,16 @@ import { loadSpaceWorkflowConfigurations } from "../src/routes/space-workflow-co
 import type { SecurityEnv } from "../src/routes/http-security.js";
 vi.mock("../src/routes/profiles.js", () => ({
   handleListWorkspaceWorkerInventory: async () =>
-    Response.json({ workers: [] }),
+    Response.json({
+      workers: [
+        {
+          id: "worker",
+          workspaceId: "ws",
+          displayName: "Worker",
+          executionOptions: null,
+        },
+      ],
+    }),
 }));
 it("shares owner defaults across members, isolates Spaces, restricts writes, and resets to inheritance", async () => {
   const { sqlite, db } = sqliteD1();
@@ -29,7 +38,7 @@ it("shares owner defaults across members, isolates Spaces, restricts writes, and
       schemaVersion: 1,
       workflowId: "chat",
       enabled,
-      defaults: {},
+      defaults: enabled ? { worker: "worker" } : {},
       stepOverrides: {},
     });
     sqlite
@@ -94,7 +103,7 @@ it("shares owner defaults across members, isolates Spaces, restricts writes, and
     expect(
       (await loadSpaceWorkflowConfigurations(env, "other")).configurations,
     ).toEqual([]);
-    // Even an all-Auto override is stored: it can replace disabled global defaults.
+    // An explicit Worker override is stored: it can replace disabled global defaults.
     expect(
       sqlite
         .prepare("SELECT COUNT(*) AS count FROM space_workflow_configurations")

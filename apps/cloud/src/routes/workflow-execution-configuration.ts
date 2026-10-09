@@ -34,6 +34,13 @@ export function parseWorkflowExecutionSelection(
       throw new HttpError(400, `executionSelection.${key} is invalid`);
     if (selected.length > 200)
       throw new HttpError(400, `executionSelection.${key} is too long`);
+    if (selected === "Auto" || selected === "Automatic") {
+      if (key === "workerId")
+        throw new HttpError(400, "Worker must be selected explicitly");
+      if (selected === "Automatic")
+        throw new HttpError(400, "Use Auto for model and effort defaults");
+      return null;
+    }
     return selected.trim();
   };
   return {
@@ -47,7 +54,7 @@ export function parseWorkflowExecutionSelection(
   };
 }
 
-/** Resolve Auto once at acceptance, using the same admission rules as execution. */
+/** Resolve configured Workers at acceptance, using the same admission rules as execution. */
 export async function resolveWorkflowExecutionBindings(
   env: SecurityEnv,
   userId: string,
@@ -102,7 +109,6 @@ export async function resolveWorkflowExecutionBindings(
     }
   > = {};
   let pinnedWorkspace: string | null = null;
-  const rejectionReasons = new Set<string>();
   for (const step of definition.steps) {
     const id = definition.id === "direct" ? "direct" : step.kind;
     const configuredSelection = effective.steps[step.kind] ?? {};
@@ -119,8 +125,12 @@ export async function resolveWorkflowExecutionBindings(
         : {}),
     };
     const instructions = stepInstructions[id]?.additionalInstructions;
+    if (!selection.worker)
+      throw new HttpError(
+        422,
+        `${step.kind}: Select a Worker before sending this Workflow`,
+      );
     if (
-      selection.worker &&
       !inventory.results.some(
         (candidate) => candidate.workerId === selection.worker,
       )
@@ -154,57 +164,9 @@ export async function resolveWorkflowExecutionBindings(
         throw new HttpError(
           422,
           "Workflow Workers must execute in the same Workspace",
-        );
+      );
       pinnedWorkspace = admission.primaryWorkspaceId;
     }
   }
-  // Evaluate whole-workflow feasibility before freezing Auto. A greedy choice
-  // for the first step must not hide a Workspace able to execute every step.
-  const workspaces = pinnedWorkspace
-    ? [pinnedWorkspace]
-    : [...new Set(inventory.results.map((worker) => worker.workspaceId))];
-  for (const workspaceId of workspaces) {
-    const bindings: typeof requested = {};
-    let eligible = true;
-    for (const step of definition.steps) {
-      const id = definition.id === "direct" ? "direct" : step.kind;
-      const value = { ...requested[id] };
-      if (!value.workerId) {
-        for (const candidate of inventory.results.filter(
-          (worker) => worker.workspaceId === workspaceId,
-        )) {
-          const proposed = { ...value, workerId: candidate.workerId };
-          const admission = await validateWorkflowWorkerEligibility(
-            env,
-            spaceId,
-            threadId,
-            { ...definition, steps: [step] },
-            { [id]: proposed },
-            attachments,
-          );
-          for (const issue of admission.issues) {
-            if (issue.message.trim()) rejectionReasons.add(issue.message);
-          }
-          if (
-            !admission.issues.length &&
-            admission.primaryWorkspaceId === workspaceId
-          ) {
-            value.workerId = candidate.workerId;
-            break;
-          }
-        }
-        if (!value.workerId) {
-          eligible = false;
-          break;
-        }
-      }
-      bindings[id] = value;
-    }
-    if (eligible) return bindings;
-  }
-  const details = [...rejectionReasons].slice(0, 8);
-  throw new HttpError(
-    422,
-    `No eligible Space Workers support this workflow configuration in one Workspace${details.length ? `: ${details.join(" ")}` : ""}`,
-  );
+  return requested;
 }

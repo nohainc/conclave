@@ -3,6 +3,7 @@ import 'sync/ax_workflow_configurations.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'sync/persistence/ax_persistent_read_cache.dart';
+import 'sync/persistence/ax_thread_view_state_store.dart';
 import '../notifications/notification_models.dart';
 import 'ax_data.dart';
 import 'ax_models.dart';
@@ -37,6 +38,7 @@ class AxStore {
   final bool _persistReadCache;
   late final persistence = AxPersistentReadCache(syncEngine, dataSource,
       backend: _readCacheBackend, enabled: _persistReadCache);
+  late final threadViewState = createAxThreadViewStateStore();
   Future<bool> hydrateReadCache() async {
     final session = auth.session;
     final id = session?.viewer?.id;
@@ -53,12 +55,17 @@ class AxStore {
   }
 
   Future<void> logout() async {
+    final userId = auth.session?.viewer?.id;
     final clearing = persistence.clearUser();
+    final clearingThreadView = userId == null
+        ? Future<void>.value()
+        : threadViewState.clearUser(userId);
     clearServerState();
     try {
       await auth.logout();
     } finally {
       await clearing;
+      await clearingThreadView;
     }
   }
 
@@ -206,6 +213,7 @@ class AxStore {
     lifecycle.dispose();
     lifecycleNotice.dispose();
     persistence.dispose();
+    threadViewState.dispose();
     workflowConfigurations.clear();
     people.clear();
     _disposed = true;

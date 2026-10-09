@@ -603,6 +603,18 @@ as `lastError`; persistence is optional, so an unavailable browser storage API
 does not disable the app. Retry identities remain memory-only as in Phase 17.
 There is no Cloud schema, HTTP, or runtime protocol change.
 
+### Local Thread view state
+
+Thread view state uses a separate browser-local storage namespace from the
+server read cache. Its user/thread-scoped, versioned record contains the active
+Chat/Work tab, selected Workflow, currently available one-step Worker/model/
+effort selection, and Chat/Work draft text. Drafts and selections never enter
+Cloud queries, mutation payloads, or Workflow configuration APIs. Attachments,
+pending mutations, and credentials are excluded. Restore reconciles the saved
+Workflow and execution choices against the current catalog, selected Workspace,
+Worker readiness and Profile capabilities; stale choices are ignored rather than
+silently substituted. Logout removes the authenticated user's local view records.
+
 
 ## Phase 19: bounded in-memory retention
 
@@ -849,15 +861,17 @@ Preference freshness is 45 minutes. Explicit Refresh revalidates page resources;
 the existing foreground/network recovery refreshes active stale queries. No
 preference polling, new realtime event, or bootstrap reload is introduced. Save/reset commit authoritative API results through the shared query,
 not through a subsequent GET. Failed reads retain cached data with an inline
-notice; cold failure is unavailable rather than Automatic. Failed writes preserve
+notice; cold failure is unavailable rather than `Auto`. Failed writes preserve
 prior preferences. Concurrent preference writes are rejected while pending.
 Session clearing fences pending reads/writes, including writes waiting for their
 initial read; account changes cannot repopulate preferences from a prior session.
 Preferences remain memory-only, outside the persistent read-cache allowlist.
 
-Edit exposes workflow defaults and optional step overrides using Profile-owned
-model/effort metadata. Automatic step choices inherit workflow defaults. Offline
-Worker selections remain visible. Cloud resolves these preferences at execution admission; new Thread/composer
+Edit exposes an explicit Worker for each enabled step plus optional step
+overrides using Profile-owned model/effort metadata. `Auto` model and effort
+choices inherit workflow defaults. Cards mark missing or unavailable Workers as
+unresolved, and offline Worker selections remain visible. Cloud resolves these
+preferences at execution admission; new Thread/composer
 resolution layers remain deferred. The
 [configuration contract](../specifications/USER_WORKFLOW_CONFIGURATION_V1.md)
 continues to own persistence and API semantics. No Phase 2 migration is required.

@@ -379,11 +379,6 @@ class _WorkComposer extends StatelessWidget {
                 ?.toString()
                 .trim() ??
             '';
-    final effortOptions = assignedWorker?.executionOptions
-        ?.effortsForModel(selectedModel.isEmpty ? null : selectedModel);
-    final supportedEfforts = effortOptions?.supported == true
-        ? effortOptions!.values
-        : const <String>[];
     final controlBg = Colors.transparent;
     const controlBorderRadius = BorderRadius.all(Radius.circular(6));
 
@@ -503,31 +498,30 @@ class _WorkComposer extends StatelessWidget {
                   child: InkWell(
                     key: const ValueKey('work-composer-worker'),
                     borderRadius: controlBorderRadius,
-                    onTap: canExecute && !submitting
-                        ? () async {
-                            final value = await _showAnchoredMenu<String>(
-                              buttonContext: workerContext,
-                              inputKey: inputKey,
-                              itemHeight: 48,
-                              items: [
-                                const PopupMenuItem<String>(
-                                    value: '', child: Text('Auto')),
-                                for (final worker in eligibleWorkers)
-                                  PopupMenuItem<String>(
-                                      value: worker.id,
-                                      child: Text(worker.displayName)),
-                              ],
-                            );
-                            if (value == null || !workerContext.mounted) {
-                              return;
-                            }
-                            onExecutionSelectionChanged({
-                              'workerId': value.isEmpty ? null : value,
-                              'model': null,
-                              'reasoningEffort': null,
-                            });
-                          }
-                        : null,
+                    onTap:
+                        canExecute && !submitting && eligibleWorkers.isNotEmpty
+                            ? () async {
+                                final value = await _showAnchoredMenu<String>(
+                                  buttonContext: workerContext,
+                                  inputKey: inputKey,
+                                  itemHeight: 48,
+                                  items: [
+                                    for (final worker in eligibleWorkers)
+                                      PopupMenuItem<String>(
+                                          value: worker.id,
+                                          child: Text(worker.displayName)),
+                                  ],
+                                );
+                                if (value == null || !workerContext.mounted) {
+                                  return;
+                                }
+                                onExecutionSelectionChanged({
+                                  'workerId': value,
+                                  'model': null,
+                                  'reasoningEffort': null,
+                                });
+                              }
+                            : null,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 5),
@@ -540,7 +534,7 @@ class _WorkComposer extends StatelessWidget {
                               assignedWorker?.displayName ??
                                   (selectedWorkerId == null ||
                                           selectedWorkerId.isEmpty
-                                      ? 'Auto'
+                                      ? 'Select Worker...'
                                       : 'Unavailable Worker'),
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context)
@@ -567,153 +561,171 @@ class _WorkComposer extends StatelessWidget {
           ],
           if (stepKind != null &&
               isWorkerAssigned &&
-              assignedWorker != null) ...[
-            if (policy.userSelectsModel &&
-                (assignedWorker.executionOptions?.modelSelectionSupported ??
-                    true)) ...[
-              const SizedBox(width: 6),
-              Builder(
-                builder: (modelBtnContext) => Tooltip(
-                  message: 'Model · this request',
-                  child: Material(
-                    color: controlBg,
-                    borderRadius: controlBorderRadius,
-                    child: InkWell(
-                      borderRadius: controlBorderRadius,
-                      onTap: canExecute && !submitting
-                          ? () async {
-                              final options = _modelsForWorker(assignedWorker);
-                              final value = await _showAnchoredMenu<String>(
-                                buttonContext: modelBtnContext,
-                                inputKey: inputKey,
-                                itemHeight: 48,
-                                items: [
-                                  const PopupMenuItem<String>(
-                                      value: '', child: Text('Auto')),
-                                  for (final option in options)
-                                    PopupMenuItem<String>(
-                                        value: option.id,
-                                        child: Text(option.name)),
-                                ],
-                              );
-                              if (value == null || !modelBtnContext.mounted) {
-                                return;
-                              }
-                              final nextEfforts = assignedWorker
-                                  .executionOptions
-                                  ?.effortsForModel(
-                                      value.isEmpty ? null : value);
+              assignedWorker != null &&
+              (policy.userSelectsModel || policy.userSelectsEffort) &&
+              (assignedWorker.executionOptions?.modelSelectionSupported ??
+                  true)) ...[
+            const SizedBox(width: 6),
+            Builder(
+              builder: (modelBtnContext) {
+                final modelOptions = _modelsForWorker(assignedWorker);
+                final modelName =
+                    _modelDisplayName(selectedModel, worker: assignedWorker);
+                final String combinedLabel;
+                if (modelName.isEmpty || selectedModel.isEmpty) {
+                  combinedLabel = 'Auto';
+                } else if (selectedReasoningEffort.isNotEmpty) {
+                  combinedLabel =
+                      '$modelName (${_reasoningEffortDisplayName(selectedReasoningEffort)})';
+                } else {
+                  combinedLabel = modelName;
+                }
+
+                return MenuAnchor(
+                  menuChildren: [
+                    MenuItemButton(
+                      onPressed: canExecute && !submitting
+                          ? () {
                               onExecutionSelectionChanged({
-                                'model': value.isEmpty ? null : value,
-                                if (selectedReasoningEffort.isNotEmpty &&
-                                    !(nextEfforts?.supported == true &&
-                                        nextEfforts!.values
-                                            .contains(selectedReasoningEffort)))
-                                  'reasoningEffort': null,
+                                'model': null,
+                                'reasoningEffort': null,
                               });
                             }
                           : null,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 5),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 130),
-                              child: Text(
-                                _modelDisplayName(selectedModel,
-                                            worker: assignedWorker)
-                                        .isEmpty
-                                    ? 'Auto'
-                                    : _modelDisplayName(selectedModel,
-                                        worker: assignedWorker),
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (selectedModel.isEmpty)
+                            const Icon(Icons.check, size: 14)
+                          else
+                            const SizedBox(width: 14),
+                          const SizedBox(width: 6),
+                          const Text('Auto'),
+                        ],
+                      ),
+                    ),
+                    for (final option in modelOptions)
+                      if (policy.userSelectsEffort &&
+                          option.supportedReasoningEfforts.isNotEmpty)
+                        SubmenuButton(
+                          leadingIcon: selectedModel == option.id
+                              ? const Icon(Icons.check, size: 14)
+                              : const SizedBox(width: 14),
+                          menuChildren: [
+                            MenuItemButton(
+                              onPressed: canExecute && !submitting
+                                  ? () {
+                                      onExecutionSelectionChanged({
+                                        'model': option.id,
+                                        'reasoningEffort': null,
+                                      });
+                                    }
+                                  : null,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (selectedModel == option.id &&
+                                      selectedReasoningEffort.isEmpty)
+                                    const Icon(Icons.check, size: 14)
+                                  else
+                                    const SizedBox(width: 14),
+                                  const SizedBox(width: 6),
+                                  const Text('Auto'),
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 2),
-                            const Icon(Icons.keyboard_arrow_down, size: 14),
+                            for (final effort
+                                in option.supportedReasoningEfforts)
+                              MenuItemButton(
+                                onPressed: canExecute && !submitting
+                                    ? () {
+                                        onExecutionSelectionChanged({
+                                          'model': option.id,
+                                          'reasoningEffort': effort,
+                                        });
+                                      }
+                                    : null,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (selectedModel == option.id &&
+                                        selectedReasoningEffort.toLowerCase() ==
+                                            effort.toLowerCase())
+                                      const Icon(Icons.check, size: 14)
+                                    else
+                                      const SizedBox(width: 14),
+                                    const SizedBox(width: 6),
+                                    Text(_reasoningEffortDisplayName(effort)),
+                                  ],
+                                ),
+                              ),
                           ],
+                          child: Text(option.name),
+                        )
+                      else
+                        MenuItemButton(
+                          leadingIcon: selectedModel == option.id
+                              ? const Icon(Icons.check, size: 14)
+                              : const SizedBox(width: 14),
+                          onPressed: canExecute && !submitting
+                              ? () {
+                                  onExecutionSelectionChanged({
+                                    'model': option.id,
+                                    'reasoningEffort': null,
+                                  });
+                                }
+                              : null,
+                          child: Text(option.name),
+                        ),
+                  ],
+                  builder: (context, controller, child) => Tooltip(
+                    message: 'Model & Effort · this request',
+                    child: Material(
+                      color: controlBg,
+                      borderRadius: controlBorderRadius,
+                      child: InkWell(
+                        key: const ValueKey('work-composer-model'),
+                        borderRadius: controlBorderRadius,
+                        onTap: canExecute && !submitting
+                            ? () {
+                                if (controller.isOpen) {
+                                  controller.close();
+                                } else {
+                                  controller.open();
+                                }
+                              }
+                            : null,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 5),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 160),
+                                child: Text(
+                                  combinedLabel,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              const Icon(Icons.keyboard_arrow_down, size: 14),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            ],
-            if (policy.userSelectsEffort && supportedEfforts.isNotEmpty) ...[
-              const SizedBox(width: 6),
-              Builder(
-                builder: (reasoningBtnContext) => Tooltip(
-                  message: 'Effort · this request',
-                  child: Material(
-                    color: controlBg,
-                    borderRadius: controlBorderRadius,
-                    child: InkWell(
-                      borderRadius: controlBorderRadius,
-                      onTap: canExecute && !submitting
-                          ? () async {
-                              final value = await _showAnchoredMenu<String>(
-                                buttonContext: reasoningBtnContext,
-                                inputKey: inputKey,
-                                itemHeight: 48,
-                                items: [
-                                  const PopupMenuItem<String>(
-                                      value: '', child: Text('Auto')),
-                                  for (final effort in supportedEfforts)
-                                    PopupMenuItem<String>(
-                                        value: effort,
-                                        child: Text(_reasoningEffortDisplayName(
-                                            effort))),
-                                ],
-                              );
-                              if (value == null ||
-                                  !reasoningBtnContext.mounted) {
-                                return;
-                              }
-                              onExecutionSelectionChanged({
-                                'reasoningEffort': value.isEmpty ? null : value,
-                              });
-                            }
-                          : null,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 5),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 110),
-                              child: Text(
-                                selectedReasoningEffort.isEmpty
-                                    ? 'Auto'
-                                    : _reasoningEffortDisplayName(
-                                        selectedReasoningEffort),
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                            ),
-                            const SizedBox(width: 2),
-                            const Icon(Icons.keyboard_arrow_down, size: 14),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+                );
+              },
+            ),
           ],
         ],
       ),

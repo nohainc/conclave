@@ -356,6 +356,9 @@ extension _ThreadActions on _ThreadPageState {
           userId: widget.currentUserId, userName: widget.currentUserName);
     } catch (error) {
       if (!mounted) return;
+      if (_discussionController.text.isEmpty) {
+        _discussionController.text = text;
+      }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Failed to save message: $error'),
           backgroundColor: ConclaveColors.error));

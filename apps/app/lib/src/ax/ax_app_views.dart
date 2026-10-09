@@ -322,6 +322,7 @@ extension _AxAppViews on _AxAppStateMixin {
               engine: store.syncEngine, spaceId: space.id),
           discussionCache: store.discussion,
           workHistoryCache: store.workHistory,
+          threadViewStateStore: store.threadViewState,
           key: ValueKey(thread.id),
           space: space,
           thread: thread,
