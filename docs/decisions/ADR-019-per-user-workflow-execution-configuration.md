@@ -43,7 +43,7 @@ Workflows is the sole global execution editor. Thread settings retain authored
 context and the initial Workflow selection, with no Worker/model/effort/fallback
 writes or scheduling side effects. The current composer's layout is retained as
 a display of Space choices; it submits authored content and Workflow identity,
-not execution overrides. Reset always resolves Automatic without consulting old
+not execution overrides. Global reset resolves Automatic without consulting old
 Thread or composer settings.
 
 The future extension is explicit and not implemented:
@@ -79,3 +79,19 @@ requester uses this shared configuration. Only the Space owner may mutate it;
 Space members may read it. Migration 0020 adds its persistence, without rewriting
 accepted snapshots. Global Workflows and Workspaces are accessed through the
 application menu rather than dedicated sidebar or rail buttons.
+
+Workspace selection is part of the execution scope, stored separately from sparse
+workflow preferences. Both Workflows views expose it. Only selected-Workspace
+Workers and Profile capabilities participate in editing, validation, and runtime
+resolution. A confirmed switch atomically resets all scope preferences. Spaces
+inherit the owner's global Workspace until explicitly forked; global switches
+reset inheriting Spaces but preserve independent scopes. Returning a Space to
+inheritance restores the current global configuration. Every Thread uses this
+shared selection; accepted snapshots are unaffected.
+
+Migration 0022 adds user/Space Workspace settings and converts old Space-wide Work
+denials into per-workflow disabled flags before deleting the retired setting.
+Workspace grants and member rights remain required. Owned Workspace selection
+creates missing grants for inheriting/new owned Spaces, without broadening
+existing grants or reactivating suspended/expired grants. Space Workspaces UI and
+its connection API are removed; Workflows owns selection and enablement.

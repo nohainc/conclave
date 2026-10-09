@@ -46,6 +46,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Workflows'));
     await tester.pumpAndSettle();
+    expect(find.text('Workspaces'), findsNothing);
+    expect(find.text('Using the global Workspace.'), findsOneWidget);
     expect(find.text('First'), findsOneWidget);
     expect(source.spaceReads, 1);
     await tester.tap(find.byKey(const ValueKey('edit-direct')));
@@ -71,11 +73,31 @@ void main() {
     await tester.tap(find.text('Workflows'));
     await tester.pumpAndSettle();
     expect(source.spaceReads, 1);
+
+    await tester.tap(find.byKey(const ValueKey('workflow-workspace')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Second Workspace').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Change Workspace?'), findsOneWidget);
+    await tester.tap(find.text('Change and reset'));
+    await tester.pumpAndSettle();
+    expect(source.selectedSpaceWorkspaces['s'], 'other');
+    expect(source.values.single.defaults.worker, 'a');
+    expect(engine.peek(cache.query).data, isEmpty);
+    expect(find.text('Using the global Workspace.'), findsNothing);
+    await tester.tap(find.text('Use global Workspace'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Change and reset'));
+    await tester.pumpAndSettle();
+    expect(source.selectedSpaceWorkspaces.containsKey('s'), isFalse);
+    expect(find.text('First'), findsOneWidget);
+    expect(find.text('Using the global Workspace.'), findsOneWidget);
+    final spaceReads = source.spaceReads;
     await tester.pumpWidget(page('other', role: 'collaborator'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Workflows'));
     await tester.pumpAndSettle();
-    expect(source.spaceReads, 2);
+    expect(source.spaceReads, spaceReads + 1);
     expect(
         tester
             .widget<TextButton>(find.byKey(const ValueKey('edit-direct')))

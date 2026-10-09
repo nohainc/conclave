@@ -12,6 +12,14 @@ import 'workflow_editor_test.dart' show worker;
 
 class IntegrationSource extends WorkflowSource
     implements AxSpaceWorkflowConfigurationDataSource {
+  @override
+  Future<AxWorkflowWorkspaceSettings> selectWorkflowWorkspace(
+      {String? spaceId, String? workspaceId, bool inherit = false}) async {
+    if (spaceId != null) spaceValues.remove(spaceId);
+    return super.selectWorkflowWorkspace(
+        spaceId: spaceId, workspaceId: workspaceId, inherit: inherit);
+  }
+
   final spaceValues = <String, Map<String, AxUserWorkflowConfiguration>>{};
   int spaceReads = 0;
   @override
@@ -19,7 +27,9 @@ class IntegrationSource extends WorkflowSource
       String spaceId) async {
     spaceReads++;
     return {
-      ...{for (final c in values) c.workflowId: c},
+      if (!selectedSpaceWorkspaces.containsKey(spaceId)) ...{
+        for (final c in values) c.workflowId: c
+      },
       ...?spaceValues[spaceId]
     }.values.toList();
   }
@@ -35,7 +45,9 @@ class IntegrationSource extends WorkflowSource
   Future<AxUserWorkflowConfiguration> resetSpaceWorkflowConfiguration(
       String spaceId, String workflowId) async {
     spaceValues[spaceId]?.remove(workflowId);
-    return values.where((c) => c.workflowId == workflowId).firstOrNull ??
+    return (!selectedSpaceWorkspaces.containsKey(spaceId)
+            ? values.where((c) => c.workflowId == workflowId).firstOrNull
+            : null) ??
         AxUserWorkflowConfiguration(workflowId: workflowId);
   }
 
@@ -65,7 +77,7 @@ class IntegrationSource extends WorkflowSource
           .toList();
 
   @override
-  Future<List<Map<String, dynamic>>> loadSpaceWorkspaces(
+  Future<List<Map<String, dynamic>>> loadSpaceWorkflowWorkspaceGrants(
           {required String spaceId}) async =>
       [
         {'workspaceId': 'ws'}

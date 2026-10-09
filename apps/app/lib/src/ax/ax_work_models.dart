@@ -663,12 +663,6 @@ abstract interface class AxDataSource {
     required String spaceId,
   }) async =>
       throw UnimplementedError('Space collaboration is not available');
-  Future<void> inviteSpaceMember({
-    required String spaceId,
-    required String email,
-    required String role,
-  }) async =>
-      throw UnimplementedError('Space collaboration is not available');
   Future<void> updateSpaceMemberPermissions(
           {required String spaceId,
           required String userId,
@@ -678,8 +672,8 @@ abstract interface class AxDataSource {
           {required String spaceId,
           required String email,
           required String role,
-          required AxSpacePermissions permissions}) =>
-      inviteSpaceMember(spaceId: spaceId, email: email, role: role);
+          required AxSpacePermissions permissions}) async =>
+      throw UnimplementedError('Space collaboration is not available');
   Future<void> changeSpaceMemberRole({
     required String spaceId,
     required String userId,
@@ -721,10 +715,10 @@ abstract interface class AxDataSource {
   Future<List<AxWorkspace>> loadWorkspaces();
   Future<List<AxSpace>> loadSpaces({bool includeArchived = false});
   Future<AxSpace> loadSpace({required String spaceId});
-  Future<List<Map<String, dynamic>>> loadSpaceWorkspaces({
+  Future<List<Map<String, dynamic>>> loadSpaceWorkflowWorkspaceGrants({
     required String spaceId,
   });
-  Future<void> requestSpaceWorkspace({
+  Future<void> createWorkspaceSpaceGrant({
     required String spaceId,
     required String workspaceId,
     List<String> allowedPermissions = const [],

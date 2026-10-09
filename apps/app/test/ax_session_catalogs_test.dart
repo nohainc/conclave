@@ -42,7 +42,7 @@ class CatalogSource extends AxFixtureDataSource {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> loadSpaceWorkspaces(
+  Future<List<Map<String, dynamic>>> loadSpaceWorkflowWorkspaceGrants(
       {required String spaceId}) {
     grantReads++;
     return grantResponse?.future ??

@@ -1,4 +1,3 @@
-import { requireSpaceRight } from "./space-permissions.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
   canTransitionWorkspaceSpaceGrantStatus,
@@ -19,7 +18,6 @@ import {
   json,
   loadWorkspaceSpaceGrant,
   recordAudit,
-  requiredString,
   securityContext,
   workspaceSpaceGrantMetadata,
 } from "./handlers.js";
@@ -61,7 +59,7 @@ export async function handleCreateWorkspaceSpaceGrant(
   return createWorkspaceSpaceGrant(request, env, context, spaceId, workspaceId);
 }
 
-export async function handleListSpaceWorkspaces(
+export async function handleListSpaceWorkflowWorkspaceGrants(
   request: Request,
   env: SecurityEnv,
   spaceId: string,
@@ -92,31 +90,6 @@ export async function handleListSpaceWorkspaces(
       canOpenWorkspace: row.owner_user_id === context.userId,
     })),
   });
-}
-
-export async function handleRequestSpaceWorkspace(
-  request: Request,
-  env: SecurityEnv,
-  spaceId: string,
-  ctx?: ExecutionContext,
-): Promise<Response> {
-  const context = await securityContext(request, env, ctx);
-  await requireSpaceRight(env, context, spaceId, "attachWorkspace");
-  const body = (await request.json().catch(() => ({}))) as Record<
-    string,
-    unknown
-  >;
-  const workspaceId = requiredString(body.workspaceId, "workspaceId");
-  const replayableRequest = new Request(request, {
-    body: JSON.stringify(body),
-  });
-  return createWorkspaceSpaceGrant(
-    replayableRequest,
-    env,
-    context,
-    spaceId,
-    workspaceId,
-  );
 }
 
 export async function handleUpdateWorkspaceSpaceGrant(

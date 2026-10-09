@@ -25,8 +25,9 @@ class AxSpaceWorkspaceGrants {
   AxQuery<AxWorkspaceGrants> query(String id) => AxQuery(
       key: key(id),
       staleTime: const Duration(minutes: 1),
-      load: () async =>
-          _freeze(await source?.loadSpaceWorkspaces(spaceId: id) ?? const []));
+      load: () async => _freeze(
+          await source?.loadSpaceWorkflowWorkspaceGrants(spaceId: id) ??
+              const []));
 
   static dynamic _freezeValue(dynamic value) => value is Map
       ? Map<String, dynamic>.unmodifiable(
@@ -131,7 +132,7 @@ class AxSpaceWorkspaceGrants {
                 'optimistic': true
               },
             ],
-        () => source!.requestSpaceWorkspace(
+        () => source!.createWorkspaceSpaceGrant(
             spaceId: spaceId,
             workspaceId: workspaceId,
             allowedPermissions: permissions));

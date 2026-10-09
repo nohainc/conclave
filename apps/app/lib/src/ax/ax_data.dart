@@ -1,3 +1,5 @@
+import 'ax_people.dart';
+export 'ax_people.dart';
 import 'ax_workflow_configuration.dart';
 export 'ax_workflow_configuration.dart';
 import 'dart:convert';
@@ -146,6 +148,8 @@ class AxApiClient extends _AxApiClientCore
         _ReadModelApi
     implements
         AxWorkflowConfigurationDataSource,
-        AxSpaceWorkflowConfigurationDataSource {
+        AxSpaceWorkflowConfigurationDataSource,
+        AxWorkflowWorkspaceDataSource,
+        AxPeopleDataSource {
   AxApiClient({super.baseUrl, super.client});
 }

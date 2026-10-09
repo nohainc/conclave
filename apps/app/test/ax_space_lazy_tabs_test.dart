@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:conclave_app/src/ax/sync/ax_space_tab_queries.dart';
-import 'package:conclave_app/src/ax/sync/ax_space_workspace_grants.dart';
 import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
 import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'ax_fixture_data.dart';
@@ -22,7 +21,7 @@ class TabSource extends AxFixtureDataSource {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> loadSpaceWorkspaces(
+  Future<List<Map<String, dynamic>>> loadSpaceWorkflowWorkspaceGrants(
       {required String spaceId}) async {
     count('grants');
     return [];
@@ -79,7 +78,6 @@ Widget page(TabSource source, AxSpaceTabQueries queries,
         dataSource: source,
         tabQueries: queries,
         spaceThreads: queries.threads,
-        workspaceGrants: AxSpaceWorkspaceGrants(source, engine: queries.engine),
         onOpenThread: (_) {},
         onEdit: () {},
         onArchive: () {},
@@ -152,13 +150,10 @@ void main() {
     await tester.pumpWidget(page(source, queries));
     await tester.pumpAndSettle();
     expect(source.calls, {'streams': 1});
-    await tester.tap(find.text('Workspaces'));
-    await tester.pumpAndSettle();
-    expect(source.calls, {'streams': 1, 'grants': 1});
+    expect(find.text('Workspaces'), findsNothing);
     await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
-    expect(source.calls,
-        {'streams': 1, 'grants': 1, 'members': 1, 'invitations': 1});
+    expect(source.calls, {'streams': 1, 'members': 1, 'invitations': 1});
     expect(queries.engine.isObserved(queries.members('P').key), isTrue);
     await tester.tap(find.text('Threads'));
     await tester.pumpAndSettle();
@@ -197,7 +192,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(source.calls['members'], 2);
     expect(find.text('Cached member'), findsOneWidget);
-    await tester.tap(find.text('Workspaces'));
+    await tester.tap(find.text('Threads'));
     await tester.pumpAndSettle();
     source.pending!.complete([
       AxSpaceMember.fromJson(
@@ -236,29 +231,6 @@ void main() {
     expect(find.text('Retry Members'), findsNothing);
     expect(source.calls['streams'], 1);
     expect(source.calls['audit'], isNull);
-  });
-
-  testWidgets(
-      'owned Workspace inventory loads only on Connect action and is reused',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1100, 1400));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final source = TabSource();
-    final queries = AxSpaceTabQueries(source);
-    await tester.pumpWidget(page(source, queries));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Workspaces'));
-    await tester.pumpAndSettle();
-    expect(source.calls['owned'], isNull);
-    await tester.tap(find.byTooltip('Connect Workspace'));
-    await tester.pumpAndSettle();
-    expect(source.calls['owned'], 1);
-    await tester.tap(find.byTooltip('Connect Workspace'));
-    await tester.pumpAndSettle();
-    expect(source.calls['owned'], 1);
-    expect(source.calls['members'], isNull);
-    await tester.pump(const Duration(seconds: 10));
-    await tester.pumpAndSettle();
   });
 
   test('member mutation revalidates only its affected query; audit stays lazy',

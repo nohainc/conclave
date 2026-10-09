@@ -12,9 +12,7 @@ export {
   type AuthenticatedIdentity,
 } from "./identity-service.js";
 export {
-  listPendingInvitations,
   provisionConclaveUser,
-  type PendingInvitation,
   type ProvisioningDatabase,
 } from "./provisioning-service.js";
 export {

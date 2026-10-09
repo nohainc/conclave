@@ -44,7 +44,8 @@ void main() {
 
     expect(find.text('Authentication'), findsOneWidget);
     expect(find.text('Threads'), findsOneWidget);
-    expect(find.text('Workspaces'), findsOneWidget);
+    expect(find.text('Workspaces'), findsNothing);
+    expect(find.text('Workflows'), findsOneWidget);
     expect(find.text('Members'), findsOneWidget);
     expect(find.text('Each Thread is one focused area of team work.'),
         findsOneWidget);

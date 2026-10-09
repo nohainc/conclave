@@ -66,6 +66,7 @@ export const COLLABORATION_REALTIME_EVENT_TYPES = [
   "discussion.created",
   "discussion.updated",
   "workspace_space_grant.updated",
+  "people.updated",
 ] as const;
 export const DURABLE_REALTIME_EVENT_TYPES = [
   "work_request.created",
@@ -98,6 +99,7 @@ export const DURABLE_REALTIME_EVENT_TYPES = [
   "discussion.created",
   "discussion.updated",
   "workspace_space_grant.updated",
+  "people.updated",
 ] as const;
 export const EPHEMERAL_REALTIME_EVENT_TYPES = [
   "assignment.progress",

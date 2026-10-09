@@ -931,3 +931,27 @@ refresh through existing lifecycle recovery or explicit Refresh.
 Thread controls project these Space choices without a second draft or an execution
 override. Authored Thread configuration retains instructions and initial Workflow
 selection. Immutable Run/Step configurations remain independent of live preferences.
+
+Workspace selectors share typed `AxWorkflowWorkspaceSettings` queries at
+`['workflow-workspace', 'user' | spaceId]`, with cache-first navigation and the
+same 45-minute preference freshness. Global/Space selectors filter the shared
+Worker inventory by selected Workspace before presenting Profile choices.
+Confirmation cancellation restores the displayed selection. Pending switches
+disable editing; mutation failure retains current preferences.
+
+A confirmed switch updates the Workspace query, then refreshes reset preferences.
+Global selection invalidates registered Space preference/Workspace queries;
+Space selection only updates that scope. Grant queries refresh after authorization
+changes. Existing `space.updated` events revalidate affected Workspace/preference
+queries, including other members' open views; reconnect recovery recognizes the
+same scoped keys. Normal Space/Thread/sidebar navigation does not reload global
+Workspace settings. The Space Workspaces tab and its obsolete connection controls
+are removed, leaving Threads, Members, and Workflows.
+
+## People directory
+
+People is one session-global `['people']` cache shared by the read-only People page and Space invitation picker. Cache-first bootstrap/navigation deduplicate reads; opening a dialog never reloads the directory. Authorized Space membership events and durable `people.updated` user-stream signals revalidate registered People. User and Space reconnect recovery includes this query even without an observer. Session clearing fences late responses. See [People v1](../specifications/PEOPLE_V1.md) for identity, persistence, and API rules.
+
+People list search is local to the hydrated session query. Shared Space names and authorized invitation destinations arrive together in the People response; details and invitation pickers observe the same query without another load. Add to Space refreshes People and registered target invitation/audit queries after success and fences refreshes at session boundaries. Transport reconnect status uses the existing shell banner; failed reads preserve cached details and disable invitation submission until recovery.
+
+The Space picker and reverse People flow use one `SpaceInvitationDialog` and `AxSpaceInvitations` writer. Open dialogs observe People and existing registered Space member/invitation queries without fetching on opening. `pendingInvitationSpaceIds` carries authorized per-Person status by stable identity. Successful invitations refresh People and target invitation/audit caches; partial failures preserve only unsent selections. All write outcomes are fenced at session changes. Cached private search remains local, including the invitation picker.

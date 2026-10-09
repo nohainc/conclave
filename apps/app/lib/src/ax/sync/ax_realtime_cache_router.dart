@@ -55,6 +55,14 @@ class AxRealtimeCacheRouter {
       _recoveries[key] = recovery;
       return recovery;
     }
+    if (type == 'people.updated' || type.startsWith('space.')) {
+      try {
+        await engine.revalidateWhere((key) => key == AxQueryKey(['people']));
+      } catch (_) {
+        // People exposes its own read error; continue updating Space state.
+      }
+      if (type == 'people.updated') return;
+    }
     if (type.startsWith('worker.inventory.')) {
       await engine.revalidateWhere((key) => key == AxQueryKey(['workers']));
       return;
@@ -85,6 +93,8 @@ class AxRealtimeCacheRouter {
       if (type == 'space.deleted') {
         spaceRemoved?.call(affected);
         engine.remove(AxQueryKey(['space', affected]), prefix: true);
+        engine.remove(AxQueryKey(['space-workflow-configurations', affected]));
+        engine.remove(AxQueryKey(['workflow-workspace', affected]));
         await engine.revalidateWhere((key) => key == AxQueryKey(['spaces']));
         return;
       }
@@ -92,6 +102,8 @@ class AxRealtimeCacheRouter {
           (key.parts[0] == 'space' &&
               key.parts.length >= 2 &&
               key.parts[1] == affected) ||
+          key == AxQueryKey(['space-workflow-configurations', affected]) ||
+          key == AxQueryKey(['workflow-workspace', affected]) ||
           key == AxQueryKey(['spaces']) ||
           key == AxQueryKey(['me', 'invitations']));
     } else if (type.startsWith('thread.') || type.startsWith('thread.')) {
@@ -138,7 +150,9 @@ class AxRealtimeCacheRouter {
       engine.refreshStaleWhere((key) =>
           scope.matches(key) &&
           _managed(key) &&
-          (scope.kind != 'user' || _observed(key)) &&
+          (scope.kind != 'user' ||
+              key == AxQueryKey(['people']) ||
+              _observed(key)) &&
           (discussionResynchronize == null || key.parts[0] != 'thread')),
       if (discussionResynchronize != null)
         for (final key in discussions) discussionResynchronize!(key.parts[1]),
@@ -154,7 +168,10 @@ class AxRealtimeCacheRouter {
 
   bool _managed(AxQueryKey key) =>
       key == AxQueryKey(['workers']) ||
+      key == AxQueryKey(['people']) ||
       (key.parts[0] == 'space' && key.parts.length >= 2) ||
+      key.parts[0] == 'space-workflow-configurations' ||
+      key.parts[0] == 'workflow-workspace' ||
       (key.parts.length == 3 &&
           key.parts[0] == 'thread' &&
           key.parts[2] == 'discussion');

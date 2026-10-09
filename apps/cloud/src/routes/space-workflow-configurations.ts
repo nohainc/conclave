@@ -1,9 +1,10 @@
+import { loadWorkflowWorkspace } from "./workflow-workspace.js";
 import type { SecurityEnv } from "./http-security.js";
 import { HttpError } from "./http-security.js";
 
 /** All members execute the same Space configuration, seeded by its owner's globals. */
 export async function loadSpaceWorkflowConfigurations(
-  env: SecurityEnv,
+  env: Pick<SecurityEnv, "CONCLAVE_DB">,
   spaceId: string,
   workflowId?: string,
 ) {
@@ -13,8 +14,13 @@ export async function loadSpaceWorkflowConfigurations(
     .bind(spaceId)
     .first<{ ownerUserId: string }>();
   if (!space) throw new HttpError(404, "Space not found");
+  const workspace = await loadWorkflowWorkspace(
+    env,
+    space.ownerUserId,
+    spaceId,
+  );
   const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT workflow_id, configuration_json FROM user_workflow_configurations WHERE user_id = ?1 AND (?2 IS NULL OR workflow_id = ?2)
+    `SELECT workflow_id, configuration_json FROM user_workflow_configurations WHERE user_id = ?1 AND (?2 IS NULL OR workflow_id = ?2) AND NOT EXISTS (SELECT 1 FROM space_workflow_settings WHERE space_id = ?3)
     UNION ALL SELECT workflow_id, configuration_json FROM space_workflow_configurations WHERE space_id = ?3 AND (?2 IS NULL OR workflow_id = ?2)`,
   )
     .bind(space.ownerUserId, workflowId ?? null, spaceId)
@@ -27,6 +33,7 @@ export async function loadSpaceWorkflowConfigurations(
     ]),
   );
   return {
+    ...workspace,
     ownerUserId: space.ownerUserId,
     configurations: [...configurations.values()],
   };

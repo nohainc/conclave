@@ -9,10 +9,13 @@ import 'package:conclave_app/src/ax/workflow_configuration_options.dart';
 import 'package:conclave_app/src/features/workflows/workflow_editor.dart';
 import 'workflows_page_test.dart' show WorkflowSource, workflow;
 
-AxWorker worker(String id, {bool offline = false, bool metadata = true}) =>
+AxWorker worker(String id,
+        {bool offline = false,
+        bool metadata = true,
+        String workspaceId = 'ws'}) =>
     AxWorker(
       id: id,
-      workspaceId: 'ws',
+      workspaceId: workspaceId,
       workspaceName: 'Laptop',
       workerTypeId: 'custom',
       displayName: id == 'a' ? 'First' : 'Second',

@@ -186,7 +186,13 @@ and Space/Thread state. Workflows is the sole global execution editor. Thread
 configuration retains authored context, and the existing composer displays its Space’s
 choices without submitting an execution override. Each Space inherits its owner’s
 global defaults until that workflow is customized; a Space override applies to
-every Thread and requester. Reset restores inheritance.
+every Thread and requester. Each scope selects one owned Workspace; only its
+Workers can be selected or resolved automatically. A confirmed Workspace switch
+resets the scope's workflows. Explicit Space Workspace selection forks its
+configuration from global defaults; otherwise the Space inherits the owner’s
+Workspace. New Spaces receive its execution grant. The Space Workspaces tab and
+Space-wide allowWork setting are retired in migration 0022. Reset restores
+workflow inheritance within the scope's selected Workspace.
 
 ```text
 Workflow Definition
@@ -221,3 +227,7 @@ Those future overlays can use the existing sparse selection type; neither exists
 in the current runtime. See [ADR-019](docs/decisions/ADR-019-per-user-workflow-execution-configuration.md)
 and [User Workflow Configuration v1](docs/specifications/USER_WORKFLOW_CONFIGURATION_V1.md)
 for persistence, migration, resolution, security, cache, and validation boundaries.
+
+People is a private, automatic directory of established collaborators, separate from Space membership. Cloud persists one user-ID pair after membership establishment and joins current profiles; AX shares one reactive session cache between People and invitations. See [People v1](docs/specifications/PEOPLE_V1.md).
+
+The user owns a private People directory of known collaborators and participates in Spaces through Members, Invitations, and Permissions. First collaboration follows email invitation → acceptance → People relationship; future collaboration follows People selection → Space invitation → acceptance. Both invitation entry points share one permission-aware subsystem, with known recipients persisted by user ID.

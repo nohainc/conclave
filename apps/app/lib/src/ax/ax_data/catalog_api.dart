@@ -56,6 +56,37 @@ mixin _CatalogApi on _AxApiClientCore {
         headers: _headers()));
   }
 
+  Future<List<AxPerson>> loadPeople() async {
+    final response = await _getJson(Uri.parse('$baseUrl/people'));
+    return List.unmodifiable((response['people'] as List).map(
+        (row) => AxPerson.fromJson(Map<String, dynamic>.from(row as Map))));
+  }
+
+  String _workflowWorkspaceUrl(String? spaceId) => spaceId == null
+      ? '$baseUrl/user/workflow-workspace'
+      : '$baseUrl/spaces/${Uri.encodeComponent(spaceId)}/workflow-workspace';
+  Future<AxWorkflowWorkspaceSettings> loadWorkflowWorkspace(
+          {String? spaceId}) async =>
+      AxWorkflowWorkspaceSettings.fromJson(
+          await _getJson(Uri.parse(_workflowWorkspaceUrl(spaceId))));
+  Future<AxWorkflowWorkspaceSettings> selectWorkflowWorkspace(
+      {String? spaceId, String? workspaceId, bool inherit = false}) async {
+    final response = await client.put(Uri.parse(_workflowWorkspaceUrl(spaceId)),
+        headers: _headers(contentType: 'application/json'),
+        body: jsonEncode({
+          'workspaceId': workspaceId,
+          'inherit': inherit,
+          'confirmReset': true
+        }));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException(
+          'Workspace selection failed (${response.statusCode}): ${response.body}',
+          statusCode: response.statusCode);
+    }
+    return AxWorkflowWorkspaceSettings.fromJson(
+        Map<String, dynamic>.from(jsonDecode(response.body) as Map));
+  }
+
   AxUserWorkflowConfiguration _configurationResponse(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AxApiException(
@@ -93,11 +124,11 @@ mixin _CatalogApi on _AxApiClientCore {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> loadSpaceWorkspaces({
+  Future<List<Map<String, dynamic>>> loadSpaceWorkflowWorkspaceGrants({
     required String spaceId,
   }) async {
-    final body =
-        await _getJson(Uri.parse('$baseUrl/spaces/$spaceId/workspaces'));
+    final body = await _getJson(
+        Uri.parse('$baseUrl/spaces/$spaceId/workflow-workspace/grants'));
     return (body['workspaces'] as List? ?? const [])
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
@@ -105,13 +136,13 @@ mixin _CatalogApi on _AxApiClientCore {
   }
 
   @override
-  Future<void> requestSpaceWorkspace({
+  Future<void> createWorkspaceSpaceGrant({
     required String spaceId,
     required String workspaceId,
     List<String> allowedPermissions = const [],
   }) async {
     final response = await client.post(
-      Uri.parse('$baseUrl/spaces/$spaceId/workspaces'),
+      Uri.parse('$baseUrl/workspaces/$workspaceId/spaces/$spaceId/grant'),
       headers: _headers(contentType: 'application/json'),
       body: jsonEncode({
         'workspaceId': workspaceId,

@@ -99,13 +99,15 @@ and reset the member's explicit rights to that preset. Space and member read
 models include effective `permissions`. Ordinary Space responses omit the internal member and invitation permission maps. General Space settings writes cannot
 change the member or invitation permission maps.
 
-`settings.allowWork` defaults to true. Only the Space owner can change it.
-When false, the composer offers only the permitted Chat workflow. Work
-submission, validation and each new assignment dispatch enforce both this
-setting and current member rights, including queued/retried steps. Chat remains
-subject to Chat permission. Existing history, Thread settings and Workspace
-attachments are preserved. Already-running provider calls are not cancelled
-by a rights change.
+Workflow enablement is configured on global/Space Workflows, together with its
+selected Workspace. Only the Space owner may change Space workflow settings.
+Submission and validation enforce the effective workflow enabled flag and the
+requester's member rights. Dispatch continues to check current member rights,
+Workspace grants, and accepted execution snapshots. Chat requires Chat permission.
+Migration 0022 converts existing Space-wide Work denials to per-workflow disabled
+flags and removes `settings.allowWork`; obsolete writes receive 400. History is
+preserved, and accepted runs retain their execution evidence. Already-running
+provider calls are not cancelled by a settings change.
 
 Own Thread management permits creation and management of Threads created by
 that member, while the owner can manage every Thread. It does not grant rights
@@ -133,3 +135,9 @@ invitations. Invitation acceptance cannot rewrite an existing member's rights.
 These are additive API/settings changes; no D1 migration or runtime protocol
 change is needed. Deploy Cloud before the updated AX app. Older clients retain
 role defaults, but their technical controls cannot bypass current member rights.
+
+## People
+
+An accepted Space membership automatically establishes symmetric user-ID relationships with co-members. Pending invitations never grant People visibility. Authenticated `GET /api/people` exposes only established peers and supports no global search or caller-supplied owner. Known-Person invitations require both a caller-owned relationship and Space invitation rights; removal from a Space preserves the relationship but removes that Space authorization. See [People v1](PEOPLE_V1.md).
+
+Known-Person Space invitations persist `invitee_user_id`; recipient inbox access and Accept/Reject compare the authenticated user ID, independent of email changes. Email-addressed invitations remain available for new collaborators and bind identity on acceptance. Invitation selection grants no membership or consent. Both People and Space entry points use the same permission-checked invitation endpoint. Migration 0024 adds a unique pending Space/recipient identity constraint without changing accepted memberships.

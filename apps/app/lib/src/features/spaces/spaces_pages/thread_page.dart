@@ -112,7 +112,7 @@ class _ThreadPageState extends State<ThreadPage>
   List<AxBuiltinWorkflow> get _availableWorkflows => _workflowCatalog
       .where((workflow) => workflow.id == 'chat'
           ? widget.space.effectivePermissions.chat
-          : widget.space.allowWork && widget.space.effectivePermissions.work)
+          : widget.space.effectivePermissions.work)
       .toList();
   String get _effectiveWorkflow =>
       _availableWorkflows.any((item) => item.reference == _workflow)

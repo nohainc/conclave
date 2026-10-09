@@ -278,14 +278,11 @@ extension _AxAppViews on _AxAppStateMixin {
     return SpacePage(
       key: ValueKey('space-page-${space.id}'),
       spaceThreads: store.spaceThreads,
-      workspaceGrants: store.spaceWorkspaceGrants,
       tabQueries: store.spaceTabs,
       mutations: store.collaboration,
       space: space,
       dataSource: widget.dataSource,
       onOpenThread: (threadId) => _openThread(space.id, threadId),
-      onOpenWorkspace: (workspaceId) =>
-          _navigateTo(AxNavigation.workspaces(workspaceId: workspaceId)),
       onEdit: () => _editSpace(space),
       onArchive: () => _archiveSpace(space),
       onDelete: () => _deleteSpace(space.id),

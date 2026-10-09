@@ -27,6 +27,11 @@ export async function resolveWorkflowExecutionBindings(
     spaceId,
     definition.id,
   );
+  if (!space.workspaceId)
+    throw new HttpError(
+      422,
+      "Choose a Workspace in Workflows before sending a request",
+    );
   const configuration = space.configurations[0]
     ? parseUserWorkflowConfiguration(definition, space.configurations[0])
     : undefined;
@@ -36,9 +41,9 @@ export async function resolveWorkflowExecutionBindings(
   const inventory = await env.CONCLAVE_DB.prepare(
     `SELECT i.worker_id AS workerId, i.workspace_id AS workspaceId FROM workspace_worker_inventory i
     JOIN workspace_space_grants g ON g.workspace_id = i.workspace_id
-    WHERE g.space_id = ?1 AND g.status = 'active' ORDER BY i.workspace_id, i.worker_id`,
+    WHERE g.space_id = ?1 AND g.status = 'active' AND i.workspace_id = ?2 ORDER BY i.workspace_id, i.worker_id`,
   )
-    .bind(spaceId)
+    .bind(spaceId, space.workspaceId)
     .all<{ workerId: string; workspaceId: string }>();
   const requested: Record<
     string,

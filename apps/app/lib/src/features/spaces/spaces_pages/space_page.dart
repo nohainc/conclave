@@ -6,13 +6,11 @@ class SpacePage extends StatelessWidget {
     required this.space,
     required this.dataSource,
     required this.onOpenThread,
-    this.onOpenWorkspace,
     this.onEdit,
     required this.onArchive,
     required this.onDelete,
     this.onSpaceUpdated,
     this.spaceThreads,
-    this.workspaceGrants,
     this.tabQueries,
     this.mutations,
   });
@@ -20,17 +18,13 @@ class SpacePage extends StatelessWidget {
   final AxSpace space;
   final AxDataSource dataSource;
   final ValueChanged<String> onOpenThread;
-  final ValueChanged<String>? onOpenWorkspace;
   final VoidCallback? onEdit;
   final VoidCallback onArchive;
   final VoidCallback onDelete;
   final ValueChanged<AxSpace>? onSpaceUpdated;
   final AxSpaceThreads? spaceThreads;
-  final AxSpaceWorkspaceGrants? workspaceGrants;
   final AxSpaceTabQueries? tabQueries;
   final AxCollaborationMutations? mutations;
-
-  // Compatibility getters/factory
 
   @override
   Widget build(BuildContext context) => _SpaceWorkspace(
@@ -38,13 +32,11 @@ class SpacePage extends StatelessWidget {
         space: space,
         dataSource: dataSource,
         onOpenThread: onOpenThread,
-        onOpenWorkspace: onOpenWorkspace,
         onEdit: onEdit,
         onArchive: onArchive,
         onDelete: onDelete,
         onSpaceUpdated: onSpaceUpdated,
         spaceThreads: spaceThreads,
-        workspaceGrants: workspaceGrants,
         tabQueries: tabQueries,
         mutations: mutations,
       );
@@ -56,13 +48,11 @@ class _SpaceWorkspace extends StatefulWidget {
     required this.space,
     required this.dataSource,
     required this.onOpenThread,
-    this.onOpenWorkspace,
     this.onEdit,
     required this.onArchive,
     required this.onDelete,
     this.onSpaceUpdated,
     this.spaceThreads,
-    this.workspaceGrants,
     this.tabQueries,
     this.mutations,
   });
@@ -70,13 +60,11 @@ class _SpaceWorkspace extends StatefulWidget {
   final AxSpace space;
   final AxDataSource dataSource;
   final ValueChanged<String> onOpenThread;
-  final ValueChanged<String>? onOpenWorkspace;
   final VoidCallback? onEdit;
   final VoidCallback onArchive;
   final VoidCallback onDelete;
   final ValueChanged<AxSpace>? onSpaceUpdated;
   final AxSpaceThreads? spaceThreads;
-  final AxSpaceWorkspaceGrants? workspaceGrants;
   final AxSpaceTabQueries? tabQueries;
   final AxCollaborationMutations? mutations;
 
@@ -90,35 +78,26 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   late List<AxThread> threads;
   List<AxSpaceMember> members = const [];
   List<AxSpaceInvitation> invitations = const [];
-  List<AxWorkspace> ownedWorkspaces = const [];
-  List<Map<String, dynamic>> spaceWorkspaces = const [];
   bool threadsLoading = true;
   bool membersLoading = true;
   Object? threadsError;
   Object? membersError;
   late AxSpaceTabQueries _queries;
+  late AxPeople _people;
   late AxWorkflowConfigurations _workflowConfigurations;
   late AxSpaceThreads _streams;
   late AxCollaborationMutations _collaboration;
   final _tabCancels = <void Function()>[];
   int _activeTab = -1;
-  bool executionLoading = true;
-  Object? executionError;
-  late AxSpaceWorkspaceGrants _grants;
   bool get canManage => widget.space.effectivePermissions.manageOwnThreads;
-  bool get canAttachWorkspace =>
-      widget.space.effectivePermissions.attachWorkspace;
   bool get canInvite => widget.space.effectivePermissions.inviteMembers;
-  bool? _allowWorkOverride;
-  bool _savingWorkSetting = false;
   final _savingMembers = <String>{};
-  bool get allowWork => _allowWorkOverride ?? widget.space.allowWork;
   bool get isOwner => widget.space.role == 'owner';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _configureQueries();
     _tabController.addListener(_onTabChanged);
     _onTabChanged();
@@ -130,8 +109,12 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
     _streams = widget.spaceThreads ?? _queries.threads;
     _collaboration = widget.mutations ??
         AxCollaborationMutations(widget.dataSource, engine: _streams.engine);
-    _grants = widget.workspaceGrants ??
-        AxSpaceWorkspaceGrants.forSource(widget.dataSource);
+    _people = AxPeople(widget.dataSource, engine: _streams.engine);
+    if (widget.dataSource is AxPeopleDataSource) {
+      unawaited(_people
+          .ensure()
+          .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    }
     _workflowConfigurations = AxWorkflowConfigurations(widget.dataSource,
         engine: _streams.engine, spaceId: widget.space.id);
     threads = _streams.peek(widget.space.id);
@@ -173,20 +156,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
       }, fireImmediately: false));
       _ensure(_streams.engine, query);
     } else if (_activeTab == 1) {
-      void apply(AxQueryState<AxWorkspaceGrants> state) {
-        spaceWorkspaces = state.data ?? const [];
-        executionError = state.error;
-        executionLoading = !state.hasData && state.isFetching;
-      }
-
-      apply(_grants.peek(id));
-      _tabCancels.add(_grants.watch(id, (state) {
-        if (mounted) _updateState(() => apply(state));
-      }));
-      unawaited(_grants
-          .ensure(id)
-          .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-    } else if (_activeTab == 2) {
       final membersQuery = _queries.members(id);
       final invitationsQuery = _queries.invitations(id);
       void apply() {
@@ -219,11 +188,9 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   @override
   void didUpdateWidget(_SpaceWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.space != widget.space) _allowWorkOverride = null;
     if (oldWidget.space.id != widget.space.id ||
         oldWidget.dataSource != widget.dataSource ||
         oldWidget.spaceThreads != widget.spaceThreads ||
-        oldWidget.workspaceGrants != widget.workspaceGrants ||
         oldWidget.tabQueries != widget.tabQueries ||
         oldWidget.mutations != widget.mutations) {
       _cancelTab();
@@ -390,7 +357,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
                             tabAlignment: TabAlignment.center,
                             tabs: const [
                               Tab(text: 'Threads'),
-                              Tab(text: 'Workspaces'),
                               Tab(text: 'Members'),
                               Tab(text: 'Workflows'),
                             ],
@@ -400,8 +366,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
                         if (_tabController.index == 0)
                           _threadsTab()
                         else if (_tabController.index == 1)
-                          _workspacesTab()
-                        else if (_tabController.index == 2)
                           _membersTab()
                         else
                           WorkflowsPage(

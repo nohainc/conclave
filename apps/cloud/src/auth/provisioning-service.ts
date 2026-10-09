@@ -16,16 +16,6 @@ export interface ProvisioningDatabase {
   batch(statements: readonly ProvisioningStatement[]): Promise<unknown>;
 }
 
-export interface PendingInvitation {
-  readonly id: string;
-  readonly workspaceId: string;
-  readonly spaceId: string | null;
-  readonly email: string;
-  readonly role: "admin" | "member" | "viewer";
-  readonly status: "pending";
-  readonly expiresAt: string;
-}
-
 /**
  * Initialize Conclave application state after Better Auth has authenticated
  * the human. Workspace registration is not created as a side effect of
@@ -47,22 +37,4 @@ export async function provisionConclaveUser(
     )
     .bind(identity.userId, identity.email, identity.name, now)
     .run();
-}
-
-export async function listPendingInvitations(
-  db: ProvisioningDatabase,
-  email: string,
-  now = new Date().toISOString(),
-): Promise<PendingInvitation[]> {
-  const normalized = email.trim().toLowerCase();
-  const rows = await db
-    .prepare(
-      `SELECT id, space_id AS spaceId, email, role, status, expires_at AS expiresAt
-       FROM space_invitations
-       WHERE lower(email) = lower(?1) AND status = 'pending' AND expires_at > ?2
-       ORDER BY created_at DESC`,
-    )
-    .bind(normalized, now)
-    .all<PendingInvitation>();
-  return (rows.results ?? []) as PendingInvitation[];
 }

@@ -1,3 +1,4 @@
+import { publishPeopleProfileChanged } from "../people.js";
 import { betterAuth } from "better-auth";
 import { passkey } from "@better-auth/passkey";
 import {
@@ -20,6 +21,7 @@ export type BetterAuthRuntimeEnv = Pick<Env, "CONCLAVE_DB"> & {
   BETTER_AUTH_TRUSTED_ORIGINS?: string;
   BETTER_AUTH_RP_ID?: string;
   BETTER_AUTH_ORIGIN?: string;
+  CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
   CONCLAVE_EMAIL?: SendEmail;
   CONCLAVE_EMAIL_FROM?: string;
   CONCLAVE_AUTH_GITHUB_CLIENT_ID?: string;
@@ -268,6 +270,13 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
     },
     plugins: [passkey(passkeyOptions)],
     databaseHooks: {
+      user: {
+        update: {
+          after: async (user: { id: string }) => {
+            await publishPeopleProfileChanged(env, user.id);
+          },
+        },
+      },
       session: {
         create: {
           after: async (

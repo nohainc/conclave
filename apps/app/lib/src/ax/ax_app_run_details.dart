@@ -3,6 +3,8 @@ part of 'ax_app.dart';
 extension _AxAppRunDetails on _AxAppStateMixin {
   Widget _runDetailsView(bool compact) {
     switch (navigation.kind) {
+      case AxRouteKind.people:
+        return PeoplePage(people: store.people);
       case AxRouteKind.workflows:
         return WorkflowsPage(
             catalogs: store.catalogs,

@@ -46,16 +46,25 @@ class AxSyncScope {
                   'invitations',
                   'audit'
                 }.contains(p[2])));
+    final workflow = p.length == 2 &&
+        (p[0] == 'space-workflow-configurations' ||
+            (p[0] == 'workflow-workspace' && p[1] != 'user'));
     final discussion =
         p.length == 3 && (p[0] == 'thread') && p[2] == 'discussion';
     final work = p.length == 3 && (p[0] == 'thread') && p[2] == 'work-requests';
     final workspace = p.length >= 2 && p[0] == 'execution_workspace';
     final workers = p.length == 1 && p[0] == 'workers';
     return switch (kind) {
-      'space' => space && p[1] == id,
+      'space' => p[0] == 'people' || ((space || workflow) && p[1] == id),
       'thread' => (discussion || work) && p[1] == id,
       'execution_workspace' => workers || (workspace && p[1] == id),
-      'user' => space || discussion || work || workspace || workers,
+      'user' => p[0] == 'people' ||
+          space ||
+          workflow ||
+          discussion ||
+          work ||
+          workspace ||
+          workers,
       _ => false,
     };
   }

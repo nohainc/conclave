@@ -4,7 +4,6 @@ import {
   copySetCookieHeaders,
   handleBetterAuthRequest,
   IdentityService,
-  listPendingInvitations,
   provisionConclaveUser,
   safeAuthReturnTo,
   type AuthenticatedIdentity,
@@ -328,96 +327,5 @@ describe("IdentityService", () => {
     expect(
       queries.some((query) => query.includes("workspace_memberships")),
     ).toBe(false);
-  });
-
-  it("returns pending invitations without accepting them", async () => {
-    const db = {
-      prepare(query: string) {
-        return {
-          bind() {
-            return this;
-          },
-          async first() {
-            return null;
-          },
-          async all<T>() {
-            expect(query).toContain("status = 'pending'");
-            return {
-              results: [
-                {
-                  id: "inv-1",
-                  workspaceId: "ws-team",
-                  spaceId: null,
-                  email: "person@example.test",
-                  role: "member",
-                  status: "pending",
-                  expiresAt: "2099-01-01T00:00:00.000Z",
-                } as unknown as T,
-              ],
-            };
-          },
-          async run() {
-            return {};
-          },
-        };
-      },
-      async batch() {},
-    };
-
-    await expect(
-      listPendingInvitations(
-        db,
-        "person@example.test",
-        "2026-09-23T00:00:00.000Z",
-      ),
-    ).resolves.toEqual([
-      {
-        id: "inv-1",
-        workspaceId: "ws-team",
-        spaceId: null,
-        email: "person@example.test",
-        role: "member",
-        status: "pending",
-        expiresAt: "2099-01-01T00:00:00.000Z",
-      },
-    ]);
-  });
-
-  it("does not expose a pending invitation to a different email", async () => {
-    let boundEmail: unknown;
-    const db = {
-      prepare(query: string) {
-        return {
-          bind(...values: unknown[]) {
-            boundEmail = values[0];
-            expect(query).toContain("lower(email) = lower(?1)");
-            return this;
-          },
-          async first() {
-            return null;
-          },
-          async all<T>() {
-            return {
-              results:
-                boundEmail === "attacker@example.test"
-                  ? []
-                  : ([{ id: "inv-1" }] as T[]),
-            } as { results: T[] };
-          },
-          async run() {
-            return {};
-          },
-        };
-      },
-      async batch() {},
-    };
-
-    await expect(
-      listPendingInvitations(
-        db,
-        "attacker@example.test",
-        "2026-09-23T00:00:00.000Z",
-      ),
-    ).resolves.toEqual([]);
   });
 });

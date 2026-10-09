@@ -11,6 +11,9 @@ function fixture(
   defaults: object = {},
   stepOverrides: object = {},
   spaceDefaults?: object,
+  workspaceId = (defaults as { worker?: string }).worker === "a"
+    ? "first"
+    : "second",
 ) {
   const inventory = [
     { workerId: "a", workspaceId: "first" },
@@ -27,16 +30,23 @@ function fixture(
     CONCLAVE_DB: {
       prepare(sql: string) {
         return {
-          bind(user: string) {
+          values: [] as unknown[],
+          bind(user: string, ...rest: unknown[]) {
+            this.values = [user, ...rest];
             expect(user).toBe(
               sql.includes("WHERE id = ?1") ||
-                sql.includes("workspace_space_grants")
+                sql.includes("workspace_space_grants") ||
+                sql.startsWith(
+                  "SELECT workspace_id AS workspaceId FROM space_workflow_settings",
+                )
                 ? "space"
                 : "user",
             );
             return this;
           },
           async first() {
+            if (sql.includes("space_workflow_settings")) return null;
+            if (sql.includes("user_workflow_settings")) return { workspaceId };
             return { ownerUserId: "user" };
           },
           async all() {
@@ -52,7 +62,7 @@ function fixture(
                       ),
                     },
                   ]
-                : inventory,
+                : inventory.filter((w) => w.workspaceId === this.values[1]),
             };
           },
         };
@@ -83,7 +93,7 @@ function fixture(
   );
   return { configuration, resolve };
 }
-it("resolves Auto across the whole workflow instead of greedily freezing the first Workspace", async () => {
+it("resolves Auto only within the selected Workspace across the whole workflow", async () => {
   const f = fixture(
     { model: "model", effort: "medium" },
     { verify: { effort: "high" } },
@@ -126,4 +136,13 @@ it("uses shared Space defaults for every requester and Thread rather than each r
   expect(await f.resolve("another-member", "another-thread")).toEqual(owner);
   f.configuration.defaults = { model: "changed-global-model" };
   expect(await f.resolve("another-member", "another-thread")).toEqual(owner);
+});
+
+it("does not fall back to another Workspace for Auto or an explicit Worker", async () => {
+  await expect(
+    fixture({}, {}, undefined, "first").resolve(),
+  ).rejects.toMatchObject({ status: 422 });
+  await expect(
+    fixture({ worker: "b" }, {}, undefined, "first").resolve(),
+  ).rejects.toMatchObject({ status: 422 });
 });

@@ -22,6 +22,8 @@ class WorkflowsPage extends StatefulWidget {
 }
 
 class _WorkflowsPageState extends State<WorkflowsPage> {
+  int _workspacePickerRevision = 0;
+  bool _changingWorkspace = false;
   @override
   void initState() {
     super.initState();
@@ -39,6 +41,9 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
 
   void _ensure() {
     unawaited(widget.configurations
+        .ensureWorkspace()
+        .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    unawaited(widget.configurations
         .ensure()
         .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
     unawaited(widget.catalogs.engine
@@ -53,6 +58,8 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
     try {
       await Future.wait([
         widget.configurations.refresh(),
+        widget.configurations.engine
+            .refresh(widget.configurations.workspaceQuery),
         widget.catalogs.engine.refresh(widget.catalogs.workflows),
         widget.catalogs.refreshWorkers(),
       ]);
@@ -61,6 +68,15 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
 
   @override
   Widget build(BuildContext context) => AxQueryBuilder(
+        engine: widget.configurations.engine,
+        query: widget.configurations.workspaceQuery,
+        ensure: false,
+        builder: (context, workspaceState) =>
+            _buildPage(context, workspaceState),
+      );
+  Widget _buildPage(BuildContext context,
+          AxQueryState<AxWorkflowWorkspaceSettings> workspaceState) =>
+      AxQueryBuilder(
         engine: widget.catalogs.engine,
         query: widget.catalogs.workflows,
         ensure: false,
@@ -81,7 +97,10 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                   workflows[definition.id] = definition;
                 }
               }
-              final workers = inventory.data ?? const <AxWorker>[];
+              final workers = (inventory.data ?? const <AxWorker>[])
+                  .where((worker) =>
+                      worker.workspaceId == workspaceState.data?.workspaceId)
+                  .toList();
               return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -110,6 +129,54 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                                 .colorScheme
                                 .onSurfaceVariant)),
                     const SizedBox(height: 18),
+                    if (workspaceState.hasData) ...[
+                      KeyedSubtree(
+                          key: ValueKey(_workspacePickerRevision),
+                          child: DropdownButtonFormField<String>(
+                              key: const ValueKey('workflow-workspace'),
+                              initialValue:
+                                  workspaceState.data!.workspaceId ?? '',
+                              decoration:
+                                  const InputDecoration(labelText: 'Workspace'),
+                              items: [
+                                const DropdownMenuItem(
+                                    value: '',
+                                    child: Text('Select a Workspace')),
+                                for (final workspace
+                                    in workspaceState.data!.workspaces)
+                                  DropdownMenuItem(
+                                      value: workspace.id,
+                                      child: Text(workspace.name)),
+                                if (workspaceState.data!.workspaceId != null &&
+                                    !workspaceState.data!.workspaces.any((w) =>
+                                        w.id ==
+                                        workspaceState.data!.workspaceId))
+                                  DropdownMenuItem(
+                                      value: workspaceState.data!.workspaceId,
+                                      child:
+                                          const Text('Unavailable Workspace')),
+                              ],
+                              onChanged: widget.canEdit && !_changingWorkspace
+                                  ? (id) => _selectWorkspace(
+                                      id == '' ? null : id,
+                                      workspaceState.data!)
+                                  : null)),
+                      if (workspaceState.data!.inherited)
+                        const Text('Using the global Workspace.'),
+                      if (widget.canEdit &&
+                          widget.configurations.spaceId != null &&
+                          !workspaceState.data!.inherited)
+                        TextButton(
+                            onPressed: _changingWorkspace
+                                ? null
+                                : () => _selectWorkspace(
+                                    null, workspaceState.data!,
+                                    inherit: true),
+                            child: const Text('Use global Workspace')),
+                      const SizedBox(height: 16),
+                    ] else if (workspaceState.error != null)
+                      const Text(
+                          'Workspace settings could not be loaded. Refresh to retry.'),
                     if (definitions.error != null ||
                         preferences.error != null ||
                         inventory.error != null)
@@ -133,7 +200,8 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                         _card(
                             definition,
                             _configuration(preferences.data!, definition.id),
-                            workers),
+                            workers,
+                            workspaceState.data?.workspaceId != null),
                   ]);
             },
           ),
@@ -143,8 +211,11 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
           List<AxUserWorkflowConfiguration> values, String id) =>
       values.firstWhere((value) => value.workflowId == id,
           orElse: () => AxUserWorkflowConfiguration(workflowId: id));
-  Widget _card(AxBuiltinWorkflow definition,
-      AxUserWorkflowConfiguration configuration, List<AxWorker> workers) {
+  Widget _card(
+      AxBuiltinWorkflow definition,
+      AxUserWorkflowConfiguration configuration,
+      List<AxWorker> workers,
+      bool hasWorkspace) {
     final selection = definition.steps.length == 1
         ? configuration.selectionFor(definition.steps.first.kind)
         : configuration.defaults;
@@ -158,8 +229,9 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
         margin: const EdgeInsets.only(bottom: 12),
         child: InkWell(
             key: ValueKey('open-workflow-${definition.id}'),
-            onTap:
-                widget.canEdit ? () => _edit(definition, configuration) : null,
+            onTap: widget.canEdit && hasWorkspace && !_changingWorkspace
+                ? () => _edit(definition, configuration)
+                : null,
             borderRadius: BorderRadius.circular(12),
             child: Padding(
               padding: const EdgeInsets.all(18),
@@ -206,7 +278,9 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                         alignment: Alignment.centerRight,
                         child: TextButton.icon(
                           key: ValueKey('edit-${definition.id}'),
-                          onPressed: widget.canEdit
+                          onPressed: widget.canEdit &&
+                                  hasWorkspace &&
+                                  !_changingWorkspace
                               ? () => _edit(definition, configuration)
                               : null,
                           label: const Text('Edit'),
@@ -217,6 +291,47 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
             )));
   }
 
+  Future<void> _selectWorkspace(
+      String? workspaceId, AxWorkflowWorkspaceSettings current,
+      {bool inherit = false}) async {
+    if (workspaceId == current.workspaceId && inherit == current.inherited) {
+      return;
+    }
+    if (_changingWorkspace) return;
+    setState(() => _changingWorkspace = true);
+    try {
+      final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+                  title: const Text('Change Workspace?'),
+                  content: Text(
+                      '${inherit ? 'All Space workflows will return to the current global settings.' : 'All workflows will reset to enabled with Automatic Worker, model, effort, and inherited steps.'} Existing runs will keep their recorded settings.${widget.configurations.spaceId == null ? ' Spaces using the global Workspace will also reset.' : ' The selected Workspace will be authorized to execute Work in this Space.'}'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Change and reset'))
+                  ]));
+      if (confirmed != true || !mounted) return;
+      await widget.configurations
+          .selectWorkspace(workspaceId, inherit: inherit);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _changingWorkspace = false;
+          _workspacePickerRevision++;
+        });
+      }
+    }
+  }
+
   Future<void> _edit(AxBuiltinWorkflow definition,
       AxUserWorkflowConfiguration configuration) async {
     await showDialog<void>(
@@ -225,6 +340,10 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
               definition: definition,
               configuration: configuration,
               catalogs: widget.catalogs,
+              workspaceId: widget.configurations.engine
+                  .peek(widget.configurations.workspaceQuery)
+                  .data
+                  ?.workspaceId,
               cache: widget.configurations,
             ));
   }

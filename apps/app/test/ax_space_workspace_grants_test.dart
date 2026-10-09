@@ -26,7 +26,8 @@ class GrantSource extends AxFixtureDataSource {
   final writes = <Completer<void>>[];
   bool failReads = false;
   @override
-  Future<AxWorkspaceGrants> loadSpaceWorkspaces({required String spaceId}) {
+  Future<AxWorkspaceGrants> loadSpaceWorkflowWorkspaceGrants(
+      {required String spaceId}) {
     loads.add(spaceId);
     if (failReads) return Future.error(StateError('offline'));
     return reads.isEmpty
@@ -41,7 +42,7 @@ class GrantSource extends AxFixtureDataSource {
   }
 
   @override
-  Future<void> requestSpaceWorkspace(
+  Future<void> createWorkspaceSpaceGrant(
           {required String spaceId,
           required String workspaceId,
           List<String> allowedPermissions = const []}) =>
@@ -99,7 +100,7 @@ class ManySpacesSource extends AxFixtureDataSource {
       (await super.loadBootstrapState())
           .copyWith(spaces: spaces, workspaces: workspaces);
   @override
-  Future<AxWorkspaceGrants> loadSpaceWorkspaces(
+  Future<AxWorkspaceGrants> loadSpaceWorkflowWorkspaceGrants(
       {required String spaceId}) async {
     grantReads++;
     return [];

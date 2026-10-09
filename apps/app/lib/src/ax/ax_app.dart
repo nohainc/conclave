@@ -1,3 +1,4 @@
+import '../features/people/people_page.dart';
 import '../features/workflows/workflows_page.dart';
 import 'dart:async';
 import 'dart:convert';

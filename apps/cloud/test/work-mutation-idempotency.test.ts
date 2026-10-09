@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import type { SecurityEnv } from "../src/routes/handlers.js";
@@ -8,9 +7,19 @@ vi.mock("../src/routes/handlers.js", async (original) => ({
     context: { userId: "owner" },
     spaceId: "P",
   }),
-  validateWorkflowWorkerEligibility: async () => ({
+  validateWorkflowWorkerEligibility: async (
+    env: SecurityEnv,
+    _space: string,
+    _thread: string,
+    _definition: unknown,
+    bindings: Record<string, { workerId: string }>,
+  ) => ({
     issues: [],
-    primaryWorkspaceId: "workspace",
+    primaryWorkspaceId: (await env.CONCLAVE_DB.prepare(
+      "SELECT workspace_id AS workspaceId FROM workspace_worker_inventory WHERE worker_id=?1",
+    )
+      .bind(Object.values(bindings)[0]!.workerId)
+      .first<{ workspaceId: string }>())!.workspaceId,
     workerProfiles: {
       direct: { profileId: "chatgpt-codex", profileReleaseVersion: 1 },
       chat: { profileId: "chatgpt-codex", profileReleaseVersion: 1 },
@@ -24,20 +33,11 @@ vi.mock("../src/event-publisher.js", () => ({
 import { handleCreateWorkRequest } from "../src/routes/work-creation.js";
 function fixture() {
   const { sqlite, db } = sqliteD1();
-  sqlite.exec(
-    readFileSync(
-      new URL(
-        "../migrations-v8/0018_user_workflow_configurations.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-  );
   sqlite.exec(`INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES('owner','owner@test','Owner','now','now');
     INSERT INTO spaces(id,owner_user_id,name,created_at,updated_at) VALUES('P','owner','Space','now','now');
     INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at) VALUES('member','P','owner','owner','now','now');
     INSERT INTO threads(id,space_id,name,status,lead_user_id,created_at,updated_at) VALUES('W','P','Stream','active','owner','now','now');
-    INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('workspace','owner','Workspace','now','now');`);
+    INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('workspace','owner','Workspace','now','now'); INSERT INTO user_workflow_settings VALUES('owner','workspace','now');`);
   sqlite.exec(
     `INSERT INTO thread_work_configs(thread_id,config_json,updated_at) VALUES('W','{"bindings":{"direct":{"workerId":"worker-a"},"chat":{"workerId":"worker-a"}}}','now')`,
   );
@@ -428,7 +428,7 @@ it("disabled user workflow cannot create execution even with a composer selectio
           stepOverrides: {},
         }),
       );
-    await expect(f.submit()).rejects.toMatchObject({ status: 422 });
+    await expect(f.submit()).rejects.toMatchObject({ status: 403 });
     expect(
       f.sqlite.prepare("SELECT count(*) n FROM work_requests").get()!.n,
     ).toBe(0);
@@ -457,6 +457,45 @@ it("rejects obsolete composer overrides even without saved global preferences", 
     expect(
       f.sqlite.prepare("SELECT count(*) n FROM work_requests").get()!.n,
     ).toBe(0);
+  } finally {
+    f.sqlite.close();
+  }
+});
+
+it("Workspace changes use the new Workspace for every Thread request while preserving earlier Run and Step snapshots", async () => {
+  const f = fixture();
+  try {
+    const first = await f.submit("Before switch", "workspace-before-00001");
+    const id = ((await first.json()) as { workRequest: { id: string } })
+      .workRequest.id;
+    const { loadConversationWorkflowRuns } =
+      await import("../src/routes/conversation-workflow-runs.js");
+    const before = (await loadConversationWorkflowRuns(f.db, [id])).get(id);
+    f.sqlite
+      .exec(`INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('new-workspace','owner','New Workspace','now','now');
+      INSERT INTO workspace_worker_inventory(worker_id,workspace_id,owner_user_id,worker_type_id,activation_state,readiness_state,local_concurrency_limit,revision,created_at,updated_at,last_seen_at) VALUES('new-worker','new-workspace','owner','chatgpt','enabled','ready',1,1,'now','now','now');
+      INSERT INTO workspace_space_grants(id,space_id,workspace_id,granted_by_user_id,status,created_at,updated_at) VALUES('new-grant','P','new-workspace','owner','active','now','now');
+      INSERT INTO space_workflow_settings VALUES('P','new-workspace','now');`);
+    const second = await f.submit("After switch", "workspace-after-000001");
+    expect(second.status).toBe(202);
+    const nextId = ((await second.json()) as { workRequest: { id: string } })
+      .workRequest.id;
+    const snapshot = JSON.parse(
+      String(
+        f.sqlite
+          .prepare("SELECT snapshot_json FROM work_requests WHERE id=?")
+          .get(nextId)!.snapshot_json,
+      ),
+    );
+    expect(snapshot.resolvedBindings.direct.workerId).toBe("new-worker");
+    const next = (await loadConversationWorkflowRuns(f.db, [nextId])).get(
+      nextId,
+    )!;
+    expect(next.executionConfigs?.implement?.workerId).toBe("new-worker");
+    expect(next.stepRuns[0]!.executionConfig?.workerId).toBe("new-worker");
+    expect((await loadConversationWorkflowRuns(f.db, [id])).get(id)).toEqual(
+      before,
+    );
   } finally {
     f.sqlite.close();
   }

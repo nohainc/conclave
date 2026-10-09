@@ -65,8 +65,7 @@ export {
   handleGetArtifact,
   handleListWorkspaceSpaceGrants,
   handleCreateWorkspaceSpaceGrant,
-  handleListSpaceWorkspaces,
-  handleRequestSpaceWorkspace,
+  handleListSpaceWorkflowWorkspaceGrants,
   handleUpdateWorkspaceSpaceGrant,
   handleRevokeWorkspaceSpaceGrant,
 } from "./workspaces.js";

@@ -1,7 +1,7 @@
+import { loadSpaceWorkflowConfigurations } from "./space-workflow-configurations.js";
 import {
   SPACE_MEMBER_PERMISSION_KEYS,
   spaceMemberPermissions,
-  spaceWorkAllowed,
   type SpaceMemberPermissions,
   type SecurityContext,
 } from "@conclave/security";
@@ -43,7 +43,6 @@ export async function loadSpacePermissions(
   return {
     role: row.role,
     rights: spaceMemberPermissions(row.role, row.settingsJson, userId),
-    allowWork: spaceWorkAllowed(row.settingsJson),
     settingsJson: row.settingsJson,
   };
 }
@@ -68,7 +67,7 @@ export async function requireWorkflowPermission(
 ) {
   const policy = await loadSpacePermissions(env, userId, spaceId);
   const chat = workflowId === "chat";
-  if (!(chat ? policy.rights.chat : policy.rights.work && policy.allowWork)) {
+  if (!(chat ? policy.rights.chat : policy.rights.work)) {
     throw new HttpError(
       403,
       chat
@@ -76,6 +75,13 @@ export async function requireWorkflowPermission(
         : "Work workflows are disabled or not allowed for this member",
     );
   }
+  const configuration = await loadSpaceWorkflowConfigurations(
+    env,
+    spaceId,
+    workflowId,
+  );
+  if (configuration.configurations[0]?.enabled === false)
+    throw new HttpError(403, "Workflow is disabled in this Space");
   return policy;
 }
 

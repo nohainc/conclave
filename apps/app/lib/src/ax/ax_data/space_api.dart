@@ -221,14 +221,6 @@ mixin _SpaceApi on _AxApiClientCore {
   }
 
   @override
-  Future<void> inviteSpaceMember(
-          {required String spaceId,
-          required String email,
-          required String role}) =>
-      _spaceMutation(Uri.parse('$baseUrl/spaces/$spaceId/invitations'),
-          {'email': email, 'role': role});
-
-  @override
   Future<void> updateSpaceMemberPermissions(
           {required String spaceId,
           required String userId,
@@ -237,6 +229,17 @@ mixin _SpaceApi on _AxApiClientCore {
           Uri.parse('$baseUrl/spaces/$spaceId/members/$userId/permissions'),
           {'permissions': permissions.toJson()},
           method: 'PATCH');
+
+  Future<void> invitePersonToSpace(
+          {required String spaceId,
+          required String userId,
+          required String role,
+          required AxSpacePermissions permissions}) =>
+      _spaceMutation(Uri.parse('$baseUrl/spaces/$spaceId/invitations'), {
+        'userId': userId,
+        'role': role,
+        'permissions': permissions.toJson()
+      });
 
   @override
   Future<void> inviteSpaceMemberWithPermissions(

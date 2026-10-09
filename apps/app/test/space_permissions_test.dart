@@ -21,7 +21,6 @@ const memberThread = AxThread(
 
 class PermissionSource extends AxFixtureDataSource {
   AxSpacePermissions memberRights = AxSpacePermissions.forRole('collaborator');
-  bool? savedAllowWork;
   bool failSave = false;
   @override
   Future<List<AxThread>> loadSpaceThreads({required String spaceId}) async => [
@@ -62,17 +61,6 @@ class PermissionSource extends AxFixtureDataSource {
       required AxSpacePermissions permissions}) async {
     if (failSave) throw Exception('Save failed');
     memberRights = permissions;
-  }
-
-  @override
-  Future<AxSpace> updateSpace(
-      {required String spaceId,
-      String? name,
-      String? description,
-      String? instructions,
-      Map<String, dynamic>? settings}) async {
-    savedAllowWork = settings?['allowWork'] as bool?;
-    return ownerSpace.copyWith(settings: settings);
   }
 
   @override
@@ -134,20 +122,6 @@ void main() {
         isTrue);
     await tester.pump(const Duration(seconds: 5));
   });
-  testWidgets(
-      'Space Work switch persists and replaces technical access controls',
-      (tester) async {
-    final source = PermissionSource();
-    await tester.pumpWidget(page(source));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Workspaces'));
-    await tester.pumpAndSettle();
-    expect(find.byTooltip('Edit Workspace access'), findsNothing);
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
-    expect(source.savedAllowWork, isFalse);
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
-  });
   testWidgets('member actions follow explicit rights, not collaborator role',
       (tester) async {
     final source = PermissionSource();
@@ -163,10 +137,8 @@ void main() {
                 const AxSpacePermissions(chat: true, inviteMembers: true))));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Create Thread'), findsNothing);
-    await tester.tap(find.text('Workspaces'));
-    await tester.pumpAndSettle();
-    expect(find.byTooltip('Connect Workspace'), findsNothing);
-    expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
+    expect(find.text('Workspaces'), findsNothing);
+    expect(find.byType(Switch), findsNothing);
     await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Share Space'), findsOneWidget);
@@ -178,7 +150,7 @@ void main() {
         isNull);
   });
   testWidgets(
-      'disabled Work filters composer choices and replaces a configured Work default with Chat',
+      'member Work permission filters composer choices and replaces Work default with Chat',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1100));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -186,7 +158,13 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: ThreadPage(
-      space: ownerSpace.copyWith(settings: {'allowWork': false}),
+      space: const AxSpace(
+          id: 'S',
+          name: 'Space',
+          branch: '',
+          lastActivity: '',
+          role: 'collaborator',
+          permissions: AxSpacePermissions(chat: true)),
       thread:
           memberThread.copyWith(workConfig: {'defaultWorkflowId': 'direct'}),
       dataSource: source,

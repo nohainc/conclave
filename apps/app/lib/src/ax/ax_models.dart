@@ -494,7 +494,6 @@ class AxSpace {
   AxSpacePermissions get effectivePermissions => role == 'owner'
       ? AxSpacePermissions.forRole(role)
       : permissions ?? AxSpacePermissions.forRole(role);
-  bool get allowWork => settings['allowWork'] != false;
 
   factory AxSpace.fromJson(Map<String, dynamic> json) => AxSpace(
         id: _string(json, 'id'),
@@ -1209,6 +1208,8 @@ class AxSpaceInvitation {
   const AxSpaceInvitation({
     required this.id,
     this.spaceId = '',
+    this.inviteeUserId,
+    this.permissions,
     this.spaceName = '',
     required this.email,
     required this.role,
@@ -1221,6 +1222,8 @@ class AxSpaceInvitation {
   });
 
   final String id;
+  final String? inviteeUserId;
+  final AxSpacePermissions? permissions;
   final String spaceId;
   final String spaceName;
   final String email;
@@ -1242,6 +1245,10 @@ class AxSpaceInvitation {
   factory AxSpaceInvitation.fromJson(Map<String, dynamic> json) =>
       AxSpaceInvitation(
         id: _string(json, 'id'),
+        inviteeUserId: json['inviteeUserId'] as String?,
+        permissions: json['permissions'] is Map
+            ? AxSpacePermissions.fromJson(json['permissions'] as Map)
+            : null,
         spaceId: _string(json, 'spaceId'),
         spaceName: _string(json, 'spaceName'),
         email: _string(json, 'email'),
@@ -1256,6 +1263,8 @@ class AxSpaceInvitation {
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        'inviteeUserId': inviteeUserId,
+        if (permissions != null) 'permissions': permissions!.toJson(),
         'spaceId': spaceId,
         'spaceName': spaceName,
         'email': email,

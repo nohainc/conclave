@@ -35,6 +35,45 @@ void main() {
     expect(aChanges, greaterThan(0));
     expect(bChanges, 0);
   });
+
+  test(
+      'Space configuration changes refresh only registered scope queries and reconnect recovers them',
+      () async {
+    final config = query(['space-workflow-configurations', 'A']);
+    final workspace = query(['workflow-workspace', 'A']);
+    final other = query(['workflow-workspace', 'B']);
+    final global = query(['workflow-workspace', 'user']);
+    for (final q in [config, workspace, other, global]) {
+      await engine.ensure(q);
+    }
+    await router.handle({'type': 'space.updated', 'spaceId': 'A'});
+    expect(engine.peek(config).data, 2);
+    expect(engine.peek(workspace).data, 2);
+    expect(engine.peek(other).data, 1);
+    expect(engine.peek(global).data, 1);
+    await router.handle({
+      'type': 'reconnect.required',
+      'scope': {'kind': 'space', 'spaceId': 'A'}
+    });
+    expect(engine.peek(config).data, 3);
+    expect(engine.peek(workspace).data, 3);
+    expect(engine.peek(other).data, 1);
+  });
+
+  test(
+      'Space deletion clears both workflow query types without clearing global selection',
+      () async {
+    final config = query(['space-workflow-configurations', 'A']);
+    final workspace = query(['workflow-workspace', 'A']);
+    final global = query(['workflow-workspace', 'user']);
+    for (final q in [config, workspace, global]) {
+      await engine.ensure(q);
+    }
+    await router.handle({'type': 'space.deleted', 'spaceId': 'A'});
+    expect(engine.peek(config).hasData, isFalse);
+    expect(engine.peek(workspace).hasData, isFalse);
+    expect(engine.peek(global).data, 1);
+  });
   test('Discussion routing survives a destroyed view and excludes history',
       () async {
     final chat = query(['thread', 'W', 'discussion']);

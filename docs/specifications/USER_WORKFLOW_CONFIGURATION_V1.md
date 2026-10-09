@@ -213,5 +213,52 @@ Migration `0020_space_workflow_configurations.sql` adds a Space-owned table with
 cascading deletion and a composite Space/workflow key. It performs no eager copying
 or historical backfill. Apply it before updated Cloud/AX. Execution resolves from active Space-granted inventory using existing
 Thread permissions and readiness checks; saved explicit Workers still require
-a valid Space grant, and Automatic can use a contributor’s granted Workspace; request authorization still uses the actual requester. All new
+a valid Space grant in the selected Workspace; request authorization still uses the actual requester. All new
 runs snapshot their resolved choices as before. No Thread execution override exists.
+
+## Workspace selection
+
+Global Workflows and the Space Workflows tab select one Workspace before editing
+or executing workflows. Only its Workers and signed Profile capabilities are
+available to the editor, write validation, and runtime Auto resolution. An
+explicit Worker outside that Workspace is rejected. Offline Workers in the
+selected Workspace retain their saved choices; execution still requires readiness.
+With no selection, new execution is unavailable until a Workspace is chosen.
+No Workspace is guessed during migration.
+
+The authenticated APIs are `GET/PUT /api/user/workflow-workspace` and
+`GET/PUT /api/spaces/:spaceId/workflow-workspace`. GET returns
+`{ workspaceId, inherited, workspaces: [{ id, name }] }`. PUT accepts
+`{ workspaceId, confirmReset: true }`; a Space may instead send
+`{ inherit: true, confirmReset: true }`. Unknown fields and foreign/revoked
+Workspaces are rejected. Only a Space owner may change its selection; members
+may read it. Selection choices are the settings owner's Workspaces; members see only the
+selected Workspace metadata.
+
+A Workspace change requires a visible confirmation and an explicit API reset
+confirmation. Settings and preference deletion commit in one D1 batch. All
+workflows become enabled with Automatic Worker/model/effort and inherited steps.
+Global changes also reset overrides in owned Spaces that inherit the Workspace;
+Spaces with an explicit Workspace keep their configurations. A Space selection
+forks the entire scope, suppressing global workflow preferences so explicit
+Space defaults are independent. Resetting a workflow in this scope means
+Automatic; returning to the global Workspace deletes the scope setting and
+restores current global preferences for all workflows.
+
+Selecting an owned Workspace authorizes its execution in the owner's Space,
+including inherited Spaces and newly created Spaces. Existing grant restrictions,
+suspension, expiration, member rights, and admission checks remain authoritative.
+Switching does not revoke historical grants or alter accepted runs. Grant creation
+is audited. Space updates notify other clients through existing collaboration
+events. No new execution or provider protocol is introduced.
+
+Apply `0022_workflow_workspace_selection.sql` with AX and Cloud together. It
+adds separate user/Space Workspace settings with cascading scope deletion and
+nullable Workspace references. It replaces existing `allowWork: false` with
+disabled per-workflow Work configurations while preserving saved selections;
+Chat remains unchanged. It removes `allowWork` from Space settings, and obsolete
+writes receive 400. The Space Workspaces tab and its GET/POST connection API are
+removed. Read-only grant metadata now uses
+`GET /api/spaces/:spaceId/workflow-workspace/grants`; canonical Workspace grant
+management APIs remain for execution authorization. Historical snapshots are
+unchanged; no production migration is performed by implementing this feature.

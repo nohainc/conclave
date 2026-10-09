@@ -1,0 +1,63 @@
+import 'ax_models.dart';
+
+class AxPeopleSpace {
+  const AxPeopleSpace(
+      {required this.id,
+      required this.name,
+      this.permissions = const AxSpacePermissions()});
+  final String id;
+  final String name;
+  final AxSpacePermissions permissions;
+  factory AxPeopleSpace.fromJson(Map<String, dynamic> json) => AxPeopleSpace(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        permissions: json['permissions'] is Map
+            ? AxSpacePermissions.fromJson(json['permissions'] as Map)
+            : const AxSpacePermissions(),
+      );
+}
+
+class AxPerson {
+  const AxPerson(
+      {required this.userId,
+      required this.displayName,
+      required this.email,
+      this.avatarUrl,
+      required this.establishedAt,
+      required this.sharedSpaceCount,
+      this.sharedSpaces = const [],
+      this.invitableSpaces = const [],
+      this.pendingInvitationSpaceIds = const []});
+  final String userId;
+  final String displayName;
+  final String email;
+  final String? avatarUrl;
+  final String establishedAt;
+  final int sharedSpaceCount;
+  final List<AxPeopleSpace> sharedSpaces;
+  final List<AxPeopleSpace> invitableSpaces;
+  final List<String> pendingInvitationSpaceIds;
+  factory AxPerson.fromJson(Map<String, dynamic> json) => AxPerson(
+      userId: json['userId'] as String,
+      displayName: json['displayName'] as String,
+      email: json['email'] as String,
+      avatarUrl: json['avatarUrl'] as String?,
+      establishedAt: json['establishedAt'] as String,
+      sharedSpaceCount: (json['sharedSpaceCount'] as num).toInt(),
+      sharedSpaces: _spaces(json['sharedSpaces']),
+      invitableSpaces: _spaces(json['invitableSpaces']),
+      pendingInvitationSpaceIds: List.unmodifiable(
+          (json['pendingInvitationSpaceIds'] as List? ?? []).cast<String>()));
+  static List<AxPeopleSpace> _spaces(Object? value) =>
+      List.unmodifiable((value as List? ?? []).map((row) =>
+          AxPeopleSpace.fromJson(Map<String, dynamic>.from(row as Map))));
+}
+
+abstract interface class AxPeopleDataSource {
+  Future<List<AxPerson>> loadPeople();
+  Future<void> invitePersonToSpace(
+      {required String spaceId,
+      required String userId,
+      required String role,
+      required AxSpacePermissions permissions});
+}

@@ -99,3 +99,29 @@ describe("collaboration streams", () => {
     },
   );
 });
+
+it("People updates carry only a peer ID in the authenticated user stream", () => {
+  const signal = {
+    eventId: "people-1",
+    type: "people.updated",
+    version: "1.1",
+    timestamp: "2026-09-23T10:00:00.000Z",
+    sequence: 1,
+    stream: { kind: "user", id: "a" },
+    payload: { entityId: "b" },
+  };
+  expect(parseRealtimeEvent(signal)).toEqual(signal);
+  expect(() =>
+    parseRealtimeEvent({
+      ...signal,
+      stream: { kind: "space", id: "A" },
+      spaceId: "A",
+    }),
+  ).toThrow();
+  expect(() =>
+    parseRealtimeEvent({
+      ...signal,
+      payload: { entityId: "b", email: "private@test" },
+    }),
+  ).toThrow();
+});

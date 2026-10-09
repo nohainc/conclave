@@ -915,6 +915,9 @@ extension _AxAppController on _AxAppStateMixin {
       final loaded = await store.loadBootstrapState(
           spaceId: resolvedSpaceId, workspaceId: workspaceId);
       if (!mounted) return;
+      unawaited(store.people
+          .ensure()
+          .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
       unawaited(store.invitations.refresh());
       optimisticRunStatus = null;
       if (showSpinner) {

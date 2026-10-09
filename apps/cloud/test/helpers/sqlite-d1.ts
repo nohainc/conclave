@@ -15,7 +15,7 @@ class Statement {
   }
   async all<T>() {
     const statement = this.db.prepare(this.sql);
-    if (/\bRETURNING\b|^\s*SELECT\b/i.test(this.sql))
+    if (statement.columns().length > 0)
       return {
         success: true,
         results: statement.all(...this.values) as T[],
@@ -52,7 +52,11 @@ export function sqliteD1() {
     "0014_exact_history_context.sql",
     "0015_conversation_workflow_runs.sql",
     "0016_workflow_step_runs.sql",
+    "0018_user_workflow_configurations.sql",
     "0020_space_workflow_configurations.sql",
+    "0022_workflow_workspace_selection.sql",
+    "0023_people_relationships.sql",
+    "0024_space_invitation_identity.sql",
   ]) {
     sqlite.exec(
       readFileSync(

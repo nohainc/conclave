@@ -301,6 +301,11 @@ class AxCollaborationMutations {
         changes.$2.rollback();
       },
       invalidate: (_, __) async {
+        try {
+          await engine.revalidateWhere((key) => key == AxQueryKey(['people']));
+        } catch (_) {
+          // A People read failure must not interrupt successful membership reconciliation.
+        }
         engine.invalidate(inviteQuery.key);
         engine.invalidate(spaceQuery.key);
         if (invite.spaceId.isNotEmpty) {

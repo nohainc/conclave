@@ -6,7 +6,7 @@ authorize execution. The existing Cloud admission checks remain authoritative.
 
 ## Space collection
 
-`GET /api/spaces/:spaceId/workspaces` returns `{ workspaces: [...] }` after
+`GET /api/spaces/:spaceId/workflow-workspace/grants` returns `{ workspaces: [...] }` after
 Space membership authorization. Each row includes the existing grant identity,
 Space/Workspace IDs, display metadata, status, permission/capability policies,
 concurrency, timestamps and expiration. The collection contains active and
@@ -21,9 +21,9 @@ invalidate and revalidate that Space collection. Failed reconciliation preserves
 the confirmed local change and exposes retry rather than reporting the write
 itself as failed. Optimistic create IDs cannot be used for edit/revoke requests.
 
-Mutation URLs and payloads remain unchanged:
+Canonical grant mutation URLs:
 
-- `POST /api/spaces/:spaceId/workspaces` grants a Workspace access.
+- `POST /api/workspaces/:workspaceId/spaces/:spaceId/grant` grants a Workspace access.
 - `PATCH /api/workspace-space-grants/:grantId` updates grant permissions/policy.
 - `DELETE /api/workspace-space-grants/:grantId` revokes a grant.
 
@@ -65,12 +65,16 @@ verification.
 
 ## Space UI member rights (v1)
 
-Space settings expose an owner-only **Allow Work workflows** switch in place
-of the technical grant editor. Turning it off preserves attachments and history;
-only Chat is offered and permitted for members with Chat rights. Each attachment
-row also exposes `canOpenWorkspace` and `canRevoke`, derived from current
-ownership and membership. Members may attach their own Workspace only with the
-explicit `attachWorkspace` right and contribution confirmation. Space owners
-can revoke attachments without acquiring ownership of the Workspace.
-See [Space member rights](AUTHORIZATION_MODEL.md#space-member-rights-v1) for
-submission/dispatch enforcement and deployment ordering.
+Workspace selection and workflow enablement live on the Space Workflows tab.
+Selecting the owner's Workspace authorizes missing execution grants; global
+selection also covers inherited and new owned Spaces. Existing grant policies,
+suspension, expiration, and member rights remain authoritative. Only Workers
+from the selected Workspace may be resolved for new execution. The Space
+Workspaces tab and its connection API are removed in migration 0022.
+
+Canonical grant APIs retain contribution confirmation and `attachWorkspace`
+checks for members contributing their own Workspace. Space owners can revoke
+attachments without acquiring Workspace ownership. Read metadata still exposes
+`canOpenWorkspace` and `canRevoke`, derived from current ownership/membership.
+See [Workflow Workspace selection](USER_WORKFLOW_CONFIGURATION_V1.md#workspace-selection)
+and [Space member rights](AUTHORIZATION_MODEL.md#space-member-rights-v1).

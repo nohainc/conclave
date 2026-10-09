@@ -1,4 +1,8 @@
 import {
+  loadWorkflowWorkspace,
+  prepareWorkflowWorkspaceGrant,
+} from "./workflow-workspace.js";
+import {
   defaultSpaceMemberPermissions,
   spaceMemberPermissions,
   SPACE_MEMBER_PERMISSION_KEYS,
@@ -131,11 +135,11 @@ export async function handleCreateSpace(
   delete settings.defaultExecutionPolicy;
   delete settings.memberPermissions;
   delete settings.invitationPermissions;
-  if (
-    settings.allowWork !== undefined &&
-    typeof settings.allowWork !== "boolean"
-  )
-    throw new HttpError(400, "allowWork must be boolean");
+  if (settings.allowWork !== undefined)
+    throw new HttpError(
+      400,
+      "Configure enabled workflows on the Workflows page",
+    );
   const now = new Date().toISOString();
   const id = `space-${crypto.randomUUID()}`;
 
@@ -150,8 +154,16 @@ export async function handleCreateSpace(
     if (duplicate) {
       throw new HttpError(409, "You already have a Space with this name");
     }
-    // Spaces are independent collaboration resources. Execution is attached
-    // only through an explicit Workspace Space Grant.
+    const workflowWorkspace = await loadWorkflowWorkspace(env, context.userId);
+    const inheritedGrants = workflowWorkspace.workspaceId
+      ? await prepareWorkflowWorkspaceGrant(
+          env,
+          context.userId,
+          id,
+          workflowWorkspace.workspaceId,
+          now,
+        )
+      : [];
     await publishCollaborationEvent(env, "space.created", id, id, {
       mutations: [
         env.CONCLAVE_DB.prepare(
@@ -170,6 +182,7 @@ export async function handleCreateSpace(
          VALUES (?1, ?2, ?3, 'owner', ?4, ?4)
          ON CONFLICT(space_id, user_id) DO NOTHING`,
         ).bind(`pm-${crypto.randomUUID()}`, id, context.userId, now),
+        ...inheritedGrants,
       ],
     });
     return json(
@@ -298,11 +311,11 @@ export async function handleUpdateSpace(
       "Member rights must be changed through the member permission controls",
     );
   }
-  if (
-    incomingSettings.allowWork !== undefined &&
-    typeof incomingSettings.allowWork !== "boolean"
-  )
-    throw new HttpError(400, "allowWork must be boolean");
+  if (incomingSettings.allowWork !== undefined)
+    throw new HttpError(
+      400,
+      "Configure enabled workflows on the Workflows page",
+    );
   const settings = {
     ...spaceSettings(existing.settingsJson),
     ...(typeof body.settings === "object" && body.settings !== null
@@ -501,12 +514,22 @@ export async function handleListSpaceInvitations(
   const policy = await loadSpacePermissions(env, context.userId, spaceId);
   if (!policy.rights.inviteMembers) return json({ invitations: [] });
   const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT id, email, role, status, expires_at AS expiresAt, created_at AS createdAt
+    `SELECT id, email, invitee_user_id AS inviteeUserId, role, status, expires_at AS expiresAt, created_at AS createdAt
      FROM space_invitations WHERE space_id = ?1 AND status = 'pending' AND (?2 = 'owner' OR invited_by_user_id = ?3) ORDER BY created_at DESC`,
   )
     .bind(spaceId, policy.role, context.userId)
     .all();
-  return json({ invitations: rows.results ?? [] });
+  const snapshots = parseSpaceSettings(
+    parseSpaceSettings(policy.settingsJson).invitationPermissions,
+  );
+  return json({
+    invitations: (rows.results ?? []).map((row) => ({
+      ...row,
+      permissions:
+        snapshots[String(row.id)] ??
+        defaultSpaceMemberPermissions(String(row.role)),
+    })),
+  });
 }
 
 export async function handleListSpaceAudit(
@@ -545,7 +568,38 @@ export async function handleCreateSpaceInvitation(
     "inviteMembers",
   );
   const body = (await request.json()) as Record<string, unknown>;
-  const email = requiredString(body.email, "email").trim().toLowerCase();
+  if (
+    Object.keys(body).some(
+      (key) => !["email", "userId", "role", "permissions"].includes(key),
+    ) ||
+    (body.email !== undefined) === (body.userId !== undefined)
+  )
+    throw new HttpError(
+      400,
+      "Provide either an email address or an established Person userId",
+    );
+  let email: string;
+  let inviteeUserId: string | null = null;
+  if (body.userId !== undefined) {
+    const userId = requiredString(body.userId, "userId");
+    if (userId === context.userId)
+      throw new HttpError(400, "You cannot invite yourself");
+    const person = await env.CONCLAVE_DB.prepare(
+      `SELECT u.email FROM people_relationships p JOIN users u ON u.id=?2 AND u.status='active'
+      WHERE p.user_low_id=MIN(?1,?2) AND p.user_high_id=MAX(?1,?2)`,
+    )
+      .bind(context.userId, userId)
+      .first<{ email: string }>();
+    if (!person)
+      throw new HttpError(
+        403,
+        "An established People relationship is required",
+      );
+    inviteeUserId = userId;
+    email = person.email.trim().toLowerCase();
+  } else email = requiredString(body.email, "email").trim().toLowerCase();
+  if (email === context.user.email.trim().toLowerCase())
+    throw new HttpError(400, "You cannot invite yourself");
   const role =
     body.role === "viewer" || body.role === "collaborator" ? body.role : null;
   if (!role || !email.includes("@"))
@@ -573,20 +627,25 @@ export async function handleCreateSpaceInvitation(
   const existingMember = await env.CONCLAVE_DB.prepare(
     `SELECT pm.user_id FROM space_memberships pm
      JOIN users u ON u.id = pm.user_id
-     WHERE pm.space_id = ?1 AND LOWER(u.email) = LOWER(?2)
+     WHERE pm.space_id = ?1 AND (pm.user_id = ?3 OR LOWER(u.email) = LOWER(?2))
      LIMIT 1`,
   )
-    .bind(spaceId, email)
+    .bind(spaceId, email, inviteeUserId)
     .first<{ user_id: string }>();
   if (existingMember) {
     throw new HttpError(409, "This user is already a Space member");
   }
+  await env.CONCLAVE_DB.prepare(
+    "UPDATE space_invitations SET status='expired',updated_at=?3 WHERE space_id=?1 AND (LOWER(email)=?2 OR invitee_user_id=?4) AND status='pending' AND expires_at<=?3",
+  )
+    .bind(spaceId, email, new Date().toISOString(), inviteeUserId)
+    .run();
   const existingInvitation = await env.CONCLAVE_DB.prepare(
     `SELECT id FROM space_invitations
-     WHERE space_id = ?1 AND status = 'pending' AND LOWER(email) = LOWER(?2)
+     WHERE space_id = ?1 AND status = 'pending' AND (LOWER(email) = LOWER(?2) OR invitee_user_id = ?3)
      LIMIT 1`,
   )
-    .bind(spaceId, email)
+    .bind(spaceId, email, inviteeUserId)
     .first<{ id: string }>();
   if (existingInvitation) {
     throw new HttpError(
@@ -597,29 +656,44 @@ export async function handleCreateSpaceInvitation(
   const now = new Date();
   const id = `pinv-${crypto.randomUUID()}`;
   const token = `space_invite_${crypto.randomUUID()}_${crypto.randomUUID()}`;
-  await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
-      `INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?8, ?8)`,
-    ).bind(
-      id,
-      spaceId,
-      email,
-      role,
-      await hashToken(token),
-      context.userId,
-      new Date(now.getTime() + 7 * 86400000).toISOString(),
-      now.toISOString(),
-    ),
-    env.CONCLAVE_DB.prepare(
-      "UPDATE spaces SET settings_json = json_set(settings_json, ?1, json(?2)), updated_at = ?3 WHERE id = ?4",
-    ).bind(
-      permissionJsonPath("invitationPermissions", id),
-      JSON.stringify(permissions),
-      now.toISOString(),
-      spaceId,
-    ),
-  ]);
+  try {
+    await env.CONCLAVE_DB.batch([
+      env.CONCLAVE_DB.prepare(
+        `INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at, invitee_user_id)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?8, ?8, ?9)`,
+      ).bind(
+        id,
+        spaceId,
+        email,
+        role,
+        await hashToken(token),
+        context.userId,
+        new Date(now.getTime() + 7 * 86400000).toISOString(),
+        now.toISOString(),
+        inviteeUserId,
+      ),
+      env.CONCLAVE_DB.prepare(
+        "UPDATE spaces SET settings_json = json_set(settings_json, ?1, json(?2)), updated_at = ?3 WHERE id = ?4",
+      ).bind(
+        permissionJsonPath("invitationPermissions", id),
+        JSON.stringify(permissions),
+        now.toISOString(),
+        spaceId,
+      ),
+    ]);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      /UNIQUE constraint failed.*(idx_space_invitations_pending_email|space_invitations.space_id, space_invitations.invitee_user_id)/i.test(
+        error.message,
+      )
+    )
+      throw new HttpError(
+        409,
+        "A pending invitation already exists for this user",
+      );
+    throw error;
+  }
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO space_audit_log (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
      VALUES (?1, ?2, 'user', ?3, 'space.invitation.created', 'invitation', ?4, ?5, ?6)`,
@@ -633,13 +707,19 @@ export async function handleCreateSpaceInvitation(
       now.toISOString(),
     )
     .run();
-  const recipient = await env.CONCLAVE_DB.prepare(
-    `SELECT id FROM users WHERE LOWER(email) = LOWER(?1) LIMIT 1`,
-  )
-    .bind(email)
-    .first<{ id: string }>();
+  const recipient = inviteeUserId
+    ? { id: inviteeUserId }
+    : await env.CONCLAVE_DB.prepare(
+        `SELECT id FROM users WHERE LOWER(email) = LOWER(?1) LIMIT 1`,
+      )
+        .bind(email)
+        .first<{ id: string }>();
   await publishCollaborationEvent(env, "space.updated", spaceId, id, {
-    additionalRecipientUserIds: recipient ? [recipient.id] : [],
+    additionalRecipientUserIds: inviteeUserId
+      ? [inviteeUserId]
+      : recipient
+        ? [recipient.id]
+        : [],
   });
 
   const spaceRow = await env.CONCLAVE_DB.prepare(
@@ -665,7 +745,17 @@ export async function handleCreateSpaceInvitation(
   }
 
   return json(
-    { invitation: { id, spaceId, email, role, status: "pending" }, token },
+    {
+      invitation: {
+        id,
+        spaceId,
+        email,
+        inviteeUserId,
+        role,
+        status: "pending",
+      },
+      token,
+    },
     { status: 201 },
   );
 }
@@ -815,10 +905,15 @@ export async function handleExpireSpaceInvitation(
     "inviteMembers",
   );
   const existing = await env.CONCLAVE_DB.prepare(
-    `SELECT id, email, invited_by_user_id AS invitedByUserId FROM space_invitations WHERE id = ?1 AND space_id = ?2 AND status = 'pending'`,
+    `SELECT id, email, invitee_user_id AS inviteeUserId, invited_by_user_id AS invitedByUserId FROM space_invitations WHERE id = ?1 AND space_id = ?2 AND status = 'pending'`,
   )
     .bind(invitationId, spaceId)
-    .first<{ id: string; email: string; invitedByUserId: string }>();
+    .first<{
+      id: string;
+      email: string;
+      inviteeUserId: string | null;
+      invitedByUserId: string;
+    }>();
   if (!existing) throw new HttpError(404, "Pending invitation not found");
 
   if (policy.role !== "owner" && existing.invitedByUserId !== context.userId)
@@ -846,13 +941,19 @@ export async function handleExpireSpaceInvitation(
       new Date().toISOString(),
     )
     .run();
-  const recipient = await env.CONCLAVE_DB.prepare(
-    `SELECT id FROM users WHERE LOWER(email) = LOWER(?1) LIMIT 1`,
-  )
-    .bind(existing.email)
-    .first<{ id: string }>();
+  const recipient = existing.inviteeUserId
+    ? { id: existing.inviteeUserId }
+    : await env.CONCLAVE_DB.prepare(
+        `SELECT id FROM users WHERE LOWER(email) = LOWER(?1) LIMIT 1`,
+      )
+        .bind(existing.email)
+        .first<{ id: string }>();
   await publishCollaborationEvent(env, "space.updated", spaceId, invitationId, {
-    additionalRecipientUserIds: recipient ? [recipient.id] : [],
+    additionalRecipientUserIds: existing.inviteeUserId
+      ? [existing.inviteeUserId]
+      : recipient
+        ? [recipient.id]
+        : [],
   });
   return json({ id: invitationId, status: "expired" });
 }
@@ -871,6 +972,7 @@ export async function handleListCurrentUserInvitations(
        pi.space_id AS spaceId,
        p.name AS spaceName,
        pi.email,
+       pi.invitee_user_id AS inviteeUserId,
        pi.role,
        pi.status,
        pi.invited_by_user_id AS invitedByUserId,
@@ -881,10 +983,10 @@ export async function handleListCurrentUserInvitations(
      FROM space_invitations pi
      JOIN spaces p ON p.id = pi.space_id
      JOIN users u ON u.id = pi.invited_by_user_id
-     WHERE LOWER(pi.email) = ?1 AND pi.status = 'pending' AND pi.expires_at > ?2
+     WHERE (pi.invitee_user_id = ?3 OR (pi.invitee_user_id IS NULL AND LOWER(pi.email) = ?1)) AND pi.status = 'pending' AND pi.expires_at > ?2
      ORDER BY pi.created_at DESC`,
   )
-    .bind(email, now)
+    .bind(email, now, context.userId)
     .all();
   return json({ invitations: rows.results ?? [] });
 }
@@ -897,7 +999,7 @@ export async function handleAcceptSpaceInvitation(
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
   const invitation = await env.CONCLAVE_DB.prepare(
-    `SELECT id, space_id AS spaceId, email, role, status, invited_by_user_id AS invitedByUserId, expires_at AS expiresAt
+    `SELECT id, space_id AS spaceId, email, invitee_user_id AS inviteeUserId, role, status, invited_by_user_id AS invitedByUserId, expires_at AS expiresAt
      FROM space_invitations WHERE id = ?1`,
   )
     .bind(invitationId)
@@ -906,6 +1008,7 @@ export async function handleAcceptSpaceInvitation(
       id: string;
       spaceId: string;
       email: string;
+      inviteeUserId: string | null;
       role: "collaborator" | "viewer";
       status: string;
       expiresAt: string;
@@ -915,10 +1018,15 @@ export async function handleAcceptSpaceInvitation(
   if (new Date(invitation.expiresAt).getTime() <= Date.now())
     throw new HttpError(410, "Space invitation expired");
   if (
-    context.user.email.trim().toLowerCase() !==
-    invitation.email.trim().toLowerCase()
+    invitation.inviteeUserId !== null
+      ? invitation.inviteeUserId !== context.userId
+      : context.user.email.trim().toLowerCase() !==
+        invitation.email.trim().toLowerCase()
   )
-    throw new HttpError(403, "Invitation email does not match signed-in user");
+    throw new HttpError(
+      403,
+      "Invitation recipient does not match signed-in user",
+    );
   const inviter = await loadSpacePermissions(
     env,
     invitation.invitedByUserId,
@@ -947,15 +1055,20 @@ export async function handleAcceptSpaceInvitation(
     throw new HttpError(409, "You are already a member of this Space");
   const membershipId = `pm-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
-  await env.CONCLAVE_DB.batch([
+  const acceptance = await env.CONCLAVE_DB.batch([
     env.CONCLAVE_DB.prepare(
-      `INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5) ON CONFLICT(space_id, user_id) DO NOTHING`,
+      `UPDATE space_invitations SET status = 'accepted', invitee_user_id = COALESCE(invitee_user_id, ?1), accepted_by_user_id = ?1, accepted_at = ?2, updated_at = ?2 WHERE id = ?3 AND status = 'pending' AND expires_at > ?2`,
+    ).bind(context.userId, now, invitation.id),
+
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at) SELECT ?1, ?2, ?3, ?4, ?5, ?5 WHERE EXISTS (SELECT 1 FROM space_invitations WHERE id=?6 AND status='accepted' AND accepted_by_user_id=?3 AND accepted_at=?5) ON CONFLICT(space_id, user_id) DO NOTHING`,
     ).bind(
       membershipId,
       invitation.spaceId,
       context.userId,
       invitation.role,
       now,
+      invitation.id,
     ),
     env.CONCLAVE_DB.prepare(
       "UPDATE spaces SET settings_json = json_remove(json_set(settings_json, ?1, json(?2)), ?3), updated_at = ?4 WHERE id = ?5 AND EXISTS (SELECT 1 FROM space_memberships WHERE id = ?6)",
@@ -968,18 +1081,18 @@ export async function handleAcceptSpaceInvitation(
       membershipId,
     ),
     env.CONCLAVE_DB.prepare(
-      `UPDATE space_invitations SET status = 'accepted', accepted_by_user_id = ?1, accepted_at = ?2, updated_at = ?2 WHERE id = ?3 AND status = 'pending'`,
-    ).bind(context.userId, now, invitation.id),
-    env.CONCLAVE_DB.prepare(
-      `INSERT INTO space_audit_log (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, 'space.invitation.accepted', 'invitation', ?4, '{}', ?5)`,
+      `INSERT INTO space_audit_log (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) SELECT ?1, ?2, 'user', ?3, 'space.invitation.accepted', 'invitation', ?4, '{}', ?5 WHERE EXISTS(SELECT 1 FROM space_memberships WHERE id=?6)`,
     ).bind(
       `pa-${crypto.randomUUID()}`,
       invitation.spaceId,
       context.userId,
       invitation.id,
       now,
+      membershipId,
     ),
   ]);
+  if (acceptance[0]?.meta?.changes === 0)
+    throw new HttpError(409, "Invitation changed before acceptance");
   await publishCollaborationEvent(
     env,
     "space.updated",
@@ -1006,7 +1119,7 @@ export async function handleDeclineSpaceInvitation(
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
   const invitation = await env.CONCLAVE_DB.prepare(
-    `SELECT id, space_id AS spaceId, email, role, status, expires_at AS expiresAt
+    `SELECT id, space_id AS spaceId, email, invitee_user_id AS inviteeUserId, role, status, expires_at AS expiresAt
      FROM space_invitations WHERE id = ?1`,
   )
     .bind(invitationId)
@@ -1014,6 +1127,7 @@ export async function handleDeclineSpaceInvitation(
       id: string;
       spaceId: string;
       email: string;
+      inviteeUserId: string | null;
       role: "collaborator" | "viewer";
       status: string;
       expiresAt: string;
@@ -1023,10 +1137,15 @@ export async function handleDeclineSpaceInvitation(
   if (new Date(invitation.expiresAt).getTime() <= Date.now())
     throw new HttpError(410, "Space invitation expired");
   if (
-    context.user.email.trim().toLowerCase() !==
-    invitation.email.trim().toLowerCase()
+    invitation.inviteeUserId !== null
+      ? invitation.inviteeUserId !== context.userId
+      : context.user.email.trim().toLowerCase() !==
+        invitation.email.trim().toLowerCase()
   )
-    throw new HttpError(403, "Invitation email does not match signed-in user");
+    throw new HttpError(
+      403,
+      "Invitation recipient does not match signed-in user",
+    );
   const now = new Date().toISOString();
   await env.CONCLAVE_DB.batch([
     env.CONCLAVE_DB.prepare(

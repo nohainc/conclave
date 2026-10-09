@@ -1,4 +1,4 @@
-import { spaceMemberPermissions, spaceWorkAllowed } from "@conclave/security";
+import { spaceMemberPermissions } from "@conclave/security";
 import {
   EXECUTION_PERMISSIONS,
   isWorkspaceSpaceGrantStatus,
@@ -154,12 +154,7 @@ export async function selectSpaceExecutionTarget(
       return null;
     workflowId = work.workflowId;
   }
-  if (
-    workflowId === "chat"
-      ? !rights.chat
-      : !rights.work || !spaceWorkAllowed(membership.settingsJson)
-  )
-    return null;
+  if (workflowId === "chat" ? !rights.chat : !rights.work) return null;
 
   if (request.threadId) {
     const thread = await db

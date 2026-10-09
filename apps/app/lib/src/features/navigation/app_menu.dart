@@ -117,6 +117,16 @@ class GlobalAppMenu extends StatelessWidget {
       menuChildren: [
         // 1. Application destinations
         MenuItemButton(
+            style: itemStyle(),
+            leadingIcon:
+                Icon(Icons.people_outline, size: 16, color: menuIconColor),
+            onPressed: () {
+              onNavigateTo(const AxNavigation.people());
+              if (compact) Scaffold.maybeOf(context)?.closeDrawer();
+            },
+            child: const Text('People',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500))),
+        MenuItemButton(
           style: itemStyle(),
           leadingIcon:
               Icon(Icons.account_tree_outlined, size: 16, color: menuIconColor),

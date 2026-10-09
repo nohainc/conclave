@@ -11,7 +11,7 @@ import {
   handleCreateThread,
   handleUpdateThread,
   handleValidateWorkRequest,
-  handleRequestSpaceWorkspace,
+  handleCreateWorkspaceSpaceGrant,
   handleRevokeWorkspaceSpaceGrant,
   type SecurityEnv,
 } from "../src/routes/handlers.js";
@@ -158,7 +158,7 @@ describe("Space member permissions contract v1", () => {
       authorizeSpaceMembership(store.db, context("member"), "S", "spaces:read"),
     ).resolves.toBeDefined();
   });
-  it("disables Work Space-wide while preserving history and member rights; settings edits preserve permission overrides", async () => {
+  it("workflow enablement preserves member rights and history, and retired Space-wide settings are rejected", async () => {
     await rights("member", { ...none, chat: true, work: true });
     const publicRead = (await (
       await handleGetSpace(req("member", {}, "GET"), env, "S")
@@ -174,11 +174,26 @@ describe("Space member permissions contract v1", () => {
       "invitationPermissions",
     );
 
-    await handleUpdateSpace(
-      req("owner", { settings: { allowWork: false } }, "PATCH"),
-      env,
-      "S",
-    );
+    await expect(
+      handleUpdateSpace(
+        req("owner", { settings: { allowWork: false } }, "PATCH"),
+        env,
+        "S",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    store.sqlite
+      .prepare(
+        "INSERT INTO space_workflow_configurations VALUES('S','direct',1,?,'now')",
+      )
+      .run(
+        JSON.stringify({
+          schemaVersion: 1,
+          workflowId: "direct",
+          enabled: false,
+          defaults: {},
+          stepOverrides: {},
+        }),
+      );
     await expect(
       requireWorkflowPermission(env, "owner", "S", "direct"),
     ).rejects.toMatchObject({ status: 403 });
@@ -201,10 +216,9 @@ describe("Space member permissions contract v1", () => {
       ).settings_json,
     ) as {
       memberPermissions: { member: { work: boolean } };
-      allowWork: boolean;
     };
     expect(stored.memberPermissions.member.work).toBe(true);
-    expect(stored.allowWork).toBe(false);
+    expect(stored).not.toHaveProperty("allowWork");
     await expect(
       handleUpdateSpace(
         req(
@@ -216,10 +230,15 @@ describe("Space member permissions contract v1", () => {
         "S",
       ),
     ).rejects.toMatchObject({ status: 400 });
-    await handleUpdateSpace(
-      req("owner", { settings: { allowWork: true } }, "PATCH"),
-      env,
-      "S",
+    await expect(
+      handleUpdateSpace(
+        req("owner", { settings: { allowWork: true } }, "PATCH"),
+        env,
+        "S",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    store.sqlite.exec(
+      "DELETE FROM space_workflow_configurations WHERE space_id='S'",
     );
     await expect(
       requireWorkflowPermission(env, "member", "S", "direct"),
@@ -230,17 +249,19 @@ describe("Space member permissions contract v1", () => {
       "INSERT INTO execution_workspaces(id,owner_user_id,name,status,created_at,updated_at) VALUES('W','other','Other workspace','online','now','now')",
     );
     await expect(
-      handleRequestSpaceWorkspace(
+      handleCreateWorkspaceSpaceGrant(
         req("member", { workspaceId: "W", confirmContribution: true }),
         env,
+        "W",
         "S",
       ),
     ).rejects.toMatchObject({ status: 403 });
     await rights("member", { ...none, attachWorkspace: true });
     await expect(
-      handleRequestSpaceWorkspace(
+      handleCreateWorkspaceSpaceGrant(
         req("member", { workspaceId: "W", confirmContribution: true }),
         env,
+        "W",
         "S",
       ),
     ).rejects.toMatchObject({ status: 403 });
@@ -251,13 +272,14 @@ describe("Space member permissions contract v1", () => {
     );
     await rights("member", { ...none, attachWorkspace: true });
     await expect(
-      handleRequestSpaceWorkspace(
+      handleCreateWorkspaceSpaceGrant(
         req("member", { workspaceId: "W" }),
         env,
+        "W",
         "S",
       ),
     ).rejects.toMatchObject({ status: 400 });
-    const response = await handleRequestSpaceWorkspace(
+    const response = await handleCreateWorkspaceSpaceGrant(
       req("member", {
         workspaceId: "W",
         confirmContribution: true,
@@ -268,6 +290,7 @@ describe("Space member permissions contract v1", () => {
         ],
       }),
       env,
+      "W",
       "S",
     );
     expect(response.status).toBe(201);

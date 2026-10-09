@@ -825,7 +825,7 @@ it.each(["turn", "step"])(
   },
 );
 
-it("rechecks granular rights and the Space Work switch at dispatch", async () => {
+it("rechecks granular rights at dispatch and ignores the retired Space-wide switch for accepted work", async () => {
   const request = {
     spaceId: "space-a",
     requesterUserId: "user-a",
@@ -860,7 +860,7 @@ it("rechecks granular rights and the Space Work switch at dispatch", async () =>
       db([candidate()], "owner", null, undefined, { allowWork: false }),
       request,
     ),
-  ).toBeNull();
+  ).not.toBeNull();
   expect(
     await selectSpaceExecutionTarget(
       db([candidate()], "owner", null, undefined, { allowWork: false }),

@@ -61,7 +61,3 @@ export function spaceMemberPermissions(
     inviteMembers: value.inviteMembers === true,
   };
 }
-
-export function spaceWorkAllowed(settings: unknown): boolean {
-  return parseSpaceSettings(settings).allowWork !== false;
-}

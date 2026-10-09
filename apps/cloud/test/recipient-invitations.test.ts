@@ -95,10 +95,13 @@ describe("Recipient Invitations API", () => {
         VALUES ('pinv-1', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-1', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
       `);
 
-      // Expired invitation to ulikoss
+      // An expired pending invitation in another Space (one pending per Space/email).
+      sqlite.exec(
+        `INSERT INTO spaces(id,owner_user_id,name,created_at,updated_at) VALUES('proj-expired','user-vitalii','Expired','now','now')`,
+      );
       sqlite.exec(`
         INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at)
-        VALUES ('pinv-expired', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-exp', 'user-vitalii', 'pending', '${past}', '${past}', '${past}');
+        VALUES ('pinv-expired', 'proj-expired', 'ulikossnokia@gmail.com', 'collaborator', 'hash-exp', 'user-vitalii', 'pending', '${past}', '${past}', '${past}');
       `);
 
       // Invitation to someone else
@@ -221,7 +224,7 @@ describe("Recipient Invitations API", () => {
       );
       await expect(
         handleAcceptSpaceInvitation(req, env as never, "pinv-wrong"),
-      ).rejects.toThrow("Invitation email does not match signed-in user");
+      ).rejects.toThrow("Invitation recipient does not match signed-in user");
     });
 
     it("rejects acceptance of expired invitation", async () => {
@@ -313,7 +316,7 @@ describe("Recipient Invitations API", () => {
       );
       await expect(
         handleDeclineSpaceInvitation(req, env as never, "pinv-dec-wrong"),
-      ).rejects.toThrow("Invitation email does not match signed-in user");
+      ).rejects.toThrow("Invitation recipient does not match signed-in user");
     });
 
     it("publishes realtime events for invitation lifecycle actions", async () => {
@@ -454,7 +457,7 @@ describe("Recipient Invitations API", () => {
       ).rejects.toThrow("A pending invitation already exists for this user");
     });
 
-    it("prevents inviting a user who is already a space member", async () => {
+    it("prevents self invitations", async () => {
       const { env } = createTestEnv();
       const req = new Request(
         "https://conclave.test/api/spaces/proj-1/invitations",
@@ -475,7 +478,7 @@ describe("Recipient Invitations API", () => {
         await import("../src/routes/spaces.js");
       await expect(
         handleCreateSpaceInvitation(req, env as never, "proj-1"),
-      ).rejects.toThrow("This user is already a Space member");
+      ).rejects.toThrow("You cannot invite yourself");
     });
 
     it("handles simultaneous accept and revoke race conditions", async () => {

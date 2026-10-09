@@ -14,6 +14,7 @@ import 'package:conclave_app/src/navigation/ax_browser_navigation.dart';
 import 'package:conclave_app/src/navigation/ax_navigation.dart';
 import 'package:conclave_app/src/platform/platform_services.dart';
 import 'ax_fixture_data.dart';
+import 'workflow_editor_test.dart' show worker, choices;
 import 'ax_fixture_realtime.dart';
 
 AxBuiltinWorkflow workflow(String id, String name,
@@ -31,7 +32,45 @@ AxBuiltinWorkflow workflow(String id, String name,
     );
 
 class WorkflowSource extends AxFixtureDataSource
-    implements AxWorkflowConfigurationDataSource {
+    implements
+        AxWorkflowConfigurationDataSource,
+        AxWorkflowWorkspaceDataSource {
+  String? selectedWorkspace = 'ws';
+  int workspaceReads = 0, workspaceWrites = 0;
+  final selectedSpaceWorkspaces = <String, String?>{};
+  @override
+  Future<AxWorkflowWorkspaceSettings> loadWorkflowWorkspace(
+      {String? spaceId}) async {
+    workspaceReads++;
+    return AxWorkflowWorkspaceSettings(
+        workspaceId: spaceId == null
+            ? selectedWorkspace
+            : selectedSpaceWorkspaces.containsKey(spaceId)
+                ? selectedSpaceWorkspaces[spaceId]
+                : selectedWorkspace,
+        inherited:
+            spaceId != null && !selectedSpaceWorkspaces.containsKey(spaceId),
+        workspaces: const [
+          AxWorkflowWorkspace(id: 'ws', name: 'First Workspace'),
+          AxWorkflowWorkspace(id: 'other', name: 'Second Workspace')
+        ]);
+  }
+
+  @override
+  Future<AxWorkflowWorkspaceSettings> selectWorkflowWorkspace(
+      {String? spaceId, String? workspaceId, bool inherit = false}) async {
+    workspaceWrites++;
+    if (spaceId == null) {
+      selectedWorkspace = workspaceId;
+      values = [];
+    } else if (inherit) {
+      selectedSpaceWorkspaces.remove(spaceId);
+    } else {
+      selectedSpaceWorkspaces[spaceId] = workspaceId;
+    }
+    return loadWorkflowWorkspace(spaceId: spaceId);
+  }
+
   int reads = 0, catalogReads = 0, writes = 0;
   bool fail = false;
   Completer<List<AxUserWorkflowConfiguration>>? pending;
@@ -121,6 +160,67 @@ class MemoryAxBrowserNavigation implements AxBrowserNavigation {
 
 void main() {
   testWidgets(
+      'Workspace switch warns, cancellation preserves preferences, confirmation resets and filters Workers',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final source = WorkflowSource()
+      ..workers = [worker('a'), worker('b', workspaceId: 'other')]
+      ..values = [
+        AxUserWorkflowConfiguration(
+            workflowId: 'chat',
+            enabled: false,
+            defaults: const AxWorkflowSelection(
+                worker: 'a', model: 'analysis', effort: 'high'),
+            stepOverrides: const {'chat': AxWorkflowSelection(effort: 'low')})
+      ];
+    final engine = AxSyncEngine();
+    final cache = AxWorkflowConfigurations(source, engine: engine);
+    Widget page() => MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: WorkflowsPage(
+                    catalogs: AxSessionCatalogs(source, engine: engine),
+                    configurations: cache))));
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('edit-chat')));
+    await tester.pumpAndSettle();
+    expect(choices(tester, 'defaults', 'Worker'), ['', 'a']);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    Future<void> switchWorkspace() async {
+      await tester.tap(find.byKey(const ValueKey('workflow-workspace')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Second Workspace').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Change Workspace?'), findsOneWidget);
+    }
+
+    await switchWorkspace();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(source.workspaceWrites, 0);
+    expect(source.values.single.enabled, isFalse);
+    await switchWorkspace();
+    await tester.tap(find.text('Change and reset'));
+    await tester.pumpAndSettle();
+    expect(source.workspaceWrites, 1);
+    expect(source.selectedWorkspace, 'other');
+    expect(source.values, isEmpty);
+    expect(cache.engine.peek(cache.query).data, isEmpty);
+    await tester.tap(find.byKey(const ValueKey('edit-chat')));
+    await tester.pumpAndSettle();
+    expect(choices(tester, 'defaults', 'Worker'), ['', 'b']);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    final reads = source.workspaceReads;
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+    expect(source.workspaceReads, reads);
+  });
+  testWidgets(
       'edit choices come from owned Profile capabilities and preserve offline selections',
       (tester) async {
     final source = WorkflowSource()
@@ -170,7 +270,9 @@ void main() {
     expect(find.text('Custom Model'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('edit-chat')));
     await tester.pumpAndSettle();
-    final picker = find.byType(DropdownButtonFormField<String>);
+    final picker = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(DropdownButtonFormField<String>));
     final model = tester.widget<DropdownButtonFormField<String>>(picker.at(1));
     final effort = tester.widget<DropdownButtonFormField<String>>(picker.at(2));
     // Inspect the dropdown items through its rendered DropdownButton.

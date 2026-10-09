@@ -1,5 +1,4 @@
 import { expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import { identityService } from "../src/auth/identity-service.js";
 import { handleWorkflowConfigurations } from "../src/routes/workflow-configurations.js";
@@ -25,16 +24,10 @@ it("authenticates actual human sessions and isolates GET/PUT/DELETE ownership", 
     });
   try {
     sqlite.exec(
-      readFileSync(
-        new URL(
-          "../migrations-v8/0018_user_workflow_configurations.sql",
-          import.meta.url,
-        ),
-        "utf8",
-      ),
+      "INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES('one','one@test','One','now','now'),('two','two@test','Two','now','now')",
     );
     sqlite.exec(
-      "INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES('one','one@test','One','now','now'),('two','two@test','Two','now','now')",
+      "INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('ws','one','Workspace','now','now'); INSERT INTO user_workflow_settings VALUES('one','ws','now');",
     );
     const configuration = (enabled: boolean) => ({
       schemaVersion: 1,

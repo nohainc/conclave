@@ -1,3 +1,5 @@
+import { handleListPeople } from "./people.js";
+import { handleWorkflowWorkspace } from "./workflow-workspace.js";
 import { handleWorkflowConfigurations } from "./workflow-configurations.js";
 import { conditionalJson } from "./conditional-read.js";
 import {
@@ -178,6 +180,8 @@ export async function routeWorkerRequest(
         decodeURIComponent(desktopSessionRotateMatch[1]),
       );
     }
+    if (url.pathname === "/api/people")
+      return await handleListPeople(request, env, ctx);
     if (request.method === "GET" && url.pathname === "/api/session") {
       return await handlers.handleSession!(request, env, ctx);
     }
@@ -187,6 +191,16 @@ export async function routeWorkerRequest(
     if (request.method === "GET" && url.pathname === "/api/workspaces") {
       return await handlers.handleListWorkspaces!(request, env, ctx);
     }
+    const workspaceSettingsMatch = url.pathname.match(
+      /^\/api\/(user|spaces\/([^/]+))\/workflow-workspace$/,
+    );
+    if (workspaceSettingsMatch)
+      return await handleWorkflowWorkspace(
+        request,
+        env,
+        workspaceSettingsMatch[2],
+        ctx,
+      );
     const spaceWorkflowMatch = url.pathname.match(
       /^\/api\/spaces\/([^/]+)\/workflow-configurations(?:\/([^/]+))?$/,
     );
@@ -533,22 +547,14 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
-    const spaceWorkspacesMatch = url.pathname.match(
-      /^\/api\/spaces\/([^/]+)\/workspaces$/,
+    const workflowWorkspaceGrantsMatch = url.pathname.match(
+      /^\/api\/spaces\/([^/]+)\/workflow-workspace\/grants$/,
     );
-    if (request.method === "GET" && spaceWorkspacesMatch?.[1]) {
-      return await handlers.handleListSpaceWorkspaces!(
+    if (request.method === "GET" && workflowWorkspaceGrantsMatch?.[1]) {
+      return await handlers.handleListSpaceWorkflowWorkspaceGrants!(
         request,
         env,
-        spaceWorkspacesMatch[1],
-        ctx,
-      );
-    }
-    if (request.method === "POST" && spaceWorkspacesMatch?.[1]) {
-      return await handlers.handleRequestSpaceWorkspace!(
-        request,
-        env,
-        spaceWorkspacesMatch[1],
+        workflowWorkspaceGrantsMatch[1],
         ctx,
       );
     }

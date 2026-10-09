@@ -4,7 +4,15 @@ import 'package:conclave_app/src/ax/ax_models.dart';
 import 'ax_fixture_snapshot.dart';
 
 /// Test-only fixture source. Production Ax always uses AxApiClient.
-class AxFixtureDataSource implements AxDataSource {
+class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
+  @override
+  Future<List<AxPerson>> loadPeople() async => const [];
+  @override
+  Future<void> invitePersonToSpace(
+      {required String spaceId,
+      required String userId,
+      required String role,
+      required AxSpacePermissions permissions}) async {}
   const AxFixtureDataSource({this.authenticated = true});
 
   final bool authenticated;
@@ -226,13 +234,6 @@ class AxFixtureDataSource implements AxDataSource {
       const [];
 
   @override
-  Future<void> inviteSpaceMember({
-    required String spaceId,
-    required String email,
-    required String role,
-  }) async {}
-
-  @override
   Future<void> changeSpaceMemberRole({
     required String spaceId,
     required String userId,
@@ -334,13 +335,13 @@ class AxFixtureDataSource implements AxDataSource {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> loadSpaceWorkspaces({
+  Future<List<Map<String, dynamic>>> loadSpaceWorkflowWorkspaceGrants({
     required String spaceId,
   }) async =>
       const [];
 
   @override
-  Future<void> requestSpaceWorkspace({
+  Future<void> createWorkspaceSpaceGrant({
     required String spaceId,
     required String workspaceId,
     List<String> allowedPermissions = const [],

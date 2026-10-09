@@ -1,3 +1,4 @@
+import { loadWorkflowWorkspace } from "./workflow-workspace.js";
 import { loadSpaceWorkflowConfigurations } from "./space-workflow-configurations.js";
 import {
   BUILTIN_WORKFLOW_CATALOG,
@@ -128,6 +129,13 @@ export async function handleWorkflowConfigurations(
       throw new HttpError(400, error.message);
     throw error;
   }
+  const selectedWorkspace = await loadWorkflowWorkspace(
+    env,
+    context.userId,
+    spaceId,
+  );
+  if (!selectedWorkspace.workspaceId)
+    throw new HttpError(400, "Choose a Workspace before configuring workflows");
   const inventoryResponse = await handleListWorkspaceWorkerInventory(
     new Request(new URL("/api/workers/inventory", request.url), {
       headers: request.headers,
@@ -136,8 +144,16 @@ export async function handleWorkflowConfigurations(
     ctx,
   );
   const inventory = (await inventoryResponse.json()) as {
-    workers: { id: string; executionOptions: WorkerExecutionOptions | null }[];
+    workers: {
+      id: string;
+      workspaceId: string;
+      executionOptions: WorkerExecutionOptions | null;
+    }[];
   };
+  const allWorkers = inventory.workers;
+  inventory.workers = inventory.workers.filter(
+    (worker) => worker.workspaceId === selectedWorkspace.workspaceId,
+  );
   const previous = await db
     .prepare(
       `SELECT configuration_json FROM ${table} WHERE ${key} = ?1 AND workflow_id = ?2`,
@@ -181,6 +197,14 @@ export async function handleWorkflowConfigurations(
         "No owned Worker supports the selected model/effort",
       );
     }
+    if (
+      allWorkers.some(
+        (worker) =>
+          worker.id === selection.worker &&
+          worker.workspaceId !== selectedWorkspace.workspaceId,
+      )
+    )
+      throw new HttpError(400, "Worker is outside the selected Workspace");
     const worker = inventory.workers.find(
       (worker) => worker.id === selection.worker,
     );

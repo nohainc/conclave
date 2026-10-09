@@ -13,7 +13,9 @@ class WorkflowEditor extends StatefulWidget {
       required this.definition,
       required this.configuration,
       required this.catalogs,
-      required this.cache});
+      required this.cache,
+      this.workspaceId});
+  final String? workspaceId;
   final AxBuiltinWorkflow definition;
   final AxUserWorkflowConfiguration configuration;
   final AxSessionCatalogs catalogs;
@@ -60,7 +62,13 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
   Future<void> _save({bool reset = false}) async {
     final workers = widget.catalogs.engine.peek(widget.catalogs.workers).data ??
         const <AxWorker>[];
-    if (!reset && _issues(AxWorkflowSelectionOptions(workers)).isNotEmpty) {
+    if (!reset &&
+        _issues(AxWorkflowSelectionOptions(workers
+                .where((worker) =>
+                    widget.workspaceId == null ||
+                    worker.workspaceId == widget.workspaceId)
+                .toList()))
+            .isNotEmpty) {
       return;
     }
     setState(() {
@@ -95,8 +103,12 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
           query: widget.catalogs.workers,
           ensure: false,
           builder: (context, state) {
-            final options =
-                AxWorkflowSelectionOptions(state.data ?? const <AxWorker>[]);
+            final options = AxWorkflowSelectionOptions(
+                (state.data ?? const <AxWorker>[])
+                    .where((worker) =>
+                        widget.workspaceId == null ||
+                        worker.workspaceId == widget.workspaceId)
+                    .toList());
             final issues = _issues(options);
             return AlertDialog(
               title: Text(widget.definition.name),
@@ -157,7 +169,12 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
                 TextButton(
                     key: const ValueKey('reset-workflow'),
                     onPressed: busy ? null : () => _save(reset: true),
-                    child: Text(widget.cache.spaceId == null
+                    child: Text(widget.cache.spaceId == null ||
+                            widget.cache.engine
+                                    .peek(widget.cache.workspaceQuery)
+                                    .data
+                                    ?.inherited ==
+                                false
                         ? 'Reset'
                         : 'Use global defaults')),
                 TextButton(

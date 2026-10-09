@@ -114,8 +114,8 @@ export const routeHandlers = {
   handleListToolProfileReleaseAudit: handlers.handleListToolProfileReleaseAudit,
   handleListWorkspaceSpaceGrants: handlers.handleListWorkspaceSpaceGrants,
   handleCreateWorkspaceSpaceGrant: handlers.handleCreateWorkspaceSpaceGrant,
-  handleListSpaceWorkspaces: handlers.handleListSpaceWorkspaces,
-  handleRequestSpaceWorkspace: handlers.handleRequestSpaceWorkspace,
+  handleListSpaceWorkflowWorkspaceGrants:
+    handlers.handleListSpaceWorkflowWorkspaceGrants,
   handleUpdateWorkspaceSpaceGrant: handlers.handleUpdateWorkspaceSpaceGrant,
   handleRevokeWorkspaceSpaceGrant: handlers.handleRevokeWorkspaceSpaceGrant,
   handleGetLatestWorkspaceRelease: handlers.handleGetLatestWorkspaceRelease,

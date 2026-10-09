@@ -1189,20 +1189,14 @@ void main() {
 
     // Verify 3 Tabs
     expect(find.text('Threads'), findsOneWidget);
-    expect(find.text('Workspaces'), findsOneWidget);
+    expect(find.text('Workspaces'), findsNothing);
+    expect(find.text('Workflows'), findsOneWidget);
     expect(find.text('Members'), findsOneWidget);
 
     // Verify Threads Tab contents
     expect(find.text('Each Thread is one focused area of team work.'),
         findsOneWidget);
     expect(find.byTooltip('Create Thread'), findsOneWidget);
-
-    // Switch to Workspaces Tab
-    await tester.tap(find.text('Workspaces'));
-    await tester.pumpAndSettle();
-    expect(find.text('Workspaces provide execution capacity for your space.'),
-        findsOneWidget);
-    expect(find.byTooltip('Connect Workspace'), findsOneWidget);
 
     // Switch to Members Tab
     await tester.tap(find.text('Members'));
@@ -1872,53 +1866,6 @@ void main() {
   });
 
   testWidgets(
-      'Workspaces tab renders workspace items and invokes onOpenWorkspace',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 1200));
-    String? openedWorkspaceId;
-
-    final customDataSource = _WorkspaceTestDataSource();
-
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: SingleChildScrollView(
-          child: SpacePage(
-            space: const AxSpace(
-              id: 'p-1',
-              name: 'Test Space',
-              branch: 'main',
-              lastActivity: 'today',
-            ),
-            dataSource: customDataSource,
-            onOpenThread: (_) {},
-            onOpenWorkspace: (id) => openedWorkspaceId = id,
-            onEdit: () {},
-            onArchive: () {},
-            onDelete: () {},
-          ),
-        ),
-      ),
-    ));
-    await tester.pumpAndSettle();
-
-    // Switch to Workspaces Tab
-    await tester.tap(find.text('Workspaces'));
-    await tester.pumpAndSettle();
-
-    // Check workspace title displayed cleanly without icons or status chips
-    expect(find.text('Production Workspace'), findsOneWidget);
-    expect(find.byIcon(Icons.computer_outlined), findsNothing);
-
-    // Tap on workspace
-    await tester.tap(find.text('Production Workspace'));
-    await tester.pumpAndSettle();
-
-    expect(openedWorkspaceId, 'ws-prod');
-
-    await tester.binding.setSurfaceSize(null);
-  });
-
-  testWidgets(
       'Space instructions can be edited and saved via 3-dots Edit dialog',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
@@ -2076,65 +2023,6 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets(
-      'Connecting duplicate workspace shows warning and stays on dialog',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 1200));
-    var requestedCount = 0;
-
-    final customDataSource = _DuplicateTestDataSource(
-      onRequestWorkspace: () => requestedCount++,
-    );
-
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: SingleChildScrollView(
-          child: SpacePage(
-            space: const AxSpace(
-              id: 'p-1',
-              name: 'Test Space',
-              branch: 'main',
-              lastActivity: 'today',
-            ),
-            dataSource: customDataSource,
-            onOpenThread: (_) {},
-            onEdit: () {},
-            onArchive: () {},
-            onDelete: () {},
-          ),
-        ),
-      ),
-    ));
-    await tester.pumpAndSettle();
-
-    // Switch to Workspaces Tab
-    await tester.tap(find.text('Workspaces'));
-    await tester.pumpAndSettle();
-
-    // Tap Connect Workspace button
-    await tester.tap(find.byTooltip('Connect Workspace'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Connect Workspace'), findsOneWidget); // Dialog title
-
-    // Attempt to connect already connected workspace
-    await tester
-        .tap(find.widgetWithText(FilledButton, 'Authorize and connect'));
-    await tester.pumpAndSettle();
-
-    // Verify warning is displayed and dialog is still visible
-    expect(find.text('This Workspace is already connected to this Space.'),
-        findsOneWidget);
-    expect(find.text('Connect Workspace'), findsOneWidget);
-    expect(requestedCount, 0);
-
-    // Cancel dialog
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-
-    await tester.binding.setSurfaceSize(null);
-  });
-
   testWidgets('Inviting duplicate member shows warning and stays on dialog',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
@@ -2173,17 +2061,18 @@ void main() {
     await tester.tap(find.byTooltip('Share Space'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Share Space'), findsOneWidget); // Dialog title
+    expect(find.text('Invite people'), findsOneWidget); // Dialog title
 
     // Enter existing member email
-    await tester.enterText(find.byType(TextField).first, 'alice@example.com');
+    await tester.enterText(
+        find.byKey(const ValueKey('invite-new-email')), 'alice@example.com');
     await tester.tap(find.widgetWithText(FilledButton, 'Send invitation'));
     await tester.pumpAndSettle();
 
     // Verify warning is displayed and dialog is still visible
     expect(find.text('This user is already a member of the Space.'),
         findsOneWidget);
-    expect(find.text('Share Space'), findsOneWidget);
+    expect(find.text('Invite people'), findsOneWidget);
     expect(inviteCount, 0);
 
     // Cancel dialog
@@ -2402,33 +2291,9 @@ void main() {
   });
 }
 
-class _WorkspaceTestDataSource extends AxFixtureDataSource {
-  List<String>? savedPermissions;
-  @override
-  Future<void> updateWorkspaceSpacePermissions({
-    required String grantId,
-    required List<String> allowedPermissions,
-  }) async {
-    savedPermissions = allowedPermissions;
-  }
-
-  @override
-  Future<List<Map<String, dynamic>>> loadSpaceWorkspaces({
-    required String spaceId,
-  }) async =>
-      [
-        {
-          'id': 'grant-1',
-          'workspaceId': 'ws-prod',
-          'workspaceName': 'Production Workspace',
-        }
-      ];
-}
-
 class _DuplicateTestDataSource extends AxFixtureDataSource {
   _DuplicateTestDataSource({
     this.onCreateThread,
-    this.onRequestWorkspace,
     this.onInviteMember,
   });
 
@@ -2443,7 +2308,6 @@ class _DuplicateTestDataSource extends AxFixtureDataSource {
       ];
 
   final VoidCallback? onCreateThread;
-  final VoidCallback? onRequestWorkspace;
   final VoidCallback? onInviteMember;
 
   @override
@@ -2458,7 +2322,7 @@ class _DuplicateTestDataSource extends AxFixtureDataSource {
       ];
 
   @override
-  Future<List<Map<String, dynamic>>> loadSpaceWorkspaces({
+  Future<List<Map<String, dynamic>>> loadSpaceWorkflowWorkspaceGrants({
     required String spaceId,
   }) async =>
       [
@@ -2506,19 +2370,11 @@ class _DuplicateTestDataSource extends AxFixtureDataSource {
   }
 
   @override
-  Future<void> requestSpaceWorkspace({
-    required String spaceId,
-    required String workspaceId,
-    List<String> allowedPermissions = const [],
-  }) async {
-    onRequestWorkspace?.call();
-  }
-
-  @override
-  Future<void> inviteSpaceMember({
+  Future<void> inviteSpaceMemberWithPermissions({
     required String spaceId,
     required String email,
     required String role,
+    required AxSpacePermissions permissions,
   }) async {
     onInviteMember?.call();
   }
@@ -2633,7 +2489,7 @@ class _GenericWorkerConfigDataSource extends _WorkFormDataSource {
       ];
 
   @override
-  Future<List<Map<String, dynamic>>> loadSpaceWorkspaces({
+  Future<List<Map<String, dynamic>>> loadSpaceWorkflowWorkspaceGrants({
     required String spaceId,
   }) async =>
       [
@@ -2968,10 +2824,11 @@ class _MembersTabTestDataSource extends AxFixtureDataSource {
   }
 
   @override
-  Future<AxSpaceInvitation> inviteSpaceMember({
+  Future<AxSpaceInvitation> inviteSpaceMemberWithPermissions({
     required String spaceId,
     required String email,
     required String role,
+    required AxSpacePermissions permissions,
   }) async {
     resendCount++;
     return AxSpaceInvitation(

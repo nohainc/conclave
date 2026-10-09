@@ -1,5 +1,4 @@
 import { expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import { handleWorkflowConfigurations } from "../src/routes/workflow-configurations.js";
 import type { SecurityEnv } from "../src/routes/http-security.js";
@@ -12,8 +11,9 @@ vi.mock("../src/routes/http-security.js", async (original) => ({
   },
 }));
 const inventory = vi.hoisted(() => ({
-  workers: [{ id: "offline", executionOptions: null }] as {
+  workers: [{ id: "offline", workspaceId: "ws", executionOptions: null }] as {
     id: string;
+    workspaceId: string;
     executionOptions: import("@conclave/core").WorkerExecutionOptions | null;
   }[],
 }));
@@ -24,16 +24,10 @@ it("persists only user overrides, isolates users, retains offline choices, reset
   const { sqlite, db } = sqliteD1();
   try {
     sqlite.exec(
-      readFileSync(
-        new URL(
-          "../migrations-v8/0018_user_workflow_configurations.sql",
-          import.meta.url,
-        ),
-        "utf8",
-      ),
+      "INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES ('U','u@test','U','now','now'),('V','v@test','V','now','now')",
     );
     sqlite.exec(
-      "INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES ('U','u@test','U','now','now'),('V','v@test','V','now','now')",
+      "INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('ws','U','Workspace','now','now'); INSERT INTO user_workflow_settings VALUES('U','ws','now');",
     );
     const env = { CONCLAVE_DB: db } as SecurityEnv;
     const configuration = {
@@ -128,7 +122,23 @@ it("persists only user overrides, isolates users, retains offline choices, reset
         .get()!.n,
     ).toBe(0);
     inventory.workers.push({
+      id: "elsewhere",
+      workspaceId: "other",
+      executionOptions: null,
+    });
+    await expect(
+      handleWorkflowConfigurations(
+        request("PUT", "U", {
+          ...configuration,
+          defaults: { worker: "elsewhere" },
+        }),
+        env,
+        "chat",
+      ),
+    ).rejects.toThrow("outside the selected Workspace");
+    inventory.workers.push({
       id: "capable",
+      workspaceId: "ws",
       executionOptions: {
         schemaVersion: 1,
         models: {
@@ -149,6 +159,40 @@ it("persists only user overrides, isolates users, retains offline choices, reset
         effort: { supported: false, values: [], defaultValue: null },
       },
     });
+    inventory.workers.push({
+      ...inventory.workers.find((w) => w.id === "capable")!,
+      id: "elsewhere-capable",
+      workspaceId: "other",
+      executionOptions: {
+        ...inventory.workers.find((w) => w.id === "capable")!.executionOptions!,
+        models: {
+          ...inventory.workers.find((w) => w.id === "capable")!
+            .executionOptions!.models,
+          allowedModelIds: ["elsewhere-model"],
+          options: [
+            {
+              id: "elsewhere-model",
+              name: "Elsewhere model",
+              effort: {
+                supported: true,
+                values: ["elsewhere-effort"],
+                defaultValue: null,
+              },
+            },
+          ],
+        },
+      },
+    });
+    await expect(
+      handleWorkflowConfigurations(
+        request("PUT", "U", {
+          ...configuration,
+          defaults: { model: "elsewhere-model", effort: "elsewhere-effort" },
+        }),
+        env,
+        "chat",
+      ),
+    ).rejects.toThrow("No owned Worker supports");
     const choices = {
       ...configuration,
       defaults: { worker: "capable", model: "m", effort: "low" },

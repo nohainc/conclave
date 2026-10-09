@@ -76,7 +76,9 @@ describe("Space lifecycle integrity", () => {
     expect(all).toContain("LOWER(TRIM(name)) = LOWER(TRIM(?2))");
     expect(all).toContain("id <> ?2");
     expect(all).toContain("status IN ('active', 'suspended')");
-    expect(all).toContain("status = 'pending' AND LOWER(email) = LOWER(?2)");
+    expect(all).toContain(
+      "status = 'pending' AND (LOWER(email) = LOWER(?2) OR invitee_user_id = ?3)",
+    );
     expect(all).toContain("You already have a Space with this name");
     expect(all).toContain("This Space already has a Thread with this name");
   });

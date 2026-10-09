@@ -252,6 +252,8 @@ class AxShellContext {
         return navigation.kind == AxRouteKind.thread &&
             target.threadId != null &&
             navigation.threadId == target.threadId;
+      case AxRouteKind.people:
+        return navigation.kind == AxRouteKind.people;
       case AxRouteKind.workflows:
         return navigation.kind == AxRouteKind.workflows;
       case AxRouteKind.workspaces:
