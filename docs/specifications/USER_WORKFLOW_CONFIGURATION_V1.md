@@ -104,9 +104,10 @@ preferences. Phase 3 introduces no schema or API migration.
 
 Cloud resolves the Space owner’s global defaults plus a shared Space workflow override
 for both validation and submission, regardless of the requester.
-Defaults are overlaid by sparse step overrides. Auto Worker is chosen from active
-Space-granted inventory through existing Space grants, Thread permissions, Profile capability,
-readiness, and Workspace eligibility rules. Resolution tests whole-workflow
+Defaults are overlaid by sparse step overrides. Auto Worker is chosen from the
+selected Space Workflow Workspace inventory; Cloud's internal execution grant,
+Thread permissions, Profile capability, readiness, and Workspace eligibility
+rules still apply. Resolution tests whole-workflow
 feasibility in one Workspace before freezing Auto choices. An explicit offline,
 missing, or incompatible Worker fails admission; it is never silently replaced.
 Auto model and effort remain null, meaning the signed Profile/provider CLI default;

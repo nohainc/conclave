@@ -39,13 +39,8 @@ class AxSyncScope {
     final space = (p[0] == 'space') &&
         (p.length == 2 ||
             (p.length == 3 &&
-                const {
-                  'threads',
-                  'workspace-grants',
-                  'members',
-                  'invitations',
-                  'audit'
-                }.contains(p[2])));
+                const {'threads', 'members', 'invitations', 'audit'}
+                    .contains(p[2])));
     final workflow = p.length == 2 &&
         (p[0] == 'space-workflow-configurations' ||
             (p[0] == 'workflow-workspace' && p[1] != 'user'));

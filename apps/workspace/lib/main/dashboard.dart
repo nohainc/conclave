@@ -459,8 +459,15 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
     final newName = widget.snapshot.workspaceName ??
         widget.snapshot.hostname ??
         'Conclave Workspace';
-    if (oldName != newName && widget.snapshot.workspaceReady) {
-      _nameController.text = newName;
+    // Do not overwrite an in-progress edit when the parent rebuilds after
+    // onChanged. The controller already contains the latest user text in
+    // that case; assigning it again resets the selection and makes the next
+    // Backspace act on the whole field.
+    if (oldName != newName && _nameController.text == oldName) {
+      _nameController.value = TextEditingValue(
+        text: newName,
+        selection: TextSelection.collapsed(offset: newName.length),
+      );
     }
     if (oldWidget.snapshot.workRootPath != widget.snapshot.workRootPath) {
       _workRootController.text = _displayWorkRoot(widget.snapshot.workRootPath);
@@ -515,6 +522,11 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
             widget.snapshot.mode == WorkspaceUiMode.installFailure) &&
         !isConnecting &&
         widget.snapshot.desiredRuntimeConnected;
+    // Workspace identity and user file location are protected while the
+    // runtime is connected or intended to be connected. They become editable
+    // again after an explicit disconnect, including while the app is offline.
+    final canEditWorkspaceSettings = !widget.snapshot.desiredRuntimeConnected &&
+        !widget.snapshot.cloudConnected;
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -531,8 +543,10 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
         ],
         TextField(
           controller: _nameController,
-          enabled: !isRegistered,
-          readOnly: isRegistered,
+          enabled:
+              canEditWorkspaceSettings && widget.onChangeWorkspaceName != null,
+          readOnly:
+              !canEditWorkspaceSettings || widget.onChangeWorkspaceName == null,
           maxLength: 200,
           onChanged: widget.onChangeWorkspaceName,
           decoration: const InputDecoration(
@@ -544,67 +558,24 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
         const SizedBox(height: 16),
         TextField(
           controller: _workRootController,
-          enabled: false,
+          enabled: canEditWorkspaceSettings,
           readOnly: true,
           decoration: InputDecoration(
             labelText: 'Work Root',
             hintText: 'Not configured',
             border: const OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Files and projects used by Conclave Workers. Changing this setting affects future Space directories; existing files are not moved automatically.',
-          style: theme.textTheme.bodySmall,
-        ),
-        if (widget.snapshot.workRootMigrationPending) ...[
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.warning_amber_outlined),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'A legacy Work Root and the new Documents Work Root both contain files. They were preserved. Review the legacy folder before choosing which files to use.',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: widget.snapshot.legacyWorkRootPath == null
-                        ? null
-                        : () => WorkspaceLifecycleController.openPath(
-                            widget.snapshot.legacyWorkRootPath!),
-                    child: const Text('Review'),
-                  ),
-                ],
+            suffixIcon: Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: TextButton.icon(
+                onPressed:
+                    canEditWorkspaceSettings && widget.onChangeWorkRoot != null
+                        ? _browseWorkRoot
+                        : null,
+                icon: const Icon(Icons.folder_open, size: 16),
+                label: const Text('Browse'),
               ),
             ),
           ),
-        ],
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          children: [
-            OutlinedButton.icon(
-              onPressed: widget.snapshot.workRootPath == null
-                  ? null
-                  : () => WorkspaceLifecycleController.openPath(
-                        widget.snapshot.workRootPath!,
-                      ),
-              icon: const Icon(Icons.folder_open, size: 16),
-              label: const Text('Open in Finder'),
-            ),
-            FilledButton.tonal(
-              onPressed:
-                  widget.onChangeWorkRoot == null ? null : _browseWorkRoot,
-              child: const Text('Change…'),
-            ),
-          ],
         ),
         const SizedBox(height: 12),
         SwitchListTile(

@@ -257,6 +257,7 @@ void main() {
     Future<void> Function()? onRelease,
     VoidCallback? onReset,
     Future<void> Function([String? name])? onRecoverCredential,
+    Future<void> Function(String name)? onChangeWorkspaceName,
     VoidCallback? onAccountAction,
     Future<void> Function()? onSignIn,
     Future<void> Function()? onSignOut,
@@ -333,6 +334,7 @@ void main() {
             onConnect: onConnect,
             onRegister: onRegister,
             onRecoverCredential: onRecoverCredential,
+            onChangeWorkspaceName: onChangeWorkspaceName,
             onDisconnect: onDisconnect,
             onRelease: onRelease,
             onReset: onReset,
@@ -1247,8 +1249,7 @@ void main() {
     expect(reset, isTrue);
   });
 
-  testWidgets(
-      'workspace tab renders the user Work Root with open and change actions',
+  testWidgets('workspace tab renders the Work Root browse action',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -1267,6 +1268,7 @@ void main() {
         workspaceName: 'Office Mac',
         workRootPath: '/custom/work/root',
       ),
+      onChangeWorkRoot: (_) async {},
     );
 
     // Verify read-only TextField and title
@@ -1277,8 +1279,15 @@ void main() {
     final textField = tester.widget<TextField>(workRootTextFieldFinder);
     expect(textField.readOnly, isTrue);
 
-    expect(find.text('Open in Finder'), findsOneWidget);
-    expect(find.text('Change…'), findsOneWidget);
+    expect(find.text('Browse'), findsOneWidget);
+    expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Browse'))
+            .onPressed,
+        isNotNull);
+    expect(find.textContaining('legacy Work Root'), findsNothing);
+    expect(find.text('Open in Finder'), findsNothing);
+    expect(find.text('Change…'), findsNothing);
   });
 
   testWidgets('Workers catalog stays hidden until Workspace is Ready',
@@ -1978,6 +1987,7 @@ void main() {
       signedIn: true,
       onConnect: () async {},
       onRegister: ([name]) async {},
+      onChangeWorkspaceName: (_) async {},
       onChangeWorkRoot: (_) async {},
       onReset: () {},
     );
@@ -2002,39 +2012,32 @@ void main() {
     // Application UI displays the Work Root as a read-only resolved path.
     final workRootField = tester
         .widget<TextField>(find.widgetWithText(TextField, 'Not configured'));
-    expect(workRootField.enabled, isFalse);
+    expect(workRootField.enabled, isTrue);
 
-    final changeBtn = tester
-        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Change…'));
-    expect(changeBtn.onPressed, isNotNull);
+    expect(find.text('Browse'), findsOneWidget);
 
-    // Case 2: Registered and connected workspace
+    // Case 2: Registered but disconnected workspace remains editable locally.
     await pumpDashboard(
       tester,
       const WorkspaceUiSnapshot(
-        mode: WorkspaceUiMode.ready,
-        title: 'Workspace is ready',
-        detail: 'Ready',
+        mode: WorkspaceUiMode.offline,
+        title: 'Workspace is offline',
+        detail: 'Disconnected',
         registered: true,
         workspaceId: 'ws-123',
-        workspaceReady: true,
-        cloudConnected: true,
+        workspaceReady: false,
+        cloudConnected: false,
         workspaceName: 'Registered Mac',
         workRootPath: '/workspace/root',
       ),
       credentialStore: credentials,
       signedIn: true,
       onChangeWorkRoot: (_) async {},
-      onDisconnect: () {},
+      onChangeWorkspaceName: (_) async {},
       onRelease: () async {},
       onReset: () {},
     );
     await tester.pumpAndSettle();
-
-    // Disconnect button is enabled
-    final disconnectBtn = tester
-        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Disconnect'));
-    expect(disconnectBtn.onPressed, isNotNull);
 
     // Release button is enabled
     final releaseBtn = tester
@@ -2046,19 +2049,95 @@ void main() {
         .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Reset'));
     expect(resetBtn.onPressed, isNotNull);
 
-    // Workspace name is read-only and disabled
+    // Workspace name remains editable while disconnected.
     final regNameField = tester
         .widget<TextField>(find.widgetWithText(TextField, 'Registered Mac'));
-    expect(regNameField.readOnly, isTrue);
-    expect(regNameField.enabled, isFalse);
+    expect(regNameField.readOnly, isFalse);
+    expect(regNameField.enabled, isTrue);
 
-    // Work root remains read-only while the Change action controls mutations.
+    // Work Root remains read-only while its browse action controls mutations.
     final regWorkRootField = tester
         .widget<TextField>(find.widgetWithText(TextField, '/workspace/root'));
-    expect(regWorkRootField.enabled, isFalse);
+    expect(regWorkRootField.enabled, isTrue);
+    expect(find.text('Browse'), findsOneWidget);
+    expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Browse'))
+            .onPressed,
+        isNotNull);
 
-    final connectedChangeBtn = tester
-        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Change…'));
-    expect(connectedChangeBtn.onPressed, isNotNull);
+    // A parent rebuild with the value just typed must preserve the active
+    // caret instead of selecting/resetting the whole Workspace name.
+    final nameController = regNameField.controller!;
+    nameController.value = const TextEditingValue(
+      text: 'Registered Ma',
+      selection: TextSelection.collapsed(offset: 13),
+    );
+    await pumpDashboard(
+      tester,
+      const WorkspaceUiSnapshot(
+        mode: WorkspaceUiMode.offline,
+        title: 'Workspace is offline',
+        detail: 'Disconnected',
+        registered: true,
+        workspaceId: 'ws-123',
+        workspaceReady: false,
+        cloudConnected: false,
+        workspaceName: 'Registered Ma',
+        workRootPath: '/workspace/root',
+      ),
+      credentialStore: credentials,
+      signedIn: true,
+      onChangeWorkRoot: (_) async {},
+      onChangeWorkspaceName: (_) async {},
+      onRelease: () async {},
+      onReset: () {},
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.widgetWithText(TextField, 'Registered Ma'))
+          .controller!
+          .selection
+          .baseOffset,
+      13,
+    );
+
+    // Case 3: Connected workspace protects identity and user-file settings.
+    await pumpDashboard(
+      tester,
+      const WorkspaceUiSnapshot(
+        mode: WorkspaceUiMode.ready,
+        title: 'Workspace ready',
+        detail: 'Connected',
+        registered: true,
+        workspaceId: 'ws-123',
+        workspaceReady: true,
+        cloudConnected: true,
+        desiredRuntimeConnected: true,
+        workspaceName: 'Connected Mac',
+        workRootPath: '/workspace/root',
+      ),
+      credentialStore: credentials,
+      signedIn: true,
+      onChangeWorkRoot: (_) async {},
+      onChangeWorkspaceName: (_) async {},
+      onDisconnect: () {},
+    );
+    await tester.pumpAndSettle();
+
+    final connectedNameField = tester
+        .widget<TextField>(find.widgetWithText(TextField, 'Connected Mac'));
+    expect(connectedNameField.readOnly, isTrue);
+    expect(connectedNameField.enabled, isFalse);
+
+    final connectedWorkRootField = tester
+        .widget<TextField>(find.widgetWithText(TextField, '/workspace/root'));
+    expect(connectedWorkRootField.enabled, isFalse);
+    expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Browse'))
+            .onPressed,
+        isNull);
   });
 }

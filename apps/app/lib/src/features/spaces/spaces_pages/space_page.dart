@@ -242,7 +242,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
                               if (widget.space.description
                                   .trim()
                                   .isNotEmpty) ...[
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 12),
                                 Text(
                                   widget.space.description.trim(),
                                   textAlign: TextAlign.center,

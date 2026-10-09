@@ -75,7 +75,6 @@ class IntegrationSource extends WorkflowSource
                 }
               }))
           .toList();
-
   @override
   Future<List<Map<String, dynamic>>> loadSpaceWorkflowWorkspaceGrants(
           {required String spaceId}) async =>

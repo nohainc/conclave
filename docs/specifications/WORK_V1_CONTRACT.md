@@ -29,14 +29,15 @@ progress replaces that renderer without reusing another message’s Markdown sta
 
 Chat and Work history open at the latest message and follow updates while the
 reader is at the bottom. Scrolling up pauses following until the reader returns
-to the bottom. Work sending (including keyboard submission) stays disabled while
-a request is preparing or awaiting completion, failure or cancellation.
-The input remains editable throughout preparation, submission, and execution so
-the user can draft the next request while sending stays disabled. The composer
-explains when an unfinished request blocks Send and offers cancellation of pending
-requests. The Workflows editor exposes Profile-supported models, custom model IDs when
-allowed, and model-specific efforts. The existing composer displays its Space’s
-choices without a local execution override.
+to the bottom. Work sending (including keyboard submission) stays disabled only
+while AX is preparing or submitting a request. The input remains editable while
+a request is being prepared or executed so the user can draft the next request.
+If a queued, running, or waiting request exists, Send remains available and first
+asks whether to cancel that request before submitting the new one. The composer
+also offers direct cancellation of pending requests. The Workflows editor exposes
+Profile-supported models, custom model IDs when allowed, and model-specific
+efforts. The existing composer displays its Space’s choices without a local
+execution override.
 
 Thread content is capped at 800 logical pixels per pane. At available widths
 of 1000 pixels or more, Chat and Work appear side by side with a vertical divider;

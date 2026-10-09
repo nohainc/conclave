@@ -33,15 +33,16 @@ function fixture(
           values: [] as unknown[],
           bind(user: string, ...rest: unknown[]) {
             this.values = [user, ...rest];
-            expect(user).toBe(
-              sql.includes("WHERE id = ?1") ||
-                sql.includes("workspace_space_grants") ||
-                sql.startsWith(
-                  "SELECT workspace_id AS workspaceId FROM space_workflow_settings",
-                )
-                ? "space"
-                : "user",
-            );
+            if (!sql.includes("workspace_worker_inventory"))
+              expect(user).toBe(
+                sql.includes("WHERE id = ?1") ||
+                  sql.includes("workspace_space_grants") ||
+                  sql.startsWith(
+                    "SELECT workspace_id AS workspaceId FROM space_workflow_settings",
+                  )
+                  ? "space"
+                  : "user",
+              );
             return this;
           },
           async first() {
@@ -62,7 +63,7 @@ function fixture(
                       ),
                     },
                   ]
-                : inventory.filter((w) => w.workspaceId === this.values[1]),
+                : inventory.filter((w) => w.workspaceId === this.values[0]),
             };
           },
         };
@@ -141,7 +142,10 @@ it("uses shared Space defaults for every requester and Thread rather than each r
 it("does not fall back to another Workspace for Auto or an explicit Worker", async () => {
   await expect(
     fixture({}, {}, undefined, "first").resolve(),
-  ).rejects.toMatchObject({ status: 422 });
+  ).rejects.toMatchObject({
+    status: 422,
+    message: expect.stringContaining("Unsupported capability"),
+  });
   await expect(
     fixture({ worker: "b" }, {}, undefined, "first").resolve(),
   ).rejects.toMatchObject({ status: 422 });

@@ -608,3 +608,40 @@ export async function handleEditDiscussionMessage(
   );
   return json({ message: { ...message, body: content, references, editedAt } });
 }
+
+export async function handleDeleteDiscussionMessage(
+  request: Request,
+  env: SecurityEnv,
+  messageId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const message = await env.CONCLAVE_DB.prepare(
+    `SELECT id, thread_id AS threadId, author_user_id AS authorUserId
+     FROM discussion_messages
+     WHERE id = ?1`,
+  )
+    .bind(messageId)
+    .first<Record<string, unknown>>();
+  if (!message) throw new HttpError(404, "Discussion message not found");
+  const { context, spaceId } = await authorizeThreadAccess(
+    request,
+    env,
+    String(message.threadId),
+    "discuss",
+    accessContext,
+  );
+  if (String(message.authorUserId) !== context.userId)
+    throw new HttpError(403, "Only the message author may delete it");
+  const mutation = env.CONCLAVE_DB.prepare(
+    "DELETE FROM discussion_messages WHERE id = ?1",
+  ).bind(messageId);
+  await publishCollaborationEvent(
+    env,
+    "discussion.deleted",
+    spaceId,
+    messageId,
+    { threadId: String(message.threadId), mutations: [mutation] },
+  );
+  return json({ success: true });
+}
+

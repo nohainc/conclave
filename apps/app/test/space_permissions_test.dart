@@ -101,6 +101,8 @@ void main() {
     await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
     expect(find.text('Owner'), findsOneWidget);
+    expect(find.text('Add workspace'), findsNothing);
+    expect(find.text('Invite members'), findsNothing);
     expect(
         tester
             .widget<Checkbox>(

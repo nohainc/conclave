@@ -39,11 +39,11 @@ export async function resolveWorkflowExecutionBindings(
   if (!effective.enabled)
     throw new HttpError(422, "Workflow is disabled in this Space");
   const inventory = await env.CONCLAVE_DB.prepare(
-    `SELECT i.worker_id AS workerId, i.workspace_id AS workspaceId FROM workspace_worker_inventory i
-    JOIN workspace_space_grants g ON g.workspace_id = i.workspace_id
-    WHERE g.space_id = ?1 AND g.status = 'active' AND i.workspace_id = ?2 ORDER BY i.workspace_id, i.worker_id`,
+    `SELECT i.worker_id AS workerId, i.workspace_id AS workspaceId
+     FROM workspace_worker_inventory i
+     WHERE i.workspace_id = ?1 ORDER BY i.workspace_id, i.worker_id`,
   )
-    .bind(spaceId, space.workspaceId)
+    .bind(space.workspaceId)
     .all<{ workerId: string; workspaceId: string }>();
   const requested: Record<
     string,
@@ -55,6 +55,7 @@ export async function resolveWorkflowExecutionBindings(
     }
   > = {};
   let pinnedWorkspace: string | null = null;
+  const rejectionReasons = new Set<string>();
   for (const step of definition.steps) {
     const id = definition.id === "direct" ? "direct" : step.kind;
     const selection = effective.steps[step.kind] ?? {};
@@ -122,6 +123,9 @@ export async function resolveWorkflowExecutionBindings(
             { [id]: proposed },
             attachments,
           );
+          for (const issue of admission.issues) {
+            if (issue.message.trim()) rejectionReasons.add(issue.message);
+          }
           if (
             !admission.issues.length &&
             admission.primaryWorkspaceId === workspaceId
@@ -139,8 +143,9 @@ export async function resolveWorkflowExecutionBindings(
     }
     if (eligible) return bindings;
   }
+  const details = [...rejectionReasons].slice(0, 8);
   throw new HttpError(
     422,
-    "No eligible Space Workers support this workflow configuration in one Workspace",
+    `No eligible Space Workers support this workflow configuration in one Workspace${details.length ? `: ${details.join(" ")}` : ""}`,
   );
 }

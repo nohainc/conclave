@@ -298,8 +298,7 @@ class _SpaceInvitationDialogState extends State<SpaceInvitationDialog> {
                   for (final entry in const {
                     'chat': 'Use Chat',
                     'work': 'Use Work workflows',
-                    'manageOwnThreads': 'Create and manage own threads',
-                    'attachWorkspace': 'Attach own workspace'
+                    'manageOwnThreads': 'Create and manage own threads'
                   }.entries)
                     CheckboxListTile(
                         key: ValueKey('invite-permission-${entry.key}'),

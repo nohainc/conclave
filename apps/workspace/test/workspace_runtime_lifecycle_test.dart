@@ -73,6 +73,9 @@ void main() {
     expect(config.workspaceRuntimeId, isNull);
     expect(config.workspaceId, isNull);
     expect(config.authToken, isNull);
+    // Keep the saved Cloud endpoint available for local Worker-catalog cache
+    // loading without restoring runtime identity or reconnecting.
+    expect(config.cloudUri, isNotNull);
     expect(WorkspaceRegistrationStore(directory).readSync()?.ownerUserId,
         'user-owner');
   });

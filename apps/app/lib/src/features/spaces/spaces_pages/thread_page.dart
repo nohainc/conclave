@@ -10,7 +10,6 @@ class ThreadPage extends StatefulWidget {
     this.workHistoryCache,
     this.catalogs,
     this.workflowConfigurations,
-    this.workspaceGrants,
     this.currentUserId,
     this.currentUserName,
     required this.onBackToSpace,
@@ -28,7 +27,6 @@ class ThreadPage extends StatefulWidget {
   final AxWorkHistoryCache? workHistoryCache;
   final AxSessionCatalogs? catalogs;
   final AxWorkflowConfigurations? workflowConfigurations;
-  final AxSpaceWorkspaceGrants? workspaceGrants;
   final String? currentUserId;
   final String? currentUserName;
   final VoidCallback onBackToSpace;
@@ -96,11 +94,10 @@ class _ThreadPageState extends State<ThreadPage>
 
   final _discussionController = TextEditingController();
   late AxSessionCatalogs _catalogs;
-  late AxSpaceWorkspaceGrants _grants;
-  void Function()? _cancelGrants;
+  void Function()? _cancelWorkflowWorkspace;
   void Function()? _cancelWorkflows;
   void Function()? _cancelWorkers;
-  Set<String> _grantedWorkspaceIds = {};
+  String? _selectedWorkflowWorkspaceId;
   int _choicesGeneration = 0;
   String _workflow = '';
   List<AxBuiltinWorkflow> _workflowCatalog = const [];
@@ -189,7 +186,8 @@ class _ThreadPageState extends State<ThreadPage>
     if (cache == null) return;
     _cancelWorkflowConfigurations = cache.engine.watch(cache.query, (state) {
       if (!mounted) return;
-      _updateState(() => _userWorkflowConfigurations = state.data ?? const []);
+      _updateComposerState(
+          () => _userWorkflowConfigurations = state.data ?? const []);
     });
     unawaited(cache
         .ensure()
@@ -252,14 +250,14 @@ class _ThreadPageState extends State<ThreadPage>
     _subscribeToWorkEvents();
     _subscribeWorkflowConfigurations();
     _subscribeCatalogs();
-    _subscribeGrants();
+    _subscribeWorkflowWorkspace();
     _loadWorkChoices();
     _loadWorkflowCatalog();
   }
 
   void _applyWorkers(List<AxWorker> workers) {
     _spaceWorkers = workers
-        .where((worker) => _grantedWorkspaceIds.contains(worker.workspaceId))
+        .where((worker) => worker.workspaceId == _selectedWorkflowWorkspaceId)
         .toList();
     _eligibleWorkers = _spaceWorkers
         .where((worker) =>
@@ -284,7 +282,7 @@ class _ThreadPageState extends State<ThreadPage>
     _applyWorkers(_catalogs.engine.peek(_catalogs.workers).data ?? const []);
     _cancelWorkflows = _catalogs.engine.watch(_catalogs.workflows, (state) {
       if (!mounted) return;
-      _updateState(() {
+      _updateComposerState(() {
         if (state.hasData) {
           _workflowCatalog = state.data!;
           if (!_workflowCatalog.any((item) => item.reference == _workflow)) {
@@ -302,7 +300,7 @@ class _ThreadPageState extends State<ThreadPage>
     _cancelWorkers = _catalogs.engine.watch(_catalogs.workers, (state) {
       if (!mounted) return;
       if (state.hasData) {
-        _updateState(() => _applyWorkers(state.data!));
+        _updateComposerState(() => _applyWorkers(state.data!));
       }
     }, fireImmediately: false);
   }
@@ -351,26 +349,24 @@ class _ThreadPageState extends State<ThreadPage>
     return current.firstOrNull?.reference ?? '';
   }
 
-  void _applyGrants(AxWorkspaceGrants grants) {
-    _grantedWorkspaceIds = grants
-        .where(
-            (value) => value['status'] == null || value['status'] == 'active')
-        .map((value) => (value['workspaceId'] ?? value['id'] ?? '').toString())
-        .where((id) => id.isNotEmpty)
-        .toSet();
+  void _subscribeWorkflowWorkspace() {
+    _cancelWorkflowWorkspace?.call();
+    final cache = _workflowConfigurations;
+    if (cache == null) {
+      _selectedWorkflowWorkspaceId = null;
+      _applyWorkers(_catalogs.engine.peek(_catalogs.workers).data ?? const []);
+      return;
+    }
+    final state = cache.engine.peek(cache.workspaceQuery);
+    _selectedWorkflowWorkspaceId = state.data?.workspaceId;
     _applyWorkers(_catalogs.engine.peek(_catalogs.workers).data ?? const []);
-  }
-
-  void _subscribeGrants() {
-    _cancelGrants?.call();
-    _grants = widget.workspaceGrants ??
-        AxSpaceWorkspaceGrants.forSource(widget.dataSource);
-    final state = _grants.peek(widget.space.id);
-    _applyGrants(state.data ?? const []);
-    _cancelGrants = _grants.watch(widget.space.id, (state) {
+    _cancelWorkflowWorkspace =
+        cache.engine.watch(cache.workspaceQuery, (state) {
       if (!mounted) return;
       _updateState(() {
-        _applyGrants(state.data ?? const []);
+        _selectedWorkflowWorkspaceId = state.data?.workspaceId;
+        _applyWorkers(
+            _catalogs.engine.peek(_catalogs.workers).data ?? const []);
       });
     });
   }
@@ -379,7 +375,6 @@ class _ThreadPageState extends State<ThreadPage>
     final ds = widget.dataSource;
     final generation = ++_choicesGeneration;
     final catalogs = _catalogs;
-    final grantsCache = _grants;
     final spaceId = widget.space.id;
     if (ds == null) {
       return;
@@ -387,13 +382,17 @@ class _ThreadPageState extends State<ThreadPage>
     try {
       await Future.wait([
         catalogs.ensureWorkers(),
-        grantsCache.ensure(spaceId),
+        _workflowConfigurations?.ensureWorkspace() ?? Future.value(null),
       ]);
       if (!mounted) return;
       if (generation != _choicesGeneration || catalogs != _catalogs) return;
-      if (grantsCache != _grants || spaceId != widget.space.id) return;
+      if (spaceId != widget.space.id) return;
       _updateState(() {
-        _applyGrants(grantsCache.peek(spaceId).data ?? const []);
+        _selectedWorkflowWorkspaceId = _workflowConfigurations?.engine
+            .peek(_workflowConfigurations!.workspaceQuery)
+            .data
+            ?.workspaceId;
+        _applyWorkers(catalogs.engine.peek(catalogs.workers).data ?? const []);
       });
     } catch (_) {
       // The shared queries retain their last valid data on refresh failure.
@@ -416,9 +415,8 @@ class _ThreadPageState extends State<ThreadPage>
     }
     if (oldWidget.catalogs != widget.catalogs ||
         oldWidget.dataSource != widget.dataSource ||
-        oldWidget.space.id != widget.space.id ||
-        oldWidget.workspaceGrants != widget.workspaceGrants) {
-      _subscribeGrants();
+        oldWidget.space.id != widget.space.id) {
+      _subscribeWorkflowWorkspace();
       unawaited(_loadWorkChoices());
     }
     if (oldWidget.dataSource != widget.dataSource ||
@@ -482,7 +480,7 @@ class _ThreadPageState extends State<ThreadPage>
     _cancelWorkflowConfigurations?.call();
     _cancelWorkflows?.call();
     _cancelWorkers?.call();
-    _cancelGrants?.call();
+    _cancelWorkflowWorkspace?.call();
     _cancelWorkHistory?.call();
     _cancelWorkRealtime?.call();
     _workEventSubscription?.cancel();
@@ -497,6 +495,11 @@ class _ThreadPageState extends State<ThreadPage>
     _workHistoryChanges.dispose();
     _chatComposerSpaceChanges.dispose();
     super.dispose();
+  }
+
+  void _updateComposerState(VoidCallback callback) {
+    callback();
+    _workComposerChanges.value++;
   }
 
   void _updateState(VoidCallback callback) {
@@ -747,6 +750,7 @@ class _ThreadPageState extends State<ThreadPage>
                               },
                               onEdit: (newText) =>
                                   _editDiscussion(message.id, newText),
+                              onDelete: () => _deleteDiscussion(message.id),
                             );
                           },
                         ),
@@ -821,8 +825,7 @@ class _ThreadPageState extends State<ThreadPage>
         onLoadOlder: _loadOlderWorkHistory,
         onShowRunDetails: widget.dataSource == null ? null : _showRunDetails,
         onRetryStep: widget.dataSource == null ? null : _retryWorkRequestStep,
-        onCancelRun:
-            widget.dataSource == null ? null : _cancelFailedWorkRequest,
+        onCancelRun: widget.dataSource == null ? null : _cancelWorkRequest,
         onWorkflowChanged: (value) => _updateState(() => _workflow = value),
         onRun: _runWork,
       );

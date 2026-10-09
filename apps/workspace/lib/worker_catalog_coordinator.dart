@@ -296,12 +296,19 @@ class WorkerCatalogCoordinator extends ChangeNotifier {
     List<WorkerDescriptor> current;
     String? catalogError;
     var catalogConfirmed = false;
-    try {
-      current = await catalog.syncCatalog();
-      catalogConfirmed = true;
-    } on Object catch (error) {
+    if (!catalog.canSyncCatalogRemotely) {
+      // A disconnected Workspace has no runtime identity for the Cloud
+      // endpoint. Keep the last known catalog (or local in-memory state)
+      // visible without surfacing that expected state as an error.
       current = catalog.workers.isNotEmpty ? catalog.workers : cached;
-      catalogError = 'Cloud Worker catalog could not be loaded: $error';
+    } else {
+      try {
+        current = await catalog.syncCatalog();
+        catalogConfirmed = true;
+      } on Object catch (error) {
+        current = catalog.workers.isNotEmpty ? catalog.workers : cached;
+        catalogError = 'Cloud Worker catalog could not be loaded: $error';
+      }
     }
 
     generation = ++_generation;

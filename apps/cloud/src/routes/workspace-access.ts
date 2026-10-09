@@ -1,4 +1,3 @@
-import { loadSpacePermissions } from "./space-permissions.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
   authorizeWorkspaceOwner,
@@ -212,14 +211,7 @@ export async function createWorkspaceSpaceGrant(
     .bind(spaceId, context.userId)
     .first<{ role: string }>();
   const membership = rawMembership;
-  if (membership) {
-    const policy = await loadSpacePermissions(env, context.userId, spaceId);
-    if (!policy.rights.attachWorkspace)
-      throw new HttpError(
-        403,
-        "Workspace attachment is not allowed for this member",
-      );
-  } else if (body.confirmContribution !== true) {
+  if (!membership && body.confirmContribution !== true) {
     throw new HttpError(
       403,
       "Workspace contribution must be explicitly authorized",

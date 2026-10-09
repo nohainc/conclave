@@ -79,11 +79,6 @@ class WorkspacesOverview extends StatelessWidget {
                   ),
                   Expanded(
                     flex: 2,
-                    child: Text('Spaces',
-                        textAlign: TextAlign.center, style: mutedStyle),
-                  ),
-                  Expanded(
-                    flex: 2,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -148,17 +143,6 @@ class WorkspacesOverview extends StatelessWidget {
                           flex: 2,
                           child: Text(
                             '${workspace.workerCount}',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            '${workspace.spaceGrantCount}',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontSize: 13.5,

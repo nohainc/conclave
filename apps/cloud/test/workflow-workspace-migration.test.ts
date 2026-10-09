@@ -65,3 +65,39 @@ it("replaces the retired Space-wide denial with disabled Work workflows without 
     sqlite.close();
   }
 });
+
+it("enables ready Workers in selected Workflow Workspaces", () => {
+  const { sqlite } = sqliteD1();
+  try {
+    sqlite.exec(`
+      INSERT INTO users(id,email,display_name,created_at,updated_at)
+        VALUES('u','u@test','User','now','now');
+      INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at)
+        VALUES('w','u','Workspace','now','now');
+      INSERT INTO user_workflow_settings(user_id,workspace_id,updated_at)
+        VALUES('u','w','now');
+      INSERT INTO workspace_worker_inventory(
+        worker_id,workspace_id,owner_user_id,worker_type_id,activation_state,
+        readiness_state,local_concurrency_limit,revision,created_at,updated_at,last_seen_at
+      ) VALUES('worker','w','u','chatgpt','enabled','ready',1,1,'now','now','now');
+      INSERT INTO worker_scheduling(worker_id,state,updated_at)
+        VALUES('worker','disabled','now');
+    `);
+    sqlite.exec(
+      readFileSync(
+        new URL(
+          "../migrations-v8/0027_enable_workflow_workspace_workers.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    expect(
+      sqlite
+        .prepare("SELECT state FROM worker_scheduling WHERE worker_id='worker'")
+        .get(),
+    ).toEqual({ state: "enabled" });
+  } finally {
+    sqlite.close();
+  }
+});

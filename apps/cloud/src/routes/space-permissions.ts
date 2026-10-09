@@ -22,7 +22,7 @@ export function validateMemberPermissions(
   ) {
     throw new HttpError(
       400,
-      "All four member permissions must be boolean values",
+      "All three member permissions must be boolean values",
     );
   }
   return value as SpaceMemberPermissions;

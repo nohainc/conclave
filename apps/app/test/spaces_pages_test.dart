@@ -817,9 +817,15 @@ void main() {
                 .widget<IconButton>(
                     find.widgetWithIcon(IconButton, Icons.send_rounded))
                 .onPressed,
-            isNull);
-        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-        expect(sends, 1);
+            isNotNull);
+        await tester.tap(find.byTooltip('Send request'));
+        await tester.pumpAndSettle();
+        expect(find.text('Cancel previous request?'), findsOneWidget);
+        expect(find.text('Cancel and send'), findsOneWidget);
+        await tester.tap(find.text('Cancel and send'));
+        await tester.pumpAndSettle();
+        expect(sends, 2);
+        expect(data.cancelledWorkRequestIds, ['saved-1']);
         data.requests = [
           previous,
           const AxWorkRequest(
@@ -1607,6 +1613,33 @@ void main() {
             'The login failure reproduces on a fresh checkout. (Updated)'),
         findsOneWidget);
 
+    // Verify delete message button shows confirmation and removes message
+    expect(find.byTooltip('Delete message'), findsOneWidget);
+    await tester.tap(find.byTooltip('Delete message'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete message?'), findsOneWidget);
+    expect(
+        find.text(
+            'Are you sure you want to delete this message? This action cannot be undone.'),
+        findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(
+        find.text(
+            'The login failure reproduces on a fresh checkout. (Updated)'),
+        findsOneWidget);
+
+    await tester.tap(find.byTooltip('Delete message'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    expect(
+        find.text(
+            'The login failure reproduces on a fresh checkout. (Updated)'),
+        findsNothing);
+
     // Multiline Markdown source is submitted through the Send action.
     await tester.enterText(
         find.byType(TextField).last, 'Line 1\nLine 2 details');
@@ -1668,7 +1701,9 @@ void main() {
       expect(
           decoration.color, own ? const Color(0xffdedcf4) : Colors.transparent);
       if (own) {
-        expect(dateX, lessThan(editX));
+        final deleteX = tester.getTopLeft(find.byTooltip('Delete message')).dx;
+        expect(dateX, lessThan(deleteX));
+        expect(deleteX, lessThan(editX));
         expect(editX, lessThan(copyX));
       } else {
         expect(copyX, lessThan(editX));
@@ -2312,7 +2347,6 @@ class _DuplicateTestDataSource extends AxFixtureDataSource {
           role: 'owner',
         ),
       ];
-
   @override
   Future<List<Map<String, dynamic>>> loadSpaceWorkflowWorkspaceGrants({
     required String spaceId,
@@ -2479,7 +2513,6 @@ class _GenericWorkerConfigDataSource extends _WorkFormDataSource {
           capabilities: [],
         ),
       ];
-
   @override
   Future<List<Map<String, dynamic>>> loadSpaceWorkflowWorkspaceGrants({
     required String spaceId,
@@ -2542,6 +2575,13 @@ class _PinnedHistoryDataSource extends _WorkHistoryDataSource {
 class _SlowSubmissionDataSource extends _WorkFormDataSource {
   final ready = Completer<List<String>>();
   List<AxWorkRequest> requests = [];
+  final cancelledWorkRequestIds = <String>[];
+
+  @override
+  Future<void> cancelWorkRequest({required String workRequestId}) async {
+    cancelledWorkRequestIds.add(workRequestId);
+  }
+
   @override
   Future<AxWorkRequestStatus> loadWorkRequest(
       {required String workRequestId}) async {

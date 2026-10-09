@@ -66,14 +66,13 @@ class WorkspaceConfig {
         : Platform.environment['CONCLAVE_WORKSPACE_DATA_DIR'];
     final dataDirectory =
         path == null ? WorkspacePaths.defaultStateDirectory() : Directory(path);
-    final registration = ignoreSavedRegistration
-        ? null
-        : WorkspaceRegistrationStore(dataDirectory).readSync();
+    final savedRegistration =
+        WorkspaceRegistrationStore(dataDirectory).readSync();
+    final registration = ignoreSavedRegistration ? null : savedRegistration;
     final cloudUrl = cloudIndex >= 0 && cloudIndex + 1 < args.length
         ? args[cloudIndex + 1]
-        : ignoreSavedRegistration
-            ? null
-            : Platform.environment['CONCLAVE_WORKSPACE_CLOUD_URL'];
+        : Platform.environment['CONCLAVE_WORKSPACE_CLOUD_URL'] ??
+            savedRegistration?.cloudUrl;
     final workspaceRuntimeId =
         workspaceRuntimeIndex >= 0 && workspaceRuntimeIndex + 1 < args.length
             ? args[workspaceRuntimeIndex + 1]

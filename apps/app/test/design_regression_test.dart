@@ -408,9 +408,9 @@ This is standard body paragraph text with **bold** and `inline_code`.
       await tester.pumpWidget(
         MaterialApp(
           theme: ConclaveBrand.darkTheme(),
-          home: Scaffold(
+          home: const Scaffold(
             body: WorkspacesPage(
-              workspaces: const [
+              workspaces: [
                 AxWorkspace(
                   id: 'ws-mac',
                   name: 'MacBook Pro M3',
@@ -422,7 +422,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
                   role: 'owner',
                 ),
               ],
-              workspaceWorkers: const [
+              workspaceWorkers: [
                 AxWorker(
                   id: 'worker-codex',
                   workspaceId: 'ws-mac',
@@ -435,7 +435,6 @@ This is standard body paragraph text with **bold** and `inline_code`.
                   capabilities: ['code', 'review'],
                 ),
               ],
-              onGrant: (_) {},
             ),
           ),
         ),

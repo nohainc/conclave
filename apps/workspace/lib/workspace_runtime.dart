@@ -13,6 +13,7 @@ import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:conclave_workspace/worker_executor.dart';
 import 'package:conclave_workspace/self_update.dart';
 import 'package:conclave_workspace/secure_credentials.dart';
+import 'package:conclave_workspace/desktop_auth.dart';
 import 'package:conclave_workspace/workspace_registration.dart';
 import 'package:conclave_workspace/workspace_transport.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
@@ -30,6 +31,27 @@ Future<Workspace> buildWorkspaceRuntime(
   final workspacePaths = WorkspacePaths(config.dataDirectory);
   final secureCredentialStore =
       credentialStore ?? const PlatformSecureCredentialStore();
+  String? humanAuthToken;
+  if (config.workspaceRuntimeId == null) {
+    try {
+      final stored =
+          await secureCredentialStore.read(desktopHumanCredentialKey);
+      if (stored != null && stored.isNotEmpty) {
+        final decoded = jsonDecode(stored);
+        if (decoded is Map) {
+          final session = DesktopHumanSession.fromSecureJson(
+            Map<String, dynamic>.from(decoded),
+          );
+          if (session.expiresAt.isAfter(DateTime.now().toUtc())) {
+            humanAuthToken = session.credential;
+          }
+        }
+      }
+    } on Object {
+      // A missing or expired desktop session simply leaves the disconnected
+      // Workspace on its local catalog cache.
+    }
+  }
   final releaseTrustPolicy = workerTrustPolicy;
   CliWorkerEngineSupervisor? cliWorkerEngineSupervisor;
   final installationId = await InstallationIdentityStore(
@@ -99,6 +121,7 @@ Future<Workspace> buildWorkspaceRuntime(
           trustPolicy: workerTrustPolicy,
           workspaceRuntimeId: config.workspaceRuntimeId,
           authToken: config.authToken,
+          humanAuthToken: humanAuthToken,
           candidateValidator: (candidate, profileFile) async {
             final supervisor = cliWorkerEngineSupervisor;
             if (supervisor == null) return false;

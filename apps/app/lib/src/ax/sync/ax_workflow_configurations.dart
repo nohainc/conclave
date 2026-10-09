@@ -70,21 +70,6 @@ class AxWorkflowConfigurations {
                 key.startsWith(AxQueryKey(['workflow-workspace'])))
             .then<void>((_) {}, onError: (Object _, StackTrace __) {});
       }
-      for (final key in engine.relevantKeys.toList()) {
-        if (key.parts.length == 3 &&
-            key.parts[0] == 'space' &&
-            key.parts[2] == 'workspace-grants' &&
-            (spaceId == null || key.parts[1] == spaceId)) {
-          engine.invalidate(key);
-        }
-      }
-      await engine
-          .refreshStaleWhere((key) =>
-              key.parts.length == 3 &&
-              key.parts[0] == 'space' &&
-              key.parts[2] == 'workspace-grants' &&
-              (spaceId == null || key.parts[1] == spaceId))
-          .then<void>((_) {}, onError: (Object _, StackTrace __) {});
     } finally {
       if (identical(_writeLease, lease)) _writeLease = null;
     }

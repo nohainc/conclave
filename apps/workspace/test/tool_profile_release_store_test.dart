@@ -294,6 +294,51 @@ void main() {
     }
   });
 
+  test('loads the human catalog endpoint while runtime is disconnected',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    late Uri requestUri;
+    late String authorization;
+    server.listen((request) async {
+      requestUri = request.uri;
+      authorization = request.headers.value(HttpHeaders.authorizationHeader)!;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'workers': [
+          {
+            'workerTypeId': 'claude',
+            'displayName': 'Claude',
+            'description': 'Claude Code CLI integration',
+            'profileDefinitionId': 'claude-code',
+            'providerToolName': 'claude',
+            'engineFamily': 'cli',
+            'visibilityState': 'visible',
+            'releaseStage': 'stable',
+            'capabilities': ['text'],
+            'sortOrder': 5,
+          },
+        ],
+      }));
+      await request.response.close();
+    });
+
+    final catalog = ToolProfileCatalogClient(
+      cloudUri: Uri.parse('http://${server.address.address}:${server.port}'),
+      humanAuthToken: 'human-token',
+      store: store,
+      trustPolicy: signing.trustPolicy,
+    );
+    try {
+      expect((await catalog.syncCatalog()).single.displayName, 'Claude');
+      expect(requestUri.path, '/api/workers/catalog');
+      expect(requestUri.queryParameters, isEmpty);
+      expect(authorization, 'Bearer human-token');
+    } finally {
+      catalog.close();
+      await server.close(force: true);
+    }
+  });
+
   test('rejects unknown catalog capabilities and oversized catalog responses',
       () async {
     final catalog = ToolProfileCatalogClient(

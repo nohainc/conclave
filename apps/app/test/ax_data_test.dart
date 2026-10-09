@@ -197,13 +197,32 @@ void main() {
             (e) => e.message, 'reason', contains('Unsupported workflowId'))));
   });
 
+  test('Work eligibility preserves structured 422 issues', () async {
+    final client = _JsonClient({
+      'eligible': false,
+      'issues': [
+        {
+          'code': 'space_workspace_grant_missing',
+          'message':
+              'Work: select this Worker\'s Workspace in the Space Workflows tab.'
+        }
+      ]
+    }, statusCode: 422);
+    final api =
+        AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+    expect(
+        await api.validateWorkRequestEligibility(
+            threadId: 'thread', workflowId: 'full_cycle'),
+        ['Work: select this Worker\'s Workspace in the Space Workflows tab.']);
+  });
+
   test('Workspace list reads aggregate grant counts with one HTTP request',
       () async {
     final client = _ApiResponseClient({
       '/api/workspaces': {
         'workspaces': [
-          {'id': 'owned', 'name': 'Owned', 'activeSpaceGrantCount': 30},
-          {'id': 'legacy', 'name': 'Legacy', 'spaceGrantCount': 2},
+          {'id': 'owned', 'name': 'Owned'},
+          {'id': 'legacy', 'name': 'Legacy'},
           {'id': 'empty', 'name': 'Empty'},
         ]
       }
@@ -211,7 +230,7 @@ void main() {
     final api =
         AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
     final values = await api.loadWorkspaces();
-    expect(values.map((w) => w.spaceGrantCount), [30, 2, 0]);
+    expect(values.map((w) => w.workerCount), [0, 0, 0]);
     expect(client.requests, ['/api/workspaces']);
   });
   test('single Work Request details retain identity and authored result',

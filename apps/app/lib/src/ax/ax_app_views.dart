@@ -320,7 +320,6 @@ extension _AxAppViews on _AxAppStateMixin {
           catalogs: store.catalogs,
           workflowConfigurations: AxWorkflowConfigurations(widget.dataSource,
               engine: store.syncEngine, spaceId: space.id),
-          workspaceGrants: store.spaceWorkspaceGrants,
           discussionCache: store.discussion,
           workHistoryCache: store.workHistory,
           key: ValueKey(thread.id),
@@ -418,14 +417,6 @@ extension _AxAppViews on _AxAppStateMixin {
         );
       }).toList(growable: false);
 
-  Future<void> _refreshWorkspaceGrantSummary() async {
-    try {
-      await store.workspaces.list();
-    } catch (_) {
-      // Preserve the previous aggregate counts while offline.
-    }
-  }
-
   Widget _workspacesView() => ListenableBuilder(
       listenable: store.workspaces,
       builder: (context, _) => AxQueryBuilder<List<AxWorker>>(
@@ -446,7 +437,6 @@ extension _AxAppViews on _AxAppStateMixin {
                 onOpenDownloads: () => browserNavigation.openExternal(
                   Uri.parse(conclaveDownloadsUrl),
                 ),
-                onGrant: _grantWorkspace,
               )));
 
   Widget _profileSecurityView() => ListenableBuilder(

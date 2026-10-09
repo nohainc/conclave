@@ -208,12 +208,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(source.workflowReads, 1);
     expect(source.workerReads, 1);
-    expect(source.grantReads, 1);
     await tester.pumpWidget(page('B', source, store.catalogs));
     await tester.pumpAndSettle();
     expect(source.workflowReads, 1);
     expect(source.workerReads, 1);
-    expect(source.grantReads, 1);
   });
   testWidgets('inventory change keeps Thread Work free of execution editors',
       (tester) async {
@@ -232,7 +230,7 @@ void main() {
     expect(source.workerReads, 2);
     expect(source.workflowReads, 1);
   });
-  testWidgets('delayed Space grants cannot restore outdated Worker choices',
+  testWidgets('delayed inventory cannot restore outdated Worker choices',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));

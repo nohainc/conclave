@@ -269,7 +269,7 @@ export function eligibilityMessage(
   if (code === "worker_missing")
     return `${step}: the selected Worker is no longer available.`;
   if (code === "space_workspace_grant_missing")
-    return `${step}: grant this Space access to the Worker's Workspace.`;
+    return `${step}: select this Worker's Workspace in the Space Workflows tab.`;
   if (code === "worker_disabled") return `${step}: ${worker} is disabled.`;
   if (code === "worker_not_ready") {
     if (

@@ -7,13 +7,11 @@ class AxRealtimeCacheRouter {
   AxRealtimeCacheRouter(this.engine,
       {this.discussionChanged,
       this.discussionResynchronize,
-      this.discussionObserved,
-      this.spaceRemoved});
+      this.discussionObserved});
   final Future<void> Function(String threadId, String type, String entityId)?
       discussionChanged;
   final Future<void> Function(String threadId)? discussionResynchronize;
   final bool Function(String threadId)? discussionObserved;
-  final void Function(String spaceId)? spaceRemoved;
   final AxSyncEngine engine;
   final _eventIds = <String>{};
   final _recoveries = <(String, String?), Future<void>>{};
@@ -76,22 +74,12 @@ class AxRealtimeCacheRouter {
       }
       return;
     }
-    if (type == 'space_workspace_grant.updated' ||
-        type == 'workspace_space_grant.updated' ||
-        type == 'space_workspace_grant.updated') {
-      if (spaceId != null) {
-        await engine.revalidateWhere(
-            (key) => key == AxQueryKey(['space', spaceId, 'workspace-grants']));
-      }
-      return;
-    }
     if (type.startsWith('space.') ||
         type.startsWith('space.') ||
         type.startsWith('invitation.')) {
       final affected = spaceId ?? id(payload['entityId']);
       if (affected == null) return;
       if (type == 'space.deleted') {
-        spaceRemoved?.call(affected);
         engine.remove(AxQueryKey(['space', affected]), prefix: true);
         engine.remove(AxQueryKey(['space-workflow-configurations', affected]));
         engine.remove(AxQueryKey(['workflow-workspace', affected]));

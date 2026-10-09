@@ -20,7 +20,6 @@ class WorkspacesPage extends StatefulWidget {
     ValueChanged<AxWorkspace>? onUpdate,
     ValueChanged<AxWorkspace>? onRevoke,
     Future<void> Function(AxWorkspace)? onConnect,
-    required this.onGrant,
     this.onOpenDownloads,
   });
 
@@ -28,7 +27,6 @@ class WorkspacesPage extends StatefulWidget {
   final List<AxWorker> workspaceWorkers;
   final String? initialWorkspaceId;
   final ValueChanged<String?>? onSelectWorkspace;
-  final ValueChanged<AxWorkspace> onGrant;
   final VoidCallback? onOpenDownloads;
 
   @override
@@ -99,7 +97,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                       letterSpacing: -0.3)),
               const SizedBox(height: 6),
               Text(
-                'Execution capacity, Workers, space access, and recent activity.',
+                'Execution capacity, Workers, and recent activity.',
                 style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
@@ -146,7 +144,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                             ],
                           ),
                           subtitle: Text(
-                            '${_machine(workspace)}  ·  ${workspace.workerCount} Workers  ·  ${_grantCount(workspace)} Space grants  ·  ${workspace.activeTaskCount} active work',
+                            '${_machine(workspace)}  ·  ${workspace.workerCount} Workers  ·  ${workspace.activeTaskCount} active work',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -157,7 +155,6 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                             child: _WorkspaceCardBody(
                               workspace: workspace,
                               workers: localWorkers,
-                              onGrant: () => widget.onGrant(workspace),
                               onOpenDownloads: widget.onOpenDownloads,
                             ),
                           ),
@@ -203,13 +200,11 @@ class _WorkspaceCardBody extends StatelessWidget {
   const _WorkspaceCardBody({
     required this.workspace,
     required this.workers,
-    required this.onGrant,
     required this.onOpenDownloads,
   });
 
   final AxWorkspace workspace;
   final List<AxWorker> workers;
-  final VoidCallback onGrant;
   final VoidCallback? onOpenDownloads;
 
   @override
@@ -241,7 +236,6 @@ class _WorkspaceCardBody extends StatelessWidget {
                   : workspace.runtimeCapabilities.join(' · '),
             ),
             _Fact(label: 'Workers', value: '${workspace.workerCount}'),
-            _Fact(label: 'Space grants', value: '${_grantCount(workspace)}'),
             _Fact(label: 'Active work', value: '${workspace.activeTaskCount}'),
           ],
         ),
@@ -252,11 +246,6 @@ class _WorkspaceCardBody extends StatelessWidget {
                 style: theme.textTheme.titleMedium
                     ?.copyWith(fontWeight: FontWeight.w700)),
             const Spacer(),
-            TextButton.icon(
-              onPressed: onGrant,
-              icon: const Icon(Icons.add_link),
-              label: const Text('Space access'),
-            ),
           ],
         ),
         const Padding(
@@ -516,5 +505,3 @@ String _statusLabel(AxWorkspace workspace) =>
             'revoked' => 'Revoked',
             _ => workspace.status,
           };
-
-int _grantCount(AxWorkspace workspace) => workspace.spaceGrantCount;

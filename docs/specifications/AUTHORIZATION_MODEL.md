@@ -16,7 +16,11 @@ Cloud checks membership at the resource boundary. A missing, suspended, or deact
 
 ## Workspace execution access
 
-A Workspace has one Cloud owner. The owner manages the Workspace runtime. Space access to a Workspace is granted explicitly through a Space-to-Workspace Grant. Grants scope which Workspace resources a Space's Threads may use; they do not change Workspace ownership.
+A Workspace has one Cloud owner. The owner manages the Workspace runtime. Space
+execution access is selected by the Space owner in Workflows; Cloud materializes
+and validates the internal Space-to-Workspace Grant used for admission. The
+grant is not managed from the Workspaces page and does not change Workspace
+ownership.
 
 Cloud authorizes each Thread operation and assignment using Space membership, Workspace ownership/grants, Thread state, logical Worker readiness, and scheduling policy. Workspace independently enforces local permissions, readiness, concurrency, deadlines, cancellation, and process cleanup.
 
@@ -77,12 +81,12 @@ Provider credentials stay in the local provider CLI configuration. Runtime crede
 
 Space membership remains the boundary for reading. Owners retain all member
 rights and control Space settings and every Thread. For other members, the
-owner can set four explicit booleans: `chat`, `work`, `manageOwnThreads`,
-and `attachWorkspace`. The Members tab shows these in a
-checkbox grid; only the owner can edit it, and the Owner badge appears beside
-the owner's name. Thread lists show the creator's email below the title when
-that person is not the Space owner. The current Thread creation identity is
-its immutable creation-time `lead_user_id`; the API does not reassign this field.
+owner can set three explicit booleans: `chat`, `work`, and
+`manageOwnThreads`. The Members tab shows these in a checkbox grid; only the
+owner can edit it, and the Owner badge appears beside the owner's name. Thread
+lists show the creator's email below the title when that person is not the
+Space owner. The current Thread creation identity is its immutable
+creation-time `lead_user_id`; the API does not reassign this field.
 
 The v1 rights map lives at `spaces.settings_json.memberPermissions[userId]`.
 Missing maps preserve role defaults: collaborators have Chat, Work and own
@@ -93,12 +97,13 @@ Malformed stored overrides fail closed. Removing a member removes their override
 and revokes their contributed Workspace Grants.
 
 `PATCH /api/spaces/:id/members/:userId/permissions` accepts
-`{ permissions: { chat, work, manageOwnThreads, attachWorkspace } }`.
-All four fields must be booleans; extra fields are rejected. Owner rights cannot
-be changed. Existing role presets remain available through the role endpoint
-and reset the member's explicit rights to that preset. Space and member read
-models include effective `permissions`. Ordinary Space responses omit the internal member and invitation permission maps. General Space settings writes cannot
-change the member or invitation permission maps.
+`{ permissions: { chat, work, manageOwnThreads } }`.
+All three fields must be booleans; extra fields are rejected. Owner rights
+cannot be changed. Existing role presets remain available through the role
+endpoint and reset the member's explicit rights to that preset. Space and
+member read models include effective `permissions`. Ordinary Space responses
+omit the internal member and invitation permission maps. General Space
+settings writes cannot change the member or invitation permission maps.
 
 Workflow enablement is configured on global/Space Workflows, together with its
 selected Workspace. Only the Space owner may change Space workflow settings.
@@ -115,10 +120,11 @@ that member, while the owner can manage every Thread. It does not grant rights
 to execute Chat or Work. Composer choices configure the next turn and do not
 change historical execution metadata.
 
-A member with `attachWorkspace` can attach only a Workspace they own and must
-explicitly authorize the contribution. Workspace ownership is checked
-independently of Space rights. The Space owner or Workspace owner may revoke
-the attachment; only the Workspace owner manages the Workspace itself.
+Workspace attachment is an explicit Workspace grant, separate from member
+permissions. Workspace ownership is checked independently of Space rights;
+Workspace owners must explicitly authorize a contribution when they are not
+the Space owner. The Space owner or Workspace owner may revoke the attachment;
+only the Workspace owner manages the Workspace itself.
 The Space UI replaces the technical grant-permission editor with the Work
 switch. New UI attachments allow repository reads/writes and shell execution,
 subject to the Workspace's local Worker permission ceiling. Existing grant

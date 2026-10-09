@@ -246,8 +246,6 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                         _permissionColumn(Icons.chat_bubble_outline, 'Chat'),
                         _permissionColumn(Icons.work_outline, 'Work'),
                         _permissionColumn(Icons.forum_outlined, 'Own threads'),
-                        _permissionColumn(
-                            Icons.laptop_mac_outlined, 'Attach workspace'),
                         const DataColumn(
                           numeric: true,
                           label: Tooltip(
@@ -381,10 +379,6 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                       Icons.chat_bubble_outline, 'Chat workflows'),
                   _permissionLegendItem(Icons.work_outline, 'Work workflows'),
                   _permissionLegendItem(Icons.forum_outlined, 'Own threads'),
-                  _permissionLegendItem(
-                      Icons.laptop_mac_outlined, 'Add workspace'),
-                  _permissionLegendItem(
-                      Icons.person_add_alt_1_outlined, 'Invite members'),
                 ],
               ),
             ] else

@@ -59,8 +59,24 @@ export async function prepareWorkflowWorkspaceGrant(
       409,
       "The selected Workspace grant is suspended or expired",
     );
-  if (existing) return [];
-  return [
+  const statements: D1PreparedStatement[] = [
+    // Selecting a Workflow Workspace is the user-facing execution boundary.
+    // Ready, locally enabled Workers there are available to Cloud scheduling;
+    // no second hidden scheduling toggle is required for Workflows.
+    env.CONCLAVE_DB.prepare(
+      `UPDATE worker_scheduling
+          SET state='enabled', updated_by_user_id=?2, updated_at=?3
+        WHERE worker_id IN (
+          SELECT worker_id FROM workspace_worker_inventory
+           WHERE workspace_id=?1
+             AND activation_state='enabled'
+             AND readiness_state='ready'
+        )
+          AND state <> 'draining'`,
+    ).bind(workspaceId, ownerUserId, now),
+  ];
+  if (existing) return statements;
+  statements.push(
     env.CONCLAVE_DB.prepare(
       "INSERT INTO workspace_space_grants(id,space_id,workspace_id,granted_by_user_id,status,allowed_permissions_json,created_at,updated_at) VALUES(?1,?2,?3,?4,'active',?5,?6,?6)",
     ).bind(
@@ -81,7 +97,8 @@ export async function prepareWorkflowWorkspaceGrant(
       JSON.stringify({ workspaceId }),
       now,
     ),
-  ];
+  );
+  return statements;
 }
 
 export async function handleWorkflowWorkspace(
@@ -112,7 +129,18 @@ export async function handleWorkflowWorkspace(
   )
     .bind(ownerUserId)
     .all<{ id: string; name: string }>();
-  if (request.method === "GET")
+  if (request.method === "GET") {
+    if (current.workspaceId && spaceId) {
+      await env.CONCLAVE_DB.batch(
+        await prepareWorkflowWorkspaceGrant(
+          env,
+          ownerUserId,
+          spaceId,
+          current.workspaceId,
+          new Date().toISOString(),
+        ),
+      );
+    }
     return json({
       ...current,
       workspaces:
@@ -122,6 +150,7 @@ export async function handleWorkflowWorkspace(
               (workspace) => workspace.id === current.workspaceId,
             ),
     });
+  }
   if (request.method !== "PUT") throw new HttpError(405, "Unsupported method");
   const body = (await request.json().catch(() => null)) as Record<
     string,

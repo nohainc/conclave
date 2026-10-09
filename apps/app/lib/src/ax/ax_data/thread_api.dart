@@ -195,8 +195,25 @@ mixin _ThreadApi on _AxApiClientCore {
       throw const AxApiException('Work eligibility response is malformed');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      // The Cloud validator returns structured eligibility issues for 422.
+      // Preserve those messages so the Work composer can tell the user what
+      // needs to be fixed (for example, selecting a Workspace or restoring a
+      // Worker grant) instead of reducing the response to a status code.
+      if (decoded is Map && decoded['issues'] is List) {
+        final messages = (decoded['issues'] as List)
+            .whereType<Map>()
+            .map((issue) => issue['message'])
+            .whereType<String>()
+            .where((message) => message.trim().isNotEmpty)
+            .toList(growable: false);
+        if (messages.isNotEmpty) return messages;
+      }
+      var detail = '';
+      if (decoded is Map && decoded['error'] is String) {
+        detail = ': ${decoded['error']}';
+      }
       throw AxApiException(
-        'Work eligibility check failed (${response.statusCode})',
+        'Work eligibility check failed (${response.statusCode})$detail',
         statusCode: response.statusCode,
       );
     }
@@ -524,6 +541,31 @@ mixin _ThreadApi on _AxApiClientCore {
           'Discussion message edit response is malformed');
     }
     return AxDiscussionMessage.fromJson(Map<String, dynamic>.from(message));
+  }
+
+  @override
+  Future<void> deleteDiscussionMessage({
+    required String messageId,
+  }) async {
+    final response = await client.delete(
+      Uri.parse('$baseUrl/discussion-messages/$messageId'),
+      headers: _headers(),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final errorBody = jsonDecode(response.body);
+        if (errorBody is Map && errorBody['error'] is String) {
+          detail = ': ${errorBody['error']}';
+        }
+      } on Object {
+        // Keep status-only message
+      }
+      throw AxApiException(
+        'Discussion message delete failed (${response.statusCode})$detail',
+        statusCode: response.statusCode,
+      );
+    }
   }
 
   @override

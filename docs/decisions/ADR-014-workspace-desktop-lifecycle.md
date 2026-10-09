@@ -139,25 +139,25 @@ It does not expose:
 The implementation should use a dedicated signed-out shell rather than rendering
 the normal dashboard with selectively disabled controls.
 
-### 4. Workers are available only after Workspace connection
+### 4. Workers remain visible while Workspace is disconnected
 
 Normal product onboarding becomes:
 
 ~~~text
 Install
 -> Sign in
--> Connect Workspace
--> Add/configure Workers
--> runtime available
+-> Add/configure Workers from local/catalog state
+-> Connect Workspace when runtime participation is needed
 ~~~
 
 When signed in but disconnected, the app shows Workspace and Workers tabs.
-Workspace contains the connection/setup surface. Workers remains visible but
-shows a Connect prompt and exposes no Worker configuration controls until the
-Workspace has an active registration and runtime identity.
-
-Worker management becomes available after the Workspace has an active
-registration and runtime identity.
+Workspace contains the connection/setup surface. Workers loads the last cached
+logical catalog and local Worker registry without restoring runtime identity or
+connecting Cloud. Worker details and local configuration remain available;
+Signed-in users may refresh the stable Worker catalog while disconnected
+through the human product session. Profile synchronization, inventory upload,
+and runtime operations still wait until reconnection because they require a
+Workspace runtime identity.
 
 The Workspace tab places **Sign out** in Account and **Disconnect Workspace**
 in the Connection section. Worker details live in the Workers tab, so the

@@ -85,7 +85,6 @@ class AxReadCacheCodec {
         'lastSeen': value.lastSeen,
         'workerCount': value.workerCount,
         'activeTaskCount': value.activeTaskCount,
-        'spaceGrantCount': value.spaceGrantCount,
       };
   Map<String, dynamic> message(AxDiscussionMessage value) => {
         'id': value.id,

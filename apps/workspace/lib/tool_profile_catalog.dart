@@ -45,6 +45,7 @@ class ToolProfileCatalogClient {
     required this.trustPolicy,
     this.workspaceRuntimeId,
     this.authToken,
+    this.humanAuthToken,
     HttpClient? client,
     this.timeout = const Duration(seconds: 30),
     this.listLoader,
@@ -63,6 +64,10 @@ class ToolProfileCatalogClient {
   final WorkerTrustPolicy trustPolicy;
   final String? workspaceRuntimeId;
   final String? authToken;
+
+  /// Human desktop-session credential used for read-only catalog access when
+  /// the Workspace runtime is intentionally disconnected.
+  final String? humanAuthToken;
   final Duration timeout;
   final ToolProfileListLoader? listLoader;
   final WorkerDescriptorLoader? workerCatalogLoader;
@@ -73,6 +78,17 @@ class ToolProfileCatalogClient {
   List<WorkerDescriptor> _workers = const [];
   bool _catalogPersisted = false;
   List<WorkerDescriptor> get workers => _workers;
+
+  /// Whether a refresh can contact a catalog source.
+  ///
+  /// A disconnected Workspace can refresh the stable catalog through the
+  /// signed-in human session, or render its cached catalog when no session is
+  /// available. Runtime Profile synchronization still requires a Workspace
+  /// runtime identity.
+  bool get canSyncCatalogRemotely =>
+      workerCatalogLoader != null ||
+      (workspaceRuntimeId != null && workspaceRuntimeId!.isNotEmpty) ||
+      (humanAuthToken != null && humanAuthToken!.isNotEmpty);
 
   WorkerDescriptor? entryForWorker(String workerTypeId) =>
       _workers.where((entry) => entry.workerTypeId == workerTypeId).firstOrNull;
@@ -89,21 +105,31 @@ class ToolProfileCatalogClient {
       raw = await loader();
     } else {
       final runtimeId = workspaceRuntimeId;
-      if (runtimeId == null || runtimeId.isEmpty) {
+      final useHumanCatalog = (runtimeId == null || runtimeId.isEmpty) &&
+          humanAuthToken?.isNotEmpty == true;
+      if ((runtimeId == null || runtimeId.isEmpty) && !useHumanCatalog) {
         throw StateError(
             'Workspace runtime identity is required for catalog sync');
       }
       final uri = _baseUri().replace(
-        path: _apiPath('/api/workspace-runtime/workers/catalog'),
-        queryParameters: {'workspaceRuntimeId': runtimeId},
+        path: _apiPath(useHumanCatalog
+            ? '/api/workers/catalog'
+            : '/api/workspace-runtime/workers/catalog'),
+        queryParameters:
+            useHumanCatalog ? null : {'workspaceRuntimeId': runtimeId},
       );
-      final response = await _get(uri);
+      final response = await _get(
+        uri,
+        token: useHumanCatalog ? humanAuthToken : null,
+      );
       if (response.statusCode != HttpStatus.ok) {
         throw StateError('Worker catalog returned HTTP ${response.statusCode}');
       }
       final decoded = jsonDecode(utf8.decode(await _readBounded(response)));
-      if (decoded is! Map ||
-          decoded['workers'] is! List ||
+      if (decoded is! Map || decoded['workers'] is! List) {
+        throw const FormatException('Worker catalog response is invalid');
+      }
+      if (!useHumanCatalog &&
           !const {'testing', 'beta', 'stable'}.contains(decoded['channel'])) {
         throw const FormatException('Worker catalog response is invalid');
       }
@@ -322,11 +348,12 @@ class ToolProfileCatalogClient {
     );
   }
 
-  Future<HttpClientResponse> _get(Uri uri) async {
+  Future<HttpClientResponse> _get(Uri uri, {String? token}) async {
     final request = await _client.getUrl(uri).timeout(timeout);
-    final token = authToken;
-    if (token != null && token.isNotEmpty) {
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    final credential = token ?? authToken;
+    if (credential != null && credential.isNotEmpty) {
+      request.headers
+          .set(HttpHeaders.authorizationHeader, 'Bearer $credential');
     }
     request.headers.set(HttpHeaders.acceptHeader, 'application/json');
     return request.close().timeout(timeout);

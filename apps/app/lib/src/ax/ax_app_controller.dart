@@ -411,7 +411,6 @@ extension _AxAppController on _AxAppStateMixin {
           store.invitations.refresh(),
         ]);
         if (!mounted) return;
-        unawaited(_refreshWorkspaceGrantSummary());
         return;
       }
       // Execution events are reconciled by the shared Work router, never by
@@ -1085,77 +1084,6 @@ extension _AxAppController on _AxAppStateMixin {
       runId: next.runId,
       executionWorkspaceId: executionWorkspaceId,
     ));
-  }
-
-  Future<void> _grantWorkspace(AxWorkspace workspace) async {
-    if (store.spaces.items.isEmpty) {
-      _showSnackBar('Create a Space before granting Workspace access.');
-      return;
-    }
-    String? selectedSpaceId = store.spaces.items.first.id;
-    final permissions = <String>{};
-    final spaceId = await showDialog<String>(
-      context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Grant Workspace to Space'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            DropdownButtonFormField<String>(
-              initialValue: selectedSpaceId,
-              decoration: const InputDecoration(labelText: 'Space'),
-              items: store.spaces.items
-                  .map((space) => DropdownMenuItem(
-                      value: space.id, child: Text(space.name)))
-                  .toList(),
-              onChanged: (value) =>
-                  setDialogState(() => selectedSpaceId = value),
-            ),
-            const Text(
-                'Work needs repository read and write access. Test steps also need command execution.'),
-            for (final entry in const {
-              'repository:read': 'Read repository files',
-              'repository:write': 'Change repository files',
-              'shell:execute': 'Execute commands and tests',
-            }.entries)
-              CheckboxListTile(
-                  title: Text(entry.value),
-                  value: permissions.contains(entry.key),
-                  onChanged: (value) => setDialogState(() {
-                        if (value == true) {
-                          permissions.add(entry.key);
-                        } else {
-                          permissions.remove(entry.key);
-                        }
-                      })),
-          ]),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: selectedSpaceId == null
-                  ? null
-                  : () => Navigator.pop(dialogContext, selectedSpaceId),
-              child: const Text('Grant access'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (spaceId == null) return;
-    try {
-      await store.spaceWorkspaceGrants.create(
-        spaceId: spaceId,
-        workspaceId: workspace.id,
-        workspaceName: workspace.name,
-        allowedPermissions: permissions.toList(),
-      );
-      await _refreshWorkspaceGrantSummary();
-      if (mounted) _showSnackBar('Workspace access request sent.');
-    } catch (error) {
-      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
-    }
   }
 
   void _handleContextualCreate() {

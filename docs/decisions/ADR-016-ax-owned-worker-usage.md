@@ -31,9 +31,10 @@ opening the desktop application.
    member selects a default built-in Workflow and binds `direct` and each
    canonical Work v1 StepKind to a Workspace Worker. A binding may also set a
    model, one fallback Worker, and additional Step instructions.
-3. **Cloud enforces the config.** The scheduler applies the selected Step
-   binding, active Space grant, Workspace online state, local readiness,
-   Cloud scheduling state, model policy, capacity, and assignment permissions.
+3. **Cloud enforces the config.** Selecting a Workflow Workspace authorizes its
+   ready, locally enabled Workers for Cloud scheduling. The scheduler then
+   applies the selected Step binding, active Space grant, Workspace online
+   state, local readiness, model policy, capacity, and assignment permissions.
    The Workspace continues to enforce its local permission and concurrency
    boundaries when executing.
 4. **A missing Step binding fails closed.** A Thread assignment is not

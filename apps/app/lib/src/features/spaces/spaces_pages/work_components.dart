@@ -381,189 +381,218 @@ class _WorkComposer extends StatelessWidget {
     final supportedEfforts = effortOptions?.supported == true
         ? effortOptions!.values
         : const <String>[];
+    final controlBg = Colors.transparent;
+    const controlBorderRadius = BorderRadius.all(Radius.circular(6));
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Builder(
-            builder: (buttonContext) => IconButton(
-              tooltip: 'Add attachments',
-              icon: const Icon(Icons.add, size: 18),
-              onPressed: () async {
-                final value = await _showAnchoredMenu<String>(
-                  buttonContext: buttonContext,
-                  inputKey: inputKey,
-                  itemHeight: 48.0,
-                  items: [
-                    PopupMenuItem(
-                      value: 'files',
-                      enabled: canExecute && !submitting,
-                      child: const ListTile(
-                        dense: true,
-                        leading: Icon(Icons.attach_file, size: 18),
-                        title: Text('Add files'),
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'link',
-                      enabled: canExecute && !submitting,
-                      child: const ListTile(
-                        dense: true,
-                        leading: Icon(Icons.link, size: 18),
-                        title: Text('Add link'),
-                      ),
-                    ),
-                  ],
-                );
-                if (!buttonContext.mounted || value == null) return;
-                if (value == 'files') {
-                  onAddFiles();
-                } else if (value == 'link') {
-                  onAddReference();
-                }
-              },
+            builder: (buttonContext) => Tooltip(
+              message: 'Add attachments',
+              child: Material(
+                color: controlBg,
+                borderRadius: controlBorderRadius,
+                child: InkWell(
+                  borderRadius: controlBorderRadius,
+                  onTap: () async {
+                    final value = await _showAnchoredMenu<String>(
+                      buttonContext: buttonContext,
+                      inputKey: inputKey,
+                      itemHeight: 48.0,
+                      items: [
+                        PopupMenuItem(
+                          value: 'files',
+                          enabled: canExecute && !submitting,
+                          child: const ListTile(
+                            dense: true,
+                            leading: Icon(Icons.attach_file, size: 18),
+                            title: Text('Add files'),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'link',
+                          enabled: canExecute && !submitting,
+                          child: const ListTile(
+                            dense: true,
+                            leading: Icon(Icons.link, size: 18),
+                            title: Text('Add link'),
+                          ),
+                        ),
+                      ],
+                    );
+                    if (!buttonContext.mounted || value == null) return;
+                    if (value == 'files') {
+                      onAddFiles();
+                    } else if (value == 'link') {
+                      onAddReference();
+                    }
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    child: Icon(Icons.add, size: 16),
+                  ),
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
           Builder(
             builder: (workflowBtnContext) => Tooltip(
               message: 'Choose workflow',
-              child: InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: canExecute && !submitting && workflowCatalog.isNotEmpty
-                    ? () async {
-                        final versions =
-                            _currentWorkflowVersions(workflowCatalog);
-                        final value = await _showAnchoredMenu<String>(
-                          buttonContext: workflowBtnContext,
-                          inputKey: inputKey,
-                          itemHeight: 48.0,
-                          items: [
-                            for (final item in versions)
-                              CheckedPopupMenuItem(
-                                value: item.reference,
-                                checked: item.reference == workflow,
-                                enabled: canExecute && !submitting,
-                                child: Tooltip(
-                                  message: item.description,
-                                  child: Text(item.name),
-                                ),
-                              ),
-                          ],
-                        );
-                        if (!workflowBtnContext.mounted || value == null) {
-                          return;
-                        }
-                        onWorkflowChanged(value);
-                      }
-                    : null,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 130),
-                        child: Text(
-                          selectedWorkflow?.name ?? 'Choose workflow',
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
+              child: Material(
+                color: controlBg,
+                borderRadius: controlBorderRadius,
+                child: InkWell(
+                  borderRadius: controlBorderRadius,
+                  onTap: canExecute && !submitting && workflowCatalog.isNotEmpty
+                      ? () async {
+                          final versions =
+                              _currentWorkflowVersions(workflowCatalog);
+                          final value = await _showAnchoredMenu<String>(
+                            buttonContext: workflowBtnContext,
+                            inputKey: inputKey,
+                            itemHeight: 48.0,
+                            items: [
+                              for (final item in versions)
+                                CheckedPopupMenuItem(
+                                  value: item.reference,
+                                  checked: item.reference == workflow,
+                                  enabled: canExecute && !submitting,
+                                  child: Tooltip(
+                                    message: item.description,
+                                    child: Text(item.name),
                                   ),
+                                ),
+                            ],
+                          );
+                          if (!workflowBtnContext.mounted || value == null) {
+                            return;
+                          }
+                          onWorkflowChanged(value);
+                        }
+                      : null,
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 130),
+                          child: Text(
+                            selectedWorkflow?.name ?? 'Choose workflow',
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 2),
-                      const Icon(Icons.keyboard_arrow_down, size: 14),
-                    ],
+                        const SizedBox(width: 2),
+                        const Icon(Icons.keyboard_arrow_down, size: 14),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
           if (stepKind != null && policy.userSelectsWorker) ...[
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             Builder(
-                builder: (workerContext) => Tooltip(
-                      message: 'Worker · configured in Workflows',
-                      child: InkWell(
-                        key: const ValueKey('work-composer-worker'),
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: null,
-                        child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 4),
-                            child:
-                                Row(mainAxisSize: MainAxisSize.min, children: [
-                              if (assignedWorker != null) ...[
-                                _workerIcon(context, assignedWorker),
-                                const SizedBox(width: 4)
-                              ],
-                              ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 140),
-                                  child: Text(
-                                    assignedWorker?.displayName ??
-                                        (binding['workerId'] == null
-                                            ? 'Automatic'
-                                            : 'Unavailable Worker'),
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                            color:
-                                                binding['workerId'] == null ||
-                                                        isWorkerAssigned
-                                                    ? null
-                                                    : colors.error),
-                                  )),
-                              const Icon(Icons.keyboard_arrow_down, size: 14),
-                            ])),
-                      ),
-                    )),
-          ],
-          if (stepKind != null && isWorkerAssigned) ...[
-            if (policy.userSelectsModel &&
-                (assignedWorker?.executionOptions?.modelSelectionSupported ??
-                    true)) ...[
-              const SizedBox(width: 4),
-              Builder(
-                builder: (modelBtnContext) => Tooltip(
-                  message: 'Model · configured in Workflows',
+              builder: (workerContext) => Tooltip(
+                message: 'Worker · configured in Workflows',
+                child: Material(
+                  color: controlBg,
+                  borderRadius: controlBorderRadius,
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
+                    key: const ValueKey('work-composer-worker'),
+                    borderRadius: controlBorderRadius,
                     onTap: null,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 4),
+                          horizontal: 8, vertical: 5),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (assignedWorker != null) ...[
+                            _workerIcon(context, assignedWorker),
+                            const SizedBox(width: 4),
+                          ],
                           ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 130),
+                            constraints: const BoxConstraints(maxWidth: 140),
                             child: Text(
-                              _modelDisplayName(selectedModel,
-                                          worker: assignedWorker)
-                                      .isEmpty
-                                  ? 'Default model'
-                                  : _modelDisplayName(selectedModel,
-                                      worker: assignedWorker),
+                              assignedWorker?.displayName ??
+                                  (binding['workerId'] == null
+                                      ? 'Automatic'
+                                      : 'Unavailable Worker'),
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall
                                   ?.copyWith(
                                     fontWeight: FontWeight.w600,
+                                    color: binding['workerId'] == null ||
+                                            isWorkerAssigned
+                                        ? null
+                                        : colors.error,
                                   ),
                             ),
                           ),
-                          const SizedBox(width: 2),
                           const Icon(Icons.keyboard_arrow_down, size: 14),
                         ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+          if (stepKind != null && isWorkerAssigned) ...[
+            if (policy.userSelectsModel &&
+                (assignedWorker?.executionOptions?.modelSelectionSupported ??
+                    true)) ...[
+              const SizedBox(width: 6),
+              Builder(
+                builder: (modelBtnContext) => Tooltip(
+                  message: 'Model · configured in Workflows',
+                  child: Material(
+                    color: controlBg,
+                    borderRadius: controlBorderRadius,
+                    child: InkWell(
+                      borderRadius: controlBorderRadius,
+                      onTap: null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 5),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 130),
+                              child: Text(
+                                _modelDisplayName(selectedModel,
+                                            worker: assignedWorker)
+                                        .isEmpty
+                                    ? 'Default model'
+                                    : _modelDisplayName(selectedModel,
+                                        worker: assignedWorker),
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            const Icon(Icons.keyboard_arrow_down, size: 14),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -571,37 +600,41 @@ class _WorkComposer extends StatelessWidget {
               ),
             ],
             if (policy.userSelectsEffort && supportedEfforts.isNotEmpty) ...[
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               Builder(
                 builder: (reasoningBtnContext) => Tooltip(
                   message: 'Effort · configured in Workflows',
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: null,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 110),
-                            child: Text(
-                              selectedReasoningEffort.isEmpty
-                                  ? 'Default effort'
-                                  : '${_reasoningEffortDisplayName(selectedReasoningEffort)} effort',
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                  child: Material(
+                    color: controlBg,
+                    borderRadius: controlBorderRadius,
+                    child: InkWell(
+                      borderRadius: controlBorderRadius,
+                      onTap: null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 5),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 110),
+                              child: Text(
+                                selectedReasoningEffort.isEmpty
+                                    ? 'Default effort'
+                                    : '${_reasoningEffortDisplayName(selectedReasoningEffort)} effort',
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 2),
-                          const Icon(Icons.keyboard_arrow_down, size: 14),
-                        ],
+                            const SizedBox(width: 2),
+                            const Icon(Icons.keyboard_arrow_down, size: 14),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -635,7 +668,6 @@ class _WorkComposer extends StatelessWidget {
             sendTooltip: 'Send request',
             sendEnabled: canExecute &&
                 !submitting &&
-                !awaitingResponse &&
                 !loadingWorkflows &&
                 workflowCatalogError == null,
             additionalControlsBuilder: (inputKey) =>
@@ -1458,11 +1490,13 @@ class _DiscussionMessageBubble extends StatefulWidget {
     required this.item,
     required this.onCopy,
     required this.onEdit,
+    this.onDelete,
   });
 
   final _DiscussionItem item;
   final VoidCallback onCopy;
   final ValueChanged<String> onEdit;
+  final VoidCallback? onDelete;
 
   @override
   State<_DiscussionMessageBubble> createState() =>
@@ -1499,6 +1533,33 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
       widget.onEdit(text);
     }
     setState(() => _isEditing = false);
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete message?'),
+        content: const Text(
+            'Are you sure you want to delete this message? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && widget.onDelete != null) {
+      widget.onDelete!();
+    }
   }
 
   @override
@@ -1614,7 +1675,27 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                           ),
                           const SizedBox(width: 8),
                         ],
-                        if (!widget.item.id.startsWith('temp-'))
+                        if (isMe &&
+                            widget.onDelete != null &&
+                            !widget.item.id.startsWith('temp-')) ...[
+                          Tooltip(
+                            message: 'Delete message',
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(4),
+                              onTap: () => _confirmDelete(context),
+                              child: Padding(
+                                padding: const EdgeInsets.all(2),
+                                child: Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 14,
+                                  color: metaColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        if (!widget.item.id.startsWith('temp-')) ...[
                           Tooltip(
                             message: 'Edit message',
                             child: InkWell(
@@ -1633,7 +1714,8 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                               ),
                             ),
                           ),
-                        const SizedBox(width: 6),
+                          const SizedBox(width: 6),
+                        ],
                         Tooltip(
                           message: 'Copy Markdown',
                           child: InkWell(

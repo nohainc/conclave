@@ -440,67 +440,21 @@ No HTTP contract, Cloud schema, protocol or compatibility migration is required.
 Standalone Thread consumers may inject the session catalog cache; the default
 source-associated fallback shares reads for consumers using the same data source.
 
-## Phase 12: Space Workspace grant collections
-
-`AxStore.spaceWorkspaceGrants` owns structural
-`['space', spaceId, 'workspace-grants']` queries with a one-minute stale
-window. Threads in one Space and the Space's Workspace settings share
-this immutable collection and in-flight reads. Cached grants render immediately;
-stale ensures retain them while revalidating. Worker choices combine the current
-shared inventory with this Space collection, rather than each Thread
-requesting both resources. Suspended grants do not supply Worker choices.
-
-Create, permission-edit and revoke actions use shared per-operation optimistic
-overlays. All observers see those changes immediately. A failed write removes
-only its own overlay, preserving concurrent writes and realtime updates. A
-successful write commits its local change, invalidates the Space grant key,
-and revalidates the existing HTTP collection. Confirmed writes survive read
-failures, which remain in query state for retry. Temporary create IDs disable
-edit/revoke controls until the authoritative collection supplies server IDs.
-No mutation changes the underlying data-source HTTP signatures.
-
-`space_workspace_grant.updated` revalidates only its Space's grant collection;
-query observers update Worker choices and Space settings. Space scope gaps
-include this collection. Session clearing and Space deletion fence late writes,
-remove optimistic overlays and preserve other Spaces' collections. A detached
-view retains data without retaining its subscription.
-
-Grant cache tests cover cold/stale read sharing, nested immutability, create/edit/
-revoke reconciliation, failures, concurrent overlays, realtime during a write,
-reconciliation retry, session clearing and Space tombstones. Thread widget
-coverage verifies that multiple views in a Space share one grant HTTP read.
-
-## Phase 13: Aggregate Workspace grant counts
-
-The Workspace list now includes `activeSpaceGrantCount`, as specified by the
-[Workspace Space Grants read model 1.1](../specifications/WORKSPACE_SPACE_GRANTS.md).
-Cloud aggregates counts in the same authorized D1 list statement. Counts are
-distinct Spaces with active, unexpired grants to non-archived Spaces; they
-include contributions even when the Workspace owner is not a Space member.
-Only the authenticated owner's non-revoked Workspaces are returned.
-
-AX maps that field into `AxWorkspace.spaceGrantCount` and renders it directly.
-The `_refreshWorkspaceSpaceGrantCounts` Space loop and separate mutable
-count map are removed. Bootstrap reads do not trigger count-specific Space
-requests. Catalog/grant signals and shell grant writes refresh the Workspace
-summary with one Workspace list read; errors retain previous counts. A grant
-signal does not reload the Space catalog.
-
-Actual-SQL Cloud tests verify status, expiration, archival, duplicates, ownership
-and zero counts. A 30-Space case makes one aggregate database read; a shell
-widget with 30 Spaces makes zero per-Space grant reads for counting. HTTP
-client tests verify the additive field and legacy/default parsing. There is no
-D1 migration, new endpoint, dependency, runtime protocol or provider change.
-Deploy Cloud's additive field before AX to populate full counts; older responses
-remain parseable using the legacy field or zero fallback.
+Workflow Workspace selection is the only user-facing Space-to-Workspace
+authorization surface. The Workflows query is cached by Space and the Thread
+page derives its Worker list from the selected Workflow Workspace; it does not
+load a separate grant collection. Cloud repairs a missing internal grant when
+the selected Workspace is read and keeps the grant table authoritative for
+admission and dispatch. The Workspaces list does not compute or display Space
+grant counts.
 
 
 ## Phase 14: lazy Space tabs
 
 `AxSpaceTabQueries` shares session-scoped Space resources in the sync engine.
 SpacePage observes and ensures only its selected tab: Threads use
-`space:<id>:threads`; Workspaces use `space:<id>:workspace-grants`;
-Members use `space:<id>:members` and `space:<id>:invitations`. Tab switches
+`space:<id>:threads`; Members use `space:<id>:members` and
+`space:<id>:invitations`. Tab switches
 remove listeners without removing cached data. Reopening a tab or Space shows
 cached results immediately and refreshes stale results in the background.
 Members/invitations use the default one-minute stale interval. Space gap

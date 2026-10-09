@@ -3,7 +3,6 @@ export const SPACE_MEMBER_PERMISSION_KEYS = [
   "chat",
   "work",
   "manageOwnThreads",
-  "attachWorkspace",
 ] as const;
 export type SpaceMemberPermission =
   (typeof SPACE_MEMBER_PERMISSION_KEYS)[number];
@@ -20,7 +19,6 @@ export function defaultSpaceMemberPermissions(
     chat: owner || collaborator,
     work: owner || collaborator,
     manageOwnThreads: owner || collaborator,
-    attachWorkspace: owner,
   };
 }
 
@@ -55,6 +53,5 @@ export function spaceMemberPermissions(
     chat: value.chat === true,
     work: value.work === true,
     manageOwnThreads: value.manageOwnThreads === true,
-    attachWorkspace: value.attachWorkspace === true,
   };
 }

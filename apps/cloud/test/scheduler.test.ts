@@ -838,7 +838,6 @@ it("rechecks granular rights at dispatch and ignores the retired Space-wide swit
         chat: true,
         work: false,
         manageOwnThreads: false,
-        attachWorkspace: false,
       },
     },
   };

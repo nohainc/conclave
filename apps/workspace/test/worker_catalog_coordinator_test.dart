@@ -252,6 +252,41 @@ void main() {
     controller.dispose();
   });
 
+  test('keeps cached catalog without runtime identity while disconnected',
+      () async {
+    final seedCatalog = ToolProfileCatalogClient(
+      cloudUri: Uri.https('cloud.example', '/'),
+      store: store,
+      trustPolicy: signing.trustPolicy,
+      workerCatalogLoader: () async => [descriptor],
+      trustRefresher: () async {},
+    );
+    await seedCatalog.syncCatalog();
+    seedCatalog.close();
+
+    final disconnectedCatalog = ToolProfileCatalogClient(
+      cloudUri: Uri.https('cloud.example', '/'),
+      store: store,
+      trustPolicy: signing.trustPolicy,
+    );
+    final controller = WorkerCatalogCoordinator(
+      catalog: disconnectedCatalog,
+      releaseStore: store,
+    );
+
+    await controller.refresh(force: true);
+
+    expect(
+      controller.snapshot.descriptors.map((worker) => worker.workerTypeId),
+      ['fixture-cli'],
+    );
+    expect(controller.snapshot.catalogConfirmed, isFalse);
+    expect(controller.snapshot.catalogError, isNull);
+
+    disconnectedCatalog.close();
+    controller.dispose();
+  });
+
   test('shows redacted download failure when no cached Profile exists',
       () async {
     final catalog = ToolProfileCatalogClient(

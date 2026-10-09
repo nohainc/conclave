@@ -66,8 +66,8 @@ function fixture() {
   return { sqlite, db, space, grant, list };
 }
 
-describe("Workspace aggregate Space grant counts", () => {
-  it("counts distinct active, unexpired grants to unarchived Spaces, only for owned Workspaces", async () => {
+describe("Workspace aggregate", () => {
+  it("does not expose Space access counts", async () => {
     const f = fixture();
     try {
       for (const id of [
@@ -92,17 +92,14 @@ describe("Workspace aggregate Space grant counts", () => {
       f.grant("g8", "private", "active", null, "private");
       const { workspaces } = await f.list();
       expect(workspaces.map((w) => w.id).sort()).toEqual(["empty", "mine"]);
-      expect(
-        workspaces.find((w) => w.id === "mine")?.activeSpaceGrantCount,
-      ).toBe(2);
-      expect(
-        workspaces.find((w) => w.id === "empty")?.activeSpaceGrantCount,
-      ).toBe(0);
+      expect(workspaces.find((w) => w.id === "mine")).not.toHaveProperty(
+        "activeSpaceGrantCount",
+      );
     } finally {
       f.sqlite.close();
     }
   });
-  it("returns counts for 30 Spaces with one aggregate database read and no per-Space reads", async () => {
+  it("uses one aggregate database read without a grant-count query", async () => {
     const f = fixture();
     try {
       for (let i = 0; i < 30; i++) {
@@ -111,11 +108,10 @@ describe("Workspace aggregate Space grant counts", () => {
       }
       const reads = vi.spyOn(f.db, "prepare");
       const { workspaces } = await f.list();
-      expect(
-        workspaces.find((w) => w.id === "mine")?.activeSpaceGrantCount,
-      ).toBe(30);
       expect(reads.mock.calls).toHaveLength(1);
-      expect(reads.mock.calls[0]?.[0]).toContain("COUNT(DISTINCT g.space_id)");
+      expect(reads.mock.calls[0]?.[0]).not.toContain(
+        "COUNT(DISTINCT g.space_id)",
+      );
     } finally {
       f.sqlite.close();
     }

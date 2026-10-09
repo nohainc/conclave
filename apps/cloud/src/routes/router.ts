@@ -520,63 +520,6 @@ export async function routeWorkerRequest(
         );
       }
     }
-    const workspaceSpacesMatch = url.pathname.match(
-      /^\/api\/workspaces\/([^/]+)\/spaces$/,
-    );
-    if (request.method === "GET" && workspaceSpacesMatch?.[1]) {
-      return await handlers.handleListWorkspaceSpaceGrants!(
-        request,
-        env,
-        workspaceSpacesMatch[1],
-        ctx,
-      );
-    }
-    const workspaceSpaceGrantMatch = url.pathname.match(
-      /^\/api\/workspaces\/([^/]+)\/spaces\/([^/]+)\/grant$/,
-    );
-    if (
-      request.method === "POST" &&
-      workspaceSpaceGrantMatch?.[1] &&
-      workspaceSpaceGrantMatch?.[2]
-    ) {
-      return await handlers.handleCreateWorkspaceSpaceGrant!(
-        request,
-        env,
-        workspaceSpaceGrantMatch[1],
-        workspaceSpaceGrantMatch[2],
-        ctx,
-      );
-    }
-    const workflowWorkspaceGrantsMatch = url.pathname.match(
-      /^\/api\/spaces\/([^/]+)\/workflow-workspace\/grants$/,
-    );
-    if (request.method === "GET" && workflowWorkspaceGrantsMatch?.[1]) {
-      return await handlers.handleListSpaceWorkflowWorkspaceGrants!(
-        request,
-        env,
-        workflowWorkspaceGrantsMatch[1],
-        ctx,
-      );
-    }
-    const grantItemMatch = url.pathname.match(
-      /^\/api\/workspace-space-grants\/([^/]+)$/,
-    );
-    if (request.method === "PATCH" && grantItemMatch?.[1]) {
-      return await handlers.handleUpdateWorkspaceSpaceGrant!(
-        request,
-        env,
-        grantItemMatch[1],
-        ctx,
-      );
-    }
-    if (request.method === "DELETE" && grantItemMatch?.[1]) {
-      return await handlers.handleRevokeWorkspaceSpaceGrant!(
-        request,
-        env,
-        grantItemMatch[1],
-        ctx,
-      );
-    }
     const artifactUploadMatch = url.pathname.match(
       /^\/api\/workspaces\/([^/]+)\/artifacts$/,
     );
@@ -927,6 +870,14 @@ export async function routeWorkerRequest(
     }
     if (request.method === "PATCH" && discussionMessageMatch?.[1]) {
       return await handlers.handleEditDiscussionMessage!(
+        request,
+        env,
+        discussionMessageMatch[1],
+        ctx,
+      );
+    }
+    if (request.method === "DELETE" && discussionMessageMatch?.[1]) {
+      return await handlers.handleDeleteDiscussionMessage!(
         request,
         env,
         discussionMessageMatch[1],

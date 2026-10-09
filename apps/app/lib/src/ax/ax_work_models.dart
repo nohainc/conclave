@@ -715,21 +715,6 @@ abstract interface class AxDataSource {
   Future<List<AxWorkspace>> loadWorkspaces();
   Future<List<AxSpace>> loadSpaces({bool includeArchived = false});
   Future<AxSpace> loadSpace({required String spaceId});
-  Future<List<Map<String, dynamic>>> loadSpaceWorkflowWorkspaceGrants({
-    required String spaceId,
-  });
-  Future<void> createWorkspaceSpaceGrant({
-    required String spaceId,
-    required String workspaceId,
-    List<String> allowedPermissions = const [],
-  });
-  Future<void> updateWorkspaceSpacePermissions({
-    required String grantId,
-    required List<String> allowedPermissions,
-  });
-  Future<void> revokeWorkspaceSpaceGrant({
-    required String grantId,
-  });
   Future<List<AxThread>> loadSpaceThreads({
     required String spaceId,
   });
@@ -805,6 +790,10 @@ abstract interface class AxDataSource {
     required String messageId,
     required String text,
     List<String> references = const [],
+  }) async =>
+      throw UnimplementedError('Discussion messages are not available');
+  Future<void> deleteDiscussionMessage({
+    required String messageId,
   }) async =>
       throw UnimplementedError('Discussion messages are not available');
   Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => const [];

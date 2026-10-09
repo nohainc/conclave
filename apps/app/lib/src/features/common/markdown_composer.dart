@@ -227,7 +227,6 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final isFocused = _focus.hasFocus;
 
     final inputContent = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -244,8 +243,8 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                     meta: modifier,
                     control: !modifier): () => _format(MarkdownFormat.bold),
                 SingleActivator(LogicalKeyboardKey.keyI,
-                        meta: modifier, control: !modifier):
-                    () => _format(MarkdownFormat.italic),
+                    meta: modifier,
+                    control: !modifier): () => _format(MarkdownFormat.italic),
                 SingleActivator(LogicalKeyboardKey.keyE,
                         meta: modifier, control: !modifier):
                     () => _format(MarkdownFormat.inlineCode),
@@ -271,6 +270,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                 labelText: widget.labelText,
                 hintText: widget.hintText,
                 isDense: widget.chatStyle,
+                hoverColor: Colors.transparent,
                 contentPadding: widget.chatStyle
                     ? const EdgeInsets.fromLTRB(14, 12, 10, 12)
                     : null,
@@ -285,9 +285,8 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                             icon: Icon(
                               Icons.text_format,
                               size: 18,
-                              color: _showFormatting
-                                  ? colorScheme.primary
-                                  : null,
+                              color:
+                                  _showFormatting ? colorScheme.primary : null,
                             ),
                             onPressed: () => setState(
                                 () => _showFormatting = !_showFormatting),
@@ -304,9 +303,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                         ],
                       )
                     : null,
-                border: widget.chatStyle
-                    ? InputBorder.none
-                    : InputBorder.none,
+                border: widget.chatStyle ? InputBorder.none : InputBorder.none,
                 enabledBorder: widget.chatStyle ? InputBorder.none : null,
                 focusedBorder: widget.chatStyle ? InputBorder.none : null,
               ),
@@ -341,14 +338,12 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
       ],
     );
 
+    final backgroundColor = colorScheme.surfaceContainerLow;
+
     return Container(
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        border: Border.all(
-          color: widget.chatStyle
-              ? (isFocused ? colorScheme.primary : colorScheme.outlineVariant)
-              : colorScheme.outlineVariant,
-          width: widget.chatStyle && isFocused ? 1.5 : 1.0,
-        ),
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(10),
       ),
       padding: EdgeInsets.all(widget.chatStyle
@@ -382,10 +377,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
               ),
             ]),
           if (!widget.chatStyle && !_preview) _formattingToolbar(),
-          if (widget.chatStyle)
-            inputContent
-          else if (!_preview)
-            inputContent,
+          inputContent,
           if (widget.chatStyle &&
               widget.sendInToolbar &&
               widget.executionControlsBuilder != null &&
@@ -410,7 +402,10 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                 ),
             ])
           else if (widget.additionalControlsBuilder != null)
-            widget.additionalControlsBuilder!(_inputKey),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+              child: widget.additionalControlsBuilder!(_inputKey),
+            ),
           if (!widget.chatStyle &&
               (widget.onSend != null || widget.onSubmit != null))
             Row(children: [

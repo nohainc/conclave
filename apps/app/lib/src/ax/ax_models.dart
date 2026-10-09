@@ -260,27 +260,18 @@ typedef AxRunPhase = AxPhaseItem;
 
 class AxSpacePermissions {
   const AxSpacePermissions(
-      {this.chat = false,
-      this.work = false,
-      this.manageOwnThreads = false,
-      this.attachWorkspace = false});
-  final bool chat, work, manageOwnThreads, attachWorkspace;
+      {this.chat = false, this.work = false, this.manageOwnThreads = false});
+  final bool chat, work, manageOwnThreads;
   factory AxSpacePermissions.forRole(String role) => AxSpacePermissions(
       chat: role == 'owner' || role == 'collaborator',
       work: role == 'owner' || role == 'collaborator',
-      manageOwnThreads: role == 'owner' || role == 'collaborator',
-      attachWorkspace: role == 'owner');
+      manageOwnThreads: role == 'owner' || role == 'collaborator');
   factory AxSpacePermissions.fromJson(Map json) => AxSpacePermissions(
       chat: json['chat'] == true,
       work: json['work'] == true,
-      manageOwnThreads: json['manageOwnThreads'] == true,
-      attachWorkspace: json['attachWorkspace'] == true);
-  Map<String, bool> toJson() => {
-        'chat': chat,
-        'work': work,
-        'manageOwnThreads': manageOwnThreads,
-        'attachWorkspace': attachWorkspace
-      };
+      manageOwnThreads: json['manageOwnThreads'] == true);
+  Map<String, bool> toJson() =>
+      {'chat': chat, 'work': work, 'manageOwnThreads': manageOwnThreads};
 }
 
 class AxThread {
@@ -1031,7 +1022,6 @@ class AxWorkspace {
     this.lastSeen = '—',
     this.workerCount = 0,
     this.activeTaskCount = 0,
-    this.spaceGrantCount = 0,
   });
 
   final String id;
@@ -1052,7 +1042,6 @@ class AxWorkspace {
   final String lastSeen;
   final int workerCount;
   final int activeTaskCount;
-  final int spaceGrantCount;
 
   factory AxWorkspace.fromJson(Map<String, dynamic> json) => AxWorkspace(
         id: _string(json, 'id'),
@@ -1076,17 +1065,11 @@ class AxWorkspace {
             json, 'lastSeen', json['factsUpdatedAt']?.toString() ?? '—'),
         workerCount: json['workerCount'] as int? ?? 0,
         activeTaskCount: json['activeTaskCount'] as int? ?? 0,
-        spaceGrantCount: (json['activeSpaceGrantCount'] ??
-                json['spaceGrantCount'] ??
-                json['activeSpaceGrantCount'] ??
-                json['spaceGrantCount']) as int? ??
-            0,
       );
 
   AxWorkspace copyWith({
     int? workerCount,
     int? activeTaskCount,
-    int? spaceGrantCount,
     String? lastSeen,
   }) =>
       AxWorkspace(
@@ -1108,7 +1091,6 @@ class AxWorkspace {
         lastSeen: lastSeen ?? this.lastSeen,
         workerCount: workerCount ?? this.workerCount,
         activeTaskCount: activeTaskCount ?? this.activeTaskCount,
-        spaceGrantCount: spaceGrantCount ?? this.spaceGrantCount,
       );
 }
 

@@ -49,3 +49,51 @@ describe("invite-members permission cleanup migration", () => {
     });
   });
 });
+
+describe("attach-workspace permission cleanup migration", () => {
+  let store: ReturnType<typeof sqliteD1>;
+
+  beforeEach(() => {
+    store = sqliteD1();
+    store.sqlite
+      .prepare(
+        "INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES('owner','owner@test','Owner','now','now')",
+      )
+      .run();
+    store.sqlite
+      .prepare(
+        "INSERT INTO spaces(id,owner_user_id,name,settings_json,created_at,updated_at) VALUES('legacy','owner','Legacy',?,'now','now')",
+      )
+      .run(
+        JSON.stringify({
+          memberPermissions: {
+            member: { chat: true, attachWorkspace: true, work: false },
+          },
+          invitationPermissions: {
+            invitation: { chat: false, attachWorkspace: true, work: true },
+          },
+        }),
+      );
+  });
+
+  afterEach(() => store.sqlite.close());
+
+  it("removes the obsolete Workspace attachment right from persisted snapshots", () => {
+    store.sqlite.exec(
+      readFileSync(
+        new URL(
+          "../migrations-v8/0026_remove_attach_workspace_permission.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    const row = store.sqlite
+      .prepare("SELECT settings_json FROM spaces WHERE id='legacy'")
+      .get() as { settings_json: string };
+    expect(JSON.parse(row.settings_json)).toEqual({
+      memberPermissions: { member: { chat: true, work: false } },
+      invitationPermissions: { invitation: { chat: false, work: true } },
+    });
+  });
+});

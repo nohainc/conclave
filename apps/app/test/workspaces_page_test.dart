@@ -78,7 +78,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
 
@@ -101,7 +100,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
 
@@ -123,7 +121,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
 
@@ -151,7 +148,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
 
@@ -197,7 +193,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
       expect(find.text('Workers'), findsNWidgets(2));
@@ -217,7 +212,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
 
@@ -240,7 +234,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
 
@@ -271,7 +264,6 @@ void main() {
             onRename: (_) {},
             onUpdate: (_) {},
             onRevoke: (_) {},
-            onGrant: (_) {},
           );
 
       await tester.pumpWidget(buildTestScaffold(page(2)));
@@ -310,7 +302,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
 
@@ -342,7 +333,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
       expect(find.text('ChatGPT'), findsNWidgets(2));
@@ -382,7 +372,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
 
@@ -439,7 +428,6 @@ void main() {
           ),
         ],
         workspaceWorkers: [worker],
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
       final workerRow =
@@ -490,7 +478,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
 
@@ -538,7 +525,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
 
@@ -566,7 +552,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
         onConnect: (workspace) async => connectedWorkspace = workspace,
       )));
       await tester.pumpAndSettle();
@@ -586,7 +571,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
 
@@ -629,7 +613,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
 
@@ -646,7 +629,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);

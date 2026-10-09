@@ -547,87 +547,213 @@ extension _AxAppShellViews on _AxAppStateMixin {
   }
 
   Widget _content({required bool compact, required bool showTopHud}) {
-    return _spaceContextBuilder(() => Column(children: [
-          if (showTopHud)
-            _threadContextBuilder(() => ListenableBuilder(
-                listenable: Listenable.merge([
-                  store.workspaces,
-                  store.executionChanges,
-                  store.realtimeStatus
-                ]),
-                builder: (context, _) => AxTopBar(
-                      shellContext: _shellContext,
-                      onNavigateTo: _navigateTo,
-                      onOpenCommandPalette: _openCommandPalette,
-                      onOpenNotifications: _showNotifications,
-                      searchController: _searchQueryController,
-                      searchFocusNode: _searchFocusNode,
-                      onClearSearch: _clearSearch,
-                      onToggleTheme: _toggleTheme,
-                      onOpenAbout: () => unawaited(_showAboutConclave()),
-                      onLogout: () => unawaited(_logout()),
-                      onOpenExternal: (uri) =>
-                          browserNavigation.openExternal(uri),
-                      compact: compact,
-                    ))),
-          ListenableBuilder(
-              listenable: Listenable.merge(
-                  [store.realtimeStatus, store.lifecycleNotice]),
-              builder: (context, _) {
-                final status = store.realtimeStatus.value;
-                return Column(children: [
-                  if (status.$1 || store.lifecycleNotice.value != null)
-                    _realtimeStatusBanner(),
-                  if (status.$2 != null)
-                    Semantics(
-                        liveRegion: true,
-                        label: status.$2!,
-                        child: const SizedBox(width: 1, height: 1)),
-                ]);
-              }),
-          Expanded(
-            child: navigation.kind == AxRouteKind.thread
-                ? Padding(
-                    padding: EdgeInsets.zero,
-                    child: _threadView(),
-                  )
-                : SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(
-                        compact ? 18 : 34, 26, compact ? 18 : 34, 40),
-                    child:
-                        showRunDetails ? _runDetailsView(compact) : _homeView(),
-                  ),
-          ),
-        ]));
-  }
-
-  Widget _realtimeStatusBanner() => Semantics(
-        liveRegion: true,
-        label: store.lifecycleNotice.value ??
-            realtimeNotice ??
-            'Live updates are reconnecting.',
-        child: Container(
-          width: double.infinity,
-          color: const Color(0xfffff6df),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-          child: Row(children: [
-            const Icon(Icons.cloud_off_outlined,
-                size: 17, color: Color(0xff8a6518)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                store.lifecycleNotice.value ??
-                    realtimeNotice ??
-                    'Live updates are reconnecting.',
-                style: const TextStyle(color: Color(0xff765817), fontSize: 12),
+    return _spaceContextBuilder(() => Stack(
+          children: [
+            Column(children: [
+              if (showTopHud)
+                _threadContextBuilder(() => ListenableBuilder(
+                    listenable: Listenable.merge([
+                      store.workspaces,
+                      store.executionChanges,
+                      store.realtimeStatus
+                    ]),
+                    builder: (context, _) => AxTopBar(
+                          shellContext: _shellContext,
+                          onNavigateTo: _navigateTo,
+                          onOpenCommandPalette: _openCommandPalette,
+                          onOpenNotifications: _showNotifications,
+                          searchController: _searchQueryController,
+                          searchFocusNode: _searchFocusNode,
+                          onClearSearch: _clearSearch,
+                          onToggleTheme: _toggleTheme,
+                          onOpenAbout: () => unawaited(_showAboutConclave()),
+                          onLogout: () => unawaited(_logout()),
+                          onOpenExternal: (uri) =>
+                              browserNavigation.openExternal(uri),
+                          compact: compact,
+                        ))),
+              Expanded(
+                child: navigation.kind == AxRouteKind.thread
+                    ? Padding(
+                        padding: EdgeInsets.zero,
+                        child: _threadView(),
+                      )
+                    : SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(
+                            compact ? 18 : 34, 26, compact ? 18 : 34, 40),
+                        child: showRunDetails
+                            ? _runDetailsView(compact)
+                            : _homeView(),
+                      ),
+              ),
+            ]),
+            Positioned(
+              top: showTopHud ? 60 : 10,
+              left: 20,
+              right: 20,
+              child: _FloatingRealtimeStatusBanner(
+                realtimeStatus: store.realtimeStatus,
+                lifecycleNotice: store.lifecycleNotice,
+                realtimeNotice: realtimeNotice,
               ),
             ),
-            const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
+          ],
+        ));
+  }
+}
+
+class _FloatingRealtimeStatusBanner extends StatefulWidget {
+  const _FloatingRealtimeStatusBanner({
+    required this.realtimeStatus,
+    required this.lifecycleNotice,
+    this.realtimeNotice,
+  });
+
+  final ValueNotifier<(bool, String?)> realtimeStatus;
+  final ValueNotifier<String?> lifecycleNotice;
+  final String? realtimeNotice;
+
+  @override
+  State<_FloatingRealtimeStatusBanner> createState() =>
+      _FloatingRealtimeStatusBannerState();
+}
+
+class _FloatingRealtimeStatusBannerState
+    extends State<_FloatingRealtimeStatusBanner> {
+  Timer? _dismissTimer;
+  bool _visible = false;
+  String? _lastNoticeKey;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.realtimeStatus.addListener(_onNoticeChanged);
+    widget.lifecycleNotice.addListener(_onNoticeChanged);
+    _onNoticeChanged();
+  }
+
+  @override
+  void didUpdateWidget(covariant _FloatingRealtimeStatusBanner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.realtimeStatus != widget.realtimeStatus) {
+      oldWidget.realtimeStatus.removeListener(_onNoticeChanged);
+      widget.realtimeStatus.addListener(_onNoticeChanged);
+    }
+    if (oldWidget.lifecycleNotice != widget.lifecycleNotice) {
+      oldWidget.lifecycleNotice.removeListener(_onNoticeChanged);
+      widget.lifecycleNotice.addListener(_onNoticeChanged);
+    }
+    if (oldWidget.realtimeNotice != widget.realtimeNotice) {
+      _onNoticeChanged();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.realtimeStatus.removeListener(_onNoticeChanged);
+    widget.lifecycleNotice.removeListener(_onNoticeChanged);
+    _dismissTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onNoticeChanged() {
+    final status = widget.realtimeStatus.value;
+    final lifecycle = widget.lifecycleNotice.value;
+    final noticeText = lifecycle ?? widget.realtimeNotice ?? status.$2;
+    final isActive = status.$1 || lifecycle != null || noticeText != null;
+
+    if (!isActive || noticeText == null || noticeText.isEmpty) {
+      _dismissTimer?.cancel();
+      if (_visible) {
+        setState(() => _visible = false);
+      }
+      return;
+    }
+
+    final key = '$isActive:$noticeText';
+    if (key != _lastNoticeKey || !_visible) {
+      _lastNoticeKey = key;
+      _dismissTimer?.cancel();
+      setState(() => _visible = true);
+      _dismissTimer = Timer(const Duration(seconds: 1), () {
+        if (mounted) {
+          setState(() => _visible = false);
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = widget.realtimeStatus.value;
+    final lifecycle = widget.lifecycleNotice.value;
+    final noticeText = lifecycle ??
+        widget.realtimeNotice ??
+        status.$2 ??
+        'Live updates are reconnecting.';
+
+    if (!_visible) return const SizedBox.shrink();
+
+    return IgnorePointer(
+      ignoring: true,
+      child: AnimatedOpacity(
+        opacity: _visible ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 200),
+        child: Semantics(
+          liveRegion: true,
+          label: noticeText,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: Material(
+                elevation: 6,
+                borderRadius: BorderRadius.circular(8),
+                color: const Color(0xfffff6df),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xffe6c875)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.cloud_off_outlined,
+                        size: 16,
+                        color: Color(0xff8a6518),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          noticeText,
+                          style: const TextStyle(
+                            color: Color(0xff765817),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Color(0xff8a6518)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ]),
+          ),
         ),
-      );
+      ),
+    );
+  }
 }

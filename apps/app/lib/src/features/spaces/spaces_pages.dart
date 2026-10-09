@@ -18,7 +18,6 @@ import '../../ax/sync/ax_work_history.dart';
 import '../../ax/sync/ax_work_realtime_sync.dart';
 import '../../ax/sync/ax_session_catalogs.dart';
 import '../../ax/sync/ax_workflow_configurations.dart';
-import '../../ax/sync/ax_space_workspace_grants.dart';
 import '../../ax/sync/ax_space_tab_queries.dart';
 import '../../ax/sync/ax_sync_engine.dart';
 import '../../ax/sync/ax_collaboration_mutations.dart';

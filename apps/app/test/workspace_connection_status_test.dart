@@ -38,7 +38,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
 
@@ -67,7 +66,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
       )));
       await tester.pumpAndSettle();
       expect(find.text('Online'), findsNWidgets(2));
@@ -91,7 +89,6 @@ void main() {
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onGrant: (_) {},
         onOpenDownloads: () => downloadsOpenedCount++,
       )));
       await tester.pumpAndSettle();
@@ -165,7 +162,6 @@ void main() {
           onRename: (_) {},
           onUpdate: (_) {},
           onRevoke: (_) {},
-          onGrant: (_) {},
         )));
         await tester.pumpAndSettle();
         expect(find.text(expectedLabel), findsWidgets);

@@ -18,6 +18,8 @@ it("requires ownership and confirmation, scopes Workspace selection, resets work
   try {
     sqlite.exec(`INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES('owner','o@test','Owner','now','now'),('member','m@test','Member','now','now');
  INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('a','owner','First','now','now'),('b','owner','Second','now','now'),('foreign','member','Foreign','now','now');
+ INSERT INTO workspace_worker_inventory(worker_id,workspace_id,owner_user_id,worker_type_id,activation_state,readiness_state,local_concurrency_limit,revision,created_at,updated_at,last_seen_at) VALUES('worker-a','a','owner','chatgpt','enabled','ready',1,1,'now','now','now');
+ INSERT INTO worker_scheduling(worker_id,state,updated_at) VALUES('worker-a','disabled','now');
  INSERT INTO spaces(id,owner_user_id,name,created_at,updated_at) VALUES('s','owner','Space','now','now'),('independent','owner','Independent','now','now');
  INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at) VALUES('o','s','owner','owner','now','now'),('m','s','member','collaborator','now','now');`);
     const env = { CONCLAVE_DB: db, BETTER_AUTH_SECRET: "test" } as SecurityEnv;
@@ -45,6 +47,26 @@ it("requires ownership and confirmation, scopes Workspace selection, resets work
         )
         .get(),
     ).toEqual({ workspace_id: "a" });
+    expect(
+      sqlite
+        .prepare(
+          "SELECT state FROM worker_scheduling WHERE worker_id='worker-a'",
+        )
+        .get(),
+    ).toEqual({ state: "enabled" });
+    sqlite
+      .prepare(
+        "DELETE FROM workspace_space_grants WHERE space_id='s' AND workspace_id='a'",
+      )
+      .run();
+    await handle(undefined, "s");
+    expect(
+      sqlite
+        .prepare(
+          "SELECT workspace_id,status FROM workspace_space_grants WHERE space_id='s' AND workspace_id='a'",
+        )
+        .get(),
+    ).toEqual({ workspace_id: "a", status: "active" });
     await expect(
       handle({ workspaceId: "a", confirmReset: true }, undefined, "member"),
     ).rejects.toMatchObject({ status: 403 });

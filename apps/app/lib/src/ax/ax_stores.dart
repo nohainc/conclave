@@ -14,7 +14,6 @@ import 'sync/ax_work_history.dart';
 import 'sync/ax_work_realtime_sync.dart';
 import 'sync/ax_realtime_cache_router.dart';
 import 'sync/ax_session_catalogs.dart';
-import 'sync/ax_space_workspace_grants.dart';
 import 'sync/ax_space_tab_queries.dart';
 import 'sync/ax_owned_workspaces.dart';
 import 'sync/ax_collaboration_mutations.dart';
@@ -235,8 +234,6 @@ class AxStore {
       AxSessionCatalogs(dataSource, engine: syncEngine);
   late final AxSpaceTabQueries spaceTabs =
       AxSpaceTabQueries(dataSource, engine: syncEngine);
-  late final AxSpaceWorkspaceGrants spaceWorkspaceGrants =
-      AxSpaceWorkspaceGrants(dataSource, engine: syncEngine);
   late final AxSpaceThreads spaceThreads =
       AxSpaceThreads(dataSource, engine: syncEngine);
   late final AxSpaceDetails spaceDetails =
@@ -251,7 +248,6 @@ class AxStore {
       AxWorkRealtimeSync.forCache(workHistory);
 
   late final realtimeCacheRouter = AxRealtimeCacheRouter(syncEngine,
-      spaceRemoved: spaceWorkspaceGrants.remove,
       discussionChanged: discussion.reconcileSignal,
       discussionObserved: discussion.isObserved,
       discussionResynchronize: (id) async {
@@ -314,7 +310,6 @@ class AxStore {
     securityLoading.value = false;
     notifications.clear();
     unreadNotifications.value = 0;
-    spaceWorkspaceGrants.clear();
     realtimeCacheRouter.reset();
     workRealtime.reset();
     collaboration.clear();

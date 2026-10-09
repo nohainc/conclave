@@ -119,6 +119,23 @@ describe("Space member permissions contract v1", () => {
         "member",
       ),
     ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      handleChangeSpaceMemberRole(
+        req(
+          "owner",
+          {
+            permissions: {
+              ...none,
+              attachWorkspace: true,
+            },
+          },
+          "PATCH",
+        ),
+        env,
+        "S",
+        "member",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
   });
   it("separates Chat, Work and own-thread management even for a member who created the thread", async () => {
     await rights("member", { ...none, chat: true });
@@ -244,19 +261,10 @@ describe("Space member permissions contract v1", () => {
       requireWorkflowPermission(env, "member", "S", "direct"),
     ).resolves.toBeDefined();
   });
-  it("requires attachment permission and independent Workspace ownership", async () => {
+  it("keeps Workspace grants independent from member permission snapshots", async () => {
     store.sqlite.exec(
       "INSERT INTO execution_workspaces(id,owner_user_id,name,status,created_at,updated_at) VALUES('W','other','Other workspace','online','now','now')",
     );
-    await expect(
-      handleCreateWorkspaceSpaceGrant(
-        req("member", { workspaceId: "W", confirmContribution: true }),
-        env,
-        "W",
-        "S",
-      ),
-    ).rejects.toMatchObject({ status: 403 });
-    await rights("member", { ...none, attachWorkspace: true });
     await expect(
       handleCreateWorkspaceSpaceGrant(
         req("member", { workspaceId: "W", confirmContribution: true }),
@@ -270,7 +278,6 @@ describe("Space member permissions contract v1", () => {
     store.sqlite.exec(
       "INSERT INTO execution_workspaces(id,owner_user_id,name,status,created_at,updated_at) VALUES('W','member','Member workspace','online','now','now')",
     );
-    await rights("member", { ...none, attachWorkspace: true });
     await expect(
       handleCreateWorkspaceSpaceGrant(
         req("member", { workspaceId: "W" }),

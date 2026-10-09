@@ -5,7 +5,6 @@ import {
 } from "@conclave/core";
 
 import {
-  authorizeSpaceMembership,
   authorizeWorkspaceOwner,
   authorizeSpaceOwner,
 } from "@conclave/security";
@@ -57,39 +56,6 @@ export async function handleCreateWorkspaceSpaceGrant(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   return createWorkspaceSpaceGrant(request, env, context, spaceId, workspaceId);
-}
-
-export async function handleListSpaceWorkflowWorkspaceGrants(
-  request: Request,
-  env: SecurityEnv,
-  spaceId: string,
-  ctx?: ExecutionContext,
-): Promise<Response> {
-  const context = await securityContext(request, env, ctx);
-  await authorizeSpaceMembership(
-    env.CONCLAVE_DB,
-    context,
-    spaceId,
-    "spaces:read",
-  );
-  const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT g.*, ew.name AS workspace_name, ew.owner_user_id
-     FROM workspace_space_grants g JOIN execution_workspaces ew ON ew.id = g.workspace_id
-     WHERE g.space_id = ?1 AND g.status IN ('active', 'suspended')
-       AND (g.expires_at IS NULL OR g.expires_at > ?2)
-     ORDER BY ew.name`,
-  )
-    .bind(spaceId, new Date().toISOString())
-    .all<Record<string, unknown>>();
-  return json({
-    workspaces: (rows.results ?? []).map((row) => ({
-      ...workspaceSpaceGrantMetadata(row),
-      canRevoke:
-        row.owner_user_id === context.userId ||
-        context.spaceRoles[spaceId] === "owner",
-      canOpenWorkspace: row.owner_user_id === context.userId,
-    })),
-  });
 }
 
 export async function handleUpdateWorkspaceSpaceGrant(

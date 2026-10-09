@@ -287,8 +287,8 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
     final preferences =
         WorkspaceLifecyclePreferencesStore(workspace.config.dataDirectory)
             .readSync();
-    final workspaceName = registration?.name ??
-        preferences.customWorkspaceName ??
+    final workspaceName = preferences.customWorkspaceName ??
+        registration?.name ??
         resolveFriendlyComputerNameSync();
     final workspaceId =
         workspace.config.workspaceId ?? registration?.workspaceId;
@@ -676,27 +676,6 @@ class WorkspaceUiSnapshot {
   final String? hostname;
   final String? cloudUrl;
   final String? workRootPath;
-
-  /// Both roots remain intact when automatic migration cannot choose safely.
-  /// The settings surface exposes an explicit review action in that case.
-  bool get workRootMigrationPending {
-    if (workRootPath == null || !Platform.isMacOS) return false;
-    final home = Platform.environment['HOME'];
-    if (home == null || home.isEmpty) return false;
-    final target = '$home/Documents/Conclave';
-    final legacy = '$home/Library/Application Support/Conclave/Workspace/Work';
-    return workRootPath == target &&
-        Directory(target).existsSync() &&
-        Directory(legacy).existsSync();
-  }
-
-  String? get legacyWorkRootPath {
-    if (!workRootMigrationPending) return null;
-    final home = Platform.environment['HOME'];
-    return home == null
-        ? null
-        : '$home/Library/Application Support/Conclave/Workspace/Work';
-  }
 
   final String statusLabel;
   final bool registered;

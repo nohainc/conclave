@@ -65,7 +65,6 @@ export {
   handleGetArtifact,
   handleListWorkspaceSpaceGrants,
   handleCreateWorkspaceSpaceGrant,
-  handleListSpaceWorkflowWorkspaceGrants,
   handleUpdateWorkspaceSpaceGrant,
   handleRevokeWorkspaceSpaceGrant,
 } from "./workspaces.js";
@@ -77,6 +76,7 @@ export {
   handleListDiscussionMessages,
   handleCreateDiscussionMessage,
   handleEditDiscussionMessage,
+  handleDeleteDiscussionMessage,
   handleGetDiscussionMessage,
 } from "./threads.js";
 export {

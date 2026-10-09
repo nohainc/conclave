@@ -404,6 +404,59 @@ class AxDiscussionCache {
         .then<void>((_) {});
   }
 
+  Future<void> delete(String id, String messageId) async {
+    final context = _context(id);
+    context.pending.remove(messageId);
+    final fence = engine.fence(query(id).key);
+    return engine.mutations
+        .run(AxMutationOperation<void, _DiscussionContext>(
+          key: AxQueryKey(['mutation', 'discussion-delete', messageId]),
+          rejectSuperseded: false,
+          optimisticUpdate: () {
+            context.pending.remove(messageId);
+            engine.update(query(id), (state) {
+              final current = state.data ?? AxDiscussionHistory();
+              final updatedMessages =
+                  current.messages.where((m) => m.id != messageId).toList();
+              return AxDiscussionHistory(
+                messages: updatedMessages,
+                initialLoaded: current.initialLoaded,
+                olderCursor: current.olderCursor,
+                newestCursor: current.newestCursor,
+              );
+            });
+            _emit(context);
+            return context;
+          },
+          isCurrent: (context) => identical(_contexts[id], context) && fence(),
+          execute: (_) async {
+            if (source != null && !messageId.startsWith('temp-')) {
+              await source!.deleteDiscussionMessage(messageId: messageId);
+            }
+          },
+          commit: (_, context) {
+            context.pending.remove(messageId);
+            engine.update(query(id), (state) {
+              final current = state.data ?? AxDiscussionHistory();
+              final updatedMessages =
+                  current.messages.where((m) => m.id != messageId).toList();
+              return AxDiscussionHistory(
+                messages: updatedMessages,
+                initialLoaded: current.initialLoaded,
+                olderCursor: current.olderCursor,
+                newestCursor: current.newestCursor,
+              );
+            });
+            _emit(context);
+          },
+          rollback: (_, __, context) {
+            _emit(context);
+          },
+          invalidate: (_, __) async {},
+        ))
+        .then<void>((_) {});
+  }
+
   /// Session boundary only; never call from widget disposal.
   void clear() {
     _attempts.clear();

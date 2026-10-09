@@ -7,8 +7,42 @@ extension _ThreadActions on _ThreadPageState {
     if (!_canExecute ||
         (text.trim().isEmpty && _workAttachments.isEmpty) ||
         submit == null ||
-        _awaitingWorkResponse) {
+        _submittingWork) {
       return;
+    }
+    final activeRequests = _workTimeline
+        .where((request) =>
+            !request.id.startsWith('local-') &&
+            const {'queued', 'running', 'waiting'}.contains(request.status))
+        .toList(growable: false);
+    if (activeRequests.isNotEmpty) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Cancel previous request?'),
+          content: Text(activeRequests.length == 1
+              ? 'A request is still processing. Cancel it and send this request instead?'
+              : '${activeRequests.length} requests are still processing. Cancel them and send this request instead?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Keep processing'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Cancel and send'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      for (final request in activeRequests) {
+        final cancelled = await _cancelWorkRequest(
+          request.id,
+          showFeedback: false,
+        );
+        if (!cancelled || !mounted) return;
+      }
     }
     final requestText = text.trim().isEmpty
         ? 'Please use the attached inputs to complete the request.'
@@ -235,7 +269,7 @@ extension _ThreadActions on _ThreadPageState {
               step,
               closeDetails: true,
             ),
-            onCancelRun: () => _cancelFailedWorkRequest(
+            onCancelRun: () => _cancelWorkRequest(
               workRequestId,
               closeDetails: true,
             ),
@@ -317,27 +351,42 @@ extension _ThreadActions on _ThreadPageState {
     }
   }
 
-  Future<void> _cancelFailedWorkRequest(
+  Future<bool> _cancelWorkRequest(
     String workRequestId, {
     bool closeDetails = false,
+    bool showFeedback = true,
   }) async {
     final dataSource = widget.dataSource;
-    if (dataSource == null) return;
+    if (dataSource == null) return false;
     try {
       await dataSource.cancelWorkRequest(workRequestId: workRequestId);
-      if (!mounted) return;
+      final current =
+          _workHistoryCache.request(widget.thread.id, workRequestId);
+      if (current != null) {
+        _workHistoryCache.patchRequest(
+          widget.thread.id,
+          current.copyWith(status: 'cancelled'),
+        );
+      }
+      if (!mounted) return false;
       if (closeDetails) Navigator.of(context).pop();
       unawaited(_workHistoryCache
           .refreshRequest(widget.thread.id, workRequestId, supersede: true)
           .catchError((Object _) {}));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Request cancelled.')),
-      );
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Request cancelled.')),
+        );
+      }
+      return true;
     } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not cancel this request.')),
-      );
+      if (!mounted) return false;
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not cancel this request.')),
+        );
+      }
+      return false;
     }
   }
 
@@ -368,6 +417,22 @@ extension _ThreadActions on _ThreadPageState {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Failed to update message: $error'),
+          backgroundColor: ConclaveColors.error));
+    }
+  }
+
+  Future<void> _deleteDiscussion(String messageId) async {
+    final cache = _discussionCache;
+    final id = widget.thread.id;
+    try {
+      await cache.delete(id, messageId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Message deleted'), duration: Duration(seconds: 2)));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to delete message: $error'),
           backgroundColor: ConclaveColors.error));
     }
   }

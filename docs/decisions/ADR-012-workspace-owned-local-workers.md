@@ -26,7 +26,7 @@ The Engine and Profile contract is defined by [ADR-018](ADR-018-generic-cli-work
 
 ### Authorization and usage
 
-Cloud owns Space membership, Workspace ownership, Space-to-Workspace Grants, Thread authorization, scheduling state, and concurrency ceilings. AX configures authorized logical Worker use in Threads. Workspace enforces local readiness, permissions, and concurrency limits; Cloud cannot widen those local limits.
+Cloud owns Space membership, Workspace ownership, Space-to-Workspace Grants, Thread authorization, scheduling state, and concurrency ceilings. Workflow Workspace selection transitions ready local Workers into the schedulable state; AX configures authorized logical Worker use in Workflows. Workspace enforces local readiness, permissions, and concurrency limits; Cloud cannot widen those local limits.
 
 See [ADR-016](ADR-016-ax-owned-worker-usage.md) for the AX and Cloud usage policy.
 
