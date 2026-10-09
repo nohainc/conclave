@@ -39,18 +39,8 @@ function fixture(coordinatorAvailable = true) {
               return { workspaceId: "workspace" };
             if (sql.includes("owner_user_id AS ownerUserId FROM spaces"))
               return { ownerUserId: "owner" };
-            if (sql.includes("SELECT wc.config_json"))
-              return {
-                configJson: JSON.stringify({
-                  bindings: {
-                    direct: { workerId: "worker-a" },
-                    chat: { workerId: "worker-a" },
-                  },
-                }),
-              };
-            if (sql.includes("space_memberships")) return { role: "owner" };
-            if (sql.includes("config_json"))
-              return { configJson: JSON.stringify({ bindings: {} }) };
+            if (sql.includes("space_memberships"))
+              return { role: "owner", settingsJson: "{}" };
             if (sql.includes("thread_execution_policies"))
               return {
                 mode: "stateful",
@@ -59,7 +49,37 @@ function fixture(coordinatorAvailable = true) {
             return null;
           },
           async all() {
-            if (sql.includes("UNION ALL")) return { results: [] };
+            if (sql.includes("UNION ALL")) {
+              const target =
+                typeof this.values[1] === "string" ? this.values[1] : null;
+              const rows = [
+                {
+                  workflow_id: "chat",
+                  configuration_json: JSON.stringify({
+                    schemaVersion: 1,
+                    workflowId: "chat",
+                    enabled: true,
+                    defaults: { worker: "worker-a" },
+                    stepOverrides: {},
+                  }),
+                },
+                {
+                  workflow_id: "direct",
+                  configuration_json: JSON.stringify({
+                    schemaVersion: 1,
+                    workflowId: "direct",
+                    enabled: true,
+                    defaults: { worker: "worker-a" },
+                    stepOverrides: {},
+                  }),
+                },
+              ];
+              return {
+                results: target
+                  ? rows.filter((r) => r.workflow_id === target)
+                  : rows,
+              };
+            }
             return {
               results: [{ workerId: "worker-a", workspaceId: "workspace" }],
             };

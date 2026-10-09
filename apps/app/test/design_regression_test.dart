@@ -442,7 +442,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
       await tester.pumpAndSettle();
 
       expect(find.text('MacBook Pro M3'), findsOneWidget);
-      expect(find.text('Ready locally'), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
       expect(find.byKey(const Key('workspace-worker-row-worker-codex')),
           findsOneWidget);
     });

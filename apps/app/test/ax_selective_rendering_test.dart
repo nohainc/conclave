@@ -181,7 +181,7 @@ void main() {
     builds.clear();
     store.realtimeStatus.value = (true, 'Reconnecting selected resources');
     store.unreadNotifications.value = 3;
-    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
     expect(find.text('Reconnecting selected resources'), findsOneWidget);
     for (final type in [
       'ConclaveAppShell',

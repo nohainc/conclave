@@ -28,6 +28,7 @@ import 'avatar_file_picker_stub.dart'
     if (dart.library.html) 'avatar_file_picker_web.dart';
 import 'ax_stores.dart';
 import 'sync/ax_query_builder.dart';
+import 'sync/ax_space_threads.dart';
 import 'sync/ax_workflow_configurations.dart';
 import 'sync/ax_sync_scope.dart';
 

@@ -51,11 +51,25 @@ export async function handleListSpaceThreads(
             threads.name, threads.status,
             threads.access_policy_json AS accessPolicyJson,
             usage.config_json AS workConfigJson,
-            threads.lead_user_id AS leadUserId, creator.email AS creatorEmail,
+            threads.lead_user_id AS leadUserId,
+            lead.display_name AS leadDisplayName,
+            creator.email AS creatorEmail,
             CASE WHEN threads.lead_user_id = space.owner_user_id THEN 1 ELSE 0 END AS creatorIsOwner,
-            threads.created_at AS createdAt, threads.updated_at AS updatedAt
+            threads.created_at AS createdAt, threads.updated_at AS updatedAt,
+            COALESCE(
+              (SELECT m.body FROM discussion_messages m
+                 WHERE m.thread_id = threads.id
+                 ORDER BY m.created_at DESC LIMIT 1),
+              (SELECT h.text FROM conversation_history_entries h
+                 JOIN conversations conversation
+                   ON conversation.id = h.conversation_id
+                WHERE conversation.thread_id = threads.id
+                ORDER BY h.occurred_at DESC LIMIT 1),
+              ''
+            ) AS brief
      FROM threads
      JOIN spaces space ON space.id = threads.space_id
+     LEFT JOIN users lead ON lead.id = threads.lead_user_id
      LEFT JOIN users creator ON creator.id = threads.lead_user_id
      LEFT JOIN thread_work_configs usage ON usage.thread_id = threads.id
      WHERE threads.space_id = ?1 ORDER BY threads.created_at ASC`,

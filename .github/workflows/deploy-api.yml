@@ -27,10 +27,33 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Validate production Gateway smoke script
         run: node --check scripts/production-workspace-gateway-smoke.mjs
+      - id: flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          pub-cache: false
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-
       - name: Validate Cloud contract and TypeScript packages
         run: pnpm validate:cloud && pnpm check:fixture-e2e
-      - name: Ensure assets placeholder directory exists
-        run: mkdir -p apps/app/build/web
+      - name: Validate AX Web App
+        run: pnpm validate:app
+      - name: Build Flutter web
+        working-directory: apps/app
+        run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
+      - name: Verify browser bundle contains no server secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONCLAVE_AUTH_GITHUB_CLIENT_SECRET: ${{ secrets.CONCLAVE_AUTH_GITHUB_CLIENT_SECRET }}
+          CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET }}
+          CONCLAVE_RELEASE_PUBLISH_TOKEN: ${{ secrets.CONCLAVE_RELEASE_PUBLISH_TOKEN }}
+          CONCLAVE_WORKSPACE_ED25519_SEED: ${{ secrets.CONCLAVE_WORKSPACE_ED25519_SEED }}
+        run: node scripts/assert-no-browser-secrets.mjs apps/app/build/web
       - name: Verify production security configuration
         run: node scripts/verify-production-security.mjs
       - name: Preflight production Tool Profile signer and trust root

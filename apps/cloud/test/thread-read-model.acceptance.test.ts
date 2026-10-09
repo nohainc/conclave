@@ -16,6 +16,9 @@ it("reads threads and configuration with distinct update timestamps", async () =
       CREATE TABLE threads (id TEXT, space_id TEXT, name TEXT, status TEXT,
         access_policy_json TEXT, lead_user_id TEXT, created_at TEXT, updated_at TEXT);
       CREATE TABLE thread_work_configs (thread_id TEXT, config_json TEXT, updated_at TEXT);
+      CREATE TABLE discussion_messages (thread_id TEXT, body TEXT, created_at TEXT);
+      CREATE TABLE conversations (id TEXT, thread_id TEXT);
+      CREATE TABLE conversation_history_entries (conversation_id TEXT, text TEXT, occurred_at TEXT);
       CREATE TABLE space_memberships (id TEXT, space_id TEXT, user_id TEXT, role TEXT, created_at TEXT, updated_at TEXT);
       INSERT INTO spaces VALUES ('space-test', 'user-owner', '{}');
       INSERT INTO users VALUES ('user-owner', 'owner@conclave.test', 'Owner');
@@ -55,6 +58,9 @@ it("reads threads and configuration with distinct update timestamps", async () =
     expect(data.threads[0]).toMatchObject({
       id: "stream-test",
       name: "Test stream",
+      lead: "user-owner",
+      leadDisplayName: "Owner",
+      brief: "",
       updatedAt: "stream-updated",
     });
   } finally {

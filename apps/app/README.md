@@ -121,6 +121,13 @@ Enabled, Ready Workers count as available; disabled Workers do not. Worker
 cards distinguish unchecked, sign-in, Profile/runtime, setup, and test failures
 instead of treating a missing legacy status field as “Needs attention”.
 
+The Home page's What's new and AI updates sections use the same compact,
+clickable update rows. Each section has a See all dialog with the complete
+available update summaries. Continue working is populated from cached Space
+thread collections and shows the three most recently updated, navigable
+Threads; thread timestamps and message snippets come from the authorized
+Cloud thread read model.
+
 ## Getting Started
 
 Markdown regression coverage includes toolbar selection transformations,

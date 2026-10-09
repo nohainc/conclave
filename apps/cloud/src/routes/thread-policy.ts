@@ -96,6 +96,9 @@ export function threadMetadata(
     creatorEmail: row.creatorEmail ?? null,
     creatorIsOwner: row.creatorIsOwner === 1,
     lead: row.leadUserId ?? row.lead_user_id ?? null,
+    leadDisplayName:
+      row.leadDisplayName ?? row.lead_display_name ?? row.leadName ?? null,
+    brief: row.brief ?? row.lastMessageSnippet ?? "",
     accessPolicy,
     workConfig: parseJson(row.workConfigJson ?? row.configJson, {
       defaultWorkflowId: "full_cycle",

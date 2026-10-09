@@ -607,7 +607,7 @@ void main() {
     await tester.pump();
     source.sends.single.completeError(StateError('denied'));
     await tester.pumpAndSettle();
-    expect(find.text('Failed Chat'), findsNothing);
+    expect(find.text('Failed Chat'), findsOneWidget);
     expect(find.textContaining('Failed to save message:'), findsOneWidget);
   });
 

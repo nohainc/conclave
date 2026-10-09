@@ -893,71 +893,28 @@ class EstablishedUserHome extends StatelessWidget {
 
           // 4. WHAT'S NEW (if productUpdates)
           if (hasProductUpdates) ...[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      "What's new",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.85),
-                      ),
-                    ),
-                    if (_unreadWhatsNewCount > 0) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          '$_unreadWhatsNewCount',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onPrimaryContainer,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                TextButton(
-                  onPressed: () {
-                    AxHomeAnalytics.trackOpenWhatsNew(
-                      unreadCount: _unreadWhatsNewCount,
-                      source: 'header_see_all',
-                    );
-                    if (onOpenWhatsNew != null) {
-                      onOpenWhatsNew!();
-                    } else {
-                      AxWhatsNewDialog.show(
-                        context,
-                        updates: productUpdates.isNotEmpty
-                            ? productUpdates
-                            : defaultProductUpdates,
-                        readStates: productUpdateReadStates,
-                        onOpenUpdateDetail: onOpenUpdateDetail,
-                        onDismissUpdate: onDismissUpdate,
-                      );
-                    }
-                  },
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  child: const Text('See all'),
-                ),
-              ],
+            _HomeUpdateSectionHeader(
+              title: "What's new",
+              unreadCount: _unreadWhatsNewCount,
+              onSeeAll: () {
+                AxHomeAnalytics.trackOpenWhatsNew(
+                  unreadCount: _unreadWhatsNewCount,
+                  source: 'header_see_all',
+                );
+                if (onOpenWhatsNew != null) {
+                  onOpenWhatsNew!();
+                } else {
+                  AxWhatsNewDialog.show(
+                    context,
+                    updates: productUpdates.isNotEmpty
+                        ? productUpdates
+                        : defaultProductUpdates,
+                    readStates: productUpdateReadStates,
+                    onOpenUpdateDetail: onOpenUpdateDetail,
+                    onDismissUpdate: onDismissUpdate,
+                  );
+                }
+              },
             ),
             const SizedBox(height: 8),
             Column(
@@ -1002,7 +959,14 @@ class EstablishedUserHome extends StatelessWidget {
 
           // 5. AI UPDATES (if aiUpdates)
           if (hasAiUpdates) ...[
-            const _SectionHeader(title: 'AI updates', isSecondary: true),
+            _HomeUpdateSectionHeader(
+              title: 'AI updates',
+              onSeeAll: () => AxAiUpdatesDialog.show(
+                context,
+                updates: aiUpdatesToShow,
+                onOpenUpdate: onOpenAiUpdate,
+              ),
+            ),
             const SizedBox(height: 8),
             Column(
               children: [
@@ -1019,7 +983,12 @@ class EstablishedUserHome extends StatelessWidget {
                       if (onOpenAiUpdate != null) {
                         onOpenAiUpdate!(aiUpdatesToShow[i]);
                       } else {
-                        onOpenWorkspaces();
+                        AxAiUpdatesDialog.show(
+                          context,
+                          updates: aiUpdatesToShow,
+                          initialUpdateId: aiUpdatesToShow[i].id,
+                          onOpenUpdate: onOpenAiUpdate,
+                        );
                       }
                     },
                   ),
@@ -1045,11 +1014,9 @@ class EstablishedUserHome extends StatelessWidget {
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({
     required this.title,
-    this.isSecondary = false,
   });
 
   final String title;
-  final bool isSecondary;
 
   @override
   Widget build(BuildContext context) {
@@ -1057,12 +1024,67 @@ class _SectionHeader extends StatelessWidget {
     return Text(
       title,
       style: TextStyle(
-        fontSize: isSecondary ? 16 : 18,
+        fontSize: 18,
         fontWeight: FontWeight.w700,
-        color: isSecondary
-            ? colorScheme.onSurface.withValues(alpha: 0.85)
-            : colorScheme.onSurface,
+        color: colorScheme.onSurface,
       ),
+    );
+  }
+}
+
+class _HomeUpdateSectionHeader extends StatelessWidget {
+  const _HomeUpdateSectionHeader({
+    required this.title,
+    required this.onSeeAll,
+    this.unreadCount = 0,
+  });
+
+  final String title;
+  final int unreadCount;
+  final VoidCallback onSeeAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: colorScheme.onSurface.withValues(alpha: 0.85),
+              ),
+            ),
+            if (unreadCount > 0) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$unreadCount',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        TextButton(
+          onPressed: onSeeAll,
+          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          child: const Text('See all'),
+        ),
+      ],
     );
   }
 }
@@ -2129,6 +2151,148 @@ const defaultProductUpdates = [
   ),
 ];
 
+class AxAiUpdatesDialog extends StatelessWidget {
+  const AxAiUpdatesDialog({
+    super.key,
+    required this.updates,
+    this.initialUpdateId,
+    this.onOpenUpdate,
+  });
+
+  final List<AxAiCapabilityUpdate> updates;
+  final String? initialUpdateId;
+  final ValueChanged<AxAiCapabilityUpdate>? onOpenUpdate;
+
+  static Future<void> show(
+    BuildContext context, {
+    required List<AxAiCapabilityUpdate> updates,
+    String? initialUpdateId,
+    ValueChanged<AxAiCapabilityUpdate>? onOpenUpdate,
+  }) =>
+      showDialog<void>(
+        context: context,
+        builder: (context) => AxAiUpdatesDialog(
+          updates: updates,
+          initialUpdateId: initialUpdateId,
+          onOpenUpdate: onOpenUpdate,
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final ordered = [...updates];
+    final selectedIndex = initialUpdateId == null
+        ? -1
+        : ordered.indexWhere((update) => update.id == initialUpdateId);
+    if (selectedIndex > 0) {
+      final selected = ordered.removeAt(selectedIndex);
+      ordered.insert(0, selected);
+    }
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640, maxHeight: 720),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('AI updates', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text(
+                        'New worker capabilities and model updates',
+                        style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ordered.isEmpty
+                    ? Center(
+                        child: Text('No AI updates available.', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                      )
+                    : ListView.separated(
+                        itemCount: ordered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final update = ordered[index];
+                          return Card(
+                            margin: EdgeInsets.zero,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: onOpenUpdate == null
+                                  ? null
+                                  : () {
+                                      onOpenUpdate!(update);
+                                      Navigator.of(context).pop();
+                                    },
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Wrap(
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      spacing: 8,
+                                      runSpacing: 4,
+                                      children: [
+                                        _buildAiUpdateDot(update.workerProfileId),
+                                        Text(update.workerDisplayName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: colorScheme.surfaceContainerHighest,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            update.type.label.toUpperCase(),
+                                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: colorScheme.onSurfaceVariant),
+                                          ),
+                                        ),
+                                        Text(update.dateDisplay, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(update.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 6),
+                                    Text(update.summary, style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant, height: 1.4)),
+                                    if (update.modelDisplayName != null && update.modelDisplayName!.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      Text('Model: ${update.modelDisplayName}', style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _AiUpdateRow extends StatelessWidget {
   const _AiUpdateRow({
     required this.update,
@@ -2143,14 +2307,17 @@ class _AiUpdateRow extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-      child: Row(
+    return InkWell(
+      onTap: onOpen,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: _aiDot(update.workerProfileId),
+            child: _buildAiUpdateDot(update.workerProfileId),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -2229,27 +2396,25 @@ class _AiUpdateRow extends StatelessWidget {
             ),
           ],
         ],
+        ),
       ),
     );
   }
+}
 
-  Widget _aiDot(String typeId) {
-    final color = switch (typeId.toLowerCase()) {
-      'chatgpt' => const Color(0xFF10A37F),
-      'gemini' => const Color(0xFF3B82F6),
-      'claude' => const Color(0xFFD97706),
-      'ollama' => const Color(0xFF6366F1),
-      _ => Colors.purpleAccent,
-    };
-    return Container(
-      width: 8,
-      height: 8,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-      ),
-    );
-  }
+Widget _buildAiUpdateDot(String typeId) {
+  final color = switch (typeId.toLowerCase()) {
+    'chatgpt' => const Color(0xFF10A37F),
+    'gemini' => const Color(0xFF3B82F6),
+    'claude' => const Color(0xFFD97706),
+    'ollama' => const Color(0xFF6366F1),
+    _ => Colors.purpleAccent,
+  };
+  return Container(
+    width: 8,
+    height: 8,
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  );
 }
 
 class _InvitationItem extends StatelessWidget {

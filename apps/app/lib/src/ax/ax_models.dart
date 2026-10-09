@@ -284,18 +284,22 @@ class AxThread {
     required this.brief,
     required this.primaryWorkspace,
     required this.queueStatus,
+    this.leadDisplayName = '',
     this.workConfig = const {},
     this.canConfigureWork = false,
     this.canExecuteWork = false,
     this.archived = false,
     this.creatorEmail = '',
     this.creatorIsOwner = true,
+    this.createdAt = '',
+    this.updatedAt = '',
   });
 
   final String id;
   final String spaceId;
   final String name;
   final String lead;
+  final String leadDisplayName;
   final String status;
   final String brief;
   final String primaryWorkspace;
@@ -306,6 +310,8 @@ class AxThread {
   final bool archived;
   final String creatorEmail;
   final bool creatorIsOwner;
+  final String createdAt;
+  final String updatedAt;
 
   String get title => name;
 
@@ -319,6 +325,7 @@ class AxThread {
           spaceId: spaceId,
           name: name ?? title ?? this.name,
           lead: lead,
+          leadDisplayName: leadDisplayName,
           status: status ?? this.status,
           brief: brief,
           primaryWorkspace: primaryWorkspace,
@@ -326,6 +333,8 @@ class AxThread {
           workConfig: workConfig ?? this.workConfig,
           creatorEmail: creatorEmail,
           creatorIsOwner: creatorIsOwner,
+          createdAt: createdAt,
+          updatedAt: updatedAt,
           canConfigureWork: canConfigureWork,
           canExecuteWork: canExecuteWork,
           archived: status == null ? archived : status == 'archived');
@@ -335,6 +344,7 @@ class AxThread {
         spaceId: _string(json, 'spaceId'),
         name: _string(json, 'name', _string(json, 'title')),
         lead: _string(json, 'lead', _string(json, 'leadName', 'Unassigned')),
+        leadDisplayName: _string(json, 'leadDisplayName'),
         status: _string(json, 'status', 'active'),
         brief: _string(json, 'brief', ''),
         primaryWorkspace: _string(json, 'primaryWorkspace', 'Not selected'),
@@ -347,6 +357,8 @@ class AxThread {
         archived: json['archived'] == true,
         creatorEmail: _string(json, 'creatorEmail'),
         creatorIsOwner: json['creatorIsOwner'] != false,
+        createdAt: _string(json, 'createdAt', _string(json, 'created_at')),
+        updatedAt: _string(json, 'updatedAt', _string(json, 'updated_at')),
       );
 }
 

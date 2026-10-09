@@ -24,10 +24,13 @@ extension _AxAppViews on _AxAppStateMixin {
         store.productUpdateReadStates,
         store.productUpdatesNotifier,
       ]),
-      builder: (context, _) => AxQueryBuilder<List<AxWorker>>(
-          engine: store.syncEngine,
-          query: store.catalogs.workers,
-          builder: (context, workers) => HomePage(
+      builder: (context, _) => _HomeThreadCollection(
+          spaces: store.spaces.items,
+          spaceThreads: store.spaceThreads,
+          builder: (continueWorkItems) => AxQueryBuilder<List<AxWorker>>(
+              engine: store.syncEngine,
+              query: store.catalogs.workers,
+              builder: (context, workers) => HomePage(
                 spaces: store.spaces.items,
                 workspaces: store.workspaces.items,
                 workers: workers.data ?? const [],
@@ -116,7 +119,7 @@ extension _AxAppViews on _AxAppStateMixin {
                     createdAt: n.createdAt,
                   );
                 }).toList(),
-                continueWorkItems: _deriveContinueWorkItems(store.spaces.items),
+                continueWorkItems: continueWorkItems,
                 isOffline: store.lifecycle.isOffline,
                 onAcceptInvitation: _acceptInvitation,
                 onDeclineInvitation: _declineInvitation,
@@ -149,45 +152,7 @@ extension _AxAppViews on _AxAppStateMixin {
                     store.markProductUpdateOpened(update.id),
                 onDismissUpdate: (update) =>
                     store.dismissProductUpdate(update.id),
-              )));
-
-  List<AxContinueWorkItem> _deriveContinueWorkItems(List<AxSpace> spaces) {
-    final items = <AxContinueWorkItem>[];
-    for (final space in spaces) {
-      if (space.archived) continue;
-      if (space.threads.isNotEmpty) {
-        for (final ws in space.threads) {
-          if (ws.archived) continue;
-          items.add(AxContinueWorkItem(
-            spaceId: space.id,
-            spaceName: space.name,
-            threadId: ws.id,
-            threadTitle: ws.name,
-            collaboratorsDisplay: ws.lead.isNotEmpty && ws.lead != 'Unassigned'
-                ? ws.lead
-                : 'You and team AI',
-            lastMessageSnippet: ws.brief.isNotEmpty
-                ? ws.brief
-                : 'Continue conversation and work in context',
-            lastActivityDisplay:
-                space.lastActivity.isNotEmpty ? space.lastActivity : 'Recently',
-          ));
-        }
-      } else {
-        items.add(AxContinueWorkItem(
-          spaceId: space.id,
-          spaceName: space.name,
-          threadId: 'default',
-          threadTitle: 'Main Thread',
-          collaboratorsDisplay: 'You and team AI',
-          lastMessageSnippet: 'Continue conversation and work in context',
-          lastActivityDisplay:
-              space.lastActivity.isNotEmpty ? space.lastActivity : 'Recently',
-        ));
-      }
-    }
-    return items.take(5).toList();
-  }
+              ))));
 
   void _openArchivedSpaces() =>
       _navigateTo(const AxNavigation.archivedSpaces());
@@ -550,4 +515,118 @@ extension _AxAppViews on _AxAppStateMixin {
     if (diff.inDays < 7) return '${diff.inDays}d ago';
     return '${dt.month}/${dt.day}/${dt.year}';
   }
+}
+
+/// Keeps Home's recent-work projection backed by cached per-Space thread
+/// collections instead of the deliberately lightweight Space list.
+class _HomeThreadCollection extends StatefulWidget {
+  const _HomeThreadCollection({
+    required this.spaces,
+    required this.spaceThreads,
+    required this.builder,
+  });
+
+  final List<AxSpace> spaces;
+  final AxSpaceThreads spaceThreads;
+  final Widget Function(List<AxContinueWorkItem>) builder;
+
+  @override
+  State<_HomeThreadCollection> createState() => _HomeThreadCollectionState();
+}
+
+class _HomeThreadCollectionState extends State<_HomeThreadCollection> {
+  VoidCallback? _cancelCache;
+
+  @override
+  void initState() {
+    super.initState();
+    _watchAndEnsure();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HomeThreadCollection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldIds = oldWidget.spaces.map((space) => space.id).toSet();
+    final newIds = widget.spaces.map((space) => space.id).toSet();
+    if (oldWidget.spaceThreads != widget.spaceThreads ||
+        oldIds.length != newIds.length ||
+        oldIds.difference(newIds).isNotEmpty ||
+        newIds.difference(oldIds).isNotEmpty) {
+      _cancelCache?.call();
+      _watchAndEnsure();
+    }
+  }
+
+  void _watchAndEnsure() {
+    _cancelCache = widget.spaceThreads.engine.watchCache(() {
+      if (mounted) setState(() {});
+    });
+    for (final space in widget.spaces) {
+      if (space.archived) continue;
+      unawaited(widget.spaceThreads.ensure(space.id).then<void>(
+            (_) {},
+            onError: (Object _, StackTrace __) {},
+          ));
+    }
+  }
+
+  List<AxContinueWorkItem> _items() {
+    final items = <AxContinueWorkItem>[];
+    for (final space in widget.spaces) {
+      if (space.archived) continue;
+      for (final thread in widget.spaceThreads.peek(space.id)) {
+        if (thread.archived) continue;
+        final updatedAt = DateTime.tryParse(thread.updatedAt);
+        final createdAt = DateTime.tryParse(thread.createdAt);
+        final activityAt = updatedAt ?? createdAt;
+        items.add(AxContinueWorkItem(
+          spaceId: space.id,
+          spaceName: space.name,
+          threadId: thread.id,
+          threadTitle: thread.name,
+          collaboratorsDisplay: thread.leadDisplayName.isNotEmpty
+              ? thread.leadDisplayName
+              : (thread.lead.isNotEmpty && thread.lead != 'Unassigned'
+                  ? thread.lead
+                  : (thread.creatorEmail.isNotEmpty
+                      ? thread.creatorEmail
+                      : 'You and team AI')),
+          lastMessageSnippet: thread.brief.isNotEmpty
+              ? thread.brief
+              : 'Continue conversation and work in context',
+          lastActivityDisplay: activityAt == null
+              ? (space.lastActivity.isNotEmpty ? space.lastActivity : 'Recently')
+              : _formatHomeThreadActivity(activityAt),
+          lastMeaningfulActivityAt: activityAt,
+        ));
+      }
+    }
+    items.sort((a, b) {
+      final aTime = a.lastMeaningfulActivityAt;
+      final bTime = b.lastMeaningfulActivityAt;
+      if (aTime == null && bTime == null) return 0;
+      if (aTime == null) return 1;
+      if (bTime == null) return -1;
+      return bTime.compareTo(aTime);
+    });
+    return items.take(3).toList();
+  }
+
+  @override
+  void dispose() {
+    _cancelCache?.call();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(_items());
+}
+
+String _formatHomeThreadActivity(DateTime value) {
+  final diff = DateTime.now().difference(value);
+  if (diff.isNegative || diff.inSeconds < 60) return 'Just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+  if (diff.inHours < 24) return '${diff.inHours} hr ago';
+  if (diff.inDays < 7) return '${diff.inDays}d ago';
+  return '${value.month}/${value.day}/${value.year}';
 }
