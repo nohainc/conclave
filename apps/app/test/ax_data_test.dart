@@ -49,6 +49,59 @@ class _ApiResponseClient extends http.BaseClient {
 }
 
 void main() {
+  test('preserves the current account session identity for profile security',
+      () {
+    final session = AxSession.fromJson({
+      'authenticated': true,
+      'sessionId': 'session-current',
+      'user': {
+        'id': 'user-1',
+        'displayName': 'Vitalii',
+        'email': 'vitalii@example.test',
+      },
+    });
+    final security = AxAccountSecurity.fromJson([
+      {'id': 'account-1', 'providerId': 'github', 'accountId': 'gh-1'},
+    ], [
+      {
+        'id': 'session-current',
+        'token': 'session-token',
+        'createdAt': '2026-10-01T10:00:00Z',
+        'expiresAt': '2026-10-15T10:00:00Z',
+      },
+    ]);
+
+    expect(session.sessionId, 'session-current');
+    expect(security.sessions.single.id, 'session-current');
+    expect(security.sessions.single.token, 'session-token');
+  });
+
+  test('uses authenticated profile APIs for name and email updates', () async {
+    final nameClient =
+        _JsonClient(const <String, dynamic>{'status': true}, statusCode: 200);
+    final nameApi = AxApiClient(
+      baseUrl: 'https://cloud.test/api',
+      client: nameClient,
+    );
+    await nameApi.updateDisplayName(displayName: 'New Name');
+    expect(nameClient.lastRequest?.url.path, '/api/auth/update-user');
+    expect(jsonDecode(nameClient.lastBody!), {'name': 'New Name'});
+
+    final emailClient = _JsonClient(const <String, dynamic>{
+      'status': true,
+      'message': 'Verification email sent'
+    }, statusCode: 200);
+    final emailApi = AxApiClient(
+      baseUrl: 'https://cloud.test/api',
+      client: emailClient,
+    );
+    final result = await emailApi.requestEmailChange(email: 'new@example.test');
+    expect(emailClient.lastRequest?.url.path, '/api/auth/change-email');
+    expect(result.verificationRequired, isTrue);
+    expect((jsonDecode(emailClient.lastBody!) as Map)['newEmail'],
+        'new@example.test');
+  });
+
   test('Space and Thread API paths consume only current product envelopes',
       () async {
     final client = _ApiResponseClient({

@@ -887,29 +887,55 @@ class AxViewer {
     required this.id,
     required this.displayName,
     required this.email,
+    this.avatarUrl,
   });
 
   final String id;
   final String displayName;
   final String email;
+  final String? avatarUrl;
+
+  AxViewer copyWith({
+    String? displayName,
+    String? email,
+    String? avatarUrl,
+  }) =>
+      AxViewer(
+        id: id,
+        displayName: displayName ?? this.displayName,
+        email: email ?? this.email,
+        avatarUrl: avatarUrl ?? this.avatarUrl,
+      );
 
   factory AxViewer.fromJson(Map<String, dynamic> json) => AxViewer(
         id: _string(json, 'id'),
         displayName: _string(json, 'displayName'),
         email: _string(json, 'email'),
+        avatarUrl:
+            json['avatarUrl'] as String? ?? json['avatar_url'] as String?,
       );
+}
+
+class AxEmailChangeResult {
+  const AxEmailChangeResult({this.message, this.verificationRequired = false});
+
+  final String? message;
+  final bool verificationRequired;
 }
 
 class AxSession {
   const AxSession({
     required this.authenticated,
     this.viewer,
+    this.sessionId,
   });
 
   final bool authenticated;
   final AxViewer? viewer;
+  final String? sessionId;
   factory AxSession.fromJson(Map<String, dynamic> json) => AxSession(
         authenticated: json['authenticated'] == true,
+        sessionId: json['sessionId'] as String?,
         viewer: json['user'] is Map
             ? AxViewer.fromJson(Map<String, dynamic>.from(json['user'] as Map))
             : null,
@@ -939,6 +965,7 @@ class AxAuthSession {
     required this.token,
     required this.createdAt,
     required this.expiresAt,
+    this.id,
     this.userAgent,
     this.ipAddress,
   });
@@ -946,6 +973,7 @@ class AxAuthSession {
   final String token;
   final String createdAt;
   final String expiresAt;
+  final String? id;
   final String? userAgent;
   final String? ipAddress;
 
@@ -953,6 +981,7 @@ class AxAuthSession {
         token: _string(json, 'token'),
         createdAt: _string(json, 'createdAt', _string(json, 'created_at')),
         expiresAt: _string(json, 'expiresAt', _string(json, 'expires_at')),
+        id: json['id'] as String? ?? json['sessionId'] as String?,
         userAgent:
             json['userAgent'] as String? ?? json['user_agent'] as String?,
         ipAddress:
@@ -964,41 +993,25 @@ class AxAccountSecurity {
   const AxAccountSecurity({
     required this.accounts,
     required this.sessions,
-    this.passkeys = const [],
   });
 
   final List<AxAuthAccount> accounts;
   final List<AxAuthSession> sessions;
-  final List<AxPasskey> passkeys;
+
+  AxAccountSecurity copyWith({
+    List<AxAuthAccount>? accounts,
+    List<AxAuthSession>? sessions,
+  }) =>
+      AxAccountSecurity(
+        accounts: accounts ?? this.accounts,
+        sessions: sessions ?? this.sessions,
+      );
 
   factory AxAccountSecurity.fromJson(List<Map<String, dynamic>> accounts,
-          List<Map<String, dynamic>> sessions,
-          [List<Map<String, dynamic>> passkeys = const []]) =>
+          List<Map<String, dynamic>> sessions) =>
       AxAccountSecurity(
         accounts: accounts.map(AxAuthAccount.fromJson).toList(growable: false),
         sessions: sessions.map(AxAuthSession.fromJson).toList(growable: false),
-        passkeys: passkeys.map(AxPasskey.fromJson).toList(growable: false),
-      );
-}
-
-class AxPasskey {
-  const AxPasskey({
-    required this.id,
-    required this.name,
-    required this.createdAt,
-    this.aaguid,
-  });
-
-  final String id;
-  final String name;
-  final String createdAt;
-  final String? aaguid;
-
-  factory AxPasskey.fromJson(Map<String, dynamic> json) => AxPasskey(
-        id: _string(json, 'id'),
-        name: _string(json, 'name', 'Passkey'),
-        createdAt: _string(json, 'createdAt', _string(json, 'created_at')),
-        aaguid: json['aaguid'] as String?,
       );
 }
 

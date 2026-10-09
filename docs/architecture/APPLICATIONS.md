@@ -47,6 +47,15 @@ configure Workers in the Conclave Workspace desktop app, and create a Space.
 Authentication and local readiness problems direct users back to that desktop
 runtime.
 
+Profile avatars are user-owned profile data. AX uploads the selected image to
+the authenticated Cloud profile endpoint; Cloud stores the private object in
+the existing `CONCLAVE_ARTIFACTS` R2 bucket and keeps only an `r2://` reference
+in `users.avatar_url`. Avatar reads are authenticated and limited to the owner
+and established People relationships, so the R2 object is never exposed as a
+public bucket URL. Profile names use the authenticated Better Auth
+`/update-user` endpoint. Email changes use `/change-email` and follow the
+configured verification flow before the address is changed.
+
 Workspace-owned Worker inventory remains visible in AX as operational
 readiness. Workspace registration and recovery, local Worker lifecycle,
 credentials, permissions, and runtime connection management belong to Conclave Workspace. AX owns actual

@@ -20,6 +20,59 @@ mixin _AuthApi on _AxApiClientCore {
   }
 
   @override
+  Future<List<int>?> loadAvatar({required String url}) async {
+    final response = await client.get(Uri.parse(url), headers: _headers());
+    if (response.statusCode == 404 || response.statusCode == 401) return null;
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException('Avatar lookup failed (${response.statusCode})',
+          statusCode: response.statusCode);
+    }
+    return response.bodyBytes;
+  }
+
+  @override
+  Future<void> updateDisplayName({required String displayName}) =>
+      _postAuth('/auth/update-user', {'name': displayName});
+
+  @override
+  Future<AxEmailChangeResult> requestEmailChange(
+      {required String email}) async {
+    final callbackURL = Uri.base.scheme == 'http' || Uri.base.scheme == 'https'
+        ? '${Uri.base.origin}/settings/profile'
+        : '/settings/profile';
+    final response = await client.post(
+      Uri.parse('$baseUrl/auth/change-email'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        'newEmail': email,
+        'callbackURL': callbackURL,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var message = 'Email update failed (${response.statusCode})';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded['message'] is String) {
+          message = decoded['message'] as String;
+        } else if (decoded is Map && decoded['error'] is String) {
+          message = decoded['error'] as String;
+        }
+      } on Object {
+        // Keep the status-based message for non-JSON responses.
+      }
+      throw AxApiException(message, statusCode: response.statusCode);
+    }
+    final decoded = jsonDecode(response.body);
+    final message = decoded is Map && decoded['message'] is String
+        ? decoded['message'] as String
+        : null;
+    return AxEmailChangeResult(
+      message: message,
+      verificationRequired: message == 'Verification email sent',
+    );
+  }
+
+  @override
   Future<void> logout() async {
     clearConditionalReads();
     final response = await client.post(Uri.parse('$baseUrl/auth/sign-out'),
@@ -31,6 +84,36 @@ mixin _AuthApi on _AxApiClientCore {
           statusCode: response.statusCode);
     }
     sessionToken = null;
+  }
+
+  @override
+  Future<String> uploadAvatar({
+    required List<int> bytes,
+    required String mediaType,
+  }) async {
+    final response = await client.put(
+      Uri.parse('$baseUrl/profile/avatar'),
+      headers: _headers(contentType: mediaType),
+      body: bytes,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var message = 'Avatar upload failed (${response.statusCode})';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded['error'] is String) {
+          message = decoded['error'] as String;
+        }
+      } on Object {
+        // Keep the status-based message for non-JSON responses.
+      }
+      throw AxApiException(message, statusCode: response.statusCode);
+    }
+    final decoded = jsonDecode(response.body);
+    final url = decoded is Map ? decoded['avatarUrl'] : null;
+    if (url is! String || url.isEmpty) {
+      throw const AxApiException('Avatar upload response is malformed');
+    }
+    return url;
   }
 
   Future<void> _postAuth(String path, Map<String, dynamic> body) async {
@@ -128,8 +211,6 @@ mixin _AuthApi on _AxApiClientCore {
     final responses = await Future.wait([
       client.get(Uri.parse('$baseUrl/auth/list-accounts'), headers: _headers()),
       client.get(Uri.parse('$baseUrl/auth/list-sessions'), headers: _headers()),
-      client.get(Uri.parse('$baseUrl/auth/passkey/list-user-passkeys'),
-          headers: _headers()),
     ]);
     for (final response in responses) {
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -140,7 +221,6 @@ mixin _AuthApi on _AxApiClientCore {
     }
     final accountsBody = jsonDecode(responses[0].body);
     final sessionsBody = jsonDecode(responses[1].body);
-    final passkeysBody = jsonDecode(responses[2].body);
     final accounts = accountsBody is List
         ? accountsBody
         : accountsBody is Map && accountsBody['accounts'] is List
@@ -151,11 +231,6 @@ mixin _AuthApi on _AxApiClientCore {
         : sessionsBody is Map && sessionsBody['sessions'] is List
             ? sessionsBody['sessions'] as List
             : const [];
-    final passkeys = passkeysBody is List
-        ? passkeysBody
-        : passkeysBody is Map && passkeysBody['passkeys'] is List
-            ? passkeysBody['passkeys'] as List
-            : const [];
     return AxAccountSecurity.fromJson(
       accounts
           .whereType<Map>()
@@ -165,34 +240,7 @@ mixin _AuthApi on _AxApiClientCore {
           .whereType<Map>()
           .map((value) => Map<String, dynamic>.from(value))
           .toList(growable: false),
-      passkeys
-          .whereType<Map>()
-          .map((value) => Map<String, dynamic>.from(value))
-          .toList(growable: false),
     );
-  }
-
-  @override
-  Future<void> registerPasskey(String name) async {
-    await passkeyBrowser.register(baseUrl, name);
-  }
-
-  @override
-  Future<void> deletePasskey(String id) async {
-    final response = await client.post(
-      Uri.parse('$baseUrl/auth/passkey/delete-passkey'),
-      headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({'id': id}),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AxApiException('Passkey removal failed',
-          statusCode: response.statusCode);
-    }
-  }
-
-  @override
-  Future<void> signInWithPasskey() async {
-    await passkeyBrowser.signIn(baseUrl);
   }
 
   @override

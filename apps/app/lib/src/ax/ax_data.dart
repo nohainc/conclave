@@ -7,8 +7,6 @@ import 'sync/ax_idempotency.dart';
 
 import 'package:http/http.dart' as http;
 
-import '../auth/passkey_browser_stub.dart'
-    if (dart.library.html) '../auth/passkey_browser_web.dart' as passkeys;
 import '../platform/http_client_stub.dart'
     if (dart.library.html) '../platform/http_client_web.dart' as platform;
 import 'ax_models.dart';
@@ -47,7 +45,6 @@ abstract class _AxApiClientCore
 
   final String baseUrl;
   final http.Client client;
-  final passkeyBrowser = passkeys.createAxPasskeyBrowser();
   String? _sessionToken;
   String? get sessionToken => _sessionToken;
   set sessionToken(String? value) {

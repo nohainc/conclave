@@ -53,11 +53,15 @@ class AxSyncScope {
     final work = p.length == 3 && (p[0] == 'thread') && p[2] == 'work-requests';
     final workspace = p.length >= 2 && p[0] == 'execution_workspace';
     final workers = p.length == 1 && p[0] == 'workers';
+    final archivedSpaces = p.length == 1 && p[0] == 'archived-spaces';
     return switch (kind) {
-      'space' => p[0] == 'people' || ((space || workflow) && p[1] == id),
+      'space' => p[0] == 'people' ||
+          archivedSpaces ||
+          ((space || workflow) && p[1] == id),
       'thread' => (discussion || work) && p[1] == id,
       'execution_workspace' => workers || (workspace && p[1] == id),
       'user' => p[0] == 'people' ||
+          archivedSpaces ||
           space ||
           workflow ||
           userWorkflow ||

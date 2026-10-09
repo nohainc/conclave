@@ -67,6 +67,12 @@ describe("IdentityService", () => {
       emailVerified: "email_verified",
       image: "avatar_url",
     });
+    expect(options.user?.changeEmail).toMatchObject({
+      enabled: true,
+    });
+    expect(options.user?.changeEmail?.sendChangeEmailConfirmation).toEqual(
+      expect.any(Function),
+    );
     expect(options.account?.modelName).toBe("auth_accounts");
     expect(options.account?.encryptOAuthTokens).toBe(true);
     expect(options.account?.accountLinking).toMatchObject({

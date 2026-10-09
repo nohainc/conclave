@@ -109,18 +109,29 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                     .where((worker) =>
                         worker.workspaceId == workspaceState.data?.workspaceId)
                     .toList();
+                final isSpaceWorkflows = widget.configurations.spaceId != null;
+                final description = isSpaceWorkflows
+                    ? 'All Threads use these workflows. Start with global defaults; customize them for this Space.'
+                    : 'Configure how Conclave performs tasks by default.';
                 return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(children: [
-                        const Expanded(
-                            child: Text('Workflows',
-                                style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -0.3))),
-                        if (widget.configurations.spaceId != null &&
-                            workspaceState.hasData)
+                        if (!isSpaceWorkflows)
+                          const Expanded(
+                              child: Text('Workflows',
+                                  style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: -0.3)))
+                        else
+                          Expanded(
+                              child: Text(description,
+                                  style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant))),
+                        if (isSpaceWorkflows && workspaceState.hasData)
                           IconButton(
                               key: const ValueKey('reset-global-workflows'),
                               tooltip: 'Reset workflows to global settings',
@@ -139,14 +150,12 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                                 : _refresh,
                             icon: const Icon(Icons.refresh)),
                       ]),
-                      Text(
-                          widget.configurations.spaceId == null
-                              ? 'Configure how Conclave performs tasks by default.'
-                              : 'All Threads use these workflows. Start with global defaults; customize them for this Space.',
-                          style: TextStyle(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant)),
+                      if (!isSpaceWorkflows)
+                        Text(description,
+                            style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant)),
                       const SizedBox(height: 18),
                       if (workspaceState.hasData) ...[
                         LayoutBuilder(builder: (context, constraints) {

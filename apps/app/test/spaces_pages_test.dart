@@ -1210,6 +1210,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Choose what each member can do in this Space.'),
         findsOneWidget);
+    expect(find.text('Permissions'), findsNothing);
+    expect(find.text('Chat workflows'), findsOneWidget);
+    expect(find.text('Work workflows'), findsOneWidget);
+    expect(find.text('Own threads'), findsOneWidget);
     expect(find.byTooltip('Share Space'), findsOneWidget);
 
     await tester.binding.setSurfaceSize(null);
@@ -1922,6 +1926,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Initial instructions'), findsOneWidget);
+    expect(find.text('Space Instructions'), findsNothing);
+    expect(
+      tester.widget<Text>(find.text('Initial instructions')).textAlign,
+      TextAlign.left,
+    );
 
     // Tap 3-dots popup menu -> Edit
     await tester.tap(find.byTooltip('Space actions'));

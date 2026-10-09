@@ -12,6 +12,55 @@ import 'package:conclave_app/src/ax/ax_models.dart';
 import 'ax_fixture_data.dart';
 
 void main() {
+  testWidgets('profile page uses sections without passkey controls',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: ConclaveBrand.lightTheme(),
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: const AxFixtureDataSource(),
+        initialUri: Uri.parse('/settings/profile'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Profile & Security'), findsNothing);
+    expect(
+        find.text(
+            'Manage your Conclave identity, linked login methods, and active sessions.'),
+        findsNothing);
+    expect(find.text('Profile'), findsNothing);
+    expect(find.text('Your stable Conclave identity'), findsNothing);
+    expect(find.textContaining('Link another verified provider'), findsNothing);
+    expect(find.textContaining('Revoke access from a device'), findsNothing);
+    expect(find.byType(Divider), findsNothing);
+    expect(find.text('Passkeys'), findsNothing);
+    expect(find.text('Add passkey'), findsNothing);
+    expect(find.text('Current'), findsOneWidget);
+    expect(find.text('Change avatar'), findsOneWidget);
+    expect(find.text('Rename'), findsOneWidget);
+    expect(find.text('Update email'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.widgetWithText(ListTile, 'Fixture browser'),
+        matching: find.text('Revoke'),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.ancestor(
+          of: find.text('Linked login methods'), matching: find.byType(Card)),
+      findsNothing,
+    );
+
+    final revoke = find.text('Revoke').last;
+    await tester.ensureVisible(revoke);
+    await tester.tap(revoke);
+    await tester.pumpAndSettle();
+    expect(find.text('Fixture browser'), findsOneWidget);
+    expect(find.text('Other browser'), findsNothing);
+  });
+
   testWidgets('clicking another space loads and reveals its Threads',
       (tester) async {
     tester.view.physicalSize = const Size(1400, 900);

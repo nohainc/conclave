@@ -14,6 +14,7 @@ import {
   hashToken,
 } from "@conclave/security";
 import { HttpError, json, recordAudit, securityContext } from "./handlers.js";
+import { avatarUrlFor } from "./profile.js";
 import type { SecurityEnv } from "./handlers.js";
 
 export async function handleSession(
@@ -22,9 +23,14 @@ export async function handleSession(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
+  const avatarUrl = avatarUrlFor(
+    request,
+    context.user.id,
+    context.user.avatarUrl,
+  );
   return json({
     authenticated: true,
-    user: context.user,
+    user: { ...context.user, avatarUrl },
     sessionId: context.sessionId,
     clientType: context.clientType,
   });

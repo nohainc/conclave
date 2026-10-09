@@ -8,6 +8,7 @@ import {
   json,
   type SecurityEnv,
 } from "./http-security.js";
+import { avatarUrlFor } from "./profile.js";
 
 export interface PeopleSpace {
   readonly id: string;
@@ -119,6 +120,7 @@ export async function handleListPeople(
       ]);
       return {
         ...person,
+        avatarUrl: avatarUrlFor(request, person.userId, person.avatarUrl),
         pendingInvitationSpaceIds: [...invitations].filter((id) =>
           spaces.results.some(
             (space) => space.id === id && space.role === "owner",

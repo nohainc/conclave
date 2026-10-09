@@ -38,6 +38,7 @@ extension _AxAppController on _AxAppStateMixin {
   Future<void> _loadSession() async {
     try {
       final session = await store.auth.load();
+      unawaited(_loadViewerAvatar(session.viewer?.avatarUrl));
       if (!session.authenticated) {
         if (!mounted) return;
         _updateState(() {
@@ -846,10 +847,154 @@ extension _AxAppController on _AxAppStateMixin {
   }
 
   Future<void> _revokeAccountSession(AxAuthSession session) async {
+    if (!revokingAccountSessionTokens.add(session.token)) return;
+    _updateState(() {});
     try {
       await widget.dataSource.revokeAccountSession(session.token);
-      await _loadAccountSecurity();
-      if (mounted) _showSnackBar('Session revoked.');
+      final current = accountSecurity;
+      if (current != null) {
+        accountSecurity = current.copyWith(
+          sessions: current.sessions
+              .where((item) => item.token != session.token)
+              .toList(growable: false),
+        );
+      }
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString());
+    } finally {
+      revokingAccountSessionTokens.remove(session.token);
+      if (mounted) _updateState(() {});
+    }
+  }
+
+  Future<void> _uploadAvatar() async {
+    if (avatarUploadBusy) return;
+    AxAvatarFile? selected;
+    try {
+      selected = await pickAvatarFile();
+    } on Object catch (error) {
+      if (mounted) _showSnackBar(error.toString());
+      return;
+    }
+    if (selected == null || !mounted) return;
+    _updateState(() => avatarUploadBusy = true);
+    try {
+      final url = await widget.dataSource.uploadAvatar(
+        bytes: selected.bytes,
+        mediaType: selected.mediaType,
+      );
+      final viewer = store.auth.viewer;
+      if (viewer != null) {
+        store.auth.viewer = viewer.copyWith(avatarUrl: url);
+      }
+      if (mounted) _updateState(() => viewerAvatarBytes = null);
+      await _loadViewerAvatar(url);
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString());
+    } finally {
+      if (mounted) _updateState(() => avatarUploadBusy = false);
+    }
+  }
+
+  Future<void> _loadViewerAvatar(String? url) async {
+    if (url == null || url.isEmpty) {
+      if (mounted) {
+        _updateState(() => viewerAvatarBytes = null);
+      }
+      return;
+    }
+    try {
+      final bytes = await widget.dataSource.loadAvatar(url: url);
+      if (!mounted || store.auth.viewer?.avatarUrl != url) return;
+      _updateState(() => viewerAvatarBytes = bytes);
+    } catch (_) {
+      // Keep initials visible when the private avatar cannot be loaded.
+    }
+  }
+
+  Future<void> _editDisplayName() async {
+    final controller =
+        TextEditingController(text: store.auth.viewer?.displayName);
+    final value = await showDialog<String>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Rename profile'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          decoration: const InputDecoration(labelText: 'Name'),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    final name = value?.trim() ?? '';
+    if (name.isEmpty || !mounted) return;
+    try {
+      await widget.dataSource.updateDisplayName(displayName: name);
+      final viewer = store.auth.viewer;
+      if (viewer != null) {
+        store.auth.viewer = viewer.copyWith(displayName: name);
+      }
+      if (mounted) _updateState(() {});
+    } catch (error) {
+      if (mounted) _showSnackBar(error.toString());
+    }
+  }
+
+  Future<void> _editEmail() async {
+    final controller = TextEditingController(text: store.auth.viewer?.email);
+    final value = await showDialog<String>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Update email'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.done,
+          decoration: const InputDecoration(labelText: 'Email address'),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    final email = value?.trim() ?? '';
+    if (email.isEmpty || !mounted) return;
+    try {
+      final result = await widget.dataSource.requestEmailChange(email: email);
+      if (!mounted) return;
+      if (result.verificationRequired) {
+        _showSnackBar('Check your email to confirm the new address.');
+      } else {
+        final viewer = store.auth.viewer;
+        if (viewer != null) {
+          store.auth.viewer = viewer.copyWith(email: email);
+          _updateState(() {});
+        }
+        _showSnackBar('Email updated.');
+      }
     } catch (error) {
       if (mounted) _showSnackBar(error.toString());
     }
@@ -860,39 +1005,6 @@ extension _AxAppController on _AxAppStateMixin {
       final uri = await widget.dataSource
           .beginAccountLink(provider, Uri(path: '/settings/profile'));
       browserNavigation.openExternal(uri);
-    } catch (error) {
-      if (mounted) _showSnackBar(error.toString());
-    }
-  }
-
-  Future<void> _registerPasskey() async {
-    try {
-      await widget.dataSource.registerPasskey('Conclave AX browser passkey');
-      await _loadAccountSecurity();
-      if (mounted) {
-        _showSnackBar('Passkey added.');
-      }
-    } catch (error) {
-      if (mounted) {
-        _showSnackBar(error.toString());
-      }
-    }
-  }
-
-  Future<void> _deletePasskey(AxPasskey passkey) async {
-    try {
-      await widget.dataSource.deletePasskey(passkey.id);
-      await _loadAccountSecurity();
-      if (mounted) _showSnackBar('Passkey removed.');
-    } catch (error) {
-      if (mounted) _showSnackBar(error.toString());
-    }
-  }
-
-  Future<void> _signInWithPasskey(Uri returnTo) async {
-    try {
-      await widget.dataSource.signInWithPasskey();
-      browserNavigation.replace(returnTo);
     } catch (error) {
       if (mounted) _showSnackBar(error.toString());
     }

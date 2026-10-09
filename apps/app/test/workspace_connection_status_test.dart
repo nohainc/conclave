@@ -41,9 +41,9 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Connection status'), findsOneWidget);
-      expect(find.text('Not connected'), findsNWidgets(2));
-      expect(find.text('Machine'), findsOneWidget);
+      expect(find.text('Connection status'), findsNothing);
+      expect(find.text('Not connected'), findsOneWidget);
+      expect(find.text('Machine'), findsNothing);
       expect(find.text('Connect Machine'), findsNothing);
 
       // Runtime Connected: Online with automatically populated platform facts
@@ -68,38 +68,30 @@ void main() {
         onRevoke: (_) {},
       )));
       await tester.pumpAndSettle();
-      expect(find.text('Online'), findsNWidgets(2));
-      expect(find.text('Machine'), findsOneWidget);
-      expect(find.text('macOS · Apple Silicon'), findsOneWidget);
-      expect(find.text('Hostname'), findsOneWidget);
-      expect(find.text('Vitalii-MacBook-Pro'), findsOneWidget);
-      expect(find.text('App version'), findsOneWidget);
-      expect(find.text('1.0.3'), findsOneWidget);
+      expect(find.text('Online'), findsOneWidget);
+      expect(find.text('Machine'), findsNothing);
+      expect(find.text('macOS · Apple Silicon · Vitalii-MacBook-Pro'),
+          findsOneWidget);
+      expect(find.text('Hostname'), findsNothing);
+      expect(find.text('App version'), findsNothing);
+      expect(find.text('1.0.3'), findsNothing);
     });
 
-    testWidgets('Download navigation resolves consistently across entrypoints',
+    testWidgets('Workspace page keeps download actions out of its UI',
         (tester) async {
-      var downloadsOpenedCount = 0;
       Uri? openedExternalUri;
 
-      // 1. Download link from Connect Machine flow in Workspace Detail
       await tester.pumpWidget(scaffold(WorkspacesPage(
         workspaces: const [initialWorkspace],
         onAdd: () {},
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
-        onOpenDownloads: () => downloadsOpenedCount++,
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Download Conclave Workspace'), findsOneWidget);
-      await tester
-          .ensureVisible(find.text('Download Conclave Workspace').first);
-      await tester.tap(find.text('Download Conclave Workspace').first);
-      expect(downloadsOpenedCount, 1);
+      expect(find.text('Download Conclave Workspace'), findsNothing);
 
-      // 2. Global application menu documentation entrypoint
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -164,7 +156,11 @@ void main() {
           onRevoke: (_) {},
         )));
         await tester.pumpAndSettle();
-        expect(find.text(expectedLabel), findsWidgets);
+        expect(
+          find.textContaining(
+              expectedLabel == '—' ? 'workspace-node-1' : expectedLabel),
+          findsWidgets,
+        );
       }
     });
   });

@@ -5,6 +5,11 @@ extension _AxAppRunDetails on _AxAppStateMixin {
     switch (navigation.kind) {
       case AxRouteKind.people:
         return PeoplePage(people: store.people);
+      case AxRouteKind.archivedSpaces:
+        return ArchivedSpacesPage(
+          archivedSpaces: store.archivedSpaces,
+          mutations: store.collaboration,
+        );
       case AxRouteKind.workflows:
         return WorkflowsPage(
             catalogs: store.catalogs,

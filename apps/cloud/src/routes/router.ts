@@ -1,4 +1,5 @@
 import { handleListPeople } from "./people.js";
+import { handleGetAvatar, handleUploadAvatar } from "./profile.js";
 import { handleWorkflowWorkspace } from "./workflow-workspace.js";
 import { handleWorkflowConfigurations } from "./workflow-configurations.js";
 import { handleWorkflowDefault } from "./workflow-default.js";
@@ -183,6 +184,16 @@ export async function routeWorkerRequest(
     }
     if (url.pathname === "/api/people")
       return await handleListPeople(request, env, ctx);
+    if (request.method === "PUT" && url.pathname === "/api/profile/avatar")
+      return await handleUploadAvatar(request, env, ctx);
+    const avatarMatch = url.pathname.match(/^\/api\/users\/([^/]+)\/avatar$/);
+    if (request.method === "GET" && avatarMatch?.[1])
+      return await handleGetAvatar(
+        request,
+        env,
+        decodeURIComponent(avatarMatch[1]),
+        ctx,
+      );
     if (request.method === "GET" && url.pathname === "/api/session") {
       return await handlers.handleSession!(request, env, ctx);
     }

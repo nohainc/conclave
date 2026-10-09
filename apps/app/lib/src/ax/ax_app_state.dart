@@ -68,6 +68,9 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   DateTime? _lastRealtimeAnnouncement;
   AxAccountSecurity? get accountSecurity => store.security.value;
   set accountSecurity(AxAccountSecurity? value) => store.security.value = value;
+  final Set<String> revokingAccountSessionTokens = <String>{};
+  bool avatarUploadBusy = false;
+  List<int>? viewerAvatarBytes;
   bool get accountSecurityLoading => store.securityLoading.value;
   set accountSecurityLoading(bool value) => store.securityLoading.value = value;
   void _updateSecurity(VoidCallback callback) => callback();
@@ -209,6 +212,8 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
         realtimeNotice: realtimeNotice,
         viewerDisplayName: store.auth.viewer?.displayName,
         viewerEmail: store.auth.viewer?.email,
+        viewerAvatarUrl: store.auth.viewer?.avatarUrl,
+        viewerAvatarBytes: viewerAvatarBytes,
         expandedSpaceIds: expandedSpaceIds,
       );
   void _toggleSpaceExpanded(String spaceId) {
@@ -536,6 +541,9 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     if (!confirmed) return;
     try {
       await widget.dataSource.archiveSpace(spaceId: space.id);
+      unawaited(store.archivedSpaces
+          .refresh()
+          .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
       store.syncEngine.remove(store.spaceDetails.query(space.id).key);
       store.spaceThreads.engine.remove(store.spaceThreads.query(space.id).key);
       expandedSpaceIds.remove(space.id);
@@ -560,6 +568,9 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     if (!confirmed) return;
     try {
       await widget.dataSource.deleteSpace(spaceId: spaceId);
+      unawaited(store.archivedSpaces
+          .refresh()
+          .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
       store.syncEngine.remove(store.spaceDetails.query(spaceId).key);
       store.spaceThreads.engine.remove(store.spaceThreads.query(spaceId).key);
       expandedSpaceIds.remove(spaceId);

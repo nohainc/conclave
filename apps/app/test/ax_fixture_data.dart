@@ -109,8 +109,28 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
   Future<void> cancelWorkRequest({required String workRequestId}) async {}
 
   @override
-  Future<AxSession> loadSession() async =>
-      AxSession(authenticated: authenticated);
+  Future<AxSession> loadSession() async => AxSession(
+        authenticated: authenticated,
+        sessionId: authenticated ? 'fixture-session' : null,
+      );
+
+  @override
+  Future<void> updateDisplayName({required String displayName}) async {}
+
+  @override
+  Future<List<int>?> loadAvatar({required String url}) async => null;
+
+  @override
+  Future<AxEmailChangeResult> requestEmailChange(
+          {required String email}) async =>
+      const AxEmailChangeResult(message: 'Email updated');
+
+  @override
+  Future<String> uploadAvatar({
+    required List<int> bytes,
+    required String mediaType,
+  }) async =>
+      'https://test/avatar.png';
 
   @override
   Future<void> logout() async {}
@@ -297,25 +317,20 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
         sessions: [
           AxAuthSession(
             token: 'fixture-session-token',
+            id: 'fixture-session',
             createdAt: '2026-09-23T10:00:00Z',
             expiresAt: '2026-10-07T10:00:00Z',
             userAgent: 'Fixture browser',
           ),
-        ],
-        passkeys: [
-          AxPasskey(
-              id: 'passkey-1', name: 'MacBook Touch ID', createdAt: 'today'),
+          AxAuthSession(
+            token: 'fixture-other-session-token',
+            id: 'fixture-other-session',
+            createdAt: '2026-09-22T10:00:00Z',
+            expiresAt: '2026-10-06T10:00:00Z',
+            userAgent: 'Other browser',
+          ),
         ],
       );
-
-  @override
-  Future<void> registerPasskey(String name) async {}
-
-  @override
-  Future<void> deletePasskey(String id) async {}
-
-  @override
-  Future<void> signInWithPasskey() async {}
 
   @override
   Future<void> approveDesktopAuthIntent({required String intentId}) async {}

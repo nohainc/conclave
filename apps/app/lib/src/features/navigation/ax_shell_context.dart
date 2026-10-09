@@ -52,6 +52,8 @@ class AxShellContext {
     this.realtimeListenable,
     this.viewerDisplayName,
     this.viewerEmail,
+    this.viewerAvatarUrl,
+    this.viewerAvatarBytes,
     this.expandedSpaceIds = const {},
   })  : _spaces = spaces,
         _workspaces = workspaces,
@@ -131,6 +133,24 @@ class AxShellContext {
       builder: (context, _) => build());
   final String? viewerDisplayName;
   final String? viewerEmail;
+  final String? viewerAvatarUrl;
+  final List<int>? viewerAvatarBytes;
+
+  ImageProvider<Object>? get viewerAvatarImage {
+    if (viewerAvatarBytes != null && viewerAvatarBytes!.isNotEmpty) {
+      return MemoryImage(Uint8List.fromList(viewerAvatarBytes!));
+    }
+    final url = viewerAvatarUrl;
+    if (url == null || url.isEmpty || _isPrivateAvatarUrl(url)) return null;
+    return NetworkImage(url);
+  }
+
+  static bool _isPrivateAvatarUrl(String url) {
+    final uri = Uri.tryParse(url);
+    return uri?.path.startsWith('/api/users/') == true &&
+        uri?.path.endsWith('/avatar') == true;
+  }
+
   final Set<String> expandedSpaceIds;
 
   int get onlineWorkspaceCount =>
@@ -254,6 +274,8 @@ class AxShellContext {
             navigation.threadId == target.threadId;
       case AxRouteKind.people:
         return navigation.kind == AxRouteKind.people;
+      case AxRouteKind.archivedSpaces:
+        return navigation.kind == AxRouteKind.archivedSpaces;
       case AxRouteKind.workflows:
         return navigation.kind == AxRouteKind.workflows;
       case AxRouteKind.workspaces:

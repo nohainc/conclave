@@ -622,6 +622,17 @@ class AxDesktopAuthIntentStatus {
 
 abstract interface class AxDataSource {
   Future<AxSession> loadSession();
+  Future<List<int>?> loadAvatar({required String url}) async => null;
+  Future<void> updateDisplayName({required String displayName}) async =>
+      throw UnimplementedError('Profile updates are not available');
+  Future<AxEmailChangeResult> requestEmailChange(
+          {required String email}) async =>
+      throw UnimplementedError('Email changes are not available');
+  Future<String> uploadAvatar({
+    required List<int> bytes,
+    required String mediaType,
+  }) async =>
+      throw UnimplementedError('Avatar uploads are not available');
   Future<void> logout();
   Future<void> signInWithEmail({
     required String email,
@@ -703,9 +714,6 @@ abstract interface class AxDataSource {
   Future<AxAccountSecurity> loadAccountSecurity();
   Future<void> revokeAccountSession(String token);
   Future<Uri> beginAccountLink(String provider, Uri returnTo);
-  Future<void> registerPasskey(String name);
-  Future<void> deletePasskey(String id);
-  Future<void> signInWithPasskey();
   Future<void> approveDesktopAuthIntent({
     required String intentId,
   });

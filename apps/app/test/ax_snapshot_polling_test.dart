@@ -131,4 +131,45 @@ void main() {
     expect(source.details.length, 3);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('realtime connection warnings wait for a sustained outage',
+      (tester) async {
+    final source = PollingSource();
+    final realtime = TestRealtime();
+    await mount(tester, source, realtime);
+
+    realtime.controller
+        .add({'type': 'realtime.connection', 'status': 'reconnecting'});
+    await tester.pump();
+    expect(find.text('Live updates paused. Conclave AX is reconnecting.'),
+        findsNothing);
+
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('Live updates paused. Conclave AX is reconnecting.'),
+        findsNothing);
+
+    realtime.controller
+        .add({'type': 'realtime.connection', 'status': 'connected'});
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('Live updates paused. Conclave AX is reconnecting.'),
+        findsNothing);
+
+    realtime.controller
+        .add({'type': 'realtime.connection', 'status': 'reconnecting'});
+    await tester.pump();
+
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Live updates paused. Conclave AX is reconnecting.'),
+        findsNothing);
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('Live updates paused. Conclave AX is reconnecting.'),
+        findsOneWidget);
+
+    realtime.controller
+        .add({'type': 'realtime.connection', 'status': 'connected'});
+    await tester.pump();
+    expect(find.text('Live updates connected.'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

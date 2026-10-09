@@ -223,6 +223,17 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                 ),
             ],
           ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 16,
+            runSpacing: 6,
+            children: [
+              _permissionLegendItem(
+                  Icons.chat_bubble_outline, 'Chat workflows'),
+              _permissionLegendItem(Icons.work_outline, 'Work workflows'),
+              _permissionLegendItem(Icons.forum_outlined, 'Own threads'),
+            ],
+          ),
           const SizedBox(height: 8),
           if (membersError != null)
             const Text(
@@ -360,26 +371,6 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Permissions',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 16,
-                runSpacing: 6,
-                children: [
-                  _permissionLegendItem(
-                      Icons.chat_bubble_outline, 'Chat workflows'),
-                  _permissionLegendItem(Icons.work_outline, 'Work workflows'),
-                  _permissionLegendItem(Icons.forum_outlined, 'Own threads'),
-                ],
               ),
             ] else
               const Padding(

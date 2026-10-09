@@ -380,7 +380,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
                 name: 'Auth Refactor',
                 lead: 'Vitalii',
                 status: 'active',
-                brief: 'Implement Passkey authentication',
+                brief: 'Implement account authentication',
                 primaryWorkspace: 'Workspace 1',
                 queueStatus: 'Idle',
               ),

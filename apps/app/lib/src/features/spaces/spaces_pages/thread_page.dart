@@ -60,6 +60,8 @@ class _ThreadPageState extends State<ThreadPage>
   Timer? _threadViewStateSaveTimer;
   int _threadViewStateGeneration = 0;
   bool _threadViewStateRestored = false;
+  bool _threadViewReady = false;
+  bool _threadViewRevealScheduled = false;
   AxThreadViewState? _pendingThreadViewState;
   final _requestController = TextEditingController();
   final _workHistoryController = ScrollController();
@@ -252,9 +254,12 @@ class _ThreadPageState extends State<ThreadPage>
     final threadId = widget.thread.id;
     final generation = ++_threadViewStateGeneration;
     _threadViewStateRestored = false;
+    _threadViewReady = false;
+    _threadViewRevealScheduled = false;
     _pendingThreadViewState = null;
     if (userId == null || userId.isEmpty) {
       _threadViewStateRestored = true;
+      _threadViewReady = true;
       return;
     }
     final saved = await _threadViewStateStore.load(
@@ -272,9 +277,13 @@ class _ThreadPageState extends State<ThreadPage>
       _discussionController.text = saved.chatDraft;
       _requestController.text = saved.workDraft;
       _pendingThreadViewState = saved;
-      _tabController.animateTo(saved.tabIndex);
+      final targetIndex = saved.tabIndex.clamp(0, _tabController.length - 1);
+      if (_tabController.index != targetIndex) {
+        _tabController.index = targetIndex;
+      }
       _reconcilePendingThreadViewState();
     }
+    if (mounted) setState(() {});
     _scheduleThreadViewStateSave();
   }
 
@@ -629,6 +638,8 @@ class _ThreadPageState extends State<ThreadPage>
     if (oldWidget.thread.id != widget.thread.id) {
       _threadViewStateGeneration++;
       _threadViewStateRestored = false;
+      _threadViewReady = false;
+      _threadViewRevealScheduled = false;
       _pendingThreadViewState = null;
       _discussionController.clear();
       _requestController.clear();
@@ -642,7 +653,9 @@ class _ThreadPageState extends State<ThreadPage>
     if (oldWidget.initialTab != widget.initialTab) {
       final targetIndex =
           widget.initialTab == 2 ? 1 : widget.initialTab.clamp(0, 1);
-      _tabController.animateTo(targetIndex);
+      if (_tabController.index != targetIndex) {
+        _tabController.index = targetIndex;
+      }
     }
     if (oldWidget.realtimeEvents != widget.realtimeEvents) {
       _workEventSubscription?.cancel();
@@ -718,6 +731,20 @@ class _ThreadPageState extends State<ThreadPage>
   Widget build(BuildContext context) => AnimatedBuilder(
         animation: _tabController,
         builder: (context, _) => LayoutBuilder(builder: (context, constraints) {
+          if (_threadViewStateRestored &&
+              !_threadViewReady &&
+              !_threadViewRevealScheduled) {
+            _threadViewRevealScheduled = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              // Let the hidden first frame attach both scroll controllers and
+              // settle at the saved position before revealing the new Thread.
+              setState(() {
+                _threadViewReady = true;
+                _threadViewRevealScheduled = false;
+              });
+            });
+          }
           Widget tabHeader(List<String> names, {TabController? controller}) =>
               DefaultTabController(
                 length: names.length,
@@ -745,9 +772,10 @@ class _ThreadPageState extends State<ThreadPage>
                   Expanded(child: content),
                 ],
               ));
+          late final Widget content;
           if (constraints.maxWidth >= 1000) {
             _alignComposers();
-            return Center(
+            content = Center(
                 child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1681),
               child: Row(
@@ -766,24 +794,35 @@ class _ThreadPageState extends State<ThreadPage>
                     Expanded(child: pane('Work', _work(context))),
                   ]),
             ));
+          } else {
+            content = Center(
+                child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 840),
+              child: Padding(
+                  key: const ValueKey('thread-tab-padding'),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      tabHeader(['Chat', 'Work'], controller: _tabController),
+                      Expanded(
+                          child: _tabController.index == 0
+                              ? _discuss(context)
+                              : _work(context)),
+                    ],
+                  )),
+            ));
           }
-          return Center(
-              child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 840),
-            child: Padding(
-                key: const ValueKey('thread-tab-padding'),
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    tabHeader(['Chat', 'Work'], controller: _tabController),
-                    Expanded(
-                        child: _tabController.index == 0
-                            ? _discuss(context)
-                            : _work(context)),
-                  ],
-                )),
-          ));
+          return IgnorePointer(
+            ignoring: !_threadViewReady,
+            child: ExcludeSemantics(
+              excluding: !_threadViewReady,
+              child: Opacity(
+                opacity: _threadViewReady ? 1 : 0,
+                child: content,
+              ),
+            ),
+          );
         }),
       );
 

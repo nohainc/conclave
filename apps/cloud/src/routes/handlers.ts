@@ -15,6 +15,7 @@ export * from "./thread-policy.js";
 export { handleListConversations } from "./conversations.js";
 export * from "./workspace-access.js";
 export * from "./profile-admin.js";
+export { handleGetAvatar, handleUploadAvatar } from "./profile.js";
 
 export {
   handleSession,

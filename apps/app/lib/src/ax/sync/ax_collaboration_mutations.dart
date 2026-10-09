@@ -134,6 +134,12 @@ class AxCollaborationMutations {
     ));
   }
 
+  Future<void> deleteSpace(AxSpace original) async {
+    await source.deleteSpace(spaceId: original.id);
+    engine.remove(details.query(original.id).key, prefix: true);
+    await engine.refresh(spaces);
+  }
+
   Future<AxThread> createThread(
       {required String spaceId,
       String? title,

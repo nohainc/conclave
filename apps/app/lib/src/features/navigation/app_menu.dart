@@ -160,7 +160,10 @@ class GlobalAppMenu extends StatelessWidget {
             size: 16,
             color: menuIconColor,
           ),
-          onPressed: onOpenArchivedSpaces,
+          onPressed: () {
+            onOpenArchivedSpaces?.call();
+            if (compact) Scaffold.maybeOf(context)?.closeDrawer();
+          },
           child: const Text(
             'Archived Spaces',
             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),

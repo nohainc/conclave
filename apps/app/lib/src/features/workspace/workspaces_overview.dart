@@ -8,12 +8,10 @@ class WorkspacesOverview extends StatelessWidget {
     super.key,
     required this.workspaces,
     required this.onSelectWorkspace,
-    this.onOpenDownloads,
   });
 
   final List<AxWorkspace> workspaces;
   final ValueChanged<AxWorkspace> onSelectWorkspace;
-  final VoidCallback? onOpenDownloads;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +32,7 @@ class WorkspacesOverview extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Workspaces provide execution capacity for AI workloads and Workers.',
+                  'Workspaces are connected execution environments. Workers are the AI integrations configured on each Workspace.',
                   style: TextStyle(
                     fontSize: 13,
                     color: theme.colorScheme.onSurfaceVariant,
@@ -45,20 +43,15 @@ class WorkspacesOverview extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           if (workspaces.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('No Workspaces connected'),
-                  const SizedBox(height: 8),
-                  const Text(
-                      'Register a Workspace from the Conclave Workspace desktop app.'),
-                  OutlinedButton.icon(
-                    onPressed: onOpenDownloads,
-                    icon: const Icon(Icons.download_outlined),
-                    label: const Text('Download Conclave Workspace'),
-                  ),
+                  Text('No Workspaces connected'),
+                  SizedBox(height: 8),
+                  Text(
+                      'Download and register Conclave Workspace to make a Workspace and its Workers available here.'),
                 ],
               ),
             )
@@ -69,16 +62,11 @@ class WorkspacesOverview extends StatelessWidget {
               child: Row(
                 children: [
                   const Expanded(
-                    flex: 5,
+                    flex: 7,
                     child: SizedBox.shrink(),
                   ),
                   Expanded(
-                    flex: 2,
-                    child: Text('Workers',
-                        textAlign: TextAlign.center, style: mutedStyle),
-                  ),
-                  Expanded(
-                    flex: 2,
+                    flex: 3,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -128,30 +116,11 @@ class WorkspacesOverview extends StatelessWidget {
                                     color: theme.colorScheme.onSurfaceVariant,
                                   ),
                                 ),
-                              if (workspace.connectionMode != null)
-                                Text(
-                                  workspace.connectionMode!,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
                             ],
                           ),
                         ),
                         Expanded(
-                          flex: 2,
-                          child: Text(
-                            '${workspace.workerCount}',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
+                          flex: 3,
                           child: Align(
                             alignment: Alignment.centerRight,
                             child: Row(

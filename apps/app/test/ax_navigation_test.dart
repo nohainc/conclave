@@ -44,6 +44,7 @@ void main() {
     final routes = <AxNavigation>[
       const AxNavigation.home(),
       const AxNavigation.spaces(),
+      const AxNavigation.archivedSpaces(),
       const AxNavigation.workflows(),
       const AxNavigation.workspaces(),
       const AxNavigation.profileSecurity(),
@@ -52,6 +53,8 @@ void main() {
     for (final route in routes) {
       expect(AxNavigation.fromUri(route.toUri()), route);
     }
+    expect(AxNavigation.fromUri(Uri.parse('/archived-spaces')).kind,
+        AxRouteKind.archivedSpaces);
   });
 
   test('preserves desktop auth approval through the browser sign-in route', () {

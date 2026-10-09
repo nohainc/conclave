@@ -236,8 +236,12 @@ void main() {
     expect(source.invitedUserId, 'b');
     expect(source.loads, loads + 1);
   });
-  testWidgets('local search matches only cached People by name or email',
+  testWidgets('People cards show email and use a responsive two-column layout',
       (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final source = PeopleSource()
       ..rows = [
         bob,
@@ -252,15 +256,11 @@ void main() {
     await tester.pumpWidget(
         MaterialApp(home: Scaffold(body: PeoplePage(people: people))));
     await tester.pumpAndSettle();
-    await tester.enterText(
-        find.byKey(const ValueKey('people-search')), ' B@TEST ');
-    await tester.pumpAndSettle();
     expect(find.text('Bob'), findsOneWidget);
-    expect(find.text('Julia'), findsNothing);
-    await tester.enterText(
-        find.byKey(const ValueKey('people-search')), 'unknown');
-    await tester.pumpAndSettle();
-    expect(find.text('No people match your search.'), findsOneWidget);
+    expect(find.text('b@test'), findsOneWidget);
+    expect(find.text('Julia'), findsOneWidget);
+    expect(find.byKey(const ValueKey('people-search')), findsNothing);
+    expect(find.byType(Card), findsNWidgets(2));
     expect(source.loads, 1);
   });
   testWidgets(
@@ -290,12 +290,10 @@ void main() {
         MaterialApp(home: Scaffold(body: PeoplePage(people: people))));
     await tester.pumpAndSettle();
     expect(find.textContaining('Holiday planning'), findsOneWidget);
-    await tester.tap(find.text('View'));
-    await tester.pumpAndSettle();
-    expect(find.text('Shared Spaces'), findsOneWidget);
+    expect(find.text('b@test'), findsOneWidget);
     expect(find.text('Holiday planning'), findsOneWidget);
     expect(source.loads, 1);
-    await tester.tap(find.text('Add to Space'));
+    await tester.tap(find.byKey(const ValueKey('add-to-space-b')));
     await tester.pumpAndSettle();
     await tester.tap(find.byType(DropdownButtonFormField<String>).first);
     await tester.pumpAndSettle();
@@ -316,15 +314,12 @@ void main() {
     expect(source.invitedSpaceId, 'C');
     expect(source.invitedPermissions!.chat, isTrue);
     expect(source.invitedPermissions!.work, isFalse);
-    expect(
-        find.text('Invitation sent. Waiting for acceptance.'), findsOneWidget);
     expect(find.text('Renamed'), findsOneWidget);
     expect(
         tester
-            .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Add to Space'))
+            .widget<TextButton>(find.byKey(const ValueKey('add-to-space-b')))
             .onPressed,
-        isNull);
+        isNotNull);
     source.rows = [person];
     await router.handle({'type': 'space.updated', 'spaceId': 'A'});
     await tester.pumpAndSettle();
@@ -350,9 +345,7 @@ void main() {
     await tester.pumpWidget(
         MaterialApp(home: Scaffold(body: PeoplePage(people: people))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('View'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Add to Space'));
+    await tester.tap(find.byKey(const ValueKey('add-to-space-b')));
     await tester.pumpAndSettle();
     await tester.tap(find.byType(DropdownButtonFormField<String>).first);
     await tester.pumpAndSettle();
@@ -455,9 +448,7 @@ void main() {
     await tester.pumpWidget(
         MaterialApp(home: Scaffold(body: PeoplePage(people: people))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('View'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Add to Space'));
+    await tester.tap(find.byKey(const ValueKey('add-to-space-b')));
     await tester.pumpAndSettle();
     await tester.tap(find.byType(DropdownButtonFormField<String>).first);
     await tester.pumpAndSettle();
@@ -613,6 +604,11 @@ void main() {
     final source = PeopleSource();
     final people = AxPeople(source, engine: AxSyncEngine());
     await openInvite(tester, people);
+    expect(find.text('Read Space'), findsNothing);
+    expect(find.text('Use Work'), findsOneWidget);
+    expect(find.text('Use Work workflows'), findsNothing);
+    expect(find.text('Manage own threads'), findsOneWidget);
+    expect(find.text('Create and manage own threads'), findsNothing);
     await tester.enterText(
         find.byKey(const ValueKey('invite-new-email')), 'john@test');
     await tester.tap(find.byKey(const ValueKey('invite-permission-chat')));

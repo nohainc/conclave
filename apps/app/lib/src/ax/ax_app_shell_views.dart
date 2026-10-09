@@ -56,7 +56,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                   unawaited(_showAboutConclave()),
                               onOpenExternal: (uri) =>
                                   browserNavigation.openExternal(uri),
-                              onOpenArchivedSpaces: _showArchivedSpaces,
+                              onOpenArchivedSpaces: _openArchivedSpaces,
                               compact: true,
                             ),
                           )
@@ -85,7 +85,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                       unawaited(_showAboutConclave()),
                                   onOpenExternal: (uri) =>
                                       browserNavigation.openExternal(uri),
-                                  onOpenArchivedSpaces: _showArchivedSpaces,
+                                  onOpenArchivedSpaces: _openArchivedSpaces,
                                   onToggleCollapse: () => _updateState(
                                       () => _desktopSidebarCollapsed = false),
                                 )
@@ -109,7 +109,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                         unawaited(_showAboutConclave()),
                                     onOpenExternal: (uri) =>
                                         browserNavigation.openExternal(uri),
-                                    onOpenArchivedSpaces: _showArchivedSpaces,
+                                    onOpenArchivedSpaces: _openArchivedSpaces,
                                     onToggleCollapse: () => _updateState(
                                         () => _desktopSidebarCollapsed = true),
                                   ),
@@ -337,15 +337,6 @@ extension _AxAppShellViews on _AxAppStateMixin {
                               'google', returnTo),
                           icon: const Icon(Icons.account_circle_outlined),
                           label: const Text('Continue with Google'),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: TextButton.icon(
-                          onPressed: () => _signInWithPasskey(returnTo),
-                          icon: const Icon(Icons.fingerprint),
-                          label: const Text('Continue with Passkey'),
                         ),
                       ),
                     ],
@@ -620,7 +611,9 @@ class _FloatingRealtimeStatusBanner extends StatefulWidget {
 
 class _FloatingRealtimeStatusBannerState
     extends State<_FloatingRealtimeStatusBanner> {
+  static const _connectionWarningDelay = Duration(seconds: 3);
   Timer? _dismissTimer;
+  Timer? _pendingConnectionWarning;
   bool _visible = false;
   String? _lastNoticeKey;
 
@@ -653,6 +646,7 @@ class _FloatingRealtimeStatusBannerState
     widget.realtimeStatus.removeListener(_onNoticeChanged);
     widget.lifecycleNotice.removeListener(_onNoticeChanged);
     _dismissTimer?.cancel();
+    _pendingConnectionWarning?.cancel();
     super.dispose();
   }
 
@@ -664,23 +658,76 @@ class _FloatingRealtimeStatusBannerState
 
     if (!isActive || noticeText == null || noticeText.isEmpty) {
       _dismissTimer?.cancel();
+      _pendingConnectionWarning?.cancel();
       if (_visible) {
         setState(() => _visible = false);
       }
       return;
     }
 
+    // A short reconnect should be invisible. If the transport is still stale
+    // after three seconds, show the warning; a connected confirmation is not
+    // useful for the brief transitions this banner is meant to cover.
+    final isConnectedNotice =
+        lifecycle == null && noticeText == 'Live updates connected.';
+    if (isConnectedNotice) {
+      _dismissTimer?.cancel();
+      _pendingConnectionWarning?.cancel();
+      if (_visible) {
+        setState(() => _visible = false);
+      }
+      _lastNoticeKey = '$isActive:$noticeText';
+      return;
+    }
+
+    final isConnectionWarning = lifecycle == null && status.$1;
+    if (isConnectionWarning) {
+      final key = '$isActive:$noticeText';
+      if (key == _lastNoticeKey &&
+          (_pendingConnectionWarning?.isActive == true || _visible)) {
+        return;
+      }
+      _lastNoticeKey = key;
+      _dismissTimer?.cancel();
+      _pendingConnectionWarning?.cancel();
+      if (_visible) {
+        setState(() => _visible = false);
+      }
+      _pendingConnectionWarning = Timer(_connectionWarningDelay, () {
+        _pendingConnectionWarning = null;
+        if (!mounted) return;
+        final currentStatus = widget.realtimeStatus.value;
+        final currentLifecycle = widget.lifecycleNotice.value;
+        final currentNotice =
+            currentLifecycle ?? widget.realtimeNotice ?? currentStatus.$2;
+        if (currentStatus.$1 &&
+            currentLifecycle == null &&
+            currentNotice != null &&
+            currentNotice.isNotEmpty) {
+          _showNotice();
+        }
+      });
+      return;
+    }
+
+    _pendingConnectionWarning?.cancel();
+
     final key = '$isActive:$noticeText';
     if (key != _lastNoticeKey || !_visible) {
       _lastNoticeKey = key;
       _dismissTimer?.cancel();
-      setState(() => _visible = true);
-      _dismissTimer = Timer(const Duration(seconds: 1), () {
-        if (mounted) {
-          setState(() => _visible = false);
-        }
-      });
+      _showNotice();
     }
+  }
+
+  void _showNotice() {
+    if (!mounted) return;
+    setState(() => _visible = true);
+    _dismissTimer = Timer(const Duration(seconds: 1), () {
+      if (mounted) {
+        setState(() => _visible = false);
+      }
+    });
   }
 
   @override

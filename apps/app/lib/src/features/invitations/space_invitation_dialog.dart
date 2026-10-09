@@ -291,14 +291,10 @@ class _SpaceInvitationDialogState extends State<SpaceInvitationDialog> {
                 if (space != null) ...[
                   Text('Permissions',
                       style: Theme.of(context).textTheme.titleMedium),
-                  const ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('Read Space'),
-                      trailing: Icon(Icons.check)),
                   for (final entry in const {
                     'chat': 'Use Chat',
-                    'work': 'Use Work workflows',
-                    'manageOwnThreads': 'Create and manage own threads'
+                    'work': 'Use Work',
+                    'manageOwnThreads': 'Manage own threads'
                   }.entries)
                     CheckboxListTile(
                         key: ValueKey('invite-permission-${entry.key}'),

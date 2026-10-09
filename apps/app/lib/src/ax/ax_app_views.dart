@@ -189,88 +189,8 @@ extension _AxAppViews on _AxAppStateMixin {
     return items.take(5).toList();
   }
 
-  Future<void> _showArchivedSpaces() async {
-    try {
-      final archived =
-          await widget.dataSource.loadSpaces(includeArchived: true);
-      var inactive = archived.where((space) => space.archived).toList();
-      String? restoringSpaceId;
-      if (!mounted) return;
-      await showDialog<void>(
-        context: navigatorKey.currentContext ?? context,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (dialogContext, setDialogState) => AlertDialog(
-            title: const Text('Archived Spaces'),
-            content: SizedBox(
-              width: 520,
-              child: inactive.isEmpty
-                  ? const Text('No archived Spaces.')
-                  : ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: inactive.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, index) {
-                        final space = inactive[index];
-                        final restoring = restoringSpaceId == space.id;
-                        return ListTile(
-                          title: Text(space.name),
-                          subtitle: Text(space.description.isEmpty
-                              ? 'No description'
-                              : space.description),
-                          trailing: FilledButton.tonal(
-                            onPressed: restoring
-                                ? null
-                                : () async {
-                                    setDialogState(
-                                        () => restoringSpaceId = space.id);
-                                    try {
-                                      await store.collaboration.editSpace(
-                                        space,
-                                        settings: const {'archived': false},
-                                      );
-                                      if (dialogContext.mounted) {
-                                        setDialogState(() {
-                                          inactive = inactive
-                                              .where(
-                                                  (item) => item.id != space.id)
-                                              .toList();
-                                          restoringSpaceId = null;
-                                        });
-                                      }
-                                      await store.spaces.refresh();
-                                      if (mounted) {
-                                        _showSnackBar('Space restored.');
-                                      }
-                                    } catch (error) {
-                                      if (dialogContext.mounted) {
-                                        setDialogState(
-                                            () => restoringSpaceId = null);
-                                      }
-                                      if (mounted) {
-                                        _showSnackBar(error.toString(),
-                                            type: ToastType.error);
-                                      }
-                                    }
-                                  },
-                            child: Text(restoring ? 'Restoring…' : 'Restore'),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Close'),
-              ),
-            ],
-          ),
-        ),
-      );
-    } catch (error) {
-      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
-    }
-  }
+  void _openArchivedSpaces() =>
+      _navigateTo(const AxNavigation.archivedSpaces());
 
   Widget _spaceOverviewView() {
     final space = selectedSpace;
@@ -437,17 +357,6 @@ extension _AxAppViews on _AxAppStateMixin {
                 workspaces: _workspaceCards(),
                 workspaceWorkers: workspaceWorkers,
                 initialWorkspaceId: navigation.workspaceId,
-                onSelectWorkspace: (workspaceId) {
-                  if (workspaceId != null) {
-                    _navigateTo(
-                        AxNavigation.workspaces(workspaceId: workspaceId));
-                  } else {
-                    _navigateTo(const AxNavigation.workspaces());
-                  }
-                },
-                onOpenDownloads: () => browserNavigation.openExternal(
-                  Uri.parse(conclaveDownloadsUrl),
-                ),
               )));
 
   Widget _profileSecurityView() => ListenableBuilder(
@@ -460,47 +369,66 @@ extension _AxAppViews on _AxAppStateMixin {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Semantics(
-          header: true,
-          child: const Text('Profile & Security',
-              style: TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-            'Manage your Conclave identity, login methods, sessions, and passkeys.',
-            style: TextStyle(color: Color(0xff777683), fontSize: 13)),
         if (store.securityError.value != null)
           TextButton(
               onPressed: _loadAccountSecurity,
               child:
                   Text('Retry account security: ${store.securityError.value}')),
         const SizedBox(height: 24),
-        _panel(
-          title: 'Profile',
-          subtitle: 'Your stable Conclave identity',
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: CircleAvatar(
-              backgroundColor: ConclaveColors.primarySoftColor(
-                  Theme.of(context).brightness == Brightness.dark),
-              child: Text(
-                _shellContext.viewerInitials,
-                style: TextStyle(
-                  color: ConclaveColors.primaryForeground(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  backgroundColor: ConclaveColors.primarySoftColor(
                       Theme.of(context).brightness == Brightness.dark),
-                  fontWeight: FontWeight.w700,
+                  backgroundImage: _shellContext.viewerAvatarImage,
+                  child: _shellContext.viewerAvatarImage == null
+                      ? Text(
+                          _shellContext.viewerInitials,
+                          style: TextStyle(
+                            color: ConclaveColors.primaryForeground(
+                                Theme.of(context).brightness ==
+                                    Brightness.dark),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        )
+                      : null,
                 ),
+                title: Text(viewer?.displayName ?? 'Conclave user'),
+                subtitle: Text(viewer?.email ?? 'Email unavailable'),
               ),
-            ),
-            title: Text(viewer?.displayName ?? 'Conclave user'),
-            subtitle: Text(viewer?.email ?? 'Email unavailable'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _editDisplayName,
+                    icon: const Icon(Icons.edit_outlined, size: 17),
+                    label: const Text('Rename'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _editEmail,
+                    icon: const Icon(Icons.alternate_email, size: 17),
+                    label: const Text('Update email'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: avatarUploadBusy ? null : _uploadAvatar,
+                    icon: const Icon(Icons.photo_camera_outlined, size: 17),
+                    label:
+                        Text(avatarUploadBusy ? 'Uploading…' : 'Change avatar'),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),
-        _panel(
+        _profileSection(
           title: 'Linked login methods',
-          subtitle:
-              'Link another verified provider so one provider can be unavailable without locking you out.',
           child: accountSecurityLoading
               ? const Center(child: CircularProgressIndicator())
               : Column(
@@ -540,9 +468,8 @@ extension _AxAppViews on _AxAppStateMixin {
                 ),
         ),
         const SizedBox(height: 16),
-        _panel(
+        _profileSection(
           title: 'Active sessions',
-          subtitle: 'Revoke access from a device you no longer recognize.',
           child: accountSecurityLoading
               ? const Center(child: CircularProgressIndicator())
               : Column(
@@ -551,60 +478,58 @@ extension _AxAppViews on _AxAppStateMixin {
                       const Align(
                           alignment: Alignment.centerLeft,
                           child: Text('No active sessions loaded.')),
-                    ...?security?.sessions.map((session) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.devices_outlined),
-                          title: Text(session.userAgent ?? 'Browser session'),
-                          subtitle: Text(
-                              'Expires ${_formatAccountDate(session.expiresAt)}'),
-                          trailing: TextButton(
-                            onPressed: () => _revokeAccountSession(session),
-                            child: const Text('Revoke'),
-                          ),
-                        )),
-                  ],
-                ),
-        ),
-        const SizedBox(height: 16),
-        _panel(
-          title: 'Passkeys',
-          subtitle:
-              'Use a device or security key to sign in without a password.',
-          child: accountSecurityLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Column(
-                  children: [
-                    if (security?.passkeys.isEmpty ?? true)
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text('No passkeys enrolled.'),
-                      ),
-                    ...?security?.passkeys.map((passkey) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.fingerprint),
-                          title: Text(passkey.name),
-                          subtitle: Text(passkey.createdAt.isEmpty
-                              ? 'WebAuthn credential'
-                              : 'Added ${_formatAccountDate(passkey.createdAt)}'),
-                          trailing: TextButton(
-                            onPressed: () => _deletePasskey(passkey),
-                            child: const Text('Remove'),
-                          ),
-                        )),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: OutlinedButton.icon(
-                        onPressed: _registerPasskey,
-                        icon: const Icon(Icons.add_circle_outline),
-                        label: const Text('Add passkey'),
-                      ),
-                    ),
+                    ...?security?.sessions.map((session) {
+                      final currentSessionId = store.auth.session?.sessionId;
+                      final isRevoking =
+                          revokingAccountSessionTokens.contains(session.token);
+                      final isCurrent = currentSessionId != null &&
+                          currentSessionId != '—' &&
+                          (session.id == currentSessionId ||
+                              session.token == currentSessionId);
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.devices_outlined),
+                        title: Text(session.userAgent ?? 'Browser session'),
+                        subtitle: Text(
+                            'Expires ${_formatAccountDate(session.expiresAt)}'),
+                        trailing: isCurrent
+                            ? const Text('Current',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xff3ca879)))
+                            : TextButton(
+                                onPressed: isRevoking
+                                    ? null
+                                    : () => _revokeAccountSession(session),
+                                child:
+                                    Text(isRevoking ? 'Revoking…' : 'Revoke'),
+                              ),
+                      );
+                    }),
                   ],
                 ),
         ),
       ],
     );
   }
+
+  Widget _profileSection({
+    required String title,
+    required Widget child,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title,
+                style:
+                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            const SizedBox(height: 10),
+            child,
+          ],
+        ),
+      );
 
   String _providerLabel(String provider) => switch (provider) {
         'github' => 'GitHub',

@@ -16,7 +16,6 @@ void main() {
             onRename: (_) {},
             onUpdate: (_) {},
             onRevoke: (_) {},
-            onOpenDownloads: () {},
           ),
         ),
       ),
@@ -28,10 +27,10 @@ void main() {
     expect(find.text('No Workspaces connected'), findsOneWidget);
     expect(
       find.text(
-          'Register a Workspace from the Conclave Workspace desktop app. Its status and Workers will appear here for Space activity.'),
+          'Download and register Conclave Workspace to make a Workspace and its Workers available here.'),
       findsOneWidget,
     );
-    expect(find.text('Download Conclave Workspace'), findsOneWidget);
+    expect(find.text('Download Conclave Workspace'), findsNothing);
     expect(find.byType(TextField), findsNothing);
   });
 
@@ -63,7 +62,7 @@ void main() {
     ));
 
     expect(find.text('Vitalii’s MacBook Pro'), findsOneWidget);
-    expect(find.textContaining('macOS'), findsNWidgets(2));
+    expect(find.textContaining('macOS'), findsOneWidget);
     expect(find.text('Pair Workspace'), findsNothing);
   });
 

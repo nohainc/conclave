@@ -47,6 +47,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Workflows'));
     await tester.pumpAndSettle();
+    expect(find.text('Workflows'), findsOneWidget);
+    expect(find.byTooltip('Refresh workflows'), findsOneWidget);
     expect(find.text('Workspaces'), findsNothing);
     expect(find.text('First'), findsOneWidget);
     expect(source.spaceReads, 1);

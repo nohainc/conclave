@@ -341,14 +341,17 @@ class AppSidebar extends StatelessWidget {
                             CircleAvatar(
                               radius: 13,
                               backgroundColor: ConclaveColors.primarySoft,
-                              child: Text(
-                                shellContext.viewerInitials,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: ConclaveColors.primaryPressed,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                              backgroundImage: shellContext.viewerAvatarImage,
+                              child: shellContext.viewerAvatarImage == null
+                                  ? Text(
+                                      shellContext.viewerInitials,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: ConclaveColors.primaryPressed,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    )
+                                  : null,
                             ),
                             const SizedBox(width: 8),
                             Expanded(
@@ -790,14 +793,17 @@ class AppIconRail extends StatelessWidget {
                 child: CircleAvatar(
                   radius: 14,
                   backgroundColor: ConclaveColors.primarySoft,
-                  child: Text(
-                    shellContext.viewerInitials,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: ConclaveColors.primaryPressed,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  backgroundImage: shellContext.viewerAvatarImage,
+                  child: shellContext.viewerAvatarImage == null
+                      ? Text(
+                          shellContext.viewerInitials,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: ConclaveColors.primaryPressed,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      : null,
                 ),
               ),
             ),

@@ -166,6 +166,8 @@ export const routeHandlers = {
   handleSubmitToolProfileReleaseEvidence:
     handlers.handleSubmitToolProfileReleaseEvidence,
   handleGetHomeReadModel: handlers.handleGetHomeReadModel,
+  handleGetAvatar: handlers.handleGetAvatar,
+  handleUploadAvatar: handlers.handleUploadAvatar,
 } as unknown as WorkerRouteHandlers;
 
 const routeDependencies = {

@@ -193,6 +193,25 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
         createdAt: "created_at",
         updatedAt: "updated_at",
       },
+      changeEmail: {
+        enabled: true,
+        sendChangeEmailConfirmation: async ({
+          user,
+          newEmail,
+          url,
+        }: {
+          user: { email: string; name?: string | null };
+          newEmail: string;
+          url: string;
+        }) =>
+          sendAuthEmail(
+            env,
+            user,
+            url,
+            "Confirm your Conclave AX email change",
+            `Confirm changing your email to ${newEmail}`,
+          ),
+      },
     },
     account: {
       modelName: "auth_accounts",

@@ -97,7 +97,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
       ),
       CommandPaletteAction(
         title: 'Profile & Security',
-        subtitle: 'Profile, passkeys, and sign-in settings',
+        subtitle: 'Profile, linked accounts, and active sessions',
         icon: Icons.person_outline_rounded,
         category: 'Navigation',
         onSelect: () {

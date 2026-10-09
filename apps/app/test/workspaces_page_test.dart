@@ -82,13 +82,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Vitalii’s MacBook Pro'), findsOneWidget);
-      expect(find.text('vitalii-macbook.local'), findsOneWidget);
-      expect(find.text('Connected · HTTPS fallback'), findsOneWidget);
-      expect(find.text('1.4.2'), findsOneWidget);
-      expect(find.text('dart · Up to 2 concurrent Workers'), findsOneWidget);
-      expect(find.textContaining('3 Workers'), findsOneWidget);
-      expect(find.text('2'), findsOneWidget);
-      expect(find.text('2026-09-26T12:30:00.000Z'), findsOneWidget);
+      expect(find.text('macOS · Apple Silicon · vitalii-macbook.local'),
+          findsOneWidget);
+      expect(find.text('Connected · HTTPS fallback'), findsNothing);
+      expect(find.text('1.4.2'), findsNothing);
+      expect(find.text('dart · Up to 2 concurrent Workers'), findsNothing);
+      expect(find.textContaining('3 Workers'), findsNothing);
+      expect(find.text('Active work'), findsNothing);
+      expect(find.text('Runtime capabilities'), findsNothing);
+      expect(find.text('2026-09-26T12:30:00.000Z'), findsNothing);
     });
 
     testWidgets('shows Workspaces as the single execution destination',
@@ -104,6 +106,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Workspaces'), findsOneWidget);
+      expect(
+        find.text(
+            'Workspaces are connected execution environments. Workers are the AI integrations configured on each Workspace.'),
+        findsOneWidget,
+      );
       expect(find.byType(TabBar), findsNothing);
       expect(find.text(snapshot.workspaces.first.name), findsOneWidget);
       expect(find.textContaining('AI Account'), findsNothing);
@@ -195,20 +202,17 @@ void main() {
         onRevoke: (_) {},
       )));
       await tester.pumpAndSettle();
-      expect(find.text('Workers'), findsNWidgets(2));
-      expect(find.text('ChatGPT'), findsNWidgets(2));
+      expect(find.text('Workers'), findsOneWidget);
+      expect(find.text('ChatGPT'), findsOneWidget);
       expect(find.textContaining('Cloud scheduling'), findsNothing);
       expect(find.text('Auth strategy'), findsNothing);
       expect(find.textContaining('credentialRef'), findsNothing);
       expect(find.text('Add legacy Cloud Worker'), findsNothing);
     });
 
-    testWidgets('empty state explains desktop registration and offers download',
-        (tester) async {
-      var downloadsOpened = false;
+    testWidgets('empty state explains Workspace registration', (tester) async {
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [],
-        onOpenDownloads: () => downloadsOpened = true,
         onRename: (_) {},
         onUpdate: (_) {},
         onRevoke: (_) {},
@@ -219,13 +223,12 @@ void main() {
       expect(find.text('Connect Workspace'), findsNothing);
       expect(
           find.textContaining(
-              'Register a Workspace from the Conclave Workspace desktop app'),
+              'Download and register Conclave Workspace to make a Workspace and its Workers available here.'),
           findsOneWidget);
-      await tester.tap(find.text('Download Conclave Workspace'));
-      expect(downloadsOpened, isTrue);
+      expect(find.text('Download Conclave Workspace'), findsNothing);
     });
 
-    testWidgets('shows useful Workspace detail inline in its expanded card',
+    testWidgets('shows Workspace machine and Workers without extra details',
         (tester) async {
       final snapshot = axFixtureSnapshot();
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
@@ -237,16 +240,18 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Hostname'), findsOneWidget);
-      expect(find.text('App version'), findsOneWidget);
-      expect(find.text('Last seen'), findsOneWidget);
-      expect(find.text('Active work'), findsOneWidget);
-      expect(find.text('Workers'), findsNWidgets(2));
-      // A single Workspace opens with runtime facts visible immediately.
-      expect(find.text('development-workspace.local'), findsOneWidget);
+      expect(find.text('Hostname'), findsNothing);
+      expect(find.text('App version'), findsNothing);
+      expect(find.text('Last seen'), findsNothing);
+      expect(find.text('Connection status'), findsNothing);
+      expect(find.text('Machine'), findsNothing);
+      expect(find.text('Active work'), findsNothing);
+      expect(find.text('Workers'), findsOneWidget);
+      expect(
+          find.textContaining('development-workspace.local'), findsOneWidget);
     });
 
-    testWidgets('expands one or two Workspaces and uses an accordion for more',
+    testWidgets('shows all Workspace cards without a Workspace expansion',
         (tester) async {
       AxWorkspace workspace(String id) => AxWorkspace(
             id: id,
@@ -268,23 +273,52 @@ void main() {
 
       await tester.pumpWidget(buildTestScaffold(page(2)));
       await tester.pumpAndSettle();
-      expect(find.text('Hostname'), findsNWidgets(2));
+      expect(find.text('0.local'), findsOneWidget);
+      expect(find.text('1.local'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
       await tester.pumpWidget(buildTestScaffold(page(3)));
       await tester.pumpAndSettle();
-      expect(find.text('Hostname'), findsOneWidget);
-      await tester.ensureVisible(find.text('Workspace 2'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Workspace 2'));
-      await tester.pumpAndSettle();
-      expect(find.text('Hostname'), findsOneWidget);
       expect(find.text('2.local'), findsOneWidget);
     });
 
-    testWidgets('Workspace deep link expands and focuses the target card',
+    testWidgets(
+        'Workspace cards are informational and use two columns when wide',
         (tester) async {
+      AxWorkspace workspace(String id) => AxWorkspace(
+            id: id,
+            name: 'Workspace $id',
+            hostname: '$id.local',
+            status: 'online',
+          );
+
+      await tester.pumpWidget(MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(1000, 800)),
+          child: Scaffold(
+            body: SingleChildScrollView(
+              child: WorkspacesPage(
+                workspaces: [workspace('one'), workspace('two')],
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      final header = tester.widget<ListTile>(find.byType(ListTile).first);
+      expect(header.onTap, isNull);
+
+      final cards = find.byType(Card);
+      expect(cards, findsNWidgets(2));
+      expect(tester.getTopLeft(cards.at(1)).dx,
+          greaterThan(tester.getTopLeft(cards.at(0)).dx));
+      expect(tester.getTopLeft(cards.at(1)).dy,
+          closeTo(tester.getTopLeft(cards.at(0)).dy, 1));
+    });
+
+    testWidgets('Workspace deep link focuses the target card', (tester) async {
       AxWorkspace workspace(String id) => AxWorkspace(
             id: id,
             name: 'Workspace $id',
@@ -335,7 +369,7 @@ void main() {
         onRevoke: (_) {},
       )));
       await tester.pumpAndSettle();
-      expect(find.text('ChatGPT'), findsNWidgets(2));
+      expect(find.text('ChatGPT'), findsOneWidget);
       expect(find.text('Codex Personal'), findsNothing);
       expect(find.byTooltip('Remove binding'), findsNothing);
     });
@@ -375,15 +409,11 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('ChatGPT'), findsNWidgets(2));
-      expect(find.text('Ready locally'), findsOneWidget);
+      expect(find.text('ChatGPT'), findsOneWidget);
+      expect(find.text('Ready locally'), findsNothing);
       expect(find.textContaining('Cloud scheduling'), findsNothing);
       expect(find.textContaining('Model'), findsNothing);
-      expect(
-        find.text(
-            'Conclave Workspace reports local readiness. Choose Workers for a Space or Thread in its Execution settings.'),
-        findsOneWidget,
-      );
+      expect(find.text('Workers'), findsOneWidget);
       expect(find.text('Authentication · browser_auth'), findsNothing);
 
       await tester.tap(find.text('ChatGPT').first);
@@ -486,11 +516,11 @@ void main() {
       final secondCard = tester.widget<Card>(cards.at(1));
       expect(firstCard, isNot(same(secondCard)));
       expect(find.descendant(of: cards.at(0), matching: find.text('ChatGPT')),
-          findsNWidgets(2));
+          findsOneWidget);
       expect(find.descendant(of: cards.at(0), matching: find.text('Gemini')),
           findsNothing);
       expect(find.descendant(of: cards.at(1), matching: find.text('Gemini')),
-          findsNWidgets(2));
+          findsOneWidget);
     });
 
     testWidgets('needs-attention points to Conclave Workspace desktop',
@@ -528,7 +558,7 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Provider sign-in required'), findsOneWidget);
+      expect(find.text('Provider sign-in required'), findsNothing);
       await tester.tap(find.text('ChatGPT').first);
       await tester.pumpAndSettle();
       expect(
@@ -556,7 +586,7 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Not connected'), findsNWidgets(2));
+      expect(find.text('Not connected'), findsOneWidget);
       expect(find.text('Connect Machine'), findsNothing);
       expect(connectedWorkspace, isNull);
     });
@@ -576,7 +606,7 @@ void main() {
 
       expect(
         find.text(
-          'No Workers have synced yet. Configure your first Worker in Conclave Workspace on this computer.',
+          'No Workers are available for this Workspace yet. Configure Workers in Conclave Workspace on this computer.',
         ),
         findsOneWidget,
       );

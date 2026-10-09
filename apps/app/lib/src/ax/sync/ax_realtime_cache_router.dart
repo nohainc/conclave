@@ -84,7 +84,9 @@ class AxRealtimeCacheRouter {
         engine.remove(AxQueryKey(['space-workflow-configurations', affected]));
         engine.remove(AxQueryKey(['workflow-workspace', affected]));
         engine.remove(AxQueryKey(['workflow-default', affected]));
-        await engine.revalidateWhere((key) => key == AxQueryKey(['spaces']));
+        await engine.revalidateWhere((key) =>
+            key == AxQueryKey(['spaces']) ||
+            key == AxQueryKey(['archived-spaces']));
         return;
       }
       await engine.revalidateWhere((key) =>
@@ -95,6 +97,7 @@ class AxRealtimeCacheRouter {
           key == AxQueryKey(['workflow-workspace', affected]) ||
           key == AxQueryKey(['workflow-default', affected]) ||
           key == AxQueryKey(['spaces']) ||
+          key == AxQueryKey(['archived-spaces']) ||
           key == AxQueryKey(['me', 'invitations']));
     } else if (type.startsWith('thread.') || type.startsWith('thread.')) {
       final affectedThread = threadId ?? id(payload['entityId']);
