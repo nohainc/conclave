@@ -1167,6 +1167,20 @@ void main() {
     expect(parsed.minimumProfileVersion, update.minimumProfileVersion);
   });
 
+  test('Thread records retain timestamps used by Continue working', () {
+    final thread = AxThread.fromJson({
+      'id': 'thread-latest',
+      'spaceId': 'space-1',
+      'name': 'Latest discussion',
+      'status': 'active',
+      'lead': 'Julia',
+      'createdAt': '2026-10-01T10:00:00Z',
+      'updatedAt': '2026-10-10T09:30:00Z',
+    });
+    expect(thread.createdAt, '2026-10-01T10:00:00Z');
+    expect(thread.updatedAt, '2026-10-10T09:30:00Z');
+  });
+
   testWidgets(
       'Phase 16 — EstablishedUserHome renders AI capability updates with distinct badges',
       (tester) async {
@@ -1255,6 +1269,60 @@ void main() {
     expect(find.text('CAPABILITY ADDED'), findsOneWidget);
     expect(find.text('Structured Output Mode'), findsOneWidget);
     expect(find.text('Oct 9'), findsOneWidget);
+  });
+
+  testWidgets('AI updates See all opens the full update dialog',
+      (tester) async {
+    const update = AxAiCapabilityUpdate(
+      id: 'ai-dialog-1',
+      workerProfileId: 'chatgpt',
+      provider: 'openai',
+      type: AxAiCapabilityUpdateType.modelAdded,
+      modelDisplayName: 'GPT-5',
+      title: 'GPT-5 is available',
+      summary: 'Use the newest reasoning model for demanding tasks.',
+      publishedAt: '2026-10-08T00:00:00Z',
+      dateDisplay: 'Oct 8',
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: EstablishedUserHome(
+          spaces: const [space],
+          workspaces: const [],
+          workers: const [
+            AxWorker(
+              id: 'worker-1',
+              workspaceId: 'workspace-1',
+              workspaceName: 'Local',
+              workerTypeId: 'chatgpt',
+              displayName: 'ChatGPT Worker',
+              status: 'ready',
+              readinessState: 'ready',
+              localConcurrencyLimit: 1,
+              capabilities: ['chat'],
+            ),
+          ],
+          aiUpdates: [update],
+          run: null,
+          openFindingCount: 0,
+          onOpenSpace: (_) {},
+          onOpenRun: (_, __) {},
+          onOpenWorkspaces: () {},
+        ),
+      ),
+    ));
+
+    await tester.ensureVisible(find.text('See all').last);
+    await tester.tap(find.text('See all').last);
+    await tester.pumpAndSettle();
+    expect(find.text('AI updates'), findsNWidgets(2));
+    expect(
+        find.text('New worker capabilities and model updates'), findsOneWidget);
+    expect(find.text('GPT-5 is available'), findsNWidgets(2));
+    expect(find.text('Use the newest reasoning model for demanding tasks.'),
+        findsNWidgets(2));
+    expect(find.text('Model: GPT-5'), findsOneWidget);
   });
 
   test(

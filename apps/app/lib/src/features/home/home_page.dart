@@ -2206,11 +2206,14 @@ class AxAiUpdatesDialog extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('AI updates', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                      const Text('AI updates',
+                          style: TextStyle(
+                              fontSize: 22, fontWeight: FontWeight.w700)),
                       const SizedBox(height: 2),
                       Text(
                         'New worker capabilities and model updates',
-                        style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
+                        style: TextStyle(
+                            fontSize: 13, color: colorScheme.onSurfaceVariant),
                       ),
                     ],
                   ),
@@ -2226,7 +2229,9 @@ class AxAiUpdatesDialog extends StatelessWidget {
               Expanded(
                 child: ordered.isEmpty
                     ? Center(
-                        child: Text('No AI updates available.', style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                        child: Text('No AI updates available.',
+                            style:
+                                TextStyle(color: colorScheme.onSurfaceVariant)),
                       )
                     : ListView.separated(
                         itemCount: ordered.length,
@@ -2249,33 +2254,64 @@ class AxAiUpdatesDialog extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Wrap(
-                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
                                       spacing: 8,
                                       runSpacing: 4,
                                       children: [
-                                        _buildAiUpdateDot(update.workerProfileId),
-                                        Text(update.workerDisplayName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                                        _buildAiUpdateDot(
+                                            update.workerProfileId),
+                                        Text(update.workerDisplayName,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 13)),
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: colorScheme.surfaceContainerHighest,
-                                            borderRadius: BorderRadius.circular(4),
+                                            color: colorScheme
+                                                .surfaceContainerHighest,
+                                            borderRadius:
+                                                BorderRadius.circular(4),
                                           ),
                                           child: Text(
                                             update.type.label.toUpperCase(),
-                                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: colorScheme.onSurfaceVariant),
+                                            style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                                letterSpacing: 0.5,
+                                                color: colorScheme
+                                                    .onSurfaceVariant),
                                           ),
                                         ),
-                                        Text(update.dateDisplay, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
+                                        Text(update.dateDisplay,
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: colorScheme
+                                                    .onSurfaceVariant)),
                                       ],
                                     ),
                                     const SizedBox(height: 10),
-                                    Text(update.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                                    Text(update.title,
+                                        style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700)),
                                     const SizedBox(height: 6),
-                                    Text(update.summary, style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant, height: 1.4)),
-                                    if (update.modelDisplayName != null && update.modelDisplayName!.isNotEmpty) ...[
+                                    Text(update.summary,
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color: colorScheme.onSurfaceVariant,
+                                            height: 1.4)),
+                                    if (update.modelDisplayName != null &&
+                                        update
+                                            .modelDisplayName!.isNotEmpty) ...[
                                       const SizedBox(height: 8),
-                                      Text('Model: ${update.modelDisplayName}', style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                                      Text('Model: ${update.modelDisplayName}',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                              fontWeight: FontWeight.w600)),
                                     ],
                                   ],
                                 ),
@@ -2313,89 +2349,89 @@ class _AiUpdateRow extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
         child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: _buildAiUpdateDot(update.workerProfileId),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    Text(
-                      update.workerDisplayName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        update.type.label.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 9,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _buildAiUpdateDot(update.workerProfileId),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      Text(
+                        update.workerDisplayName,
+                        style: const TextStyle(
                           fontWeight: FontWeight.w700,
-                          letterSpacing: 0.4,
-                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 13,
                         ),
                       ),
-                    ),
-                    Text(
-                      update.dateDisplay,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w500,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          update.type.label.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.4,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ),
+                      Text(
+                        update.dateDisplay,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    update.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  update.title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  update.summary,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: colorScheme.onSurfaceVariant,
-                    height: 1.35,
+                  const SizedBox(height: 2),
+                  Text(
+                    update.summary,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colorScheme.onSurfaceVariant,
+                      height: 1.35,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          if (onOpen != null) ...[
-            const SizedBox(width: 8),
-            TextButton(
-              onPressed: onOpen,
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                ],
               ),
-              child: const Text('Configure →'),
             ),
+            if (onOpen != null) ...[
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: onOpen,
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                ),
+                child: const Text('Configure →'),
+              ),
+            ],
           ],
-        ],
         ),
       ),
     );

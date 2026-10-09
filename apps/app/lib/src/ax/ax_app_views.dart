@@ -31,128 +31,131 @@ extension _AxAppViews on _AxAppStateMixin {
               engine: store.syncEngine,
               query: store.catalogs.workers,
               builder: (context, workers) => HomePage(
-                spaces: store.spaces.items,
-                workspaces: store.workspaces.items,
-                workers: workers.data ?? const [],
-                invitations: store.invitations.items,
-                productUpdates: store.productUpdates,
-                productUpdateReadStates: store.productUpdateReadStates.value,
-                attentionItems: notifications.map((n) {
-                  final kind = switch (n.kind) {
-                    AxNotificationKind.threadNeedsInput ||
-                    AxNotificationKind.workflowRunNeedsApproval ||
-                    AxNotificationKind.approvalRequired =>
-                      AxAttentionKind.needsInput,
-                    AxNotificationKind.threadFailed ||
-                    AxNotificationKind.workflowRunFailed ||
-                    AxNotificationKind.failed =>
-                      AxAttentionKind.failedExecution,
-                    AxNotificationKind.workerCredentialProblem ||
-                    AxNotificationKind.workerInstallFailed =>
-                      AxAttentionKind.workerProblem,
-                    AxNotificationKind.workspaceOffline =>
-                      AxAttentionKind.workspaceProblem,
-                    AxNotificationKind.threadCompleted ||
-                    AxNotificationKind.workflowRunCompleted ||
-                    AxNotificationKind.completed =>
-                      AxAttentionKind.completed,
-                    AxNotificationKind.spaceInvitationReceived ||
-                    AxNotificationKind.invitationReceived =>
-                      AxAttentionKind.invitation,
-                  };
-                  final categoryLabel = switch (n.kind) {
-                    AxNotificationKind.threadNeedsInput ||
-                    AxNotificationKind.workflowRunNeedsApproval ||
-                    AxNotificationKind.approvalRequired =>
-                      'Needs your input',
-                    AxNotificationKind.threadFailed ||
-                    AxNotificationKind.workflowRunFailed ||
-                    AxNotificationKind.failed =>
-                      'Failed execution',
-                    AxNotificationKind.workerCredentialProblem =>
-                      'Worker needs attention',
-                    AxNotificationKind.workerInstallFailed =>
-                      'Worker install failed',
-                    AxNotificationKind.workspaceOffline => 'Workspace offline',
-                    AxNotificationKind.threadCompleted ||
-                    AxNotificationKind.workflowRunCompleted ||
-                    AxNotificationKind.completed =>
-                      'Completed',
-                    AxNotificationKind.spaceInvitationReceived ||
-                    AxNotificationKind.invitationReceived =>
-                      'Space invitation',
-                  };
-                  final actionLabel = switch (n.kind) {
-                    AxNotificationKind.threadNeedsInput ||
-                    AxNotificationKind.workflowRunNeedsApproval ||
-                    AxNotificationKind.approvalRequired =>
-                      'Review →',
-                    AxNotificationKind.threadFailed ||
-                    AxNotificationKind.workflowRunFailed ||
-                    AxNotificationKind.failed =>
-                      'Inspect →',
-                    AxNotificationKind.workerCredentialProblem => 'Fix →',
-                    AxNotificationKind.workerInstallFailed => 'Fix →',
-                    AxNotificationKind.workspaceOffline => 'Connect →',
-                    AxNotificationKind.threadCompleted ||
-                    AxNotificationKind.workflowRunCompleted ||
-                    AxNotificationKind.completed =>
-                      'Open →',
-                    AxNotificationKind.spaceInvitationReceived ||
-                    AxNotificationKind.invitationReceived =>
-                      'View →',
-                  };
-                  return AxHomeAttentionItem(
-                    id: n.id,
-                    kind: kind,
-                    categoryLabel: categoryLabel,
-                    title: n.title,
-                    subtitle: n.message,
-                    timestampDisplay: _formatNotificationTime(n.createdAt),
-                    actionLabel: actionLabel,
-                    spaceId: n.spaceId,
-                    threadId: n.threadId,
-                    isUnread: !n.read,
-                    isActionable: n.kind != AxNotificationKind.completed &&
-                        n.kind != AxNotificationKind.threadCompleted &&
-                        n.kind != AxNotificationKind.workflowRunCompleted,
-                    createdAt: n.createdAt,
-                  );
-                }).toList(),
-                continueWorkItems: continueWorkItems,
-                isOffline: store.lifecycle.isOffline,
-                onAcceptInvitation: _acceptInvitation,
-                onDeclineInvitation: _declineInvitation,
-                run: executionSnapshot.run,
-                openFindingCount: executionSnapshot.findings
-                    .where((finding) => finding.status == FindingStatus.open)
-                    .length,
-                onOpenWorkspaces: () =>
-                    _navigateTo(const AxNavigation.workspaces()),
-                onOpenSpace: (spaceId) =>
-                    _navigateTo(AxNavigation.space(spaceId)),
-                onOpenThread: (spaceId, threadId) =>
-                    _navigateTo(AxNavigation.thread(spaceId, threadId)),
-                onOpenRun: (spaceId, runId) =>
-                    _navigateTo(AxNavigation.run(spaceId, runId)),
-                onCreateSpace: _createSpace,
-                onOpenNotifications: _showNotifications,
-                onOpenWhatsNew: () => AxWhatsNewDialog.show(
-                  context,
-                  updates: store.productUpdates.isNotEmpty
-                      ? store.productUpdates
-                      : defaultProductUpdates,
-                  readStates: store.productUpdateReadStates.value,
-                  onOpenUpdateDetail: (update) =>
-                      store.markProductUpdateOpened(update.id),
-                  onDismissUpdate: (update) =>
-                      store.dismissProductUpdate(update.id),
-                ),
-                onOpenUpdateDetail: (update) =>
-                    store.markProductUpdateOpened(update.id),
-                onDismissUpdate: (update) =>
-                    store.dismissProductUpdate(update.id),
-              ))));
+                    spaces: store.spaces.items,
+                    workspaces: store.workspaces.items,
+                    workers: workers.data ?? const [],
+                    invitations: store.invitations.items,
+                    productUpdates: store.productUpdates,
+                    productUpdateReadStates:
+                        store.productUpdateReadStates.value,
+                    attentionItems: notifications.map((n) {
+                      final kind = switch (n.kind) {
+                        AxNotificationKind.threadNeedsInput ||
+                        AxNotificationKind.workflowRunNeedsApproval ||
+                        AxNotificationKind.approvalRequired =>
+                          AxAttentionKind.needsInput,
+                        AxNotificationKind.threadFailed ||
+                        AxNotificationKind.workflowRunFailed ||
+                        AxNotificationKind.failed =>
+                          AxAttentionKind.failedExecution,
+                        AxNotificationKind.workerCredentialProblem ||
+                        AxNotificationKind.workerInstallFailed =>
+                          AxAttentionKind.workerProblem,
+                        AxNotificationKind.workspaceOffline =>
+                          AxAttentionKind.workspaceProblem,
+                        AxNotificationKind.threadCompleted ||
+                        AxNotificationKind.workflowRunCompleted ||
+                        AxNotificationKind.completed =>
+                          AxAttentionKind.completed,
+                        AxNotificationKind.spaceInvitationReceived ||
+                        AxNotificationKind.invitationReceived =>
+                          AxAttentionKind.invitation,
+                      };
+                      final categoryLabel = switch (n.kind) {
+                        AxNotificationKind.threadNeedsInput ||
+                        AxNotificationKind.workflowRunNeedsApproval ||
+                        AxNotificationKind.approvalRequired =>
+                          'Needs your input',
+                        AxNotificationKind.threadFailed ||
+                        AxNotificationKind.workflowRunFailed ||
+                        AxNotificationKind.failed =>
+                          'Failed execution',
+                        AxNotificationKind.workerCredentialProblem =>
+                          'Worker needs attention',
+                        AxNotificationKind.workerInstallFailed =>
+                          'Worker install failed',
+                        AxNotificationKind.workspaceOffline =>
+                          'Workspace offline',
+                        AxNotificationKind.threadCompleted ||
+                        AxNotificationKind.workflowRunCompleted ||
+                        AxNotificationKind.completed =>
+                          'Completed',
+                        AxNotificationKind.spaceInvitationReceived ||
+                        AxNotificationKind.invitationReceived =>
+                          'Space invitation',
+                      };
+                      final actionLabel = switch (n.kind) {
+                        AxNotificationKind.threadNeedsInput ||
+                        AxNotificationKind.workflowRunNeedsApproval ||
+                        AxNotificationKind.approvalRequired =>
+                          'Review →',
+                        AxNotificationKind.threadFailed ||
+                        AxNotificationKind.workflowRunFailed ||
+                        AxNotificationKind.failed =>
+                          'Inspect →',
+                        AxNotificationKind.workerCredentialProblem => 'Fix →',
+                        AxNotificationKind.workerInstallFailed => 'Fix →',
+                        AxNotificationKind.workspaceOffline => 'Connect →',
+                        AxNotificationKind.threadCompleted ||
+                        AxNotificationKind.workflowRunCompleted ||
+                        AxNotificationKind.completed =>
+                          'Open →',
+                        AxNotificationKind.spaceInvitationReceived ||
+                        AxNotificationKind.invitationReceived =>
+                          'View →',
+                      };
+                      return AxHomeAttentionItem(
+                        id: n.id,
+                        kind: kind,
+                        categoryLabel: categoryLabel,
+                        title: n.title,
+                        subtitle: n.message,
+                        timestampDisplay: _formatNotificationTime(n.createdAt),
+                        actionLabel: actionLabel,
+                        spaceId: n.spaceId,
+                        threadId: n.threadId,
+                        isUnread: !n.read,
+                        isActionable: n.kind != AxNotificationKind.completed &&
+                            n.kind != AxNotificationKind.threadCompleted &&
+                            n.kind != AxNotificationKind.workflowRunCompleted,
+                        createdAt: n.createdAt,
+                      );
+                    }).toList(),
+                    continueWorkItems: continueWorkItems,
+                    isOffline: store.lifecycle.isOffline,
+                    onAcceptInvitation: _acceptInvitation,
+                    onDeclineInvitation: _declineInvitation,
+                    run: executionSnapshot.run,
+                    openFindingCount: executionSnapshot.findings
+                        .where(
+                            (finding) => finding.status == FindingStatus.open)
+                        .length,
+                    onOpenWorkspaces: () =>
+                        _navigateTo(const AxNavigation.workspaces()),
+                    onOpenSpace: (spaceId) =>
+                        _navigateTo(AxNavigation.space(spaceId)),
+                    onOpenThread: (spaceId, threadId) =>
+                        _navigateTo(AxNavigation.thread(spaceId, threadId)),
+                    onOpenRun: (spaceId, runId) =>
+                        _navigateTo(AxNavigation.run(spaceId, runId)),
+                    onCreateSpace: _createSpace,
+                    onOpenNotifications: _showNotifications,
+                    onOpenWhatsNew: () => AxWhatsNewDialog.show(
+                      context,
+                      updates: store.productUpdates.isNotEmpty
+                          ? store.productUpdates
+                          : defaultProductUpdates,
+                      readStates: store.productUpdateReadStates.value,
+                      onOpenUpdateDetail: (update) =>
+                          store.markProductUpdateOpened(update.id),
+                      onDismissUpdate: (update) =>
+                          store.dismissProductUpdate(update.id),
+                    ),
+                    onOpenUpdateDetail: (update) =>
+                        store.markProductUpdateOpened(update.id),
+                    onDismissUpdate: (update) =>
+                        store.dismissProductUpdate(update.id),
+                  ))));
 
   void _openArchivedSpaces() =>
       _navigateTo(const AxNavigation.archivedSpaces());
@@ -595,7 +598,9 @@ class _HomeThreadCollectionState extends State<_HomeThreadCollection> {
               ? thread.brief
               : 'Continue conversation and work in context',
           lastActivityDisplay: activityAt == null
-              ? (space.lastActivity.isNotEmpty ? space.lastActivity : 'Recently')
+              ? (space.lastActivity.isNotEmpty
+                  ? space.lastActivity
+                  : 'Recently')
               : _formatHomeThreadActivity(activityAt),
           lastMeaningfulActivityAt: activityAt,
         ));
