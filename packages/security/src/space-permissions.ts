@@ -4,7 +4,6 @@ export const SPACE_MEMBER_PERMISSION_KEYS = [
   "work",
   "manageOwnThreads",
   "attachWorkspace",
-  "inviteMembers",
 ] as const;
 export type SpaceMemberPermission =
   (typeof SPACE_MEMBER_PERMISSION_KEYS)[number];
@@ -22,7 +21,6 @@ export function defaultSpaceMemberPermissions(
     work: owner || collaborator,
     manageOwnThreads: owner || collaborator,
     attachWorkspace: owner,
-    inviteMembers: owner,
   };
 }
 
@@ -58,6 +56,5 @@ export function spaceMemberPermissions(
     work: value.work === true,
     manageOwnThreads: value.manageOwnThreads === true,
     attachWorkspace: value.attachWorkspace === true,
-    inviteMembers: value.inviteMembers === true,
   };
 }

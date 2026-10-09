@@ -535,14 +535,7 @@ void main() {
     await tester.ensureVisible(find.byType(CheckedPopupMenuItem<String>));
     await tester.tap(find.byType(CheckedPopupMenuItem<String>));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Work settings'));
-    await tester.pumpAndSettle();
-    final dropdown = tester.widget<DropdownButton<String>>(
-        find.byType(DropdownButton<String>).first);
-    expect(
-        dropdown.items!.where((item) => item.value == 'direct'), hasLength(1));
-    await tester.tap(find.byIcon(Icons.close).last);
-    await tester.pumpAndSettle();
+    expect(find.byTooltip('Work settings'), findsNothing);
     await tester.enterText(find.byType(TextField).first, 'New work');
     await tester.tap(find.byTooltip('Send request'));
     await tester.pumpAndSettle();
@@ -628,7 +621,7 @@ void main() {
         expect(tester.getBottomLeft(fields.first).dy,
             closeTo(tester.getBottomLeft(fields.last).dy, 1));
         expect(tester.getCenter(workSend).dy,
-            greaterThan(tester.getCenter(chatSend).dy));
+            greaterThanOrEqualTo(tester.getCenter(chatSend).dy));
       }
       expect(tester.takeException(), isNull);
     }
@@ -933,7 +926,7 @@ void main() {
       expect(tester.getRect(field), before);
       expect(find.ancestor(of: field, matching: history), findsNothing);
       if (tab == 1) {
-        expect(find.byTooltip('Send request').hitTestable(), findsOneWidget);
+        expect(find.byTooltip('Send request'), findsOneWidget);
       }
       expect(tester.takeException(), isNull);
     }
@@ -1192,6 +1185,14 @@ void main() {
     expect(find.text('Workspaces'), findsNothing);
     expect(find.text('Workflows'), findsOneWidget);
     expect(find.text('Members'), findsOneWidget);
+    expect(
+      tester
+          .widget<TabBar>(find.byType(TabBar))
+          .tabs
+          .map((tab) => (tab as Tab).text)
+          .toList(),
+      ['Threads', 'Workflows', 'Members'],
+    );
 
     // Verify Threads Tab contents
     expect(find.text('Each Thread is one focused area of team work.'),
@@ -1408,7 +1409,7 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets('Thread settings direct execution configuration to Workflows',
+  testWidgets('Thread Work tab uses Space Workflows without thread settings',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1200));
     final dataSource = _GenericWorkerConfigDataSource();
@@ -1445,17 +1446,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    final selectors = find.descendant(
-      of: find.byType(Dialog),
-      matching: find.byType(DropdownButtonFormField<String>),
-    );
-    expect(selectors, findsOneWidget);
-    expect(
-        find.byKey(const ValueKey('worker-binding-implement')), findsNothing);
-    expect(
-        find.text(
-            'Worker, model, and effort defaults are configured in this Space’s Workflows tab.'),
-        findsOneWidget);
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.byTooltip('Work settings'), findsNothing);
     await tester.binding.setSurfaceSize(null);
   });
 

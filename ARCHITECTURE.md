@@ -23,7 +23,10 @@ are normative and checked by `scripts/verify-v8-architecture.mjs`.
 
 - **Conclave AX** is the human application for Spaces, Threads, team Chat, AI execution through Work Requests, Workspace grants, user Workflow configuration, results, and audit.
 - **Conclave Cloud** owns collaboration and scheduling state, the logical Worker catalog, Profile releases, and authorization. Provider credentials stay local.
-- **Conclave Workspace** owns the local Work Root, Worker readiness, Profile verification and cache, Engine supervision, cancellation, and diagnostics.
+- **Conclave Workspace** is the machine execution environment. It owns
+  application-managed state below
+  `~/Library/Application Support/Conclave/Workspace/` and resolves one
+  user-owned Work Root, which defaults to `~/Documents/Conclave` on macOS.
 - **Logical Workers** such as ChatGPT and Gemini are stable product identities. The Engine and Profile resolve each identity to a supported provider CLI.
 
 ## Work v1
@@ -50,6 +53,47 @@ The runtime implementation stays below the logical Worker boundary:
 ~~~text
 User Workflow Configuration -> execution resolution -> logical Worker -> signed Profile -> CLI Worker Engine -> provider CLI
 ~~~
+
+### Filesystem ownership
+
+The application-family data root is resolved automatically at
+`~/Library/Application Support/Conclave/`. Workspace state, registry,
+Profiles, Engines, sessions, caches, runtime metadata, and other internal
+files remain application-managed below its `Workspace/` subtree. Profile Lab
+uses a separate `Profile Lab/` subtree under the same root.
+
+The Work Root is user-owned working data that Workers may operate on. A Space
+Work Directory is resolved beneath it. A Workspace is an execution environment
+with a Work Root; it is not itself a directory.
+Each Space directory is selected through a private `spaceId` registry and an
+identity marker, so duplicate names and Space renames do not move user files.
+Threads share their Space directory and do not receive directories by default;
+Thread sessions, logs, execution state, and temporary runtime metadata remain
+under the application-managed Workspace subtree.
+
+The filesystem contract is:
+
+```text
+USER-OWNED
+~/Documents/Conclave/
+└── <Space>/
+    └── projects/files
+
+CONCLAVE-OWNED
+~/Library/Application Support/Conclave/
+├── Workspace/
+│   ├── profiles
+│   ├── engines
+│   ├── sessions
+│   ├── logs
+│   └── runtime
+└── Profile Lab/
+    └── internal state
+```
+
+Resetting or removing a Workspace clears only Conclave-owned state. It never
+deletes the Work Root or a Space directory; deleting user-owned files requires
+an explicit destructive action.
 
 ## Conversation Workflow ownership
 

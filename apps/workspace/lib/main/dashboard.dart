@@ -446,7 +446,7 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
           'Conclave Workspace',
     );
     _workRootController = TextEditingController(
-      text: widget.snapshot.workRootPath ?? '',
+      text: _displayWorkRoot(widget.snapshot.workRootPath),
     );
   }
 
@@ -463,7 +463,7 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
       _nameController.text = newName;
     }
     if (oldWidget.snapshot.workRootPath != widget.snapshot.workRootPath) {
-      _workRootController.text = widget.snapshot.workRootPath ?? '';
+      _workRootController.text = _displayWorkRoot(widget.snapshot.workRootPath);
     }
   }
 
@@ -483,6 +483,17 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
         await widget.onChangeWorkRoot!(selected);
       }
     }
+  }
+
+  String _displayWorkRoot(String? path) {
+    if (path == null || path.isEmpty) return '';
+    final home = Platform.environment['HOME'];
+    if (home != null && home.isNotEmpty && path == home) return '~';
+    final separator = Platform.pathSeparator;
+    if (home != null && home.isNotEmpty && path.startsWith('$home$separator')) {
+      return '~${path.substring(home.length)}';
+    }
+    return path;
   }
 
   @override
@@ -533,22 +544,67 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
         const SizedBox(height: 16),
         TextField(
           controller: _workRootController,
-          enabled: !widget.snapshot.workspaceReady,
+          enabled: false,
           readOnly: true,
           decoration: InputDecoration(
             labelText: 'Work Root',
             hintText: 'Not configured',
             border: const OutlineInputBorder(),
-            suffixIcon: Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: TextButton.icon(
-                onPressed:
-                    widget.snapshot.workspaceReady ? null : _browseWorkRoot,
-                icon: const Icon(Icons.folder_open, size: 16),
-                label: const Text('Browse'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Files and projects used by Conclave Workers. Changing this setting affects future Space directories; existing files are not moved automatically.',
+          style: theme.textTheme.bodySmall,
+        ),
+        if (widget.snapshot.workRootMigrationPending) ...[
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.warning_amber_outlined),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'A legacy Work Root and the new Documents Work Root both contain files. They were preserved. Review the legacy folder before choosing which files to use.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: widget.snapshot.legacyWorkRootPath == null
+                        ? null
+                        : () => WorkspaceLifecycleController.openPath(
+                            widget.snapshot.legacyWorkRootPath!),
+                    child: const Text('Review'),
+                  ),
+                ],
               ),
             ),
           ),
+        ],
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: widget.snapshot.workRootPath == null
+                  ? null
+                  : () => WorkspaceLifecycleController.openPath(
+                        widget.snapshot.workRootPath!,
+                      ),
+              icon: const Icon(Icons.folder_open, size: 16),
+              label: const Text('Open in Finder'),
+            ),
+            FilledButton.tonal(
+              onPressed:
+                  widget.onChangeWorkRoot == null ? null : _browseWorkRoot,
+              child: const Text('Change…'),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         SwitchListTile(

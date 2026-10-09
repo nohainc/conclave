@@ -839,7 +839,6 @@ it("rechecks granular rights at dispatch and ignores the retired Space-wide swit
         work: false,
         manageOwnThreads: false,
         attachWorkspace: false,
-        inviteMembers: false,
       },
     },
   };

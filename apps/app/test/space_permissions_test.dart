@@ -133,15 +133,14 @@ void main() {
             branch: '',
             lastActivity: '',
             role: 'collaborator',
-            permissions:
-                const AxSpacePermissions(chat: true, inviteMembers: true))));
+            permissions: const AxSpacePermissions(chat: true))));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Create Thread'), findsNothing);
     expect(find.text('Workspaces'), findsNothing);
     expect(find.byType(Switch), findsNothing);
     await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Share Space'), findsOneWidget);
+    expect(find.byTooltip('Share Space'), findsNothing);
     expect(
         tester
             .widget<Checkbox>(

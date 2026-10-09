@@ -90,7 +90,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   final _tabCancels = <void Function()>[];
   int _activeTab = -1;
   bool get canManage => widget.space.effectivePermissions.manageOwnThreads;
-  bool get canInvite => widget.space.effectivePermissions.inviteMembers;
+  bool get canInvite => widget.space.role == 'owner';
   final _savingMembers = <String>{};
   bool get isOwner => widget.space.role == 'owner';
 
@@ -155,7 +155,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
         if (mounted) _updateState(() => apply(state));
       }, fireImmediately: false));
       _ensure(_streams.engine, query);
-    } else if (_activeTab == 1) {
+    } else if (_activeTab == 2) {
       final membersQuery = _queries.members(id);
       final invitationsQuery = _queries.invitations(id);
       void apply() {
@@ -357,8 +357,8 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
                             tabAlignment: TabAlignment.center,
                             tabs: const [
                               Tab(text: 'Threads'),
-                              Tab(text: 'Members'),
                               Tab(text: 'Workflows'),
+                              Tab(text: 'Members'),
                             ],
                           ),
                         ),
@@ -366,13 +366,13 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
                         if (_tabController.index == 0)
                           _threadsTab()
                         else if (_tabController.index == 1)
-                          _membersTab()
-                        else
                           WorkflowsPage(
                               catalogs: AxSessionCatalogs.forSource(
                                   widget.dataSource),
                               configurations: _workflowConfigurations,
-                              canEdit: widget.space.role == 'owner'),
+                              canEdit: widget.space.role == 'owner')
+                        else
+                          _membersTab(),
                       ],
                     ),
                   ),

@@ -17,6 +17,7 @@ export interface WorkerStepExecutionInput {
   readonly workerInput: Readonly<Record<string, unknown>>;
   readonly scope: {
     readonly spaceId: string;
+    readonly spaceName?: string;
     readonly requesterUserId: string;
     readonly threadId: string;
     readonly workRequestId: string;
@@ -66,6 +67,7 @@ export function prepareWorkerStepExecution(
         retryNumber: input.retry.number,
       }),
       spaceId: scope.spaceId,
+      ...(scope.spaceName ? { spaceName: scope.spaceName } : {}),
       requestedByUserId: scope.requesterUserId,
       threadId: scope.threadId,
       workRequestId: scope.workRequestId,

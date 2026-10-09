@@ -419,35 +419,29 @@ the safe projection. No remote Profile publication or deployment was performed.
 
 ## Phase 8 — Dynamic next-turn composer
 
-Manual single-binding workflows display Worker, model, and effort choices beside
-Send, below the message input. Attachment/history/settings controls and the
+Manual single-binding workflows display the effective Worker, model, and effort
+beside Send, below the message input. Attachment/history controls and the
 Workflow selector use a separate utility row so execution choices remain visible
 in the two-pane layout. Rows can scroll horizontally on narrower screens, while
 Send stays visible. Preview has one Send control. Text input remains editable
 while an execution is active; sending another request stays disabled until it ends.
 
-Workflow capability metadata determines which controls are shown; graph workflows
-retain their per-Step Work settings. The Worker picker lists eligible Space
-Workers with their names, Workspace labels, and existing provider icons or generic
-initials. An unassigned workflow can select its Worker directly in the composer.
+Workflow capability metadata determines which values are shown; graph workflows
+retain their per-Step Work settings in the Workflows surface. The composer shows
+the eligible Space Worker with its name, Workspace label, and existing provider
+icon or generic initial. Worker/model/effort selection remains in Workflows.
 Selectors prefer the typed version 1 `executionOptions` projection from Phase 7.
 Model selection is hidden when unsupported; effort follows the selected model's
 capability and supported values. Older API responses retain the existing
 Profile-owned `modelOptions` fallback. No global provider model list is introduced.
 
-Selections are local next-turn overrides per composer binding, initially seeded
-from shared Thread settings. Picking Worker/model/effort does not write shared
-Work settings or change the Conversation or historical turn metadata. Users with
-execution permission can choose next-turn options independently of permission to
-edit shared settings. Selecting a different Worker restores its remembered valid choices (Phase 10),
-or starts with Default when it has no remembered choices;
-selecting the same Worker/model preserves them. Settings edits explicitly reseed
-that binding. Submission snapshots the effective local selection before asynchronous
-work, retaining the existing immutable accepted-turn contract. Later composer edits
-cannot mutate the submitted selection.
+The composer reads the effective values from the Space Workflow configuration. It
+does not write Worker/model/effort settings or create per-thread execution
+overrides. Submission snapshots the resolved configuration at acceptance, and
+later Space Workflow edits cannot mutate the submitted selection.
 
-Local choices survive sending while this Thread form remains mounted and are
-cleared when it switches Threads. Phase 10 adds separate last-used combinations per Worker within this form. Cascading catalog reconciliation is described in Phase 9 below; Cloud and Engine
+Displayed values update when the Space Workflow configuration or Worker catalog
+changes. Cascading catalog reconciliation is described in Phase 9 below; Cloud and Engine
 remain the authoritative validators for stale selections.
 
 This is an AX-only UI/state change. No database migration or protocol change is
@@ -455,17 +449,17 @@ required; Phase 7's API projection is preferred, with the Profile catalog fallba
 supporting coordinated rollout. No remote build or deployment was performed.
 
 
-## Phase 9 — Cascading capability selection
+## Phase 9 — Cascading capability display
 
-The next-turn composer reconciles model and effort against the selected Worker's
-versioned execution options, including its model allowlist and model-specific
-effort capabilities. Switching Workers uses remembered valid overrides from Phase 10 or Default; switching
-models retains an effort only when supported by the destination model. Default
-remains an absent override, allowing Profile/Engine defaults to apply.
+The composer reconciles the displayed model and effort against the selected
+Worker's versioned execution options, including its model allowlist and
+model-specific effort capabilities. Unsupported configured values are displayed
+as unavailable until the Space Workflow is corrected. Automatic remains an
+absent override, allowing Profile/Engine defaults to apply.
 
-Inventory refreshes reconcile local overrides and shared-setting seeds without
-writing shared Thread settings or historical turns. Removed choices revert to
-Default and do not reappear merely because a later catalog includes them again.
+Inventory refreshes reconcile the displayed Space Workflow values without
+writing Thread settings or historical turns. Removed choices are reported as
+unavailable and do not silently select a replacement.
 Loading/error notifications without catalog data preserve the last usable catalog.
 Worker picker callbacks recheck eligibility before accepting a selection.
 Submission reads the same reconciled configuration as the composer.
@@ -473,30 +467,16 @@ Submission reads the same reconciled configuration as the composer.
 This phase uses the existing Profile catalog projection, rather than live CLI
 model discovery. Older API responses without typed execution options retain the
 Phase 8 catalog fallback; Cloud/Engine validation remains authoritative for them.
-No migration, public API change, or remote deployment is required. Per-Worker
-preference restoration is described in Phase 10 below.
+No migration, public API change, or remote deployment is required. Workflows
+remains the authoritative configuration surface.
 
 
-## Phase 10 — Remember next-turn selections per Worker
+## Phase 10 — No Thread-level execution preferences
 
-Each mounted Thread form remembers the last model and effort overrides for
-each Worker, separately per composer binding. Sending preserves the selection.
-Switching away records the current combination, including choices seeded from
-shared Work settings; switching back restores it after capability reconciliation.
-A Worker with no remembered combination starts with Default model and effort.
-Explicitly selecting Default replaces the previous remembered override.
-
-Inventory updates reconcile preferences for inactive selections too, so removed
-model/effort choices do not reappear when returning to a Worker. Transient fetch
-failures retain the existing catalog and preferences. Shared binding edits reset
-that binding's local preferences. Changing Thread, Space, user identity, or
-data source clears local choices to prevent preferences crossing those boundaries.
-
-Preferences contain only model and effort overrides. They do not determine
-canonical Conversation state, native Worker sessions, or historical turn metadata.
-They remain in memory for the lifetime of the Thread form; reopening the form
-or restarting the app seeds choices from shared settings again. Cross-device or
-restart persistence is outside this phase. No migration or API change is required.
+Threads do not remember Worker/model/effort choices. The Workflows page owns
+those values, and the composer displays the current effective Space Workflow
+configuration. There is no Thread migration or local preference store for these
+values. WorkflowRun and StepRun snapshots remain the historical authority.
 
 
 ## Phase 11 — Conversation Router

@@ -803,15 +803,14 @@ This is an additive human API projection; no runtime schema or D1 migration is
 required. Existing published profiles remain immutable; adding model catalogs
 requires authoring and publishing a new signed release through Profile Lab.
 
-Manual Chat/Work Worker, model, and effort controls sit beside Send and are local
-next-turn overrides seeded from shared Thread bindings. Choosing them does not
-save shared Work settings. Workflow policy and Profile capabilities gate controls;
-Workers can be selected directly without opening settings. See
+Chat/Work Worker, model, and effort values sit beside Send as the effective
+Space Workflow configuration. They are display-only in the composer; editing
+belongs to Workflows. Workflow policy and Profile capabilities gate the values
+shown. See
 [dynamic composer](CONVERSATION_CONTINUITY_V1.md#phase-8--dynamic-next-turn-composer).
 
-Manual Chat/Work composer choices are next-turn defaults. Creation accepts
-`executionSelection` and pins authoritative Worker/Profile release, nullable model
-and effort, and Workflow identity/version in `snapshot.turnExecutionConfig`.
+Work creation pins the authoritative Worker/Profile release, nullable model and
+effort, and Workflow identity/version in `snapshot.turnExecutionConfig`.
 History exposes `executionConfig`; later default changes cannot modify it.
 See [Conversation Continuity V1](CONVERSATION_CONTINUITY_V1.md) Phase 3.
 

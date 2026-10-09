@@ -15,6 +15,16 @@ The top-level execution-capacity page is **Workspaces**. Each Workspace card gro
 - Stateful Threads use their configured Workspace. Stateless execution may use another authorized Workspace when the Work policy permits it.
 - Workspace registration and local recovery are managed by the Conclave Workspace desktop application.
 
+Filesystem terminology is explicit: a Workspace is the execution environment,
+the Application Data Root is private application-managed state, the Work Root
+is user-owned working data, and each Space Work Directory is a directory under
+the Work Root. The Workspace UI never asks users to choose the Application
+Data Root. On macOS the family root is `~/Library/Application Support/Conclave/`
+and the default Work Root is `~/Documents/Conclave`.
+Space directories are bound to immutable Space IDs through private registry
+metadata and an identity marker. Threads share their Space directory and do
+not receive directories by default.
+
 ## Workspace overview model
 
 AX may assemble a `WorkspaceOverview` from focused Cloud responses. The UI
@@ -75,7 +85,7 @@ Thread configuration is Cloud-owned and constrained by the [Work v1 Contract](..
 }
 ~~~
 
-Cloud checks a Thread's Space access and Workspace grants before scheduling. Workspace enforces its local readiness, permissions, concurrency limit, and process lifecycle. AX may suggest bindings from ready logical Workers; suggestions are ordinary editable Thread settings.
+Cloud checks a Thread's Space access and Workspace grants before scheduling. Workspace enforces its local readiness, permissions, concurrency limit, and process lifecycle. AX displays the effective Space Workflow bindings from ready logical Workers; execution configuration is edited in the Workflows surface rather than on a Thread.
 
 ## Ownership boundaries
 
@@ -87,7 +97,7 @@ Cloud checks a Thread's Space access and Workspace grants before scheduling. Wor
 | Worker setup, activation, and readiness | Workspace | Show safe inventory and status |
 | Provider CLI authentication | Provider CLI on the Workspace machine | Never read or write credentials in AX |
 | Space membership and Workspace grants | Cloud | Provide authorized Space controls |
-| Thread Worker bindings and scheduling | Cloud | Provide Thread execution settings |
+| Space Workflow bindings and scheduling | Cloud | Provide Space Workflows configuration; Threads display the effective choices |
 | Work Root, local files, processes, and logs | Workspace | Do not expose local paths or secrets in ordinary AX UI |
 
 ## Connection display

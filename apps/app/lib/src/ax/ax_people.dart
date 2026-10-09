@@ -4,16 +4,19 @@ class AxPeopleSpace {
   const AxPeopleSpace(
       {required this.id,
       required this.name,
-      this.permissions = const AxSpacePermissions()});
+      this.permissions = const AxSpacePermissions(),
+      this.canInvite = false});
   final String id;
   final String name;
   final AxSpacePermissions permissions;
+  final bool canInvite;
   factory AxPeopleSpace.fromJson(Map<String, dynamic> json) => AxPeopleSpace(
         id: json['id'] as String,
         name: json['name'] as String,
         permissions: json['permissions'] is Map
             ? AxSpacePermissions.fromJson(json['permissions'] as Map)
             : const AxSpacePermissions(),
+        canInvite: json['canInvite'] == true,
       );
 }
 

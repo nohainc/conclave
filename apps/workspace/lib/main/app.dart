@@ -2,7 +2,9 @@ part of '../main.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await WorkspacePaths.preserveMacWorkRoot();
+  await WorkspacePaths.preserveMacWorkRoot(
+    configuredWorkRoot: Platform.environment['CONCLAVE_WORKSPACE_WORK_ROOT'],
+  );
   const credentialStore = PlatformSecureCredentialStore(
     nativeKeychain: FlutterMacKeychainBridge(),
   );
@@ -740,11 +742,24 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       authToken: currentWorkspace.config.authToken,
       workRootPath: newPath,
     );
-    final replacement = await buildWorkspaceRuntime(
-      updatedConfig,
-      credentialStore: currentWorkspace.credentialStore,
-    );
-    await widget.lifecycle.replaceWorkspace(replacement);
+    try {
+      final replacement = await buildWorkspaceRuntime(
+        updatedConfig,
+        credentialStore: currentWorkspace.credentialStore,
+      );
+      await widget.lifecycle.replaceWorkspace(replacement);
+    } on Object catch (error) {
+      if (mounted) {
+        final ctx = _navigatorKey.currentContext;
+        if (ctx != null) {
+          showCopyableErrorSnackBar(
+            ctx,
+            'Could not change Work Root: $error',
+          );
+        }
+      }
+      return;
+    }
     if (mounted) {
       setState(() {});
       final ctx = _navigatorKey.currentContext;

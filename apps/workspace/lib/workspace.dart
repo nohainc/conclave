@@ -21,6 +21,7 @@ export 'tool_profile_catalog.dart';
 export 'tool_profile_release_store.dart';
 export 'worker_catalog_coordinator.dart';
 export 'workspace_paths.dart';
+export 'space_directory.dart';
 
 typedef WorkspaceStatusProvider = Future<Map<String, Object?>> Function();
 typedef WorkspaceUpdateHandler = Future<Map<String, Object?>> Function(
@@ -287,7 +288,9 @@ class Workspace {
   Future<void> start() async {
     if (_running) return;
     _workRoot = await config.workRootResolver.resolve();
-    await WorkspacePaths(config.dataDirectory).prepareRuntimeDirectories();
+    final paths = WorkspacePaths(config.dataDirectory);
+    paths.validateWorkRootSeparation(_workRoot!);
+    await paths.prepareRuntimeDirectories();
     await config.dataDirectory.create(recursive: true);
     await currentPlatformRuntime.restrictPermissions(
       config.dataDirectory.path,

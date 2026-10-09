@@ -548,8 +548,9 @@ Within ThreadPage, Discussion observes its own cached query. Work history
 and Workflow/Worker/grant controls have separate local listenables. Catalog,
 inventory, and grant updates do not rebuild Chat or Work history. History updates
 do not rebuild Chat, and Discussion updates do not rebuild Work history.
-Composer alignment updates only its spacing listenable. Open Work settings still
-observe choices, including realtime inventory changes. Reconnect notices,
+Composer alignment updates only its spacing listenable. The Work composer
+observes Space Workflow choices, including realtime inventory changes; editing
+those choices belongs to the Space Workflows surface. Reconnect notices,
 notification badges, execution-health popovers, and account-security data have
 local subscriptions instead of root server-update `setState` calls.
 

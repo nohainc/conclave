@@ -10,7 +10,7 @@ import {
 } from "@conclave/security";
 import {
   loadSpacePermissions,
-  requireSpaceRight,
+  requireSpaceOwner,
   validateMemberPermissions,
   permissionJsonPath,
 } from "./space-permissions.js";
@@ -512,12 +512,12 @@ export async function handleListSpaceInvitations(
     accessContext,
   );
   const policy = await loadSpacePermissions(env, context.userId, spaceId);
-  if (!policy.rights.inviteMembers) return json({ invitations: [] });
+  if (policy.role !== "owner") return json({ invitations: [] });
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT id, email, invitee_user_id AS inviteeUserId, role, status, expires_at AS expiresAt, created_at AS createdAt
-     FROM space_invitations WHERE space_id = ?1 AND status = 'pending' AND (?2 = 'owner' OR invited_by_user_id = ?3) ORDER BY created_at DESC`,
+     FROM space_invitations WHERE space_id = ?1 AND status = 'pending' ORDER BY created_at DESC`,
   )
-    .bind(spaceId, policy.role, context.userId)
+    .bind(spaceId)
     .all();
   const snapshots = parseSpaceSettings(
     parseSpaceSettings(policy.settingsJson).invitationPermissions,
@@ -561,12 +561,7 @@ export async function handleCreateSpaceInvitation(
     spaceId,
     accessContext,
   );
-  const policy = await requireSpaceRight(
-    env,
-    context,
-    spaceId,
-    "inviteMembers",
-  );
+  const policy = await requireSpaceOwner(env, context, spaceId);
   const body = (await request.json()) as Record<string, unknown>;
   if (
     Object.keys(body).some(
@@ -898,26 +893,18 @@ export async function handleExpireSpaceInvitation(
     spaceId,
     accessContext,
   );
-  const policy = await requireSpaceRight(
-    env,
-    context,
-    spaceId,
-    "inviteMembers",
-  );
+  const policy = await requireSpaceOwner(env, context, spaceId);
   const existing = await env.CONCLAVE_DB.prepare(
-    `SELECT id, email, invitee_user_id AS inviteeUserId, invited_by_user_id AS invitedByUserId FROM space_invitations WHERE id = ?1 AND space_id = ?2 AND status = 'pending'`,
+    `SELECT id, email, invitee_user_id AS inviteeUserId FROM space_invitations WHERE id = ?1 AND space_id = ?2 AND status = 'pending'`,
   )
     .bind(invitationId, spaceId)
     .first<{
       id: string;
       email: string;
       inviteeUserId: string | null;
-      invitedByUserId: string;
     }>();
   if (!existing) throw new HttpError(404, "Pending invitation not found");
 
-  if (policy.role !== "owner" && existing.invitedByUserId !== context.userId)
-    throw new HttpError(403, "Only your own invitations can be revoked");
   const result = await env.CONCLAVE_DB.prepare(
     `UPDATE space_invitations SET status = 'expired', updated_at = ?1 WHERE id = ?2 AND space_id = ?3 AND status = 'pending'`,
   )
@@ -1032,7 +1019,7 @@ export async function handleAcceptSpaceInvitation(
     invitation.invitedByUserId,
     invitation.spaceId,
   );
-  if (!inviter.rights.inviteMembers)
+  if (inviter.role !== "owner")
     throw new HttpError(403, "The inviter can no longer invite members");
   const settings = parseSpaceSettings(inviter.settingsJson);
   const snapshot = parseSpaceSettings(

@@ -1,4 +1,4 @@
-/// The runtime-side Thread filesystem contract.
+/// The runtime-side identity contract for a Thread operating in its Space.
 ///
 /// This is intentionally an identity contract, not a path resolver.
 /// Work Root configuration and safe path resolution are layered on top of it.
@@ -42,8 +42,8 @@ abstract final class ThreadFilesystemInvariants {
   static const workRootOwnership = 'workspace_runtime_local';
   static const workerCwd = 'runtime_resolved';
   static const repositories = 'worker_managed';
-  static const mutation = 'one_per_thread';
-  static const parallelism = 'different_threads';
+  static const mutation = 'one_per_space';
+  static const parallelism = 'threads_share_space_directory';
   static const directoryIdentity = <String>['spaceId', 'threadId'];
   static const forbiddenPathComponents = <String>[
     'spaceName',

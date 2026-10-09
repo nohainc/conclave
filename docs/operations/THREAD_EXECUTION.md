@@ -8,8 +8,9 @@ Ctrl/Cmd+Enter to save.
 Selecting a different Space loads its Threads into the sidebar. Manual
 expansion/collapse is preserved during background refreshes.
 
-1. Open Work settings and bind a Ready Worker/model to **Chat** and **Work**.
-   These bindings are independent and may use different registered Workers.
+1. Open the Space Workflows surface and configure a Ready Worker/model for
+   **Chat** and **Work**. These bindings are independent and may use different
+   registered Workers.
 2. Choose **Chat** for explanation, investigation or conversation. Its Profile
    must enforce read-only execution. Requests resume the Thread's Chat
    conversation without acquiring a mutation lease. Asking for implementation

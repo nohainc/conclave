@@ -316,13 +316,8 @@ describe("Space member permissions contract v1", () => {
         .get(),
     ).toEqual({ owner_user_id: "member" });
   });
-  it("allows delegated invitations without privilege escalation and clamps grants when the inviter loses a right", async () => {
-    await rights("member", {
-      ...none,
-      chat: true,
-      work: true,
-      inviteMembers: true,
-    });
+  it("allows invitations only for the Space owner", async () => {
+    await rights("member", { ...none, chat: true, work: true });
     await expect(
       handleCreateSpaceInvitation(
         req("member", {
@@ -335,7 +330,7 @@ describe("Space member permissions contract v1", () => {
       ),
     ).rejects.toMatchObject({ status: 403 });
     const response = await handleCreateSpaceInvitation(
-      req("member", {
+      req("owner", {
         email: "recipient@example.test",
         role: "collaborator",
         permissions: { ...none, chat: true, work: true },
@@ -346,14 +341,13 @@ describe("Space member permissions contract v1", () => {
     const { invitation } = (await response.json()) as {
       invitation: { id: string };
     };
-    await rights("member", { ...none, chat: true, inviteMembers: true });
     await handleAcceptSpaceInvitation(req("recipient"), env, invitation.id);
     await expect(
       requireWorkflowPermission(env, "recipient", "S", "chat"),
     ).resolves.toBeDefined();
     await expect(
       requireWorkflowPermission(env, "recipient", "S", "direct"),
-    ).rejects.toMatchObject({ status: 403 });
+    ).resolves.toBeDefined();
     expect(
       store.sqlite
         .prepare("SELECT role FROM space_memberships WHERE user_id='recipient'")

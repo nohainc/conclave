@@ -135,6 +135,13 @@ class ThreadCleanupService {
           'explicit cleanup confirmation does not match the Thread');
     }
     final directory = candidate.directory;
+    final spaceMarker = File(
+      '${directory.parent.path}${Platform.pathSeparator}.conclave-space.json',
+    );
+    if (await spaceMarker.exists()) {
+      throw const ThreadCleanupViolation(
+          'Thread data belongs to a shared Space directory and cannot be deleted independently');
+    }
     if (await FileSystemEntity.type(directory.path, followLinks: false) !=
         FileSystemEntityType.directory) {
       throw const ThreadCleanupViolation(

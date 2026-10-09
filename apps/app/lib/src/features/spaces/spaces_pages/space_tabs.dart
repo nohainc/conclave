@@ -248,8 +248,6 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                         _permissionColumn(Icons.forum_outlined, 'Own threads'),
                         _permissionColumn(
                             Icons.laptop_mac_outlined, 'Attach workspace'),
-                        _permissionColumn(
-                            Icons.person_add_alt_1_outlined, 'Invite members'),
                         const DataColumn(
                           numeric: true,
                           label: Tooltip(

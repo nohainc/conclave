@@ -10,19 +10,19 @@ void main() {
 
       expect(
         paths.applicationSupportDirectory.path,
-        '/Users/testuser/Library/Application Support/conclave.profile_lab',
+        '/Users/testuser/Library/Application Support/Conclave/Profile Lab',
       );
       expect(
         paths.draftsDirectory.path,
-        '/Users/testuser/Library/Application Support/conclave.profile_lab/drafts',
+        '/Users/testuser/Library/Application Support/Conclave/Profile Lab/drafts',
       );
       expect(
         paths.enginesDirectory.path,
-        '/Users/testuser/Library/Application Support/conclave.profile_lab/engines',
+        '/Users/testuser/Library/Application Support/Conclave/Profile Lab/engines',
       );
       expect(
         paths.sandboxDirectory.path,
-        '/Users/testuser/Library/Application Support/conclave.profile_lab/sandbox',
+        '/Users/testuser/Library/Application Support/Conclave/Profile Lab/sandbox',
       );
       expect(
         paths.logsDirectory.path,
@@ -30,15 +30,15 @@ void main() {
       );
       expect(
         paths.credentialsDirectory.path,
-        '/Users/testuser/Library/Application Support/conclave.profile_lab/credentials',
+        '/Users/testuser/Library/Application Support/Conclave/Profile Lab/credentials',
       );
       expect(
         paths.sessionFile.path,
-        '/Users/testuser/Library/Application Support/conclave.profile_lab/credentials/profile_lab_session.json',
+        '/Users/testuser/Library/Application Support/Conclave/Profile Lab/credentials/profile_lab_session.json',
       );
       expect(
         paths.cloudSettingsFile.path,
-        '/Users/testuser/Library/Application Support/conclave.profile_lab/cloud_settings.json',
+        '/Users/testuser/Library/Application Support/Conclave/Profile Lab/cloud_settings.json',
       );
       expect(
         ProfileLabPaths.bundleIdentifier,

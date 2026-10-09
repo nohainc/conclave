@@ -208,8 +208,8 @@ void main() {
               AxPeopleSpace(
                   id: 'S',
                   name: 'Space',
-                  permissions:
-                      AxSpacePermissions(chat: true, inviteMembers: true))
+                  permissions: AxSpacePermissions(chat: true),
+                  canInvite: true)
             ])
       ];
     await tester.pumpWidget(MaterialApp(
@@ -279,7 +279,8 @@ void main() {
           AxPeopleSpace(
               id: 'C',
               name: 'Conclave AX',
-              permissions: AxSpacePermissions(chat: true, inviteMembers: true))
+              permissions: AxSpacePermissions(chat: true),
+              canInvite: true)
         ]);
     final source = PeopleSource()..rows = [person];
     final engine = AxSyncEngine();
@@ -341,10 +342,7 @@ void main() {
             establishedAt: 'now',
             sharedSpaceCount: 0,
             invitableSpaces: [
-              AxPeopleSpace(
-                  id: 'C',
-                  name: 'Candidate',
-                  permissions: AxSpacePermissions(inviteMembers: true))
+              AxPeopleSpace(id: 'C', name: 'Candidate', canInvite: true)
             ])
       ];
     final engine = AxSyncEngine();
@@ -429,10 +427,7 @@ void main() {
     await people.ensure();
     final write = AxSpaceInvitations(people).send(
         userId: 'b',
-        space: const AxPeopleSpace(
-            id: 'C',
-            name: 'Candidate',
-            permissions: AxSpacePermissions(inviteMembers: true)),
+        space: const AxPeopleSpace(id: 'C', name: 'Candidate', canInvite: true),
         permissions: const AxSpacePermissions());
     final assertion = expectLater(write, throwsA(isA<AxMutationSuperseded>()));
     engine.clear();
@@ -453,10 +448,7 @@ void main() {
             establishedAt: 'now',
             sharedSpaceCount: 0,
             invitableSpaces: [
-              AxPeopleSpace(
-                  id: 'C',
-                  name: 'Candidate',
-                  permissions: AxSpacePermissions(inviteMembers: true))
+              AxPeopleSpace(id: 'C', name: 'Candidate', canInvite: true)
             ])
       ];
     final people = AxPeople(source, engine: AxSyncEngine());
@@ -515,10 +507,7 @@ void main() {
     await people.ensure();
     final write = AxSpaceInvitations(people).send(
         userId: 'b',
-        space: const AxPeopleSpace(
-            id: 'C',
-            name: 'Candidate',
-            permissions: AxSpacePermissions(inviteMembers: true)),
+        space: const AxPeopleSpace(id: 'C', name: 'Candidate', canInvite: true),
         permissions: const AxSpacePermissions());
     final assertion = expectLater(write, throwsA(isA<AxMutationSuperseded>()));
     engine.clear();
@@ -541,8 +530,8 @@ void main() {
                             space: const AxPeopleSpace(
                                 id: 'S',
                                 name: 'Space',
-                                permissions: AxSpacePermissions(
-                                    chat: true, inviteMembers: true)))),
+                                permissions: AxSpacePermissions(chat: true),
+                                canInvite: true))),
                     child: const Text('Open invitation'))))));
     await tester.tap(find.text('Open invitation'));
     await tester.pumpAndSettle();
@@ -551,7 +540,8 @@ void main() {
   const candidate = AxPeopleSpace(
       id: 'S',
       name: 'Space',
-      permissions: AxSpacePermissions(chat: true, inviteMembers: true));
+      permissions: AxSpacePermissions(chat: true),
+      canInvite: true);
   const available = AxPerson(
       userId: 'alex',
       displayName: 'Alex',

@@ -57,6 +57,8 @@ export interface TaskToDispatch {
   /** Opaque Conclave key used only for package-local session mapping. */
   readonly sessionKey?: unknown;
   readonly spaceId?: string;
+  /** Human-readable label used only to choose a stable local Space directory. */
+  readonly spaceName?: string;
   readonly requestedByUserId?: string;
   readonly model?: string;
   readonly reasoningEffort?: string;
@@ -307,6 +309,7 @@ async function dispatchWorkspaceWorkerAssignment(
       executionWorkspaceId: target.workspaceId,
       workspaceRuntimeId: target.workspaceRuntimeIdentityId,
       spaceId: target.spaceId,
+      ...(task.spaceName ? { spaceName: task.spaceName } : {}),
       runId,
       taskId,
       attemptId,

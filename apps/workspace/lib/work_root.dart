@@ -21,14 +21,8 @@ class WorkRootResolver {
           separator: separator);
     }
     if (platform.operatingSystem == 'macos') {
-      return _join([
-        platform.homeDirectory,
-        'Library',
-        'Application Support',
-        'Conclave',
-        'Workspace',
-        'Work'
-      ], separator: separator);
+      return _join([platform.homeDirectory, 'Documents', 'Conclave'],
+          separator: separator);
     }
     return _join(
         [platform.homeDirectory, '.local', 'share', 'conclave', 'work'],

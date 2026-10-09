@@ -1,45 +1,6 @@
 part of '../spaces_pages.dart';
 
 extension _ThreadActions on _ThreadPageState {
-  Future<void> _saveWorkConfig(Map<String, dynamic> config) async {
-    if (!_canConfigureWork) return;
-    final ds = widget.dataSource;
-    if (ds == null) return;
-    _updateState(() => _savingWorkConfig = true);
-    try {
-      final mutations = widget.mutations ??
-          AxCollaborationMutations(ds, engine: _workHistoryCache.engine);
-      final updated = await mutations.editThread(
-        widget.thread,
-        workConfig: config,
-      );
-      if (!mounted) return;
-      _updateState(() {
-        _workConfig = Map<String, dynamic>.from(updated.workConfig);
-        _threadInstructionsController.text =
-            _workConfig['threadInstructions']?.toString() ??
-                _workConfig['threadInstructions']?.toString() ??
-                '';
-        _savingWorkConfig = false;
-      });
-      final defaultId = _workConfig['defaultWorkflowId']?.toString();
-      final selectedDefault = _currentWorkflows
-          .where((workflow) => workflow.id == defaultId)
-          .map((workflow) => workflow.reference)
-          .firstOrNull;
-      if (selectedDefault != null) _workflow = selectedDefault;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Work settings saved')),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      _updateState(() => _savingWorkConfig = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save Work settings: $error')),
-      );
-    }
-  }
-
   Future<void> _runWork() async {
     final text = _requestController.text;
     final submit = widget.onRunWork;

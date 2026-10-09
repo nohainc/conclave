@@ -7,6 +7,7 @@ import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'cloud_connection.dart';
 import 'runtime_capabilities.dart';
+import 'space_directory.dart';
 import 'thread_directory.dart';
 
 /// Translate Cloud assignment permissions without consulting names or providers.
@@ -97,11 +98,11 @@ Future<void> _materializeWorkRequestInputs({
   }
 }
 
-/// Provider-independent guidance attached to every Thread execution.
+/// Provider-independent guidance attached to every Space execution.
 /// It describes the local directory contract without exposing paths or
 /// turning Git operations into a Conclave-managed subsystem.
 const threadExecutionGuidance = <String>[
-  'This directory is the Thread persistent isolated working area.',
+  'This directory is the Space persistent working area shared by its Threads.',
   'Reuse existing files and repositories when they are present.',
   'Clone repositories here when the requested work needs one.',
   'Do not assume this directory is disposable; preserve useful local state.',
@@ -157,11 +158,23 @@ class WorkerAssignmentHandler {
     required this.resolveLogicalWorker,
     this.executeWithToolProfile,
     this.defaultWorkingDirectory,
+    this.applicationStateDirectory,
+    this.spaceDirectoryLifecycle,
+    SpaceMutationCoordinator? spaceMutationCoordinator,
     this.threadDirectoryLifecycle,
     ThreadMutationCoordinator? threadMutationCoordinator,
     this.onProgress,
     this.cancelToolProfileAssignment,
-  }) : threadMutationCoordinator = threadMutationCoordinator ??
+  })  : spaceMutationCoordinator = spaceMutationCoordinator ??
+            (spaceDirectoryLifecycle == null
+                ? null
+                : SpaceMutationCoordinator(
+                    lifecycle: spaceDirectoryLifecycle,
+                    applicationStateDirectory: applicationStateDirectory ??
+                        Directory(
+                            '${Directory.current.path}${Platform.pathSeparator}.conclave-mutation-state'),
+                  )),
+        threadMutationCoordinator = threadMutationCoordinator ??
             (threadDirectoryLifecycle == null
                 ? null
                 : ThreadMutationCoordinator(threadDirectoryLifecycle));
@@ -169,6 +182,9 @@ class WorkerAssignmentHandler {
   final AssignmentLogicalWorkerResolver resolveLogicalWorker;
   final ToolProfileAssignmentExecutor? executeWithToolProfile;
   final Directory? defaultWorkingDirectory;
+  final Directory? applicationStateDirectory;
+  final SpaceDirectoryLifecycle? spaceDirectoryLifecycle;
+  final SpaceMutationCoordinator? spaceMutationCoordinator;
   final ThreadDirectoryLifecycle? threadDirectoryLifecycle;
   final ThreadMutationCoordinator? threadMutationCoordinator;
   final WorkerProgressRelay? onProgress;
@@ -202,19 +218,33 @@ class WorkerAssignmentHandler {
     final executionClass = context.payload['executionClass'];
     final spaceId = _requiredStringForThread(
         context.payload['spaceId'], 'spaceId', executionClass);
-    final threadId = _requiredStringForThread(
+    _requiredStringForThread(
         context.payload['threadId'], 'threadId', executionClass);
     var directory = defaultWorkingDirectory ?? Directory.current;
-    if (spaceId != null && threadId != null) {
-      final lifecycle = threadDirectoryLifecycle;
-      if (lifecycle == null) {
-        throw const RuntimeViolation(
-            'Thread directory lifecycle is required for scoped execution');
+    if (spaceId != null) {
+      final spaceLifecycle = spaceDirectoryLifecycle;
+      if (spaceLifecycle != null) {
+        directory = await spaceLifecycle.ensureForExecution(
+          spaceId: spaceId,
+          spaceName: _spaceName(context.payload),
+        );
+      } else {
+        final legacyLifecycle = threadDirectoryLifecycle;
+        if (legacyLifecycle == null) {
+          throw const RuntimeViolation(
+              'Space directory lifecycle is required for scoped execution');
+        }
+        final threadId = _requiredStringForThread(
+            context.payload['threadId'], 'threadId', executionClass);
+        if (threadId == null) {
+          throw const RuntimeViolation(
+              'Thread ID is required for legacy scoped execution');
+        }
+        directory = await legacyLifecycle.ensureForExecution(
+          spaceId: spaceId,
+          threadId: threadId,
+        );
       }
-      directory = await lifecycle.ensureForExecution(
-        spaceId: spaceId,
-        threadId: threadId,
-      );
       await _materializeWorkRequestInputs(
         threadDirectory: directory,
         payload: context.payload,
@@ -298,7 +328,6 @@ class WorkerAssignmentHandler {
     final threadId = context.payload['threadId'];
     final leaseId = context.payload['leaseId'];
     final fencingToken = context.payload['fencingToken'];
-    final coordinator = threadMutationCoordinator;
     if (spaceId is! String ||
         threadId is! String ||
         leaseId is! String ||
@@ -306,17 +335,33 @@ class WorkerAssignmentHandler {
       throw const RuntimeViolation(
           'stateful assignment requires Thread lease identity');
     }
-    if (coordinator == null) {
-      throw const RuntimeViolation(
-          'Thread mutation coordinator is required for stateful execution');
+    final spaceCoordinator = spaceMutationCoordinator;
+    if (spaceCoordinator != null) {
+      return spaceCoordinator.withMutation(
+        spaceId: spaceId,
+        spaceName: _spaceName(context.payload),
+        leaseId: leaseId,
+        fencingToken: fencingToken,
+        action: (_) => execute(),
+      );
     }
-    return coordinator.withMutation(
+    final legacyCoordinator = threadMutationCoordinator;
+    if (legacyCoordinator == null) {
+      throw const RuntimeViolation(
+          'Space mutation coordinator is required for stateful execution');
+    }
+    return legacyCoordinator.withMutation(
       spaceId: spaceId,
       threadId: threadId,
       leaseId: leaseId,
       fencingToken: fencingToken,
       action: (_) => execute(),
     );
+  }
+
+  String _spaceName(Map<String, Object?> payload) {
+    final value = payload['spaceName'];
+    return value is String && value.trim().isNotEmpty ? value.trim() : 'Space';
   }
 
   String? _requiredStringForThread(

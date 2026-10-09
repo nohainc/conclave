@@ -1,33 +1,5 @@
 part of '../spaces_pages.dart';
 
-Widget _workflowOption(
-  BuildContext context,
-  AxBuiltinWorkflow workflow,
-) =>
-    ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 520),
-      child: SizedBox(
-        height: 54,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(text: workflow.name),
-                const TextSpan(text: '  —  '),
-                TextSpan(
-                  text: workflow.description,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ),
-    );
-
 class AxModelOption {
   const AxModelOption({
     required this.id,
@@ -184,7 +156,6 @@ class _WorkComposer extends StatelessWidget {
     required this.loadingWorkflows,
     required this.workflowCatalogError,
     required this.canExecute,
-    this.canConfigureWork = true,
     required this.workTimeline,
     required this.localWorkProgress,
     required this.loadingTimeline,
@@ -205,7 +176,6 @@ class _WorkComposer extends StatelessWidget {
     required this.onRetryStep,
     required this.onCancelRun,
     required this.onWorkflowChanged,
-    this.onOpenSettings,
     required this.onRun,
   });
 
@@ -221,7 +191,6 @@ class _WorkComposer extends StatelessWidget {
   final bool loadingWorkflows;
   final String? workflowCatalogError;
   final bool canExecute;
-  final bool canConfigureWork;
   final List<AxWorkRequest> workTimeline;
   final Map<String, String> localWorkProgress;
   final bool loadingTimeline;
@@ -242,7 +211,6 @@ class _WorkComposer extends StatelessWidget {
   final Future<void> Function(String, AxWorkRequestStep)? onRetryStep;
   final Future<void> Function(String)? onCancelRun;
   final ValueChanged<String> onWorkflowChanged;
-  final VoidCallback? onOpenSettings;
   final Future<void> Function() onRun;
 
   @override
@@ -457,12 +425,6 @@ class _WorkComposer extends StatelessWidget {
               },
             ),
           ),
-          if (onOpenSettings != null)
-            IconButton(
-              tooltip: 'Work settings',
-              onPressed: onOpenSettings,
-              icon: const Icon(Icons.tune_rounded, size: 18),
-            ),
           const SizedBox(width: 4),
           Builder(
             builder: (workflowBtnContext) => Tooltip(

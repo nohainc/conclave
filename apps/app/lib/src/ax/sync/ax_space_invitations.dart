@@ -15,6 +15,9 @@ class AxSpaceInvitations {
     if ((userId == null) == (email == null)) {
       throw ArgumentError('Select a Person or provide an email');
     }
+    if (!space.canInvite) {
+      throw StateError('Only the Space owner can invite members');
+    }
     final engine = people.engine;
     final current = engine.fence(AxPeople.key);
     if (!current()) throw const AxMutationSuperseded();

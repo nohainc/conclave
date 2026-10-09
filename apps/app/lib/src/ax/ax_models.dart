@@ -263,27 +263,23 @@ class AxSpacePermissions {
       {this.chat = false,
       this.work = false,
       this.manageOwnThreads = false,
-      this.attachWorkspace = false,
-      this.inviteMembers = false});
-  final bool chat, work, manageOwnThreads, attachWorkspace, inviteMembers;
+      this.attachWorkspace = false});
+  final bool chat, work, manageOwnThreads, attachWorkspace;
   factory AxSpacePermissions.forRole(String role) => AxSpacePermissions(
       chat: role == 'owner' || role == 'collaborator',
       work: role == 'owner' || role == 'collaborator',
       manageOwnThreads: role == 'owner' || role == 'collaborator',
-      attachWorkspace: role == 'owner',
-      inviteMembers: role == 'owner');
+      attachWorkspace: role == 'owner');
   factory AxSpacePermissions.fromJson(Map json) => AxSpacePermissions(
       chat: json['chat'] == true,
       work: json['work'] == true,
       manageOwnThreads: json['manageOwnThreads'] == true,
-      attachWorkspace: json['attachWorkspace'] == true,
-      inviteMembers: json['inviteMembers'] == true);
+      attachWorkspace: json['attachWorkspace'] == true);
   Map<String, bool> toJson() => {
         'chat': chat,
         'work': work,
         'manageOwnThreads': manageOwnThreads,
-        'attachWorkspace': attachWorkspace,
-        'inviteMembers': inviteMembers
+        'attachWorkspace': attachWorkspace
       };
 }
 

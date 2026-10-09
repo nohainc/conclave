@@ -26,8 +26,8 @@
 
 Conclave AX is the human web application. Conclave Cloud owns identity,
 authorization, Spaces, Threads, scheduling, Profile releases, and
-persistence. Conclave Workspace owns local Work Root data, logical Worker
-readiness, Profile verification/cache, Engine supervision, permissions,
+persistence. Conclave Workspace owns application-managed runtime state and
+user-owned Work Root data, logical Worker readiness, Profile verification/cache, Engine supervision, permissions,
 cancellation, and diagnostics.
 
 Each assignment or probe runs through the generic CLI Worker Engine as a
@@ -51,7 +51,9 @@ See [Protocol Boundaries](PROTOCOL_BOUNDARIES.md).
 
 ## Implementation principles
 
-- Keep D1 persistence owned by Cloud route and service modules; keep Workspace local persistence in the Workspace data directory.
+- Keep D1 persistence owned by Cloud route and service modules; keep Workspace
+  application data below the application-family root and keep user Work Root
+  files separate from that internal state.
 - Prefer explicit domain types, state machines, immutable assignment snapshots,
   and idempotent commands.
 - Keep scheduling authorization in Cloud and process/filesystem enforcement in

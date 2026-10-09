@@ -11,8 +11,9 @@ through `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY`; it does not test Cloud rollout
 
 Conclave Workspace is the machine-side execution and security runtime.
 
-It maintains the Cloud connection, owns the local Work Root, creates/resolves
-Thread working directories, manages logical Workers and local provider
+It maintains the Cloud connection, owns application-managed runtime state,
+resolves the user-owned local Work Root, and creates/resolves one stable
+working directory per Space shared by its Threads, manages logical Workers and local provider
 credentials, resolves signed Tool Profiles, launches the generic CLI Worker
 Engine, enforces local permissions, supervises execution, and reports safe
 readiness/status back to Conclave Cloud.
@@ -29,6 +30,16 @@ Its GUI is intentionally minimal and local-first:
 
 Spaces, Threads, Discuss, Work orchestration, Space membership and
 remote scheduling policy belong in Conclave AX.
+
+The Workspace is an execution environment, not a directory. Its private
+Application Data Root is resolved automatically under the Conclave application
+family root (`~/Library/Application Support/Conclave/Workspace/` on macOS).
+The user Work Root is separate and defaults to `~/Documents/Conclave`; Space
+Work Directories live beneath it.
+Space directory names are human-readable, while a private registry and marker
+bind each directory to its immutable Space ID. Thread directories are not
+created during normal execution; Thread sessions and runtime metadata remain
+under Application Data Root.
 
 Users install only Conclave Workspace. Workspace manages the bundled generic
 Engine and signed Tool Profile releases; provider CLI software is installed

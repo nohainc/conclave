@@ -175,8 +175,7 @@ void main() {
     expect(source.spaceReads, 3);
     await tester.pumpWidget(const SizedBox());
   });
-  testWidgets(
-      'Thread settings keep instructions and remove Worker model fallback editors',
+  testWidgets('Thread Work tab has no thread execution settings',
       (tester) async {
     tester.view.physicalSize = const Size(900, 1200);
     tester.view.devicePixelRatio = 1;
@@ -206,26 +205,8 @@ void main() {
                 onBackToSpace: () {},
                 onArchive: () {}))));
     await tester.pumpAndSettle();
-    expect(
-        find.text(
-            'Worker, model, and effort defaults are configured in this Space’s Workflows tab.'),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey('worker-binding-direct')), findsNothing);
-    await tester.tap(find.text('Advanced'));
-    await tester.pumpAndSettle();
-    final configure = find.byKey(const ValueKey('configure-binding-direct'));
-    await tester.ensureVisible(configure);
-    await tester.tap(configure);
-    await tester.pumpAndSettle();
-    expect(find.text('Work instructions'), findsOneWidget);
-    expect(find.text('Model (optional)'), findsNothing);
-    expect(find.text('Fallback Worker (optional)'), findsNothing);
-    await tester.enterText(
-        find.descendant(
-            of: find.byType(AlertDialog), matching: find.byType(TextField)),
-        'Authored instruction');
-    await tester.tap(find.text('Save').last);
-    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.byTooltip('Work settings'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 }

@@ -215,8 +215,7 @@ void main() {
     expect(source.workerReads, 1);
     expect(source.grantReads, 1);
   });
-  testWidgets(
-      'inventory change keeps Thread settings free of execution editors',
+  testWidgets('inventory change keeps Thread Work free of execution editors',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1000, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -224,14 +223,12 @@ void main() {
     final store = AxStore(source);
     await tester.pumpWidget(page('A', source, store.catalogs, initialTab: 2));
     await tester.pumpAndSettle();
-    const notice =
-        'Worker, model, and effort defaults are configured in this Space’s Workflows tab.';
-    expect(find.text(notice), findsOneWidget);
+    expect(find.byTooltip('Work settings'), findsNothing);
     source.workers = [];
     await store.realtimeCacheRouter
         .handle({'type': 'worker.inventory.updated'});
     await tester.pumpAndSettle();
-    expect(find.text(notice), findsOneWidget);
+    expect(find.byTooltip('Work settings'), findsNothing);
     expect(source.workerReads, 2);
     expect(source.workflowReads, 1);
   });
@@ -252,10 +249,7 @@ void main() {
       {'workspaceId': 'workspace'}
     ]);
     await tester.pumpAndSettle();
-    expect(
-        find.text(
-            'Worker, model, and effort defaults are configured in this Space’s Workflows tab.'),
-        findsOneWidget);
+    expect(find.byTooltip('Work settings'), findsNothing);
     expect(source.workerReads, 2);
   });
 }

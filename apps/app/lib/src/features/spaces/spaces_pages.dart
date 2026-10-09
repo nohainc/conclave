@@ -34,7 +34,6 @@ part 'spaces_pages/space_page.dart';
 part 'spaces_pages/space_actions.dart';
 part 'spaces_pages/space_tabs.dart';
 part 'spaces_pages/thread_page.dart';
-part 'spaces_pages/thread_config.dart';
 part 'spaces_pages/thread_actions.dart';
 part 'spaces_pages/work_components.dart';
 

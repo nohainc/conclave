@@ -252,7 +252,7 @@ it("returns only shared Spaces and authorized invitation destinations, excluding
       invitableSpaces: {
         id: string;
         name: string;
-        permissions: { inviteMembers: boolean; work: boolean };
+        permissions: { work: boolean };
       }[];
     };
   expect((await bob()).sharedSpaces).toEqual([{ id: "A", name: "First" }]);
@@ -263,18 +263,16 @@ it("returns only shared Spaces and authorized invitation destinations, excluding
     .prepare("UPDATE space_invitations SET expires_at='2000-01-01' WHERE id=?")
     .run(id);
   store.sqlite.exec(
-    `UPDATE spaces SET name='Renamed' WHERE id='C'; UPDATE spaces SET settings_json='{"memberPermissions":{"a":{"inviteMembers":true}}}' WHERE id='D'`,
+    `UPDATE spaces SET name='Renamed' WHERE id='C'; UPDATE spaces SET settings_json='{"memberPermissions":{"a":{"work":false}}}' WHERE id='D'`,
   );
   expect((await bob()).invitableSpaces).toMatchObject([
     { id: "C", name: "Renamed" },
-    { id: "D", permissions: { inviteMembers: true, work: false } },
   ]);
   await handleRemoveSpaceMember(request("a", {}), env, "A", "b");
   expect((await bob()).sharedSpaces).toEqual([]);
   expect((await bob()).invitableSpaces.map((s) => s.id)).toEqual([
     "A",
     "C",
-    "D",
   ]);
   // A Person's other Spaces are private unless the caller is also a member.
   expect(JSON.stringify(await bob())).not.toContain("Second");

@@ -57,7 +57,7 @@ void main() {
     expect(
         WorkRootResolver(platform: FakePlatform('macos', '/home/tester'))
             .defaultPath,
-        '/home/tester/Library/Application Support/Conclave/Workspace/Work');
+        '/home/tester/Documents/Conclave');
     expect(
         WorkRootResolver(platform: FakePlatform('linux', '/home/tester'))
             .defaultPath,

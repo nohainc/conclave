@@ -594,8 +594,10 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
                       wr.requested_by_user_id AS requesterUserId,
                       wr.status AS workRequestStatus,
                       wr.cancel_requested_at AS cancelRequestedAt,
-                      ws.space_id AS spaceId
+                      ws.space_id AS spaceId,
+                      s.name AS spaceName
                  FROM work_requests wr JOIN threads ws ON ws.id = wr.thread_id
+                 JOIN spaces s ON s.id = ws.space_id
                 WHERE wr.id = ?1`,
               )
               .bind(params.workRequestId)
@@ -605,6 +607,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
                 workRequestStatus: string;
                 cancelRequestedAt: string | null;
                 spaceId: string;
+                spaceName: string;
               }>();
             if (!context) throw new Error("Work Request was not found");
             if (
@@ -628,6 +631,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
               workerInput,
               scope: {
                 spaceId: context.spaceId,
+                spaceName: context.spaceName,
                 requesterUserId: context.requesterUserId,
                 threadId: context.threadId,
                 workRequestId: params.workRequestId!,

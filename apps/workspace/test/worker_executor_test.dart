@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:conclave_workspace/worker_executor.dart';
+import 'package:conclave_workspace/space_directory.dart';
 import 'package:conclave_workspace/thread_directory.dart';
 import 'package:conclave_workspace/thread_path.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
@@ -145,6 +146,50 @@ void main() {
     );
     expect(sameThread.workingDirectory.path, expected);
     expect(otherThread.workingDirectory.path, isNot(expected));
+  });
+
+  test('resolves new executions to one shared Space directory', () async {
+    final root = await Directory.systemTemp.createTemp('space-cwd-root-');
+    addTearDown(() => root.delete(recursive: true));
+    final handler = WorkerAssignmentHandler(
+      spaceDirectoryLifecycle: SpaceDirectoryLifecycle(
+        SpaceDirectoryResolver(
+          workRoot: Directory('${root.path}/work'),
+          registryDirectory: Directory('${root.path}/state'),
+        ),
+      ),
+      resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
+    );
+    const base = WorkspaceAssignmentContext(
+      workspaceId: 'workspace-1',
+      workspaceRuntimeId: 'runtime-1',
+      workerId: 'cwd-worker',
+      runId: 'run-1',
+      taskId: 'task-1',
+      attemptId: 'attempt-1',
+      assignmentId: 'assignment-space-cwd-1',
+      idempotencyKey: 'idem-space-cwd-1',
+      payload: {
+        'workerId': 'cwd-worker',
+        'workerTypeId': 'test-worker',
+        'spaceId': 'space-1',
+        'threadId': 'thread-1',
+        'spaceName': 'Conclave AX',
+        'executionClass': 'stateless_read',
+      },
+    );
+
+    final first = await handler.prepareAssignmentScope(base);
+    final second = await handler.prepareAssignmentScope(
+      base.copyWith(payload: {
+        ...base.payload,
+        'threadId': 'thread-2',
+      }),
+    );
+    expect(first.workingDirectory.path, second.workingDirectory.path);
+    expect(first.workingDirectory.path, endsWith('Conclave AX'));
+    expect(Directory('${root.path}/work/Conclave AX/thread-1').existsSync(),
+        isFalse);
   });
 
   test('requires Thread identity for stateful process CWD', () async {

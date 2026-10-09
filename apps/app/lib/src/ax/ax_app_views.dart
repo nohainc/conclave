@@ -320,7 +320,6 @@ extension _AxAppViews on _AxAppStateMixin {
           catalogs: store.catalogs,
           workflowConfigurations: AxWorkflowConfigurations(widget.dataSource,
               engine: store.syncEngine, spaceId: space.id),
-          mutations: store.collaboration,
           workspaceGrants: store.spaceWorkspaceGrants,
           discussionCache: store.discussion,
           workHistoryCache: store.workHistory,

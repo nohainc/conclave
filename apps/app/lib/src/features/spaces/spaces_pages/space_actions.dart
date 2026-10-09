@@ -412,7 +412,8 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
             space: AxPeopleSpace(
                 id: widget.space.id,
                 name: widget.space.name,
-                permissions: widget.space.effectivePermissions)));
+                permissions: widget.space.effectivePermissions,
+                canInvite: widget.space.role == 'owner')));
     if (sent == true && mounted) _message('Space invitation sent.');
   }
 
@@ -490,7 +491,8 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
           space: AxPeopleSpace(
               id: widget.space.id,
               name: widget.space.name,
-              permissions: widget.space.effectivePermissions),
+              permissions: widget.space.effectivePermissions,
+              canInvite: widget.space.role == 'owner'),
           permissions: AxSpacePermissions.fromJson(selected),
           userId: invite.inviteeUserId,
           email: invite.inviteeUserId == null ? invite.email : null);

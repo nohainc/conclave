@@ -15,6 +15,7 @@ export interface PeopleSpace {
 }
 export interface InvitablePeopleSpace extends PeopleSpace {
   readonly permissions: SpaceMemberPermissions;
+  readonly canInvite: boolean;
 }
 export interface Person {
   readonly userId: string;
@@ -118,8 +119,10 @@ export async function handleListPeople(
       ]);
       return {
         ...person,
-        pendingInvitationSpaceIds: [...invitations].filter(
-          (id) => permissions.get(id)?.inviteMembers,
+        pendingInvitationSpaceIds: [...invitations].filter((id) =>
+          spaces.results.some(
+            (space) => space.id === id && space.role === "owner",
+          ),
         ),
         sharedSpaces: spaces.results
           .filter((space) => membership.has(space.id))
@@ -127,15 +130,16 @@ export async function handleListPeople(
         invitableSpaces: spaces.results
           .filter(
             (space) =>
-              permissions.get(space.id)!.inviteMembers &&
+              space.role === "owner" &&
               space.archived === 0 &&
               !membership.has(space.id) &&
               !invitations.has(space.id),
           )
-          .map(({ id, name }): InvitablePeopleSpace => ({
+          .map(({ id, name, role }): InvitablePeopleSpace => ({
             id,
             name,
             permissions: permissions.get(id)!,
+            canInvite: role === "owner",
           })),
       };
     }),

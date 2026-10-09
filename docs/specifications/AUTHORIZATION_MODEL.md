@@ -77,8 +77,8 @@ Provider credentials stay in the local provider CLI configuration. Runtime crede
 
 Space membership remains the boundary for reading. Owners retain all member
 rights and control Space settings and every Thread. For other members, the
-owner can set five explicit booleans: `chat`, `work`, `manageOwnThreads`,
-`attachWorkspace`, and `inviteMembers`. The Members tab shows these in a
+owner can set four explicit booleans: `chat`, `work`, `manageOwnThreads`,
+and `attachWorkspace`. The Members tab shows these in a
 checkbox grid; only the owner can edit it, and the Owner badge appears beside
 the owner's name. Thread lists show the creator's email below the title when
 that person is not the Space owner. The current Thread creation identity is
@@ -87,13 +87,14 @@ its immutable creation-time `lead_user_id`; the API does not reassign this field
 The v1 rights map lives at `spaces.settings_json.memberPermissions[userId]`.
 Missing maps preserve role defaults: collaborators have Chat, Work and own
 Thread management; viewers can read; owners have all rights. Workspace
-attachment and member invitations require explicit grants for non-owners.
+attachment requires an explicit grant for non-owners; member invitations remain
+owner-only.
 Malformed stored overrides fail closed. Removing a member removes their override
 and revokes their contributed Workspace Grants.
 
 `PATCH /api/spaces/:id/members/:userId/permissions` accepts
-`{ permissions: { chat, work, manageOwnThreads, attachWorkspace, inviteMembers } }`.
-All five fields must be booleans; extra fields are rejected. Owner rights cannot
+`{ permissions: { chat, work, manageOwnThreads, attachWorkspace } }`.
+All four fields must be booleans; extra fields are rejected. Owner rights cannot
 be changed. Existing role presets remain available through the role endpoint
 and reset the member's explicit rights to that preset. Space and member read
 models include effective `permissions`. Ordinary Space responses omit the internal member and invitation permission maps. General Space settings writes cannot
@@ -124,17 +125,17 @@ subject to the Workspace's local Worker permission ceiling. Existing grant
 restrictions and network policy still apply. Work rights provide the execution
 ceiling, intersected with the grant and the request's read-only Step policy.
 
-Members with `inviteMembers` may invite people with a subset of their own
-rights, including read-only invitations. `POST /api/spaces/:id/invitations`
+Invitation management is owner-only; there is no member-level invitation right
+to delegate or persist. `POST /api/spaces/:id/invitations`
 accepts the same optional `permissions` object. Invitation rights are
 snapshotted in `settings.invitationPermissions[invitationId]` and intersected
-with the inviter's current rights at acceptance. Revoked invitation authority
-prevents acceptance. Delegated inviters see and revoke only their own pending
-invitations. Invitation acceptance cannot rewrite an existing member's rights.
+with the owner's current rights at acceptance. Revoked ownership prevents
+acceptance. Members cannot list, create, resend, or revoke pending invitations.
+Invitation acceptance cannot rewrite an existing member's rights.
 
-These are additive API/settings changes; no D1 migration or runtime protocol
-change is needed. Deploy Cloud before the updated AX app. Older clients retain
-role defaults, but their technical controls cannot bypass current member rights.
+Migration 0025 removes obsolete `inviteMembers` snapshots from persisted Space
+settings. Deploy Cloud before the updated AX app. Older clients cannot bypass
+the owner-only invitation boundary or current member rights.
 
 ## People
 

@@ -1248,7 +1248,7 @@ void main() {
   });
 
   testWidgets(
-      'workspace tab renders read-only work root field with browse button and no open folder button',
+      'workspace tab renders the user Work Root with open and change actions',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -1277,12 +1277,8 @@ void main() {
     final textField = tester.widget<TextField>(workRootTextFieldFinder);
     expect(textField.readOnly, isTrue);
 
-    // Verify Browse button
-    expect(find.text('Browse'), findsOneWidget);
-
-    // Verify Open folder button is deleted
-    final openFolderBtn = find.widgetWithText(FilledButton, 'Open folder');
-    expect(openFolderBtn, findsNothing);
+    expect(find.text('Open in Finder'), findsOneWidget);
+    expect(find.text('Change…'), findsOneWidget);
   });
 
   testWidgets('Workers catalog stays hidden until Workspace is Ready',
@@ -1982,6 +1978,7 @@ void main() {
       signedIn: true,
       onConnect: () async {},
       onRegister: ([name]) async {},
+      onChangeWorkRoot: (_) async {},
       onReset: () {},
     );
     await tester.pumpAndSettle();
@@ -2002,15 +1999,14 @@ void main() {
     expect(nameField.readOnly, isFalse);
     expect(nameField.enabled, isTrue);
 
-    // Work Root is enabled when disconnected
+    // Application UI displays the Work Root as a read-only resolved path.
     final workRootField = tester
         .widget<TextField>(find.widgetWithText(TextField, 'Not configured'));
-    expect(workRootField.enabled, isTrue);
+    expect(workRootField.enabled, isFalse);
 
-    // Browse button is enabled
-    final browseBtn =
-        tester.widget<TextButton>(find.widgetWithText(TextButton, 'Browse'));
-    expect(browseBtn.onPressed, isNotNull);
+    final changeBtn = tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Change…'));
+    expect(changeBtn.onPressed, isNotNull);
 
     // Case 2: Registered and connected workspace
     await pumpDashboard(
@@ -2028,6 +2024,7 @@ void main() {
       ),
       credentialStore: credentials,
       signedIn: true,
+      onChangeWorkRoot: (_) async {},
       onDisconnect: () {},
       onRelease: () async {},
       onReset: () {},
@@ -2055,14 +2052,13 @@ void main() {
     expect(regNameField.readOnly, isTrue);
     expect(regNameField.enabled, isFalse);
 
-    // Work root is disabled when connected
+    // Work root remains read-only while the Change action controls mutations.
     final regWorkRootField = tester
         .widget<TextField>(find.widgetWithText(TextField, '/workspace/root'));
     expect(regWorkRootField.enabled, isFalse);
 
-    // Browse button is disabled when connected
-    final disabledBrowseBtn =
-        tester.widget<TextButton>(find.widgetWithText(TextButton, 'Browse'));
-    expect(disabledBrowseBtn.onPressed, isNull);
+    final connectedChangeBtn = tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Change…'));
+    expect(connectedChangeBtn.onPressed, isNotNull);
   });
 }

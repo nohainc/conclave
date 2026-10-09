@@ -11,8 +11,6 @@ import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/assignment_journal.dart';
 import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:conclave_workspace/worker_executor.dart';
-import 'package:conclave_workspace/thread_directory.dart';
-import 'package:conclave_workspace/thread_path.dart';
 import 'package:conclave_workspace/self_update.dart';
 import 'package:conclave_workspace/secure_credentials.dart';
 import 'package:conclave_workspace/workspace_registration.dart';
@@ -154,6 +152,13 @@ Future<Workspace> buildWorkspaceRuntime(
       .map((worker) => worker.id)
       .toList();
   final workRoot = await config.workRootResolver.resolve();
+  workspacePaths.validateWorkRootSeparation(workRoot);
+  final spaceDirectoryLifecycle = SpaceDirectoryLifecycle(
+    SpaceDirectoryResolver(
+      workRoot: workRoot,
+      registryDirectory: workspacePaths.spaceDirectoryRegistryDirectory,
+    ),
+  );
   final workerHandler = WorkerAssignmentHandler(
     resolveLogicalWorker: (workerId) async {
       final worker = await localWorkerRegistry.find(workerId);
@@ -176,6 +181,8 @@ Future<Workspace> buildWorkspaceRuntime(
       );
     },
     defaultWorkingDirectory: workRoot,
+    applicationStateDirectory: workspacePaths.applicationSupportDirectory,
+    spaceDirectoryLifecycle: spaceDirectoryLifecycle,
     cancelToolProfileAssignment: cliWorkerEngineSupervisor?.cancel,
     executeWithToolProfile: (worker, workingDirectory, context, payload,
         {onProgress}) async {
@@ -285,9 +292,6 @@ Future<Workspace> buildWorkspaceRuntime(
         onProgress: onProgress,
       );
     },
-    threadDirectoryLifecycle: ThreadDirectoryLifecycle(
-      pathResolver: ThreadPathResolver(workRoot),
-    ),
   );
   WorkspaceUpdateController? updateController;
   String? updateAvailable;

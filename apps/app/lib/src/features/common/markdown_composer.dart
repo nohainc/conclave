@@ -132,6 +132,11 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
   void initState() {
     super.initState();
     widget.controller.addListener(_sourceChanged);
+    _focus.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -160,6 +165,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
   @override
   void dispose() {
     widget.controller.removeListener(_sourceChanged);
+    _focus.removeListener(_onFocusChange);
     _focus.dispose();
     super.dispose();
   }
@@ -218,20 +224,142 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
       ]);
 
   @override
-  Widget build(BuildContext context) => Container(
-        decoration: BoxDecoration(
-          border: widget.chatStyle
-              ? null
-              : Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-          borderRadius: BorderRadius.circular(10),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isFocused = _focus.hasFocus;
+
+    final inputContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (!_preview) ...[
+          CallbackShortcuts(
+            key: _inputKey,
+            bindings: {
+              if (widget.onSend != null && widget.onSubmit == null)
+                const SingleActivator(LogicalKeyboardKey.enter): _submit,
+              for (final modifier in [true, false]) ...{
+                SingleActivator(LogicalKeyboardKey.keyB,
+                    meta: modifier,
+                    control: !modifier): () => _format(MarkdownFormat.bold),
+                SingleActivator(LogicalKeyboardKey.keyI,
+                        meta: modifier, control: !modifier):
+                    () => _format(MarkdownFormat.italic),
+                SingleActivator(LogicalKeyboardKey.keyE,
+                        meta: modifier, control: !modifier):
+                    () => _format(MarkdownFormat.inlineCode),
+                if (widget.onSend != null || widget.onSubmit != null)
+                  SingleActivator(LogicalKeyboardKey.enter,
+                      meta: modifier, control: !modifier): _submit,
+              },
+            },
+            child: TextField(
+              controller: widget.controller,
+              enabled: widget.enabled,
+              focusNode: _focus,
+              autofocus: widget.autofocus,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              style: widget.chatStyle
+                  ? ConclaveMessageTypography.fromTheme(Theme.of(context))
+                  : null,
+              minLines:
+                  widget.chatStyle || widget.compact ? 1 : widget.minLines,
+              maxLines: widget.maxLines,
+              decoration: InputDecoration(
+                labelText: widget.labelText,
+                hintText: widget.hintText,
+                isDense: widget.chatStyle,
+                contentPadding: widget.chatStyle
+                    ? const EdgeInsets.fromLTRB(14, 12, 10, 12)
+                    : null,
+                suffixIcon: widget.chatStyle
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: _showFormatting
+                                ? 'Hide Markdown controls'
+                                : 'Show Markdown controls',
+                            icon: Icon(
+                              Icons.text_format,
+                              size: 18,
+                              color: _showFormatting
+                                  ? colorScheme.primary
+                                  : null,
+                            ),
+                            onPressed: () => setState(
+                                () => _showFormatting = !_showFormatting),
+                          ),
+                          if (widget.onSend != null && !widget.sendInToolbar)
+                            IconButton(
+                              tooltip: widget.sendTooltip,
+                              onPressed: widget.enabled && widget.sendEnabled
+                                  ? widget.onSend
+                                  : null,
+                              color: colorScheme.primary,
+                              icon: const Icon(Icons.send_rounded, size: 18),
+                            ),
+                        ],
+                      )
+                    : null,
+                border: widget.chatStyle
+                    ? InputBorder.none
+                    : InputBorder.none,
+                enabledBorder: widget.chatStyle ? InputBorder.none : null,
+                focusedBorder: widget.chatStyle ? InputBorder.none : null,
+              ),
+            ),
+          ),
+        ] else
+          ValueListenableBuilder<TextEditingValue>(
+            key: _inputKey,
+            valueListenable: widget.controller,
+            builder: (context, value, _) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: value.text.isEmpty
+                  ? const Text('Nothing to preview yet.')
+                  : ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 180),
+                      child: SingleChildScrollView(
+                          child: ConclaveMarkdownBody(data: value.text)),
+                    ),
+            ),
+          ),
+        if (widget.chatStyle && (_showFormatting || _preview)) ...[
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
+            child: _formattingToolbar(),
+          ),
+        ],
+      ],
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: widget.chatStyle
+              ? (isFocused ? colorScheme.primary : colorScheme.outlineVariant)
+              : colorScheme.outlineVariant,
+          width: widget.chatStyle && isFocused ? 1.5 : 1.0,
         ),
-        padding: EdgeInsets.all(widget.chatStyle
-            ? 0
-            : widget.compact
-                ? 6
-                : 10),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        borderRadius: BorderRadius.circular(10),
+      ),
+      padding: EdgeInsets.all(widget.chatStyle
+          ? 0
+          : widget.compact
+              ? 6
+              : 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
           if (!widget.chatStyle)
             Row(children: [
               TextButton(
@@ -254,92 +382,10 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
               ),
             ]),
           if (!widget.chatStyle && !_preview) _formattingToolbar(),
-          if (!_preview) ...[
-            CallbackShortcuts(
-                key: _inputKey,
-                bindings: {
-                  if (widget.onSend != null && widget.onSubmit == null)
-                    const SingleActivator(LogicalKeyboardKey.enter): _submit,
-                  for (final modifier in [true, false]) ...{
-                    SingleActivator(LogicalKeyboardKey.keyB,
-                        meta: modifier,
-                        control: !modifier): () => _format(MarkdownFormat.bold),
-                    SingleActivator(LogicalKeyboardKey.keyI,
-                            meta: modifier, control: !modifier):
-                        () => _format(MarkdownFormat.italic),
-                    SingleActivator(LogicalKeyboardKey.keyE,
-                            meta: modifier, control: !modifier):
-                        () => _format(MarkdownFormat.inlineCode),
-                    if (widget.onSend != null || widget.onSubmit != null)
-                      SingleActivator(LogicalKeyboardKey.enter,
-                          meta: modifier, control: !modifier): _submit,
-                  },
-                },
-                child: TextField(
-                  controller: widget.controller,
-                  enabled: widget.enabled,
-                  focusNode: _focus,
-                  autofocus: widget.autofocus,
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
-                  style: widget.chatStyle
-                      ? ConclaveMessageTypography.fromTheme(Theme.of(context))
-                      : null,
-                  minLines:
-                      widget.chatStyle || widget.compact ? 1 : widget.minLines,
-                  maxLines: widget.maxLines,
-                  decoration: InputDecoration(
-                      labelText: widget.labelText,
-                      hintText: widget.hintText,
-                      isDense: widget.chatStyle,
-                      contentPadding: widget.chatStyle
-                          ? const EdgeInsets.fromLTRB(14, 12, 10, 12)
-                          : null,
-                      suffixIcon: widget.chatStyle
-                          ? Row(mainAxisSize: MainAxisSize.min, children: [
-                              IconButton(
-                                  tooltip: _showFormatting
-                                      ? 'Hide Markdown controls'
-                                      : 'Show Markdown controls',
-                                  icon: const Icon(Icons.text_format, size: 18),
-                                  onPressed: () => setState(() =>
-                                      _showFormatting = !_showFormatting)),
-                              if (widget.onSend != null &&
-                                  !widget.sendInToolbar)
-                                IconButton(
-                                    tooltip: widget.sendTooltip,
-                                    onPressed:
-                                        widget.enabled && widget.sendEnabled
-                                            ? widget.onSend
-                                            : null,
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                    icon: const Icon(Icons.send_rounded,
-                                        size: 18)),
-                            ])
-                          : null,
-                      border: widget.chatStyle
-                          ? OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10))
-                          : InputBorder.none),
-                )),
-          ] else
-            ValueListenableBuilder<TextEditingValue>(
-              key: _inputKey,
-              valueListenable: widget.controller,
-              builder: (context, value, _) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: value.text.isEmpty
-                    ? const Text('Nothing to preview yet.')
-                    : ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 180),
-                        child: SingleChildScrollView(
-                            child: ConclaveMarkdownBody(data: value.text)),
-                      ),
-              ),
-            ),
-          if (widget.chatStyle && (_showFormatting || _preview))
-            _formattingToolbar(),
+          if (widget.chatStyle)
+            inputContent
+          else if (!_preview)
+            inputContent,
           if (widget.chatStyle &&
               widget.sendInToolbar &&
               widget.executionControlsBuilder != null &&
@@ -384,6 +430,8 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                   icon: const Icon(Icons.send_rounded),
                 ),
             ]),
-        ]),
-      );
+        ],
+      ),
+    );
+  }
 }

@@ -123,4 +123,18 @@ void main() {
     expect(result.issues, hasLength(1));
     expect(await thread.exists(), isTrue);
   });
+
+  test('never deletes a Thread directory under a shared Space directory',
+      () async {
+    await File(
+      '${thread.parent.path}${Platform.pathSeparator}.conclave-space.json',
+    ).writeAsString('{"spaceId":"space-1"}');
+    final candidate = (await service().scan()).candidates.single;
+
+    await expectLater(
+      service().delete(candidate, confirmation: candidate.confirmationText),
+      throwsA(isA<ThreadCleanupViolation>()),
+    );
+    expect(await thread.exists(), isTrue);
+  });
 }

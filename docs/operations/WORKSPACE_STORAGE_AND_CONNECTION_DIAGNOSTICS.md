@@ -19,10 +19,11 @@ The default layout is:
     Profiles/    verified Tool Profiles and cached logical Worker catalog
     Engines/     generic CLI Worker Engine
     Workers/     per-Worker state, sessions, and diagnostics
-    Work/        Thread working directories (Work Root)
     Updates/     staged Workspace updates
 ~/Library/Logs/Conclave Workspace/
     workspace.log
+~/Documents/Conclave/
+    <Space>/     user-owned Space Work Directories and Thread files
 ```
 
 The local Worker registry contains Worker IDs, catalog type IDs, activation,
@@ -47,9 +48,30 @@ they never contain bearer credentials.
 
 Workspace initializes fresh local runtime state under the Workspace-owned state
 directory. It does not import pre-Workspace registration, Worker registry, or
-update files. The former default Work Root is moved to the Workspace location
-only when that destination is absent; if both locations exist, both remain
-untouched. Workspace never deletes Work Root.
+update files. The former application-managed Work Root is moved to the default
+user Work Root (`~/Documents/Conclave`) only when that destination is absent; if
+both locations exist, both remain untouched. Workspace never deletes Work Root.
+Workers use one stable, human-readable directory per Space under that root.
+The private registry and directory marker bind the path to the immutable
+`spaceId`, so duplicate names and renames are safe. Threads share this Space
+directory; their sessions, logs, leases, and temporary runtime state remain
+under the Workspace application-data tree.
+
+The ownership boundary is explicit:
+
+```text
+USER-OWNED
+~/Documents/Conclave/<Space>/projects/files
+
+CONCLAVE-OWNED
+~/Library/Application Support/Conclave/Workspace/
+  profiles/ engines/ sessions/ logs/ runtime/
+~/Library/Application Support/Conclave/Profile Lab/
+```
+
+Changing Work Root only changes where future Space directories resolve. It does
+not move existing repositories automatically. Runtime reset, cache cleanup,
+Workspace removal, and uninstall/reinstall preserve the user Work Root.
 
 ## Connection stages
 

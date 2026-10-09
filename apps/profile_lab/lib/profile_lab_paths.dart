@@ -2,9 +2,8 @@ import 'dart:io';
 
 /// Standard, isolated filesystem paths for Conclave Profile Lab on macOS.
 ///
-/// Profile Lab maintains its own dedicated application support directory,
-/// logs directory, and credentials namespace, completely segregated from
-/// Conclave Workspace.
+/// Profile Lab uses its own subtree of the Conclave application-family root,
+/// separate from Conclave Workspace.
 class ProfileLabPaths {
   ProfileLabPaths({String? homeDirectory})
       : _home = homeDirectory ??
@@ -13,24 +12,24 @@ class ProfileLabPaths {
 
   final String _home;
 
-  /// Root application support directory:
-  /// `~/Library/Application Support/conclave.profile_lab/`
+  /// Application-managed Profile Lab data:
+  /// `~/Library/Application Support/Conclave/Profile Lab/`
   Directory get applicationSupportDirectory => Directory(
-        '$_home/Library/Application Support/conclave.profile_lab',
+        '$_home/Library/Application Support/Conclave/Profile Lab',
       );
 
   /// Isolated drafts storage root:
-  /// `~/Library/Application Support/conclave.profile_lab/drafts/`
+  /// `~/Library/Application Support/Conclave/Profile Lab/drafts/`
   Directory get draftsDirectory =>
       Directory('${applicationSupportDirectory.path}/drafts');
 
   /// Bundled/cached CLI Worker Engine binaries root:
-  /// `~/Library/Application Support/conclave.profile_lab/engines/`
+  /// `~/Library/Application Support/Conclave/Profile Lab/engines/`
   Directory get enginesDirectory =>
       Directory('${applicationSupportDirectory.path}/engines');
 
   /// Dedicated isolated scratch and execution sandbox root:
-  /// `~/Library/Application Support/conclave.profile_lab/sandbox/`
+  /// `~/Library/Application Support/Conclave/Profile Lab/sandbox/`
   Directory get sandboxDirectory =>
       Directory('${applicationSupportDirectory.path}/sandbox');
 
@@ -51,6 +50,10 @@ class ProfileLabPaths {
   File get cloudSettingsFile =>
       File('${applicationSupportDirectory.path}/cloud_settings.json');
 
+  Directory get legacyApplicationSupportDirectory => Directory(
+        '$_home/Library/Application Support/conclave.profile_lab',
+      );
+
   /// Bundle identifier and secure Keychain service namespace.
   static const String bundleIdentifier = 'com.conclaveax.profile-lab';
   static const String keychainService = 'com.conclaveax.profile-lab';
@@ -58,6 +61,12 @@ class ProfileLabPaths {
   /// Ensures all required application support directories exist with restrictive
   /// POSIX permissions (0700).
   Future<void> ensureDirectoriesExist() async {
+    if (await legacyApplicationSupportDirectory.exists() &&
+        !await applicationSupportDirectory.exists()) {
+      await applicationSupportDirectory.parent.create(recursive: true);
+      await legacyApplicationSupportDirectory
+          .rename(applicationSupportDirectory.path);
+    }
     for (final dir in [
       applicationSupportDirectory,
       draftsDirectory,

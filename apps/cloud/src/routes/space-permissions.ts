@@ -22,7 +22,7 @@ export function validateMemberPermissions(
   ) {
     throw new HttpError(
       400,
-      "All five member permissions must be boolean values",
+      "All four member permissions must be boolean values",
     );
   }
   return value as SpaceMemberPermissions;
@@ -56,6 +56,17 @@ export async function requireSpaceRight(
   const policy = await loadSpacePermissions(env, context.userId, spaceId);
   if (!policy.rights[right])
     throw new HttpError(403, "Space permission is required: " + right);
+  return policy;
+}
+
+export async function requireSpaceOwner(
+  env: SecurityEnv,
+  context: SecurityContext,
+  spaceId: string,
+) {
+  const policy = await loadSpacePermissions(env, context.userId, spaceId);
+  if (policy.role !== "owner")
+    throw new HttpError(403, "Only the Space owner can manage invitations");
   return policy;
 }
 
