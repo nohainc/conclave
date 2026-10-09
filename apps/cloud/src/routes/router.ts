@@ -1,6 +1,7 @@
 import { handleListPeople } from "./people.js";
 import { handleWorkflowWorkspace } from "./workflow-workspace.js";
 import { handleWorkflowConfigurations } from "./workflow-configurations.js";
+import { handleWorkflowDefault } from "./workflow-default.js";
 import { conditionalJson } from "./conditional-read.js";
 import {
   BUILTIN_WORKFLOW_CATALOG,
@@ -201,6 +202,18 @@ export async function routeWorkerRequest(
         workspaceSettingsMatch[2],
         ctx,
       );
+    const spaceWorkflowDefaultMatch = url.pathname.match(
+      /^\/api\/spaces\/([^/]+)\/workflow-default$/,
+    );
+    if (spaceWorkflowDefaultMatch)
+      return await handleWorkflowDefault(
+        request,
+        env,
+        decodeURIComponent(spaceWorkflowDefaultMatch[1]!),
+        ctx,
+      );
+    if (url.pathname === "/api/user/workflow-default")
+      return await handleWorkflowDefault(request, env, undefined, ctx);
     const spaceWorkflowMatch = url.pathname.match(
       /^\/api\/spaces\/([^/]+)\/workflow-configurations(?:\/([^/]+))?$/,
     );

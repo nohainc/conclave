@@ -359,6 +359,16 @@ extension _AxAppViews on _AxAppStateMixin {
             attachments: attachments,
             idempotencyKey: idempotencyKey,
           ),
+          onRunWorkWithSelection:
+              (prompt, workflowId, attachments, idempotencyKey, selection) =>
+                  widget.dataSource.createWorkRequestWithSelection(
+            threadId: thread.id,
+            workflowId: workflowId,
+            prompt: prompt,
+            attachments: attachments,
+            executionSelection: selection,
+            idempotencyKey: idempotencyKey,
+          ),
         );
       },
     );

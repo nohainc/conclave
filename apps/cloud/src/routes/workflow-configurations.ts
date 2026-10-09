@@ -16,6 +16,10 @@ import {
 } from "./http-security.js";
 import { handleListWorkspaceWorkerInventory } from "./profiles.js";
 import type { WorkerExecutionOptions } from "@conclave/core";
+import {
+  loadSpaceWorkflowDefault,
+  loadUserWorkflowDefault,
+} from "./workflow-default.js";
 
 function definitionFor(id: string) {
   const definition = Object.values(BUILTIN_WORKFLOW_CATALOG)
@@ -61,6 +65,7 @@ export async function handleWorkflowConfigurations(
       );
       return json({
         schemaVersion: 1,
+        defaultWorkflowId: effective.defaultWorkflowId,
         configurations: effective.configurations,
       });
     }
@@ -73,6 +78,7 @@ export async function handleWorkflowConfigurations(
       .all<{ configuration_json: string }>();
     return json({
       schemaVersion: 1,
+      defaultWorkflowId: await loadUserWorkflowDefault(env, context.userId),
       configurations: rows.results.map((row) =>
         JSON.parse(row.configuration_json),
       ),
@@ -129,6 +135,8 @@ export async function handleWorkflowConfigurations(
       throw new HttpError(400, error.message);
     throw error;
   }
+  if (workflowId === "chat" && !configuration.enabled)
+    throw new HttpError(400, "Chat workflow cannot be disabled");
   const selectedWorkspace = await loadWorkflowWorkspace(
     env,
     context.userId,
@@ -257,6 +265,28 @@ export async function handleWorkflowConfigurations(
         new Date().toISOString(),
       )
       .run();
+  }
+  const defaultWorkflowId = spaceId
+    ? await loadSpaceWorkflowDefault(env, spaceId, owner)
+    : await loadUserWorkflowDefault(env, context.userId);
+  if (defaultWorkflowId === workflowId && !configuration.enabled) {
+    if (spaceId) {
+      await env.CONCLAVE_DB.prepare(
+        `INSERT INTO space_workflow_defaults(space_id,workflow_id,updated_at)
+         VALUES(?1,'chat',?2)
+         ON CONFLICT(space_id) DO UPDATE SET workflow_id='chat',updated_at=excluded.updated_at`,
+      )
+        .bind(spaceId, new Date().toISOString())
+        .run();
+    } else {
+      await env.CONCLAVE_DB.prepare(
+        `INSERT INTO user_workflow_defaults(user_id,workflow_id,updated_at)
+         VALUES(?1,'chat',?2)
+         ON CONFLICT(user_id) DO UPDATE SET workflow_id='chat',updated_at=excluded.updated_at`,
+      )
+        .bind(context.userId, new Date().toISOString())
+        .run();
+    }
   }
   return json({ configuration });
 }

@@ -56,6 +56,33 @@ mixin _CatalogApi on _AxApiClientCore {
         headers: _headers()));
   }
 
+  Future<String> loadWorkflowDefault() async => (await _getJson(
+          Uri.parse('$baseUrl/user/workflow-default')))['defaultWorkflowId']
+      as String;
+
+  Future<String> saveWorkflowDefault(String workflowId) async {
+    final response = await client.put(
+        Uri.parse('$baseUrl/user/workflow-default'),
+        headers: _headers(contentType: 'application/json'),
+        body: jsonEncode({'defaultWorkflowId': workflowId}));
+    return _workflowDefaultResponse(response);
+  }
+
+  Future<String> loadSpaceWorkflowDefault(String spaceId) async =>
+      (await _getJson(Uri.parse(
+              '$baseUrl/spaces/${Uri.encodeComponent(spaceId)}/workflow-default')))[
+          'defaultWorkflowId'] as String;
+
+  Future<String> saveSpaceWorkflowDefault(
+      String spaceId, String workflowId) async {
+    final response = await client.put(
+        Uri.parse(
+            '$baseUrl/spaces/${Uri.encodeComponent(spaceId)}/workflow-default'),
+        headers: _headers(contentType: 'application/json'),
+        body: jsonEncode({'defaultWorkflowId': workflowId}));
+    return _workflowDefaultResponse(response);
+  }
+
   Future<List<AxPerson>> loadPeople() async {
     final response = await _getJson(Uri.parse('$baseUrl/people'));
     return List.unmodifiable((response['people'] as List).map(
@@ -96,6 +123,15 @@ mixin _CatalogApi on _AxApiClientCore {
     final body = jsonDecode(response.body) as Map;
     return AxUserWorkflowConfiguration.fromJson(
         Map<String, dynamic>.from(body['configuration'] as Map));
+  }
+
+  String _workflowDefaultResponse(http.Response response) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException(
+          'Default workflow selection failed (${response.statusCode}): ${response.body}',
+          statusCode: response.statusCode);
+    }
+    return (jsonDecode(response.body) as Map)['defaultWorkflowId'] as String;
   }
 
   @override

@@ -126,22 +126,6 @@ Future<T?> _showAnchoredMenu<T>({
   );
 }
 
-Widget _workerIcon(BuildContext context, AxWorker worker) {
-  final asset =
-      WorkerPresentation.resolve(worker.workerTypeId, worker.displayName)
-          .iconAsset;
-  return SizedBox(
-      width: 18,
-      height: 18,
-      child: asset != null
-          ? Image.asset(asset,
-              fit: BoxFit.contain, semanticLabel: '${worker.displayName} icon')
-          : CircleAvatar(
-              child: Text(
-                  worker.displayName.isEmpty ? '?' : worker.displayName[0],
-                  style: const TextStyle(fontSize: 10))));
-}
-
 class _WorkComposer extends StatelessWidget {
   const _WorkComposer({
     required this.requestController,
@@ -162,11 +146,11 @@ class _WorkComposer extends StatelessWidget {
     required this.timelineError,
     required this.submitError,
     required this.submitting,
-    required this.awaitingResponse,
     required this.composerKey,
     required this.attachments,
     required this.onAddFiles,
-    required this.onAddReference,
+    required this.executionSelection,
+    required this.onExecutionSelectionChanged,
     required this.onRemoveAttachment,
     required this.onRefresh,
     required this.hasOlder,
@@ -197,11 +181,11 @@ class _WorkComposer extends StatelessWidget {
   final String? timelineError;
   final String? submitError;
   final bool submitting;
-  final bool awaitingResponse;
   final GlobalKey composerKey;
   final List<Map<String, dynamic>> attachments;
   final Future<void> Function() onAddFiles;
-  final Future<void> Function() onAddReference;
+  final Map<String, dynamic> executionSelection;
+  final ValueChanged<Map<String, dynamic>> onExecutionSelectionChanged;
   final ValueChanged<int> onRemoveAttachment;
   final Future<void> Function() onRefresh;
   final bool hasOlder;
@@ -336,7 +320,11 @@ class _WorkComposer extends StatelessWidget {
     final binding = rawBinding is Map
         ? Map<String, dynamic>.from(rawBinding)
         : <String, dynamic>{};
-    final workerId = binding['workerId']?.toString() ?? '';
+    final workerId = (executionSelection.containsKey('workerId')
+                ? executionSelection['workerId']
+                : binding['workerId'])
+            ?.toString() ??
+        '';
     if (workerId.isEmpty) return null;
     return eligibleWorkers.where((w) => w.id == workerId).firstOrNull ??
         spaceWorkers.where((w) => w.id == workerId).firstOrNull;
@@ -373,9 +361,24 @@ class _WorkComposer extends StatelessWidget {
     final isWorkerAssigned = _isWorkerAssigned;
     final policy =
         selectedWorkflow?.executionPolicy ?? const AxWorkflowCapabilities();
-    final selectedModel = binding['model']?.toString().trim() ?? '';
+    final selectedWorkerId = (executionSelection.containsKey('workerId')
+            ? executionSelection['workerId']
+            : binding['workerId'])
+        ?.toString()
+        .trim();
+    final selectedModel = (executionSelection.containsKey('model')
+                ? executionSelection['model']
+                : binding['model'])
+            ?.toString()
+            .trim() ??
+        '';
     final selectedReasoningEffort =
-        binding['reasoningEffort']?.toString().trim() ?? '';
+        (executionSelection.containsKey('reasoningEffort')
+                    ? executionSelection['reasoningEffort']
+                    : binding['reasoningEffort'])
+                ?.toString()
+                .trim() ??
+            '';
     final effortOptions = assignedWorker?.executionOptions
         ?.effortsForModel(selectedModel.isEmpty ? null : selectedModel);
     final supportedEfforts = effortOptions?.supported == true
@@ -412,22 +415,11 @@ class _WorkComposer extends StatelessWidget {
                             title: Text('Add files'),
                           ),
                         ),
-                        PopupMenuItem(
-                          value: 'link',
-                          enabled: canExecute && !submitting,
-                          child: const ListTile(
-                            dense: true,
-                            leading: Icon(Icons.link, size: 18),
-                            title: Text('Add link'),
-                          ),
-                        ),
                       ],
                     );
                     if (!buttonContext.mounted || value == null) return;
                     if (value == 'files') {
                       onAddFiles();
-                    } else if (value == 'link') {
-                      onAddReference();
                     }
                   },
                   child: const Padding(
@@ -504,30 +496,51 @@ class _WorkComposer extends StatelessWidget {
             const SizedBox(width: 6),
             Builder(
               builder: (workerContext) => Tooltip(
-                message: 'Worker · configured in Workflows',
+                message: 'Worker · this request',
                 child: Material(
                   color: controlBg,
                   borderRadius: controlBorderRadius,
                   child: InkWell(
                     key: const ValueKey('work-composer-worker'),
                     borderRadius: controlBorderRadius,
-                    onTap: null,
+                    onTap: canExecute && !submitting
+                        ? () async {
+                            final value = await _showAnchoredMenu<String>(
+                              buttonContext: workerContext,
+                              inputKey: inputKey,
+                              itemHeight: 48,
+                              items: [
+                                const PopupMenuItem<String>(
+                                    value: '', child: Text('Auto')),
+                                for (final worker in eligibleWorkers)
+                                  PopupMenuItem<String>(
+                                      value: worker.id,
+                                      child: Text(worker.displayName)),
+                              ],
+                            );
+                            if (value == null || !workerContext.mounted) {
+                              return;
+                            }
+                            onExecutionSelectionChanged({
+                              'workerId': value.isEmpty ? null : value,
+                              'model': null,
+                              'reasoningEffort': null,
+                            });
+                          }
+                        : null,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 5),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (assignedWorker != null) ...[
-                            _workerIcon(context, assignedWorker),
-                            const SizedBox(width: 4),
-                          ],
                           ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 140),
                             child: Text(
                               assignedWorker?.displayName ??
-                                  (binding['workerId'] == null
-                                      ? 'Automatic'
+                                  (selectedWorkerId == null ||
+                                          selectedWorkerId.isEmpty
+                                      ? 'Auto'
                                       : 'Unavailable Worker'),
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context)
@@ -535,7 +548,8 @@ class _WorkComposer extends StatelessWidget {
                                   .bodySmall
                                   ?.copyWith(
                                     fontWeight: FontWeight.w600,
-                                    color: binding['workerId'] == null ||
+                                    color: selectedWorkerId == null ||
+                                            selectedWorkerId.isEmpty ||
                                             isWorkerAssigned
                                         ? null
                                         : colors.error,
@@ -551,20 +565,54 @@ class _WorkComposer extends StatelessWidget {
               ),
             ),
           ],
-          if (stepKind != null && isWorkerAssigned) ...[
+          if (stepKind != null &&
+              isWorkerAssigned &&
+              assignedWorker != null) ...[
             if (policy.userSelectsModel &&
-                (assignedWorker?.executionOptions?.modelSelectionSupported ??
+                (assignedWorker.executionOptions?.modelSelectionSupported ??
                     true)) ...[
               const SizedBox(width: 6),
               Builder(
                 builder: (modelBtnContext) => Tooltip(
-                  message: 'Model · configured in Workflows',
+                  message: 'Model · this request',
                   child: Material(
                     color: controlBg,
                     borderRadius: controlBorderRadius,
                     child: InkWell(
                       borderRadius: controlBorderRadius,
-                      onTap: null,
+                      onTap: canExecute && !submitting
+                          ? () async {
+                              final options = _modelsForWorker(assignedWorker);
+                              final value = await _showAnchoredMenu<String>(
+                                buttonContext: modelBtnContext,
+                                inputKey: inputKey,
+                                itemHeight: 48,
+                                items: [
+                                  const PopupMenuItem<String>(
+                                      value: '', child: Text('Auto')),
+                                  for (final option in options)
+                                    PopupMenuItem<String>(
+                                        value: option.id,
+                                        child: Text(option.name)),
+                                ],
+                              );
+                              if (value == null || !modelBtnContext.mounted) {
+                                return;
+                              }
+                              final nextEfforts = assignedWorker
+                                  .executionOptions
+                                  ?.effortsForModel(
+                                      value.isEmpty ? null : value);
+                              onExecutionSelectionChanged({
+                                'model': value.isEmpty ? null : value,
+                                if (selectedReasoningEffort.isNotEmpty &&
+                                    !(nextEfforts?.supported == true &&
+                                        nextEfforts!.values
+                                            .contains(selectedReasoningEffort)))
+                                  'reasoningEffort': null,
+                              });
+                            }
+                          : null,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 5),
@@ -577,7 +625,7 @@ class _WorkComposer extends StatelessWidget {
                                 _modelDisplayName(selectedModel,
                                             worker: assignedWorker)
                                         .isEmpty
-                                    ? 'Default model'
+                                    ? 'Auto'
                                     : _modelDisplayName(selectedModel,
                                         worker: assignedWorker),
                                 overflow: TextOverflow.ellipsis,
@@ -603,13 +651,37 @@ class _WorkComposer extends StatelessWidget {
               const SizedBox(width: 6),
               Builder(
                 builder: (reasoningBtnContext) => Tooltip(
-                  message: 'Effort · configured in Workflows',
+                  message: 'Effort · this request',
                   child: Material(
                     color: controlBg,
                     borderRadius: controlBorderRadius,
                     child: InkWell(
                       borderRadius: controlBorderRadius,
-                      onTap: null,
+                      onTap: canExecute && !submitting
+                          ? () async {
+                              final value = await _showAnchoredMenu<String>(
+                                buttonContext: reasoningBtnContext,
+                                inputKey: inputKey,
+                                itemHeight: 48,
+                                items: [
+                                  const PopupMenuItem<String>(
+                                      value: '', child: Text('Auto')),
+                                  for (final effort in supportedEfforts)
+                                    PopupMenuItem<String>(
+                                        value: effort,
+                                        child: Text(_reasoningEffortDisplayName(
+                                            effort))),
+                                ],
+                              );
+                              if (value == null ||
+                                  !reasoningBtnContext.mounted) {
+                                return;
+                              }
+                              onExecutionSelectionChanged({
+                                'reasoningEffort': value.isEmpty ? null : value,
+                              });
+                            }
+                          : null,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 5),
@@ -620,8 +692,9 @@ class _WorkComposer extends StatelessWidget {
                               constraints: const BoxConstraints(maxWidth: 110),
                               child: Text(
                                 selectedReasoningEffort.isEmpty
-                                    ? 'Default effort'
-                                    : '${_reasoningEffortDisplayName(selectedReasoningEffort)} effort',
+                                    ? 'Auto'
+                                    : _reasoningEffortDisplayName(
+                                        selectedReasoningEffort),
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context)
                                     .textTheme
@@ -681,12 +754,7 @@ class _WorkComposer extends StatelessWidget {
               children: [
                 for (var i = 0; i < attachments.length; i++)
                   InputChip(
-                    avatar: Icon(
-                      attachments[i]['kind'] == 'url'
-                          ? Icons.link
-                          : Icons.insert_drive_file,
-                      size: 14,
-                    ),
+                    avatar: const Icon(Icons.insert_drive_file, size: 14),
                     label: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 220),
                       child: Text(
@@ -704,35 +772,12 @@ class _WorkComposer extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                'Up to 10 attachments. Files total 1 MB; links are passed as references.',
+                'Up to 10 file attachments. Files total 1 MB.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
           ],
           if (loadingWorkflows) const LinearProgressIndicator(),
-          if (awaitingResponse && !submitting)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(children: [
-                const Expanded(
-                  child: Text(
-                    'A previous request is still in progress. You can draft your next message or cancel the pending request.',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-                if (onCancelRun != null)
-                  TextButton(
-                    onPressed: () async {
-                      for (final request in workTimeline.where((request) =>
-                          const {'queued', 'running', 'waiting'}
-                              .contains(request.status))) {
-                        await onCancelRun!(request.id);
-                      }
-                    },
-                    child: const Text('Cancel pending request'),
-                  ),
-              ]),
-            ),
           if (workflowCatalogError != null)
             Text(workflowCatalogError!, style: TextStyle(color: colors.error)),
           if (!canExecute)

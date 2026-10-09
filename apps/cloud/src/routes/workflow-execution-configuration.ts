@@ -2,10 +2,52 @@ import { loadSpaceWorkflowConfigurations } from "./space-workflow-configurations
 import {
   parseUserWorkflowConfiguration,
   resolveUserWorkflowConfiguration,
+  type WorkflowSelection,
   type BuiltinWorkflowDefinition,
 } from "@conclave/core";
 import { HttpError, type SecurityEnv } from "./http-security.js";
 import { validateWorkflowWorkerEligibility } from "./handlers.js";
+
+export interface WorkflowExecutionSelectionOverride {
+  readonly workerId?: string | null;
+  readonly model?: string | null;
+  readonly reasoningEffort?: string | null;
+}
+
+export function parseWorkflowExecutionSelection(
+  value: unknown,
+): WorkflowExecutionSelectionOverride | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new HttpError(400, "executionSelection must be an object");
+  const object = value as Record<string, unknown>;
+  if (
+    Object.keys(object).some(
+      (key) => !["workerId", "model", "reasoningEffort"].includes(key),
+    )
+  )
+    throw new HttpError(400, "executionSelection contains an unknown field");
+  const stringOrNull = (key: string) => {
+    const selected = object[key];
+    if (selected === undefined || selected === null) return selected;
+    if (typeof selected !== "string" || selected.trim().length === 0)
+      throw new HttpError(400, `executionSelection.${key} is invalid`);
+    if (selected.length > 200)
+      throw new HttpError(400, `executionSelection.${key} is too long`);
+    return selected.trim();
+  };
+  return {
+    ...(Object.hasOwn(object, "workerId")
+      ? { workerId: stringOrNull("workerId") }
+      : {}),
+    ...(Object.hasOwn(object, "model")
+      ? { model: stringOrNull("model") }
+      : {}),
+    ...(Object.hasOwn(object, "reasoningEffort")
+      ? { reasoningEffort: stringOrNull("reasoningEffort") }
+      : {}),
+  };
+}
 
 /** Resolve Auto once at acceptance, using the same admission rules as execution. */
 export async function resolveWorkflowExecutionBindings(
@@ -21,7 +63,14 @@ export async function resolveWorkflowExecutionBindings(
     }
   >,
   attachments: readonly unknown[],
+  executionSelection?: unknown,
 ) {
+  const override = parseWorkflowExecutionSelection(executionSelection);
+  if (override && definition.steps.length !== 1)
+    throw new HttpError(
+      400,
+      "Execution overrides are available only for one-step Workflows",
+    );
   const space = await loadSpaceWorkflowConfigurations(
     env,
     spaceId,
@@ -58,7 +107,19 @@ export async function resolveWorkflowExecutionBindings(
   const rejectionReasons = new Set<string>();
   for (const step of definition.steps) {
     const id = definition.id === "direct" ? "direct" : step.kind;
-    const selection = effective.steps[step.kind] ?? {};
+    const configuredSelection = effective.steps[step.kind] ?? {};
+    const selection: WorkflowSelection = {
+      ...configuredSelection,
+      ...(override && Object.hasOwn(override, "workerId")
+        ? { worker: override.workerId ?? undefined }
+        : {}),
+      ...(override && Object.hasOwn(override, "model")
+        ? { model: override.model ?? undefined }
+        : {}),
+      ...(override && Object.hasOwn(override, "reasoningEffort")
+        ? { effort: override.reasoningEffort ?? undefined }
+        : {}),
+    };
     const instructions = stepInstructions[id]?.additionalInstructions;
     if (
       selection.worker &&

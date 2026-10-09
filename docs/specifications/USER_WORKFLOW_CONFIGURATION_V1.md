@@ -51,10 +51,12 @@ its authenticated API client. Phase 2 adds the global Workflows page and session
 Phase 4 applies this resolution at preflight and request acceptance. Disabled
 Workflows cannot execute. Thread bindings no longer provide execution defaults.
 
-Space overrides now sit between owner-global defaults and execution. Future Thread and composer layers can overlay the same sparse selection type
-at the resolver boundary without changing user preference storage. Neither
-future layer is introduced here. Effective configurations are frozen at acceptance; historical requests are never
-rewritten when preferences change.
+Space overrides now sit between owner-global defaults and execution. A transient
+composer selection may overlay the same sparse selection type for a one-step
+request only; it is validated at acceptance and is never saved to Space or user
+preferences. Thread-level preferences remain a future layer. Effective
+configurations are frozen at acceptance; historical requests are never rewritten
+when preferences change.
 
 Apply additive v8 migration `0018_user_workflow_configurations.sql` before
 serving these endpoints. It creates a user-owned table with cascading user
@@ -126,11 +128,13 @@ model/effort even when null. Profile changes or revocation fail admission rather
 than substituting a release. Existing historical requests remain unchanged; no
 missing Profile identity is reconstructed from today's inventory.
 
-The composer's existing layout displays Space execution choices without editing
-or submitting an override. AX sends the authored request, attachments, Workflow
-identity, and idempotency key. Cloud rejects the removed `executionSelection`
-claim. Unconfigured Workflows and reset resolve Automatic consistently, with no
-legacy Thread binding or composer fallback. Thread settings retain authored
+The composer displays Space execution choices and allows a one-step request to
+edit Worker, model, and effort locally. AX sends that transient selection with
+the authored request, attachments, Workflow identity, and idempotency key;
+Cloud validates it and includes the resolved values in the immutable snapshot
+without changing saved preferences. Multi-step Workflows do not accept this
+override. Unconfigured Workflows and reset resolve Automatic consistently, with
+no legacy Thread binding or persistent composer fallback. Thread settings retain authored
 instructions and initial Workflow selection, but no execution configuration or
 implicit Worker scheduling writes. Generic Settings remains account/application
 configuration. Workflows is the authoritative global execution editor.
@@ -147,8 +151,9 @@ preferences. With no saved user preferences, execution resolves Automatic.
 
 Accepted request snapshots and historical runs are never migrated or backfilled.
 The snapshot's versioned execution data remains immutable. Old API clients trying
-to write Thread execution fields or submit `executionSelection` receive 400; ship
-AX and Cloud together. There is no compatibility alias or runtime fallback.
+to write Thread execution fields receive 400. Invalid or multi-step
+`executionSelection` payloads receive 400; ship AX and Cloud together. There is
+no compatibility alias or runtime fallback.
 Historical read-only fields remain evidence, not a source for new execution defaults.
 
 ## Ownership and future extensions
@@ -159,6 +164,8 @@ Workflow Definition
 User Workflow Configuration (Space owner)
        ↓
 Space Workflow Configuration
+       ↓
+Scope default Workflow selection
        ↓
 Execution Resolution
        ↓
@@ -174,12 +181,21 @@ Space Workflow Configuration
        ↓
 Thread preference       [future]
        ↓
-Composer override       [future]
+Composer override       [one-step, current request only]
 ```
 
-Thread preference and composer override layers are not implemented. When added,
-they may overlay the same sparse selection type before resolution, without schema
-redesign or historical rewrites. See [ADR-019](../decisions/ADR-019-per-user-workflow-execution-configuration.md).
+The composer override is transient and is never persisted in Workflow
+Configuration. A future Thread preference may overlay the same sparse selection
+type before it, without schema redesign or historical rewrites. See
+[ADR-019](../decisions/ADR-019-per-user-workflow-execution-configuration.md).
+
+Each user and Space also has one sparse default Workflow selection. It is stored
+separately from execution fields, defaults to `chat`, and is never copied into a
+Workflow Definition. `GET/PUT /api/user/workflow-default` and
+`GET/PUT /api/spaces/:spaceId/workflow-default` read or update the selection.
+Only enabled Workflows can be selected. Chat is always enabled and is the
+automatic fallback when the selected Workflow is disabled or a Workspace change
+resets the scope.
 
 ## Focused validation
 
@@ -216,6 +232,10 @@ or historical backfill. Apply it before updated Cloud/AX. Execution resolves fro
 Thread permissions and readiness checks; saved explicit Workers still require
 a valid Space grant in the selected Workspace; request authorization still uses the actual requester. All new
 runs snapshot their resolved choices as before. No Thread execution override exists.
+
+Migration `0028_workflow_default_selection.sql` adds separate user and Space
+default-selection rows and normalizes any legacy Chat rows to enabled. It does
+not copy workflow definitions or execution selections.
 
 ## Workspace selection
 

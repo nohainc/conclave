@@ -1,4 +1,7 @@
-import { resolveWorkflowExecutionBindings } from "./workflow-execution-configuration.js";
+import {
+  parseWorkflowExecutionSelection,
+  resolveWorkflowExecutionBindings,
+} from "./workflow-execution-configuration.js";
 import { requireWorkflowPermission } from "./space-permissions.js";
 import { initialConversationTaskStatements } from "./conversation-workflow-step-runs.js";
 import { MutationIdempotency } from "./mutation-idempotency.js";
@@ -77,11 +80,9 @@ export async function handleValidateWorkRequest(
     bindings: {},
   });
   const body = (await request.json()) as Record<string, unknown>;
-  if (body.executionSelection !== undefined)
-    throw new HttpError(
-      400,
-      "Execution overrides are not supported; configure execution in Workflows",
-    );
+  const executionSelection = parseWorkflowExecutionSelection(
+    body.executionSelection,
+  );
   const workflowId = requiredString(
     body.workflowId ?? config.defaultWorkflowId,
     "workflowId",
@@ -108,6 +109,7 @@ export async function handleValidateWorkRequest(
       workflow,
       {},
       attachments,
+      executionSelection,
     ),
     attachments,
   );
@@ -148,11 +150,9 @@ export async function handleCreateWorkRequest(
     accessContext,
   );
   const body = (await request.json()) as Record<string, unknown>;
-  if (body.executionSelection !== undefined)
-    throw new HttpError(
-      400,
-      "Execution overrides are not supported; configure execution in Workflows",
-    );
+  const executionSelection = parseWorkflowExecutionSelection(
+    body.executionSelection,
+  );
   const receipt = await MutationIdempotency.from(
     request,
     env.CONCLAVE_DB,
@@ -374,6 +374,7 @@ export async function handleCreateWorkRequest(
     workflowSnapshot,
     instructions,
     normalizedAttachments,
+    executionSelection,
   );
   const eligibility = await validateWorkflowWorkerEligibility(
     env,

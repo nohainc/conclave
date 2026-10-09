@@ -738,12 +738,37 @@ abstract interface class AxDataSource {
     String? idempotencyKey,
   }) async =>
       throw UnimplementedError('Work Request execution is not available');
+
+  /// Sends a one-request execution override without changing Space settings.
+  /// Implementations that do not support overrides retain the normal request.
+  Future<String> createWorkRequestWithSelection({
+    required String threadId,
+    required String workflowId,
+    required String prompt,
+    List<Map<String, dynamic>> attachments = const [],
+    Map<String, dynamic> executionSelection = const {},
+    String? idempotencyKey,
+  }) async =>
+      createWorkRequest(
+          threadId: threadId,
+          workflowId: workflowId,
+          prompt: prompt,
+          attachments: attachments,
+          idempotencyKey: idempotencyKey);
   Future<List<String>> validateWorkRequestEligibility({
     required String threadId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
   }) async =>
       const [];
+  Future<List<String>> validateWorkRequestEligibilityWithSelection({
+    required String threadId,
+    required String workflowId,
+    List<Map<String, dynamic>> attachments = const [],
+    Map<String, dynamic> executionSelection = const {},
+  }) async =>
+      validateWorkRequestEligibility(
+          threadId: threadId, workflowId: workflowId, attachments: attachments);
   Future<AxConversationHistoryPage> loadConversationHistory(
           {required String threadId,
           required String conversationId,

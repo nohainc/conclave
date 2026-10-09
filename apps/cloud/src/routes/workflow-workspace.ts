@@ -185,7 +185,9 @@ export async function handleWorkflowWorkspace(
   const changed =
     selected !== current.workspaceId ||
     Boolean(body.inherit) !== current.inherited;
-  if (!changed) return json({ ...current, workspaces: choices.results });
+  const resetToGlobal = Boolean(body.inherit && spaceId && current.inherited);
+  if (!changed && !resetToGlobal)
+    return json({ ...current, workspaces: choices.results });
   if (body.confirmReset !== true)
     throw new HttpError(
       409,
@@ -216,6 +218,11 @@ export async function handleWorkflowWorkspace(
         )
         .bind(spaceId),
     );
+    statements.push(
+      db
+        .prepare("DELETE FROM space_workflow_defaults WHERE space_id = ?1")
+        .bind(spaceId),
+    );
     if (selected)
       statements.push(
         ...(await prepareWorkflowWorkspaceGrant(
@@ -241,8 +248,20 @@ export async function handleWorkflowWorkspace(
     );
     statements.push(
       db
+        .prepare("DELETE FROM user_workflow_defaults WHERE user_id = ?1")
+        .bind(ownerUserId),
+    );
+    statements.push(
+      db
         .prepare(
           "DELETE FROM space_workflow_configurations WHERE space_id IN (SELECT s.id FROM spaces s WHERE s.owner_user_id=?1 AND NOT EXISTS (SELECT 1 FROM space_workflow_settings ws WHERE ws.space_id=s.id))",
+        )
+        .bind(ownerUserId),
+    );
+    statements.push(
+      db
+        .prepare(
+          "DELETE FROM space_workflow_defaults WHERE space_id IN (SELECT s.id FROM spaces s WHERE s.owner_user_id=?1 AND NOT EXISTS (SELECT 1 FROM space_workflow_settings ws WHERE ws.space_id=s.id))",
         )
         .bind(ownerUserId),
     );

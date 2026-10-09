@@ -16,6 +16,7 @@ class ThreadPage extends StatefulWidget {
     required this.onArchive,
     this.onRename,
     this.onRunWork,
+    this.onRunWorkWithSelection,
     this.realtimeEvents,
     this.initialTab = 0,
   });
@@ -34,6 +35,12 @@ class ThreadPage extends StatefulWidget {
   final Future<void> Function(String name)? onRename;
   final Future<String> Function(String prompt, String workflowId,
       List<Map<String, dynamic>> attachments, String idempotencyKey)? onRunWork;
+  final Future<String> Function(
+      String prompt,
+      String workflowId,
+      List<Map<String, dynamic>> attachments,
+      String idempotencyKey,
+      Map<String, dynamic> executionSelection)? onRunWorkWithSelection;
   final Stream<Map<String, dynamic>>? realtimeEvents;
   final int initialTab;
 
@@ -74,11 +81,6 @@ class _ThreadPageState extends State<ThreadPage>
       }
     });
   }
-
-  bool get _awaitingWorkResponse =>
-      _submittingWork ||
-      _workTimeline.any((request) =>
-          !const {'completed', 'failed', 'cancelled'}.contains(request.status));
 
   void _followLatest(ScrollController controller, bool follow) {
     if (!follow) return;
@@ -145,10 +147,13 @@ class _ThreadPageState extends State<ThreadPage>
   void Function()? _cancelWorkRealtime;
   bool get _submittingWork => _workHistoryCache.submitting(widget.thread.id);
   List<Map<String, dynamic>> _workAttachments = [];
+  Map<String, dynamic> _workExecutionSelection = {};
   List<AxWorker> _spaceWorkers = const [];
   List<AxWorker> _eligibleWorkers = const [];
   AxWorkflowConfigurations? _workflowConfigurations;
   void Function()? _cancelWorkflowConfigurations;
+  void Function()? _cancelWorkflowDefault;
+  String? _workflowDefaultId;
   List<AxUserWorkflowConfiguration> _userWorkflowConfigurations = const [];
   Map<String, dynamic> get _composerWorkConfig {
     final id = _effectiveWorkflow.split(':').first;
@@ -175,6 +180,7 @@ class _ThreadPageState extends State<ThreadPage>
 
   void _subscribeWorkflowConfigurations() {
     final ds = widget.dataSource;
+    _cancelWorkflowDefault?.call();
     _workflowConfigurations =
         widget.workflowConfigurations?.spaceId == widget.space.id
             ? widget.workflowConfigurations
@@ -186,12 +192,29 @@ class _ThreadPageState extends State<ThreadPage>
     if (cache == null) return;
     _cancelWorkflowConfigurations = cache.engine.watch(cache.query, (state) {
       if (!mounted) return;
-      _updateComposerState(
-          () => _userWorkflowConfigurations = state.data ?? const []);
+      _updateComposerState(() {
+        _userWorkflowConfigurations = state.data ?? const [];
+        _workExecutionSelection = {};
+      });
     });
+    _workflowDefaultId = cache.engine.peek(cache.defaultQuery).data;
+    _cancelWorkflowDefault = cache.engine.watch(cache.defaultQuery, (state) {
+      if (!mounted) return;
+      if (state.hasData) {
+        _updateComposerState(() {
+          _workflowDefaultId = state.data;
+          _workExecutionSelection = {};
+          if (_workflowCatalog.isNotEmpty) {
+            _workflow = _threadDefaultReference(_workflowCatalog,
+                preferredId: _workflowDefaultId);
+          }
+        });
+      }
+    }, fireImmediately: false);
     unawaited(cache
         .ensure()
         .catchError((Object error) => <AxUserWorkflowConfiguration>[]));
+    unawaited(cache.ensureDefault().catchError((Object error) => 'chat'));
   }
 
   final _workComposerChanges = ValueNotifier<int>(0);
@@ -277,7 +300,8 @@ class _ThreadPageState extends State<ThreadPage>
     _workflowCatalog = workflows.data ?? const [];
     _loadingWorkflows = !workflows.hasData;
     if (_workflowCatalog.isNotEmpty) {
-      _workflow = _threadDefaultReference(_workflowCatalog);
+      _workflow = _threadDefaultReference(_workflowCatalog,
+          preferredId: _workflowDefaultId);
     }
     _applyWorkers(_catalogs.engine.peek(_catalogs.workers).data ?? const []);
     _cancelWorkflows = _catalogs.engine.watch(_catalogs.workflows, (state) {
@@ -286,7 +310,8 @@ class _ThreadPageState extends State<ThreadPage>
         if (state.hasData) {
           _workflowCatalog = state.data!;
           if (!_workflowCatalog.any((item) => item.reference == _workflow)) {
-            _workflow = _threadDefaultReference(_workflowCatalog);
+            _workflow = _threadDefaultReference(_workflowCatalog,
+                preferredId: _workflowDefaultId);
           }
         }
         _loadingWorkflows = !state.hasData && state.isFetching;
@@ -325,7 +350,10 @@ class _ThreadPageState extends State<ThreadPage>
         _loadingWorkflows = false;
         _workflowCatalogError =
             workflows.isEmpty ? 'No built-in Workflows are available.' : null;
-        _workflow = workflows.isEmpty ? '' : _threadDefaultReference(workflows);
+        _workflow = workflows.isEmpty
+            ? ''
+            : _threadDefaultReference(workflows,
+                preferredId: _workflowDefaultId);
       });
     } catch (_) {
       if (!mounted || catalogs != _catalogs) return;
@@ -336,9 +364,15 @@ class _ThreadPageState extends State<ThreadPage>
     }
   }
 
-  String _threadDefaultReference(List<AxBuiltinWorkflow> workflows) {
+  String _threadDefaultReference(List<AxBuiltinWorkflow> workflows,
+      {String? preferredId}) {
     if (workflows.isEmpty) return '';
     final current = _currentWorkflowVersions(workflows);
+    if (preferredId != null) {
+      final preferred =
+          current.where((item) => item.id == preferredId).firstOrNull;
+      if (preferred != null) return preferred.reference;
+    }
     // The Work composer needs a stable default after thread-level execution
     // settings are removed. Prefer the general-purpose work workflow when the
     // catalog exposes it, then fall back to the catalog's first current entry.
@@ -402,6 +436,11 @@ class _ThreadPageState extends State<ThreadPage>
   @override
   void didUpdateWidget(ThreadPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.thread.id != widget.thread.id ||
+        oldWidget.space.id != widget.space.id ||
+        oldWidget.dataSource != widget.dataSource) {
+      _workExecutionSelection = {};
+    }
     if (oldWidget.workflowConfigurations != widget.workflowConfigurations ||
         oldWidget.dataSource != widget.dataSource ||
         oldWidget.space.id != widget.space.id) {
@@ -478,6 +517,7 @@ class _ThreadPageState extends State<ThreadPage>
   @override
   void dispose() {
     _cancelWorkflowConfigurations?.call();
+    _cancelWorkflowDefault?.call();
     _cancelWorkflows?.call();
     _cancelWorkers?.call();
     _cancelWorkflowWorkspace?.call();
@@ -812,10 +852,14 @@ class _ThreadPageState extends State<ThreadPage>
         timelineError: _workTimelineError,
         submitError: _workSubmitError,
         submitting: _submittingWork,
-        awaitingResponse: _awaitingWorkResponse,
         attachments: _workAttachments,
         onAddFiles: _addWorkFiles,
-        onAddReference: _addWorkReference,
+        executionSelection: _workExecutionSelection,
+        onExecutionSelectionChanged: (selection) => _updateState(() =>
+            _workExecutionSelection = {
+              ..._workExecutionSelection,
+              ...selection
+            }),
         onRemoveAttachment: (index) => _updateState(() {
           _workAttachments.removeAt(index);
         }),
@@ -826,7 +870,10 @@ class _ThreadPageState extends State<ThreadPage>
         onShowRunDetails: widget.dataSource == null ? null : _showRunDetails,
         onRetryStep: widget.dataSource == null ? null : _retryWorkRequestStep,
         onCancelRun: widget.dataSource == null ? null : _cancelWorkRequest,
-        onWorkflowChanged: (value) => _updateState(() => _workflow = value),
+        onWorkflowChanged: (value) => _updateState(() {
+          _workflow = value;
+          _workExecutionSelection = {};
+        }),
         onRun: _runWork,
       );
 }

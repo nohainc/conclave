@@ -31,14 +31,14 @@ it("authenticates actual human sessions and isolates GET/PUT/DELETE ownership", 
     );
     const configuration = (enabled: boolean) => ({
       schemaVersion: 1,
-      workflowId: "chat",
+      workflowId: "direct",
       enabled,
       defaults: {},
       stepOverrides: {},
     });
     sqlite
       .prepare(
-        "INSERT INTO user_workflow_configurations VALUES('two','chat',1,?,'now')",
+        "INSERT INTO user_workflow_configurations VALUES('two','direct',1,?,'now')",
       )
       .run(JSON.stringify(configuration(false)));
     const env = {
@@ -46,11 +46,14 @@ it("authenticates actual human sessions and isolates GET/PUT/DELETE ownership", 
       BETTER_AUTH_SECRET: "test-secret",
     } as SecurityEnv;
     const request = (method: string, user?: string, body?: unknown) =>
-      new Request("https://cloud.test/api/user/workflow-configurations/chat", {
-        method,
-        headers: user ? { authorization: user } : {},
-        ...(body ? { body: JSON.stringify(body) } : {}),
-      });
+      new Request(
+        "https://cloud.test/api/user/workflow-configurations/direct",
+        {
+          method,
+          headers: user ? { authorization: user } : {},
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        },
+      );
     await expect(
       handleWorkflowConfigurations(request("GET"), env),
     ).rejects.toMatchObject({ status: 401 });

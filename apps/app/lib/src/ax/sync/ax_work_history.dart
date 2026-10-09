@@ -325,9 +325,13 @@ class AxWorkHistoryCache {
     String? requestedByUserId,
     String? requestedByName,
     List<Map<String, dynamic>> attachments = const [],
+    Map<String, dynamic> executionSelection = const {},
     required Future<String> Function(
             String, String, List<Map<String, dynamic>>, String)
         execute,
+    Future<String> Function(String, String, List<Map<String, dynamic>>, String,
+            Map<String, dynamic>)?
+        executeWithSelection,
   }) async {
     if (submitting(id) ||
         peek(id).requests.any(
@@ -341,7 +345,9 @@ class AxWorkHistoryCache {
       'workflowId': workflowId,
       'workflowVersion': workflowVersion,
       'prompt': prompt,
-      'attachments': inputs
+      'attachments': inputs,
+      if (executionSelection.isNotEmpty)
+        'executionSelection': freezeAxMutationInput(executionSelection),
     };
     final key = idempotencyKey ?? _attempts.keyFor(scope, input);
     final retrySubmission = _attempts.wasSubmitted(key);
@@ -382,8 +388,12 @@ class AxWorkHistoryCache {
         execute: (context) async {
           if (source != null && !retrySubmission) {
             progress('Checking that everything is ready…');
-            final issues = await source!.validateWorkRequestEligibility(
-                threadId: id, workflowId: workflowId, attachments: inputs);
+            final issues = await source!
+                .validateWorkRequestEligibilityWithSelection(
+                    threadId: id,
+                    workflowId: workflowId,
+                    attachments: inputs,
+                    executionSelection: executionSelection);
             if (!current(context)) throw const AxMutationSuperseded();
             if (issues.isNotEmpty) {
               throw AxApiException(
@@ -397,7 +407,10 @@ class AxWorkHistoryCache {
           context.pendingSubmissions[key] = null;
           String savedId;
           try {
-            savedId = await execute(prompt, workflowId, inputs, key);
+            savedId = executeWithSelection == null
+                ? await execute(prompt, workflowId, inputs, key)
+                : await executeWithSelection(
+                    prompt, workflowId, inputs, key, executionSelection);
           } catch (_) {
             final accepted = context.pendingSubmissions[key];
             if (accepted == null) rethrow;

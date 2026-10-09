@@ -37,6 +37,8 @@ function fixture(
               expect(user).toBe(
                 sql.includes("WHERE id = ?1") ||
                   sql.includes("workspace_space_grants") ||
+                  sql.includes("FROM spaces WHERE id = ?1") ||
+                  sql.includes("space_id = ?1") ||
                   sql.startsWith(
                     "SELECT workspace_id AS workspaceId FROM space_workflow_settings",
                   )

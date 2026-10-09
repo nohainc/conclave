@@ -35,6 +35,22 @@ export async function loadSpaceWorkflowConfigurations(
   return {
     ...workspace,
     ownerUserId: space.ownerUserId,
+    defaultWorkflowId:
+      (
+        await env.CONCLAVE_DB.prepare(
+          "SELECT workflow_id AS workflowId FROM space_workflow_defaults WHERE space_id = ?1",
+        )
+          .bind(spaceId)
+          .first<{ workflowId: string }>()
+      )?.workflowId ??
+      (
+        await env.CONCLAVE_DB.prepare(
+          "SELECT workflow_id AS workflowId FROM user_workflow_defaults WHERE user_id = ?1",
+        )
+          .bind(space.ownerUserId)
+          .first<{ workflowId: string }>()
+      )?.workflowId ??
+      "chat",
     configurations: [...configurations.values()],
   };
 }

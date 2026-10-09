@@ -15,12 +15,16 @@ class IntegrationSource extends WorkflowSource
   @override
   Future<AxWorkflowWorkspaceSettings> selectWorkflowWorkspace(
       {String? spaceId, String? workspaceId, bool inherit = false}) async {
-    if (spaceId != null) spaceValues.remove(spaceId);
+    if (spaceId != null) {
+      spaceValues.remove(spaceId);
+      spaceDefaults.remove(spaceId);
+    }
     return super.selectWorkflowWorkspace(
         spaceId: spaceId, workspaceId: workspaceId, inherit: inherit);
   }
 
   final spaceValues = <String, Map<String, AxUserWorkflowConfiguration>>{};
+  final spaceDefaults = <String, String>{};
   int spaceReads = 0;
   @override
   Future<List<AxUserWorkflowConfiguration>> loadSpaceWorkflowConfigurations(
@@ -32,6 +36,17 @@ class IntegrationSource extends WorkflowSource
       },
       ...?spaceValues[spaceId]
     }.values.toList();
+  }
+
+  @override
+  Future<String> loadSpaceWorkflowDefault(String spaceId) async =>
+      spaceDefaults[spaceId] ?? super.loadSpaceWorkflowDefault(spaceId);
+
+  @override
+  Future<String> saveSpaceWorkflowDefault(
+      String spaceId, String workflowId) async {
+    spaceDefaults[spaceId] = workflowId;
+    return workflowId;
   }
 
   @override
@@ -92,6 +107,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final source = IntegrationSource()
+      ..defaultWorkflow = 'direct'
       ..workers = [worker('a'), worker('b')]
       ..values = [
         AxUserWorkflowConfiguration(
@@ -104,6 +120,7 @@ void main() {
     final catalogs = AxSessionCatalogs(source, engine: engine);
     final history = AxWorkHistoryCache(source, engine: engine);
     var submitted = 0;
+    Map<String, dynamic>? submittedSelection;
     Widget page(String id) => MaterialApp(
         home: Scaffold(
             body: ThreadPage(
@@ -144,6 +161,13 @@ void main() {
                   submitted++;
                   expect(workflow, 'direct');
                   return 'accepted';
+                },
+                onRunWorkWithSelection:
+                    (prompt, workflow, attachments, key, selection) async {
+                  submittedSelection = selection;
+                  submitted++;
+                  expect(workflow, 'direct');
+                  return 'accepted';
                 })));
     await tester.pumpWidget(page('one'));
     await tester.pumpAndSettle();
@@ -154,7 +178,13 @@ void main() {
         tester
             .widget<InkWell>(find.byKey(const ValueKey('work-composer-worker')))
             .onTap,
-        isNull);
+        isNotNull);
+    await tester.tap(find.byKey(const ValueKey('work-composer-worker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Second').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Second'), findsOneWidget);
+    expect(source.values.single.defaults.worker, 'a');
     await cache.save(AxUserWorkflowConfiguration(
         workflowId: 'direct',
         defaults: const AxWorkflowSelection(
@@ -163,11 +193,20 @@ void main() {
     expect(find.text('Second'), findsOneWidget);
     await cache.reset('direct');
     await tester.pumpAndSettle();
-    expect(find.text('Automatic'), findsOneWidget);
+    expect(find.text('Auto'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('work-composer-worker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Second').last);
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Run with Automatic');
     await tester.tap(find.byTooltip('Send request'));
     await tester.pumpAndSettle();
     expect(submitted, 1);
+    expect(submittedSelection, {
+      'workerId': 'b',
+      'model': null,
+      'reasoningEffort': null,
+    });
     await tester.pumpWidget(page('two'));
     await tester.pumpAndSettle();
     expect(source.reads, 1);

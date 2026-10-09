@@ -33,7 +33,7 @@ it("persists only user overrides, isolates users, retains offline choices, reset
     const configuration = {
       schemaVersion: 1,
       workflowId: "chat",
-      enabled: false,
+      enabled: true,
       defaults: { worker: "offline" },
       stepOverrides: {},
     };

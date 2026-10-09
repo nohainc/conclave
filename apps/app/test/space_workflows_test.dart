@@ -18,6 +18,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final source = IntegrationSource()
+      ..defaultWorkflow = 'direct'
       ..workers = [worker('a'), worker('b')]
       ..values = [
         AxUserWorkflowConfiguration(
@@ -47,10 +48,9 @@ void main() {
     await tester.tap(find.text('Workflows'));
     await tester.pumpAndSettle();
     expect(find.text('Workspaces'), findsNothing);
-    expect(find.text('Using the global Workspace.'), findsOneWidget);
     expect(find.text('First'), findsOneWidget);
     expect(source.spaceReads, 1);
-    await tester.tap(find.byKey(const ValueKey('edit-direct')));
+    await tester.tap(find.byKey(const ValueKey('open-workflow-direct')));
     await tester.pumpAndSettle();
     expect(find.text('First'), findsWidgets);
     await tester.tap(find.text('Save'));
@@ -84,14 +84,28 @@ void main() {
     expect(source.selectedSpaceWorkspaces['s'], 'other');
     expect(source.values.single.defaults.worker, 'a');
     expect(engine.peek(cache.query).data, isEmpty);
-    expect(find.text('Using the global Workspace.'), findsNothing);
-    await tester.tap(find.text('Use global Workspace'));
+    source.spaceValues['s'] = {
+      'direct':
+          AxUserWorkflowConfiguration(workflowId: 'direct', enabled: false),
+    };
+    source.spaceDefaults['s'] = 'chat';
+    expect(
+        find.byKey(const ValueKey('reset-global-workflows')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('reset-global-workflows')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Change and reset'));
+    expect(find.text('Reset Space workflows?'), findsOneWidget);
+    await tester.tap(find.text('Reset workflows'));
     await tester.pumpAndSettle();
     expect(source.selectedSpaceWorkspaces.containsKey('s'), isFalse);
     expect(find.text('First'), findsOneWidget);
-    expect(find.text('Using the global Workspace.'), findsOneWidget);
+    expect(engine.peek(cache.query).data?.single.enabled, isTrue);
+    expect(engine.peek(cache.defaultQuery).data, 'direct');
+    expect(
+        tester
+            .widget<IconButton>(
+                find.byKey(const ValueKey('reset-global-workflows')))
+            .onPressed,
+        isNotNull);
     final spaceReads = source.spaceReads;
     await tester.pumpWidget(page('other', role: 'collaborator'));
     await tester.pumpAndSettle();
@@ -100,8 +114,8 @@ void main() {
     expect(source.spaceReads, spaceReads + 1);
     expect(
         tester
-            .widget<TextButton>(find.byKey(const ValueKey('edit-direct')))
-            .onPressed,
+            .widget<InkWell>(find.byKey(const ValueKey('open-workflow-direct')))
+            .onTap,
         isNull);
     await tester.pumpWidget(const SizedBox());
   });

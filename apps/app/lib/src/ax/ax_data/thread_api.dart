@@ -170,6 +170,51 @@ mixin _ThreadApi on _AxApiClientCore {
   }
 
   @override
+  Future<String> createWorkRequestWithSelection({
+    required String threadId,
+    required String workflowId,
+    required String prompt,
+    List<Map<String, dynamic>> attachments = const [],
+    Map<String, dynamic> executionSelection = const {},
+    String? idempotencyKey,
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/threads/$threadId/work-requests'),
+      headers: {
+        ..._headers(contentType: 'application/json'),
+        'Idempotency-Key': idempotencyKey ?? newAxIdempotencyKey()
+      },
+      body: jsonEncode({
+        'workflowId': workflowId,
+        if (executionSelection.isNotEmpty)
+          'executionSelection': executionSelection,
+        'input': {'originalRequest': prompt, 'attachments': attachments},
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final body = jsonDecode(response.body);
+        if (body is Map && body['error'] is String) {
+          detail = ': ${body['error']}';
+        }
+      } on FormatException {
+        /* Preserve status when the server returns no JSON. */
+      }
+      throw AxApiException(
+        'Work request failed (${response.statusCode})$detail',
+        statusCode: response.statusCode,
+      );
+    }
+    final body = jsonDecode(response.body);
+    final request = body is Map ? body['workRequest'] : null;
+    if (request is! Map || request['id'] is! String) {
+      throw const AxApiException('Work request response is malformed');
+    }
+    return request['id'] as String;
+  }
+
+  @override
   Future<List<String>> validateWorkRequestEligibility({
     required String threadId,
     required String workflowId,
@@ -227,6 +272,61 @@ mixin _ThreadApi on _AxApiClientCore {
         .map((issue) => issue['message'])
         .whereType<String>()
         .toList(growable: false);
+  }
+
+  @override
+  Future<List<String>> validateWorkRequestEligibilityWithSelection({
+    required String threadId,
+    required String workflowId,
+    List<Map<String, dynamic>> attachments = const [],
+    Map<String, dynamic> executionSelection = const {},
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/threads/$threadId/work-requests/validate'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({
+        'workflowId': workflowId,
+        if (executionSelection.isNotEmpty)
+          'executionSelection': executionSelection,
+        'attachments': attachments
+            .map((attachment) => {
+                  'kind': attachment['kind'],
+                  'mediaType': attachment['mediaType'],
+                })
+            .toList(growable: false),
+      }),
+    );
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } on FormatException {
+      throw const AxApiException('Work eligibility response is malformed');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      if (decoded is Map && decoded['issues'] is List) {
+        final messages = (decoded['issues'] as List)
+            .whereType<Map>()
+            .map((issue) => issue['message'])
+            .whereType<String>()
+            .where((message) => message.trim().isNotEmpty)
+            .toList(growable: false);
+        if (messages.isNotEmpty) return messages;
+      }
+      final detail = decoded is Map && decoded['error'] is String
+          ? ': ${decoded['error']}'
+          : '';
+      throw AxApiException(
+          'Work eligibility check failed (${response.statusCode})$detail',
+          statusCode: response.statusCode);
+    }
+    final issues = decoded is Map ? decoded['issues'] : null;
+    return issues is List
+        ? issues
+            .whereType<Map>()
+            .map((issue) => issue['message'])
+            .whereType<String>()
+            .toList(growable: false)
+        : const [];
   }
 
   @override

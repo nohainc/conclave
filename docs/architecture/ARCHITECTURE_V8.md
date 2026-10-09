@@ -806,13 +806,20 @@ that admitted Worker under the signed Profile through the generic Engine.
 
 ```text
 Workflow Definition → User Workflow Configuration (Space owner)
-                     → Space Workflow Configuration → Execution Resolution
+                     → Space Workflow Configuration
+                     → Scope default Workflow selection
+                     → Execution Resolution
                      → WorkflowRun → StepRun
 ```
 
-Thread preference and Composer override are future layers, not current runtime
-inputs. Workflows is the sole global execution editor; Thread configuration keeps
-only authored context and initial Workflow selection. See
+The default Workflow selection is a user/Space preference, separate from the
+sparse Worker/model/effort configuration. It starts at Chat, cannot point to a
+disabled Workflow, and returns to Chat if the selected default is disabled.
+
+Thread preference remains a future layer. A one-step Composer override is a
+transient current-request input and is never persisted; Workflows remains the
+sole editor for saved execution settings. Thread configuration keeps only
+authored context and initial Workflow selection. See
 [ADR-019](../decisions/ADR-019-per-user-workflow-execution-configuration.md) and
 [User Workflow Configuration v1](../specifications/USER_WORKFLOW_CONFIGURATION_V1.md).
 

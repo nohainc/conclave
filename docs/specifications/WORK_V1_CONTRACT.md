@@ -33,11 +33,11 @@ to the bottom. Work sending (including keyboard submission) stays disabled only
 while AX is preparing or submitting a request. The input remains editable while
 a request is being prepared or executed so the user can draft the next request.
 If a queued, running, or waiting request exists, Send remains available and first
-asks whether to cancel that request before submitting the new one. The composer
-also offers direct cancellation of pending requests. The Workflows editor exposes
+asks whether to cancel that request before submitting the new one. The Workflows editor exposes
 Profile-supported models, custom model IDs when allowed, and model-specific
-efforts. The existing composer displays its Space’s choices without a local
-execution override.
+efforts. For a one-step Workflow, the composer may temporarily override Worker,
+model, and effort for the current request; those choices are never written to
+Space or user Workflow settings.
 
 Thread content is capped at 800 logical pixels per pane. At available widths
 of 1000 pixels or more, Chat and Work appear side by side with a vertical divider;
@@ -805,9 +805,10 @@ required. Existing published profiles remain immutable; adding model catalogs
 requires authoring and publishing a new signed release through Profile Lab.
 
 Chat/Work Worker, model, and effort values sit beside Send as the effective
-Space Workflow configuration. They are display-only in the composer; editing
-belongs to Workflows. Workflow policy and Profile capabilities gate the values
-shown. See
+Space Workflow configuration. One-step Work requests can edit these controls
+for the current request only; multi-step Workflows continue to use their
+configured Space values. Workflow policy and Profile capabilities gate the
+values shown. See
 [dynamic composer](CONVERSATION_CONTINUITY_V1.md#phase-8--dynamic-next-turn-composer).
 
 Work creation pins the authoritative Worker/Profile release, nullable model and
@@ -894,9 +895,10 @@ Definition → User Workflow Configuration → Execution Resolution → Workflow
 StepRun. User preferences belong to neither Space nor Thread. Global defaults and
 sparse fixed-step overrides resolve at acceptance, then Worker/Profile release,
 model, and effort are immutable execution evidence. Reset means Automatic.
-Thread preference and Composer override are future layers; old Thread execution
-fields and `executionSelection` are rejected rather than treated as compatibility
-inputs. Apply v8 migrations 0018 and 0019; historical accepted snapshots are untouched.
+Thread preference remains a future layer. A transient `executionSelection` may be
+submitted only for a one-step Work request; it is capability-validated, overlaid
+at acceptance, and never persisted as a preference. Apply v8 migrations 0018 and
+0019; historical accepted snapshots are untouched.
 
 Space Workflows provides shared execution overrides initialized from its owner's
 global defaults. All Threads use the Space configuration. Saving forks a workflow;

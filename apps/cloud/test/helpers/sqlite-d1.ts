@@ -59,6 +59,8 @@ export function sqliteD1() {
     "0024_space_invitation_identity.sql",
     "0025_remove_invite_members_permission.sql",
     "0026_remove_attach_workspace_permission.sql",
+    "0027_enable_workflow_workspace_workers.sql",
+    "0028_workflow_default_selection.sql",
   ]) {
     sqlite.exec(
       readFileSync(

@@ -28,12 +28,38 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
       throw UnimplementedError('Work Request fixture is not configured');
 
   @override
+  Future<String> createWorkRequestWithSelection({
+    required String threadId,
+    required String workflowId,
+    required String prompt,
+    List<Map<String, dynamic>> attachments = const [],
+    Map<String, dynamic> executionSelection = const {},
+    String? idempotencyKey,
+  }) =>
+      createWorkRequest(
+          threadId: threadId,
+          workflowId: workflowId,
+          prompt: prompt,
+          attachments: attachments,
+          idempotencyKey: idempotencyKey);
+
+  @override
   Future<List<String>> validateWorkRequestEligibility({
     required String threadId,
     required String workflowId,
     List<Map<String, dynamic>> attachments = const [],
   }) async =>
       const [];
+
+  @override
+  Future<List<String>> validateWorkRequestEligibilityWithSelection({
+    required String threadId,
+    required String workflowId,
+    List<Map<String, dynamic>> attachments = const [],
+    Map<String, dynamic> executionSelection = const {},
+  }) =>
+      validateWorkRequestEligibility(
+          threadId: threadId, workflowId: workflowId, attachments: attachments);
 
   @override
   Future<AxConversationHistoryPage> loadConversationHistory(

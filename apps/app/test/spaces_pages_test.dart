@@ -797,8 +797,8 @@ void main() {
         await tester.pumpAndSettle();
         expectPreviousUnchanged();
         expect(find.textContaining('A previous request is still in progress.'),
-            findsOneWidget);
-        expect(find.text('Cancel pending request'), findsOneWidget);
+            findsNothing);
+        expect(find.text('Cancel pending request'), findsNothing);
         expect(
             tester
                 .widget<TextField>(find.byType(TextField).first)
@@ -1363,7 +1363,7 @@ void main() {
     await tester.tap(find.byTooltip('Add attachments'));
     await tester.pumpAndSettle();
     expect(find.text('Add files'), findsOneWidget);
-    expect(find.text('Add link'), findsOneWidget);
+    expect(find.text('Add link'), findsNothing);
     expect(tester.getBottomLeft(find.text('Add files')).dy,
         lessThan(tester.getTopLeft(find.byTooltip('Add attachments')).dy));
     final menu = find

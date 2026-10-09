@@ -123,7 +123,10 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Enabled'),
                           value: enabled,
-                          onChanged: busy
+                          subtitle: widget.definition.id == 'chat'
+                              ? const Text('Chat is always available.')
+                              : null,
+                          onChanged: busy || widget.definition.id == 'chat'
                               ? null
                               : (value) => setState(() => enabled = value)),
                       Text('Default execution',

@@ -437,26 +437,35 @@ it("disabled user workflow cannot create execution even with a composer selectio
   }
 });
 
-it("rejects obsolete composer overrides even without saved global preferences", async () => {
+it("accepts one-step composer overrides without changing saved preferences", async () => {
   const f = fixture();
   try {
-    await expect(
-      handleCreateWorkRequest(
-        new Request("https://cloud.test/work", {
-          method: "POST",
-          body: JSON.stringify({
-            workflowId: "direct",
-            input: { originalRequest: "Request" },
-            executionSelection: { workerId: "worker-a" },
-          }),
+    const response = await handleCreateWorkRequest(
+      new Request("https://cloud.test/work", {
+        method: "POST",
+        headers: { "Idempotency-Key": "composer-selection-000001" },
+        body: JSON.stringify({
+          workflowId: "direct",
+          input: { originalRequest: "Request" },
+          executionSelection: { workerId: "worker-a" },
         }),
-        f.env,
-        "W",
-      ),
-    ).rejects.toMatchObject({ status: 400 });
+      }),
+      f.env,
+      "W",
+    );
+    expect(response.status).toBe(202);
     expect(
-      f.sqlite.prepare("SELECT count(*) n FROM work_requests").get()!.n,
-    ).toBe(0);
+      f.sqlite
+        .prepare("SELECT snapshot_json FROM work_requests")
+        .get()!.snapshot_json,
+    ).toEqual(expect.stringContaining('"workerId":"worker-a"'));
+    expect(
+      f.sqlite
+        .prepare(
+          "SELECT configuration_json FROM user_workflow_configurations WHERE user_id='owner' AND workflow_id='direct'",
+        )
+        .get(),
+    ).toBeUndefined();
   } finally {
     f.sqlite.close();
   }

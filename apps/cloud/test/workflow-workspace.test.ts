@@ -150,6 +150,29 @@ it("requires ownership and confirmation, scopes Workspace selection, resets work
         )
         .get(),
     ).toEqual({ n: 1 });
+    const enabledDirect = JSON.stringify({
+      schemaVersion: 1,
+      workflowId: "direct",
+      enabled: true,
+      defaults: {},
+      stepOverrides: {},
+    });
+    sqlite
+      .prepare(
+        "INSERT INTO user_workflow_configurations VALUES('owner','direct',1,?,'now')",
+      )
+      .run(enabledDirect);
+    sqlite.exec(
+      "INSERT INTO user_workflow_defaults VALUES('owner','direct','now'); INSERT INTO space_workflow_configurations VALUES('s','direct',1,'{\"schemaVersion\":1,\"workflowId\":\"direct\",\"enabled\":false,\"defaults\":{},\"stepOverrides\":{}}','now'); INSERT INTO space_workflow_defaults VALUES('s','direct','now');",
+    );
+    expect(
+      (await loadSpaceWorkflowConfigurations(env, "s")).configurations.find(
+        (value) => value.workflowId === "direct",
+      )?.enabled,
+    ).toBe(false);
+    expect(
+      (await loadSpaceWorkflowConfigurations(env, "s")).defaultWorkflowId,
+    ).toBe("direct");
     sqlite.exec(
       "UPDATE workspace_space_grants SET status='suspended' WHERE space_id='s' AND workspace_id='a'",
     );
@@ -164,6 +187,20 @@ it("requires ownership and confirmation, scopes Workspace selection, resets work
       workspaceId: "b",
       inherited: true,
     });
+    const reset = await loadSpaceWorkflowConfigurations(env, "s");
+    expect(reset.configurations.find((value) => value.workflowId === "direct")?.enabled)
+      .toBe(true);
+    expect(reset.defaultWorkflowId).toBe("direct");
+    expect(
+      sqlite
+        .prepare("SELECT COUNT(*) AS n FROM space_workflow_defaults WHERE space_id='s'")
+        .get(),
+    ).toEqual({ n: 0 });
+    expect(
+      sqlite
+        .prepare("SELECT COUNT(*) AS n FROM space_workflow_configurations WHERE space_id='s'")
+        .get(),
+    ).toEqual({ n: 0 });
   } finally {
     identity.mockRestore();
     sqlite.close();

@@ -27,9 +27,55 @@ class AxWorkflowConfigurations {
           ? await _api.loadWorkflowConfigurations()
           : await _spaceApi.loadSpaceWorkflowConfigurations(spaceId!)));
 
+  late final defaultQuery = AxQuery<String>(
+      key: AxQueryKey(['workflow-default', spaceId ?? 'user']),
+      staleTime: const Duration(minutes: 45),
+      load: () async {
+        final api = source is AxWorkflowDefaultDataSource
+            ? source as AxWorkflowDefaultDataSource
+            : null;
+        if (api == null) return 'chat';
+        return spaceId == null
+            ? api.loadWorkflowDefault()
+            : api.loadSpaceWorkflowDefault(spaceId!);
+      });
+
   Future<List<AxUserWorkflowConfiguration>> ensure() =>
       engine.ensure(query, policy: AxCachePolicy.cacheFirst);
   Future<List<AxUserWorkflowConfiguration>> refresh() => engine.refresh(query);
+  Future<String> ensureDefault() =>
+      engine.ensure(defaultQuery, policy: AxCachePolicy.cacheFirst);
+  Future<String> refreshDefault() => engine.refresh(defaultQuery);
+
+  Future<void> setDefault(String workflowId) async {
+    if (_writeLease != null) {
+      throw StateError('A workflow update is already pending');
+    }
+    final api = source is AxWorkflowDefaultDataSource
+        ? source as AxWorkflowDefaultDataSource
+        : null;
+    if (api == null) throw StateError('Workflow default is unavailable');
+    final epoch = _sessionEpoch;
+    final lease = Object();
+    _writeLease = lease;
+    try {
+      await engine.mutate(AxMutation<String>(
+          query: defaultQuery,
+          execute: () => spaceId == null
+              ? api.saveWorkflowDefault(workflowId)
+              : api.saveSpaceWorkflowDefault(spaceId!, workflowId)));
+      if (epoch != _sessionEpoch) throw const AxMutationSuperseded();
+      if (spaceId == null) {
+        engine.invalidate(AxQueryKey(['workflow-default']), prefix: true);
+        await engine
+            .refreshStaleWhere(
+                (key) => key.startsWith(AxQueryKey(['workflow-default'])))
+            .then<void>((_) {}, onError: (Object _, StackTrace __) {});
+      }
+    } finally {
+      if (identical(_writeLease, lease)) _writeLease = null;
+    }
+  }
 
   AxQueryKey get workspaceKey =>
       AxQueryKey(['workflow-workspace', spaceId ?? 'user']);
@@ -57,8 +103,15 @@ class AxWorkflowConfigurations {
                   workspaceId: workspaceId,
                   inherit: inherit)));
       if (epoch != _sessionEpoch) throw const AxMutationSuperseded();
-      engine.invalidate(queryKey);
-      await refresh();
+      // Workspace changes reset the scoped workflow preferences on Cloud. Drop
+      // the old values before reloading so a successful reset cannot leave a
+      // stale Space default or disabled configuration visible while the new
+      // effective settings are fetched.
+      engine.remove(queryKey);
+      engine.remove(defaultQuery.key);
+      // Refresh both resources independently. A transient configuration read
+      // failure must not prevent the default workflow from being updated.
+      await Future.wait<Object?>([refresh(), refreshDefault()]);
       if (epoch != _sessionEpoch) throw const AxMutationSuperseded();
       if (spaceId == null) {
         engine.invalidate(AxQueryKey(['space-workflow-configurations']),
@@ -82,6 +135,7 @@ class AxWorkflowConfigurations {
     _writeLease = null;
     engine.remove(queryKey);
     engine.remove(workspaceKey);
+    engine.remove(defaultQuery.key);
   }
 
   Future<void> save(AxUserWorkflowConfiguration value) => _write(
@@ -123,10 +177,16 @@ class AxWorkflowConfigurations {
       if (spaceId == null) {
         engine.invalidate(AxQueryKey(['space-workflow-configurations']),
             prefix: true);
+        engine.invalidate(AxQueryKey(['workflow-default']), prefix: true);
         await engine
             .refreshStaleWhere((key) =>
-                key.startsWith(AxQueryKey(['space-workflow-configurations'])))
+                key.startsWith(AxQueryKey(['space-workflow-configurations'])) ||
+                key.startsWith(AxQueryKey(['workflow-default'])))
             .then<void>((_) {}, onError: (Object _, StackTrace __) {});
+      }
+      if (source is AxWorkflowDefaultDataSource) {
+        engine.invalidate(defaultQuery.key);
+        await refreshDefault();
       }
     } finally {
       if (identical(_writeLease, lease)) {

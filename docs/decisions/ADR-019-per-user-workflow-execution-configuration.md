@@ -39,14 +39,15 @@ Retries dispatch the snapshot and cannot silently substitute Worker or Profile.
 Changing preferences, ownership, availability, or current catalog metadata never
 rewrites accepted history.
 
-Workflows is the sole global execution editor. Thread settings retain authored
-context and the initial Workflow selection, with no Worker/model/effort/fallback
-writes or scheduling side effects. The current composer's layout is retained as
-a display of Space choices; it submits authored content and Workflow identity,
-not execution overrides. Global reset resolves Automatic without consulting old
-Thread or composer settings.
+Workflows is the sole editor for saved execution settings. Thread settings retain
+authored context and the initial Workflow selection, with no Worker/model/effort/
+fallback writes or scheduling side effects. For a one-step Workflow, the current
+composer may submit a transient Worker/model/effort selection for that request;
+Cloud validates and snapshots it without changing Space or user settings. Global
+reset resolves Automatic without consulting old Thread or composer settings.
 
-The future extension is explicit and not implemented:
+The future Thread extension is explicit; the one-step composer layer is already
+implemented as a current-request-only overlay:
 
 ```text
 User Workflow Configuration
@@ -55,7 +56,7 @@ Space Workflow Configuration
        ↓
 Thread preference       [future]
        ↓
-Composer override       [future]
+Composer override       [one-step, current request only]
 ```
 
 Both layers can overlay the sparse selection type before execution resolution,

@@ -18,6 +18,7 @@ void main() {
             return http.Response(
                 jsonEncode({
                   'schemaVersion': 1,
+                  'defaultWorkflowId': 'chat',
                   'configurations': [configuration.toJson()]
                 }),
                 200);

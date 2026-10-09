@@ -6,7 +6,7 @@ extension _ThreadActions on _ThreadPageState {
     final submit = widget.onRunWork;
     if (!_canExecute ||
         (text.trim().isEmpty && _workAttachments.isEmpty) ||
-        submit == null ||
+        (submit == null && widget.onRunWorkWithSelection == null) ||
         _submittingWork) {
       return;
     }
@@ -48,6 +48,8 @@ extension _ThreadActions on _ThreadPageState {
         ? 'Please use the attached inputs to complete the request.'
         : text;
     final attachments = List<Map<String, dynamic>>.from(_workAttachments);
+    final executionSelection =
+        Map<String, dynamic>.from(_workExecutionSelection);
     final workflowId = _effectiveWorkflow.split(':').first;
     final workflowVersion =
         int.tryParse(_effectiveWorkflow.split(':v').last) ?? 1;
@@ -71,8 +73,18 @@ extension _ThreadActions on _ThreadPageState {
           workflowName: workflowName,
           requestedByUserId: widget.currentUserId,
           attachments: attachments,
-          execute: (prompt, workflow, inputs, key) =>
-              submit(prompt, workflow, inputs, key));
+          executionSelection: executionSelection,
+          execute: (prompt, workflow, inputs, key) => submit == null
+              ? throw StateError('Work submission is unavailable')
+              : submit(prompt, workflow, inputs, key),
+          executeWithSelection: widget.onRunWorkWithSelection == null
+              ? null
+              : (prompt, workflow, inputs, key, selection) =>
+                  widget.onRunWorkWithSelection!(
+                      prompt, workflow, inputs, key, selection));
+      if (mounted && widget.thread.id == threadId) {
+        _updateState(() => _workExecutionSelection = {});
+      }
     } catch (error) {
       if (!mounted ||
           widget.thread.id != threadId ||
@@ -118,64 +130,6 @@ extension _ThreadActions on _ThreadPageState {
       if (mounted) {
         _updateState(() => _workSubmitError = error.message.toString());
       }
-    }
-  }
-
-  Future<void> _addWorkReference() async {
-    final controller = TextEditingController();
-    final value = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add a link'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: TextInputType.url,
-          decoration: const InputDecoration(hintText: 'https://example.com'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Add link'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (value == null || value.isEmpty) return;
-    if (_workAttachments.length >= 10) {
-      if (mounted) {
-        _updateState(() => _workSubmitError =
-            'A Work Request can include up to 10 attachments.');
-      }
-      return;
-    }
-    final uri = Uri.tryParse(value);
-    if (uri == null ||
-        (uri.scheme != 'https' && uri.scheme != 'http') ||
-        uri.host.isEmpty ||
-        value.length > 2048) {
-      if (mounted) {
-        _updateState(() => _workSubmitError =
-            'Enter a valid http or https link (up to 2,048 characters).');
-      }
-      return;
-    }
-    if (mounted) {
-      _updateState(() => _workAttachments = [
-            ..._workAttachments,
-            {
-              'kind': 'url',
-              'name': uri.host,
-              'url': uri.toString(),
-              'mediaType': 'text/uri-list',
-              'sizeBytes': 0,
-            },
-          ]);
     }
   }
 
