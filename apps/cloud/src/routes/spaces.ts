@@ -893,7 +893,7 @@ export async function handleExpireSpaceInvitation(
     spaceId,
     accessContext,
   );
-  const policy = await requireSpaceOwner(env, context, spaceId);
+  await requireSpaceOwner(env, context, spaceId);
   const existing = await env.CONCLAVE_DB.prepare(
     `SELECT id, email, invitee_user_id AS inviteeUserId FROM space_invitations WHERE id = ?1 AND space_id = ?2 AND status = 'pending'`,
   )

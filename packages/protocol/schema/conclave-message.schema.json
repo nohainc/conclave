@@ -125,6 +125,7 @@
       "thread.deleted",
       "discussion.created",
       "discussion.updated",
+      "discussion.deleted",
       "workspace_space_grant.updated",
       "people.updated"
     ],
@@ -145,6 +146,7 @@
       "thread.deleted",
       "discussion.created",
       "discussion.updated",
+      "discussion.deleted",
       "workspace_space_grant.updated",
       "people.updated"
     ]

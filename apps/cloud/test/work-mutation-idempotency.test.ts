@@ -455,9 +455,8 @@ it("accepts one-step composer overrides without changing saved preferences", asy
     );
     expect(response.status).toBe(202);
     expect(
-      f.sqlite
-        .prepare("SELECT snapshot_json FROM work_requests")
-        .get()!.snapshot_json,
+      f.sqlite.prepare("SELECT snapshot_json FROM work_requests").get()!
+        .snapshot_json,
     ).toEqual(expect.stringContaining('"workerId":"worker-a"'));
     expect(
       f.sqlite

@@ -107,7 +107,7 @@ describe("Workspace aggregate", () => {
         f.grant(`g${i}`, `p${i}`);
       }
       const reads = vi.spyOn(f.db, "prepare");
-      const { workspaces } = await f.list();
+      await f.list();
       expect(reads.mock.calls).toHaveLength(1);
       expect(reads.mock.calls[0]?.[0]).not.toContain(
         "COUNT(DISTINCT g.space_id)",

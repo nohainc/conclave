@@ -270,10 +270,7 @@ it("returns only shared Spaces and authorized invitation destinations, excluding
   ]);
   await handleRemoveSpaceMember(request("a", {}), env, "A", "b");
   expect((await bob()).sharedSpaces).toEqual([]);
-  expect((await bob()).invitableSpaces.map((s) => s.id)).toEqual([
-    "A",
-    "C",
-  ]);
+  expect((await bob()).invitableSpaces.map((s) => s.id)).toEqual(["A", "C"]);
   // A Person's other Spaces are private unless the caller is also a member.
   expect(JSON.stringify(await bob())).not.toContain("Second");
 });

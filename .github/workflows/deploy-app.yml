@@ -1,26 +1,6 @@
 name: Deploy Conclave AX App
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "apps/app/**"
-      - "apps/cloud/**"
-      - "packages/core/**"
-      - "packages/protocol/**"
-      - "packages/security/**"
-      - "packages/workspace-runtime-protocol/**"
-      - "packages/tool-profile/**"
-      - "packages/dart/protocol/**"
-      - "packages/conclave_design/**"
-      - "infra/cloudflare/app.wrangler.jsonc"
-      - "scripts/production-workspace-gateway-smoke*"
-      - "scripts/migrate-production-d1.sh"
-      - "scripts/verify-production-security.mjs"
-      - "scripts/assert-no-browser-secrets.mjs"
-      - "pnpm-lock.yaml"
-      - "package.json"
-      - ".github/workflows/deploy-app.yml"
   workflow_dispatch:
 
 concurrency:

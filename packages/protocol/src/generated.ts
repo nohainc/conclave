@@ -65,6 +65,7 @@ export const COLLABORATION_REALTIME_EVENT_TYPES = [
   "thread.deleted",
   "discussion.created",
   "discussion.updated",
+  "discussion.deleted",
   "workspace_space_grant.updated",
   "people.updated",
 ] as const;
@@ -98,6 +99,7 @@ export const DURABLE_REALTIME_EVENT_TYPES = [
   "thread.deleted",
   "discussion.created",
   "discussion.updated",
+  "discussion.deleted",
   "workspace_space_grant.updated",
   "people.updated",
 ] as const;

@@ -66,18 +66,18 @@ it("authenticates actual human sessions and isolates GET/PUT/DELETE ownership", 
       handleWorkflowConfigurations(
         request("PUT", "one", { ...configuration(false), userId: "two" }),
         env,
-        "chat",
+        "direct",
       ),
     ).rejects.toMatchObject({ status: 400 });
     await handleWorkflowConfigurations(
       request("PUT", "one", configuration(false)),
       env,
-      "chat",
+      "direct",
     );
-    await handleWorkflowConfigurations(request("DELETE", "one"), env, "chat");
+    await handleWorkflowConfigurations(request("DELETE", "one"), env, "direct");
     expect(
       await (
-        await handleWorkflowConfigurations(request("GET", "two"), env, "chat")
+        await handleWorkflowConfigurations(request("GET", "two"), env, "direct")
       ).json(),
     ).toMatchObject({ configurations: [configuration(false)] });
     expect(
@@ -90,7 +90,7 @@ it("authenticates actual human sessions and isolates GET/PUT/DELETE ownership", 
           stepOverrides: { invented: { effort: "high" } },
         }),
         env,
-        "chat",
+        "direct",
       ),
     ).rejects.toMatchObject({ status: 400 });
   } finally {

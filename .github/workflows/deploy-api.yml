@@ -1,23 +1,6 @@
 name: Deploy Conclave Cloud API
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "apps/cloud/**"
-      - "packages/core/**"
-      - "packages/protocol/**"
-      - "packages/security/**"
-      - "packages/workspace-runtime-protocol/**"
-      - "packages/tool-profile/**"
-      - "infra/cloudflare/app.wrangler.jsonc"
-      - "scripts/production-workspace-gateway-smoke*"
-      - "scripts/migrate-production-d1.sh"
-      - "scripts/verify-production-security.mjs"
-      - "scripts/deploy-api.sh"
-      - "pnpm-lock.yaml"
-      - "package.json"
-      - ".github/workflows/deploy-api.yml"
   workflow_dispatch:
 
 concurrency:

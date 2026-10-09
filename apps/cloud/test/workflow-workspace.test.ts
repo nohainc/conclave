@@ -188,17 +188,23 @@ it("requires ownership and confirmation, scopes Workspace selection, resets work
       inherited: true,
     });
     const reset = await loadSpaceWorkflowConfigurations(env, "s");
-    expect(reset.configurations.find((value) => value.workflowId === "direct")?.enabled)
-      .toBe(true);
+    expect(
+      reset.configurations.find((value) => value.workflowId === "direct")
+        ?.enabled,
+    ).toBe(true);
     expect(reset.defaultWorkflowId).toBe("direct");
     expect(
       sqlite
-        .prepare("SELECT COUNT(*) AS n FROM space_workflow_defaults WHERE space_id='s'")
+        .prepare(
+          "SELECT COUNT(*) AS n FROM space_workflow_defaults WHERE space_id='s'",
+        )
         .get(),
     ).toEqual({ n: 0 });
     expect(
       sqlite
-        .prepare("SELECT COUNT(*) AS n FROM space_workflow_configurations WHERE space_id='s'")
+        .prepare(
+          "SELECT COUNT(*) AS n FROM space_workflow_configurations WHERE space_id='s'",
+        )
         .get(),
     ).toEqual({ n: 0 });
   } finally {

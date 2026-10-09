@@ -40,9 +40,7 @@ export function parseWorkflowExecutionSelection(
     ...(Object.hasOwn(object, "workerId")
       ? { workerId: stringOrNull("workerId") }
       : {}),
-    ...(Object.hasOwn(object, "model")
-      ? { model: stringOrNull("model") }
-      : {}),
+    ...(Object.hasOwn(object, "model") ? { model: stringOrNull("model") } : {}),
     ...(Object.hasOwn(object, "reasoningEffort")
       ? { reasoningEffort: stringOrNull("reasoningEffort") }
       : {}),
