@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
 import 'package:conclave_workspace/workspace.dart';
 import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/workspace_lifecycle.dart';
@@ -11,6 +12,7 @@ import 'package:conclave_workspace/workspace_manager_service.dart';
 /// Headless Workspace service entry point. It imports only the Dart runtime
 /// graph; Flutter is used by the separate desktop management application.
 Future<void> main(List<String> args) async {
+  setCurrentProcessName('conclave-service');
   final dataDirectory = WorkspaceConfig.resolveDataDirectory(args);
   final preferenceStore = WorkspaceLifecyclePreferencesStore(dataDirectory);
   final registration = WorkspaceRegistrationStore(dataDirectory).readSync();

@@ -38,6 +38,10 @@ The service is a standalone Dart executable (`conclave-service`) and keeps the
 generic Engine as a separately supervised child (`conclave-agent`). The service
 holds the per-installation lock, owns process cleanup, and is the only runtime
 owner. Closing Workspace.app closes its IPC client and does not stop execution.
+At startup the compiled Dart processes set their macOS diagnostic names to
+those product names. This affects only Activity Monitor/process diagnostics;
+it does not change the executable, IPC protocol, Workspace credentials, or
+Cloud authentication.
 
 ## Lifecycle and state
 
@@ -160,7 +164,9 @@ The two app paths are materialized copies for their bundles, not independent
 source artifacts. `scripts/build-workspace.sh` is the cross-platform entry
 point; `scripts/build-workspace-macos.sh` assembles the signed macOS app and
 LaunchAgent; `scripts/build-workspace-service.sh` builds the standalone service
-for focused development; `scripts/check-workspace-service.sh` and
+for focused development; `scripts/run-workspace-service.sh` launches that
+compiled executable by default and reserves `--source` for Dart debugging;
+`scripts/check-workspace-service.sh` and
 `scripts/verify-workspace-service-bundle.sh` validate the service package.
 Signing and launchd checks are release/device evidence and cannot be replaced
 by a successful Dart compile.

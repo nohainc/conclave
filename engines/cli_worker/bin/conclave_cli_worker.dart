@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
 import '../lib/src/cli_worker_engine.dart';
 
 Future<void> main(List<String> arguments) async {
+  setCurrentProcessName('conclave-agent');
   try {
     final options = EngineOptions.parse(arguments);
     await CliWorkerEngine(options: options).run();

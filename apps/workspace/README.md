@@ -81,8 +81,15 @@ management shell connects through this protocol and does not create or control
 an in-process execution runtime. See the canonical architecture document for
 the command surface, ownership map, and validation gates.
 
-For development, `scripts/run-workspace-service.sh` runs the headless process
+For development, first run `scripts/build-workspace-service.sh`, then
+`scripts/run-workspace-service.sh` starts the compiled `conclave-service`
 against the existing local configuration without building the Flutter app.
+Use `scripts/run-workspace-service.sh --source` only when debugging Dart source
+directly; that mode intentionally appears as a Dart VM process.
+Compiled service and Engine processes set their macOS diagnostic names at
+startup, so Activity Monitor shows `conclave-service` and `conclave-agent`
+instead of the Dart runtime prefix. This changes only the local display name;
+IPC, Workspace credentials, and Cloud authentication are unchanged.
 `scripts/check-workspace-service.sh` compiles it and runs a one-shot lifecycle
 in temporary directories; the Workspace CI validation invokes the same check.
 The per-installation lock rejects a second service process that attempts to
