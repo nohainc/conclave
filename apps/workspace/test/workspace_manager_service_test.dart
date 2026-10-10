@@ -10,6 +10,37 @@ import 'package:conclave_workspace/workspace_manager_service.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('snapshot separates service health from persisted Cloud intent',
+      () async {
+    final root = await Directory('/tmp').createTemp('ws-state-');
+    addTearDown(() => root.delete(recursive: true));
+    final preferences = WorkspaceLifecyclePreferencesStore(root);
+    await preferences.write(const WorkspaceLifecyclePreferences(
+      desiredCloudState: DesiredCloudConnectionState.connected,
+      launchAtLogin: false,
+      managementLockPreference: ManagementLockState.unlocked,
+    ));
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse('https://cloud.example.test'),
+      workspaceRuntimeId: 'runtime-test',
+      workspaceId: 'workspace-test',
+      factory: (_) async => throw StateError('fixture must stay disconnected'),
+    );
+    addTearDown(connection.close);
+    final workspace = Workspace(
+      config: WorkspaceConfig(dataDirectory: root),
+      cloudConnection: connection,
+    );
+    final manager = WorkspaceManagerService(workspace);
+    final state = await manager.snapshot();
+    final service = (state['service'] as Map).cast<String, Object?>();
+    final cloud = (state['cloud'] as Map).cast<String, Object?>();
+    expect(service['serviceHealthy'], isFalse);
+    expect(cloud['desiredConnectionState'], 'connected');
+    expect(cloud['connected'], isFalse);
+    expect(cloud['acceptingNewWork'], isFalse);
+  });
+
   test(
       'prepareStop drains Cloud admission while process shutdown stays host-owned',
       () async {

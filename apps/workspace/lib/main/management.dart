@@ -55,9 +55,6 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
         facts: facts,
         expectedOwnerUserId: session.userId,
       );
-      if (preferences.launchAtLogin) {
-        await lifecycle.ensureBackgroundService();
-      }
       await preferenceStore.write(WorkspaceLifecyclePreferences(
         desiredRuntime: DesiredRuntimeState.disconnected,
         launchAtLogin: preferences.launchAtLogin,
@@ -68,8 +65,12 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
         customWorkspaceName: workspaceName,
         workRootPath: preferences.workRootPath,
       ));
-      await lifecycle.ensureBackgroundService();
-      await lifecycle.request('configuration.reload');
+      // Cloud ownership registration does not start the local service. If a
+      // service is already running, ask it to reload the persisted identity;
+      // otherwise the user can start it explicitly from Workspace Service.
+      if (lifecycle.running) {
+        await lifecycle.request('configuration.reload');
+      }
       if (mounted) {
         _updateState(() => _workerRevision++);
         ScaffoldMessenger.of(context).showSnackBar(

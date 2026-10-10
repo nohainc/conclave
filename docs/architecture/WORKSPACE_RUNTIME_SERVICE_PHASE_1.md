@@ -91,13 +91,27 @@ An offline Cloud connection does not mean the service process has failed.
 
 ## Service controls and display cache
 
-Workspace.app exposes Start Service / Stop Service using the host manager.
-`service.prepareStop` is an additive IPC command: it pauses assignment admission,
-drains for the existing bounded grace period, and closes Cloud transport. A
-failed drain resumes admission and reports `assignments_active`; process
-termination remains exclusively a host-management operation. The UI verifies
-IPC disconnect before reporting a successful stop. Start enables login startup;
-Stop disables it. macOS approval-required responses identify Login Items.
+Workspace.app presents separate Workspace Service and Conclave Cloud sections.
+Register/start/stop/restart/unregister and process inspection use the host
+manager. Once the service is usable, Cloud connect/disconnect/reconnect,
+Worker operations, configuration, and diagnostics use authenticated IPC; the
+UI does not reach into runtime objects directly. A stopped service leaves Cloud
+controls informational and directs the user to start the service first.
+Registration, process launch, and IPC readiness are separate operations:
+`register`, `start`, `stop`, `restart`, and `unregister`. `service.prepareStop`
+is an additive IPC command: it pauses assignment admission, drains for the
+existing bounded grace period, and closes Cloud transport. A failed drain
+resumes admission and reports `assignments_active`; process termination remains
+exclusively a host-management operation. The UI verifies both the launchd
+process transition and IPC disconnect before reporting a successful stop. Stop
+does not unregister the service or rewrite persisted Cloud intent; Unregister
+is a separate host operation. macOS approval-required responses identify Login
+Items.
+
+The shared `WorkspaceServiceInfo` model reports registration, process state,
+PID, version, last exit details, and IPC state without inferring process health
+from registration alone. A launchd failure is surfaced immediately when its
+exit reason is available instead of waiting for an IPC timeout.
 
 UI snapshots expose service process state separately from Cloud connection.
 The app does not own a Cloud execution WebSocket or HTTP fallback client.
@@ -125,8 +139,10 @@ Flutter disposes failed initial manager clients and subscriptions, including
 their reconnect loop, before permitting a fresh attachment attempt. A single
 in-flight attempt prevents duplicate management clients. Retries reread the
 capability key; established IPC connections retain their existing reconnect
-behavior. Startup timeout means local attachment failed, not proof of process
-failure. Sanitized host status and IPC diagnostics remain visible in the
-management UI. Regression tests use real Unix sockets for delayed key/socket
-readiness, rejected handshakes, concurrent starts, timeout, and attaching to an
-already running service without re-registering it.
+behavior. The manager explicitly requests launchd startup after registration,
+observes the process state, and then waits for the authenticated IPC handshake.
+A launchd failure stops immediately with its exit reason; only a still-starting
+process reaches the bounded IPC timeout. Sanitized host status and IPC
+diagnostics remain visible in the management UI. Regression tests use real Unix
+sockets for delayed key/socket readiness, rejected handshakes, concurrent
+starts, timeout, and attaching to an already running service.

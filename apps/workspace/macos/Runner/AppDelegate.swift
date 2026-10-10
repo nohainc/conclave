@@ -5,6 +5,7 @@ import LocalAuthentication
 
 private enum WorkspaceBackgroundService {
   static let launchAgentPlist = "com.conclaveax.workspace.service.plist"
+  static let launchAgentLabel = "com.conclaveax.workspace.service"
   static let helperRelativePath = "Contents/Helpers/conclave-service"
 
   @available(macOS 13.0, *)
@@ -13,13 +14,17 @@ private enum WorkspaceBackgroundService {
   }
 
   static func registeredProcessIsRunning() throws -> Bool {
-    return try launchdStatus()["launchdState"] as? String == "running"
+    return (try launchdStatus()["launchdState"] as? String) == "running"
+  }
+
+  static var launchdTarget: String {
+    "gui/\(getuid())/\(launchAgentLabel)"
   }
 
   static func launchdStatus() throws -> [String: Any] {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-    process.arguments = ["print", "gui/\(getuid())/com.conclaveax.workspace.service"]
+    process.arguments = ["print", launchdTarget]
     let output = Pipe()
     process.standardOutput = output
     process.standardError = output
@@ -34,6 +39,116 @@ private enum WorkspaceBackgroundService {
           "Could not verify whether the registered service is running. Open Login Items to inspect its status."])
     }
     return parseWorkspaceLaunchdStatus(text)
+  }
+
+  static func runLaunchctl(_ arguments: [String]) throws {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+    process.arguments = arguments
+    let output = Pipe()
+    process.standardOutput = output
+    process.standardError = output
+    try process.run()
+    let data = output.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else {
+      let message = String(data: data, encoding: .utf8)?.trimmingCharacters(
+        in: .whitespacesAndNewlines) ?? "launchctl failed"
+      throw NSError(
+        domain: "ConclaveWorkspaceService",
+        code: Int(process.terminationStatus),
+        userInfo: [NSLocalizedDescriptionKey: message]
+      )
+    }
+  }
+
+  static func processState(_ launchd: [String: Any]) -> String {
+    switch launchd["launchdState"] as? String {
+    case "running": return "running"
+    case "starting": return "starting"
+    case "stopping": return "stopping"
+    case "stopped", "not running":
+      return launchd["lastExitReason"] != nil ? "failed" : "stopped"
+    default: return "unknown"
+    }
+  }
+
+  @available(macOS 13.0, *)
+  static func validateBundle() throws {
+    let helperURL = Bundle.main.bundleURL.appendingPathComponent(helperRelativePath)
+    let plistURL = Bundle.main.bundleURL
+      .appendingPathComponent("Contents/Library/LaunchAgents")
+      .appendingPathComponent(launchAgentPlist)
+    guard FileManager.default.isExecutableFile(atPath: helperURL.path),
+          FileManager.default.fileExists(atPath: plistURL.path) else {
+      throw NSError(
+        domain: "ConclaveWorkspaceService",
+        code: 2,
+        userInfo: [NSLocalizedDescriptionKey:
+          "The Workspace Service helper or LaunchAgent manifest is missing."]
+      )
+    }
+    guard workspaceServiceHasTrustedSignature(helperURL) else {
+      throw NSError(
+        domain: "ConclaveWorkspaceService",
+        code: 3,
+        userInfo: [NSLocalizedDescriptionKey:
+          "The Workspace Service helper does not have a trusted Apple signature. Rebuild with an Apple signing identity."]
+      )
+    }
+  }
+
+  @available(macOS 13.0, *)
+  static func registerService() throws -> [String: Any] {
+    try validateBundle()
+    if service.status == .enabled {
+      // Re-import a stopped registration so updates replace a stale embedded
+      // BundleProgram. Registration itself does not request a launch.
+      if !(try registeredProcessIsRunning()) {
+        try service.unregister()
+        try service.register()
+      }
+    } else {
+      try service.register()
+    }
+    return status()
+  }
+
+  @available(macOS 13.0, *)
+  static func startService() throws -> [String: Any] {
+    try validateBundle()
+    guard service.status == .enabled else {
+      throw NSError(
+        domain: "ConclaveWorkspaceService",
+        code: 4,
+        userInfo: [NSLocalizedDescriptionKey:
+          "The Workspace Service is not registered. Register it before starting it."]
+      )
+    }
+    if !(try registeredProcessIsRunning()) {
+      // Explicitly ask launchd to start the already-registered agent. This is
+      // intentionally separate from SMAppService.register().
+      try runLaunchctl(["kickstart", launchdTarget])
+    }
+    return status()
+  }
+
+  @available(macOS 13.0, *)
+  static func stopService() throws -> [String: Any] {
+    if try registeredProcessIsRunning() {
+      try runLaunchctl(["kill", "SIGTERM", launchdTarget])
+    }
+    return status()
+  }
+
+  @available(macOS 13.0, *)
+  static func restartService() throws -> [String: Any] {
+    try validateBundle()
+    if service.status != .enabled {
+      _ = try registerService()
+    }
+    try runLaunchctl(["kickstart", "-k", launchdTarget])
+    return status()
   }
 
   static func status() -> [String: Any] {
@@ -52,6 +167,7 @@ private enum WorkspaceBackgroundService {
         "running": false,
         "helperPresent": FileManager.default.isExecutableFile(atPath: helperURL.path),
         "plistPresent": FileManager.default.fileExists(atPath: plistURL.path),
+        "launchSupported": false,
       ]
     }
     let registration: String
@@ -70,16 +186,20 @@ private enum WorkspaceBackgroundService {
     // SMAppService reports registration/approval, not whether launchd has
     // started the process. Keep that distinction explicit for the UI.
     let launchd = (try? launchdStatus()) ?? ["launchdState": "unknown"]
+    let launchSupported = workspaceServiceHasTrustedSignature(helperURL)
     return [
       "supported": true,
       "registration": registration,
       "launchdState": launchd["launchdState"] ?? "unknown",
+      "process": processState(launchd),
+      "pid": launchd["pid"] ?? NSNull(),
+      "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") ?? NSNull(),
+      "ipc": "unavailable",
       "lastExitCode": launchd["lastExitCode"] ?? NSNull(),
       "lastExitReason": launchd["lastExitReason"] ?? NSNull(),
-      "running": NSNull(),
-      "runningStatus": "checkIpc",
       "helperPresent": true,
       "plistPresent": true,
+      "launchSupported": launchSupported,
     ]
   }
 }
@@ -183,36 +303,15 @@ class AppDelegate: FlutterAppDelegate {
         DispatchQueue.main.async {
           NSApp.terminate(nil)
         }
-      case "getServiceStatus":
+      case "getServiceInfo", "getServiceStatus":
         result(WorkspaceBackgroundService.status())
       case "registerService":
         guard #available(macOS 13.0, *) else {
           result(FlutterError(code: "unsupported_os", message: "The background service requires macOS 13 or later.", details: nil))
           return
         }
-        let helperURL = Bundle.main.bundleURL.appendingPathComponent(WorkspaceBackgroundService.helperRelativePath)
-        guard FileManager.default.isExecutableFile(atPath: helperURL.path) else {
-          result(FlutterError(code: "service_missing", message: "The Workspace background service is missing from this app installation.", details: helperURL.path))
-          return
-        }
         do {
-          // launchd rejects ad-hoc helpers before Dart or IPC can start.
-          guard workspaceServiceHasTrustedSignature(helperURL) else {
-            result(FlutterError(code: "service_signing_required",
-              message: "macOS cannot start this background service because its signature is not trusted. Rebuild Workspace with an Apple signing identity using --sign. Ad-hoc builds can open the UI but cannot run the background service.", details: nil))
-            return
-          }
-          if WorkspaceBackgroundService.service.status == .enabled {
-            // An update may leave launchd with the previous BundleProgram.
-            // Refresh only a stopped job; never interrupt a running runtime.
-            if !(try WorkspaceBackgroundService.registeredProcessIsRunning()) {
-              try WorkspaceBackgroundService.service.unregister()
-              try WorkspaceBackgroundService.service.register()
-            }
-          } else {
-            try WorkspaceBackgroundService.service.register()
-          }
-          result(WorkspaceBackgroundService.status())
+          result(try WorkspaceBackgroundService.registerService())
         } catch {
           result(FlutterError(code: "service_registration_failed", message: error.localizedDescription, details: WorkspaceBackgroundService.status()))
         }
@@ -228,6 +327,36 @@ class AppDelegate: FlutterAppDelegate {
           result(WorkspaceBackgroundService.status())
         } catch {
           result(FlutterError(code: "service_unregistration_failed", message: error.localizedDescription, details: WorkspaceBackgroundService.status()))
+        }
+      case "startService":
+        guard #available(macOS 13.0, *) else {
+          result(FlutterError(code: "unsupported_os", message: "The background service requires macOS 13 or later.", details: nil))
+          return
+        }
+        do {
+          result(try WorkspaceBackgroundService.startService())
+        } catch {
+          result(FlutterError(code: "service_start_failed", message: error.localizedDescription, details: WorkspaceBackgroundService.status()))
+        }
+      case "stopService":
+        guard #available(macOS 13.0, *) else {
+          result(FlutterError(code: "unsupported_os", message: "The background service requires macOS 13 or later.", details: nil))
+          return
+        }
+        do {
+          result(try WorkspaceBackgroundService.stopService())
+        } catch {
+          result(FlutterError(code: "service_stop_failed", message: error.localizedDescription, details: WorkspaceBackgroundService.status()))
+        }
+      case "restartService":
+        guard #available(macOS 13.0, *) else {
+          result(FlutterError(code: "unsupported_os", message: "The background service requires macOS 13 or later.", details: nil))
+          return
+        }
+        do {
+          result(try WorkspaceBackgroundService.restartService())
+        } catch {
+          result(FlutterError(code: "service_restart_failed", message: error.localizedDescription, details: WorkspaceBackgroundService.status()))
         }
       case "openLoginItemsSettings":
         guard #available(macOS 13.0, *) else {

@@ -62,4 +62,52 @@ void main() {
     expect(unknown.lastExitCode, isNull);
     expect(unknown.lastExitReason, isNull);
   });
+
+  test('ServiceInfo separates registration, process, and IPC state', () {
+    final info = WorkspaceServiceInfo.fromNative(const {
+      'supported': true,
+      'registration': 'registered',
+      'launchdState': 'not running',
+      'lastExitReason': 'OS_REASON_CODESIGNING',
+      'pid': 42831,
+      'version': '1.0.3',
+      'ipc': 'failed',
+      'launchSupported': false,
+    });
+    expect(info.registered, isTrue);
+    expect(info.process, WorkspaceServiceProcessStatus.failed);
+    expect(info.ipc, WorkspaceServiceIpcStatus.failed);
+    expect(info.processRunning, isFalse);
+    expect(info.ipcReady, isFalse);
+    expect(info.serviceHealthy, isFalse);
+    expect(info.pid, 42831);
+    expect(info.version, '1.0.3');
+    expect(info.launchFailed, isTrue);
+    expect(info.launchSupported, isFalse);
+  });
+
+  test('healthy service is independent from Cloud connectivity', () {
+    const info = WorkspaceServiceInfo(
+      registration: WorkspaceBackgroundServiceRegistration.registered,
+      supported: true,
+      helperPresent: true,
+      plistPresent: true,
+      process: WorkspaceServiceProcessStatus.running,
+      ipc: WorkspaceServiceIpcStatus.ready,
+    );
+    expect(info.processRunning, isTrue);
+    expect(info.ipcReady, isTrue);
+    expect(info.serviceHealthy, isTrue);
+  });
+
+  test('ad-hoc development bundles cannot claim launchd support', () {
+    final info = WorkspaceServiceInfo.fromNative(const {
+      'supported': true,
+      'registration': 'notRegistered',
+      'helperPresent': true,
+      'plistPresent': true,
+      'launchSupported': false,
+    });
+    expect(info.launchSupported, isFalse);
+  });
 }

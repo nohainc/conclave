@@ -9,20 +9,22 @@ import 'package:flutter_test/flutter_test.dart';
 
 class _HostManager implements WorkspaceServiceManager {
   int registrations = 0;
+  int starts = 0;
   Future<void> Function()? onRegistration;
+  WorkspaceServiceInfo info = const WorkspaceServiceInfo(
+    registration: WorkspaceBackgroundServiceRegistration.registered,
+    supported: true,
+    helperPresent: true,
+    plistPresent: true,
+    launchdState: 'stopped',
+  );
   @override
-  Future<WorkspaceBackgroundServiceStatus> status() async =>
-      const WorkspaceBackgroundServiceStatus(
-        registration: WorkspaceBackgroundServiceRegistration.registered,
-        supported: true,
-        helperPresent: true,
-        plistPresent: true,
-        launchdState: 'running',
-        lastExitCode: 7,
-        lastExitReason: 'OS_REASON_CODESIGNING',
-      );
+  Future<WorkspaceServiceInfo> getInfo() async => info;
+
   @override
-  Future<WorkspaceBackgroundServiceStatus> register() async {
+  Future<WorkspaceServiceInfo> status() => getInfo();
+  @override
+  Future<WorkspaceServiceInfo> register() async {
     registrations++;
     final action = onRegistration;
     if (action != null) unawaited(action());
@@ -30,7 +32,18 @@ class _HostManager implements WorkspaceServiceManager {
   }
 
   @override
-  Future<WorkspaceBackgroundServiceStatus> unregister() => status();
+  Future<WorkspaceServiceInfo> unregister() => getInfo();
+  @override
+  Future<WorkspaceServiceInfo> start() async {
+    starts++;
+    return info;
+  }
+
+  @override
+  Future<WorkspaceServiceInfo> stop() => getInfo();
+
+  @override
+  Future<WorkspaceServiceInfo> restart() => getInfo();
   @override
   Future<void> openSettings() async {}
 }
@@ -156,6 +169,7 @@ void main() {
       await lifecycle.ensureBackgroundService();
       expect(lifecycle.running, isTrue);
       expect(host.registrations, 1);
+      expect(host.starts, 1);
     } finally {
       await starting;
       await lifecycle.quit();
@@ -165,6 +179,16 @@ void main() {
 
   test('never-ready service reports an IPC timeout and operational diagnostics',
       () async {
+    host.info = const WorkspaceServiceInfo(
+      registration: WorkspaceBackgroundServiceRegistration.registered,
+      supported: true,
+      helperPresent: true,
+      plistPresent: true,
+      launchdState: 'running',
+      process: WorkspaceServiceProcessStatus.running,
+      lastExitCode: 7,
+      lastExitReason: 'OS_REASON_CODESIGNING',
+    );
     await expectLater(
         lifecycle.ensureBackgroundService(),
         throwsA(isA<TimeoutException>().having((error) => error.message,
@@ -182,17 +206,70 @@ void main() {
         containsPair('Service exit reason', 'OS_REASON_CODESIGNING'));
     expect(lifecycle.uiSnapshot.issue, contains('Last IPC error:'));
     expect(lifecycle.uiSnapshot.issue, isNot(contains('did not start')));
-    expect(host.registrations, 1);
+    expect(host.registrations, 0);
+    expect(host.starts, 1);
+  });
+
+  test('launchd failure is reported before waiting for an IPC timeout',
+      () async {
+    host.info = const WorkspaceServiceInfo(
+      registration: WorkspaceBackgroundServiceRegistration.registered,
+      supported: true,
+      helperPresent: true,
+      plistPresent: true,
+      launchdState: 'not running',
+      process: WorkspaceServiceProcessStatus.failed,
+      lastExitCode: 9,
+      lastExitReason: 'OS_REASON_CODESIGNING',
+    );
+
+    await expectLater(
+      lifecycle.ensureBackgroundService(),
+      throwsA(isA<StateError>().having(
+        (error) => error.message,
+        'message',
+        contains('OS_REASON_CODESIGNING'),
+      )),
+    );
+    expect(host.starts, 1);
+    expect(lifecycle.uiSnapshot.serviceInfo.process,
+        WorkspaceServiceProcessStatus.failed);
+  });
+
+  test('unsigned development bundle explains why launchd cannot start it',
+      () async {
+    host.info = const WorkspaceServiceInfo(
+      registration: WorkspaceBackgroundServiceRegistration.notRegistered,
+      supported: true,
+      helperPresent: true,
+      plistPresent: true,
+      launchSupported: false,
+    );
+    await expectLater(
+      lifecycle.ensureBackgroundService(),
+      throwsA(isA<StateError>().having(
+        (error) => error.message,
+        'message',
+        contains('not signed for macOS background service execution'),
+      )),
+    );
+    expect(host.registrations, 0);
+    expect(host.starts, 0);
   });
 
   test('already-running service attaches without native registration',
       () async {
+    host.info = host.info.copyWith(
+      launchdState: 'running',
+      process: WorkspaceServiceProcessStatus.running,
+    );
     final service = server();
     await service.start();
     try {
       await lifecycle.ensureBackgroundService();
       expect(lifecycle.running, isTrue);
       expect(host.registrations, 0);
+      expect(host.starts, 0);
     } finally {
       await lifecycle.quit();
       await service.close();

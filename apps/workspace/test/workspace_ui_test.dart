@@ -12,6 +12,7 @@ import 'package:conclave_workspace/tool_profile_catalog.dart';
 import 'package:conclave_workspace/tool_profile_release_store.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
 import 'package:conclave_workspace/worker_catalog_coordinator.dart';
+import 'package:conclave_workspace/workspace_background_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter/services.dart';
@@ -223,11 +224,16 @@ void main() {
     WidgetTester tester,
     WorkspaceUiSnapshot snapshot, {
     Future<void> Function()? onStartService,
+    Future<void> Function()? onRegisterService,
+    Future<void> Function()? onUnregisterService,
+    Future<void> Function()? onRestartService,
     Future<void> Function([String? name])? onRegister,
     Future<void> Function()? onStopService,
     Future<void> Function()? onRelease,
     VoidCallback? onReset,
     Future<void> Function([String? name])? onRecoverCredential,
+    Future<void> Function()? onConnectCloud,
+    Future<void> Function()? onDisconnectCloud,
     Future<void> Function(String name)? onChangeWorkspaceName,
     VoidCallback? onAccountAction,
     Future<void> Function()? onSignIn,
@@ -306,8 +312,13 @@ void main() {
           body: WorkspaceDashboard(
             snapshot: snapshot,
             onStartService: onStartService,
+            onRegisterService: onRegisterService,
+            onUnregisterService: onUnregisterService,
+            onRestartService: onRestartService,
             onRegister: onRegister,
             onRecoverCredential: onRecoverCredential,
+            onConnectCloud: onConnectCloud,
+            onDisconnectCloud: onDisconnectCloud,
             onChangeWorkspaceName: onChangeWorkspaceName,
             onStopService: onStopService,
             onRelease: onRelease,
@@ -881,7 +892,7 @@ void main() {
     );
 
     expect(find.text('Network unavailable'), findsOneWidget);
-    expect(find.text('Cloud: Offline'), findsOneWidget);
+    expect(find.text('Cloud: Disconnected'), findsOneWidget);
     expect(find.text('Retry service startup'), findsOneWidget);
     expect(find.text('Start Service'), findsOneWidget);
     expect(find.byTooltip('Copy error message'), findsOneWidget);
@@ -958,6 +969,105 @@ void main() {
     expect(find.text('Current Work'), findsNothing);
     expect(find.text('View Workers'), findsNothing);
     expect(find.bySemanticsLabel('Workspace status'), findsNothing);
+  });
+
+  testWidgets('service manager separates host lifecycle from Cloud controls',
+      (tester) async {
+    var registerServiceCalls = 0;
+    var startServiceCalls = 0;
+    var unregisterServiceCalls = 0;
+    await pumpDashboard(
+      tester,
+      const WorkspaceUiSnapshot(
+        mode: WorkspaceUiMode.offline,
+        title: 'Workspace is offline',
+        detail: 'The Workspace service is stopped.',
+        registered: true,
+        workspaceName: 'Development Mac',
+        serviceInfo: WorkspaceServiceInfo(
+          registration: WorkspaceBackgroundServiceRegistration.registered,
+          supported: true,
+          helperPresent: true,
+          plistPresent: true,
+          process: WorkspaceServiceProcessStatus.stopped,
+          ipc: WorkspaceServiceIpcStatus.unavailable,
+        ),
+      ),
+      signedIn: true,
+      onRegisterService: () async => registerServiceCalls++,
+      onStartService: () async => startServiceCalls++,
+      onUnregisterService: () async => unregisterServiceCalls++,
+    );
+
+    expect(find.text('Workspace Service'), findsOneWidget);
+    expect(find.text('Conclave Cloud'), findsOneWidget);
+    expect(find.text('Start Service'), findsOneWidget);
+    expect(find.text('Unregister'), findsOneWidget);
+    expect(
+        find.text(
+            'Start the Workspace Service to manage the Cloud connection.'),
+        findsOneWidget);
+    expect(find.text('Connect'), findsNothing);
+
+    await tester.tap(find.text('Start Service'));
+    await tester.tap(find.text('Unregister'));
+    expect(startServiceCalls, 1);
+    expect(unregisterServiceCalls, 1);
+    expect(registerServiceCalls, 0);
+
+    await pumpDashboard(
+      tester,
+      const WorkspaceUiSnapshot(
+        mode: WorkspaceUiMode.ready,
+        title: 'Workspace is ready',
+        detail: 'The Workspace service is running.',
+        registered: true,
+        workspaceName: 'Development Mac',
+        cloudConnected: true,
+        serviceRunning: true,
+        serviceInfo: WorkspaceServiceInfo(
+          registration: WorkspaceBackgroundServiceRegistration.registered,
+          supported: true,
+          helperPresent: true,
+          plistPresent: true,
+          process: WorkspaceServiceProcessStatus.running,
+          ipc: WorkspaceServiceIpcStatus.ready,
+        ),
+      ),
+      signedIn: true,
+      onStopService: () async {},
+      onRestartService: () async {},
+      onDisconnectCloud: () async {},
+    );
+    expect(find.text('Stop Service'), findsOneWidget);
+    expect(find.text('Restart'), findsOneWidget);
+    expect(find.text('Disconnect'), findsOneWidget);
+    expect(find.text('Connect'), findsNothing);
+  });
+
+  testWidgets('unregistered host exposes Register Service separately',
+      (tester) async {
+    var registerCalls = 0;
+    await pumpDashboard(
+      tester,
+      const WorkspaceUiSnapshot(
+        mode: WorkspaceUiMode.firstLaunch,
+        title: 'Connect this Workspace',
+        detail: 'Register the local service.',
+        serviceInfo: WorkspaceServiceInfo(
+          registration: WorkspaceBackgroundServiceRegistration.notRegistered,
+          supported: true,
+          helperPresent: true,
+          plistPresent: true,
+        ),
+      ),
+      signedIn: true,
+      onRegisterService: () async => registerCalls++,
+    );
+    expect(find.text('Not installed'), findsOneWidget);
+    expect(find.text('Register Service'), findsOneWidget);
+    await tester.tap(find.text('Register Service'));
+    expect(registerCalls, 1);
   });
 
   testWidgets('header overflow menu provides AX, updates, and about',
@@ -2166,7 +2276,7 @@ void main() {
       calls++;
       return stopped.future;
     });
-    expect(find.text('Service running · Cloud offline'), findsOneWidget);
+    expect(find.text('Service running · Cloud disconnected'), findsOneWidget);
     expect(find.text('Start Service'), findsNothing);
     await tester.tap(find.text('Stop Service'));
     await tester.pump();

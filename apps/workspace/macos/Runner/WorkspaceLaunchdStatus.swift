@@ -15,6 +15,8 @@ func parseWorkspaceLaunchdStatus(_ text: String) -> [String: Any] {
       result["lastExitCode"] = Int(value.dropFirst("last exit code = ".count))
     } else if value.hasPrefix("last exit reason = ") {
       result["lastExitReason"] = String(value.dropFirst("last exit reason = ".count))
+    } else if value.hasPrefix("pid = ") {
+      result["pid"] = Int(value.dropFirst("pid = ".count))
     }
   }
   return result

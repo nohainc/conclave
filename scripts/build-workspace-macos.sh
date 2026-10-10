@@ -195,7 +195,12 @@ if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
     "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
   codesign --verify --deep --strict --verbose=2 "$APP"
 else
-  echo "CONCLAVE_MACOS_SIGN_IDENTITY is not set; sealing the development bundle with ad-hoc signatures."
+  if [[ "$MODE" == "debug" ]]; then
+    echo "No Apple signing identity was supplied; this is a UI-only debug bundle."
+    echo "The Workspace Service controls will explain that launchd execution is unavailable."
+  else
+    echo "CONCLAVE_MACOS_SIGN_IDENTITY is not set; sealing the development bundle with ad-hoc signatures."
+  fi
   codesign --force --sign - \
     "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
   codesign --force --sign - "$HELPERS_DIR/conclave-service"

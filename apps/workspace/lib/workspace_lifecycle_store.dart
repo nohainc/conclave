@@ -24,7 +24,9 @@ class WorkspaceLifecyclePreferencesStore {
       final version = decoded['schemaVersion'];
       if (version is int && version >= currentSchemaVersion) return false;
       return _parseDesiredRuntime(
-            decoded['desiredRuntimeState'] ?? decoded['desiredRuntime'],
+            decoded['desiredCloudState'] ??
+                decoded['desiredRuntimeState'] ??
+                decoded['desiredRuntime'],
           ) ==
           null;
     } on Object {
@@ -41,7 +43,9 @@ class WorkspaceLifecyclePreferencesStore {
       return _preferencesFromMap(
         map,
         desiredRuntime: _parseDesiredRuntime(
-              map['desiredRuntimeState'] ?? map['desiredRuntime'],
+              map['desiredCloudState'] ??
+                  map['desiredRuntimeState'] ??
+                  map['desiredRuntime'],
             ) ??
             DesiredRuntimeState.disconnected,
       );
@@ -78,7 +82,9 @@ class WorkspaceLifecyclePreferencesStore {
     if (version is int && version >= currentSchemaVersion) return false;
 
     final legacyDesired = _parseDesiredRuntime(
-      decoded['desiredRuntimeState'] ?? decoded['desiredRuntime'],
+      decoded['desiredCloudState'] ??
+          decoded['desiredRuntimeState'] ??
+          decoded['desiredRuntime'],
     );
     final preferences = _preferencesFromMap(
       decoded,
@@ -100,7 +106,11 @@ class WorkspaceLifecyclePreferencesStore {
       await temporary.writeAsString(
         jsonEncode({
           'schemaVersion': currentSchemaVersion,
-          'desiredRuntimeState': preferences.desiredRuntime.name,
+          // desiredCloudState is the authoritative name. Keep the older
+          // desiredRuntimeState key during the local-file migration window so
+          // older Workspace services continue to understand the intent.
+          'desiredCloudState': preferences.desiredCloudState.name,
+          'desiredRuntimeState': preferences.desiredCloudState.name,
           'launchAtLogin': preferences.launchAtLogin,
           'managementLockPreference': preferences.managementLockPreference.name,
           if (preferences.autoLockTimeout != null)

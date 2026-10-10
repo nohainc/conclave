@@ -99,6 +99,16 @@ class WorkspaceManagerService {
       }
     }
     final activeIds = connection?.activeAssignmentIds ?? const <String>[];
+    final preferences = WorkspaceLifecyclePreferencesStore(
+      workspace.config.dataDirectory,
+    ).readSync();
+    final processRunning = workspace.isRunning;
+    final ipcReady = true;
+    final connectionStage = connection?.connectionStage;
+    final authenticated = connectionStage == WorkspaceConnectionStage.ready ||
+        connectionStage == WorkspaceConnectionStage.synchronizing ||
+        connectionStage == WorkspaceConnectionStage.switchingToWebSocket;
+    final synchronized = connection?.lastInventorySyncAt != null;
     final journalRecords =
         await connection?.assignmentJournal?.reconcile() ?? const {};
     final recoveryRequired = journalRecords.values
@@ -114,12 +124,18 @@ class WorkspaceManagerService {
           .compareTo(right['assignmentId']! as String));
     return {
       'service': {
+        // A service snapshot only exists after the process has been launched;
+        // host registration remains authoritative in WorkspaceServiceInfo.
+        'registered': processRunning,
         'processState': state['processState'] ??
             (workspace.isRunning ? 'ready' : 'stopped'),
         'startedAt': state['startedAt'],
         'version': conclaveWorkspaceAppVersion,
         'installationId': workspace.installationId,
         'uptimeSeconds': _serviceUptimeSeconds(state),
+        'processRunning': processRunning,
+        'ipcReady': ipcReady,
+        'serviceHealthy': processRunning && ipcReady,
       },
       'cloud': {
         'state': WorkspaceServiceState.cloudStateFor(
@@ -129,8 +145,13 @@ class WorkspaceManagerService {
           stage: connection?.connectionStage,
         ).name,
         'connected': connection?.isConnected ?? false,
+        'desiredConnectionState': preferences.desiredCloudState.name,
+        'connectionStage': connectionStage?.name ?? 'offline',
+        'authenticated': authenticated,
+        'synchronized': synchronized,
         'transport': connection?.activeTransportMode,
-        'acceptingNewWork': connection?.acceptingNewWork ?? false,
+        'acceptingNewWork': connection?.isConnected == true &&
+            connection?.acceptingNewWork == true,
         'lastError': connection?.lastConnectionError,
         'reconnectCount': connection?.reconnectCount ?? 0,
         'lastInventorySyncAt':
@@ -306,7 +327,7 @@ class WorkspaceManagerService {
             command == 'connection.connect') {
           return snapshot();
         }
-        await _setDesiredRuntime(DesiredRuntimeState.connected);
+        await _setDesiredCloudState(DesiredCloudConnectionState.connected);
         connection.resumeNewWork();
         await connection.retryNow();
         return snapshot();
@@ -324,7 +345,7 @@ class WorkspaceManagerService {
         return snapshot();
       case 'connection.disconnect':
         if (connection == null) {
-          await _setDesiredRuntime(DesiredRuntimeState.disconnected);
+          await _setDesiredCloudState(DesiredCloudConnectionState.disconnected);
           return snapshot();
         }
         final drained = await _drainAssignments(connection);
@@ -336,7 +357,7 @@ class WorkspaceManagerService {
           );
         }
         await connection.close();
-        await _setDesiredRuntime(DesiredRuntimeState.disconnected);
+        await _setDesiredCloudState(DesiredCloudConnectionState.disconnected);
         return snapshot();
       case 'connection.pause':
         connection?.pauseNewWork();
@@ -452,6 +473,7 @@ class WorkspaceManagerService {
         }
         return worker.toJson();
       case 'workers.testWorker':
+      case 'worker.test':
         final workerId = payload['workerId'];
         if (workerId is! String || registry == null) {
           throw const WorkspaceManagerProtocolException(
@@ -547,11 +569,12 @@ class WorkspaceManagerService {
     }
   }
 
-  Future<void> _setDesiredRuntime(DesiredRuntimeState desired) async {
+  Future<void> _setDesiredCloudState(
+      DesiredCloudConnectionState desired) async {
     final store = WorkspaceLifecyclePreferencesStore(
       workspace.config.dataDirectory,
     );
-    await store.write(store.readSync().copyWith(desiredRuntime: desired));
+    await store.write(store.readSync().copyWith(desiredCloudState: desired));
   }
 
   Future<void> _reloadRuntime() async {
@@ -576,11 +599,11 @@ class WorkspaceManagerService {
       final replacement = await rebuild();
       final desired = WorkspaceLifecyclePreferencesStore(
         replacement.config.dataDirectory,
-      ).readSync().desiredRuntime;
+      ).readSync().desiredCloudState;
       await replacement.start(connectCloud: false);
       _workspace = replacement;
       _bindWorkspaceEvents(replacement);
-      if (desired == DesiredRuntimeState.connected) {
+      if (desired == DesiredCloudConnectionState.connected) {
         // Completing configuration reload means the local runtime is ready,
         // not that Cloud is reachable. Its transport owns retry/backoff.
         unawaited(replacement.cloudConnection?.connect().catchError(

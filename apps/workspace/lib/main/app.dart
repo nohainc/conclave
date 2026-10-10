@@ -143,34 +143,95 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
   Future<void> _startWorkspaceService() async {
     final lifecycle = widget.lifecycle;
     try {
-      final registration =
-          WorkspaceRegistrationStore(lifecycle.config.dataDirectory).readSync();
-      if (registration == null) {
-        await _registerWorkspace();
-      }
-      final currentRegistration =
-          WorkspaceRegistrationStore(lifecycle.config.dataDirectory).readSync();
-      if (currentRegistration == null) return;
-      if ((await lifecycle.credentialStore
-                  .read(currentRegistration.workspaceRuntimeId))
-              ?.isNotEmpty !=
-          true) {
-        await _connectWorkspace();
-      } else {
-        final store =
-            WorkspaceLifecyclePreferencesStore(lifecycle.config.dataDirectory);
-        await store.write(store.readSync().copyWith(
-              desiredRuntime: DesiredRuntimeState.connected,
-              launchAtLogin: true,
-            ));
-        await lifecycle.ensureBackgroundService();
-        await lifecycle.request('configuration.reload');
-      }
+      // Starting the local service is deliberately independent from Cloud.
+      // The service restores the user's persisted Cloud intent itself after
+      // its IPC endpoint becomes ready.
+      await lifecycle.ensureBackgroundService();
       if (mounted) setState(() {});
     } on Object catch (error) {
       final context = _navigatorKey.currentContext;
       if (mounted && context != null) {
         showCopyableErrorSnackBar(context, 'Could not start service: $error');
+      }
+    }
+  }
+
+  Future<void> _registerWorkspaceService() async {
+    try {
+      await widget.lifecycle.registerService();
+      if (mounted) setState(() {});
+    } on Object catch (error) {
+      final context = _navigatorKey.currentContext;
+      if (mounted && context != null) {
+        showCopyableErrorSnackBar(
+            context, 'Could not register service: $error');
+      }
+    }
+  }
+
+  Future<void> _unregisterWorkspaceService() async {
+    try {
+      await widget.lifecycle.unregisterService();
+      if (mounted) setState(() {});
+    } on Object catch (error) {
+      final context = _navigatorKey.currentContext;
+      if (mounted && context != null) {
+        showCopyableErrorSnackBar(
+          context,
+          'Could not unregister service: $error',
+        );
+      }
+    }
+  }
+
+  Future<void> _restartWorkspaceService() async {
+    try {
+      await widget.lifecycle.restartService();
+      if (mounted) setState(() {});
+    } on Object catch (error) {
+      final context = _navigatorKey.currentContext;
+      if (mounted && context != null) {
+        showCopyableErrorSnackBar(context, 'Could not restart service: $error');
+      }
+    }
+  }
+
+  Future<void> _connectCloudThroughService() async {
+    try {
+      final registration = WorkspaceRegistrationStore(
+        widget.lifecycle.config.dataDirectory,
+      ).readSync();
+      if (registration == null ||
+          (await widget.lifecycle.credentialStore
+                      .read(registration.workspaceRuntimeId))
+                  ?.isNotEmpty !=
+              true) {
+        // Authentication and credential recovery remain a management concern;
+        // the actual Cloud connection is still opened by the service over IPC.
+        await _connectWorkspace();
+      } else {
+        await widget.lifecycle.connectCloud();
+      }
+      if (mounted) setState(() {});
+    } on Object catch (error) {
+      final context = _navigatorKey.currentContext;
+      if (mounted && context != null) {
+        showCopyableErrorSnackBar(context, 'Could not connect Cloud: $error');
+      }
+    }
+  }
+
+  Future<void> _disconnectCloudThroughService() async {
+    try {
+      await widget.lifecycle.disconnectCloud();
+      if (mounted) setState(() {});
+    } on Object catch (error) {
+      final context = _navigatorKey.currentContext;
+      if (mounted && context != null) {
+        showCopyableErrorSnackBar(
+          context,
+          'Could not disconnect Cloud: $error',
+        );
       }
     }
   }
@@ -725,8 +786,13 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       onSignIn: _signInDesktopHuman,
       onSignOut: _signOutDesktopHuman,
       onStartService: _startWorkspaceService,
+      onRegisterService: _registerWorkspaceService,
+      onUnregisterService: _unregisterWorkspaceService,
+      onRestartService: _restartWorkspaceService,
       onRegister: _registerWorkspace,
       onRecoverCredential: ([name]) => _connectWorkspace(name: name),
+      onConnectCloud: _connectCloudThroughService,
+      onDisconnectCloud: _disconnectCloudThroughService,
       onChangeWorkspaceName: _changeWorkspaceName,
       onStopService: _stopWorkspaceService,
       onRelease: _releaseWorkspaceOwnership,

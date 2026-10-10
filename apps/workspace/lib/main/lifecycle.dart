@@ -39,6 +39,24 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     if (initialManagerSnapshot != null) {
       _managerSnapshot = initialManagerSnapshot;
       _managerConnected = true;
+      final service = initialManagerSnapshot['service'];
+      final processState =
+          service is Map ? service['processState']?.toString() : null;
+      _serviceInfo = _serviceInfo.copyWith(
+        process: switch (processState) {
+          'ready' => WorkspaceServiceProcessStatus.running,
+          'starting' ||
+          'initializing' =>
+            WorkspaceServiceProcessStatus.starting,
+          'stopping' => WorkspaceServiceProcessStatus.stopping,
+          'stopped' => WorkspaceServiceProcessStatus.stopped,
+          'failed' => WorkspaceServiceProcessStatus.failed,
+          _ => WorkspaceServiceProcessStatus.unknown,
+        },
+        ipc: processState == 'ready'
+            ? WorkspaceServiceIpcStatus.ready
+            : WorkspaceServiceIpcStatus.unavailable,
+      );
     }
     _managerRetryTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (!_closed && !_managerConnected) unawaited(_connectToManager());
@@ -52,6 +70,12 @@ class WorkspaceLifecycleController extends ChangeNotifier {
   Future<void>? _managerConnectAttempt;
   Object? _lastIpcError;
   Map<String, String> _serviceDiagnostics = const {};
+  WorkspaceServiceInfo _serviceInfo = const WorkspaceServiceInfo(
+    registration: WorkspaceBackgroundServiceRegistration.unknown,
+    supported: false,
+    helperPresent: false,
+    plistPresent: false,
+  );
   final SecureCredentialStore credentialStore;
   bool _hidden = false;
   bool _quitting = false;
@@ -78,18 +102,15 @@ class WorkspaceLifecycleController extends ChangeNotifier {
   static const WorkspaceServiceManager _serviceManager =
       MethodChannelWorkspaceServiceManager();
 
-  static Future<WorkspaceBackgroundServiceStatus>
-      getBackgroundServiceStatus() async {
-    return _serviceManager.status();
+  static Future<WorkspaceServiceInfo> getBackgroundServiceStatus() async {
+    return _serviceManager.getInfo();
   }
 
-  static Future<WorkspaceBackgroundServiceStatus>
-      registerBackgroundService() async {
+  static Future<WorkspaceServiceInfo> registerBackgroundService() async {
     return _serviceManager.register();
   }
 
-  static Future<WorkspaceBackgroundServiceStatus>
-      unregisterBackgroundService() async {
+  static Future<WorkspaceServiceInfo> unregisterBackgroundService() async {
     return _serviceManager.unregister();
   }
 
@@ -114,38 +135,104 @@ class WorkspaceLifecycleController extends ChangeNotifier {
 
   Future<void> ensureBackgroundService() async {
     _serviceDiagnostics = const {};
-    var status = await _hostServiceManager.status();
-    if (!status.supported) {
+    var info = await _hostServiceManager.getInfo();
+    _serviceInfo = info;
+    if (!info.supported) {
       throw UnsupportedError(
         'Background service management is unavailable on this platform.',
       );
     }
+    if (!info.launchSupported) {
+      throw StateError(
+        'This Workspace build is not signed for macOS background service execution. '
+        'Build with an Apple signing identity or use the UI-only debug mode.',
+      );
+    }
     await _connectToManager();
-    if (_managerConnected) return;
-    // The host refreshes stale/stopped registrations, never a running job.
-    status = await _hostServiceManager.register();
-    if (status.registration ==
+    if (_managerConnected) {
+      _serviceInfo = _serviceInfo.copyWith(
+        process: WorkspaceServiceProcessStatus.running,
+        ipc: WorkspaceServiceIpcStatus.ready,
+      );
+      return;
+    }
+    if (info.registration ==
         WorkspaceBackgroundServiceRegistration.approvalRequired) {
       throw StateError(
           'Approve Conclave Workspace in System Settings → General → Login Items, then start the service again.');
     }
+    try {
+      if (!info.registered ||
+          info.process != WorkspaceServiceProcessStatus.running) {
+        info = await _hostServiceManager.register();
+        _serviceInfo = info;
+      }
+      if (!info.launchSupported) {
+        throw StateError(
+          'This Workspace build is not signed for macOS background service execution. '
+          'Build with an Apple signing identity or use the UI-only debug mode.',
+        );
+      }
+      if (info.registration ==
+          WorkspaceBackgroundServiceRegistration.approvalRequired) {
+        throw StateError(
+            'Approve Conclave Workspace in System Settings → General → Login Items, then start the service again.');
+      }
+      if (!info.registered) {
+        throw StateError(
+            'Workspace Service could not be registered (${info.registration.name}).');
+      }
+      // Registration and process launch are separate host operations. The
+      // explicit start call returns immediately; IPC readiness is proven in
+      // the loop below.
+      info = await _hostServiceManager.start();
+      _serviceInfo = info.copyWith(ipc: WorkspaceServiceIpcStatus.starting);
+    } catch (error) {
+      _recordServiceFailure(_serviceInfo, error);
+      rethrow;
+    }
     final deadline = DateTime.now().add(startupTimeout);
     while (!_managerConnected && DateTime.now().isBefore(deadline)) {
       await _connectToManager();
+      if (_managerConnected) {
+        _serviceInfo = _serviceInfo.copyWith(
+          process: WorkspaceServiceProcessStatus.running,
+          ipc: WorkspaceServiceIpcStatus.ready,
+        );
+        return;
+      }
+      try {
+        info = await _hostServiceManager.getInfo();
+        _serviceInfo = info.copyWith(ipc: WorkspaceServiceIpcStatus.starting);
+        if (info.launchFailed) {
+          final error = StateError(_serviceFailureMessage(info));
+          _recordServiceFailure(info, error);
+          throw error;
+        }
+      } catch (error) {
+        if (error is StateError &&
+            error.toString().startsWith('Bad state: Workspace Service')) {
+          rethrow;
+        }
+        _lastIpcError = error;
+      }
       if (!_managerConnected) {
         await Future<void>.delayed(startupRetryDelay);
       }
     }
     if (!_managerConnected) {
       try {
-        status = await _hostServiceManager.status();
+        info = await _hostServiceManager.getInfo();
+        _serviceInfo = info.copyWith(ipc: WorkspaceServiceIpcStatus.failed);
       } on Object {
         // Preserve the connection failure if host inspection also fails.
       }
       final runtime = WorkspacePaths(config.dataDirectory).runtimeDirectory;
       _serviceDiagnostics = {
-        'Registration': status.registration.name,
-        'launchd': status.launchdState,
+        'Registration': _serviceInfo.registration.name,
+        'Process': _serviceInfo.process.name,
+        'launchd': _serviceInfo.launchdState,
+        if (_serviceInfo.pid != null) 'PID': '${_serviceInfo.pid}',
         'IPC key': await File('${runtime.path}/manager-ipc.key').exists()
             ? 'Found'
             : 'Missing',
@@ -157,10 +244,10 @@ class WorkspaceLifecycleController extends ChangeNotifier {
             : 'Missing',
         'IPC connection': 'Unavailable',
         'Last IPC error': _lastIpcError?.toString() ?? 'Unknown',
-        if (status.lastExitCode != null)
-          'Service exit code': '${status.lastExitCode}',
-        if (status.lastExitReason != null)
-          'Service exit reason': status.lastExitReason!,
+        if (_serviceInfo.lastExitCode != null)
+          'Service exit code': '${_serviceInfo.lastExitCode}',
+        if (_serviceInfo.lastExitReason != null)
+          'Service exit reason': _serviceInfo.lastExitReason!,
       };
       final error = TimeoutException(
         'Workspace Service was registered, but Workspace could not connect to it.\n'
@@ -171,6 +258,108 @@ class WorkspaceLifecycleController extends ChangeNotifier {
       notifyListeners();
       throw error;
     }
+  }
+
+  WorkspaceServiceInfo get serviceInfo => _serviceInfo;
+
+  Future<WorkspaceServiceInfo> getServiceInfo() async {
+    _serviceInfo = await _hostServiceManager.getInfo();
+    notifyListeners();
+    return _serviceInfo;
+  }
+
+  Future<WorkspaceServiceInfo> registerService() async {
+    _serviceInfo = await _hostServiceManager.register();
+    notifyListeners();
+    return _serviceInfo;
+  }
+
+  Future<WorkspaceServiceInfo> startService() async {
+    _serviceInfo = await _hostServiceManager.start();
+    notifyListeners();
+    return _serviceInfo;
+  }
+
+  Future<WorkspaceServiceInfo> restartService() async {
+    if (_managerConnected) {
+      await request('service.prepareStop',
+          timeout: const Duration(seconds: 20));
+    }
+    await _closeManagerConnection();
+    _serviceInfo = await _hostServiceManager.restart();
+    _serviceInfo = _serviceInfo.copyWith(
+      process: WorkspaceServiceProcessStatus.starting,
+      ipc: WorkspaceServiceIpcStatus.starting,
+    );
+    notifyListeners();
+
+    final deadline = DateTime.now().add(startupTimeout);
+    while (DateTime.now().isBefore(deadline)) {
+      await _connectToManager();
+      if (_managerConnected) {
+        _serviceInfo = _serviceInfo.copyWith(
+          process: WorkspaceServiceProcessStatus.running,
+          ipc: WorkspaceServiceIpcStatus.ready,
+        );
+        notifyListeners();
+        return _serviceInfo;
+      }
+      final info = await _hostServiceManager.getInfo();
+      _serviceInfo = info.copyWith(ipc: WorkspaceServiceIpcStatus.starting);
+      if (info.launchFailed) {
+        final error = StateError(_serviceFailureMessage(info));
+        _recordServiceFailure(info, error);
+        throw error;
+      }
+      await Future<void>.delayed(startupRetryDelay);
+    }
+    _serviceInfo = _serviceInfo.copyWith(ipc: WorkspaceServiceIpcStatus.failed);
+    final error = TimeoutException(
+      'Workspace Service restarted, but its IPC endpoint did not become ready.',
+    );
+    _recordServiceFailure(_serviceInfo, error);
+    throw error;
+  }
+
+  Future<WorkspaceServiceInfo> unregisterService() async {
+    _serviceInfo = await _hostServiceManager.unregister();
+    notifyListeners();
+    return _serviceInfo;
+  }
+
+  Future<void> connectCloud() async {
+    await request('connection.connect');
+    notifyListeners();
+  }
+
+  Future<void> disconnectCloud() async {
+    await request('connection.disconnect');
+    notifyListeners();
+  }
+
+  String _serviceFailureMessage(WorkspaceServiceInfo info) {
+    final reason = info.lastExitReason;
+    return reason == null
+        ? 'Workspace Service failed before IPC became ready.'
+        : 'Workspace Service failed before IPC became ready: $reason';
+  }
+
+  void _recordServiceFailure(WorkspaceServiceInfo info, Object error) {
+    _serviceInfo = info.copyWith(ipc: WorkspaceServiceIpcStatus.failed);
+    _serviceDiagnostics = {
+      'Registration': info.registration.name,
+      'Process': info.process.name,
+      'launchd': info.launchdState,
+      if (info.pid != null) 'PID': '${info.pid}',
+      if (info.lastExitCode != null)
+        'Service exit code': '${info.lastExitCode}',
+      if (info.lastExitReason != null)
+        'Service exit reason': info.lastExitReason!,
+      'IPC connection': 'Unavailable',
+      'Error': error.toString(),
+    };
+    _startupError = error;
+    notifyListeners();
   }
 
   bool get hidden => _hidden;
@@ -269,6 +458,9 @@ class WorkspaceLifecycleController extends ChangeNotifier {
         if (identical(_manager, connection)) _manager = null;
         if (identical(_managerEvents, events)) _managerEvents = null;
         _managerConnected = false;
+        _serviceInfo = _serviceInfo.copyWith(
+          ipc: WorkspaceServiceIpcStatus.failed,
+        );
         _lastIpcError = error;
         if (_serviceDiagnostics.isEmpty) {
           _startupError = error;
@@ -289,6 +481,9 @@ class WorkspaceLifecycleController extends ChangeNotifier {
         _managerConnected = event['connected'] == true;
         if (!_managerConnected) {
           _startupError = 'Workspace service disconnected.';
+          _serviceInfo = _serviceInfo.copyWith(
+            ipc: WorkspaceServiceIpcStatus.unavailable,
+          );
           _managerSnapshot = const {};
         }
         break;
@@ -339,12 +534,26 @@ class WorkspaceLifecycleController extends ChangeNotifier {
 
   void _acceptSnapshot(Map<String, Object?> snapshot) {
     _managerSnapshot = snapshot;
+    final service = snapshot['service'];
+    if (service is Map) {
+      final startedAt =
+          DateTime.tryParse(service['startedAt']?.toString() ?? '');
+      final version = service['version']?.toString();
+      _serviceInfo = _serviceInfo.copyWith(
+        startedAt: startedAt,
+        version: version == null || version.isEmpty ? null : version,
+      );
+    }
     final workerCatalogSnapshot = snapshot['workerCatalog'];
     if (workerCatalogSnapshot is Map) {
       workerCatalog
           .acceptSnapshot(Map<String, Object?>.from(workerCatalogSnapshot));
     }
     _managerConnected = true;
+    _serviceInfo = _serviceInfo.copyWith(
+      process: WorkspaceServiceProcessStatus.running,
+      ipc: WorkspaceServiceIpcStatus.ready,
+    );
     _startupError = null;
     _publishMenuStatus();
   }
@@ -500,8 +709,8 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
             ? 'Connected'
             : WorkspaceLifecyclePreferencesStore(config.dataDirectory)
                         .readSync()
-                        .desiredRuntime ==
-                    DesiredRuntimeState.connected
+                        .desiredCloudState ==
+                    DesiredCloudConnectionState.connected
                 ? 'Connecting'
                 : 'Disconnected';
     unawaited(_desktopChannel.invokeMethod<void>('status', {
@@ -517,7 +726,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
           ManagementLockState.locked,
       'reauthRequired': _managementAuthRequired,
       'runtimeRunning': cloudMap['connected'] == true,
-      'serviceRunning': running,
+      'serviceRunning': uiSnapshot.serviceHealthy,
     }).catchError((_) {}));
   }
 
@@ -537,18 +746,43 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
     final assignmentsMap =
         assignments is Map ? assignments : const <String, Object?>{};
     final processState = serviceMap['processState']?.toString();
-    final cloudState = running ? cloudMap['state']?.toString() : null;
-    final stage = switch (cloudState) {
-      'connecting' => WorkspaceConnectionStage.connecting,
-      'reconnecting' => WorkspaceConnectionStage.reconnecting,
-      'connected' => WorkspaceConnectionStage.ready,
-      _ => WorkspaceConnectionStage.offline,
-    };
+    final serviceProcessRunning = serviceMap['processRunning'] == true ||
+        processState == 'ready' ||
+        _serviceInfo.process == WorkspaceServiceProcessStatus.running;
+    final serviceIpcReady = serviceMap['ipcReady'] == true ||
+        _managerConnected ||
+        _serviceInfo.ipc == WorkspaceServiceIpcStatus.ready;
+    final serviceHealthy = serviceMap['serviceHealthy'] == true ||
+        (serviceProcessRunning && serviceIpcReady);
+    final cloudState = cloudMap['state']?.toString();
+    final stage = !serviceProcessRunning
+        ? WorkspaceConnectionStage.offline
+        : switch (cloudMap['connectionStage']?.toString() ?? cloudState) {
+            'validating' => WorkspaceConnectionStage.validating,
+            'connecting' => WorkspaceConnectionStage.connecting,
+            'authenticating' => WorkspaceConnectionStage.authenticating,
+            'synchronizing' => WorkspaceConnectionStage.synchronizing,
+            'switchingToWebSocket' =>
+              WorkspaceConnectionStage.switchingToWebSocket,
+            'reconnecting' => WorkspaceConnectionStage.reconnecting,
+            'connected' || 'ready' => WorkspaceConnectionStage.ready,
+            _ => WorkspaceConnectionStage.offline,
+          };
     final activeCount = assignmentsMap['activeCount'] is int
         ? assignmentsMap['activeCount'] as int
         : 0;
-    final connected = running && cloudMap['connected'] == true;
-    final desired = preferences.desiredRuntime == DesiredRuntimeState.connected;
+    final connected = serviceProcessRunning && cloudMap['connected'] == true;
+    final desired = (cloudMap['desiredConnectionState']?.toString() ??
+            preferences.desiredCloudState.name) ==
+        DesiredCloudConnectionState.connected.name;
+    final authenticated = cloudMap['authenticated'] == true;
+    final synchronized = cloudMap['synchronized'] == true;
+    final acceptingWork = cloudMap['acceptingNewWork'] == true;
+    final cloudConnecting = stage == WorkspaceConnectionStage.validating ||
+        stage == WorkspaceConnectionStage.connecting ||
+        stage == WorkspaceConnectionStage.authenticating ||
+        stage == WorkspaceConnectionStage.synchronizing ||
+        stage == WorkspaceConnectionStage.switchingToWebSocket;
     final registrationPresent = registration != null;
     final runtimeId = workspaceMap['workspaceRuntimeId']?.toString() ??
         registration?.workspaceRuntimeId;
@@ -559,52 +793,60 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
         registration?.name ??
         resolveFriendlyComputerNameSync();
     final error = cloudMap['lastError']?.toString();
-    final mode = !_managerConnected || processState == 'stopped'
+    final mode = !_managerConnected || !serviceProcessRunning
         ? WorkspaceUiMode.offline
         : !registrationPresent
             ? WorkspaceUiMode.firstLaunch
-            : stage == WorkspaceConnectionStage.connecting ||
-                    stage == WorkspaceConnectionStage.reconnecting
+            : cloudConnecting || stage == WorkspaceConnectionStage.reconnecting
                 ? WorkspaceUiMode.starting
                 : activeCount > 0
                     ? WorkspaceUiMode.active
-                    : connected
+                    : serviceHealthy
                         ? WorkspaceUiMode.ready
                         : WorkspaceUiMode.offline;
     final status = !_managerConnected
         ? 'Service unavailable'
         : connected
-            ? (cloudMap['acceptingNewWork'] == true ? 'Connected' : 'Paused')
-            : cloudState == 'connecting'
+            ? (acceptingWork ? 'Connected' : 'Paused')
+            : cloudConnecting
                 ? 'Connecting'
                 : cloudState == 'reconnecting'
                     ? 'Reconnecting'
                     : cloudState == 'authenticationRequired'
                         ? 'Authentication required'
-                        : 'Offline';
+                        : serviceHealthy
+                            ? 'Cloud disconnected'
+                            : 'Offline';
     return WorkspaceUiSnapshot(
       mode: mode,
       serviceDiagnostics: _serviceDiagnostics,
+      serviceInfo: _serviceInfo,
       desiredRuntimeConnected: desired,
       title: !_managerConnected
           ? 'Workspace Service is unavailable'
           : !registrationPresent
               ? 'Register this Workspace'
-              : connected
-                  ? (activeCount > 0
-                      ? 'Work in progress'
-                      : 'Workspace is ready')
+              : serviceHealthy
+                  ? connected
+                      ? (activeCount > 0
+                          ? 'Work in progress'
+                          : 'Workspace is ready')
+                      : 'Workspace Service is running'
                   : 'Workspace is offline',
       detail: !_managerConnected
           ? 'Start the background service to manage this Workspace.'
           : !registrationPresent
               ? 'Sign in to register this computer with Conclave.'
-              : connected
-                  ? (activeCount > 0
-                      ? 'The background service is running assigned work.'
-                      : 'This computer is registered and ready to run assigned work.')
-                  : 'The background service is running, but Cloud is disconnected.',
-      issue: !_managerConnected ? _startupError?.toString() : error,
+              : serviceHealthy
+                  ? connected
+                      ? (activeCount > 0
+                          ? 'The background service is running assigned work.'
+                          : 'This computer is registered and ready to run assigned work.')
+                      : 'The background service is healthy, but Cloud is disconnected.'
+                  : 'The background service is not running.',
+      issue: !_managerConnected || !serviceHealthy
+          ? _startupError?.toString()
+          : null,
       workspaceName: workspaceName,
       workspaceId: workspaceId,
       installationId:
@@ -612,7 +854,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       workspaceRuntimeId: runtimeId,
       hostname: registration?.hostname ?? Platform.localHostname,
       cloudUrl: workspaceMap['cloudUrl']?.toString() ?? registration?.cloudUrl,
-      workRootPath: running
+      workRootPath: serviceHealthy
           ? workspaceMap['workRoot']?.toString() ?? config.workRootPath
           : preferences.workRootPath ??
               config.workRootPath ??
@@ -620,8 +862,16 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       registered: registrationPresent || workspaceId != null,
       ownerUserId: registration?.ownerUserId,
       workspaceReady: connected,
-      serviceRunning: running,
+      serviceRunning: serviceHealthy,
       cloudConnected: connected,
+      serviceProcessRunning: serviceProcessRunning,
+      serviceIpcReady: serviceIpcReady,
+      serviceHealthy: serviceHealthy,
+      desiredCloudConnected: desired,
+      cloudAuthenticated: authenticated,
+      cloudSynchronized: synchronized,
+      cloudAcceptingWork: acceptingWork,
+      cloudConnectionStage: cloudMap['connectionStage']?.toString(),
       statusLabel: status,
       logsPath: WorkspacePaths(config.dataDirectory).logsFile.path,
       activeAssignments: activeCount,
@@ -644,7 +894,13 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
   WorkspaceUiSnapshot get uiSnapshot => _ipcUiSnapshot;
 
   Future<void> launch() async {
+    try {
+      _serviceInfo = await _hostServiceManager.getInfo();
+    } on Object catch (error) {
+      _lastIpcError = error;
+    }
     await _connectToManager();
+    notifyListeners();
   }
 
   /// Drain through authenticated IPC, then stop through the OS host boundary.
@@ -654,9 +910,8 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
           timeout: const Duration(seconds: 20));
     }
     try {
-      await _hostServiceManager.unregister();
+      _serviceInfo = await _hostServiceManager.stop();
     } on Object {
-      if (_managerConnected) await request('connection.reconnect');
       rethrow;
     }
     final deadline = DateTime.now().add(const Duration(seconds: 10));
@@ -667,19 +922,25 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       throw StateError(
           'macOS has not stopped the service. Check Login Items and Diagnostics.');
     }
+    await _closeManagerConnection();
+    _serviceInfo = _serviceInfo.copyWith(
+      process: WorkspaceServiceProcessStatus.stopped,
+      ipc: WorkspaceServiceIpcStatus.unavailable,
+      clearPid: true,
+    );
+    _startupError = null;
+    // Stopping the local process does not change the user's Cloud intent or
+    // registration. An explicit Disconnect action owns that preference.
+    _publishMenuStatus();
+    notifyListeners();
+  }
+
+  Future<void> _closeManagerConnection() async {
+    _managerConnected = false;
     await _managerEvents?.cancel();
     _managerEvents = null;
     await _manager?.close();
     _manager = null;
-    _managerConnected = false;
-    _startupError = null;
-    final store = WorkspaceLifecyclePreferencesStore(config.dataDirectory);
-    await store.write(store.readSync().copyWith(
-          desiredRuntime: DesiredRuntimeState.disconnected,
-          launchAtLogin: false,
-        ));
-    _publishMenuStatus();
-    notifyListeners();
   }
 
   Future<void> retryConnection() async {
@@ -759,6 +1020,14 @@ class WorkspaceUiSnapshot {
     this.workspaceReady = false,
     this.serviceRunning = false,
     this.cloudConnected = false,
+    this.serviceProcessRunning = false,
+    this.serviceIpcReady = false,
+    this.serviceHealthy = false,
+    this.desiredCloudConnected = false,
+    this.cloudAuthenticated = false,
+    this.cloudSynchronized = false,
+    this.cloudAcceptingWork = false,
+    this.cloudConnectionStage,
     this.accountsNeedingAction = const [],
     this.workerSummary = 'Worker diagnostics are available after sign-in',
     this.logsPath,
@@ -784,10 +1053,25 @@ class WorkspaceUiSnapshot {
     this.appVersion = conclaveWorkspaceAppVersion,
     this.issue,
     this.serviceDiagnostics = const {},
+    this.serviceInfo = const WorkspaceServiceInfo(
+      registration: WorkspaceBackgroundServiceRegistration.unknown,
+      supported: false,
+      helperPresent: false,
+      plistPresent: false,
+    ),
   });
 
   String get serviceStatusDescription {
     if (serviceRunning) return 'Running';
+    if (serviceInfo.process == WorkspaceServiceProcessStatus.failed) {
+      return 'Failed';
+    }
+    if (serviceInfo.process == WorkspaceServiceProcessStatus.starting) {
+      return 'Starting';
+    }
+    if (serviceInfo.process == WorkspaceServiceProcessStatus.stopping) {
+      return 'Stopping';
+    }
     if (serviceDiagnostics['launchd'] == 'running') {
       return 'Running · Management unavailable';
     }
@@ -818,6 +1102,20 @@ class WorkspaceUiSnapshot {
   final bool workspaceReady;
   final bool serviceRunning;
   final bool cloudConnected;
+
+  /// Explicit service health dimensions. The legacy fields above remain
+  /// source-compatible aliases for existing management surfaces.
+  final bool serviceProcessRunning;
+  final bool serviceIpcReady;
+  final bool serviceHealthy;
+  final bool desiredCloudConnected;
+  final bool cloudAuthenticated;
+  final bool cloudSynchronized;
+  final bool cloudAcceptingWork;
+  final String? cloudConnectionStage;
+
+  String get desiredConnectionState =>
+      desiredCloudConnected ? 'connected' : 'disconnected';
   final List<String> accountsNeedingAction;
   final String workerSummary;
   final String? logsPath;
@@ -842,6 +1140,7 @@ class WorkspaceUiSnapshot {
   final DateTime? lastConnectionAttemptAt;
   final String appVersion;
   final String? issue;
+  final WorkspaceServiceInfo serviceInfo;
 
   String get runtimeCredentialStatus => runtimeCredentialAvailable
       ? 'Available locally (value hidden)'

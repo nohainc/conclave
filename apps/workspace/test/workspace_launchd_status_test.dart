@@ -26,6 +26,7 @@ for state in ["running", "not running"] {
       TOKEN = secret
     }
     last exit reason = OS_REASON_CODESIGNING
+    pid = 42831
     resource coalition = {
       state = active
     }
@@ -38,7 +39,8 @@ for state in ["running", "not running"] {
   precondition(status["launchdState"] as? String == state)
   precondition(status["lastExitCode"] as? Int == 7)
   precondition(status["lastExitReason"] as? String == "OS_REASON_CODESIGNING")
-  precondition(status.count == 3)
+  precondition(status["pid"] as? Int == 42831)
+  precondition(status.count == 4)
 }
 let unknown = parseWorkspaceLaunchdStatus("unrecognized job output")
 precondition(unknown["launchdState"] as? String == "unknown")

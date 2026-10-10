@@ -5,13 +5,16 @@ void main() {
   test('unsupported host reports status without pretending registration',
       () async {
     const manager = UnsupportedWorkspaceServiceManager();
-    final status = await manager.status();
+    final status = await manager.getInfo();
 
     expect(status.supported, isFalse);
     expect(status.registration,
         WorkspaceBackgroundServiceRegistration.unsupported);
     await expectLater(manager.register(), throwsA(isA<UnsupportedError>()));
     await expectLater(manager.unregister(), throwsA(isA<UnsupportedError>()));
+    await expectLater(manager.start(), throwsA(isA<UnsupportedError>()));
+    await expectLater(manager.stop(), throwsA(isA<UnsupportedError>()));
+    await expectLater(manager.restart(), throwsA(isA<UnsupportedError>()));
     await expectLater(manager.openSettings(), throwsA(isA<UnsupportedError>()));
   });
 }

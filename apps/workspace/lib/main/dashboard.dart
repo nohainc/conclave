@@ -6,8 +6,13 @@ class WorkspaceDashboard extends StatefulWidget {
     this.onSignIn,
     this.onSignOut,
     this.onStartService,
+    this.onRegisterService,
+    this.onUnregisterService,
+    this.onRestartService,
     this.onRegister,
     this.onRecoverCredential,
+    this.onConnectCloud,
+    this.onDisconnectCloud,
     this.onChangeWorkspaceName,
     this.onStopService,
     this.onRelease,
@@ -33,8 +38,13 @@ class WorkspaceDashboard extends StatefulWidget {
   final Future<void> Function()? onSignIn;
   final Future<void> Function()? onSignOut;
   final Future<void> Function()? onStartService;
+  final Future<void> Function()? onRegisterService;
+  final Future<void> Function()? onUnregisterService;
+  final Future<void> Function()? onRestartService;
   final Future<void> Function([String? name])? onRegister;
   final Future<void> Function([String? name])? onRecoverCredential;
+  final Future<void> Function()? onConnectCloud;
+  final Future<void> Function()? onDisconnectCloud;
   final Future<void> Function(String name)? onChangeWorkspaceName;
   final Future<void> Function()? onStopService;
   final Future<void> Function()? onRelease;
@@ -76,10 +86,11 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
         : null;
 
     final isConnected = snapshot.cloudConnected;
-    final connectionLabel = snapshot.serviceRunning
+    final serviceHealthy = snapshot.serviceHealthy || snapshot.serviceRunning;
+    final connectionLabel = serviceHealthy
         ? (isConnected
             ? 'Service running · Cloud connected'
-            : 'Service running · Cloud offline')
+            : 'Service running · Cloud disconnected')
         : 'Service ${snapshot.serviceStatusDescription.toLowerCase()}';
 
     return Column(
@@ -112,7 +123,7 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: isConnected
+                        color: serviceHealthy
                             ? ConclaveBrand.success
                             : ConclaveBrand.warning,
                         shape: BoxShape.circle,
@@ -285,10 +296,15 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                     signedIn: effectiveSignedIn,
                     credentialStore: widget.credentialStore,
                     onStartService: widget.onStartService,
+                    onRegisterService: widget.onRegisterService,
+                    onUnregisterService: widget.onUnregisterService,
+                    onRestartService: widget.onRestartService,
                     onRegister: widget.onRegister,
                     onRecoverCredential: widget.onRecoverCredential,
                     onChangeWorkspaceName: widget.onChangeWorkspaceName,
                     onRetry: widget.onRetry,
+                    onConnectCloud: widget.onConnectCloud,
+                    onDisconnectCloud: widget.onDisconnectCloud,
                     onExportDiagnostics: widget.onExportDiagnostics,
                     onChangeWorkRoot: widget.onChangeWorkRoot,
                     onStopService: widget.onStopService,
@@ -298,7 +314,8 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                   _WorkersTab(
                     key: ValueKey(widget.workerRevision),
                     catalogCoordinator: widget.workerCatalogCoordinator,
-                    serviceAvailable: snapshot.serviceRunning,
+                    serviceAvailable:
+                        snapshot.serviceHealthy || snapshot.serviceRunning,
                     isSelected: _selectedSurface == WorkspaceSurface.workers,
                     onRollbackToolProfile: widget.onRollbackToolProfile,
                     onReadinessCheck: widget.onReadinessCheck,
@@ -379,8 +396,13 @@ class _WorkspaceTab extends StatefulWidget {
     required this.snapshot,
     this.signedIn = false,
     this.onStartService,
+    this.onRegisterService,
+    this.onUnregisterService,
+    this.onRestartService,
     this.onRegister,
     this.onRecoverCredential,
+    this.onConnectCloud,
+    this.onDisconnectCloud,
     this.onChangeWorkspaceName,
     required this.credentialStore,
     this.onRetry,
@@ -394,8 +416,13 @@ class _WorkspaceTab extends StatefulWidget {
   final WorkspaceUiSnapshot snapshot;
   final bool signedIn;
   final Future<void> Function()? onStartService;
+  final Future<void> Function()? onRegisterService;
+  final Future<void> Function()? onUnregisterService;
+  final Future<void> Function()? onRestartService;
   final Future<void> Function([String? name])? onRegister;
   final Future<void> Function([String? name])? onRecoverCredential;
+  final Future<void> Function()? onConnectCloud;
+  final Future<void> Function()? onDisconnectCloud;
   final Future<void> Function(String name)? onChangeWorkspaceName;
   final SecureCredentialStore credentialStore;
   final Future<void> Function()? onRetry;
@@ -505,37 +532,261 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
         stage == WorkspaceConnectionStage.authenticating ||
         stage == WorkspaceConnectionStage.synchronizing ||
         stage == WorkspaceConnectionStage.reconnecting;
-    final isError = (widget.snapshot.mode == WorkspaceUiMode.offline ||
+    final serviceHealthy =
+        widget.snapshot.serviceHealthy || widget.snapshot.serviceRunning;
+    final isError = !serviceHealthy &&
+        (widget.snapshot.mode == WorkspaceUiMode.offline ||
             widget.snapshot.mode == WorkspaceUiMode.installFailure) &&
         !isConnecting &&
-        widget.snapshot.desiredRuntimeConnected;
+        widget.snapshot.serviceInfo.process !=
+            WorkspaceServiceProcessStatus.stopped;
     // Protect identity and user file location while the service owns them.
-    final canEditWorkspaceSettings =
-        !widget.snapshot.serviceRunning && !widget.snapshot.cloudConnected;
+    final canEditWorkspaceSettings = !widget.snapshot.serviceProcessRunning &&
+        !widget.snapshot.serviceRunning &&
+        !widget.snapshot.cloudConnected;
+
+    final serviceInfo = widget.snapshot.serviceInfo;
+    final serviceRegistrationMissing = serviceInfo.registration ==
+            WorkspaceBackgroundServiceRegistration.notRegistered ||
+        serviceInfo.registration ==
+            WorkspaceBackgroundServiceRegistration.serviceMissing ||
+        serviceInfo.registration ==
+            WorkspaceBackgroundServiceRegistration.unsupported;
+    // An unknown host snapshot is used while the native manager is still
+    // being queried. Keep the existing Start Service affordance during that
+    // short window; an explicit notRegistered/serviceMissing response is what
+    // renders the Register Service state.
+    final serviceRegistered = !serviceRegistrationMissing &&
+        (serviceInfo.registered ||
+            widget.snapshot.serviceRunning ||
+            serviceInfo.registration ==
+                WorkspaceBackgroundServiceRegistration.approvalRequired ||
+            serviceInfo.registration ==
+                WorkspaceBackgroundServiceRegistration.unknown);
+    final serviceLaunchSupported = serviceInfo.registration ==
+            WorkspaceBackgroundServiceRegistration.unknown ||
+        (serviceInfo.supported &&
+            serviceInfo.launchSupported &&
+            serviceInfo.helperPresent &&
+            serviceInfo.plistPresent);
+    final serviceProcessRunning = widget.snapshot.serviceProcessRunning ||
+        widget.snapshot.serviceRunning ||
+        serviceInfo.process == WorkspaceServiceProcessStatus.running;
+    final ipcReady = widget.snapshot.serviceIpcReady ||
+        widget.snapshot.serviceRunning ||
+        serviceInfo.ipc == WorkspaceServiceIpcStatus.ready;
+    final serviceStatus = !serviceLaunchSupported && serviceInfo.supported
+        ? 'Build not signed'
+        : switch (serviceInfo.registration) {
+            WorkspaceBackgroundServiceRegistration.unsupported => 'Unavailable',
+            WorkspaceBackgroundServiceRegistration.notRegistered ||
+            WorkspaceBackgroundServiceRegistration.serviceMissing =>
+              'Not installed',
+            WorkspaceBackgroundServiceRegistration.approvalRequired =>
+              'Approval required',
+            _
+                when serviceInfo.process ==
+                    WorkspaceServiceProcessStatus.failed =>
+              'Failed',
+            _ when serviceProcessRunning => 'Running',
+            _ => 'Stopped',
+          };
+    final cloudStatus = widget.snapshot.cloudConnected
+        ? 'Connected'
+        : widget.snapshot.cloudConnectionStage == 'reconnecting' ||
+                isConnecting && serviceProcessRunning
+            ? 'Reconnecting'
+            : 'Disconnected';
+    final transport = switch (widget.snapshot.activeTransportMode) {
+      'websocket' => 'WebSocket',
+      'http_long_poll' => 'HTTPS fallback',
+      _ => '—',
+    };
+    final cloudRegistered = isRegistered;
 
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Text('Service', style: theme.textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Text(widget.snapshot.serviceStatusDescription),
-        const SizedBox(height: 8),
-        Text(
-            'Cloud: ${widget.snapshot.cloudConnected ? "Connected" : isConnecting && widget.snapshot.serviceRunning ? "Reconnecting" : "Offline"}${widget.snapshot.activeTransportMode == "websocket" ? " · WebSocket" : widget.snapshot.activeTransportMode == "http_long_poll" ? " · HTTPS" : ""}'),
-        const SizedBox(height: 8),
-        Text('The service runs in the background after you close this app.',
-            style: theme.textTheme.bodySmall),
-        const SizedBox(height: 24),
         if (isError) ...[
           _WorkspaceRecoveryPanel(
             issue: widget.snapshot.issue,
-            retryLabel: !widget.snapshot.serviceRunning
+            retryLabel: !serviceProcessRunning
                 ? 'Retry service startup'
                 : 'Retry Cloud connection',
             onRetry: widget.onRetry,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
         ],
+        _WorkspaceManagementSection(
+          title: 'Workspace Service',
+          children: [
+            _DetailRow(label: 'Status', value: serviceStatus),
+            if (serviceInfo.pid != null)
+              _DetailRow(label: 'PID', value: '${serviceInfo.pid}'),
+            _DetailRow(
+              label: 'Version',
+              value: serviceInfo.version ?? widget.snapshot.appVersion,
+            ),
+            _DetailRow(
+              label: 'Started',
+              value: _formatServiceTime(serviceInfo.startedAt),
+            ),
+            _DetailRow(
+              label: 'IPC',
+              value: ipcReady
+                  ? 'Ready'
+                  : serviceProcessRunning
+                      ? 'Unavailable'
+                      : 'Not running',
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                if (!serviceLaunchSupported)
+                  Text(
+                    'Background Service unavailable. Rebuild this app with an Apple signing identity for macOS background service execution.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  )
+                else if (!serviceRegistered)
+                  FilledButton.icon(
+                    onPressed: _serviceActionPending ||
+                            widget.onRegisterService == null
+                        ? null
+                        : () => _runServiceAction(
+                              widget.onRegisterService!,
+                            ),
+                    icon: const Icon(Icons.app_registration, size: 16),
+                    label: const Text('Register Service'),
+                  )
+                else if (serviceProcessRunning)
+                  FilledButton.icon(
+                    onPressed:
+                        _serviceActionPending || widget.onStopService == null
+                            ? null
+                            : () => _runServiceAction(widget.onStopService!),
+                    icon: _serviceActionPending
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.stop, size: 16),
+                    label: Text(
+                        _serviceActionPending ? 'Stopping…' : 'Stop Service'),
+                  )
+                else
+                  FilledButton.icon(
+                    onPressed:
+                        _serviceActionPending || widget.onStartService == null
+                            ? null
+                            : () => _runServiceAction(widget.onStartService!),
+                    icon: _serviceActionPending
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.play_arrow, size: 16),
+                    label: Text(
+                        _serviceActionPending ? 'Starting…' : 'Start Service'),
+                  ),
+                if (serviceProcessRunning)
+                  OutlinedButton.icon(
+                    onPressed:
+                        _serviceActionPending || widget.onRestartService == null
+                            ? null
+                            : () => _runServiceAction(
+                                  widget.onRestartService!,
+                                ),
+                    icon: const Icon(Icons.restart_alt, size: 16),
+                    label: const Text('Restart'),
+                  )
+                else if (serviceRegistered)
+                  OutlinedButton.icon(
+                    onPressed: _serviceActionPending ||
+                            widget.onUnregisterService == null
+                        ? null
+                        : () => _runServiceAction(
+                              widget.onUnregisterService!,
+                            ),
+                    icon: const Icon(Icons.remove_circle_outline, size: 16),
+                    label: const Text('Unregister'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _WorkspaceManagementSection(
+          title: 'Conclave Cloud',
+          children: [
+            _DetailRow(
+              label: 'Status',
+              value: 'Cloud: $cloudStatus',
+            ),
+            _DetailRow(
+              label: 'Desired',
+              value: widget.snapshot.desiredCloudConnected
+                  ? 'Connected'
+                  : 'Disconnected',
+            ),
+            _DetailRow(
+              label: 'Workspace',
+              value: widget.snapshot.workspaceName == null
+                  ? widget.snapshot.hostname ?? 'Not registered'
+                  : 'This Workspace',
+            ),
+            _DetailRow(label: 'Transport', value: transport),
+            const SizedBox(height: 14),
+            if (!cloudRegistered)
+              FilledButton.icon(
+                onPressed: isConnecting || !effectiveSignedIn
+                    ? null
+                    : widget.onRegister == null &&
+                            widget.onRecoverCredential == null
+                        ? null
+                        : () {
+                            final name = _nameController.text.trim();
+                            if (widget.onRegister != null) {
+                              unawaited(widget.onRegister!(name));
+                            } else {
+                              unawaited(widget.onRecoverCredential!(name));
+                            }
+                          },
+                icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                label: const Text('Register'),
+              )
+            else if (!serviceProcessRunning || !ipcReady)
+              Text(
+                'Start the Workspace Service to manage the Cloud connection.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              )
+            else if (widget.snapshot.cloudConnected)
+              OutlinedButton.icon(
+                onPressed: widget.onDisconnectCloud == null
+                    ? null
+                    : () => _runServiceAction(widget.onDisconnectCloud!),
+                icon: const Icon(Icons.cloud_off_outlined, size: 16),
+                label: const Text('Disconnect'),
+              )
+            else
+              FilledButton.icon(
+                onPressed: widget.onConnectCloud == null
+                    ? null
+                    : () => _runServiceAction(widget.onConnectCloud!),
+                icon: const Icon(Icons.cloud_queue, size: 16),
+                label: const Text('Connect'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 24),
         TextField(
           controller: _nameController,
           enabled:
@@ -573,106 +824,119 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
           ),
         ),
         const SizedBox(height: 16),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            FilledButton.icon(
-              onPressed: _serviceActionPending
-                  ? null
-                  : (widget.snapshot.serviceRunning
-                      ? (widget.onStopService == null
-                          ? null
-                          : () => _runServiceAction(widget.onStopService!))
-                      : (widget.onStartService == null || !effectiveSignedIn
-                          ? null
-                          : () => _runServiceAction(widget.onStartService!))),
-              icon: _serviceActionPending
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : Icon(
-                      widget.snapshot.serviceRunning
-                          ? Icons.stop
-                          : Icons.play_arrow,
-                      size: 16),
-              label: Text(_serviceActionPending
-                  ? (widget.snapshot.serviceRunning ? 'Stopping…' : 'Starting…')
-                  : (widget.snapshot.serviceRunning
-                      ? 'Stop Service'
-                      : 'Start Service')),
-            ),
-
-            // Button 2: Register / Release
-            if (isRegistered)
-              OutlinedButton.icon(
-                onPressed: widget.onRelease != null
-                    ? () => unawaited(widget.onRelease!())
-                    : null,
-                icon: const Icon(Icons.person_remove_outlined, size: 16),
-                label: const Text('Release'),
-                style: OutlinedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                ),
-              )
-            else
-              FilledButton.icon(
-                onPressed: (isConnecting || !effectiveSignedIn)
-                    ? null
-                    : () {
-                        if (widget.onRegister != null) {
-                          unawaited(widget.onRegister!(
-                            _nameController.text.trim(),
-                          ));
-                        } else if (widget.onRecoverCredential != null) {
-                          unawaited(widget.onRecoverCredential!(
-                            _nameController.text.trim(),
-                          ));
-                        }
-                      },
-                icon: const Icon(Icons.app_registration, size: 16),
-                label: const Text('Register'),
-                style: FilledButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                ),
-              ),
-
-            // Button 3: Reset
-            if (widget.onReset != null)
-              OutlinedButton.icon(
-                onPressed: widget.onReset,
-                icon: Icon(Icons.delete_forever_outlined,
-                    size: 16, color: theme.colorScheme.error),
-                label: Text('Reset',
-                    style: TextStyle(color: theme.colorScheme.error)),
-                style: OutlinedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  side: BorderSide(
-                      color: theme.colorScheme.error.withValues(alpha: 0.5)),
-                ),
-              ),
-          ],
-        ),
         if (isRegistered) ...[
-          const SizedBox(height: 8),
-          Text(
-            'Disconnect keeps this installation owned by your account. '
-            'Release lets another account claim it.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          _WorkspaceManagementSection(
+            title: 'Workspace ownership',
+            subtitle: 'Cloud registration is separate from the local service.',
+            children: [
+              Text(
+                'Disconnect keeps this installation owned by your account. '
+                'Release lets another account claim it.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  if (widget.onRelease != null)
+                    OutlinedButton.icon(
+                      onPressed: () => unawaited(widget.onRelease!()),
+                      icon: const Icon(Icons.person_remove_outlined, size: 16),
+                      label: const Text('Release'),
+                    ),
+                  if (widget.onReset != null)
+                    OutlinedButton.icon(
+                      onPressed: widget.onReset,
+                      icon: Icon(Icons.delete_forever_outlined,
+                          size: 16, color: theme.colorScheme.error),
+                      label: Text('Reset',
+                          style: TextStyle(color: theme.colorScheme.error)),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(
+                          color: theme.colorScheme.error.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+        ] else if (widget.onReset != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: widget.onReset,
+              icon: Icon(Icons.delete_forever_outlined,
+                  size: 16, color: theme.colorScheme.error),
+              label: Text('Reset',
+                  style: TextStyle(color: theme.colorScheme.error)),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(
+                  color: theme.colorScheme.error.withValues(alpha: 0.5),
+                ),
+              ),
             ),
           ),
-        ],
         const SizedBox(height: 24),
         _WorkspaceDiagnosticsSection(
           snapshot: widget.snapshot,
           onExportDiagnostics: widget.onExportDiagnostics,
         ),
       ],
+    );
+  }
+}
+
+String _formatServiceTime(DateTime? value) {
+  if (value == null) return '—';
+  final local = value.toLocal();
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+class _WorkspaceManagementSection extends StatelessWidget {
+  const _WorkspaceManagementSection({
+    required this.title,
+    required this.children,
+    this.subtitle,
+  });
+
+  final String title;
+  final String? subtitle;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: theme.textTheme.titleMedium),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          ...children,
+        ],
+      ),
     );
   }
 }
@@ -703,6 +967,36 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
           childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           children: [
             const Divider(height: 16),
+            Text('Service', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 6),
+            _DetailRow(
+              label: 'Registered',
+              value: snapshot.serviceInfo.registered ? 'Yes' : 'No',
+            ),
+            _DetailRow(
+              label: 'Process',
+              value: snapshot.serviceInfo.process.name,
+            ),
+            _DetailRow(
+              label: 'IPC',
+              value: snapshot.serviceInfo.ipc.name,
+            ),
+            if (snapshot.serviceInfo.pid != null)
+              _DetailRow(
+                label: 'PID',
+                value: '${snapshot.serviceInfo.pid}',
+              ),
+            if (snapshot.serviceInfo.version != null)
+              _DetailRow(
+                label: 'Version',
+                value: snapshot.serviceInfo.version!,
+              ),
+            if (snapshot.serviceInfo.lastExitReason != null)
+              _DetailRow(
+                label: 'Last exit',
+                value: snapshot.serviceInfo.lastExitReason!,
+              ),
+            const SizedBox(height: 16),
             if (snapshot.serviceDiagnostics.isNotEmpty) ...[
               Text('Service startup', style: theme.textTheme.titleSmall),
               const SizedBox(height: 6),

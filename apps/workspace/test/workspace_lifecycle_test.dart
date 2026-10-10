@@ -112,6 +112,7 @@ void main() {
     final json = jsonDecode(raw) as Map<String, dynamic>;
     expect(json['schemaVersion'],
         WorkspaceLifecyclePreferencesStore.currentSchemaVersion);
+    expect(json['desiredCloudState'], 'connected');
     expect(json['desiredRuntimeState'], 'connected');
     expect(json['customWorkspaceName'], 'My Custom Office Mac');
     expect(json.containsKey('desiredRuntime'), isFalse);
@@ -120,6 +121,24 @@ void main() {
     expect(
       directory.listSync().where((entity) => entity.path.contains('.tmp.')),
       isEmpty,
+    );
+  });
+
+  test('Cloud intent has an explicit semantic accessor', () {
+    const preferences = WorkspaceLifecyclePreferences(
+      desiredRuntime: DesiredRuntimeState.connected,
+      launchAtLogin: false,
+      managementLockPreference: ManagementLockState.unlocked,
+    );
+    expect(
+        preferences.desiredCloudState, DesiredCloudConnectionState.connected);
+    expect(
+      preferences
+          .copyWith(
+            desiredCloudState: DesiredCloudConnectionState.disconnected,
+          )
+          .desiredCloudState,
+      DesiredCloudConnectionState.disconnected,
     );
   });
 

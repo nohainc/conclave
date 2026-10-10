@@ -14,7 +14,14 @@ enum WorkspaceParticipationState {
 
 enum ManagementLockState { unlocked, locked }
 
-enum DesiredRuntimeState { connected, disconnected }
+/// The Cloud connection intent that should survive a service restart.
+///
+/// The older [DesiredRuntimeState] name is retained as a source-compatible
+/// alias for local preference files and callers. It must not be confused with
+/// the health of the local Workspace Service.
+enum DesiredCloudConnectionState { connected, disconnected }
+
+typedef DesiredRuntimeState = DesiredCloudConnectionState;
 
 /// Full lifecycle snapshot that can be constructed and tested without UI state.
 /// Transport health remains a separate [RuntimeTransportState] projection.
@@ -23,13 +30,19 @@ class WorkspaceLifecycleState {
     required this.humanAuth,
     required this.participation,
     required this.managementLock,
-    required this.desiredRuntime,
-  });
+    DesiredRuntimeState? desiredRuntime,
+    DesiredCloudConnectionState? desiredCloudState,
+  }) : desiredRuntime = desiredCloudState ??
+            desiredRuntime ??
+            DesiredCloudConnectionState.disconnected;
 
   final HumanAuthState humanAuth;
   final WorkspaceParticipationState participation;
   final ManagementLockState managementLock;
   final DesiredRuntimeState desiredRuntime;
+
+  /// Explicit semantic name for the persisted Cloud intent.
+  DesiredCloudConnectionState get desiredCloudState => desiredRuntime;
 }
 
 /// Existing runtime transport projection; intentionally orthogonal to lifecycle.
@@ -44,7 +57,8 @@ enum RuntimeTransportState {
 /// Non-secret local preferences and non-authoritative owner display cache.
 class WorkspaceLifecyclePreferences {
   const WorkspaceLifecyclePreferences({
-    required this.desiredRuntime,
+    DesiredRuntimeState? desiredRuntime,
+    DesiredCloudConnectionState? desiredCloudState,
     required this.launchAtLogin,
     required this.managementLockPreference,
     this.autoLockTimeout,
@@ -52,10 +66,13 @@ class WorkspaceLifecyclePreferences {
     this.ownerDisplayName,
     this.customWorkspaceName,
     this.workRootPath,
-  });
+  }) : desiredRuntime = desiredCloudState ??
+            desiredRuntime ??
+            DesiredCloudConnectionState.disconnected;
 
   WorkspaceLifecyclePreferences copyWith({
     DesiredRuntimeState? desiredRuntime,
+    DesiredCloudConnectionState? desiredCloudState,
     bool? launchAtLogin,
     ManagementLockState? managementLockPreference,
     Duration? autoLockTimeout,
@@ -65,7 +82,8 @@ class WorkspaceLifecyclePreferences {
     String? workRootPath,
   }) =>
       WorkspaceLifecyclePreferences(
-        desiredRuntime: desiredRuntime ?? this.desiredRuntime,
+        desiredRuntime:
+            desiredCloudState ?? desiredRuntime ?? this.desiredRuntime,
         launchAtLogin: launchAtLogin ?? this.launchAtLogin,
         managementLockPreference:
             managementLockPreference ?? this.managementLockPreference,
@@ -77,6 +95,10 @@ class WorkspaceLifecyclePreferences {
       );
 
   final DesiredRuntimeState desiredRuntime;
+
+  /// Persisted Cloud intent. The service process can be healthy regardless of
+  /// this value and regardless of the current Cloud transport state.
+  DesiredCloudConnectionState get desiredCloudState => desiredRuntime;
   final bool launchAtLogin;
   final ManagementLockState managementLockPreference;
   final Duration? autoLockTimeout;

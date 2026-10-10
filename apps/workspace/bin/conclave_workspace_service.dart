@@ -19,7 +19,7 @@ Future<void> main(List<String> args) async {
     hasRuntimeRegistrationAndCredential:
         registration != null && config.authToken?.isNotEmpty == true,
   );
-  final desiredRuntime = preferenceStore.readSync().desiredRuntime;
+  final desiredCloudState = preferenceStore.readSync().desiredCloudState;
   final runtime = await buildWorkspaceRuntime(config, restartArgs: args);
   final once = args.contains('--once');
   try {
@@ -43,7 +43,8 @@ Future<void> main(List<String> args) async {
     if (once) return;
     // Local management must become available before a slow/offline Cloud
     // handshake. Transport recovery remains owned by the service.
-    if (runtime.isRunning && desiredRuntime == DesiredRuntimeState.connected) {
+    if (runtime.isRunning &&
+        desiredCloudState == DesiredCloudConnectionState.connected) {
       unawaited(runtime.cloudConnection?.connect().catchError((Object error) {
             stderr.writeln('Workspace Cloud connection unavailable: $error');
           }) ??
