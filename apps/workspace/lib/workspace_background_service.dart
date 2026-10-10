@@ -16,12 +16,18 @@ class WorkspaceBackgroundServiceStatus {
     required this.supported,
     required this.helperPresent,
     required this.plistPresent,
+    this.launchdState = 'unknown',
+    this.lastExitCode,
+    this.lastExitReason,
   });
 
   final WorkspaceBackgroundServiceRegistration registration;
   final bool supported;
   final bool helperPresent;
   final bool plistPresent;
+  final String launchdState;
+  final int? lastExitCode;
+  final String? lastExitReason;
 
   factory WorkspaceBackgroundServiceStatus.fromNative(
     Map<Object?, Object?> value,
@@ -40,6 +46,14 @@ class WorkspaceBackgroundServiceStatus {
       supported: value['supported'] == true,
       helperPresent: value['helperPresent'] == true,
       plistPresent: value['plistPresent'] == true,
+      launchdState: value['launchdState'] is String
+          ? value['launchdState'] as String
+          : 'unknown',
+      lastExitCode:
+          value['lastExitCode'] is int ? value['lastExitCode'] as int : null,
+      lastExitReason: value['lastExitReason'] is String
+          ? value['lastExitReason'] as String
+          : null,
     );
   }
 }

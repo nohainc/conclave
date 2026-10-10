@@ -80,7 +80,7 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
         ? (isConnected
             ? 'Service running · Cloud connected'
             : 'Service running · Cloud offline')
-        : 'Service stopped';
+        : 'Service ${snapshot.serviceStatusDescription.toLowerCase()}';
 
     return Column(
       children: [
@@ -518,7 +518,7 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
       children: [
         Text('Service', style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
-        Text(widget.snapshot.serviceRunning ? 'Running' : 'Stopped'),
+        Text(widget.snapshot.serviceStatusDescription),
         const SizedBox(height: 8),
         Text(
             'Cloud: ${widget.snapshot.cloudConnected ? "Connected" : isConnecting && widget.snapshot.serviceRunning ? "Reconnecting" : "Offline"}${widget.snapshot.activeTransportMode == "websocket" ? " · WebSocket" : widget.snapshot.activeTransportMode == "http_long_poll" ? " · HTTPS" : ""}'),
@@ -703,6 +703,13 @@ class _WorkspaceDiagnosticsSection extends StatelessWidget {
           childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           children: [
             const Divider(height: 16),
+            if (snapshot.serviceDiagnostics.isNotEmpty) ...[
+              Text('Service startup', style: theme.textTheme.titleSmall),
+              const SizedBox(height: 6),
+              for (final entry in snapshot.serviceDiagnostics.entries)
+                _DetailRow(label: entry.key, value: entry.value),
+              const SizedBox(height: 16),
+            ],
             // Connection
             Align(
               alignment: Alignment.centerLeft,

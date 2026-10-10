@@ -13,6 +13,10 @@ private enum WorkspaceBackgroundService {
   }
 
   static func registeredProcessIsRunning() throws -> Bool {
+    return try launchdStatus()["launchdState"] as? String == "running"
+  }
+
+  static func launchdStatus() throws -> [String: Any] {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
     process.arguments = ["print", "gui/\(getuid())/com.conclaveax.workspace.service"]
@@ -24,14 +28,12 @@ private enum WorkspaceBackgroundService {
     process.waitUntilExit()
     let text = String(data: data, encoding: .utf8) ?? ""
     if process.terminationStatus != 0 {
-      if text.contains("Could not find service") { return false }
+      if text.contains("Could not find service") { return ["launchdState": "stopped"] }
       throw NSError(domain: "ConclaveWorkspaceService", code: 1,
         userInfo: [NSLocalizedDescriptionKey:
           "Could not verify whether the registered service is running. Open Login Items to inspect its status."])
     }
-    return text.split(separator: "\n").contains {
-      $0.trimmingCharacters(in: .whitespaces) == "state = running"
-    }
+    return parseWorkspaceLaunchdStatus(text)
   }
 
   static func status() -> [String: Any] {
@@ -67,9 +69,13 @@ private enum WorkspaceBackgroundService {
     }
     // SMAppService reports registration/approval, not whether launchd has
     // started the process. Keep that distinction explicit for the UI.
+    let launchd = (try? launchdStatus()) ?? ["launchdState": "unknown"]
     return [
       "supported": true,
       "registration": registration,
+      "launchdState": launchd["launchdState"] ?? "unknown",
+      "lastExitCode": launchd["lastExitCode"] ?? NSNull(),
+      "lastExitReason": launchd["lastExitReason"] ?? NSNull(),
       "running": NSNull(),
       "runningStatus": "checkIpc",
       "helperPresent": true,
@@ -190,6 +196,12 @@ class AppDelegate: FlutterAppDelegate {
           return
         }
         do {
+          // launchd rejects ad-hoc helpers before Dart or IPC can start.
+          guard workspaceServiceHasTrustedSignature(helperURL) else {
+            result(FlutterError(code: "service_signing_required",
+              message: "macOS cannot start this background service because its signature is not trusted. Rebuild Workspace with an Apple signing identity using --sign. Ad-hoc builds can open the UI but cannot run the background service.", details: nil))
+            return
+          }
           if WorkspaceBackgroundService.service.status == .enabled {
             // An update may leave launchd with the previous BundleProgram.
             // Refresh only a stopped job; never interrupt a running runtime.

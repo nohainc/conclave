@@ -22,6 +22,7 @@ command -v ditto >/dev/null 2>&1 || {
 MODE="release"
 OPEN_APP="0"
 PREPARED="0"
+DEFAULT_CONCLAVE_MACOS_SIGN_IDENTITY='Apple Development: vitalii@nohainc.com (7X62W6499P)'
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -60,13 +61,13 @@ while [[ $# -gt 0 ]]; do
       echo "  --release          Build in release mode (default)"
       echo "  --debug            Build in debug mode"
       echo "  --version, -v VER  Override workspace version"
-      echo "  --sign IDENTITY    Developer ID signing identity"
+      echo "  --sign IDENTITY    Apple signing identity"
       echo "  --open, -o         Open the built application bundle after build"
       echo "  --help, -h         Show this help message"
       echo ""
       echo "Environment variables:"
       echo "  CONCLAVE_WORKSPACE_VERSION           Workspace version override"
-      echo "  CONCLAVE_MACOS_SIGN_IDENTITY         Signing identity"
+      echo "  CONCLAVE_MACOS_SIGN_IDENTITY         Signing identity override"
       echo "  CONCLAVE_MACOS_NOTARY_PROFILE        Keychain profile for notarization"
       exit 0
       ;;
@@ -76,6 +77,25 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# A normal invocation is a signed release build. Keep the identity overridable
+# for another certificate, CI, or a Developer ID distribution build.
+if [[ "$MODE" == "release" && -z "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
+  CONCLAVE_MACOS_SIGN_IDENTITY="$DEFAULT_CONCLAVE_MACOS_SIGN_IDENTITY"
+fi
+
+if [[ "$MODE" == "release" && -z "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
+  echo "Release Workspace builds require an Apple signing identity for the SMAppService LaunchAgent." >&2
+  echo "Use --sign 'Apple Development: ...' or 'Developer ID Application: ...' (or CONCLAVE_MACOS_SIGN_IDENTITY)." >&2
+  echo "For UI inspection only, use --debug; its ad-hoc service cannot start through launchd." >&2
+  exit 1
+fi
+if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
+  if ! security find-identity -v -p codesigning | /usr/bin/grep -F -- "$CONCLAVE_MACOS_SIGN_IDENTITY" >/dev/null; then
+    echo "The requested signing identity is not available as a valid code-signing identity in Keychain." >&2
+    exit 1
+  fi
+fi
 
 VERSION="${CONCLAVE_WORKSPACE_VERSION:-$(awk '/^version:/ {print $2; exit}' "$WORKSPACE_DIR/pubspec.yaml")}"
 if [[ -z "$VERSION" ]]; then
@@ -146,15 +166,33 @@ cp "$WORKSPACE_DIR/macos/Runner/LaunchAgents/com.conclaveax.workspace.service.pl
   "$LAUNCH_AGENTS_DIR/com.conclaveax.workspace.service.plist"
 
 if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
-  echo "Signing with configured Developer ID identity"
+  echo "Signing with configured Apple identity"
   codesign --force --options runtime --timestamp \
     --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" \
     "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
   codesign --force --options runtime --timestamp \
     --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" \
     "$HELPERS_DIR/conclave-service"
+
+  # macOS 26 validates SMAppService launch agents against the signed
+  # executable's team. Inject the team identifier before sealing the app so
+  # the launch constraint is part of the signed resource set.
+  TEAM_ID="$(codesign -dv --verbose=4 "$HELPERS_DIR/conclave-service" 2>&1 \
+    | awk -F= '/^TeamIdentifier=/{print $2; exit}')"
+  if [[ -z "$TEAM_ID" ]]; then
+    echo "Could not determine the signing team identifier for the Workspace service." >&2
+    exit 1
+  fi
+  /usr/bin/plutil -insert SpawnConstraint.team-identifier \
+    -string "$TEAM_ID" \
+    "$LAUNCH_AGENTS_DIR/com.conclaveax.workspace.service.plist"
+
   codesign --force --deep --options runtime --timestamp \
     --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" "$APP"
+  codesign --verify --strict --verbose=2 \
+    "$HELPERS_DIR/conclave-service"
+  codesign --verify --strict --verbose=2 \
+    "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
   codesign --verify --deep --strict --verbose=2 "$APP"
 else
   echo "CONCLAVE_MACOS_SIGN_IDENTITY is not set; sealing the development bundle with ad-hoc signatures."

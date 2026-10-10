@@ -118,3 +118,15 @@ change Work Root through a running service; `configuration.update` rejects that
 operation. Configuration is read at startup, requires no Cloud round trip, and
 does not move files. IPC startup and configuration reload do not await Cloud
 connectivity. A slow/offline Cloud handshake does not block local management.
+
+## IPC startup reliability
+
+Flutter disposes failed initial manager clients and subscriptions, including
+their reconnect loop, before permitting a fresh attachment attempt. A single
+in-flight attempt prevents duplicate management clients. Retries reread the
+capability key; established IPC connections retain their existing reconnect
+behavior. Startup timeout means local attachment failed, not proof of process
+failure. Sanitized host status and IPC diagnostics remain visible in the
+management UI. Regression tests use real Unix sockets for delayed key/socket
+readiness, rejected handshakes, concurrent starts, timeout, and attaching to an
+already running service without re-registering it.

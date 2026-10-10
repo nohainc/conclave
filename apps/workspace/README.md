@@ -106,11 +106,20 @@ Build a local macOS Workspace app from repository root:
 bash scripts/build-workspace-macos.sh
 ~~~
 
-The local build bundles the generic CLI Worker Engine. Apple Developer ID
-signing is separately optional via `--sign`.
+The local build bundles the generic CLI Worker Engine. With no arguments the
+script creates a signed release using the configured local Apple Development
+identity. Use `--sign` or `CONCLAVE_MACOS_SIGN_IDENTITY` to select another
+certificate. The build embeds a launch constraint
+matching the signed helper and its team. macOS rejects ad-hoc signed helpers
+launched through SMAppService before the service can create its IPC socket.
+The build also verifies the helper and Engine signatures before packaging;
+restore the signing certificate and private key if that check fails.
+`--debug` without an identity is available for UI inspection only; Start Service
+reports the signing requirement immediately. Install a valid signing certificate
+and its private key in Keychain before building a service-enabled app.
 
 Optional environment:
-- `CONCLAVE_MACOS_SIGN_IDENTITY` — Developer ID Application identity;
+- `CONCLAVE_MACOS_SIGN_IDENTITY` — optional signing identity override;
 - `CONCLAVE_MACOS_NOTARY_PROFILE` — `notarytool` keychain profile;
 - `CONCLAVE_WORKSPACE_VERSION` — override build version.
 - `CONCLAVE_RELEASE_TRUST_KEYS_JSON` — explicit public Ed25519 roots. Unsigned
@@ -204,3 +213,17 @@ job (including an old helper path after an update), the native bridge refreshes
 its `SMAppService` registration. It does not unregister a running job. Local
 IPC and configuration reload become ready before Cloud's initial handshake;
 Cloud failure is shown as connectivity state, not local startup failure.
+
+## Service startup diagnostics
+
+Failed initial IPC attempts are disposed (subscription and client), so retries
+read the current capability key and socket instead of retaining a failed
+client. Concurrent startup calls share one in-flight attempt; an established
+client keeps event-driven reconnect behavior. A registration timeout reports
+that IPC attachment failed, not that the process necessarily failed to start.
+The error and Advanced Diagnostics include registration, launchd state, key/
+socket presence, last IPC error, and the last service exit code when available.
+The native bridge exposes selected operational fields only, never the launchd
+environment or the local capability key. IPC remains independent of Cloud
+connectivity. Login/reboot, TCC and signed-device acceptance remain separate
+release checks.

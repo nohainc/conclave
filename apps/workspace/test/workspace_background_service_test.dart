@@ -42,4 +42,24 @@ void main() {
     expect(unsupported.registration,
         WorkspaceBackgroundServiceRegistration.unsupported);
   });
+  test(
+      'host diagnostics retain launchd state and last exit without assuming IPC',
+      () {
+    final status = WorkspaceBackgroundServiceStatus.fromNative({
+      'supported': true,
+      'registration': 'registered',
+      'helperPresent': true,
+      'plistPresent': true,
+      'launchdState': 'running',
+      'lastExitCode': 7,
+      'lastExitReason': 'OS_REASON_CODESIGNING',
+    });
+    expect(status.launchdState, 'running');
+    expect(status.lastExitCode, 7);
+    expect(status.lastExitReason, 'OS_REASON_CODESIGNING');
+    final unknown = WorkspaceBackgroundServiceStatus.fromNative(const {});
+    expect(unknown.launchdState, 'unknown');
+    expect(unknown.lastExitCode, isNull);
+    expect(unknown.lastExitReason, isNull);
+  });
 }

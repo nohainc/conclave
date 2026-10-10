@@ -2182,4 +2182,41 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Stop Service'), findsOneWidget);
   });
+  testWidgets(
+      'advanced diagnostics distinguish host state from unavailable IPC',
+      (tester) async {
+    await pumpDashboard(
+        tester,
+        const WorkspaceUiSnapshot(
+          mode: WorkspaceUiMode.offline,
+          title: 'Service connection unavailable',
+          detail: '',
+          desiredRuntimeConnected: true,
+          registered: true,
+          workspaceId: 'workspace-test',
+          serviceDiagnostics: {
+            'Registration': 'registered',
+            'launchd': 'running',
+            'IPC key': 'Found',
+            'IPC socket': 'Missing',
+            'Last IPC error': 'Socket unavailable',
+            'Service exit code': '7',
+          },
+        ),
+        signedIn: true);
+    expect(
+        find.text('Service running · management unavailable'), findsOneWidget);
+    expect(find.text('Service stopped'), findsNothing);
+    expect(find.text('Service startup'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Advanced Diagnostics'), 250,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Advanced Diagnostics'));
+    await tester.pumpAndSettle();
+    expect(find.text('Service startup'), findsOneWidget);
+    expect(find.text('launchd'), findsOneWidget);
+    expect(find.text('IPC socket'), findsOneWidget);
+    expect(find.text('Last IPC error'), findsOneWidget);
+    expect(find.text('Service exit code'), findsOneWidget);
+    expect(find.text('Socket unavailable'), findsOneWidget);
+  });
 }

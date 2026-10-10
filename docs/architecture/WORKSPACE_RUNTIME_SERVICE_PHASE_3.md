@@ -22,7 +22,19 @@ copies its generic Worker Engine alongside it, embeds the launchd property list,
 and signs both executables before the enclosing app when a Developer ID
 identity is configured. The release archive is structurally checked before it
 is created. The ad-hoc/unsigned development build can be inspected, but is not
-valid evidence that macOS will accept background registration.
+valid evidence that macOS will accept background registration. macOS launch
+constraints reject an ad-hoc helper before its entry point runs. Release builds
+therefore require a valid Apple signing identity; unsigned debug builds are for
+UI inspection only. The native registration boundary checks the helper against
+the Apple signing anchor and reports an actionable signing error before
+registration rather than allowing an inevitable IPC timeout.
+
+The LaunchAgent also declares a `SpawnConstraint` for the helper's signing
+identifier. Release builds add the helper's signing team identifier before the
+containing app is sealed. This keeps the macOS launch constraint tied to the
+actual signed helper and avoids a registration that reports success while
+launchd rejects the process before its Dart entry point runs (notably on macOS
+26 and later).
 
 The native bridge exposes registration, unregistration, status, and opening
 Login Items settings through the existing desktop method channel. It uses
@@ -90,3 +102,16 @@ plist. A running job is preserved; an uninspectable job reports an actionable
 error. No manual plist installation, Cloud schema change, or installation
 identity reset is involved. Verify this recovery using the signed-device gates
 above after a bundle update.
+
+The native status bridge exposes `launchdState`, nullable `lastExitCode`, and
+nullable `lastExitReason` as additive diagnostic fields, independently of
+registration and authenticated IPC health. A codesigning exit reason is
+reported immediately so a broken certificate chain is not presented as a
+generic IPC timeout. Only these selected values are returned from launchd
+inspection; raw job output and its environment are never returned to Flutter.
+
+The native parser uses the job's first state record; resource and jetsam
+coalition states cannot override it. A compiled Swift regression fixture covers
+both Running and Stopped jobs with nested Active coalitions and verifies that
+environment attributes are excluded. Automated Unix-socket startup tests do
+not replace signed-device login/reboot and LaunchAgent lifecycle acceptance.

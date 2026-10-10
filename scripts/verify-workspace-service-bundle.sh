@@ -30,7 +30,13 @@ done
   echo "LaunchAgent argv[0] does not identify the embedded service." >&2
   exit 1
 }
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :SpawnConstraint:signing-identifier' "$PLIST")" == "conclave-service" ]] || {
+  echo "LaunchAgent spawn constraint does not identify the embedded service." >&2
+  exit 1
+}
 if codesign -dv "$APP" >/dev/null 2>&1; then
+  codesign --verify --strict --verbose=2 "$HELPER"
+  codesign --verify --strict --verbose=2 "$ENGINE"
   codesign --verify --deep --strict --verbose=2 "$APP"
 fi
 echo "Workspace service bundle is structurally valid: $APP"

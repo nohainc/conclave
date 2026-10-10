@@ -32,7 +32,10 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     this.config, {
     required this.credentialStore,
     Map<String, Object?>? initialManagerSnapshot,
-  }) {
+    WorkspaceServiceManager? serviceManager,
+    this.startupTimeout = const Duration(seconds: 30),
+    this.startupRetryDelay = const Duration(milliseconds: 300),
+  }) : _hostServiceManager = serviceManager ?? _serviceManager {
     if (initialManagerSnapshot != null) {
       _managerSnapshot = initialManagerSnapshot;
       _managerConnected = true;
@@ -43,6 +46,12 @@ class WorkspaceLifecycleController extends ChangeNotifier {
   }
 
   final WorkspaceConfig config;
+  final WorkspaceServiceManager _hostServiceManager;
+  final Duration startupTimeout;
+  final Duration startupRetryDelay;
+  Future<void>? _managerConnectAttempt;
+  Object? _lastIpcError;
+  Map<String, String> _serviceDiagnostics = const {};
   final SecureCredentialStore credentialStore;
   bool _hidden = false;
   bool _quitting = false;
@@ -104,7 +113,8 @@ class WorkspaceLifecycleController extends ChangeNotifier {
   }
 
   Future<void> ensureBackgroundService() async {
-    var status = await _serviceManager.status();
+    _serviceDiagnostics = const {};
+    var status = await _hostServiceManager.status();
     if (!status.supported) {
       throw UnsupportedError(
         'Background service management is unavailable on this platform.',
@@ -113,23 +123,53 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     await _connectToManager();
     if (_managerConnected) return;
     // The host refreshes stale/stopped registrations, never a running job.
-    status = await _serviceManager.register();
+    status = await _hostServiceManager.register();
     if (status.registration ==
         WorkspaceBackgroundServiceRegistration.approvalRequired) {
       throw StateError(
           'Approve Conclave Workspace in System Settings → General → Login Items, then start the service again.');
     }
-    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    final deadline = DateTime.now().add(startupTimeout);
     while (!_managerConnected && DateTime.now().isBefore(deadline)) {
       await _connectToManager();
       if (!_managerConnected) {
-        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await Future<void>.delayed(startupRetryDelay);
       }
     }
     if (!_managerConnected) {
-      throw TimeoutException(
-        'Background service was registered but did not start.',
+      try {
+        status = await _hostServiceManager.status();
+      } on Object {
+        // Preserve the connection failure if host inspection also fails.
+      }
+      final runtime = WorkspacePaths(config.dataDirectory).runtimeDirectory;
+      _serviceDiagnostics = {
+        'Registration': status.registration.name,
+        'launchd': status.launchdState,
+        'IPC key': await File('${runtime.path}/manager-ipc.key').exists()
+            ? 'Found'
+            : 'Missing',
+        'IPC socket': await FileSystemEntity.type(
+                    '${runtime.path}/manager.sock',
+                    followLinks: false) !=
+                FileSystemEntityType.notFound
+            ? 'Found'
+            : 'Missing',
+        'IPC connection': 'Unavailable',
+        'Last IPC error': _lastIpcError?.toString() ?? 'Unknown',
+        if (status.lastExitCode != null)
+          'Service exit code': '${status.lastExitCode}',
+        if (status.lastExitReason != null)
+          'Service exit reason': status.lastExitReason!,
+      };
+      final error = TimeoutException(
+        'Workspace Service was registered, but Workspace could not connect to it.\n'
+        '${_serviceDiagnostics.entries.map((entry) => "${entry.key}: ${entry.value}").join("\n")}',
+        startupTimeout,
       );
+      _startupError = error;
+      notifyListeners();
+      throw error;
     }
   }
 
@@ -170,37 +210,76 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     return result;
   }
 
-  Future<void> _connectToManager() async {
-    if (_closed || _managerConnected) return;
-    if (_manager != null) return;
+  Future<void> _connectToManager() {
+    if (_closed || _managerConnected) return Future<void>.value();
+    final pending = _managerConnectAttempt;
+    if (pending != null) return pending;
+    if (_manager != null) return Future<void>.value();
+    final attempt = _openManagerConnection();
+    _managerConnectAttempt = attempt;
+    return attempt.whenComplete(() {
+      if (identical(_managerConnectAttempt, attempt)) {
+        _managerConnectAttempt = null;
+      }
+    });
+  }
+
+  Future<void> _openManagerConnection() async {
     final runtimeDirectory =
         WorkspacePaths(config.dataDirectory).runtimeDirectory;
     final keyFile = File('${runtimeDirectory.path}/manager-ipc.key');
+    WorkspaceManagerIpcConnection? connection;
+    StreamSubscription<Map<String, Object?>>? events;
     try {
       final key = (await keyFile.readAsString()).trim();
+      if (_closed) return;
       if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(key)) {
         throw StateError('Workspace service IPC key is invalid.');
       }
-      final connection = WorkspaceManagerIpcConnection(
-        socketPath: '${runtimeDirectory.path}/manager.sock',
-        key: key,
-      );
+      connection = WorkspaceManagerIpcConnection(
+          socketPath: '${runtimeDirectory.path}/manager.sock', key: key);
       _manager = connection;
-      _managerEvents = connection.events.listen(_handleManagerEvent);
+      events = connection.events.listen((event) {
+        if (!_closed && identical(_manager, connection)) {
+          _handleManagerEvent(event);
+        }
+      });
+      _managerEvents = events;
       await connection.connect();
       if (_closed) {
+        await events.cancel();
         await connection.close();
-        _manager = null;
+        if (identical(_manager, connection)) _manager = null;
+        if (identical(_managerEvents, events)) _managerEvents = null;
         return;
       }
       _managerConnected = true;
       _startupError = null;
+      _lastIpcError = null;
+      _serviceDiagnostics = const {};
       _acceptSnapshot(connection.initialSnapshot);
       notifyListeners();
     } on Object catch (error) {
-      _managerConnected = false;
-      _startupError = error;
-      notifyListeners();
+      // Dispose the failed client and its independent retry loop. The next
+      // startup attempt must read the current capability key and socket.
+      try {
+        await events?.cancel();
+        await connection?.close();
+      } finally {
+        if (identical(_manager, connection)) _manager = null;
+        if (identical(_managerEvents, events)) _managerEvents = null;
+        _managerConnected = false;
+        _lastIpcError = error;
+        if (_serviceDiagnostics.isEmpty) {
+          _startupError = error;
+        } else {
+          _serviceDiagnostics = {
+            ..._serviceDiagnostics,
+            'Last IPC error': error.toString(),
+          };
+        }
+        if (!_closed) notifyListeners();
+      }
     }
   }
 
@@ -505,6 +584,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
                         : 'Offline';
     return WorkspaceUiSnapshot(
       mode: mode,
+      serviceDiagnostics: _serviceDiagnostics,
       desiredRuntimeConnected: desired,
       title: !_managerConnected
           ? 'Workspace Service is unavailable'
@@ -574,7 +654,7 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
           timeout: const Duration(seconds: 20));
     }
     try {
-      await _serviceManager.unregister();
+      await _hostServiceManager.unregister();
     } on Object {
       if (_managerConnected) await request('connection.reconnect');
       rethrow;
@@ -703,8 +783,23 @@ class WorkspaceUiSnapshot {
     this.lastConnectionAttemptAt,
     this.appVersion = conclaveWorkspaceAppVersion,
     this.issue,
+    this.serviceDiagnostics = const {},
   });
 
+  String get serviceStatusDescription {
+    if (serviceRunning) return 'Running';
+    if (serviceDiagnostics['launchd'] == 'running') {
+      return 'Running · Management unavailable';
+    }
+    if (serviceDiagnostics.isNotEmpty &&
+        !const {'stopped', 'not running'}
+            .contains(serviceDiagnostics['launchd'])) {
+      return 'Status unavailable';
+    }
+    return 'Stopped';
+  }
+
+  final Map<String, String> serviceDiagnostics;
   final WorkspaceUiMode mode;
   final String title;
   final String detail;
