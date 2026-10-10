@@ -9,17 +9,26 @@ fi
 
 HELPER="$APP/Contents/Helpers/conclave-service"
 ENGINE="$APP/Contents/Helpers/assets/engines/conclave_cli_worker_engine"
+APP_EXECUTABLE="$APP/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
 PLIST="$APP/Contents/Library/LaunchAgents/com.conclaveax.workspace.service.plist"
-for path in "$HELPER" "$ENGINE" "$PLIST"; do
+for path in "$HELPER" "$ENGINE" "$APP_EXECUTABLE" "$PLIST"; do
   [[ -e "$path" ]] || { echo "Missing service bundle item: $path" >&2; exit 1; }
 done
 [[ -x "$HELPER" && -x "$ENGINE" ]] || {
   echo "Service and Engine bundle items must be executable." >&2
   exit 1
 }
+[[ -x "$APP_EXECUTABLE" ]] || {
+  echo "Workspace app executable must be executable." >&2
+  exit 1
+}
 /usr/libexec/PlistBuddy -c 'Print :Label' "$PLIST" >/dev/null
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :Label' "$PLIST")" == "com.conclaveax.workspace.service" ]] || {
   echo "Unexpected LaunchAgent label." >&2
+  exit 1
+}
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :AssociatedBundleIdentifiers:0' "$PLIST")" == "com.conclaveax.workspace" ]] || {
+  echo "LaunchAgent is not associated with the Workspace app bundle." >&2
   exit 1
 }
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :BundleProgram' "$PLIST")" == "Contents/Helpers/conclave-service" ]] || {
@@ -45,13 +54,19 @@ fi
 }
 
 if codesign -dv "$APP" >/dev/null 2>&1; then
+  team_id() {
+    codesign -dv --verbose=4 "$1" 2>&1 \
+      | awk -F= '/^TeamIdentifier=/ && $2 != "not set" && $2 != "" && !s{print $2; s=1}'
+  }
+  identifier() {
+    codesign -dv --verbose=4 "$1" 2>&1 \
+      | awk -F= '/^Identifier=/ && !s{print $2; s=1}'
+  }
+
   codesign --verify --strict --verbose=2 "$HELPER"
   codesign --verify --strict --verbose=2 "$ENGINE"
+  codesign --verify --strict --verbose=2 "$APP_EXECUTABLE"
   codesign --verify --deep --strict --verbose=2 "$APP"
-  codesign --verify --strict --verbose=2 \
-    --test-requirement '=anchor apple generic' "$HELPER"
-  codesign --verify --strict --verbose=2 \
-    --test-requirement '=anchor apple generic' "$ENGINE"
 
   # Dart AOT executables are hardened-runtime code. Keep the helper-specific
   # entitlements intact after the application bundle is sealed; otherwise
@@ -73,19 +88,19 @@ if codesign -dv "$APP" >/dev/null 2>&1; then
     }
   done
 
-  team_id() {
-    codesign -dv --verbose=4 "$1" 2>&1 \
-      | awk -F= '/^TeamIdentifier=/ && !s{print $2; s=1}'
-  }
-  identifier() {
-    codesign -dv --verbose=4 "$1" 2>&1 \
-      | awk -F= '/^Identifier=/ && !s{print $2; s=1}'
-  }
-
   APP_TEAM_ID="$(team_id "$APP")"
   HELPER_TEAM_ID="$(team_id "$HELPER")"
   ENGINE_TEAM_ID="$(team_id "$ENGINE")"
+  APP_EXECUTABLE_TEAM_ID="$(team_id "$APP_EXECUTABLE")"
   HELPER_IDENTIFIER="$(identifier "$HELPER")"
+  if [[ -n "$APP_TEAM_ID" || -n "$APP_EXECUTABLE_TEAM_ID" || -n "$HELPER_TEAM_ID" || -n "$ENGINE_TEAM_ID" ]]; then
+    codesign --verify --strict --verbose=2 \
+      --test-requirement '=anchor apple generic' "$APP_EXECUTABLE"
+    codesign --verify --strict --verbose=2 \
+      --test-requirement '=anchor apple generic' "$HELPER"
+    codesign --verify --strict --verbose=2 \
+      --test-requirement '=anchor apple generic' "$ENGINE"
+  fi
   [[ "$HELPER_IDENTIFIER" == "conclave-service" ]] || {
     echo "The signed service helper has an unexpected designated identifier: ${HELPER_IDENTIFIER:-missing}." >&2
     exit 1
@@ -94,9 +109,9 @@ if codesign -dv "$APP" >/dev/null 2>&1; then
   # Apple-signed release bundles must have one signing team across the app,
   # service, and Worker Engine. Ad-hoc development signatures have no team
   # identifier and are intentionally allowed for UI-only development builds.
-  if [[ -n "$APP_TEAM_ID" || -n "$HELPER_TEAM_ID" || -n "$ENGINE_TEAM_ID" ]]; then
-    [[ -n "$APP_TEAM_ID" && "$APP_TEAM_ID" == "$HELPER_TEAM_ID" && "$APP_TEAM_ID" == "$ENGINE_TEAM_ID" ]] || {
-      echo "Workspace app, service helper, and Worker Engine are not signed by the same team." >&2
+  if [[ -n "$APP_TEAM_ID" || -n "$APP_EXECUTABLE_TEAM_ID" || -n "$HELPER_TEAM_ID" || -n "$ENGINE_TEAM_ID" ]]; then
+    [[ -n "$APP_TEAM_ID" && "$APP_TEAM_ID" == "$APP_EXECUTABLE_TEAM_ID" && "$APP_TEAM_ID" == "$HELPER_TEAM_ID" && "$APP_TEAM_ID" == "$ENGINE_TEAM_ID" ]] || {
+      echo "Workspace app, app executable, service helper, and Worker Engine are not signed by the same team." >&2
       exit 1
     }
   fi

@@ -4,6 +4,10 @@
 <dict>
 	<key>Label</key>
 	<string>com.conclaveax.workspace.service</string>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>com.conclaveax.workspace</string>
+	</array>
 	<key>BundleProgram</key>
 	<string>Contents/Helpers/conclave-service</string>
 	<key>ProgramArguments</key>

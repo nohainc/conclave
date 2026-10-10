@@ -23,7 +23,6 @@ import 'workspace_manager_ipc.dart';
 import 'workspace_manager_worker_catalog.dart';
 import 'local_management_authenticator.dart';
 import 'copyable_messages.dart';
-import 'cli_worker_engine_supervisor.dart';
 import 'worker_readiness.dart';
 import 'workspace_worker_view.dart';
 

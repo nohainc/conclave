@@ -41,6 +41,44 @@ void main() {
     expect(cloud['acceptingNewWork'], isFalse);
   });
 
+  test('update checks are handled by the service without reconnecting Cloud',
+      () async {
+    if (Platform.isWindows) return;
+    final root = await Directory('/tmp').createTemp('ws-updates-');
+    addTearDown(() => root.delete(recursive: true));
+    var checks = 0;
+    final workspace = Workspace(
+      config: WorkspaceConfig(dataDirectory: root),
+      updateHandler: (request) async {
+        expect(request['action'], 'check');
+        checks++;
+        return const {'phase': 'idle'};
+      },
+    );
+    final manager = WorkspaceManagerService(workspace);
+    try {
+      await manager.start();
+    } on SocketException catch (error) {
+      if (error.osError?.errorCode == 1) {
+        markTestSkipped('Execution sandbox blocks local Unix sockets.');
+        return;
+      }
+      rethrow;
+    }
+    addTearDown(manager.close);
+    final key =
+        (await File('${root.path}/runtime/manager-ipc.key').readAsString())
+            .trim();
+    final client = await WorkspaceManagerIpcClient.connect(
+      socketPath: '${root.path}/runtime/manager.sock',
+      key: key,
+    );
+    addTearDown(client.close);
+
+    expect(await client.request('updates.check'), {'phase': 'idle'});
+    expect(checks, 1);
+  });
+
   test(
       'prepareStop drains Cloud admission while process shutdown stays host-owned',
       () async {

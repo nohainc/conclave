@@ -155,12 +155,13 @@ does not unregister the LaunchAgent or change the persisted Cloud connection
 intent. Closing or quitting Workspace.app only closes the management client
 and leaves the service running.
 
-The two tabs are **Workspace** and **Workers**. Worker configuration and live
-tests execute in the service through authenticated IPC; the UI awaits results.
-A local display cache retains the last known Worker list while the service is
-stopped, with configuration and tests disabled. Name and Work Root are editable
-only while the service is stopped. Diagnostics and actionable service/Cloud
-errors remain accessible from the Workspace tab.
+The Workspace page contains **Workspace** and **Workers** sections. Worker
+configuration and live tests execute in the service through authenticated IPC;
+the UI awaits results. A local display cache retains the last known Worker list
+while the service is stopped, with configuration and tests disabled. Name and
+Work Root are editable only while the service is stopped. The Workers section
+has a catalog refresh control in its heading, while actionable service and
+Cloud errors remain visible in context.
 
 Packaged runtime process names are `conclave-service` and `conclave-agent`.
 The latter is the separately isolated generic CLI Worker Engine, materialized

@@ -81,9 +81,7 @@ private enum WorkspaceKeychainChannel {
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
-    let windowFrame = self.frame
     self.contentViewController = flutterViewController
-    self.setFrame(windowFrame, display: true)
     WorkspaceKeychainChannel.register(
       messenger: flutterViewController.engine.binaryMessenger
     )
@@ -91,7 +89,11 @@ class MainFlutterWindow: NSWindow {
       messenger: flutterViewController.engine.binaryMessenger
     )
 
-    self.minSize = NSSize(width: 400, height: 600)
+    self.minSize = NSSize(width: 750, height: 650)
+    var frame = self.frame
+    frame.size.width = 750
+    frame.size.height = 650
+    self.setFrame(frame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 

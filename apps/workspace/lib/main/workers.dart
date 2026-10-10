@@ -5,7 +5,6 @@ class _WorkersTab extends StatefulWidget {
     required this.isSelected,
     this.catalogCoordinator,
     this.serviceAvailable = true,
-    this.onRollbackToolProfile,
     this.onReadinessCheck,
     this.onConfigureWorker,
     this.onSetWorkerEnabled,
@@ -15,7 +14,6 @@ class _WorkersTab extends StatefulWidget {
   final bool isSelected;
   final bool serviceAvailable;
   final WorkspaceWorkerCatalogClient? catalogCoordinator;
-  final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
   final Future<void> Function(WorkerDescriptor worker)? onConfigureWorker;
   final Future<void> Function(String workerId, bool enabled)?
       onSetWorkerEnabled;
@@ -28,8 +26,6 @@ class _WorkersTab extends StatefulWidget {
 
 class _WorkersTabState extends State<_WorkersTab> {
   final Set<String> _updatingWorkerTypes = {};
-  bool _rollingBack = false;
-
   @override
   void initState() {
     super.initState();
@@ -68,32 +64,6 @@ class _WorkersTabState extends State<_WorkersTab> {
     }
   }
 
-  Future<void> _rollbackToolProfile(String workerTypeId) async {
-    if (_rollingBack) return;
-    setState(() => _rollingBack = true);
-    var passed = false;
-    try {
-      passed = await widget.onRollbackToolProfile?.call(workerTypeId) ?? false;
-    } on Object {
-      passed = false;
-    } finally {
-      if (mounted) {
-        setState(() {
-          _rollingBack = false;
-        });
-        unawaited(widget.catalogCoordinator?.refresh(force: true) ??
-            Future<void>.value());
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(passed
-                ? 'Profile rollback passed its passive probe.'
-                : 'Rollback validation failed. The current Profile was kept.'),
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _setActivationState(
     LocalWorker worker,
     bool enabled,
@@ -106,92 +76,73 @@ class _WorkersTabState extends State<_WorkersTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        if (!widget.serviceAvailable) ...[
-          const Text(
-              'Start the service to configure or test Workers. The last known Worker list is shown below.'),
-          const SizedBox(height: 16),
-        ],
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'The service configures and tests the Workers available on this computer.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Refresh Worker catalog',
-              onPressed:
-                  !widget.serviceAvailable || widget.catalogCoordinator == null
-                      ? null
-                      : () => unawaited(
-                            widget.catalogCoordinator!.refresh(force: true),
-                          ),
-              icon: const Icon(Icons.refresh),
-            ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!widget.serviceAvailable) ...[
+            const Text(
+                'Start the service to configure or test Workers. The last known Worker list is shown below.'),
+            const SizedBox(height: 16),
           ],
-        ),
-        const SizedBox(height: 16),
-        Builder(
-          builder: (context) {
-            final catalog = widget.catalogCoordinator?.snapshot ??
-                const WorkerCatalogSnapshot();
-            final canConfigure = widget.onConfigureWorker != null &&
-                catalog.localRegistryLoaded &&
-                catalog.localRegistryError == null;
-            return Column(
-              children: [
-                for (final worker in catalog.workers)
-                  if (worker.descriptor == null)
-                    _buildRetiredWorkerCard(worker, theme)
-                  else
-                    _buildLogicalWorkerCard(worker, canConfigure, theme),
-                if (catalog.descriptors.isEmpty && catalog.localRegistryLoaded)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      'No Workers are available in the Cloud catalog.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+          Builder(
+            builder: (context) {
+              final catalog = widget.catalogCoordinator?.snapshot ??
+                  const WorkerCatalogSnapshot();
+              final canConfigure = widget.onConfigureWorker != null &&
+                  catalog.localRegistryLoaded &&
+                  catalog.localRegistryError == null;
+              return Column(
+                children: [
+                  for (final worker in catalog.workers)
+                    if (worker.descriptor == null)
+                      _buildRetiredWorkerCard(worker, theme)
+                    else
+                      _buildLogicalWorkerCard(worker, canConfigure, theme),
+                  if (catalog.descriptors.isEmpty &&
+                      catalog.localRegistryLoaded)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        'No Workers are available in the Cloud catalog.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
-                  ),
-                if (catalog.catalogError != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: CopyableMessageText(
-                      catalog.catalogError!,
-                      style: TextStyle(color: theme.colorScheme.error),
-                      iconColor: theme.colorScheme.error,
+                  if (catalog.catalogError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: CopyableMessageText(
+                        catalog.catalogError!,
+                        style: TextStyle(color: theme.colorScheme.error),
+                        iconColor: theme.colorScheme.error,
+                      ),
                     ),
-                  ),
-                if (catalog.localRegistryError != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: CopyableMessageText(
-                      catalog.localRegistryError!,
-                      style: TextStyle(color: theme.colorScheme.error),
-                      iconColor: theme.colorScheme.error,
+                  if (catalog.localRegistryError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: CopyableMessageText(
+                        catalog.localRegistryError!,
+                        style: TextStyle(color: theme.colorScheme.error),
+                        iconColor: theme.colorScheme.error,
+                      ),
                     ),
-                  ),
-                if (!catalog.localRegistryLoaded &&
-                    catalog.localRegistryError != null)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 4),
-                    child: CopyableMessageText(
-                      'Local Worker setup is unavailable. Restart Workspace and check Diagnostics.',
+                  if (!catalog.localRegistryLoaded &&
+                      catalog.localRegistryError != null)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: CopyableMessageText(
+                        'Local Worker setup is unavailable. Restart Workspace and try again.',
+                      ),
                     ),
-                  ),
-              ],
-            );
-          },
-        ),
-      ],
+                ],
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -254,6 +205,16 @@ class _WorkersTabState extends State<_WorkersTab> {
                         '$providerToolName · $providerToolVersion',
                         style: theme.textTheme.bodySmall,
                       )),
+                  if (worker != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Local Worker · ${worker.id}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
                 ]),
             trailing: _updatingWorkerTypes.contains(entry.workerTypeId)
                 ? const SizedBox(
@@ -289,137 +250,6 @@ class _WorkersTabState extends State<_WorkersTab> {
                                       : null,
                                 )),
                           ]),
-          ),
-          Theme(
-            data: theme.copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              leading: const Icon(Icons.analytics_outlined, size: 18),
-              title: Text(
-                'Diagnostics',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              children: [
-                _DetailRow(
-                  label: 'Catalog',
-                  value: 'Available',
-                ),
-                _DetailRow(
-                  label: 'Profile state',
-                  value: view.profileState.label,
-                ),
-                _DetailRow(
-                  label: 'Local Worker',
-                  value: switch (view.localState) {
-                    WorkspaceLocalWorkerState.loading => 'Loading',
-                    WorkspaceLocalWorkerState.unavailable => 'Unavailable',
-                    WorkspaceLocalWorkerState.notConfigured => 'Not configured',
-                    WorkspaceLocalWorkerState.configured =>
-                      worker?.id ?? 'Configured',
-                  },
-                ),
-                _DetailRow(
-                  label: 'Worker state',
-                  value: view.state.label,
-                ),
-                _DetailRow(
-                  label: 'Workspace version',
-                  value: conclaveWorkspaceAppVersion,
-                ),
-                _DetailRow(
-                  label: 'Engine version',
-                  value: cliWorkerEngineVersion,
-                ),
-                if (profile != null) ...[
-                  _DetailRow(
-                    label: 'Integration',
-                    value:
-                        '${profile['definitionId']}@${profile['releaseVersion'] ?? 'unavailable'}',
-                  ),
-                  _DetailRow(
-                    label: 'Profile resolution',
-                    value: '${profile['source']}',
-                  ),
-                  _DetailRow(
-                    label: 'Profile channel',
-                    value: '${profile['channel']}',
-                  ),
-                  _DetailRow(
-                    label: 'Active Profile',
-                    value: '${profile['activeVersion'] ?? 'None'}',
-                  ),
-                  _DetailRow(
-                    label: 'Last-known-good Profile',
-                    value: '${profile['lastKnownGoodVersion'] ?? 'None'}',
-                  ),
-                  if (profile['lastKnownGoodVersion'] is int)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 138, top: 6),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: OutlinedButton.icon(
-                          onPressed: _rollingBack ||
-                                  widget.onRollbackToolProfile == null
-                              ? null
-                              : () => _rollbackToolProfile(entry.workerTypeId),
-                          icon: _rollingBack
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.restore, size: 16),
-                          label: Text(
-                            'Validate and roll back to Profile ${profile['lastKnownGoodVersion']}',
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-                if (view.profileAvailability.message != null)
-                  _DetailRow(
-                    label: 'Profile resolution detail',
-                    value: view.profileAvailability.message!,
-                  ),
-                _DetailRow(
-                  label: 'Worker Type ID',
-                  value: entry.workerTypeId,
-                ),
-                _DetailRow(
-                  label: 'Provider CLI',
-                  value: worker?.toolName ?? entry.providerToolName,
-                ),
-                _DetailRow(
-                  label: 'Provider CLI version',
-                  value: providerToolVersion,
-                ),
-                _DetailRow(
-                  label: 'Provider tool path (local only)',
-                  value: worker?.toolPath ?? 'Not resolved',
-                ),
-                _DetailRow(
-                  label: 'Readiness',
-                  value: readiness,
-                ),
-                _DetailRow(
-                  label: 'Last Test',
-                  value: _lastLiveTestLabel(worker),
-                ),
-                if (worker?.lastLiveTestDetails != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 138, bottom: 8),
-                    child: CopyableMessageText(
-                      worker!.lastLiveTestDetails!,
-                      style: theme.textTheme.bodySmall,
-                      tooltip: 'Copy Worker diagnostic',
-                    ),
-                  ),
-              ],
-            ),
           ),
         ],
       ),
@@ -462,6 +292,15 @@ class _WorkersTabState extends State<_WorkersTab> {
               padding: const EdgeInsets.only(top: 3),
               child: Text('$toolName · $toolVersion',
                   style: theme.textTheme.bodySmall),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                'Local Worker · ${worker.id}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
           ],
         ),
@@ -522,8 +361,10 @@ class _WorkersTabState extends State<_WorkersTab> {
       if (mounted) setState(() {});
     } on Object {
       if (mounted) {
-        showCopyableErrorSnackBar(context,
-            'Could not complete setup for ${entry.displayName}. Check Diagnostics.');
+        showCopyableErrorSnackBar(
+          context,
+          'Could not complete setup for ${entry.displayName}. Try again or review the Worker status.',
+        );
       }
     } finally {
       _updatingWorkerTypes.remove(entry.workerTypeId);
@@ -577,103 +418,6 @@ class _CatalogStatusBadge extends StatelessWidget {
           fontWeight: FontWeight.w600,
           color: color,
         ),
-      ),
-    );
-  }
-}
-
-String _lastLiveTestLabel(LocalWorker? worker) {
-  final testedAt = worker?.lastLiveTestAt;
-  if (testedAt == null) return 'Not run';
-  final date = DateTime.tryParse(testedAt)?.toLocal();
-  final when = date == null ? testedAt : date.toString().split('.').first;
-  final result = worker?.lastLiveTestPassed == true ? 'Passed' : 'Failed';
-  return '$result · $when';
-}
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 130,
-            child: Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CopyableDetailRow extends StatelessWidget {
-  const _CopyableDetailRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 130,
-            child: Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              overflow: TextOverflow.ellipsis,
-              style: ConclaveTypography.monoMedium,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.copy, size: 14),
-            tooltip: 'Copy $label',
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: value));
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('$label copied to clipboard'),
-                  duration: const Duration(seconds: 1),
-                ),
-              );
-            },
-          ),
-        ],
       ),
     );
   }

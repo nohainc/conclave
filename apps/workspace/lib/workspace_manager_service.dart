@@ -349,6 +349,18 @@ class WorkspaceManagerService {
           'healthy': workspace.isRunning,
           'processState': workspace.isRunning ? 'ready' : 'stopped',
         };
+      case 'updates.status':
+        return workspace.updateStatusProvider?.call() ??
+            const {'phase': 'unconfigured'};
+      case 'updates.check':
+        final updateHandler = workspace.updateHandler;
+        if (updateHandler == null) {
+          throw const WorkspaceManagerProtocolException(
+            'updates_unavailable',
+            'Workspace update checks are not configured for this installation.',
+          );
+        }
+        return updateHandler(const {'action': 'check'});
       case 'service.restart':
       case 'service.shutdown':
         throw const WorkspaceManagerProtocolException(

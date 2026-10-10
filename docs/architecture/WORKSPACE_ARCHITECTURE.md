@@ -67,6 +67,24 @@ restart without blindly rerunning uncertain work. Cloud session history is
 audited in D1, while live transport state, queues, cursors, and acknowledgments
 belong to the Cloud gateway's live transport layer.
 
+Workspace release checks are also service-owned. The UI sends an
+`updates.check` IPC request; the service performs the authenticated release
+lookup without disconnecting or reconnecting Cloud. If update support is not
+configured, the UI reports that state instead of using a connection retry as a
+fallback.
+
+Human management authentication is a separate concern from runtime
+authentication. Workspace.app keeps the short-lived `DesktopHumanSession` for
+sign-in, account ownership checks, and management commands. The Workspace
+Service uses the registered Workspace runtime identity and secure runtime
+credential for Cloud reconnect and execution. Signing out of Workspace.app
+revokes and removes only the human management session; it does not disconnect
+Cloud, stop or unregister the service, release Workspace ownership, remove the
+runtime credential, or disable Workers. The service may therefore remain
+running and connected while the UI asks the user to sign in again. Explicit
+Disconnect Cloud, Stop Service, Release, and Reset actions retain their own
+separate lifecycle semantics.
+
 ## Worker subsystem
 
 `WorkspaceWorkerSubsystem` is the service composition boundary. It owns the

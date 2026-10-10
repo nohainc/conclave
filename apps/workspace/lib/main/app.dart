@@ -1,5 +1,44 @@
 part of '../main.dart';
 
+/// Signs out the management session without changing the independently-owned
+/// Workspace Service or its Cloud connection intent.
+///
+/// The optional callback keeps this boundary testable without making tests
+/// perform a real network request. Production callers use the Cloud revoke
+/// endpoint and still delete the local session when that endpoint is
+/// unavailable.
+Future<void> revokeAndForgetDesktopHumanSession({
+  required SecureCredentialStore credentialStore,
+  required String cloudUrl,
+  Future<void> Function(DesktopHumanSession session)? revokeSession,
+}) async {
+  final stored = await credentialStore.read(desktopHumanCredentialKey);
+  if (stored != null) {
+    try {
+      final decoded = jsonDecode(stored);
+      if (decoded is Map) {
+        final session = DesktopHumanSession.fromSecureJson(
+          Map<String, dynamic>.from(decoded),
+        );
+        if (revokeSession != null) {
+          await revokeSession(session);
+        } else {
+          final client = DesktopAuthClient(cloudUrl: cloudUrl);
+          try {
+            await client.revokeSession(session);
+          } finally {
+            client.close();
+          }
+        }
+      }
+    } on Object {
+      // Local sign-out must remain available if Cloud is unreachable or the
+      // session has already expired.
+    }
+  }
+  await credentialStore.delete(desktopHumanCredentialKey);
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await WorkspacePaths.preserveMacWorkRoot(
@@ -240,6 +279,38 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     }
   }
 
+  Future<void> _checkForUpdates() async {
+    try {
+      final status = await widget.lifecycle.checkForUpdates();
+      final phase = status['phase']?.toString();
+      final version = status['version']?.toString();
+      final message = switch (phase) {
+        'available' when version != null && version.isNotEmpty =>
+          'Workspace update available: v$version.',
+        'idle' => 'Conclave Workspace is up to date.',
+        'unconfigured' =>
+          'Workspace update checks are not configured for this installation.',
+        _ => 'Workspace update check completed.',
+      };
+      if (mounted) {
+        final context = _navigatorKey.currentContext;
+        if (context != null) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(message)));
+        }
+      }
+    } on Object catch (error) {
+      if (!mounted) return;
+      final context = _navigatorKey.currentContext;
+      if (context != null) {
+        showCopyableErrorSnackBar(
+          context,
+          'Workspace update check unavailable: $error',
+        );
+      }
+    }
+  }
+
   Future<void> _stopWorkspaceService() async {
     try {
       await widget.lifecycle.stopService();
@@ -256,15 +327,6 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     await widget.lifecycle.quit();
     const desktopChannel = MethodChannel('com.conclave.workspace/desktop');
     await desktopChannel.invokeMethod<void>('terminate');
-  }
-
-  Future<void> _exportDiagnostics() async {
-    final file = await widget.lifecycle.exportDiagnostics();
-    final ctx = _navigatorKey.currentContext;
-    if (!mounted || ctx == null) return;
-    ScaffoldMessenger.of(ctx).showSnackBar(
-      SnackBar(content: Text('Diagnostics exported to ${file.path}')),
-    );
   }
 
   Future<DesktopHumanSession?> _approveDesktopAuthInBrowser(
@@ -650,66 +712,10 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     final lifecycle = widget.lifecycle;
     final registration =
         WorkspaceRegistrationStore(lifecycle.config.dataDirectory).readSync();
-    final desiredRuntime = WorkspaceLifecyclePreferencesStore(
-      lifecycle.config.dataDirectory,
-    ).readSync().desiredRuntime;
-    final runtimeIntendedConnected =
-        desiredRuntime == DesiredRuntimeState.connected;
-    if (registration != null && runtimeIntendedConnected) {
-      final dialogContext = _navigatorKey.currentContext;
-      if (dialogContext == null) return;
-      final choice = await showDialog<bool>(
-        context: dialogContext,
-        builder: (context) => AlertDialog(
-          title: const Text('This Workspace is connected.'),
-          content: const Text(
-            'Disconnect this Workspace before signing out. Disconnecting keeps '
-            'the installation owner and local Workers, credentials, Profiles, '
-            'and Work Root.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Disconnect and sign out'),
-            ),
-          ],
-        ),
-      );
-      if (choice != true) return;
-      await _disconnectWorkspace(confirmed: true);
-      if (WorkspaceLifecyclePreferencesStore(
-            lifecycle.config.dataDirectory,
-          ).readSync().desiredRuntime !=
-          DesiredRuntimeState.disconnected) {
-        return;
-      }
-    }
-    final stored =
-        await lifecycle.credentialStore.read(desktopHumanCredentialKey);
-    if (stored != null) {
-      try {
-        final decoded = jsonDecode(stored);
-        if (decoded is Map) {
-          final session = DesktopHumanSession.fromSecureJson(
-            Map<String, dynamic>.from(decoded),
-          );
-          final client = DesktopAuthClient(
-              cloudUrl: registration?.cloudUrl ?? conclaveProductionCloudUrl);
-          try {
-            await client.revokeSession(session);
-          } finally {
-            client.close();
-          }
-        }
-      } on Object {
-        // Local sign-out must remain available if Cloud is unreachable or the session expired.
-      }
-    }
-    await lifecycle.credentialStore.delete(desktopHumanCredentialKey);
+    await revokeAndForgetDesktopHumanSession(
+      credentialStore: lifecycle.credentialStore,
+      cloudUrl: registration?.cloudUrl ?? conclaveProductionCloudUrl,
+    );
     if (mounted) setState(() => _workerRevision++);
   }
 
@@ -811,14 +817,9 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       onRetry: lifecycle.running
           ? lifecycle.retryConnection
           : _startWorkspaceService,
-      onExportDiagnostics: _exportDiagnostics,
+      onCheckForUpdates: _checkForUpdates,
       onChangeWorkRoot: _changeWorkRoot,
       onReadinessCheck: lifecycle.checkWorkerReadiness,
-      onRollbackToolProfile: (workerTypeId) async {
-        final result = await lifecycle.request('workers.rollbackProfile',
-            payload: {'workerTypeId': workerTypeId});
-        return result is Map && result['passed'] == true;
-      },
       onConfigureWorker: (worker) =>
           lifecycle.workerCatalog.configureWorker(worker.workerTypeId),
       onSetWorkerEnabled: lifecycle.workerCatalog.setEnabled,
@@ -841,7 +842,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       themeMode: ThemeMode.system,
       home: Scaffold(
         body: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 400, minHeight: 600),
+          constraints: const BoxConstraints(minWidth: 750, minHeight: 650),
           child: lifecycle.hidden
               ? const Center(
                   child: Text('Workspace is running in the background.'))
@@ -855,6 +856,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
                   onSignIn: _signInDesktopHuman,
                   onConnectWorkspace: () => _connectWorkspace(),
                   onSignOut: _signOutDesktopHuman,
+                  onCheckForUpdates: _checkForUpdates,
                   onRelease: _releaseWorkspaceOwnership,
                   onQuit: _confirmQuit,
                   onManagementAuthRequiredChanged:

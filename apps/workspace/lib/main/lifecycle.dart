@@ -373,6 +373,18 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Checks the installed Workspace release through the running service.
+  /// This is an HTTP release lookup owned by the service; it does not alter
+  /// Cloud connection state or request a reconnect.
+  Future<Map<String, Object?>> checkForUpdates() async {
+    final result = await request('updates.check');
+    if (result is! Map) {
+      throw StateError('Workspace update check returned an invalid response.');
+    }
+    notifyListeners();
+    return Map<String, Object?>.from(result);
+  }
+
   String _serviceFailureMessage(WorkspaceServiceInfo info) {
     final reason = info.lastExitReason;
     return reason == null

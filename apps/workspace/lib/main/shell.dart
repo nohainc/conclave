@@ -28,6 +28,7 @@ class WorkspaceShellRouter extends StatefulWidget {
     this.onRelease,
     required this.onQuit,
     this.onRetry,
+    this.onCheckForUpdates,
     this.onManagementAuthRequiredChanged,
     required this.managementShellBuilder,
     super.key,
@@ -45,6 +46,7 @@ class WorkspaceShellRouter extends StatefulWidget {
   final Future<void> Function()? onRelease;
   final Future<void> Function() onQuit;
   final Future<void> Function()? onRetry;
+  final Future<void> Function()? onCheckForUpdates;
   final ValueChanged<bool>? onManagementAuthRequiredChanged;
   final Widget Function() managementShellBuilder;
 
@@ -216,6 +218,7 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
               return _MinimalShell(
                 onAbout: _showAbout,
                 onRetry: widget.onRetry,
+                onCheckForUpdates: widget.onCheckForUpdates,
                 child: _SignedOutShell(
                   onSignIn: widget.onSignIn,
                   signInRequired: access.signInRequired,
@@ -225,6 +228,7 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
               return _MinimalShell(
                 onAbout: _showAbout,
                 onRetry: widget.onRetry,
+                onCheckForUpdates: widget.onCheckForUpdates,
                 child: _ReauthRequiredShell(
                   runtimeConnected: widget.snapshot.cloudConnected,
                   onSignIn: widget.onSignIn,
@@ -242,11 +246,13 @@ class _MinimalShell extends StatelessWidget {
     required this.child,
     this.onAbout,
     this.onRetry,
+    this.onCheckForUpdates,
   });
 
   final Widget child;
   final VoidCallback? onAbout;
   final Future<void> Function()? onRetry;
+  final Future<void> Function()? onCheckForUpdates;
 
   @override
   Widget build(BuildContext context) {
@@ -286,7 +292,7 @@ class _MinimalShell extends StatelessWidget {
                     WorkspaceLifecycleController.openAX();
                     break;
                   case _HeaderMenuAction.checkForUpdates:
-                    onRetry?.call();
+                    onCheckForUpdates?.call();
                     break;
                   case _HeaderMenuAction.about:
                     onAbout?.call();

@@ -167,13 +167,14 @@ chmod 755 "$HELPERS_DIR/conclave-service" \
 cp "$WORKSPACE_DIR/macos/Runner/LaunchAgents/com.conclaveax.workspace.service.plist" \
   "$LAUNCH_AGENTS_DIR/com.conclaveax.workspace.service.plist"
 
+if [[ "$MODE" == "debug" ]]; then
+  APP_ENTITLEMENTS="$WORKSPACE_DIR/macos/Runner/DebugProfile.entitlements"
+else
+  APP_ENTITLEMENTS="$WORKSPACE_DIR/macos/Runner/Release.entitlements"
+fi
+
 if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
   echo "Signing with configured Apple identity"
-  if [[ "$MODE" == "debug" ]]; then
-    APP_ENTITLEMENTS="$WORKSPACE_DIR/macos/Runner/DebugProfile.entitlements"
-  else
-    APP_ENTITLEMENTS="$WORKSPACE_DIR/macos/Runner/Release.entitlements"
-  fi
 
   # Flutter initially signs its embedded frameworks with the build-time
   # identity. Re-sign every embedded framework with the same identity as the
@@ -192,12 +193,28 @@ if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
   # OS_REASON_CODESIGNING.
   codesign --force --options runtime --timestamp \
     --entitlements "$WORKSPACE_DIR/macos/Runner/WorkspaceHelper.entitlements" \
+    --identifier "conclave-agent" \
     --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" \
     "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
   codesign --force --options runtime --timestamp \
     --entitlements "$WORKSPACE_DIR/macos/Runner/WorkspaceHelper.entitlements" \
+    --identifier "conclave-service" \
     --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" \
     "$HELPERS_DIR/conclave-service"
+
+  # Flutter may leave the app executable ad-hoc signed even when the outer
+  # bundle is later sealed with the configured Apple identity. SMAppService
+  # validates the complete bundle, so the main executable must carry the same
+  # trusted signature as the app and its embedded helpers.
+  APP_EXECUTABLE="$APP/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
+  [[ -x "$APP_EXECUTABLE" ]] || {
+    echo "The Workspace app executable is missing: $APP_EXECUTABLE" >&2
+    exit 1
+  }
+  codesign --force --options runtime --timestamp \
+    --entitlements "$APP_ENTITLEMENTS" \
+    --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" \
+    "$APP_EXECUTABLE"
 
   # The Flutter build has already signed the embedded Flutter frameworks. Seal
   # only the application bundle so the helper signatures above remain intact.
@@ -216,10 +233,22 @@ else
   else
     echo "CONCLAVE_MACOS_SIGN_IDENTITY is not set; sealing the development bundle with ad-hoc signatures."
   fi
-  codesign --force --sign - \
+  codesign --force --options runtime \
+    --entitlements "$WORKSPACE_DIR/macos/Runner/WorkspaceHelper.entitlements" \
+    --identifier "conclave-agent" \
+    --sign - \
     "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
-  codesign --force --sign - "$HELPERS_DIR/conclave-service"
-  codesign --force --deep --sign - "$APP"
+  codesign --force --options runtime \
+    --entitlements "$WORKSPACE_DIR/macos/Runner/WorkspaceHelper.entitlements" \
+    --identifier "conclave-service" \
+    --sign - "$HELPERS_DIR/conclave-service"
+  APP_EXECUTABLE="$APP/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
+  codesign --force --options runtime \
+    --entitlements "$APP_ENTITLEMENTS" \
+    --sign - "$APP_EXECUTABLE"
+  codesign --force --options runtime \
+    --entitlements "$APP_ENTITLEMENTS" \
+    --sign - "$APP"
 fi
 
 bash "$ROOT/scripts/verify-workspace-service-bundle.sh" "$APP"

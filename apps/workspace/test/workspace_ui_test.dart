@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_workspace/local_worker_registry.dart';
-import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:conclave_workspace/desktop_auth.dart';
 import 'package:conclave_workspace/main.dart';
 import 'package:conclave_workspace/platform_runtime.dart';
@@ -13,6 +12,8 @@ import 'package:conclave_workspace/tool_profile_release_store.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
 import 'package:conclave_workspace/worker_catalog_coordinator.dart';
 import 'package:conclave_workspace/workspace_background_service.dart';
+import 'package:conclave_workspace/workspace_lifecycle.dart';
+import 'package:conclave_workspace/workspace_lifecycle_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter/services.dart';
@@ -153,6 +154,47 @@ LocalWorker _disabledChatGptWorker({
     );
 
 void main() {
+  test('desktop sign out only removes the human management session', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'conclave-workspace-sign-out-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final credentials = _MemoryCredentialStore()
+      ..values[desktopHumanCredentialKey] = jsonEncode({
+        'credential': 'human-session-secret',
+        'sessionId': 'session-1',
+        'userId': 'user-1',
+        'displayName': 'Test User',
+        'email': 'test@example.com',
+        'expiresAt': DateTime.now()
+            .add(const Duration(hours: 1))
+            .toUtc()
+            .toIso8601String(),
+      })
+      ..values['runtime-id'] = 'runtime-secret';
+    final preferences = WorkspaceLifecyclePreferencesStore(directory);
+    await preferences.write(const WorkspaceLifecyclePreferences(
+      desiredRuntime: DesiredRuntimeState.connected,
+      launchAtLogin: true,
+      managementLockPreference: ManagementLockState.unlocked,
+    ));
+    DesktopHumanSession? revoked;
+
+    await revokeAndForgetDesktopHumanSession(
+      credentialStore: credentials,
+      cloudUrl: 'https://cloud.example',
+      revokeSession: (session) async => revoked = session,
+    );
+
+    expect(revoked?.userId, 'user-1');
+    expect(credentials.readSync(desktopHumanCredentialKey), isNull);
+    expect(credentials.readSync('runtime-id'), 'runtime-secret');
+    expect(
+      preferences.readSync().desiredRuntime,
+      DesiredRuntimeState.connected,
+    );
+  });
+
   Future<void> waitForCatalogRefresh(WidgetTester tester) async {
     final dashboard = tester.widget<WorkspaceDashboard>(
       find.byType(WorkspaceDashboard),
@@ -171,8 +213,6 @@ void main() {
   }
 
   Future<void> openWorkers(WidgetTester tester) async {
-    await tester.tap(find.text('Workers').first);
-    await tester.pump();
     await waitForCatalogRefresh(tester);
   }
 
@@ -240,7 +280,7 @@ void main() {
     Future<void> Function()? onSignOut,
     VoidCallback? onQuit,
     Future<void> Function()? onRetry,
-    Future<void> Function()? onExportDiagnostics,
+    Future<void> Function()? onCheckForUpdates,
     Future<void> Function(String path)? onChangeWorkRoot,
     LocalWorkerRegistry? localWorkerRegistry,
     Future<void> Function({LocalWorkerProbeMode mode, String? workerTypeId})?
@@ -328,7 +368,7 @@ void main() {
             onSignOut: onSignOut,
             onQuit: onQuit,
             onRetry: onRetry,
-            onExportDiagnostics: onExportDiagnostics,
+            onCheckForUpdates: onCheckForUpdates,
             onChangeWorkRoot: onChangeWorkRoot,
             onReadinessCheck: onReadinessCheck,
             onSetWorkerEnabled: onSetWorkerEnabled,
@@ -507,7 +547,8 @@ void main() {
     await openWorkers(tester);
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
-    await tester.tap(find.text('Workspace').first);
+    final workspacePage = find.byType(SingleChildScrollView).first;
+    await tester.drag(workspacePage, const Offset(0, -320));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Register'));
     expect(connectStarted, isTrue);
@@ -580,8 +621,6 @@ void main() {
     expect(find.text('Workspace'), findsWidgets);
     expect(find.text('Workers'), findsWidgets);
     await openWorkers(tester);
-    await tester.tap(find.text('Workspace').first);
-    await tester.pumpAndSettle();
     expect(find.text('Start Service'), findsOneWidget);
     expect(find.text('Release'), findsOneWidget);
     await tester.ensureVisible(find.text('Release'));
@@ -892,7 +931,7 @@ void main() {
     );
 
     expect(find.text('Network unavailable'), findsOneWidget);
-    expect(find.text('Cloud: Disconnected'), findsOneWidget);
+    expect(find.text('Conclave Cloud'), findsNothing);
     expect(find.text('Retry service startup'), findsOneWidget);
     expect(find.text('Start Service'), findsOneWidget);
     expect(find.byTooltip('Copy error message'), findsOneWidget);
@@ -934,6 +973,7 @@ void main() {
         logsPath: '/tmp/workspace.log',
         updateSummary: 'Up to date',
       ),
+      onUnregisterService: () async {},
     );
 
     // Only Workspace and Workers tabs exist in top navigation
@@ -951,7 +991,8 @@ void main() {
     expect(find.text('Workspace'), findsWidgets);
     expect(find.text('MacBook Pro'), findsOneWidget);
     expect(find.text('Connection'), findsNothing);
-    expect(find.text('Service running · Cloud connected'), findsOneWidget);
+    expect(find.text('Service running · Cloud connected · WebSocket'),
+        findsOneWidget);
     expect(find.text('Run background service at login'), findsNothing);
     expect(find.text('Startup'), findsNothing);
     expect(find.text('Current work'), findsNothing);
@@ -959,11 +1000,11 @@ void main() {
     expect(find.text('View Workers'), findsNothing);
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('Application'), findsNothing);
-    expect(find.text('Advanced Diagnostics'), findsOneWidget);
 
     // The registered Workspace has no enrollment form.
     expect(find.text('Connect this Workspace'), findsNothing);
     expect(find.text('Start Service'), findsNothing);
+    expect(find.text('Unregister'), findsNothing);
 
     // Removed sections are not on the Workspace tab
     expect(find.text('Current Work'), findsNothing);
@@ -999,14 +1040,10 @@ void main() {
       onUnregisterService: () async => unregisterServiceCalls++,
     );
 
-    expect(find.text('Workspace Service'), findsOneWidget);
-    expect(find.text('Conclave Cloud'), findsOneWidget);
+    expect(find.text('Workspace Service'), findsNothing);
+    expect(find.text('Conclave Cloud'), findsNothing);
     expect(find.text('Start Service'), findsOneWidget);
     expect(find.text('Unregister'), findsOneWidget);
-    expect(
-        find.text(
-            'Start the Workspace Service to manage the Cloud connection.'),
-        findsOneWidget);
     expect(find.text('Connect'), findsNothing);
 
     await tester.tap(find.text('Start Service'));
@@ -1064,7 +1101,6 @@ void main() {
       signedIn: true,
       onRegisterService: () async => registerCalls++,
     );
-    expect(find.text('Not installed'), findsOneWidget);
     expect(find.text('Register Service'), findsOneWidget);
     await tester.tap(find.text('Register Service'));
     expect(registerCalls, 1);
@@ -1073,6 +1109,7 @@ void main() {
   testWidgets('header overflow menu provides AX, updates, and about',
       (tester) async {
     var retryCalled = false;
+    var updateCheckCalled = false;
 
     await pumpDashboard(
       tester,
@@ -1088,11 +1125,12 @@ void main() {
         hostname: 'MacBook Pro',
       ),
       onRetry: () async => retryCalled = true,
+      onCheckForUpdates: () async => updateCheckCalled = true,
     );
 
     expect(find.text('Conclave Workspace'), findsOneWidget);
     expect(find.text('MacBook Pro'), findsOneWidget);
-    expect(find.text('Cloud: Connected'), findsOneWidget);
+    expect(find.text('Service running · Cloud connected'), findsOneWidget);
 
     // Verify HUD Quit icon button is not shown
     expect(find.byTooltip('Quit Conclave Workspace'), findsNothing);
@@ -1108,7 +1146,8 @@ void main() {
     // Tap Check for Updates
     await tester.tap(find.text('Check for Updates'));
     await tester.pumpAndSettle();
-    expect(retryCalled, isTrue);
+    expect(updateCheckCalled, isTrue);
+    expect(retryCalled, isFalse);
 
     // Open overflow menu and tap About
     await tester.tap(find.byIcon(Icons.menu));
@@ -1147,99 +1186,6 @@ void main() {
         findsOneWidget);
     await tester.tap(find.text('Retry service startup'));
     expect(retried, isTrue);
-  });
-
-  testWidgets(
-      'advanced diagnostics accordion starts collapsed and exposes IDs, logs, metrics upon expansion',
-      (tester) async {
-    var exported = false;
-    String? copiedConnectionDetails;
-    tester.view.physicalSize = const Size(800, 1600);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        if (call.method == 'Clipboard.setData') {
-          copiedConnectionDetails = (call.arguments as Map)['text'] as String?;
-        }
-        return null;
-      },
-    );
-    addTearDown(() => tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, null));
-
-    await pumpDashboard(
-      tester,
-      const WorkspaceUiSnapshot(
-        mode: WorkspaceUiMode.ready,
-        title: 'Workspace is ready',
-        detail: 'Ready',
-        registered: true,
-        workspaceReady: true,
-        cloudConnected: true,
-        serviceRunning: true,
-        workspaceId: 'ws-test-123',
-        workspaceRuntimeId: 'runtime-workspace-a',
-        cloudUrl:
-            'wss://app.conclaveax.com/api/workspace-gateway/connect?workspaceRuntimeId=runtime-workspace-a',
-        logsPath: '/var/logs/workspace.log',
-        connectionStage: WorkspaceConnectionStage.offline,
-        connectionError: 'Cloud rejected the WebSocket upgrade with HTTP 400.',
-        connectionHttpStatus: 400,
-        runtimeCredentialAvailable: true,
-        protocolHelloStatus: 'not started',
-        dnsTlsStatus: 'passed',
-        webSocketUpgradeStatus: 'failed (HTTP 400)',
-      ),
-      onExportDiagnostics: () async => exported = true,
-    );
-
-    expect(find.text('Advanced Diagnostics'), findsOneWidget);
-
-    // Before expanding, internal section headers and IDs are collapsed / not shown
-    expect(find.text('Runtime ID'), findsNothing);
-
-    await tester.ensureVisible(find.text('Advanced Diagnostics'));
-    await tester.tap(find.text('Advanced Diagnostics'));
-    await tester.pumpAndSettle();
-
-    // After expanding, details are exposed
-    expect(find.text('Identity'), findsOneWidget);
-    expect(find.text('Workspace ID'), findsOneWidget);
-    expect(find.text('ws-test-123'), findsOneWidget);
-    expect(find.text('Runtime ID'), findsOneWidget);
-    expect(find.text('runtime-workspace-a'), findsOneWidget);
-    expect(find.text('Gateway state'), findsOneWidget);
-    expect(find.text('Connection stage'), findsOneWidget);
-    expect(find.text('offline'), findsOneWidget);
-    expect(find.text('DNS / TLS'), findsOneWidget);
-    expect(find.text('passed'), findsOneWidget);
-    expect(find.text('WebSocket upgrade'), findsOneWidget);
-    expect(find.text('Protocol hello'), findsOneWidget);
-    expect(find.text('not started'), findsOneWidget);
-    expect(find.text('failed (HTTP 400)'), findsOneWidget);
-    expect(find.text('Runtime credential'), findsOneWidget);
-    expect(find.text('Cloud: Connected'), findsOneWidget);
-    expect(find.text('Open Log File'), findsOneWidget);
-
-    final exportBtn = find.text('Export Report');
-    await tester.ensureVisible(exportBtn);
-    await tester.pumpAndSettle();
-    expect(exportBtn, findsOneWidget);
-    await tester.tap(exportBtn);
-    expect(exported, isTrue);
-
-    final copyButton = find.text('Copy connection details');
-    await tester.ensureVisible(copyButton);
-    await tester.pumpAndSettle();
-    await tester.tap(copyButton);
-    expect(copiedConnectionDetails, contains('HTTP 400'));
-    expect(copiedConnectionDetails, isNot(contains('Bearer')));
-
-    // Diagnostics section does not show Retry connection button
-    expect(find.text('Retry Cloud connection'), findsNothing);
   });
 
   test('runtime credential diagnostics reflect desired runtime state', () {
@@ -1314,12 +1260,7 @@ void main() {
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('/workspace/root'), findsOneWidget);
     expect(find.text('Stop Service'), findsOneWidget);
-    expect(
-      find.text(
-        'Disconnect keeps this installation owned by your account. Release lets another account claim it.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Workspace ownership'), findsNothing);
     await tester.ensureVisible(find.text('Stop Service'));
     await tester.tap(find.text('Stop Service'));
     expect(disconnected, isTrue);
@@ -1443,7 +1384,7 @@ void main() {
     expect(find.text('codex · Unknown'), findsOneWidget);
     expect(find.text('agy · Unknown'), findsOneWidget);
     expect(find.textContaining('Capabilities:'), findsNothing);
-    expect(find.text('Diagnostics'), findsNWidgets(2));
+    expect(find.text('Diagnostics'), findsNothing);
     expect(find.text('Set up ChatGPT'), findsNothing);
     expect(find.text('Set up Gemini'), findsNothing);
     expect(find.text('Save Worker'), findsNothing);
@@ -1548,7 +1489,7 @@ void main() {
     expect(find.text('Gemini'), findsOneWidget);
     expect(find.text('Dynamic Test Worker'), findsOneWidget);
     expect(find.text('Setup required'), findsNWidgets(3));
-    expect(find.text('Diagnostics'), findsNWidgets(3));
+    expect(find.text('Diagnostics'), findsNothing);
     final refreshButton = tester.widget<IconButton>(
       find.widgetWithIcon(IconButton, Icons.refresh),
     );
@@ -1644,7 +1585,7 @@ void main() {
     expect(find.textContaining('Adapter version'), findsNothing);
     expect(find.textContaining('Signature'), findsNothing);
     expect(find.textContaining('Release channel'), findsNothing);
-    expect(find.text('Diagnostics'), findsNWidgets(2));
+    expect(find.text('Diagnostics'), findsNothing);
     expect(find.text('Save readiness'), findsNothing);
     expect(find.text('Authentication'), findsNothing);
     expect(
@@ -1657,23 +1598,10 @@ void main() {
     expect(find.text('Allowed Models'), findsNothing);
     expect(find.text('Permissions'), findsNothing);
 
-    await tester.tap(find.text('Workspace').first);
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Advanced Diagnostics'));
-    await tester.tap(find.text('Advanced Diagnostics'));
-    await tester.pumpAndSettle();
-    expect(find.text('Engine & Tool Profiles'), findsNothing);
-
-    await openWorkers(tester);
-    await tester.ensureVisible(find.text('Diagnostics').first);
-    await tester.tap(find.text('Diagnostics').first);
-    await tester.pumpAndSettle();
-    expect(find.text('Engine version'), findsOneWidget);
-    expect(find.text('1.0.0'), findsWidgets);
-    expect(find.text('Provider CLI'), findsOneWidget);
-    expect(find.text('Provider CLI version'), findsOneWidget);
-    expect(find.text('Codex CLI'), findsOneWidget);
-    expect(find.text('1.2.3'), findsOneWidget);
+    expect(find.text('Engine version'), findsNothing);
+    expect(find.text('Provider CLI version'), findsNothing);
+    expect(find.text('Tool'), findsNothing);
+    expect(find.text('Codex CLI · 1.2.3'), findsOneWidget);
     expect(find.textContaining('Worker version'), findsNothing);
     expect(find.textContaining('Signing key'), findsNothing);
     expect(find.textContaining('Release channel'), findsNothing);
@@ -2291,42 +2219,5 @@ void main() {
     stopped.complete();
     await tester.pumpAndSettle();
     expect(find.text('Stop Service'), findsOneWidget);
-  });
-  testWidgets(
-      'advanced diagnostics distinguish host state from unavailable IPC',
-      (tester) async {
-    await pumpDashboard(
-        tester,
-        const WorkspaceUiSnapshot(
-          mode: WorkspaceUiMode.offline,
-          title: 'Service connection unavailable',
-          detail: '',
-          desiredRuntimeConnected: true,
-          registered: true,
-          workspaceId: 'workspace-test',
-          serviceDiagnostics: {
-            'Registration': 'registered',
-            'launchd': 'running',
-            'IPC key': 'Found',
-            'IPC socket': 'Missing',
-            'Last IPC error': 'Socket unavailable',
-            'Service exit code': '7',
-          },
-        ),
-        signedIn: true);
-    expect(
-        find.text('Service running · management unavailable'), findsOneWidget);
-    expect(find.text('Service stopped'), findsNothing);
-    expect(find.text('Service startup'), findsNothing);
-    await tester.scrollUntilVisible(find.text('Advanced Diagnostics'), 250,
-        scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('Advanced Diagnostics'));
-    await tester.pumpAndSettle();
-    expect(find.text('Service startup'), findsOneWidget);
-    expect(find.text('launchd'), findsOneWidget);
-    expect(find.text('IPC socket'), findsOneWidget);
-    expect(find.text('Last IPC error'), findsOneWidget);
-    expect(find.text('Service exit code'), findsOneWidget);
-    expect(find.text('Socket unavailable'), findsOneWidget);
   });
 }
