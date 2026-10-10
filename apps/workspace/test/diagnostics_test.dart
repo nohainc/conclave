@@ -8,6 +8,15 @@ import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('process metrics are sampled on demand', () async {
+    final metrics = await sampleWorkspaceProcessMetrics();
+    expect(metrics['processId'], pid);
+    expect(metrics['residentMemoryBytes'], isA<int>());
+    expect(metrics['residentMemoryBytes'], greaterThan(0));
+    expect(metrics['cpuPercent'], anyOf(isA<double>(), isNull));
+    expect(DateTime.tryParse(metrics['sampledAt']! as String), isNotNull);
+  });
+
   test('diagnostics redact secrets and preserve assignment correlation',
       () async {
     final directory =

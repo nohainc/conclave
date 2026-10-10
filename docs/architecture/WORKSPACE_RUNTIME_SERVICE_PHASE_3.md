@@ -1,7 +1,7 @@
 # Workspace Runtime Service — Phase 3: macOS service packaging
 
-**Status:** Native registration bridge and bundle packaging implemented; full
-UI ownership handoff and signed-device acceptance remain open.
+**Status:** Native registration bridge, bundle packaging, and IPC management
+implemented; signed-device acceptance remains open.
 
 ## Bundle contract
 
@@ -10,7 +10,7 @@ The macOS distribution contains:
 ```text
 Conclave Workspace.app/Contents/
 ├── Helpers/
-│   ├── conclave-workspace-service
+│   ├── conclave-service
 │   └── assets/engines/conclave_cli_worker_engine
 └── Library/LaunchAgents/
     └── com.conclaveax.workspace.service.plist
@@ -39,13 +39,13 @@ profiles.
 
 ## Ownership dependency
 
-The manager UI still starts an in-process runtime, as recorded in the
-[Phase 1 audit](WORKSPACE_RUNTIME_SERVICE_PHASE_1.md). Therefore the embedded
-agent must not yet be presented as a fully supported replacement runtime in
-the management UI: activating both owners can contend for the per-installation
-lock, and the current UI does not display IPC snapshots or route management
-commands through the service. Phase 2's UI ownership handoff is required before
-the first-run “Enable Background Service” flow is complete.
+The Flutter manager is an authenticated local IPC client. Start Service registers
+the embedded agent and verifies process health over IPC; Stop Service requests
+a bounded assignment drain before unregistering through the native host bridge.
+The generic Worker Engine is materialized as `conclave-agent`; the bundled
+service is `conclave-service`. The LaunchAgent label is stable across updates.
+Native registration alone is not proof that the process started. User approval,
+TCC, Keychain access, and signed release behavior require the validation below.
 
 ## Required macOS release validation
 
@@ -78,3 +78,15 @@ execution.
 Do not mark the native acceptance criteria complete until these device tests
 are recorded in
 [Workspace desktop lifecycle release validation](../operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md).
+
+## Stopped registration recovery
+
+An enabled `SMAppService` registration can still refer to a previous
+`BundleProgram` after updating the executable name. On explicit Start, the UI
+first attempts IPC attachment, then asks the host to ensure registration.
+The native bridge checks the launchd job locally. If it is stopped, it
+unregisters/re-registers through Service Management to import the current bundle
+plist. A running job is preserved; an uninspectable job reports an actionable
+error. No manual plist installation, Cloud schema change, or installation
+identity reset is involved. Verify this recovery using the signed-device gates
+above after a bundle update.

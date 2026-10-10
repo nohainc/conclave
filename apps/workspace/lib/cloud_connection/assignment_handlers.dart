@@ -150,6 +150,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
     }
 
     _activeAssignments.add(context.assignmentId);
+    _notifyStateChanged();
     await _recordAssignment(context.assignmentId, AssignmentStatus.running,
         context: context);
     if (_cancelledBeforeStart.remove(context.assignmentId)) {
@@ -160,6 +161,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         result: const {'reason': 'Cancelled before Worker launch'},
       );
       _activeAssignments.remove(context.assignmentId);
+      _notifyStateChanged();
       socket.send(jsonEncode(_assignmentEnvelope(
         'assignment.cancelled',
         correlation,
@@ -209,6 +211,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         )));
       } finally {
         _activeAssignments.remove(context.assignmentId);
+        _notifyStateChanged();
       }
       return;
     }
@@ -237,6 +240,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       )));
     } finally {
       _activeAssignments.remove(context.assignmentId);
+      _notifyStateChanged();
     }
   }
 

@@ -2,18 +2,23 @@ part of '../main.dart';
 
 class _WorkersTab extends StatefulWidget {
   const _WorkersTab({
-    required this.registry,
     required this.isSelected,
     this.catalogCoordinator,
+    this.serviceAvailable = true,
     this.onRollbackToolProfile,
     this.onReadinessCheck,
+    this.onConfigureWorker,
+    this.onSetWorkerEnabled,
     super.key,
   });
 
-  final LocalWorkerRegistry? registry;
   final bool isSelected;
-  final WorkerCatalogCoordinator? catalogCoordinator;
+  final bool serviceAvailable;
+  final WorkspaceWorkerCatalogClient? catalogCoordinator;
   final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
+  final Future<void> Function(WorkerDescriptor worker)? onConfigureWorker;
+  final Future<void> Function(String workerId, bool enabled)?
+      onSetWorkerEnabled;
   final Future<void> Function(
       {LocalWorkerProbeMode mode, String? workerTypeId})? onReadinessCheck;
 
@@ -29,9 +34,9 @@ class _WorkersTabState extends State<_WorkersTab> {
   void initState() {
     super.initState();
     widget.catalogCoordinator?.addListener(_catalogChanged);
-    if (widget.isSelected) {
+    if (widget.isSelected && widget.serviceAvailable) {
       unawaited(
-        widget.catalogCoordinator?.refresh(force: true) ?? Future<void>.value(),
+        widget.catalogCoordinator?.refresh() ?? Future<void>.value(),
       );
     }
   }
@@ -55,9 +60,10 @@ class _WorkersTabState extends State<_WorkersTab> {
       widget.catalogCoordinator?.addListener(_catalogChanged);
       refreshCatalog = widget.isSelected;
     }
-    if (refreshCatalog) {
+    if (widget.serviceAvailable &&
+        (refreshCatalog || !oldWidget.serviceAvailable && widget.isSelected)) {
       unawaited(
-        widget.catalogCoordinator?.refresh(force: true) ?? Future<void>.value(),
+        widget.catalogCoordinator?.refresh() ?? Future<void>.value(),
       );
     }
   }
@@ -92,25 +98,7 @@ class _WorkersTabState extends State<_WorkersTab> {
     LocalWorker worker,
     bool enabled,
   ) async {
-    final registry = widget.registry;
-    if (registry == null) return;
-    await registry.update(
-      worker.id,
-      (current) => current.copyWith(
-        status: enabled
-            ? LocalWorkerStatus.needsAttention
-            : LocalWorkerStatus.disabled,
-        activationState: enabled
-            ? LocalWorkerActivationState.enabled
-            : LocalWorkerActivationState.disabled,
-      ),
-    );
-    if (enabled) {
-      await widget.onReadinessCheck?.call(
-        mode: LocalWorkerProbeMode.passive,
-        workerTypeId: worker.workerTypeId,
-      );
-    }
+    await widget.onSetWorkerEnabled?.call(worker.id, enabled);
     await widget.catalogCoordinator?.refreshLocalWorkers();
     if (mounted) setState(() {});
   }
@@ -121,11 +109,16 @@ class _WorkersTabState extends State<_WorkersTab> {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
+        if (!widget.serviceAvailable) ...[
+          const Text(
+              'Start the service to configure or test Workers. The last known Worker list is shown below.'),
+          const SizedBox(height: 16),
+        ],
         Row(
           children: [
             Expanded(
               child: Text(
-                'Workers check their provider tools and report readiness to Workspace.',
+                'The service configures and tests the Workers available on this computer.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -133,11 +126,12 @@ class _WorkersTabState extends State<_WorkersTab> {
             ),
             IconButton(
               tooltip: 'Refresh Worker catalog',
-              onPressed: widget.catalogCoordinator == null
-                  ? null
-                  : () => unawaited(
-                        widget.catalogCoordinator!.refresh(force: true),
-                      ),
+              onPressed:
+                  !widget.serviceAvailable || widget.catalogCoordinator == null
+                      ? null
+                      : () => unawaited(
+                            widget.catalogCoordinator!.refresh(force: true),
+                          ),
               icon: const Icon(Icons.refresh),
             ),
           ],
@@ -147,7 +141,7 @@ class _WorkersTabState extends State<_WorkersTab> {
           builder: (context) {
             final catalog = widget.catalogCoordinator?.snapshot ??
                 const WorkerCatalogSnapshot();
-            final canConfigure = widget.registry != null &&
+            final canConfigure = widget.onConfigureWorker != null &&
                 catalog.localRegistryLoaded &&
                 catalog.localRegistryError == null;
             return Column(
@@ -185,7 +179,8 @@ class _WorkersTabState extends State<_WorkersTab> {
                       iconColor: theme.colorScheme.error,
                     ),
                   ),
-                if (widget.registry == null)
+                if (!catalog.localRegistryLoaded &&
+                    catalog.localRegistryError != null)
                   const Padding(
                     padding: EdgeInsets.only(top: 4),
                     child: CopyableMessageText(
@@ -209,8 +204,11 @@ class _WorkersTabState extends State<_WorkersTab> {
     if (entry == null) return const SizedBox.shrink();
     final worker = view.localWorker;
     final profile = view.profileAvailability.details;
-    final pending = _updatingWorkerTypes.contains(entry.workerTypeId);
-    final readiness = pending ? 'Checking…' : view.readinessLabel;
+    final pending = _updatingWorkerTypes.contains(entry.workerTypeId) ||
+        !widget.serviceAvailable;
+    final readiness = _updatingWorkerTypes.contains(entry.workerTypeId)
+        ? 'Checking…'
+        : view.readinessLabel;
     final badges = <String>{
       ...view.statusBadges(readinessLabelOverride: pending ? readiness : null),
       view.state.label,
@@ -257,7 +255,7 @@ class _WorkersTabState extends State<_WorkersTab> {
                         style: theme.textTheme.bodySmall,
                       )),
                 ]),
-            trailing: pending
+            trailing: _updatingWorkerTypes.contains(entry.workerTypeId)
                 ? const SizedBox(
                     width: 20,
                     height: 20,
@@ -484,18 +482,7 @@ class _WorkersTabState extends State<_WorkersTab> {
         }
         return;
       }
-      final registry = widget.registry;
-      if (registry == null) return;
-      await LocalWorkerSetupService(registry: registry).createCatalogWorker(
-        entry: currentEntry,
-        permissions: defaultLocalWorkerPermissions,
-      );
-      await widget.catalogCoordinator?.ensureWorkerProfileAvailable(
-        entry.workerTypeId,
-        waitForActiveRefresh: true,
-      );
-      await widget.onReadinessCheck?.call(
-          mode: LocalWorkerProbeMode.live, workerTypeId: entry.workerTypeId);
+      await widget.onConfigureWorker?.call(currentEntry);
     });
   }
 
@@ -521,7 +508,7 @@ class _WorkersTabState extends State<_WorkersTab> {
   Future<WorkerDescriptor?> _refreshCatalogEntry(WorkerDescriptor entry) async {
     final coordinator = widget.catalogCoordinator;
     if (coordinator == null) return entry;
-    await coordinator.refresh(force: true);
+    await coordinator.refresh();
     return coordinator.entryForWorker(entry.workerTypeId);
   }
 

@@ -5,11 +5,33 @@ import LocalAuthentication
 
 private enum WorkspaceBackgroundService {
   static let launchAgentPlist = "com.conclaveax.workspace.service.plist"
-  static let helperRelativePath = "Contents/Helpers/conclave-workspace-service"
+  static let helperRelativePath = "Contents/Helpers/conclave-service"
 
   @available(macOS 13.0, *)
   static var service: SMAppService {
     SMAppService.agent(plistName: launchAgentPlist)
+  }
+
+  static func registeredProcessIsRunning() throws -> Bool {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+    process.arguments = ["print", "gui/\(getuid())/com.conclaveax.workspace.service"]
+    let output = Pipe()
+    process.standardOutput = output
+    process.standardError = output
+    try process.run()
+    let data = output.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    let text = String(data: data, encoding: .utf8) ?? ""
+    if process.terminationStatus != 0 {
+      if text.contains("Could not find service") { return false }
+      throw NSError(domain: "ConclaveWorkspaceService", code: 1,
+        userInfo: [NSLocalizedDescriptionKey:
+          "Could not verify whether the registered service is running. Open Login Items to inspect its status."])
+    }
+    return text.split(separator: "\n").contains {
+      $0.trimmingCharacters(in: .whitespaces) == "state = running"
+    }
   }
 
   static func status() -> [String: Any] {
@@ -155,25 +177,6 @@ class AppDelegate: FlutterAppDelegate {
         DispatchQueue.main.async {
           NSApp.terminate(nil)
         }
-      case "setLaunchAtLogin":
-        guard let enabled = call.arguments as? Bool else {
-          result(FlutterError(code: "bad_argument", message: "Expected a Boolean", details: nil))
-          return
-        }
-        guard #available(macOS 13.0, *) else {
-          result(FlutterError(code: "unsupported_os", message: "Launch at login requires macOS 13 or later", details: nil))
-          return
-        }
-        do {
-          if enabled && SMAppService.mainApp.status != .enabled {
-            try SMAppService.mainApp.register()
-          } else if !enabled && SMAppService.mainApp.status == .enabled {
-            try SMAppService.mainApp.unregister()
-          }
-          result(nil)
-        } catch {
-          result(FlutterError(code: "launch_at_login_failed", message: error.localizedDescription, details: nil))
-        }
       case "getServiceStatus":
         result(WorkspaceBackgroundService.status())
       case "registerService":
@@ -187,7 +190,14 @@ class AppDelegate: FlutterAppDelegate {
           return
         }
         do {
-          if WorkspaceBackgroundService.service.status != .enabled {
+          if WorkspaceBackgroundService.service.status == .enabled {
+            // An update may leave launchd with the previous BundleProgram.
+            // Refresh only a stopped job; never interrupt a running runtime.
+            if !(try WorkspaceBackgroundService.registeredProcessIsRunning()) {
+              try WorkspaceBackgroundService.service.unregister()
+              try WorkspaceBackgroundService.service.register()
+            }
+          } else {
             try WorkspaceBackgroundService.service.register()
           }
           result(WorkspaceBackgroundService.status())
@@ -274,25 +284,19 @@ class AppDelegate: FlutterAppDelegate {
   private func updateStatus(_ status: [String: Any]) {
     let state = status["state"] as? String ?? "Offline"
     let active = status["active"] as? Int ?? 0
-    let transport = status["transportMode"] as? String ?? "offline"
     let accepting = status["accepting"] as? Bool ?? true
     let draining = status["draining"] as? Bool ?? false
     runtimeConnected = status["runtimeRunning"] as? Bool ?? (state == "Connected")
     reauthRequired = status["reauthRequired"] as? Bool ?? false
     statusItem?.button?.title = "Conclave Workspace"
-    if reauthRequired && runtimeConnected {
-      workspaceStatusItem?.title = "Workspace running"
-    } else if runtimeConnected {
-      switch transport {
-      case "websocket": workspaceStatusItem?.title = "Connected · WebSocket"
-      case "http_long_poll": workspaceStatusItem?.title = "Connected · HTTPS fallback"
-      case "switching_to_websocket": workspaceStatusItem?.title = "Reconnecting · HTTPS fallback"
-      default: workspaceStatusItem?.title = "Connected"
-      }
-    } else if state == "Connecting" || state == "Attention" {
-      workspaceStatusItem?.title = state == "Connecting" ? "Workspace connecting" : "Workspace needs attention"
+    let serviceRunning = status["serviceRunning"] as? Bool ?? false
+    if serviceRunning {
+      workspaceStatusItem?.title = runtimeConnected
+        ? "Service running · Cloud connected"
+        : "Service running · Cloud offline"
     } else {
-      workspaceStatusItem?.title = "Workspace disconnected"
+      workspaceStatusItem?.title = state == "Attention"
+        ? "Service needs attention" : "Service stopped"
     }
     assignmentCountItem?.title = reauthRequired && runtimeConnected
       ? "Sign in required to manage"

@@ -12,6 +12,33 @@ import 'tool_profile_resolver.dart';
 const _diagnosticSecretPattern =
     r'(secret|token|password|api[_-]?key|authorization|cookie|raw[_-]?credential|private[_-]?key)';
 
+/// Samples the service process only when diagnostics are requested. CPU is
+/// intentionally nullable on platforms without `ps`; no background sampler
+/// or timer is kept alive for the management UI.
+Future<Map<String, Object?>> sampleWorkspaceProcessMetrics() async {
+  double? cpuPercent;
+  if (!Platform.isWindows) {
+    try {
+      final result = await Process.run(
+        'ps',
+        ['-o', '%cpu=', '-p', '$pid'],
+        runInShell: false,
+      );
+      if (result.exitCode == 0) {
+        cpuPercent = double.tryParse(result.stdout.toString().trim());
+      }
+    } on ProcessException {
+      // CPU measurement is best-effort; keep memory and PID available.
+    }
+  }
+  return {
+    'processId': pid,
+    'residentMemoryBytes': ProcessInfo.currentRss,
+    'cpuPercent': cpuPercent,
+    'sampledAt': DateTime.now().toUtc().toIso8601String(),
+  };
+}
+
 Object? sanitizeWorkspaceDiagnostics(Object? value, {int depth = 0}) {
   if (depth > 5) {
     return '[depth limited]';

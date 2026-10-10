@@ -30,7 +30,7 @@ Future<File?> loadBundledCliWorkerEngine({
     await runtime.restrictPermissions(versionDirectory.path, directory: true);
     final executable = File(
       '${versionDirectory.path}${Platform.pathSeparator}'
-      '${Platform.isWindows ? 'conclave_cli_worker_engine.exe' : 'conclave_cli_worker_engine'}',
+      '${Platform.isWindows ? 'conclave-agent.exe' : 'conclave-agent'}',
     );
     var cacheMatchesBundle = false;
     if (await executable.exists()) {

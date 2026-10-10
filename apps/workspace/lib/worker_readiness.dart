@@ -46,7 +46,6 @@ class WorkerReadinessMonitor {
     this.cliWorkerEngineSupervisor,
     this.workerStateDirectory,
     this.profileDiagnosticStoreForWorker,
-    this.interval = const Duration(minutes: 5),
     this.assessWorker,
   });
 
@@ -57,15 +56,14 @@ class WorkerReadinessMonitor {
   final Directory Function(String workerId)? workerStateDirectory;
   final WorkerDiagnosticStore Function(String workerTypeId)?
       profileDiagnosticStoreForWorker;
-  final Duration interval;
   final Future<WorkerReadinessAssessment> Function(LocalWorker worker)?
       assessWorker;
-  Timer? _timer;
+  bool _started = false;
   Future<void>? _activeCheck;
 
   Future<void> start() async {
-    if (_timer != null) return;
-    _timer = Timer.periodic(interval, (_) => unawaited(_checkSafely()));
+    if (_started) return;
+    _started = true;
     for (final worker in await registry.list()) {
       if (worker.activationState != LocalWorkerActivationState.enabled ||
           worker.status != LocalWorkerStatus.ready) {
@@ -741,8 +739,6 @@ class WorkerReadinessMonitor {
   }
 
   Future<void> dispose() async {
-    _timer?.cancel();
-    _timer = null;
     await _activeCheck;
   }
 }

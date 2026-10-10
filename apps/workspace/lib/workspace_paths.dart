@@ -79,6 +79,13 @@ class WorkspacePaths {
     }
   }
 
+  File installationLockFile(String? installationId) {
+    final identity =
+        installationId?.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_') ??
+            'unidentified';
+    return File('${stateDirectory.path}/installation-$identity.lock');
+  }
+
   /// Private state owned by each configured logical Worker.
   Directory get workersDirectory =>
       Directory('${applicationSupportDirectory.path}/Workers');

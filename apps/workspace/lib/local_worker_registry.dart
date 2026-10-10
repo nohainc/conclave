@@ -530,6 +530,18 @@ class LocalWorkerRegistry {
         await _write(workers);
       });
 
+  /// Removes all configured Worker slots while preserving the Workspace's
+  /// installation identity, Profiles, Engines and user Work Root.
+  Future<void> reset() => _locked(() async {
+        final workers = await _read();
+        for (final worker in workers) {
+          if (worker.status != LocalWorkerStatus.removed) {
+            await onWorkerRemoving?.call(worker.id);
+          }
+        }
+        await _write(const []);
+      });
+
   Future<String> exportBackup() => _locked(() async {
         final workers = await _read();
         final body = <String, Object?>{

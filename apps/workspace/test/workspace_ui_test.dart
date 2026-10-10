@@ -219,41 +219,12 @@ void main() {
     expect(copiedText, error);
   });
 
-  testWidgets('launch-at-login uses the native desktop API only when supported',
-      (tester) async {
-    final methods = <MethodCall>[];
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('com.conclave.workspace/desktop'),
-      (call) async {
-        methods.add(call);
-        return null;
-      },
-    );
-    addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-              const MethodChannel('com.conclave.workspace/desktop'),
-              null,
-            ));
-
-    if (Platform.isMacOS) {
-      await WorkspaceLifecycleController.setLaunchAtLogin(true);
-      expect(methods.single.method, 'setLaunchAtLogin');
-      expect(methods.single.arguments, isTrue);
-    } else {
-      await expectLater(
-        WorkspaceLifecycleController.setLaunchAtLogin(true),
-        throwsUnsupportedError,
-      );
-      expect(methods, isEmpty);
-    }
-  });
-
   Future<void> pumpDashboard(
     WidgetTester tester,
     WorkspaceUiSnapshot snapshot, {
-    Future<void> Function()? onConnect,
+    Future<void> Function()? onStartService,
     Future<void> Function([String? name])? onRegister,
-    VoidCallback? onDisconnect,
+    Future<void> Function()? onStopService,
     Future<void> Function()? onRelease,
     VoidCallback? onReset,
     Future<void> Function([String? name])? onRecoverCredential,
@@ -268,6 +239,8 @@ void main() {
     LocalWorkerRegistry? localWorkerRegistry,
     Future<void> Function({LocalWorkerProbeMode mode, String? workerTypeId})?
         onReadinessCheck,
+    Future<void> Function(String workerId, bool enabled)? onSetWorkerEnabled,
+    Future<void> Function(WorkerDescriptor worker)? onConfigureWorker,
     SecureCredentialStore? credentialStore,
     ToolProfileCatalogClient? toolProfileCatalog,
     bool signedIn = false,
@@ -325,17 +298,18 @@ void main() {
       refreshExecutor: (operation) => Zone.root.run(operation),
     );
     addTearDown(catalogCoordinator.dispose);
+    await tester.runAsync(() => catalogCoordinator.refresh());
 
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: WorkspaceDashboard(
             snapshot: snapshot,
-            onConnect: onConnect,
+            onStartService: onStartService,
             onRegister: onRegister,
             onRecoverCredential: onRecoverCredential,
             onChangeWorkspaceName: onChangeWorkspaceName,
-            onDisconnect: onDisconnect,
+            onStopService: onStopService,
             onRelease: onRelease,
             onReset: onReset,
             onAccountAction: onAccountAction,
@@ -346,7 +320,8 @@ void main() {
             onExportDiagnostics: onExportDiagnostics,
             onChangeWorkRoot: onChangeWorkRoot,
             onReadinessCheck: onReadinessCheck,
-            localWorkerRegistry: localWorkerRegistry,
+            onSetWorkerEnabled: onSetWorkerEnabled,
+            onConfigureWorker: onConfigureWorker ?? (_) async {},
             workerCatalogCoordinator: catalogCoordinator,
             // Build-time widget tests must never read the developer's actual
             // Keychain. Tests covering Keychain behavior provide a mocked
@@ -386,7 +361,7 @@ void main() {
 
     expect(find.text('Sign in'), findsOneWidget);
     expect(find.text('Connect Workspace'), findsNothing);
-    expect(find.text('Connect'), findsNothing);
+    expect(find.text('Start Service'), findsNothing);
 
     await tester.tap(find.text('Sign in'));
     await tester.pump();
@@ -459,6 +434,7 @@ void main() {
           registered: true,
           workspaceReady: true,
           cloudConnected: true,
+          serviceRunning: true,
           ownerUserId: 'user-1',
           hostname: 'sensitive-machine-name',
           workRootPath: '/private/work/root',
@@ -483,7 +459,8 @@ void main() {
     expect(managementVisible, isTrue);
   });
 
-  testWidgets('signed-in disconnected account exposes explicit Connect action',
+  testWidgets(
+      'signed-in stopped account exposes Start Service and cached Workers',
       (tester) async {
     final credentials = _MemoryCredentialStore()
       ..values[desktopHumanCredentialKey] = jsonEncode({
@@ -514,7 +491,7 @@ void main() {
 
     expect(find.text('vitalii@example.com'), findsOneWidget);
     expect(find.text('Register'), findsOneWidget);
-    expect(find.text('Connect'), findsOneWidget);
+    expect(find.text('Start Service'), findsOneWidget);
     expect(find.text('Workers'), findsWidgets);
     await openWorkers(tester);
     expect(find.text('ChatGPT'), findsOneWidget);
@@ -588,13 +565,13 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Connect'), findsOneWidget);
+    expect(find.text('Start Service'), findsOneWidget);
     expect(find.text('Workspace'), findsWidgets);
     expect(find.text('Workers'), findsWidgets);
     await openWorkers(tester);
     await tester.tap(find.text('Workspace').first);
     await tester.pumpAndSettle();
-    expect(find.text('Connect'), findsOneWidget);
+    expect(find.text('Start Service'), findsOneWidget);
     expect(find.text('Release'), findsOneWidget);
     await tester.ensureVisible(find.text('Release'));
     await tester.pumpAndSettle();
@@ -627,6 +604,7 @@ void main() {
       registered: true,
       workspaceReady: true,
       cloudConnected: true,
+      serviceRunning: true,
       desiredRuntimeConnected: true,
       ownerUserId: 'user-a',
       workspaceName: 'User A Workspace',
@@ -680,6 +658,7 @@ void main() {
           registered: true,
           workspaceReady: true,
           cloudConnected: true,
+          serviceRunning: true,
           ownerUserId: 'user-a',
           workspaceName: 'User A Workspace',
         ),
@@ -774,6 +753,7 @@ void main() {
           workspaceReady: true,
           ownerUserId: 'user-a',
           cloudConnected: true,
+          serviceRunning: true,
           desiredRuntimeConnected: true,
         ),
         credentialStore: credentials,
@@ -821,6 +801,7 @@ void main() {
           workspaceReady: true,
           ownerUserId: 'user-a',
           cloudConnected: true,
+          serviceRunning: true,
           desiredRuntimeConnected: true,
         ),
         credentialStore: credentials,
@@ -884,7 +865,7 @@ void main() {
         workspaceName: 'Development Mac',
       ),
       onRetry: () async => retried = true,
-      onRecoverCredential: ([name]) async => recoveryPrepared = true,
+      onStartService: () async => recoveryPrepared = true,
       credentialStore: _MemoryCredentialStore()
         ..values[desktopHumanCredentialKey] = jsonEncode({
           'credential': 'human-session',
@@ -900,19 +881,19 @@ void main() {
     );
 
     expect(find.text('Network unavailable'), findsOneWidget);
-    expect(find.text('Offline'), findsWidgets);
-    expect(find.text('Retry connection'), findsOneWidget);
-    expect(find.text('Connect'), findsOneWidget);
+    expect(find.text('Cloud: Offline'), findsOneWidget);
+    expect(find.text('Retry service startup'), findsOneWidget);
+    expect(find.text('Start Service'), findsOneWidget);
     expect(find.byTooltip('Copy error message'), findsOneWidget);
     await tester.tap(find.byTooltip('Copy error message'));
     await tester.pump();
     expect(copiedText, 'Network unavailable');
     expect(find.text('Error message copied'), findsOneWidget);
-    await tester.tap(find.text('Retry connection'));
+    await tester.tap(find.text('Retry service startup'));
     expect(retried, isTrue);
-    await tester.ensureVisible(find.text('Connect'));
+    await tester.ensureVisible(find.text('Start Service'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Connect'));
+    await tester.tap(find.text('Start Service'));
     expect(recoveryPrepared, isTrue);
   });
 
@@ -933,6 +914,7 @@ void main() {
         registered: true,
         workspaceReady: true,
         cloudConnected: true,
+        serviceRunning: true,
         activeTransportMode: 'websocket',
         workspaceName: 'MacBook Pro',
         workspaceId: 'ws-123',
@@ -958,8 +940,8 @@ void main() {
     expect(find.text('Workspace'), findsWidgets);
     expect(find.text('MacBook Pro'), findsOneWidget);
     expect(find.text('Connection'), findsNothing);
-    expect(find.text('Connected · WebSocket'), findsOneWidget);
-    expect(find.text('Start at login'), findsOneWidget);
+    expect(find.text('Service running · Cloud connected'), findsOneWidget);
+    expect(find.text('Run background service at login'), findsNothing);
     expect(find.text('Startup'), findsNothing);
     expect(find.text('Current work'), findsNothing);
     expect(find.text('Workers'), findsWidgets);
@@ -970,7 +952,7 @@ void main() {
 
     // The registered Workspace has no enrollment form.
     expect(find.text('Connect this Workspace'), findsNothing);
-    expect(find.text('Connect'), findsNothing);
+    expect(find.text('Start Service'), findsNothing);
 
     // Removed sections are not on the Workspace tab
     expect(find.text('Current Work'), findsNothing);
@@ -991,6 +973,7 @@ void main() {
         registered: true,
         workspaceReady: true,
         cloudConnected: true,
+        serviceRunning: true,
         statusLabel: 'Connected',
         hostname: 'MacBook Pro',
       ),
@@ -999,7 +982,7 @@ void main() {
 
     expect(find.text('Conclave Workspace'), findsOneWidget);
     expect(find.text('MacBook Pro'), findsOneWidget);
-    expect(find.text('Connected'), findsWidgets);
+    expect(find.text('Cloud: Connected'), findsOneWidget);
 
     // Verify HUD Quit icon button is not shown
     expect(find.byTooltip('Quit Conclave Workspace'), findsNothing);
@@ -1052,7 +1035,7 @@ void main() {
         find.text(
             'Your work is safe. The Workspace will not discard an assignment.'),
         findsOneWidget);
-    await tester.tap(find.text('Retry update'));
+    await tester.tap(find.text('Retry service startup'));
     expect(retried, isTrue);
   });
 
@@ -1086,6 +1069,7 @@ void main() {
         registered: true,
         workspaceReady: true,
         cloudConnected: true,
+        serviceRunning: true,
         workspaceId: 'ws-test-123',
         workspaceRuntimeId: 'runtime-workspace-a',
         cloudUrl:
@@ -1127,7 +1111,7 @@ void main() {
     expect(find.text('not started'), findsOneWidget);
     expect(find.text('failed (HTTP 400)'), findsOneWidget);
     expect(find.text('Runtime credential'), findsOneWidget);
-    expect(find.text('Connected'), findsWidgets);
+    expect(find.text('Cloud: Connected'), findsOneWidget);
     expect(find.text('Open Log File'), findsOneWidget);
 
     final exportBtn = find.text('Export Report');
@@ -1145,7 +1129,7 @@ void main() {
     expect(copiedConnectionDetails, isNot(contains('Bearer')));
 
     // Diagnostics section does not show Retry connection button
-    expect(find.text('Retry connection'), findsNothing);
+    expect(find.text('Retry Cloud connection'), findsNothing);
   });
 
   test('runtime credential diagnostics reflect desired runtime state', () {
@@ -1199,6 +1183,7 @@ void main() {
         registered: true,
         workspaceReady: true,
         cloudConnected: true,
+        serviceRunning: true,
         activeTransportMode: 'websocket',
         workspaceName: 'Office Mac',
         workspaceId: 'ws-456',
@@ -1206,7 +1191,9 @@ void main() {
         cloudUrl: 'https://app.conclaveax.com',
         workRootPath: '/workspace/root',
       ),
-      onDisconnect: () => disconnected = true,
+      onStopService: () async {
+        disconnected = true;
+      },
       onSignOut: () async => signedOut = true,
       onRelease: () async => released = true,
       onReset: () => reset = true,
@@ -1216,15 +1203,15 @@ void main() {
     expect(find.text('test@example.com'), findsOneWidget);
     expect(find.text('Work Root'), findsOneWidget);
     expect(find.text('/workspace/root'), findsOneWidget);
-    expect(find.text('Disconnect'), findsOneWidget);
+    expect(find.text('Stop Service'), findsOneWidget);
     expect(
       find.text(
         'Disconnect keeps this installation owned by your account. Release lets another account claim it.',
       ),
       findsOneWidget,
     );
-    await tester.ensureVisible(find.text('Disconnect'));
-    await tester.tap(find.text('Disconnect'));
+    await tester.ensureVisible(find.text('Stop Service'));
+    await tester.tap(find.text('Stop Service'));
     expect(disconnected, isTrue);
     expect(find.byIcon(Icons.menu), findsOneWidget);
     await tester.tap(find.byIcon(Icons.menu));
@@ -1249,7 +1236,7 @@ void main() {
     expect(reset, isTrue);
   });
 
-  testWidgets('workspace tab renders the Work Root browse action',
+  testWidgets('workspace tab keeps Work Root browsing disabled while connected',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -1265,6 +1252,7 @@ void main() {
         registered: true,
         workspaceReady: true,
         cloudConnected: true,
+        serviceRunning: true,
         workspaceName: 'Office Mac',
         workRootPath: '/custom/work/root',
       ),
@@ -1284,7 +1272,7 @@ void main() {
         tester
             .widget<TextButton>(find.widgetWithText(TextButton, 'Browse'))
             .onPressed,
-        isNotNull);
+        isNull);
     expect(find.textContaining('legacy Work Root'), findsNothing);
     expect(find.text('Open in Finder'), findsNothing);
     expect(find.text('Change…'), findsNothing);
@@ -1330,6 +1318,7 @@ void main() {
         registered: true,
         workspaceReady: true,
         cloudConnected: true,
+        serviceRunning: true,
         workspaceName: 'Office Mac',
       ),
       localWorkerRegistry: _FakeWorkerRegistry([]),
@@ -1432,9 +1421,9 @@ void main() {
               registered: true,
               workspaceReady: true,
               cloudConnected: true,
+              serviceRunning: true,
               workspaceName: 'Office Mac',
             ),
-            localWorkerRegistry: registry,
             workerCatalogCoordinator: catalogCoordinator,
             credentialStore: _MemoryCredentialStore(),
           ),
@@ -1506,6 +1495,7 @@ void main() {
         registered: true,
         workspaceReady: true,
         cloudConnected: true,
+        serviceRunning: true,
         workspaceName: 'Office Mac',
       ),
       localWorkerRegistry: _FakeWorkerRegistry([chatGptWorker, geminiWorker]),
@@ -1600,6 +1590,7 @@ void main() {
         registered: true,
         workspaceReady: true,
         cloudConnected: true,
+        serviceRunning: true,
         workspaceName: 'Office Mac',
       ),
       localWorkerRegistry: registry,
@@ -1675,6 +1666,7 @@ void main() {
         registered: true,
         workspaceReady: true,
         cloudConnected: true,
+        serviceRunning: true,
         workspaceName: 'Office Mac',
       ),
       localWorkerRegistry: registry,
@@ -1725,7 +1717,7 @@ void main() {
     );
   });
 
-  testWidgets('activation switch never requests a live Worker test',
+  testWidgets('activation switch delegates without a live Worker test',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -1756,9 +1748,23 @@ void main() {
         registered: true,
         workspaceReady: true,
         cloudConnected: true,
+        serviceRunning: true,
         workspaceName: 'Office Mac',
       ),
       localWorkerRegistry: registry,
+      onSetWorkerEnabled: (workerId, enabled) async {
+        await registry.update(
+          workerId,
+          (current) => current.copyWith(
+            status: enabled
+                ? LocalWorkerStatus.needsAttention
+                : LocalWorkerStatus.disabled,
+            activationState: enabled
+                ? LocalWorkerActivationState.enabled
+                : LocalWorkerActivationState.disabled,
+          ),
+        );
+      },
       onReadinessCheck: ({
         LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
         String? workerTypeId,
@@ -1778,7 +1784,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(registry.workers.single.activationState,
         LocalWorkerActivationState.enabled);
-    expect(probeModes, [LocalWorkerProbeMode.passive]);
+    expect(probeModes, isEmpty);
     expect(registry.workers.single.lastLiveTestAt, isNull);
   });
 
@@ -1811,6 +1817,7 @@ void main() {
         registered: true,
         workspaceReady: true,
         cloudConnected: true,
+        serviceRunning: true,
         workspaceName: 'Office Mac',
       ),
       localWorkerRegistry: registry,
@@ -1985,7 +1992,7 @@ void main() {
       ),
       credentialStore: credentials,
       signedIn: true,
-      onConnect: () async {},
+      onStartService: () async {},
       onRegister: ([name]) async {},
       onChangeWorkspaceName: (_) async {},
       onChangeWorkRoot: (_) async {},
@@ -1993,10 +2000,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Connect button is disabled
-    final connectBtn = tester
-        .widget<FilledButton>(find.widgetWithText(FilledButton, 'Connect'));
-    expect(connectBtn.onPressed, isNull);
+    // Starting also handles registration for a signed-in account.
+    final connectBtn = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Start Service'));
+    expect(connectBtn.onPressed, isNotNull);
 
     // Register button is enabled
     final registerBtn = tester
@@ -2114,6 +2121,7 @@ void main() {
         workspaceId: 'ws-123',
         workspaceReady: true,
         cloudConnected: true,
+        serviceRunning: true,
         desiredRuntimeConnected: true,
         workspaceName: 'Connected Mac',
         workRootPath: '/workspace/root',
@@ -2122,7 +2130,7 @@ void main() {
       signedIn: true,
       onChangeWorkRoot: (_) async {},
       onChangeWorkspaceName: (_) async {},
-      onDisconnect: () {},
+      onStopService: () async {},
     );
     await tester.pumpAndSettle();
 
@@ -2139,5 +2147,39 @@ void main() {
             .widget<TextButton>(find.widgetWithText(TextButton, 'Browse'))
             .onPressed,
         isNull);
+  });
+  testWidgets('running service can be stopped while Cloud is offline',
+      (tester) async {
+    final stopped = Completer<void>();
+    var calls = 0;
+    await pumpDashboard(
+        tester,
+        const WorkspaceUiSnapshot(
+          mode: WorkspaceUiMode.offline,
+          title: 'Cloud offline',
+          detail: '',
+          serviceRunning: true,
+          registered: true,
+          workspaceName: 'Test Mac',
+        ),
+        signedIn: true, onStopService: () {
+      calls++;
+      return stopped.future;
+    });
+    expect(find.text('Service running · Cloud offline'), findsOneWidget);
+    expect(find.text('Start Service'), findsNothing);
+    await tester.tap(find.text('Stop Service'));
+    await tester.pump();
+    expect(find.text('Stopping…'), findsOneWidget);
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Stopping…'))
+            .onPressed,
+        isNull);
+    expect(calls, 1);
+    stopped.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Stop Service'), findsOneWidget);
   });
 }

@@ -20,6 +20,8 @@ void main() {
     expect(await executable!.readAsBytes(), bytes);
     expect(executable.path, contains('$cliWorkerEngineVersion-'));
     expect(executable.path, startsWith(root.path));
+    expect(executable.uri.pathSegments.last,
+        Platform.isWindows ? 'conclave-agent.exe' : 'conclave-agent');
   });
 
   test('repairs altered cached Engine bytes from the bundled release',

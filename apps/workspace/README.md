@@ -19,11 +19,11 @@ Engine, enforces local permissions, supervises execution, and reports safe
 readiness/status back to Conclave Cloud.
 
 Its GUI is intentionally minimal and local-first:
-- account sign-in and explicit Workspace connection/lifecycle;
+- account sign-in and explicit service start/stop;
 - Workers;
 - provider authentication;
 - local permissions;
-- current local work;
+- service health and Cloud connection status;
 - diagnostics/logs;
 - updates;
 - pause/quit.
@@ -70,32 +70,33 @@ separate process, Cloud-connection, and execution state in
 `workspace-state.json`.
 
 The service exposes a versioned, authenticated local IPC protocol for status,
-connection, Worker, assignment, log, and diagnostics commands. Service restart
-and shutdown remain host-manager operations. The desktop management shell
-still starts its own in-process runtime and has not yet been converted to a
-local service-protocol client. See the
+connection, Worker, assignment, configuration, log, and diagnostics commands.
+Service restart and shutdown remain host-manager operations. The Flutter
+management shell connects through this protocol and does not create or control
+an in-process execution runtime. See the
 [Phase 1 service boundary audit](../../docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_1.md)
-for the current command surface, ownership map, and remaining handoff.
+for the command surface, ownership map, and validation gates.
 
 For development, `scripts/run-workspace-service.sh` runs the headless process
 against the existing local configuration without building the Flutter app.
 `scripts/check-workspace-service.sh` compiles it and runs a one-shot lifecycle
 in temporary directories; the Workspace CI validation invokes the same check.
-Do not run the service and the Flutter-owned runtime with the same installation
-identity at the same time; the installation lock rejects the second process.
+The per-installation lock rejects a second service process that attempts to
+own the same Workspace installation.
 
 ## Desktop development and macOS build
 
-Conclave Workspace is the native desktop product. The Flutter GUI and the
-headless entrypoint share the same runtime composition in
-`lib/workspace_runtime.dart`.
+Conclave Workspace is the native desktop product. The headless service composes
+the runtime in `lib/workspace_runtime.dart`; the Flutter GUI manages it over
+local IPC.
 
 The current macOS release target requires macOS 12 or newer.
 
 The package embeds the standalone service helper, its generic Engine, and an
 `SMAppService` LaunchAgent manifest. Background registration requires macOS 13
-or newer. A macOS 12 installation remains able to run Workspace in the UI but
-cannot register the LaunchAgent. See the
+or newer. Persistent execution through the managed service requires macOS 13
+or newer; earlier macOS versions can open the management UI but cannot start
+the service. See the
 [Phase 3 macOS service integration notes](../../docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_3.md)
 for the bundle contract, status semantics, and signed-device validation.
 
@@ -121,28 +122,41 @@ The output ZIP is written under `dist/conclave-workspace/macos`.
 
 ## Account and Workspace lifecycle
 
-The normal desktop path uses browser-based Better Auth sign-in, followed by an
-explicit **Connect Workspace** action. Sign-in alone does not register or start
-the runtime. Connect sends the persistent installation ID and safe machine
-facts, then recovers or creates the Workspace for the authenticated owner.
-Human session, runtime credential, and local Worker/provider credentials are
-separate secrets stored in their respective secure stores.
+The desktop path uses browser-based Better Auth sign-in, followed by
+**Start Service**. Starting registers or recovers the existing installation,
+enables the embedded per-user LaunchAgent, and waits for authenticated local
+IPC. The service independently connects to Cloud using WebSocket with HTTP
+fallback and bounded reconnect backoff. A running service can therefore be
+Cloud-offline without being stopped.
 
-Connected Workspaces can start at macOS login through `SMAppService.mainApp`.
-The preference is offered during first Connect and can later be changed in the
-Workspace Account section. Startup uses the runtime credential and persisted
-desired-runtime state; it does not require interactive human sign-in. A
-deliberately disconnected Workspace stays disconnected after restart. Closing
-the window leaves the runtime running. Locking protects management UI without
-stopping runtime work.
+**Stop Service** asks the service to stop accepting work and drain active
+assignments before unregistering the LaunchAgent. If work does not finish
+within the bounded grace period, stopping is refused and admission resumes.
+A successful stop disables automatic startup; starting enables login startup
+again through `SMAppService.agent`. Closing or quitting Workspace.app only
+closes the management client and leaves the service running.
+
+The two tabs are **Workspace** and **Workers**. Worker configuration and live
+tests execute in the service through authenticated IPC; the UI awaits results.
+A local display cache retains the last known Worker list while the service is
+stopped, with configuration and tests disabled. Name and Work Root are editable
+only while the service is stopped. Diagnostics and actionable service/Cloud
+errors remain accessible from the Workspace tab.
+
+Packaged runtime process names are `conclave-service` and `conclave-agent`.
+The latter is the separately isolated generic CLI Worker Engine, materialized
+under the existing Workspace Engine registry. LaunchAgent identity remains
+`com.conclaveax.workspace.service`; assets retain their shared Engine names.
+An independently installed legacy `conclave_agent_engine` daemon is outside
+this bundle and is not silently stopped or removed by the manager.
 
 Workspace error and warning messages include a copy action where they are
 shown, including transient notifications and Worker setup details. Copying a
 message copies its displayed text; it does not extend the message's existing
 display timeout.
 
-Disconnect preserves installation ownership and local Worker/provider
-credentials. Release ownership is a separate advanced action for a disconnected
+Stopping the service preserves installation ownership and local Worker/provider
+credentials. Release ownership is a separate advanced action for a stopped
 Workspace and permits a different account to connect. Reset local Workspace
 has separate published data-removal semantics; see [ADR-014](../../docs/decisions/ADR-014-workspace-desktop-lifecycle.md).
 
@@ -174,3 +188,19 @@ Engine/Profile acceptance gate, but their build/install/release tooling is
 retired. Normal Workspace execution uses the generic Engine and signed Tool
 Profiles. Worker readiness remains a local execution fact; Cloud receives only
 safe inventory.
+
+## Work Root configuration before startup
+
+Work Root is a machine-local setting in `workspace-lifecycle.json` under
+Application Data. Workspace.app validates and saves it while the service is
+stopped, without IPC or Cloud access; service startup reads the same file.
+The installation's advisory lock protects against edits while an independent
+service process is running even if its IPC socket is unavailable. A changed
+root applies to future Space directory resolution and never moves existing
+user files. The running-service API rejects Work Root changes.
+
+Start Service first attempts IPC attachment. If macOS has an enabled but stopped
+job (including an old helper path after an update), the native bridge refreshes
+its `SMAppService` registration. It does not unregister a running job. Local
+IPC and configuration reload become ready before Cloud's initial handshake;
+Cloud failure is shown as connectivity state, not local startup failure.

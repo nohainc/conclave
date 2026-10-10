@@ -54,9 +54,21 @@ the environment keys explicitly allowed by their signed Tool Profile.
 
 Structured service logs include timestamp, severity, event, service version,
 and Workspace ID. The active log and one rotated log are each bounded by the
-configured limit (1 MiB by default). Log rotation and service-state refresh
-use 30-second intervals; the management snapshot comparison uses a 5-second
-interval while the manager is running.
+configured limit (1 MiB by default). Log rotation and the persisted process
+state heartbeat run every 30 seconds. The management service does not poll for
+snapshots: Cloud connection, Worker catalog, registry, assignment, and IPC
+command changes publish updated snapshots as events occur. The Worker catalog
+syncs at service startup or when explicitly refreshed; Worker readiness gets
+one passive startup check and subsequent checks are triggered by configuration,
+activation, profile, or explicit test actions. The generic Worker Engine is
+launched for a probe or assignment and is not retained as an idle process.
+
+Cloud reconnect is owned by the connection manager. Failed initial connections
+and dropped sessions retry with exponential backoff from two seconds up to two
+minutes; a deliberate disconnect disables retries. The management UI does not
+run a competing reconnect loop. Process metrics are sampled only when requested
+through the diagnostics command and report resident memory and an OS CPU sample
+when available; no metrics sampler runs in the idle service.
 
 ## Remaining platform validation
 

@@ -1,30 +1,16 @@
 import 'dart:io';
-import 'dart:async';
 
 import 'package:conclave_workspace/assignment_journal.dart';
 import 'package:conclave_workspace/cloud_connection.dart';
+import 'package:conclave_workspace/secure_credentials.dart';
 import 'package:conclave_workspace/workspace.dart';
 import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/workspace_lifecycle.dart';
 import 'package:conclave_workspace/workspace_lifecycle_store.dart';
-import 'package:conclave_workspace/workspace_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_workspace/main.dart';
 import 'package:conclave_workspace/workspace_runtime.dart';
-
-class _SilentWorkspaceSocket implements WorkspaceTransport {
-  final _messages = StreamController<Object?>.broadcast();
-
-  @override
-  Stream<Object?> get messages => _messages.stream;
-
-  @override
-  void send(Object message) {}
-
-  @override
-  Future<void> close() => _messages.close();
-}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -80,7 +66,7 @@ void main() {
         'user-owner');
   });
 
-  test('disconnected registration remains visible as owned but not connected',
+  test('IPC snapshot projects registered disconnected Workspace state',
       () async {
     final directory =
         await Directory.systemTemp.createTemp('conclave-workspace-');
@@ -102,132 +88,156 @@ void main() {
         ownerUserId: 'user-owner',
       ),
     );
-    final workspace = Workspace(
-      config: WorkspaceConfig.fromArgs(
-        ['--data-dir', directory.path],
-        ignoreSavedRegistration: true,
-      ),
+    final lifecycle = WorkspaceLifecycleController(
+      WorkspaceConfig.fromArgs(['--data-dir', directory.path]),
+      credentialStore: const PlatformSecureCredentialStore(),
+      initialManagerSnapshot: {
+        'service': {'processState': 'ready', 'installationId': 'install-owned'},
+        'cloud': {'state': 'disconnected', 'connected': false},
+        'workspace': {
+          'workspaceId': 'workspace-owned',
+          'workspaceRuntimeId': 'runtime-owned',
+          'name': 'Owned Workspace',
+          'cloudUrl': 'https://cloud.example.test',
+        },
+        'assignments': {'activeCount': 0, 'activeIds': <String>[]},
+      },
     );
-    final snapshot = WorkspaceLifecycleController(workspace).uiSnapshot;
 
+    final snapshot = lifecycle.uiSnapshot;
     expect(snapshot.registered, isTrue);
     expect(snapshot.ownerUserId, 'user-owner');
+    expect(snapshot.workspaceName, 'Owned Workspace');
     expect(snapshot.desiredRuntimeConnected, isFalse);
     expect(snapshot.workspaceReady, isFalse);
     expect(snapshot.cloudConnected, isFalse);
+    expect(lifecycle.running, isTrue);
+    await lifecycle.quit();
+    await directory.delete(recursive: true);
   });
 
-  test('connection failure keeps saved Workspace registration registered',
+  test('manager saves and displays Work Root while service is stopped',
       () async {
-    final directory =
-        await Directory.systemTemp.createTemp('conclave-workspace-');
-    const workspaceId = 'workspace-1';
-    const runtimeId = 'runtime-1';
+    final root = await Directory.systemTemp.createTemp('manager-work-root-');
+    addTearDown(() => root.delete(recursive: true));
+    final lifecycle = WorkspaceLifecycleController(
+      WorkspaceConfig(dataDirectory: Directory('${root.path}/state')),
+      credentialStore: const PlatformSecureCredentialStore(),
+    );
+    addTearDown(lifecycle.quit);
+    await lifecycle.changeWorkRoot('${root.path}/work');
+    expect(lifecycle.uiSnapshot.workRootPath,
+        await Directory('${root.path}/work').resolveSymbolicLinks());
+    expect(lifecycle.uiSnapshot.serviceRunning, isFalse);
+  });
+
+  test('running service protects Work Root even when Cloud is offline',
+      () async {
+    final root = await Directory.systemTemp.createTemp('running-work-root-');
+    addTearDown(() => root.delete(recursive: true));
+    final lifecycle = WorkspaceLifecycleController(
+      WorkspaceConfig(dataDirectory: root),
+      credentialStore: const PlatformSecureCredentialStore(),
+      initialManagerSnapshot: {
+        'service': {'processState': 'ready'},
+        'cloud': {'connected': false},
+      },
+    );
+    addTearDown(lifecycle.quit);
+    await expectLater(lifecycle.changeWorkRoot('${root.path}/work'),
+        throwsA(isA<StateError>()));
+    expect(await Directory('${root.path}/work').exists(), isFalse);
+  });
+
+  test('stopped service cannot display a stale connected Cloud snapshot',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('stopped-service-');
+    addTearDown(() => directory.delete(recursive: true));
+    final lifecycle = WorkspaceLifecycleController(
+      WorkspaceConfig(dataDirectory: directory),
+      credentialStore: const PlatformSecureCredentialStore(),
+      initialManagerSnapshot: {
+        'service': {'processState': 'stopped'},
+        'cloud': {'state': 'connected', 'connected': true},
+      },
+    );
+    addTearDown(lifecycle.quit);
+    expect(lifecycle.uiSnapshot.serviceRunning, isFalse);
+    expect(lifecycle.uiSnapshot.cloudConnected, isFalse);
+    expect(
+        lifecycle.uiSnapshot.connectionStage, WorkspaceConnectionStage.offline);
+  });
+
+  test('management UI reports service state from IPC without owning runtime',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('conclave-ipc-ui-');
     await WorkspaceRegistrationStore(directory)
         .write(const WorkspaceRegistration(
-      workspaceRuntimeId: runtimeId,
-      workspaceId: workspaceId,
+      workspaceRuntimeId: 'runtime-1',
+      workspaceId: 'workspace-1',
       cloudUrl: 'https://cloud.example.test',
       name: 'Development Mac',
       hostname: 'development-mac.local',
-      installationId: 'install_12345678-1234-4234-8234-123456789abc',
+      installationId: 'install-ui-test',
     ));
-    final connection = WorkspaceCloudConnection(
-      uri: Uri.parse(
-          'wss://cloud.example.test/api/workspace-gateway/connect?workspaceRuntimeId=$runtimeId'),
-      workspaceRuntimeId: runtimeId,
-      workspaceId: workspaceId,
-      // The platform's WebSocket error text is not stable across macOS/Linux
-      // and may omit the HTTP status. Missing saved credentials are enough to
-      // offer the explicit recovery action.
-      factory: (_) async => throw const WebSocketException(
-        'Connection failed',
-      ),
-    );
     final lifecycle = WorkspaceLifecycleController(
-      Workspace(
-        config: WorkspaceConfig(
-          dataDirectory: directory,
-          workspaceRuntimeId: runtimeId,
-          workspaceId: workspaceId,
-          authToken: 'revoked-runtime-token',
-        ),
-        cloudConnection: connection,
-      ),
+      WorkspaceConfig.fromArgs(['--data-dir', directory.path]),
+      credentialStore: const PlatformSecureCredentialStore(),
+      initialManagerSnapshot: {
+        'service': {'processState': 'ready'},
+        'cloud': {
+          'state': 'connected',
+          'connected': true,
+          'acceptingNewWork': true,
+          'reconnectCount': 2,
+        },
+        'workspace': {
+          'workspaceId': 'workspace-1',
+          'workspaceRuntimeId': 'runtime-1',
+          'name': 'Development Mac',
+          'cloudUrl': 'https://cloud.example.test',
+          'workRoot': '${directory.path}/Work',
+        },
+        'assignments': {
+          'activeCount': 1,
+          'activeIds': ['assignment-1'],
+        },
+      },
     );
 
-    await expectLater(lifecycle.launch(), throwsA(isA<WebSocketException>()));
-    expect(lifecycle.uiSnapshot.mode, WorkspaceUiMode.offline);
-    expect(lifecycle.uiSnapshot.registered, isTrue);
-    expect(lifecycle.uiSnapshot.workspaceName, 'Development Mac');
-
+    expect(lifecycle.uiSnapshot.mode, WorkspaceUiMode.active);
+    expect(lifecycle.uiSnapshot.statusLabel, 'Connected');
+    expect(lifecycle.uiSnapshot.activeAssignments, 1);
+    expect(lifecycle.uiSnapshot.activeAssignmentIds, ['assignment-1']);
+    expect(lifecycle.acceptingNewWork, isTrue);
     await lifecycle.quit();
+    await directory.delete(recursive: true);
   });
 
-  test('registered runtime without an authenticated session is shown offline',
+  test('launch and quit only attach and detach the management client',
       () async {
     final directory =
-        await Directory.systemTemp.createTemp('conclave-workspace-');
-    const workspaceId = 'workspace-2';
-    const runtimeId = 'runtime-2';
-    await WorkspaceRegistrationStore(directory)
-        .write(const WorkspaceRegistration(
-      workspaceRuntimeId: runtimeId,
-      workspaceId: workspaceId,
-      cloudUrl: 'https://cloud.example.test',
-      name: 'Offline Mac',
-      hostname: 'offline-mac.local',
-      installationId: 'install_12345678-1234-4234-8234-123456789def',
-    ));
-    final connection = WorkspaceCloudConnection(
-      uri: Uri.parse(
-          'wss://cloud.example.test/api/workspace-gateway/connect?workspaceRuntimeId=$runtimeId'),
-      workspaceRuntimeId: runtimeId,
-      workspaceId: workspaceId,
-      factory: (_) async => _SilentWorkspaceSocket(),
-    );
+        await Directory.systemTemp.createTemp('conclave-ui-client-');
     final lifecycle = WorkspaceLifecycleController(
-      Workspace(
-        config: WorkspaceConfig(
-          dataDirectory: directory,
-          workspaceRuntimeId: runtimeId,
-          workspaceId: workspaceId,
-          authToken: 'possibly-revoked-token',
-        ),
-        cloudConnection: connection,
-      ),
+      WorkspaceConfig(dataDirectory: directory),
+      credentialStore: const PlatformSecureCredentialStore(),
     );
 
     await lifecycle.launch();
-    expect(connection.isConnected, isFalse);
-    expect(lifecycle.uiSnapshot.mode, WorkspaceUiMode.starting);
-    expect(lifecycle.uiSnapshot.statusLabel, 'Connecting');
-    expect(lifecycle.uiSnapshot.cloudConnected, isFalse);
-    await connection.close();
-    expect(lifecycle.uiSnapshot.mode, WorkspaceUiMode.offline);
-    expect(lifecycle.uiSnapshot.statusLabel, 'Offline');
-    await lifecycle.quit();
-  });
-
-  test('Workspace launches, minimizes/restores, and quits cleanly', () async {
-    final directory =
-        await Directory.systemTemp.createTemp('conclave-workspace-');
-    final lifecycle = WorkspaceLifecycleController(
-      Workspace(config: WorkspaceConfig(dataDirectory: directory)),
+    expect(lifecycle.running, isFalse,
+        reason: 'the management UI must not start an in-process runtime');
+    expect(
+      File('${directory.path}/installation-unidentified.lock').existsSync(),
+      isFalse,
     );
-
-    await lifecycle.launch();
-    expect(lifecycle.running, isTrue);
     lifecycle.minimize();
     expect(lifecycle.hidden, isTrue);
-    expect(lifecycle.running, isTrue,
-        reason: 'hiding the window must leave the runtime alive');
     lifecycle.restore();
     expect(lifecycle.hidden, isFalse);
-    expect(lifecycle.running, isTrue);
     await lifecycle.quit();
     expect(lifecycle.quitting, isTrue);
     expect(lifecycle.running, isFalse);
+    await directory.delete(recursive: true);
   });
 
   test('Workspace shutdown invokes the Worker process-tree shutdown hook',
@@ -246,96 +256,6 @@ void main() {
     await workspace.stop();
 
     expect(shutdownCalls, 1);
-  });
-
-  test('pause and resume affect assignment intake, not runtime lifecycle',
-      () async {
-    final directory = await Directory.systemTemp.createTemp('conclave-pause-');
-    final registration = const WorkspaceRegistration(
-      workspaceRuntimeId: 'runtime-1',
-      workspaceId: 'workspace-1',
-      cloudUrl: 'https://cloud.example.test',
-      name: 'Test Workspace',
-      hostname: 'test-machine',
-      ownerUserId: 'owner-1',
-      installationId: 'installation-1',
-    );
-    await WorkspaceRegistrationStore(directory).write(registration);
-    await WorkspaceLifecyclePreferencesStore(directory).write(
-      const WorkspaceLifecyclePreferences(
-        desiredRuntime: DesiredRuntimeState.connected,
-        launchAtLogin: false,
-        managementLockPreference: ManagementLockState.unlocked,
-      ),
-    );
-    final connection = WorkspaceCloudConnection(
-      uri: Uri.parse(
-          'wss://cloud.example.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
-      workspaceRuntimeId: 'runtime-1',
-      workspaceId: 'workspace-1',
-      factory: (_) async => _SilentWorkspaceSocket(),
-    );
-    final lifecycle = WorkspaceLifecycleController(Workspace(
-      config: WorkspaceConfig(
-        dataDirectory: directory,
-        workspaceRuntimeId: 'runtime-1',
-        workspaceId: 'workspace-1',
-        authToken: 'runtime-credential',
-      ),
-      cloudConnection: connection,
-    ));
-
-    await lifecycle.handleDesktopAction('pause');
-    expect(connection.acceptingNewWork, isFalse);
-    expect(connection.isDraining, isFalse);
-    expect(lifecycle.quitting, isFalse);
-    expect(
-      WorkspaceLifecyclePreferencesStore(directory).readSync().desiredRuntime,
-      DesiredRuntimeState.connected,
-    );
-
-    await lifecycle.handleDesktopAction('resume');
-    expect(connection.acceptingNewWork, isTrue);
-    await lifecycle.quit();
-  });
-
-  test('quit drain waits for work and restores intake if the timeout expires',
-      () async {
-    var now = DateTime.utc(2026, 9, 27);
-    var active = 2;
-    var drainStarted = false;
-    var restored = false;
-    final drained = await drainWorkspaceAssignments(
-      activeAssignmentCount: () => active,
-      beginDrain: () => drainStarted = true,
-      restoreNewWorkState: () => restored = true,
-      timeout: const Duration(seconds: 3),
-      pollInterval: const Duration(seconds: 1),
-      now: () => now,
-      wait: (duration) async {
-        now = now.add(duration);
-        active--;
-      },
-    );
-    expect(drained, isTrue);
-    expect(drainStarted, isTrue);
-    expect(restored, isFalse);
-
-    now = DateTime.utc(2026, 9, 27);
-    active = 1;
-    restored = false;
-    final timedOut = await drainWorkspaceAssignments(
-      activeAssignmentCount: () => active,
-      beginDrain: () {},
-      restoreNewWorkState: () => restored = true,
-      timeout: const Duration(seconds: 1),
-      pollInterval: const Duration(seconds: 1),
-      now: () => now,
-      wait: (duration) async => now = now.add(duration),
-    );
-    expect(timedOut, isFalse);
-    expect(restored, isTrue);
-    expect(active, 1);
   });
 
   test('assignment journal recovers interrupted work after restart', () async {

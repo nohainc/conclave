@@ -198,8 +198,8 @@ class WorkspaceCloudConnection {
     this.onSessionReady,
     this.workspaceUpdateAvailableHandler,
     this.heartbeat = const Duration(seconds: 15),
-    this.reconnectBaseDelay = const Duration(milliseconds: 10),
-    this.reconnectMaxDelay = const Duration(seconds: 5),
+    this.reconnectBaseDelay = const Duration(seconds: 2),
+    this.reconnectMaxDelay = const Duration(minutes: 2),
     this.protocolHandshakeTimeout = const Duration(seconds: 15),
     this.syncTimeout = const Duration(seconds: 20),
     this.webSocketProbeInterval = const Duration(minutes: 5),
@@ -258,7 +258,15 @@ class WorkspaceCloudConnection {
   int reconnectCount = 0;
   String? sessionId;
   bool get isConnected => sessionId != null;
-  WorkspaceConnectionStage connectionStage = WorkspaceConnectionStage.offline;
+  void Function()? onStateChanged;
+  WorkspaceConnectionStage _connectionStage = WorkspaceConnectionStage.offline;
+  WorkspaceConnectionStage get connectionStage => _connectionStage;
+  set connectionStage(WorkspaceConnectionStage value) {
+    if (_connectionStage == value) return;
+    _connectionStage = value;
+    _notifyStateChanged();
+  }
+
   DateTime? lastConnectionAttemptAt;
   DateTime? lastWebSocketUpgradeAt;
   String? activeTransportMode;
@@ -316,7 +324,14 @@ class WorkspaceCloudConnection {
   }
 
   int get activeAssignmentCount => _activeAssignments.length;
-  bool acceptingNewWork = true;
+  bool _acceptingNewWork = true;
+  bool get acceptingNewWork => _acceptingNewWork;
+  set acceptingNewWork(bool value) {
+    if (_acceptingNewWork == value) return;
+    _acceptingNewWork = value;
+    _notifyStateChanged();
+  }
+
   bool get isDraining => _draining;
   bool _draining = false;
   DateTime? lastInventorySyncAt;
@@ -356,6 +371,8 @@ class WorkspaceCloudConnection {
   final _cancelledBeforeStart = <String>{};
   final _pendingAssignmentsDuringSync = <Map<String, dynamic>>[];
   final _lastEphemeralWorkerEvent = <String, DateTime>{};
+
+  void _notifyStateChanged() => onStateChanged?.call();
 
   /// Sends the Workspace-owned inventory projection. Secrets, credential
   /// references, and local paths must not be included by the caller.
@@ -490,7 +507,12 @@ class WorkspaceCloudConnection {
       connectionStage = WorkspaceConnectionStage.offline;
       rethrow;
     }
-    await _open();
+    try {
+      await _open();
+    } on Object catch (error) {
+      _scheduleReconnect(error);
+      rethrow;
+    }
   }
 
   /// Fully tears down any existing timers, subscriptions, and socket objects
@@ -542,7 +564,17 @@ class WorkspaceCloudConnection {
       return;
     }
     await _cleanCurrentTransport();
-    await _open();
+    try {
+      await _open();
+    } on Object catch (error) {
+      _scheduleReconnect(error);
+      rethrow;
+    }
+  }
+
+  void _scheduleReconnect(Object error) {
+    if (_closing || _reconnecting || _isTerminalWebSocketFailure(error)) return;
+    unawaited(_reconnect());
   }
 
   Future<void> _open({WorkspaceTransport? preparedWebSocket}) async {
@@ -1174,6 +1206,7 @@ class WorkspaceCloudConnection {
     try {
       while (!_closing) {
         reconnectCount += 1;
+        _notifyStateChanged();
         final multiplier = 1 << _reconnectAttempt.clamp(0, 8);
         final delay = Duration(
           microseconds: (reconnectBaseDelay.inMicroseconds * multiplier)
@@ -1219,7 +1252,7 @@ class WorkspaceCloudConnection {
     if (error is! WebSocketException) return false;
     // These responses indicate auth, ownership, or protocol remediation is
     // needed. Opening HTTP with the same runtime credential cannot fix them.
-    return const {401, 403, 409, 426}.contains(error.httpStatusCode);
+    return const {400, 401, 403, 409, 422, 426}.contains(error.httpStatusCode);
   }
 
   Future<void> close() async {

@@ -111,6 +111,8 @@ class WorkspaceLifecyclePreferencesStore {
             'ownerDisplayName': preferences.ownerDisplayName,
           if (preferences.customWorkspaceName != null)
             'customWorkspaceName': preferences.customWorkspaceName,
+          if (preferences.workRootPath != null)
+            'workRootPath': preferences.workRootPath,
         }),
         flush: true,
       );
@@ -147,6 +149,9 @@ class WorkspaceLifecyclePreferencesStore {
           : null,
       customWorkspaceName: decoded['customWorkspaceName'] is String
           ? decoded['customWorkspaceName'] as String
+          : null,
+      workRootPath: decoded['workRootPath'] is String
+          ? decoded['workRootPath'] as String
           : null,
     );
   }

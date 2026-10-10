@@ -35,8 +35,22 @@ class WorkerCatalogSnapshot {
   final String? localRegistryError;
 }
 
+abstract interface class WorkspaceWorkerCatalogClient {
+  void addListener(void Function() listener);
+  void removeListener(void Function() listener);
+  WorkerCatalogSnapshot get snapshot;
+  WorkerDescriptor? entryForWorker(String workerTypeId);
+  Future<void> refresh({bool force = false});
+  Future<void> refreshLocalWorkers();
+  Future<void> ensureWorkerProfileAvailable(
+    String workerTypeId, {
+    bool waitForActiveRefresh = false,
+  });
+}
+
 /// Owns the Workspace catalog -> Profile -> readiness synchronization pipeline.
-class WorkerCatalogCoordinator extends WorkspaceNotifier {
+class WorkerCatalogCoordinator extends WorkspaceNotifier
+    implements WorkspaceWorkerCatalogClient {
   WorkerCatalogCoordinator({
     required this.catalog,
     required this.releaseStore,
@@ -44,7 +58,6 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier {
     this.onCatalogReconciled,
     this.refreshReadiness,
     this.refreshExecutor,
-    this.refreshInterval = const Duration(minutes: 10),
     this.minimumRefreshInterval = const Duration(minutes: 1),
   });
 
@@ -54,10 +67,10 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier {
   final Future<void> Function()? onCatalogReconciled;
   final Future<void> Function()? refreshReadiness;
   final Future<void> Function(Future<void> Function())? refreshExecutor;
-  final Duration refreshInterval;
   final Duration minimumRefreshInterval;
 
   WorkerCatalogSnapshot _snapshot = const WorkerCatalogSnapshot();
+  @override
   WorkerCatalogSnapshot get snapshot => _snapshot;
   Future<void>? _activeRefresh;
   final Map<String, Future<void>> _activeProfileSyncs = {};
@@ -65,11 +78,11 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier {
   bool _localRegistryLoaded = false;
   String? _localRegistryError;
   DateTime? _lastRefreshAt;
-  Timer? _timer;
   int _generation = 0;
   bool _disposed = false;
   bool _refreshingReadiness = false;
 
+  @override
   WorkerDescriptor? entryForWorker(String workerTypeId) =>
       catalog.entryForWorker(workerTypeId);
 
@@ -139,6 +152,7 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier {
 
   /// Reloads the local registry and republishes render-ready Worker states.
   /// Registry mutations call this through the runtime's onChanged hook.
+  @override
   Future<void> refreshLocalWorkers() async {
     final currentRegistry = registry;
     try {
@@ -251,12 +265,15 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier {
   }
 
   void start() {
-    if (_timer != null) return;
+    if (_started) return;
+    _started = true;
     unawaited(refreshLocalWorkers());
     unawaited(refresh());
-    _timer = Timer.periodic(refreshInterval, (_) => unawaited(refresh()));
   }
 
+  bool _started = false;
+
+  @override
   Future<void> refresh({bool force = false}) {
     final active = _activeRefresh;
     if (active != null) return active;
@@ -326,7 +343,7 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier {
     try {
       await refreshReadiness?.call();
     } on Object {
-      // Keep catalog/Profile state; the next readiness cycle retries probes.
+      // Keep catalog/Profile state; the next readiness-triggered check retries.
     } finally {
       _refreshingReadiness = false;
     }
@@ -347,6 +364,7 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier {
 
   /// Ensures a single assignment/readiness fallback uses the same Profile
   /// synchronization and selection policy as the full catalog refresh.
+  @override
   Future<void> ensureWorkerProfileAvailable(
     String workerTypeId, {
     bool waitForActiveRefresh = false,
@@ -586,7 +604,6 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _timer?.cancel();
     super.dispose();
   }
 }

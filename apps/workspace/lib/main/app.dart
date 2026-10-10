@@ -34,14 +34,6 @@ Future<void> main() async {
   }
   final startupPreferences = preferencesStore.readSync();
   final desiredRuntime = startupPreferences.desiredRuntime;
-  if (shouldHideManagementWindowOnStartup(
-    isMacOS: Platform.isMacOS,
-    launchAtLogin: startupPreferences.launchAtLogin,
-  )) {
-    unawaited(const MethodChannel('com.conclave.workspace/desktop')
-        .invokeMethod<void>('hideMainWindow')
-        .catchError((_) {}));
-  }
   if (registration != null &&
       desiredRuntime == DesiredRuntimeState.connected &&
       !runtimeCredentialLoaded) {
@@ -54,12 +46,15 @@ Future<void> main() async {
     credentialStore: credentialStore,
     ignoreSavedRegistration: desiredRuntime == DesiredRuntimeState.disconnected,
   );
-  final workspace = await buildWorkspaceRuntime(
-    config,
-    credentialStore: credentialStore,
-  );
-  runApp(
-      ConclaveWorkspaceApp(lifecycle: WorkspaceLifecycleController(workspace)));
+  // The UI is a local management client only. Runtime composition, Cloud
+  // connectivity, Worker Engine supervision, and assignment processing are
+  // owned by the standalone Workspace Service.
+  runApp(ConclaveWorkspaceApp(
+    lifecycle: WorkspaceLifecycleController(
+      config,
+      credentialStore: credentialStore,
+    ),
+  ));
 }
 
 class ConclaveWorkspaceApp extends StatefulWidget {
@@ -125,11 +120,6 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
 
   void _updateState(VoidCallback callback) => setState(callback);
 
-  WorkspaceLifecyclePreferences get _preferences =>
-      WorkspaceLifecyclePreferencesStore(
-        widget.lifecycle.workspace.config.dataDirectory,
-      ).readSync();
-
   Future<bool> _requireStepUp(String reason) async {
     var authenticated = false;
     try {
@@ -150,129 +140,57 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     return authenticated;
   }
 
-  Future<void> _setLaunchAtLogin(bool enabled) async {
+  Future<void> _startWorkspaceService() async {
+    final lifecycle = widget.lifecycle;
     try {
-      await WorkspaceLifecycleController.setLaunchAtLogin(enabled);
-    } catch (e) {
-      debugPrint('Could not set launch at login via desktop channel: $e');
+      final registration =
+          WorkspaceRegistrationStore(lifecycle.config.dataDirectory).readSync();
+      if (registration == null) {
+        await _registerWorkspace();
+      }
+      final currentRegistration =
+          WorkspaceRegistrationStore(lifecycle.config.dataDirectory).readSync();
+      if (currentRegistration == null) return;
+      if ((await lifecycle.credentialStore
+                  .read(currentRegistration.workspaceRuntimeId))
+              ?.isNotEmpty !=
+          true) {
+        await _connectWorkspace();
+      } else {
+        final store =
+            WorkspaceLifecyclePreferencesStore(lifecycle.config.dataDirectory);
+        await store.write(store.readSync().copyWith(
+              desiredRuntime: DesiredRuntimeState.connected,
+              launchAtLogin: true,
+            ));
+        await lifecycle.ensureBackgroundService();
+        await lifecycle.request('configuration.reload');
+      }
+      if (mounted) setState(() {});
+    } on Object catch (error) {
+      final context = _navigatorKey.currentContext;
+      if (mounted && context != null) {
+        showCopyableErrorSnackBar(context, 'Could not start service: $error');
+      }
     }
-    final store = WorkspaceLifecyclePreferencesStore(
-      widget.lifecycle.workspace.config.dataDirectory,
-    );
-    final p = store.readSync();
-    await store.write(WorkspaceLifecyclePreferences(
-      desiredRuntime: p.desiredRuntime,
-      launchAtLogin: enabled,
-      managementLockPreference: p.managementLockPreference,
-      autoLockTimeout: p.autoLockTimeout,
-      ownerUserId: p.ownerUserId,
-      ownerDisplayName: p.ownerDisplayName,
-      customWorkspaceName: p.customWorkspaceName,
-    ));
-    if (mounted) setState(() {});
+  }
+
+  Future<void> _stopWorkspaceService() async {
+    try {
+      await widget.lifecycle.stopService();
+      if (mounted) setState(() {});
+    } on Object catch (error) {
+      final context = _navigatorKey.currentContext;
+      if (mounted && context != null) {
+        showCopyableErrorSnackBar(context, 'Could not stop service: $error');
+      }
+    }
   }
 
   Future<void> _confirmQuit() async {
-    final dialogContext = _navigatorKey.currentContext;
-    if (dialogContext == null) return;
-
-    final lifecycle = widget.lifecycle;
-    final connection = lifecycle.workspace.cloudConnection;
-    final initialCount = connection?.activeAssignmentCount ?? 0;
-    if (initialCount > 0) {
-      final drainAndQuit = await showDialog<bool>(
-        context: dialogContext,
-        builder: (context) => AlertDialog(
-          title: const Text('Assignments are running'),
-          content: CopyableMessageText(
-            'There ${initialCount == 1 ? 'is 1 active assignment' : 'are $initialCount active assignments'}. '
-            'Drain and quit stops accepting new work, waits for active assignments to finish, then closes the runtime. '
-            'If they do not finish within 15 seconds, the Workspace stays open.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Drain and quit'),
-            ),
-          ],
-        ),
-      );
-      if (drainAndQuit != true || !mounted) return;
-
-      if (connection != null) {
-        final acceptingBeforeDrain = connection.acceptingNewWork;
-        final drained = await drainWorkspaceAssignments(
-          activeAssignmentCount: () => connection.activeAssignmentCount,
-          beginDrain: () {
-            connection.beginDrain();
-            lifecycle.refreshMenuStatus();
-          },
-          restoreNewWorkState: acceptingBeforeDrain
-              ? () {
-                  connection.resumeNewWork();
-                  lifecycle.refreshMenuStatus();
-                }
-              : () {
-                  connection.pauseNewWork();
-                  lifecycle.refreshMenuStatus();
-                },
-        );
-        if (!drained) {
-          if (!mounted) return;
-          await showDialog<void>(
-            context: dialogContext,
-            builder: (context) => AlertDialog(
-              title: const Text('Assignments are still running'),
-              content: CopyableMessageText(
-                'The Workspace remains open with ${connection.activeAssignmentCount} active assignments. '
-                '${acceptingBeforeDrain ? 'New work has resumed.' : 'New work remains paused.'}',
-              ),
-              actions: [
-                FilledButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Keep Workspace running'),
-                ),
-              ],
-            ),
-          );
-          return;
-        }
-      }
-    } else {
-      // Prevent an assignment racing the shutdown between the count check and
-      // closing the transport.
-      connection?.beginDrain();
-      lifecycle.refreshMenuStatus();
-    }
-
-    try {
-      await lifecycle.quit();
-      const desktopChannel = MethodChannel('com.conclave.workspace/desktop');
-      await desktopChannel.invokeMethod<void>('terminate');
-    } catch (error) {
-      if (mounted) {
-        await showDialog<void>(
-          context: dialogContext,
-          builder: (context) => AlertDialog(
-            title: const Text('Unable to Quit'),
-            content: CopyableMessageText(
-              'An error occurred while stopping the Workspace: $error\n\n'
-              'Conclave Workspace did not close.',
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
-    }
+    await widget.lifecycle.quit();
+    const desktopChannel = MethodChannel('com.conclave.workspace/desktop');
+    await desktopChannel.invokeMethod<void>('terminate');
   }
 
   Future<void> _exportDiagnostics() async {
@@ -400,8 +318,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     final dialogContext = _navigatorKey.currentContext;
     if (dialogContext == null) return;
     final registration =
-        WorkspaceRegistrationStore(lifecycle.workspace.config.dataDirectory)
-            .readSync();
+        WorkspaceRegistrationStore(lifecycle.config.dataDirectory).readSync();
     final cloudUrl = registration?.cloudUrl ??
         Platform.environment['CONCLAVE_WORKSPACE_CLOUD_URL'] ??
         conclaveProductionCloudUrl;
@@ -411,8 +328,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     DesktopHumanSession? claimedSession;
     var sessionCommitted = false;
     try {
-      final previousRecord = await lifecycle.workspace.credentialStore
-          .read(desktopHumanCredentialKey);
+      final previousRecord =
+          await lifecycle.credentialStore.read(desktopHumanCredentialKey);
       if (previousRecord != null) {
         try {
           final decoded = jsonDecode(previousRecord);
@@ -439,7 +356,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       WorkspaceRegistration? effectiveRegistration;
       var registrationRepaired = false;
       await persistDesktopHumanSessionAfterPreflight(
-        credentialStore: lifecycle.workspace.credentialStore,
+        credentialStore: lifecycle.credentialStore,
         session: session,
         preflight: () async {
           failureContext = 'validating the desktop session';
@@ -447,12 +364,12 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
           // Preflight the installation against the claimed session before
           // replacing the currently stored human session.
           final existingRegistration = WorkspaceRegistrationStore(
-            lifecycle.workspace.config.dataDirectory,
+            lifecycle.config.dataDirectory,
           ).readSync();
           effectiveRegistration = existingRegistration;
           WorkspaceOwnership? staleOwnershipForRepair;
           final identityStore = InstallationIdentityStore(
-            lifecycle.workspace.config.dataDirectory,
+            lifecycle.config.dataDirectory,
           );
           final installationId =
               existingRegistration?.installationId ?? identityStore.readSync();
@@ -549,8 +466,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
               }
               failureContext = 'repairing the stale Workspace registration';
               final registrationService = WorkspaceRegistrationService(
-                dataDirectory: lifecycle.workspace.config.dataDirectory,
-                credentialStore: lifecycle.workspace.credentialStore,
+                dataDirectory: lifecycle.config.dataDirectory,
+                credentialStore: lifecycle.credentialStore,
               );
               effectiveRegistration = staleRegistration == null
                   ? await registrationService.registerWithDesktopSession(
@@ -575,7 +492,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
             }
             if (existingRegistration != null && !registrationRepaired) {
               await WorkspaceRegistrationStore(
-                lifecycle.workspace.config.dataDirectory,
+                lifecycle.config.dataDirectory,
               ).write(WorkspaceRegistration(
                 workspaceRuntimeId: existingRegistration.workspaceRuntimeId,
                 workspaceId: existingRegistration.workspaceId,
@@ -606,7 +523,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
         }
       }
       final preferenceStore = WorkspaceLifecyclePreferencesStore(
-        lifecycle.workspace.config.dataDirectory,
+        lifecycle.config.dataDirectory,
       );
       final preferences = preferenceStore.readSync();
       await preferenceStore.write(WorkspaceLifecyclePreferences(
@@ -618,18 +535,14 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
         autoLockTimeout: preferences.autoLockTimeout,
         ownerUserId: session.userId,
         ownerDisplayName: session.displayName,
+        customWorkspaceName: preferences.customWorkspaceName,
+        workRootPath: preferences.workRootPath,
       ));
       Object? restartFailure;
       if (registrationRepaired) {
         try {
-          final config = WorkspaceConfig.fromArgs(
-            const [],
-            credentialStore: lifecycle.workspace.credentialStore,
-          );
-          await lifecycle.replaceWorkspace(await buildWorkspaceRuntime(
-            config,
-            credentialStore: lifecycle.workspace.credentialStore,
-          ));
+          await lifecycle.ensureBackgroundService();
+          await lifecycle.request('configuration.reload');
         } on Object catch (error) {
           restartFailure = error;
         }
@@ -665,10 +578,9 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
   Future<void> _signOutDesktopHuman() async {
     final lifecycle = widget.lifecycle;
     final registration =
-        WorkspaceRegistrationStore(lifecycle.workspace.config.dataDirectory)
-            .readSync();
+        WorkspaceRegistrationStore(lifecycle.config.dataDirectory).readSync();
     final desiredRuntime = WorkspaceLifecyclePreferencesStore(
-      lifecycle.workspace.config.dataDirectory,
+      lifecycle.config.dataDirectory,
     ).readSync().desiredRuntime;
     final runtimeIntendedConnected =
         desiredRuntime == DesiredRuntimeState.connected;
@@ -699,14 +611,14 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       if (choice != true) return;
       await _disconnectWorkspace(confirmed: true);
       if (WorkspaceLifecyclePreferencesStore(
-            lifecycle.workspace.config.dataDirectory,
+            lifecycle.config.dataDirectory,
           ).readSync().desiredRuntime !=
           DesiredRuntimeState.disconnected) {
         return;
       }
     }
-    final stored = await lifecycle.workspace.credentialStore
-        .read(desktopHumanCredentialKey);
+    final stored =
+        await lifecycle.credentialStore.read(desktopHumanCredentialKey);
     if (stored != null) {
       try {
         final decoded = jsonDecode(stored);
@@ -726,28 +638,14 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
         // Local sign-out must remain available if Cloud is unreachable or the session expired.
       }
     }
-    await lifecycle.workspace.credentialStore.delete(desktopHumanCredentialKey);
+    await lifecycle.credentialStore.delete(desktopHumanCredentialKey);
     if (mounted) setState(() => _workerRevision++);
   }
 
   Future<void> _changeWorkRoot(String newPath) async {
     if (!await _requireStepUp('Change the Workspace Work Root')) return;
-    final currentWorkspace = widget.lifecycle.workspace;
-    final updatedConfig = WorkspaceConfig(
-      dataDirectory: currentWorkspace.config.dataDirectory,
-      cloudUri: currentWorkspace.config.cloudUri,
-      workspaceRuntimeId: currentWorkspace.config.workspaceRuntimeId,
-      installationId: currentWorkspace.config.installationId,
-      workspaceId: currentWorkspace.config.workspaceId,
-      authToken: currentWorkspace.config.authToken,
-      workRootPath: newPath,
-    );
     try {
-      final replacement = await buildWorkspaceRuntime(
-        updatedConfig,
-        credentialStore: currentWorkspace.credentialStore,
-      );
-      await widget.lifecycle.replaceWorkspace(replacement);
+      await widget.lifecycle.changeWorkRoot(newPath);
     } on Object catch (error) {
       if (mounted) {
         final ctx = _navigatorKey.currentContext;
@@ -774,9 +672,9 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
   Future<DesktopHumanSession?> _restoreDesktopSession(
     DesktopHumanSession session,
   ) async {
-    final registration = WorkspaceRegistrationStore(
-            widget.lifecycle.workspace.config.dataDirectory)
-        .readSync();
+    final registration =
+        WorkspaceRegistrationStore(widget.lifecycle.config.dataDirectory)
+            .readSync();
     final cloudUrl = registration?.cloudUrl ??
         Platform.environment['CONCLAVE_WORKSPACE_CLOUD_URL'] ??
         conclaveProductionCloudUrl;
@@ -808,7 +706,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     if (trimmed.isEmpty) return;
     final lifecycle = widget.lifecycle;
     final preferenceStore = WorkspaceLifecyclePreferencesStore(
-      lifecycle.workspace.config.dataDirectory,
+      lifecycle.config.dataDirectory,
     );
     final preferences = preferenceStore.readSync();
     if (preferences.customWorkspaceName != trimmed) {
@@ -823,31 +721,34 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     final lifecycle = widget.lifecycle;
     return WorkspaceDashboard(
       snapshot: lifecycle.uiSnapshot,
-      launchAtLogin: _preferences.launchAtLogin,
-      onLaunchAtLoginChanged: _setLaunchAtLogin,
       requireStepUp: _requireStepUp,
       onSignIn: _signInDesktopHuman,
       onSignOut: _signOutDesktopHuman,
-      onConnect: () => _connectWorkspace(),
+      onStartService: _startWorkspaceService,
       onRegister: _registerWorkspace,
       onRecoverCredential: ([name]) => _connectWorkspace(name: name),
       onChangeWorkspaceName: _changeWorkspaceName,
-      onDisconnect: _disconnectWorkspace,
+      onStopService: _stopWorkspaceService,
       onRelease: _releaseWorkspaceOwnership,
       onReset: _resetLocalWorkspace,
       onQuit: _confirmQuit,
-      onRetry: lifecycle.retryConnection,
+      onRetry: lifecycle.running
+          ? lifecycle.retryConnection
+          : _startWorkspaceService,
       onExportDiagnostics: _exportDiagnostics,
       onChangeWorkRoot: _changeWorkRoot,
       onReadinessCheck: lifecycle.checkWorkerReadiness,
-      onRollbackToolProfile: (workerTypeId) async =>
-          await lifecycle.workspace.workerReadinessMonitor
-              ?.rollbackToolProfile(workerTypeId) ??
-          false,
+      onRollbackToolProfile: (workerTypeId) async {
+        final result = await lifecycle.request('workers.rollbackProfile',
+            payload: {'workerTypeId': workerTypeId});
+        return result is Map && result['passed'] == true;
+      },
+      onConfigureWorker: (worker) =>
+          lifecycle.workerCatalog.configureWorker(worker.workerTypeId),
+      onSetWorkerEnabled: lifecycle.workerCatalog.setEnabled,
       workerRevision: _workerRevision,
-      localWorkerRegistry: lifecycle.workspace.localWorkerRegistry,
-      credentialStore: lifecycle.workspace.credentialStore,
-      workerCatalogCoordinator: lifecycle.workspace.workerCatalogCoordinator,
+      credentialStore: lifecycle.credentialStore,
+      workerCatalogCoordinator: lifecycle.workerCatalog,
       signedIn: true,
     );
   }
@@ -870,7 +771,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
                   child: Text('Workspace is running in the background.'))
               : WorkspaceShellRouter(
                   snapshot: lifecycle.uiSnapshot,
-                  credentialStore: lifecycle.workspace.credentialStore,
+                  credentialStore: lifecycle.credentialStore,
                   cloudUrl: lifecycle.uiSnapshot.cloudUrl ??
                       conclaveProductionCloudUrl,
                   refreshToken: _workerRevision,

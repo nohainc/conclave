@@ -66,7 +66,6 @@ void main() {
     var checks = 0;
     final monitor = WorkerReadinessMonitor(
       registry: registry,
-      interval: const Duration(milliseconds: 10),
       assessWorker: (_) async {
         checks++;
         return const WorkerReadinessAssessment(
@@ -93,9 +92,9 @@ void main() {
     expect((await restoredRegistry.find(worker.id))!.readinessState,
         WorkerReadinessState.testFailed);
     await monitor.start();
-    await Future<void>.delayed(const Duration(milliseconds: 60));
     await monitor.dispose();
-    expect(checks, greaterThanOrEqualTo(3));
+    expect(checks, 2,
+        reason: 'startup performs one passive check and does not poll');
   });
 
   test('disabled Workers remain disabled and are not probed', () async {
@@ -295,7 +294,6 @@ void main() {
     final result = Completer<WorkerReadinessAssessment>();
     final monitor = WorkerReadinessMonitor(
       registry: registry,
-      interval: const Duration(hours: 1),
       assessWorker: (_) => result.future,
     );
     await monitor.start();

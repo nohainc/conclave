@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:conclave_workspace/workspace.dart';
 import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/workspace_lifecycle.dart';
@@ -25,41 +24,49 @@ Future<void> main(List<String> args) async {
   final once = args.contains('--once');
   try {
     await runtime.start(
-      connectCloud: desiredRuntime == DesiredRuntimeState.connected,
+      connectCloud: false,
     );
   } on Object catch (error) {
-    // Keep the service process healthy while Cloud is unavailable. Cloud
-    // transport recovery is retried below; local Workers and configuration
-    // remain available for the next connection attempt.
-    stderr.writeln('Workspace service started offline: $error');
+    // Publish failed initialization through IPC for management diagnostics.
+    // A failed runtime must not start a Cloud execution connection.
+    stderr.writeln('Workspace service initialization failed: $error');
   }
-  final manager = WorkspaceManagerService(runtime);
+  final manager = WorkspaceManagerService(
+    runtime,
+    reloadRuntime: () async {
+      final refreshedConfig = WorkspaceConfig.fromArgs(args);
+      return buildWorkspaceRuntime(refreshedConfig, restartArgs: args);
+    },
+  );
   try {
     await manager.start();
     if (once) return;
+    // Local management must become available before a slow/offline Cloud
+    // handshake. Transport recovery remains owned by the service.
+    if (runtime.isRunning && desiredRuntime == DesiredRuntimeState.connected) {
+      unawaited(runtime.cloudConnection?.connect().catchError((Object error) {
+            stderr.writeln('Workspace Cloud connection unavailable: $error');
+          }) ??
+          Future<void>.value());
+    }
+    final stopped = Completer<void>();
+    void stopOnSignal(ProcessSignal _) {
+      if (!stopped.isCompleted) stopped.complete();
+    }
 
-    var retryDelay = const Duration(seconds: 2);
-    while (runtime.isRunning) {
-      await Future<void>.delayed(retryDelay);
-      if (!runtime.isRunning) break;
-      final connection = runtime.cloudConnection;
-      if (connection == null ||
-          preferenceStore.readSync().desiredRuntime !=
-              DesiredRuntimeState.connected ||
-          connection.connectionStage != WorkspaceConnectionStage.offline) {
-        continue;
-      }
-      try {
-        await connection.retryNow();
-        retryDelay = const Duration(seconds: 2);
-      } on Object catch (error) {
-        final current = retryDelay.inSeconds;
-        retryDelay = Duration(seconds: (current * 2).clamp(2, 60));
-        stderr.writeln('Workspace Cloud reconnect failed: $error');
+    final signals = [
+      ProcessSignal.sigterm.watch().listen(stopOnSignal),
+      ProcessSignal.sigint.watch().listen(stopOnSignal),
+    ];
+    try {
+      await stopped.future;
+    } finally {
+      for (final signal in signals) {
+        await signal.cancel();
       }
     }
   } finally {
     await manager.close();
-    await runtime.stop();
+    await manager.workspace.stop();
   }
 }

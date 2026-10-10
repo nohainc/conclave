@@ -15,6 +15,7 @@ import 'tool_profile_release_store.dart';
 import 'worker_catalog_coordinator.dart';
 import 'workspace_service_state.dart';
 import 'workspace_registration_models.dart';
+import 'workspace_lifecycle_store.dart';
 
 export 'local_worker_registry.dart';
 export 'release_trust_roots.dart';
@@ -97,7 +98,10 @@ class WorkspaceConfig {
                 registration?.workspaceId;
     final workRootPath = workRootIndex >= 0 && workRootIndex + 1 < args.length
         ? args[workRootIndex + 1]
-        : Platform.environment['CONCLAVE_WORKSPACE_WORK_ROOT'];
+        : Platform.environment['CONCLAVE_WORKSPACE_WORK_ROOT'] ??
+            WorkspaceLifecyclePreferencesStore(dataDirectory)
+                .readSync()
+                .workRootPath;
     final secureStore =
         credentialStore ?? const PlatformSecureCredentialStore();
     final storedToken = workspaceRuntimeId == null
@@ -310,11 +314,8 @@ class Workspace {
       config.dataDirectory.path,
       directory: true,
     );
-    final lockIdentity =
-        config.installationId?.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_') ??
-            'unidentified';
-    final lockFile =
-        File('${config.dataDirectory.path}/installation-$lockIdentity.lock');
+    final lockFile = WorkspacePaths(config.dataDirectory)
+        .installationLockFile(config.installationId);
     try {
       _lock = await lockFile.open(mode: FileMode.writeOnlyAppend);
       await _lock!.lock(FileLock.exclusive);

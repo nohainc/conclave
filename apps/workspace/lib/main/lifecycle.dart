@@ -27,73 +27,47 @@ String? _readUserEmailFromCredentialStore(
   }
 }
 
-String _webSocketUpgradeStatus(WorkspaceCloudConnection? connection) {
-  if (connection == null) return 'not configured';
-  final failureAt = connection.lastWebSocketFailureAt;
-  if (failureAt != null &&
-      (connection.lastWebSocketUpgradeAt == null ||
-          failureAt.isAfter(connection.lastWebSocketUpgradeAt!))) {
-    final status = connection.lastWebSocketHttpStatusCode;
-    return status == null ? 'failed' : 'failed (HTTP $status)';
-  }
-  final status = connection.lastHttpStatusCode;
-  if (status != null) return 'failed (HTTP $status)';
-  if (connection.lastWebSocketUpgradeAt != null) return 'succeeded';
-  return 'not completed';
-}
-
-Future<bool> drainWorkspaceAssignments({
-  required int Function() activeAssignmentCount,
-  required void Function() beginDrain,
-  required void Function() restoreNewWorkState,
-  Duration timeout = const Duration(seconds: 15),
-  Duration pollInterval = const Duration(milliseconds: 250),
-  DateTime Function()? now,
-  Future<void> Function(Duration)? wait,
-}) async {
-  beginDrain();
-  final clock = now ?? DateTime.now;
-  final delay = wait ?? Future<void>.delayed;
-  final deadline = clock().add(timeout);
-  while (activeAssignmentCount() > 0 && clock().isBefore(deadline)) {
-    await delay(pollInterval);
-  }
-  if (activeAssignmentCount() == 0) return true;
-  restoreNewWorkState();
-  return false;
-}
-
 class WorkspaceLifecycleController extends ChangeNotifier {
-  WorkspaceLifecycleController(this.workspace) {
-    _statusTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      _publishMenuStatus();
-      notifyListeners();
+  WorkspaceLifecycleController(
+    this.config, {
+    required this.credentialStore,
+    Map<String, Object?>? initialManagerSnapshot,
+  }) {
+    if (initialManagerSnapshot != null) {
+      _managerSnapshot = initialManagerSnapshot;
+      _managerConnected = true;
+    }
+    _managerRetryTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!_closed && !_managerConnected) unawaited(_connectToManager());
     });
   }
 
-  Workspace workspace;
+  final WorkspaceConfig config;
+  final SecureCredentialStore credentialStore;
   bool _hidden = false;
   bool _quitting = false;
   Object? _startupError;
-  Timer? _statusTimer;
+  Timer? _managerRetryTimer;
+  WorkspaceManagerIpcConnection? _manager;
+  StreamSubscription<Map<String, Object?>>? _managerEvents;
+  Map<String, Object?> _managerSnapshot = const {};
+  bool _managerConnected = false;
+  bool _closed = false;
+  late final IpcWorkspaceWorkerCatalog workerCatalog =
+      IpcWorkspaceWorkerCatalog(
+          (command, {payload = const {}}) => request(
+                command,
+                payload: payload,
+              ),
+          cacheFile: File(
+            '${config.dataDirectory.path}/runtime/manager-worker-display.json',
+          ));
   // Fail closed until the human session has been restored by the shell router.
   bool _managementAuthRequired = true;
   static const _desktopChannel =
       MethodChannel('com.conclave.workspace/desktop');
   static const WorkspaceServiceManager _serviceManager =
       MethodChannelWorkspaceServiceManager();
-
-  static Future<void> setLaunchAtLogin(bool enabled) async {
-    if (!Platform.isMacOS) {
-      if (enabled) {
-        throw UnsupportedError(
-          'Launch at login is currently supported only on macOS.',
-        );
-      }
-      return;
-    }
-    await _desktopChannel.invokeMethod<void>('setLaunchAtLogin', enabled);
-  }
 
   static Future<WorkspaceBackgroundServiceStatus>
       getBackgroundServiceStatus() async {
@@ -114,12 +88,187 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     await _serviceManager.openSettings();
   }
 
+  Future<void> changeWorkRoot(String path) async {
+    if (_managerConnected) {
+      throw StateError('Stop the service before changing Work Root.');
+    }
+    final installationId = config.installationId ??
+        WorkspaceRegistrationStore(config.dataDirectory)
+            .readSync()
+            ?.installationId ??
+        InstallationIdentityStore(config.dataDirectory).readSync();
+    await StoppedWorkspaceConfiguration(config.dataDirectory,
+            installationId: installationId)
+        .setWorkRoot(path);
+    notifyListeners();
+  }
+
+  Future<void> ensureBackgroundService() async {
+    var status = await _serviceManager.status();
+    if (!status.supported) {
+      throw UnsupportedError(
+        'Background service management is unavailable on this platform.',
+      );
+    }
+    await _connectToManager();
+    if (_managerConnected) return;
+    // The host refreshes stale/stopped registrations, never a running job.
+    status = await _serviceManager.register();
+    if (status.registration ==
+        WorkspaceBackgroundServiceRegistration.approvalRequired) {
+      throw StateError(
+          'Approve Conclave Workspace in System Settings → General → Login Items, then start the service again.');
+    }
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (!_managerConnected && DateTime.now().isBefore(deadline)) {
+      await _connectToManager();
+      if (!_managerConnected) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+    }
+    if (!_managerConnected) {
+      throw TimeoutException(
+        'Background service was registered but did not start.',
+      );
+    }
+  }
+
   bool get hidden => _hidden;
   bool get quitting => _quitting;
-  bool get running => workspace.isRunning;
+  bool get running =>
+      _managerConnected &&
+      (_managerSnapshot['service'] is Map
+          ? ((_managerSnapshot['service'] as Map)['processState'] == 'ready')
+          : true);
   Object? get startupError => _startupError;
-  bool get acceptingNewWork =>
-      workspace.cloudConnection?.acceptingNewWork ?? false;
+  bool get acceptingNewWork {
+    final cloud = _managerSnapshot['cloud'];
+    return cloud is Map && cloud['acceptingNewWork'] == true;
+  }
+
+  int get activeAssignmentCount {
+    final assignments = _managerSnapshot['assignments'];
+    return assignments is Map && assignments['activeCount'] is int
+        ? assignments['activeCount'] as int
+        : 0;
+  }
+
+  Future<Object?> request(
+    String command, {
+    Map<String, Object?> payload = const {},
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    final manager = _manager;
+    if (!_managerConnected || manager == null) {
+      throw const SocketException('Workspace service is not connected.');
+    }
+    final result =
+        await manager.request(command, payload: payload, timeout: timeout);
+    if (result is Map && result['service'] is Map) {
+      _acceptSnapshot(Map<String, Object?>.from(result));
+    }
+    return result;
+  }
+
+  Future<void> _connectToManager() async {
+    if (_closed || _managerConnected) return;
+    if (_manager != null) return;
+    final runtimeDirectory =
+        WorkspacePaths(config.dataDirectory).runtimeDirectory;
+    final keyFile = File('${runtimeDirectory.path}/manager-ipc.key');
+    try {
+      final key = (await keyFile.readAsString()).trim();
+      if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(key)) {
+        throw StateError('Workspace service IPC key is invalid.');
+      }
+      final connection = WorkspaceManagerIpcConnection(
+        socketPath: '${runtimeDirectory.path}/manager.sock',
+        key: key,
+      );
+      _manager = connection;
+      _managerEvents = connection.events.listen(_handleManagerEvent);
+      await connection.connect();
+      if (_closed) {
+        await connection.close();
+        _manager = null;
+        return;
+      }
+      _managerConnected = true;
+      _startupError = null;
+      _acceptSnapshot(connection.initialSnapshot);
+      notifyListeners();
+    } on Object catch (error) {
+      _managerConnected = false;
+      _startupError = error;
+      notifyListeners();
+    }
+  }
+
+  void _handleManagerEvent(Map<String, Object?> event) {
+    switch (event['name']) {
+      case 'ipc.connectionChanged':
+        _managerConnected = event['connected'] == true;
+        if (!_managerConnected) {
+          _startupError = 'Workspace service disconnected.';
+          _managerSnapshot = const {};
+        }
+        break;
+      case 'ipc.snapshot':
+        final snapshot = event['snapshot'];
+        if (snapshot is Map) {
+          _acceptSnapshot(Map<String, Object?>.from(snapshot));
+        }
+        _managerConnected = true;
+        _startupError = null;
+        break;
+      case 'service.statusChanged':
+        final snapshot = event['snapshot'];
+        if (snapshot is Map) {
+          _acceptSnapshot(Map<String, Object?>.from(snapshot));
+        }
+        break;
+      case 'cloud.connectionChanged':
+        _managerSnapshot = {
+          ..._managerSnapshot,
+          'cloud': event['cloud'] ?? _managerSnapshot['cloud'],
+        };
+        break;
+      case 'worker.inventoryChanged':
+        _managerSnapshot = {
+          ..._managerSnapshot,
+          'workers': event['workers'] ?? _managerSnapshot['workers'],
+        };
+        final workerCatalog = _managerSnapshot['workerCatalog'];
+        if (workerCatalog is Map) {
+          this
+              .workerCatalog
+              .acceptSnapshot(Map<String, Object?>.from(workerCatalog));
+        }
+        break;
+      case 'worker.catalogChanged':
+        final workerCatalog = event['workerCatalog'];
+        if (workerCatalog is Map) {
+          this
+              .workerCatalog
+              .acceptSnapshot(Map<String, Object?>.from(workerCatalog));
+        }
+        break;
+    }
+    _publishMenuStatus();
+    notifyListeners();
+  }
+
+  void _acceptSnapshot(Map<String, Object?> snapshot) {
+    _managerSnapshot = snapshot;
+    final workerCatalogSnapshot = snapshot['workerCatalog'];
+    if (workerCatalogSnapshot is Map) {
+      workerCatalog
+          .acceptSnapshot(Map<String, Object?>.from(workerCatalogSnapshot));
+    }
+    _managerConnected = true;
+    _startupError = null;
+    _publishMenuStatus();
+  }
 
   void updateManagementAuthRequired(bool required) {
     if (_managementAuthRequired == required) return;
@@ -136,26 +285,17 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
     String? workerTypeId,
   }) async {
-    await workspace.workerReadinessMonitor?.checkNow(
-      mode: mode,
-      workerTypeId: workerTypeId,
-    );
-    notifyListeners();
+    await request('workers.checkReadiness',
+        timeout: const Duration(minutes: 2),
+        payload: {
+          'mode': mode.name,
+          if (workerTypeId != null) 'workerTypeId': workerTypeId,
+        });
   }
 
-  /// Handles system wake from sleep / app resume by checking worker readiness
-  /// and actively reconnecting if the cloud connection dropped.
+  /// Reattach to local IPC after wake; the service owns Cloud recovery.
   Future<void> handleSystemResume() async {
-    await checkWorkerReadiness();
-    final connection = workspace.cloudConnection;
-    if (connection != null) {
-      if (!connection.isConnected) {
-        unawaited(connection.retryNow().catchError((_) {}));
-      } else if (connection.activeTransportMode == 'http_long_poll') {
-        unawaited(connection.retryWebSocketNow().catchError((_) {}));
-      }
-    }
-    notifyListeners();
+    if (!_managerConnected) await _connectToManager();
   }
 
   Future<void> handleDesktopAction(String action) async {
@@ -164,27 +304,24 @@ class WorkspaceLifecycleController extends ChangeNotifier {
         restore();
         break;
       case 'pause':
-        workspace.cloudConnection?.pauseNewWork();
+        await request('connection.pause');
         break;
       case 'resume':
-        workspace.cloudConnection?.resumeNewWork();
+        await request('connection.resume');
         break;
       case 'togglePause':
-        final connection = workspace.cloudConnection;
-        if (connection?.isDraining == true) break;
-        if (connection?.acceptingNewWork == true) {
-          connection?.pauseNewWork();
-        } else if (connection?.isConnected == true) {
-          connection?.resumeNewWork();
-        }
+        await request(
+            acceptingNewWork ? 'connection.pause' : 'connection.resume');
         break;
       case 'diagnostics':
-        final file = await exportDiagnostics();
-        await openPath(file.path);
+        final result = await request('diagnostics.getDiagnostics');
+        if (result is Map && result['path'] is String) {
+          await openPath(result['path'] as String);
+        }
         break;
       case 'logs':
-        await openPath(
-            WorkspacePaths(workspace.config.dataDirectory).logsFile.path);
+        final path = WorkspacePaths(config.dataDirectory).logsFile.path;
+        await openPath(path);
         break;
       case 'openAX':
         await openAX();
@@ -273,12 +410,16 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
   }
 
   void _publishMenuStatus() {
-    final connection = workspace.cloudConnection;
+    final cloud = _managerSnapshot['cloud'];
+    final assignments = _managerSnapshot['assignments'];
+    final cloudMap = cloud is Map ? cloud : const <String, Object?>{};
+    final assignmentMap =
+        assignments is Map ? assignments : const <String, Object?>{};
     final state = startupError != null
         ? 'Attention'
-        : connection?.isConnected == true
+        : cloudMap['connected'] == true
             ? 'Connected'
-            : WorkspaceLifecyclePreferencesStore(workspace.config.dataDirectory)
+            : WorkspaceLifecyclePreferencesStore(config.dataDirectory)
                         .readSync()
                         .desiredRuntime ==
                     DesiredRuntimeState.connected
@@ -286,310 +427,192 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
                 : 'Disconnected';
     unawaited(_desktopChannel.invokeMethod<void>('status', {
       'state': state,
-      'transportMode': connection?.activeTransportMode ?? 'offline',
-      'fallbackHealth': connection?.fallbackHealthStatus ?? 'not configured',
-      'lastWebSocketFailure': connection?.lastWebSocketFailure,
-      'active': connection?.activeAssignmentCount ?? 0,
-      'accepting': connection?.acceptingNewWork ?? false,
-      'draining': connection?.isDraining ?? false,
+      'transportMode': cloudMap['transport'] ?? 'offline',
+      'fallbackHealth': 'service managed',
+      'active': assignmentMap['activeCount'] ?? 0,
+      'accepting': cloudMap['acceptingNewWork'] == true,
+      'draining': false,
       'managementLocked': WorkspaceLifecyclePreferencesStore(
-            workspace.config.dataDirectory,
+            config.dataDirectory,
           ).readSync().managementLockPreference ==
           ManagementLockState.locked,
       'reauthRequired': _managementAuthRequired,
-      'runtimeRunning': connection?.isConnected == true,
+      'runtimeRunning': cloudMap['connected'] == true,
+      'serviceRunning': running,
     }).catchError((_) {}));
   }
 
-  WorkspaceUiSnapshot get uiSnapshot {
-    final connection = workspace.cloudConnection;
+  WorkspaceUiSnapshot get _ipcUiSnapshot {
     final registration =
-        WorkspaceRegistrationStore(workspace.config.dataDirectory).readSync();
+        WorkspaceRegistrationStore(config.dataDirectory).readSync();
     final preferences =
-        WorkspaceLifecyclePreferencesStore(workspace.config.dataDirectory)
-            .readSync();
+        WorkspaceLifecyclePreferencesStore(config.dataDirectory).readSync();
+    final service = _managerSnapshot['service'];
+    final cloud = _managerSnapshot['cloud'];
+    final workspaceState = _managerSnapshot['workspace'];
+    final assignments = _managerSnapshot['assignments'];
+    final serviceMap = service is Map ? service : const <String, Object?>{};
+    final cloudMap = cloud is Map ? cloud : const <String, Object?>{};
+    final workspaceMap =
+        workspaceState is Map ? workspaceState : const <String, Object?>{};
+    final assignmentsMap =
+        assignments is Map ? assignments : const <String, Object?>{};
+    final processState = serviceMap['processState']?.toString();
+    final cloudState = running ? cloudMap['state']?.toString() : null;
+    final stage = switch (cloudState) {
+      'connecting' => WorkspaceConnectionStage.connecting,
+      'reconnecting' => WorkspaceConnectionStage.reconnecting,
+      'connected' => WorkspaceConnectionStage.ready,
+      _ => WorkspaceConnectionStage.offline,
+    };
+    final activeCount = assignmentsMap['activeCount'] is int
+        ? assignmentsMap['activeCount'] as int
+        : 0;
+    final connected = running && cloudMap['connected'] == true;
+    final desired = preferences.desiredRuntime == DesiredRuntimeState.connected;
+    final registrationPresent = registration != null;
+    final runtimeId = workspaceMap['workspaceRuntimeId']?.toString() ??
+        registration?.workspaceRuntimeId;
+    final workspaceId =
+        workspaceMap['workspaceId']?.toString() ?? registration?.workspaceId;
     final workspaceName = preferences.customWorkspaceName ??
+        workspaceMap['name']?.toString() ??
         registration?.name ??
         resolveFriendlyComputerNameSync();
-    final workspaceId =
-        workspace.config.workspaceId ?? registration?.workspaceId;
-    final workspaceRuntimeId =
-        workspace.config.workspaceRuntimeId ?? registration?.workspaceRuntimeId;
-    final installationId = workspace.installationId ??
-        workspace.config.installationId ??
-        registration?.installationId ??
-        InstallationIdentityStore(workspace.config.dataDirectory).readSync();
-    final hostname = registration?.hostname ?? Platform.localHostname;
-    final ownerUserId = registration?.ownerUserId;
-    final cloudUrl =
-        workspace.config.cloudUri?.toString() ?? registration?.cloudUrl;
-    final workRootPath =
-        workspace.workRoot?.path ?? workspace.config.workRootPath;
-    final desiredRuntimeConnected =
-        WorkspaceLifecyclePreferencesStore(workspace.config.dataDirectory)
-                .readSync()
-                .desiredRuntime ==
-            DesiredRuntimeState.connected;
-
-    if (quitting) {
-      return WorkspaceUiSnapshot(
-        mode: WorkspaceUiMode.stopped,
-        desiredRuntimeConnected: desiredRuntimeConnected,
-        title: 'Stopping Workspace',
-        detail: 'Stopping the runtime and closing its connection.',
-        workspaceName: workspaceName,
-        workspaceId: workspaceId,
-        installationId: installationId,
-        workspaceRuntimeId: workspaceRuntimeId,
-        hostname: hostname,
-        cloudUrl: cloudUrl,
-        workRootPath: workRootPath,
-        statusLabel: 'Stopping',
-        connectionStage: connection?.connectionStage,
-        connectionError: connection?.lastConnectionError,
-        connectionHttpStatus: connection?.lastHttpStatusCode,
-        runtimeCredentialAvailable:
-            workspace.config.authToken?.isNotEmpty == true,
-        protocolHelloStatus: connection?.protocolHelloStatus,
-        dnsTlsStatus: connection?.lastDnsTlsStatus,
-        webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
-        activeTransportMode: connection?.activeTransportMode,
-        fallbackHealthStatus: connection?.fallbackHealthStatus,
-        lastWebSocketFailure: connection?.lastWebSocketFailure,
-        lastWebSocketHttpStatusCode: connection?.lastWebSocketHttpStatusCode,
-        lastWebSocketFailureAt: connection?.lastWebSocketFailureAt,
-        lastConnectionAttemptAt: connection?.lastConnectionAttemptAt,
-      );
-    }
-    if (startupError != null) {
-      return WorkspaceUiSnapshot(
-        mode: WorkspaceUiMode.offline,
-        desiredRuntimeConnected: desiredRuntimeConnected,
-        title: 'Workspace is offline',
-        detail: 'The Workspace could not connect. It will be safe to retry.',
-        issue: startupError.toString(),
-        workspaceName: workspaceName,
-        workspaceId: workspaceId,
-        installationId: installationId,
-        workspaceRuntimeId: workspaceRuntimeId,
-        hostname: hostname,
-        cloudUrl: cloudUrl,
-        workRootPath: workRootPath,
-        registered: workspaceRuntimeId != null && workspaceId != null,
-        ownerUserId: ownerUserId,
-        workspaceReady:
-            connection?.connectionStage == WorkspaceConnectionStage.ready,
-        // A saved token can be present and still be revoked in Cloud. The
-        // Account section can recover it through the human management API.
-        statusLabel: 'Offline',
-        logsPath:
-            WorkspacePaths(workspace.config.dataDirectory).logsDirectory.path,
-        connectionStage: connection?.connectionStage,
-        connectionError:
-            connection?.lastConnectionError ?? startupError.toString(),
-        connectionHttpStatus: connection?.lastHttpStatusCode,
-        runtimeCredentialAvailable:
-            workspace.config.authToken?.isNotEmpty == true,
-        protocolHelloStatus: connection?.protocolHelloStatus,
-        dnsTlsStatus: connection?.lastDnsTlsStatus,
-        webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
-        activeTransportMode: connection?.activeTransportMode,
-        fallbackHealthStatus: connection?.fallbackHealthStatus,
-        lastWebSocketFailure: connection?.lastWebSocketFailure,
-        lastWebSocketHttpStatusCode: connection?.lastWebSocketHttpStatusCode,
-        lastWebSocketFailureAt: connection?.lastWebSocketFailureAt,
-        lastConnectionAttemptAt: connection?.lastConnectionAttemptAt,
-      );
-    }
-    if (workspace.config.workspaceRuntimeId == null) {
-      final isRegistered = registration != null;
-      return WorkspaceUiSnapshot(
-        mode: isRegistered
-            ? WorkspaceUiMode.offline
-            : WorkspaceUiMode.firstLaunch,
-        desiredRuntimeConnected: desiredRuntimeConnected,
-        title: isRegistered ? 'Workspace is offline' : 'Connect this Workspace',
-        detail: isRegistered
-            ? 'The Workspace is registered and ready to connect.'
-            : 'Sign in to register this computer with Conclave.',
-        workspaceName: workspaceName,
-        workspaceId: workspaceId,
-        workspaceRuntimeId: workspaceRuntimeId,
-        registered: isRegistered,
-        ownerUserId: ownerUserId,
-        installationId: installationId,
-        hostname: hostname,
-        cloudUrl: cloudUrl,
-        workRootPath: workRootPath,
-        statusLabel: isRegistered ? 'Offline' : 'Not registered',
-        connectionStage: connection?.connectionStage,
-        runtimeCredentialAvailable:
-            workspace.config.authToken?.isNotEmpty == true,
-        protocolHelloStatus: connection?.protocolHelloStatus,
-        dnsTlsStatus: connection?.lastDnsTlsStatus,
-        webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
-        activeTransportMode: connection?.activeTransportMode,
-        fallbackHealthStatus: connection?.fallbackHealthStatus,
-        lastWebSocketFailure: connection?.lastWebSocketFailure,
-        lastWebSocketHttpStatusCode: connection?.lastWebSocketHttpStatusCode,
-        lastWebSocketFailureAt: connection?.lastWebSocketFailureAt,
-      );
-    }
-    if (!running) {
-      return WorkspaceUiSnapshot(
-        mode: WorkspaceUiMode.starting,
-        desiredRuntimeConnected: desiredRuntimeConnected,
-        title: 'Starting Workspace',
-        detail: 'Checking this machine and reconnecting to Conclave.',
-        workspaceName: workspaceName,
-        workspaceId: workspaceId,
-        installationId: installationId,
-        workspaceRuntimeId: workspaceRuntimeId,
-        hostname: hostname,
-        cloudUrl: cloudUrl,
-        workRootPath: workRootPath,
-        statusLabel: 'Starting',
-        connectionStage: connection?.connectionStage,
-        connectionError: connection?.lastConnectionError,
-        connectionHttpStatus: connection?.lastHttpStatusCode,
-        runtimeCredentialAvailable:
-            workspace.config.authToken?.isNotEmpty == true,
-        protocolHelloStatus: connection?.protocolHelloStatus,
-        dnsTlsStatus: connection?.lastDnsTlsStatus,
-        webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
-        activeTransportMode: connection?.activeTransportMode,
-        fallbackHealthStatus: connection?.fallbackHealthStatus,
-        lastWebSocketFailure: connection?.lastWebSocketFailure,
-        lastWebSocketHttpStatusCode: connection?.lastWebSocketHttpStatusCode,
-        lastWebSocketFailureAt: connection?.lastWebSocketFailureAt,
-        lastConnectionAttemptAt: connection?.lastConnectionAttemptAt,
-      );
-    }
-    final activeAssignments = connection?.activeAssignmentCount ?? 0;
-    final isConnected = connection?.isConnected ?? false;
-    final stage = connection?.connectionStage;
-    final isConnecting = stage == WorkspaceConnectionStage.validating ||
-        stage == WorkspaceConnectionStage.connecting ||
-        stage == WorkspaceConnectionStage.authenticating ||
-        stage == WorkspaceConnectionStage.synchronizing ||
-        stage == WorkspaceConnectionStage.reconnecting ||
-        stage == WorkspaceConnectionStage.switchingToWebSocket;
-    final isOffline = !isConnected && !isConnecting;
-    final statusLabel = isConnecting
-        ? (stage == WorkspaceConnectionStage.reconnecting
-            ? 'Reconnecting'
-            : stage == WorkspaceConnectionStage.switchingToWebSocket
-                ? 'Switching to WebSocket'
-                : 'Connecting')
-        : isOffline
-            ? 'Offline'
-            : (connection?.isDraining ?? false)
-                ? 'Draining'
-                : !(connection?.acceptingNewWork ?? true)
-                    ? 'Paused'
-                    : 'Connected';
-
+    final error = cloudMap['lastError']?.toString();
+    final mode = !_managerConnected || processState == 'stopped'
+        ? WorkspaceUiMode.offline
+        : !registrationPresent
+            ? WorkspaceUiMode.firstLaunch
+            : stage == WorkspaceConnectionStage.connecting ||
+                    stage == WorkspaceConnectionStage.reconnecting
+                ? WorkspaceUiMode.starting
+                : activeCount > 0
+                    ? WorkspaceUiMode.active
+                    : connected
+                        ? WorkspaceUiMode.ready
+                        : WorkspaceUiMode.offline;
+    final status = !_managerConnected
+        ? 'Service unavailable'
+        : connected
+            ? (cloudMap['acceptingNewWork'] == true ? 'Connected' : 'Paused')
+            : cloudState == 'connecting'
+                ? 'Connecting'
+                : cloudState == 'reconnecting'
+                    ? 'Reconnecting'
+                    : cloudState == 'authenticationRequired'
+                        ? 'Authentication required'
+                        : 'Offline';
     return WorkspaceUiSnapshot(
-      mode: isConnecting
-          ? WorkspaceUiMode.starting
-          : isOffline
-              ? WorkspaceUiMode.offline
-              : activeAssignments > 0
-                  ? WorkspaceUiMode.active
-                  : WorkspaceUiMode.ready,
-      desiredRuntimeConnected: desiredRuntimeConnected,
-      title: isConnecting
-          ? 'Connecting Workspace'
-          : isOffline
-              ? 'Workspace is offline'
-              : activeAssignments > 0
-                  ? 'Work in progress'
-                  : 'Workspace is ready',
-      detail: isConnecting
-          ? 'Checking this machine and connecting to Conclave.'
-          : isOffline
-              ? activeAssignments > 0
-                  ? 'Cloud is disconnected. Active work remains on this computer while the Workspace retries.'
-                  : 'The Workspace is registered, but Cloud has not authenticated this connection.'
-              : activeAssignments > 0
-                  ? 'The Workspace is running assigned work.'
-                  : 'This computer is registered and ready to run assigned work.',
-      issue: isConnecting
-          ? null
-          : isOffline
-              ? (connection?.lastConnectionError ??
-                  'No authenticated Cloud session. Recover the Workspace connection from Account.')
-              : null,
+      mode: mode,
+      desiredRuntimeConnected: desired,
+      title: !_managerConnected
+          ? 'Workspace Service is unavailable'
+          : !registrationPresent
+              ? 'Register this Workspace'
+              : connected
+                  ? (activeCount > 0
+                      ? 'Work in progress'
+                      : 'Workspace is ready')
+                  : 'Workspace is offline',
+      detail: !_managerConnected
+          ? 'Start the background service to manage this Workspace.'
+          : !registrationPresent
+              ? 'Sign in to register this computer with Conclave.'
+              : connected
+                  ? (activeCount > 0
+                      ? 'The background service is running assigned work.'
+                      : 'This computer is registered and ready to run assigned work.')
+                  : 'The background service is running, but Cloud is disconnected.',
+      issue: !_managerConnected ? _startupError?.toString() : error,
       workspaceName: workspaceName,
       workspaceId: workspaceId,
-      installationId: installationId,
-      workspaceRuntimeId: workspaceRuntimeId,
-      hostname: hostname,
-      cloudUrl: cloudUrl,
-      workRootPath: workRootPath,
-      registered: true,
-      ownerUserId: ownerUserId,
-      workspaceReady:
-          connection?.connectionStage == WorkspaceConnectionStage.ready,
-      cloudConnected: isConnected,
-      statusLabel: statusLabel,
-      logsPath: WorkspacePaths(workspace.config.dataDirectory).logsFile.path,
-      activeAssignments: activeAssignments,
-      activeAssignmentIds: connection?.activeAssignmentIds ?? const [],
-      reconnectCount: connection?.reconnectCount ?? 0,
-      sessionId: connection?.sessionId,
-      lastInventorySyncAt: connection?.lastInventorySyncAt,
-      connectionStage: connection?.connectionStage,
-      connectionError: connection?.lastConnectionError,
-      connectionHttpStatus: connection?.lastHttpStatusCode,
-      runtimeCredentialAvailable:
-          workspace.config.authToken?.isNotEmpty == true,
-      protocolHelloStatus: connection?.protocolHelloStatus,
-      dnsTlsStatus: connection?.lastDnsTlsStatus,
-      webSocketUpgradeStatus: _webSocketUpgradeStatus(connection),
-      activeTransportMode: connection?.activeTransportMode,
-      fallbackHealthStatus: connection?.fallbackHealthStatus,
-      lastWebSocketFailure: connection?.lastWebSocketFailure,
-      lastWebSocketHttpStatusCode: connection?.lastWebSocketHttpStatusCode,
-      lastWebSocketFailureAt: connection?.lastWebSocketFailureAt,
-      lastConnectionAttemptAt: connection?.lastConnectionAttemptAt,
+      installationId:
+          serviceMap['installationId']?.toString() ?? config.installationId,
+      workspaceRuntimeId: runtimeId,
+      hostname: registration?.hostname ?? Platform.localHostname,
+      cloudUrl: workspaceMap['cloudUrl']?.toString() ?? registration?.cloudUrl,
+      workRootPath: running
+          ? workspaceMap['workRoot']?.toString() ?? config.workRootPath
+          : preferences.workRootPath ??
+              config.workRootPath ??
+              WorkRootResolver().defaultPath,
+      registered: registrationPresent || workspaceId != null,
+      ownerUserId: registration?.ownerUserId,
+      workspaceReady: connected,
+      serviceRunning: running,
+      cloudConnected: connected,
+      statusLabel: status,
+      logsPath: WorkspacePaths(config.dataDirectory).logsFile.path,
+      activeAssignments: activeCount,
+      activeAssignmentIds: assignmentsMap['activeIds'] is List
+          ? (assignmentsMap['activeIds'] as List).whereType<String>().toList()
+          : const [],
+      reconnectCount: cloudMap['reconnectCount'] is int
+          ? cloudMap['reconnectCount'] as int
+          : 0,
+      lastInventorySyncAt: DateTime.tryParse(
+        cloudMap['lastInventorySyncAt']?.toString() ?? '',
+      ),
+      connectionStage: stage,
+      connectionError: error,
+      runtimeCredentialAvailable: config.authToken?.isNotEmpty == true,
+      activeTransportMode: cloudMap['transport']?.toString(),
     );
   }
 
+  WorkspaceUiSnapshot get uiSnapshot => _ipcUiSnapshot;
+
   Future<void> launch() async {
-    _startupError = null;
+    await _connectToManager();
+  }
+
+  /// Drain through authenticated IPC, then stop through the OS host boundary.
+  Future<void> stopService() async {
+    if (_managerConnected) {
+      await request('service.prepareStop',
+          timeout: const Duration(seconds: 20));
+    }
     try {
-      await workspace.start();
-    } catch (error) {
-      _startupError = error;
-      notifyListeners();
+      await _serviceManager.unregister();
+    } on Object {
+      if (_managerConnected) await request('connection.reconnect');
       rethrow;
     }
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (_managerConnected && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    if (_managerConnected) {
+      throw StateError(
+          'macOS has not stopped the service. Check Login Items and Diagnostics.');
+    }
+    await _managerEvents?.cancel();
+    _managerEvents = null;
+    await _manager?.close();
+    _manager = null;
+    _managerConnected = false;
+    _startupError = null;
+    final store = WorkspaceLifecyclePreferencesStore(config.dataDirectory);
+    await store.write(store.readSync().copyWith(
+          desiredRuntime: DesiredRuntimeState.disconnected,
+          launchAtLogin: false,
+        ));
+    _publishMenuStatus();
     notifyListeners();
   }
 
   Future<void> retryConnection() async {
-    final connection = workspace.cloudConnection;
-    if (!running || connection == null) {
-      await launch();
-      return;
-    }
-    _startupError = null;
     try {
-      await connection.retryNow();
+      if (!_managerConnected) {
+        await _connectToManager();
+      } else {
+        await request('connection.reconnect');
+      }
     } catch (error) {
       _startupError = error;
     }
     notifyListeners();
-  }
-
-  Future<void> replaceWorkspace(Workspace nextWorkspace) async {
-    await workspace.stop();
-    workspace = nextWorkspace;
-    _startupError = null;
-    _hidden = false;
-    notifyListeners();
-    await launch();
   }
 
   void minimize() {
@@ -607,28 +630,22 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
   Future<void> quit() async {
     if (_quitting) return;
     _quitting = true;
-    _statusTimer?.cancel();
-    notifyListeners();
-    await workspace.stop();
+    _closed = true;
+    _managerRetryTimer?.cancel();
+    await _managerEvents?.cancel();
+    await _manager?.close();
+    workerCatalog.dispose();
+    _manager = null;
+    _managerConnected = false;
     notifyListeners();
   }
 
   Future<File> exportDiagnostics() async {
-    final status = await workspace.statusProvider?.call() ?? const {};
-    final update = await workspace.updateStatusProvider?.call() ?? const {};
-    final checkAt =
-        DateTime.tryParse(status['lastUpdateCheckAt'] as String? ?? '');
-    return writeWorkspaceDiagnostics(
-      config: workspace.config,
-      connection: workspace.cloudConnection,
-      journal: workspace.cloudConnection?.assignmentJournal,
-      workerRegistry: workspace.localWorkerRegistry,
-      toolProfileReleaseStore: workspace.toolProfileReleaseStore,
-      lastUpdateCheckStatus: status['lastUpdateCheckStatus'] as String?,
-      lastUpdateCheckAt: checkAt,
-      updateStatus: update['phase'] as String?,
-      workRootPath: workspace.workRoot?.path,
-    );
+    final result = await request('diagnostics.getDiagnostics');
+    if (result is Map && result['path'] is String) {
+      return File(result['path'] as String);
+    }
+    throw StateError('Workspace Service did not return diagnostics.');
   }
 }
 
@@ -660,6 +677,7 @@ class WorkspaceUiSnapshot {
     this.ownerUserId,
     this.desiredRuntimeConnected = false,
     this.workspaceReady = false,
+    this.serviceRunning = false,
     this.cloudConnected = false,
     this.accountsNeedingAction = const [],
     this.workerSummary = 'Worker diagnostics are available after sign-in',
@@ -703,6 +721,7 @@ class WorkspaceUiSnapshot {
   final String? ownerUserId;
   final bool desiredRuntimeConnected;
   final bool workspaceReady;
+  final bool serviceRunning;
   final bool cloudConnected;
   final List<String> accountsNeedingAction;
   final String workerSummary;

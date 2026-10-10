@@ -5,10 +5,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_DIR="$ROOT/apps/workspace"
 OUT_DIR="$ROOT/dist/conclave-workspace/service"
 ENGINE_NAME="conclave_cli_worker_engine"
-OUTPUT_NAME="conclave_workspace_service"
+OUTPUT_NAME="conclave-service"
 if [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
   ENGINE_NAME="conclave_cli_worker_engine.exe"
-  OUTPUT_NAME="conclave_workspace_service.exe"
+  OUTPUT_NAME="conclave-service.exe"
 fi
 
 command -v flutter >/dev/null 2>&1 || {

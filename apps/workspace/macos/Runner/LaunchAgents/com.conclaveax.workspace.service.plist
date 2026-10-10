@@ -5,10 +5,10 @@
 	<key>Label</key>
 	<string>com.conclaveax.workspace.service</string>
 	<key>BundleProgram</key>
-	<string>Contents/Helpers/conclave-workspace-service</string>
+	<string>Contents/Helpers/conclave-service</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>Contents/Helpers/conclave-workspace-service</string>
+		<string>Contents/Helpers/conclave-service</string>
 		<string>--background-service</string>
 	</array>
 	<key>RunAtLoad</key>

@@ -353,7 +353,6 @@ void main() {
     addTearDown(catalog.close);
     addTearDown(controller.dispose);
 
-    expect(controller.refreshInterval, const Duration(minutes: 10));
     expect(controller.minimumRefreshInterval, const Duration(minutes: 1));
 
     await controller.refresh(force: true);

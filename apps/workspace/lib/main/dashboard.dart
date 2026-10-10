@@ -5,16 +5,14 @@ class WorkspaceDashboard extends StatefulWidget {
     required this.snapshot,
     this.onSignIn,
     this.onSignOut,
-    this.onConnect,
+    this.onStartService,
     this.onRegister,
     this.onRecoverCredential,
     this.onChangeWorkspaceName,
-    this.onDisconnect,
+    this.onStopService,
     this.onRelease,
     this.onReset,
     this.onAccountAction,
-    this.launchAtLogin = false,
-    this.onLaunchAtLoginChanged,
     this.requireStepUp,
     this.onQuit,
     this.onRetry,
@@ -23,9 +21,10 @@ class WorkspaceDashboard extends StatefulWidget {
     this.onReadinessCheck,
     this.onRollbackToolProfile,
     this.workerRevision = 0,
-    this.localWorkerRegistry,
     this.credentialStore = const PlatformSecureCredentialStore(),
     this.workerCatalogCoordinator,
+    this.onConfigureWorker,
+    this.onSetWorkerEnabled,
     this.signedIn = false,
     super.key,
   });
@@ -33,17 +32,14 @@ class WorkspaceDashboard extends StatefulWidget {
   final WorkspaceUiSnapshot snapshot;
   final Future<void> Function()? onSignIn;
   final Future<void> Function()? onSignOut;
-  final Future<void> Function()? onConnect;
+  final Future<void> Function()? onStartService;
   final Future<void> Function([String? name])? onRegister;
   final Future<void> Function([String? name])? onRecoverCredential;
   final Future<void> Function(String name)? onChangeWorkspaceName;
-  final VoidCallback? onDisconnect;
+  final Future<void> Function()? onStopService;
   final Future<void> Function()? onRelease;
   final VoidCallback? onReset;
   final VoidCallback? onAccountAction;
-  final bool launchAtLogin;
-  final ValueChanged<bool>? onLaunchAtLoginChanged;
-  final LocalWorkerRegistry? localWorkerRegistry;
   final Future<bool> Function(String reason)? requireStepUp;
   final VoidCallback? onQuit;
   final Future<void> Function()? onRetry;
@@ -54,7 +50,10 @@ class WorkspaceDashboard extends StatefulWidget {
   final Future<bool> Function(String workerTypeId)? onRollbackToolProfile;
   final int workerRevision;
   final SecureCredentialStore credentialStore;
-  final WorkerCatalogCoordinator? workerCatalogCoordinator;
+  final WorkspaceWorkerCatalogClient? workerCatalogCoordinator;
+  final Future<void> Function(WorkerDescriptor worker)? onConfigureWorker;
+  final Future<void> Function(String workerId, bool enabled)?
+      onSetWorkerEnabled;
   final bool signedIn;
 
   @override
@@ -77,29 +76,11 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
         : null;
 
     final isConnected = snapshot.cloudConnected;
-    final stage = snapshot.connectionStage;
-    final isConnecting = snapshot.mode == WorkspaceUiMode.starting ||
-        stage == WorkspaceConnectionStage.validating ||
-        stage == WorkspaceConnectionStage.connecting ||
-        stage == WorkspaceConnectionStage.authenticating ||
-        stage == WorkspaceConnectionStage.synchronizing ||
-        stage == WorkspaceConnectionStage.reconnecting;
-    final connectionLabel =
-        snapshot.activeTransportMode == 'switching_to_websocket' ||
-                stage == WorkspaceConnectionStage.switchingToWebSocket
-            ? 'Switching to WebSocket…'
-            : isConnected
-                ? switch (snapshot.activeTransportMode) {
-                    'websocket' => 'Connected · WebSocket',
-                    'http_long_poll' => 'Connected · HTTPS fallback',
-                    'switching_to_websocket' => 'Switching to WebSocket…',
-                    _ => 'Connected',
-                  }
-                : isConnecting
-                    ? (stage == WorkspaceConnectionStage.reconnecting
-                        ? 'Reconnecting...'
-                        : 'Connecting...')
-                    : 'Offline';
+    final connectionLabel = snapshot.serviceRunning
+        ? (isConnected
+            ? 'Service running · Cloud connected'
+            : 'Service running · Cloud offline')
+        : 'Service stopped';
 
     return Column(
       children: [
@@ -303,27 +284,26 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                     snapshot: snapshot,
                     signedIn: effectiveSignedIn,
                     credentialStore: widget.credentialStore,
-                    onConnect: widget.onConnect,
+                    onStartService: widget.onStartService,
                     onRegister: widget.onRegister,
                     onRecoverCredential: widget.onRecoverCredential,
                     onChangeWorkspaceName: widget.onChangeWorkspaceName,
                     onRetry: widget.onRetry,
                     onExportDiagnostics: widget.onExportDiagnostics,
                     onChangeWorkRoot: widget.onChangeWorkRoot,
-                    launchAtLogin: widget.launchAtLogin,
-                    onLaunchAtLoginChanged: widget.onLaunchAtLoginChanged,
-                    onDisconnect:
-                        snapshot.workspaceReady ? widget.onDisconnect : null,
+                    onStopService: widget.onStopService,
                     onRelease: widget.onRelease,
                     onReset: widget.onReset,
                   ),
                   _WorkersTab(
                     key: ValueKey(widget.workerRevision),
-                    registry: widget.localWorkerRegistry,
                     catalogCoordinator: widget.workerCatalogCoordinator,
+                    serviceAvailable: snapshot.serviceRunning,
                     isSelected: _selectedSurface == WorkspaceSurface.workers,
                     onRollbackToolProfile: widget.onRollbackToolProfile,
                     onReadinessCheck: widget.onReadinessCheck,
+                    onConfigureWorker: widget.onConfigureWorker,
+                    onSetWorkerEnabled: widget.onSetWorkerEnabled,
                   ),
                 ],
               ),
@@ -398,7 +378,7 @@ class _WorkspaceTab extends StatefulWidget {
   const _WorkspaceTab({
     required this.snapshot,
     this.signedIn = false,
-    this.onConnect,
+    this.onStartService,
     this.onRegister,
     this.onRecoverCredential,
     this.onChangeWorkspaceName,
@@ -406,16 +386,14 @@ class _WorkspaceTab extends StatefulWidget {
     this.onRetry,
     this.onExportDiagnostics,
     this.onChangeWorkRoot,
-    this.onDisconnect,
+    this.onStopService,
     this.onRelease,
     this.onReset,
-    this.launchAtLogin = false,
-    this.onLaunchAtLoginChanged,
   });
 
   final WorkspaceUiSnapshot snapshot;
   final bool signedIn;
-  final Future<void> Function()? onConnect;
+  final Future<void> Function()? onStartService;
   final Future<void> Function([String? name])? onRegister;
   final Future<void> Function([String? name])? onRecoverCredential;
   final Future<void> Function(String name)? onChangeWorkspaceName;
@@ -423,17 +401,16 @@ class _WorkspaceTab extends StatefulWidget {
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onExportDiagnostics;
   final Future<void> Function(String path)? onChangeWorkRoot;
-  final VoidCallback? onDisconnect;
+  final Future<void> Function()? onStopService;
   final Future<void> Function()? onRelease;
   final VoidCallback? onReset;
-  final bool launchAtLogin;
-  final ValueChanged<bool>? onLaunchAtLoginChanged;
 
   @override
   State<_WorkspaceTab> createState() => _WorkspaceTabState();
 }
 
 class _WorkspaceTabState extends State<_WorkspaceTab> {
+  bool _serviceActionPending = false;
   late final TextEditingController _nameController;
   late final TextEditingController _workRootController;
 
@@ -492,6 +469,16 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
     }
   }
 
+  Future<void> _runServiceAction(Future<void> Function() action) async {
+    if (_serviceActionPending) return;
+    setState(() => _serviceActionPending = true);
+    try {
+      await action();
+    } finally {
+      if (mounted) setState(() => _serviceActionPending = false);
+    }
+  }
+
   String _displayWorkRoot(String? path) {
     if (path == null || path.isEmpty) return '';
     final home = Platform.environment['HOME'];
@@ -522,21 +509,29 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
             widget.snapshot.mode == WorkspaceUiMode.installFailure) &&
         !isConnecting &&
         widget.snapshot.desiredRuntimeConnected;
-    // Workspace identity and user file location are protected while the
-    // runtime is connected or intended to be connected. They become editable
-    // again after an explicit disconnect, including while the app is offline.
-    final canEditWorkspaceSettings = !widget.snapshot.desiredRuntimeConnected &&
-        !widget.snapshot.cloudConnected;
+    // Protect identity and user file location while the service owns them.
+    final canEditWorkspaceSettings =
+        !widget.snapshot.serviceRunning && !widget.snapshot.cloudConnected;
 
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
+        Text('Service', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Text(widget.snapshot.serviceRunning ? 'Running' : 'Stopped'),
+        const SizedBox(height: 8),
+        Text(
+            'Cloud: ${widget.snapshot.cloudConnected ? "Connected" : isConnecting && widget.snapshot.serviceRunning ? "Reconnecting" : "Offline"}${widget.snapshot.activeTransportMode == "websocket" ? " · WebSocket" : widget.snapshot.activeTransportMode == "http_long_poll" ? " · HTTPS" : ""}'),
+        const SizedBox(height: 8),
+        Text('The service runs in the background after you close this app.',
+            style: theme.textTheme.bodySmall),
+        const SizedBox(height: 24),
         if (isError) ...[
           _WorkspaceRecoveryPanel(
             issue: widget.snapshot.issue,
-            retryLabel: widget.snapshot.mode == WorkspaceUiMode.offline
-                ? 'Retry connection'
-                : 'Retry update',
+            retryLabel: !widget.snapshot.serviceRunning
+                ? 'Retry service startup'
+                : 'Retry Cloud connection',
             onRetry: widget.onRetry,
           ),
           const SizedBox(height: 24),
@@ -577,60 +572,37 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          value: widget.launchAtLogin,
-          onChanged: widget.onLaunchAtLoginChanged,
-          title: const Text('Start at login'),
-        ),
         const SizedBox(height: 16),
         Wrap(
           spacing: 12,
           runSpacing: 12,
           children: [
-            // Button 1: Connect / Disconnect
-            if (widget.snapshot.workspaceReady ||
-                widget.snapshot.cloudConnected)
-              FilledButton.icon(
-                onPressed: widget.onDisconnect,
-                icon: const Icon(Icons.link_off, size: 16),
-                label: const Text('Disconnect'),
-                style: FilledButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                ),
-              )
-            else
-              FilledButton.icon(
-                onPressed: (!isRegistered || isConnecting)
-                    ? null
-                    : () {
-                        if (widget.onConnect != null) {
-                          unawaited(widget.onConnect!());
-                        } else if (widget.onRecoverCredential != null) {
-                          unawaited(widget.onRecoverCredential!(
-                            _nameController.text.trim(),
-                          ));
-                        }
-                      },
-                icon: isConnecting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.sync, size: 16),
-                label: Text(
-                  isConnecting ? 'Connecting…' : 'Connect',
-                ),
-                style: FilledButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                ),
-              ),
+            FilledButton.icon(
+              onPressed: _serviceActionPending
+                  ? null
+                  : (widget.snapshot.serviceRunning
+                      ? (widget.onStopService == null
+                          ? null
+                          : () => _runServiceAction(widget.onStopService!))
+                      : (widget.onStartService == null || !effectiveSignedIn
+                          ? null
+                          : () => _runServiceAction(widget.onStartService!))),
+              icon: _serviceActionPending
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : Icon(
+                      widget.snapshot.serviceRunning
+                          ? Icons.stop
+                          : Icons.play_arrow,
+                      size: 16),
+              label: Text(_serviceActionPending
+                  ? (widget.snapshot.serviceRunning ? 'Stopping…' : 'Starting…')
+                  : (widget.snapshot.serviceRunning
+                      ? 'Stop Service'
+                      : 'Start Service')),
+            ),
 
             // Button 2: Register / Release
             if (isRegistered)

@@ -33,8 +33,8 @@ cd "$WORKSPACE_DIR"
 "$DART" compile exe \
   --packages="$WORKSPACE_DIR/.dart_tool/package_config.json" \
   bin/conclave_workspace_service.dart \
-  -o "$TEMP_ROOT/conclave-workspace-service"
-"$TEMP_ROOT/conclave-workspace-service" \
+  -o "$TEMP_ROOT/conclave-service"
+"$TEMP_ROOT/conclave-service" \
   --once \
   --data-dir "$TEMP_ROOT/data" \
   --work-root "$TEMP_ROOT/work"

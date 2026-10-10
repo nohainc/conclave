@@ -78,6 +78,24 @@ void main() {
         '/Users/test/.local/bin/codex');
   });
 
+  test('reset is performed by the runtime owner and shuts down Worker slots',
+      () async {
+    final worker = await registry.create(
+      catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
+    );
+    final removed = <String>[];
+    final ownerRegistry = LocalWorkerRegistry(
+      dataDirectory: directory,
+      workspaceId: 'workspace-1',
+      onWorkerRemoving: (workerId) async => removed.add(workerId),
+    );
+
+    await ownerRegistry.reset();
+
+    expect(removed, [worker.id]);
+    expect(await ownerRegistry.list(), isEmpty);
+  });
+
   test('rejects legacy and unknown fields in the current schema', () async {
     final worker = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('chatgpt'),

@@ -1892,7 +1892,7 @@ void main() {
     } on Object catch (error) {
       expect(error, isA<TimeoutException>());
     }
-    expect(connection.connectionStage, WorkspaceConnectionStage.offline);
+    expect(connection.connectionStage, WorkspaceConnectionStage.reconnecting);
     expect(connection.lastConnectionError, contains('Connection timed out'));
 
     await connection.retryNow();

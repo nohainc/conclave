@@ -31,7 +31,10 @@ Future<Workspace> buildWorkspaceRuntime(
   final secureCredentialStore =
       credentialStore ?? const PlatformSecureCredentialStore();
   String? humanAuthToken;
-  if (config.workspaceRuntimeId == null) {
+  // A human session is only needed to sync the catalog while a saved Cloud
+  // endpoint exists without a registered runtime identity. Avoid invoking
+  // the OS credential helper for a fresh, offline service installation.
+  if (config.workspaceRuntimeId == null && config.cloudUri != null) {
     try {
       final stored =
           await secureCredentialStore.read(desktopHumanCredentialKey);

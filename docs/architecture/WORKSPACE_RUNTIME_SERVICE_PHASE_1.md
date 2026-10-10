@@ -1,7 +1,6 @@
 # Workspace Runtime Service — Phase 1
 
-**Status:** Headless service and local IPC backend implemented; GUI ownership
-handoff remains incomplete.
+**Status:** Headless runtime and Flutter IPC management ownership implemented.
 
 ## Existing ownership audit
 
@@ -36,20 +35,22 @@ installation identity independently. The per-installation advisory lock is
 held for the process lifetime; the operating system releases it when the
 process exits unexpectedly.
 
-## Remaining handoff
+## UI/service ownership handoff
 
-The Flutter shell still constructs the runtime in `main/app.dart`, starts it
-from `WorkspaceLifecycleController.launch`, requests readiness/reconnect work
-from `didChangeAppLifecycleState`, and stops it from `dispose`/`quit`. Workspace
-management forms also currently call runtime controllers directly. The shell
-has not yet become a client of the standalone process, so closing the Flutter
-process does not yet leave a separately launched service behind.
+The Flutter shell now creates only its local management configuration and
+connects to `WorkspaceManagerIpcConnection`. It does not compose, start, stop,
+or reconnect a Workspace runtime. Closing or quitting the UI closes only its
+IPC client; the separately managed service keeps its Cloud connection and
+assignments. Runtime status and Worker catalog state are driven by the service
+snapshot and events.
 
-Completing that handoff requires a versioned local management protocol and
-moving runtime mutations behind it. The protocol backend is now present, but
-the desktop app does not yet connect to it or delegate its runtime to it. The
-standalone executable is usable independently for headless operation. Existing
-Cloud and Worker protocols are unchanged.
+Cloud connection control, readiness checks, Worker setup/activation/profile actions,
+diagnostics and runtime configuration reloads use the
+versioned IPC boundary. Sign-in and Cloud ownership operations remain
+management actions in the UI; after they update shared secure/local
+configuration, they ask the service to reload while preserving installation
+and runtime identities. The UI no longer writes the Worker registry directly.
+Existing Cloud and Worker protocols are unchanged.
 
 ## Local management IPC
 
@@ -61,22 +62,21 @@ accepting commands, limits frames to 1 MiB, correlates responses by request ID,
 and sends an initial status snapshot followed by subscribed runtime events.
 Clients reconnect with bounded backoff after a service restart.
 
-The command dispatcher currently provides status/version/health, connect,
-disconnect with a 15-second assignment drain, reconnect, Worker list/enable/
-disable/live test, active assignment list/cancel, configuration read,
-diagnostics, metrics, and bounded log-tail commands. Service restart and
-shutdown explicitly require the host-management boundary. Runtime
-configuration updates are not yet supported by IPC.
+The command dispatcher provides status/version/health, connect, disconnect
+with a 15-second assignment drain, reconnect, Worker catalog and registry
+operations, readiness/profile actions, active assignment list/cancel,
+configuration read/update/reload, diagnostics, metrics, and bounded log-tail
+commands. Service restart and shutdown explicitly require the host-management
+boundary.
 
 The socket and protocol tests are present. In restricted execution environments
 that deny local socket creation they report as skipped; they must run on a
 normal Workspace development host before this transport is considered verified.
 
-The Flutter UI has not yet been migrated to `WorkspaceManagerIpcConnection`.
-Until that migration is complete, it still starts and stops the in-process
-runtime, reads live runtime objects directly, and does not receive these IPC
-events. Consequently closing the UI does not yet leave the runtime running
-independently through the desktop product flow.
+The ownership boundary is implemented in code. Signed macOS bundle, launchd,
+TCC, Keychain, reboot/login, and Cloud-to-Worker end-to-end validation remain
+release evidence; this implementation has not established those device-level
+claims.
 
 ## Lifecycle dimensions
 
@@ -88,3 +88,33 @@ independently through the desktop product flow.
 - execution state: idle or executing.
 
 An offline Cloud connection does not mean the service process has failed.
+
+## Service controls and display cache
+
+Workspace.app exposes Start Service / Stop Service using the host manager.
+`service.prepareStop` is an additive IPC command: it pauses assignment admission,
+drains for the existing bounded grace period, and closes Cloud transport. A
+failed drain resumes admission and reports `assignments_active`; process
+termination remains exclusively a host-management operation. The UI verifies
+IPC disconnect before reporting a successful stop. Start enables login startup;
+Stop disables it. macOS approval-required responses identify Login Items.
+
+UI snapshots expose service process state separately from Cloud connection.
+The app does not own a Cloud execution WebSocket or HTTP fallback client.
+Worker tests execute through IPC with a bounded response timeout. The local
+`runtime/manager-worker-display.json` projection is a best-effort display cache,
+never an authority for Worker configuration or assignment admission. Cached
+controls are disabled while the service is stopped.
+
+Runtime executables are named `conclave-service` and `conclave-agent`. The
+service LaunchAgent label and installation identity are unchanged. Shared
+bundled Engine asset names are unchanged; Workspace materialization assigns
+the process name. Existing independent legacy daemons are not managed here.
+
+Work Root selection while stopped is persisted by `StoppedWorkspaceConfiguration`
+in the existing local lifecycle preferences file. It validates path separation
+and access under the same installation lock used by the service. The GUI cannot
+change Work Root through a running service; `configuration.update` rejects that
+operation. Configuration is read at startup, requires no Cloud round trip, and
+does not move files. IPC startup and configuration reload do not await Cloud
+connectivity. A slow/offline Cloud handshake does not block local management.

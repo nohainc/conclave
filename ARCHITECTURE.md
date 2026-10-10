@@ -165,20 +165,19 @@ Each boundary has its own identity, authorization, transport, versioning, and wi
 
 See [Protocol Boundaries](docs/architecture/PROTOCOL_BOUNDARIES.md) and the [Tool Profile v1 specification](docs/specifications/TOOL_PROFILE_V1.md).
 
-Workspace is being extracted into a persistent Dart service while retaining
-the separate CLI Worker Engine process. The current service entry point and
-versioned local IPC backend are implemented; the outstanding
-Flutter-to-service ownership handoff is documented in the
+Workspace uses a persistent Dart service while retaining the separate CLI
+Worker Engine process. Flutter Workspace is an IPC management client and no
+longer composes or starts an in-process runtime. The ownership boundary and
+remaining end-to-end evidence are documented in the
 [Workspace Runtime Service Phase 1 audit](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_1.md).
-The macOS package now embeds the signed-service layout and uses an
-`SMAppService` LaunchAgent bridge; device validation and the GUI-to-service
-ownership handoff remain release gates. See the
+The macOS package embeds the signed-service layout and uses an `SMAppService`
+LaunchAgent bridge; device validation remains a release gate. See the
 [Phase 3 macOS service integration](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_3.md).
 The service recovery contract is in
 [Phase 4](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_4.md). The current
 migration, cleanup, and release gates are tracked in
 [Phase 5](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_5.md); the
-in-process UI runtime remains active until its IPC replacement is verified.
+current macOS and Cloud-to-Worker end-to-end gates are recorded there.
 
 ## Security and release trust
 
@@ -290,3 +289,21 @@ for persistence, migration, resolution, security, cache, and validation boundari
 People is a private, automatic directory of established collaborators, separate from Space membership. Cloud persists one user-ID pair after membership establishment and joins current profiles; AX shares one reactive session cache between People and invitations. See [People v1](docs/specifications/PEOPLE_V1.md).
 
 The user owns a private People directory of known collaborators and participates in Spaces through Members, Invitations, and Permissions. First collaboration follows email invitation → acceptance → People relationship; future collaboration follows People selection → Space invitation → acceptance. Both invitation entry points share one permission-aware subsystem, with known recipients persisted by user ID.
+
+Workspace manager lifecycle: the two-tab Flutter app exposes **Start Service**
+and **Stop Service** through macOS host management, while runtime commands and
+Worker tests use authenticated local IPC. The `conclave-service` process owns
+Cloud WebSocket/HTTP fallback; `conclave-agent` is its separate generic CLI
+Worker Engine. Service process health and Cloud connectivity are distinct.
+Stopping drains work before unregistering; closing the UI preserves execution.
+The UI may cache Worker display snapshots locally, but configuration and
+execution state remain service-owned.
+
+Machine-local Work Root settings can be edited by the manager while the service
+is stopped. The existing lifecycle file is read at service startup; neither
+Cloud nor live IPC is required to save it. The service's installation lock also
+protects stopped-state configuration writes. Running-service Work Root changes
+are rejected, and manual changes do not move user files. Service IPC readiness
+is independent of Cloud handshake completion. Native Start refreshes an enabled
+but stopped macOS registration after bundle changes without stopping a running
+job or resetting installation identity.

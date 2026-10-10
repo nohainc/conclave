@@ -16,12 +16,6 @@ enum ManagementLockState { unlocked, locked }
 
 enum DesiredRuntimeState { connected, disconnected }
 
-bool shouldHideManagementWindowOnStartup({
-  required bool isMacOS,
-  required bool launchAtLogin,
-}) =>
-    isMacOS && launchAtLogin;
-
 /// Full lifecycle snapshot that can be constructed and tested without UI state.
 /// Transport health remains a separate [RuntimeTransportState] projection.
 class WorkspaceLifecycleState {
@@ -57,6 +51,7 @@ class WorkspaceLifecyclePreferences {
     this.ownerUserId,
     this.ownerDisplayName,
     this.customWorkspaceName,
+    this.workRootPath,
   });
 
   WorkspaceLifecyclePreferences copyWith({
@@ -67,6 +62,7 @@ class WorkspaceLifecyclePreferences {
     String? ownerUserId,
     String? ownerDisplayName,
     String? customWorkspaceName,
+    String? workRootPath,
   }) =>
       WorkspaceLifecyclePreferences(
         desiredRuntime: desiredRuntime ?? this.desiredRuntime,
@@ -77,6 +73,7 @@ class WorkspaceLifecyclePreferences {
         ownerUserId: ownerUserId ?? this.ownerUserId,
         ownerDisplayName: ownerDisplayName ?? this.ownerDisplayName,
         customWorkspaceName: customWorkspaceName ?? this.customWorkspaceName,
+        workRootPath: workRootPath ?? this.workRootPath,
       );
 
   final DesiredRuntimeState desiredRuntime;
@@ -86,6 +83,7 @@ class WorkspaceLifecyclePreferences {
   final String? ownerUserId;
   final String? ownerDisplayName;
   final String? customWorkspaceName;
+  final String? workRootPath;
 
   /// Reset removes the local Workspace configuration while retaining user
   /// preferences and the non-authoritative owner cache as documented in ADR-014.
@@ -100,5 +98,6 @@ class WorkspaceLifecyclePreferences {
         ownerUserId: previous.ownerUserId,
         ownerDisplayName: previous.ownerDisplayName,
         customWorkspaceName: previous.customWorkspaceName,
+        workRootPath: previous.workRootPath,
       );
 }
