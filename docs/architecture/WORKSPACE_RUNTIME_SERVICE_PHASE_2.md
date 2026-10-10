@@ -1,5 +1,8 @@
 # Workspace Runtime Service — Phase 2
 
+> **Historical implementation record.** The current architecture is defined
+> in [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md).
+
 **Status:** Workspace.app is a service manager and authenticated IPC client.
 
 ## Management boundary

@@ -1,3 +1,5 @@
+import { WorkspaceRuntimeAuthenticator } from "./runtime-authenticator.js";
+
 const jsonArray = (value: unknown): string[] => {
   if (typeof value !== "string") return [];
   try {
@@ -152,19 +154,12 @@ export async function isWorkspaceRuntimeAuthorized(
   workspaceRuntimeId: string,
   tokenHash: string,
 ): Promise<{ executionWorkspaceId: string } | null> {
-  const row = await db
-    .prepare(
-      `SELECT wri.workspace_id AS executionWorkspaceId
-       FROM workspace_runtime_identities wri
-       JOIN execution_workspaces ew ON ew.id = wri.workspace_id
-       WHERE wri.id = ?1
-         AND wri.credential_token_hash = ?2
-         AND wri.revoked_at IS NULL
-         AND ew.status <> 'revoked'`,
-    )
-    .bind(workspaceRuntimeId, tokenHash)
-    .first<{ executionWorkspaceId: string }>();
-  return row ?? null;
+  const identity = await new WorkspaceRuntimeAuthenticator(
+    db,
+  ).authenticateRuntimeHash(workspaceRuntimeId, tokenHash);
+  return identity
+    ? { executionWorkspaceId: identity.executionWorkspaceId }
+    : null;
 }
 
 export async function findWorkspaceRuntimeIdentity(
@@ -174,20 +169,13 @@ export async function findWorkspaceRuntimeIdentity(
   executionWorkspaceId: string;
   credentialTokenHash: string;
 } | null> {
-  const row = await db
-    .prepare(
-      `SELECT wri.workspace_id AS executionWorkspaceId,
-              wri.credential_token_hash AS credentialTokenHash
-       FROM workspace_runtime_identities wri
-       JOIN execution_workspaces ew ON ew.id = wri.workspace_id
-       WHERE wri.id = ?1
-         AND wri.revoked_at IS NULL
-         AND ew.status <> 'revoked'`,
-    )
-    .bind(workspaceRuntimeId)
-    .first<{
-      executionWorkspaceId: string;
-      credentialTokenHash: string;
-    }>();
-  return row ?? null;
+  const identity = await new WorkspaceRuntimeAuthenticator(
+    db,
+  ).findWorkspaceRuntimeIdentity(workspaceRuntimeId);
+  return identity
+    ? {
+        executionWorkspaceId: identity.executionWorkspaceId,
+        credentialTokenHash: identity.credentialTokenHash,
+      }
+    : null;
 }

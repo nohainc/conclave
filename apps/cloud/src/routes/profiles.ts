@@ -7,7 +7,7 @@ export {
   spaceWorkerExecutionOptions,
 } from "../worker-execution-options.js";
 
-import { extractBearerToken, hashToken } from "@conclave/security";
+import { extractBearerToken } from "@conclave/security";
 import {
   changeToolProfileLifecycle,
   createDraftToolProfileRelease,
@@ -47,6 +47,7 @@ import {
 import type { SecurityEnv } from "./handlers.js";
 import { WORKER_INPUT_CAPABILITIES } from "@conclave/core";
 import { SENSITIVE_OPERATIONS } from "../auth/step-up.js";
+import { WorkspaceRuntimeAuthenticator } from "../workspace-gateway/runtime-authenticator.js";
 
 export async function handleListWorkspaceWorkerInventory(
   request: Request,
@@ -167,24 +168,18 @@ async function requireWorkspaceProfileContext(
   if (!runtimeId || !credential) {
     throw new HttpError(401, "Workspace runtime credentials are required");
   }
-  const runtime = await env.CONCLAVE_DB.prepare(
-    `SELECT wri.workspace_id AS workspaceId
-       FROM workspace_runtime_identities wri
-       JOIN execution_workspaces ew ON ew.id = wri.workspace_id
-      WHERE wri.id = ?1 AND wri.credential_token_hash = ?2
-        AND wri.revoked_at IS NULL AND ew.status <> 'revoked'`,
-  )
-    .bind(runtimeId, await hashToken(credential))
-    .first<{ workspaceId: string }>();
+  const runtime = await new WorkspaceRuntimeAuthenticator(
+    env.CONCLAVE_DB,
+  ).authenticateRuntime(runtimeId, credential);
   if (!runtime)
     throw new HttpError(401, "Workspace runtime credential is invalid");
   const channelRow = await env.CONCLAVE_DB.prepare(
     `SELECT channel FROM workspace_tool_profile_channels WHERE workspace_id = ?1`,
   )
-    .bind(runtime.workspaceId)
+    .bind(runtime.executionWorkspaceId)
     .first<{ channel: ToolProfileChannel }>();
   return {
-    workspaceId: runtime.workspaceId,
+    workspaceId: runtime.executionWorkspaceId,
     channel: channelRow?.channel ?? "stable",
   };
 }

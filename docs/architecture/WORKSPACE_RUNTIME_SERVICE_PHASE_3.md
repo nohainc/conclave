@@ -1,5 +1,8 @@
 # Workspace Runtime Service Phase 3
 
+> **Historical implementation record.** The current architecture is defined
+> in [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md).
+
 ## Independent service and Cloud state
 
 The Workspace Service owns the local runtime. Cloud connectivity is a separate

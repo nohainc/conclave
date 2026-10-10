@@ -1,5 +1,8 @@
 # Workspace Runtime Service — Phase 5: Migration and release gates
 
+> **Historical implementation record.** The current architecture is defined
+> in [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md).
+
 **Status: in progress; not release-ready.** The standalone Dart service,
 versioned local IPC backend, macOS bundle pipeline, runtime recovery, and
 Flutter-to-service ownership handoff are implemented. The UI now sends

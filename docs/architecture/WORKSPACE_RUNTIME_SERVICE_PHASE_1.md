@@ -1,5 +1,8 @@
 # Workspace Runtime Service — Phase 1
 
+> **Historical implementation record.** The current architecture is defined
+> in [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md).
+
 **Status:** Headless runtime and Flutter IPC management ownership implemented.
 
 ## Existing ownership audit

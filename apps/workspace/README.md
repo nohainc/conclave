@@ -31,6 +31,9 @@ Its GUI is intentionally minimal and local-first:
 Spaces, Threads, Discuss, Work orchestration, Space membership and
 remote scheduling policy belong in Conclave AX.
 
+The authoritative ownership and lifecycle contract is the
+[Workspace architecture](../../docs/architecture/WORKSPACE_ARCHITECTURE.md).
+
 The Workspace is an execution environment, not a directory. Its private
 Application Data Root is resolved automatically under the Conclave application
 family root (`~/Library/Application Support/Conclave/Workspace/` on macOS).
@@ -75,9 +78,8 @@ The service exposes a versioned, authenticated local IPC protocol for status,
 connection, Worker, assignment, configuration, log, and diagnostics commands.
 Service restart and shutdown remain host-manager operations. The Flutter
 management shell connects through this protocol and does not create or control
-an in-process execution runtime. See the
-[Phase 1 service boundary audit](../../docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_1.md)
-for the command surface, ownership map, and validation gates.
+an in-process execution runtime. See the canonical architecture document for
+the command surface, ownership map, and validation gates.
 
 For development, `scripts/run-workspace-service.sh` runs the headless process
 against the existing local configuration without building the Flutter app.
@@ -98,9 +100,8 @@ The package embeds the standalone service helper, its generic Engine, and an
 `SMAppService` LaunchAgent manifest. Background registration requires macOS 13
 or newer. Persistent execution through the managed service requires macOS 13
 or newer; earlier macOS versions can open the management UI but cannot start
-the service. See the
-[Phase 3 macOS service integration notes](../../docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_3.md)
-for the bundle contract, status semantics, and signed-device validation.
+the service. See the canonical architecture document for the bundle contract,
+status semantics, and signed-device validation requirements.
 
 Build a local macOS Workspace app from repository root:
 
@@ -180,9 +181,8 @@ Gateway using its runtime credential. Disconnect and ownership release use the
 desktop human session.
 
 The service journals assignment outcomes and classifies interrupted work on
-startup before accepting new work. See the
-[runtime recovery contract](../../docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_4.md)
-for recovery states, process cleanup, logging, and current Cloud reconciliation
+startup before accepting new work. See the canonical architecture document for
+recovery states, process cleanup, logging, and current Cloud reconciliation
 limits.
 
 ## First-party Worker v1 contract

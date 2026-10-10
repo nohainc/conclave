@@ -1,21 +1,13 @@
-/// Registration state reported by the native service host.
-enum WorkspaceBackgroundServiceRegistration {
-  unsupported,
-  notRegistered,
-  registered,
-  approvalRequired,
-  serviceMissing,
-  unknown,
-}
+import 'workspace_service_lifecycle.dart';
 
-enum WorkspaceServiceProcessStatus {
-  stopped,
-  starting,
-  running,
-  stopping,
-  failed,
-  unknown,
-}
+export 'workspace_service_lifecycle.dart';
+
+/// Registration state reported by the native service host.
+///
+/// These aliases preserve the existing host adapter API while the shared
+/// lifecycle model remains the single source of truth.
+typedef WorkspaceBackgroundServiceRegistration = ServiceInstallationState;
+typedef WorkspaceServiceProcessStatus = ServiceRuntimeState;
 
 enum WorkspaceServiceIpcStatus {
   unavailable,
@@ -70,11 +62,27 @@ class WorkspaceServiceInfo {
   bool get registered =>
       registration == WorkspaceBackgroundServiceRegistration.registered;
 
+  ServiceInstallationState get installationState => registration;
+
   bool get processRunning => process == WorkspaceServiceProcessStatus.running;
+
+  ServiceRuntimeState get runtimeState => process;
 
   bool get ipcReady => ipc == WorkspaceServiceIpcStatus.ready;
 
   bool get serviceHealthy => processRunning && ipcReady;
+
+  /// Host status intentionally leaves Cloud disconnected; Cloud state is
+  /// supplied by the service IPC snapshot through [WorkspaceServiceLifecycle].
+  WorkspaceServiceLifecycle get lifecycle => WorkspaceServiceLifecycle(
+        installation: installationState,
+        runtime: runtimeState,
+        cloud: CloudConnectionState.disconnected,
+        ipcReady: ipcReady,
+        pid: pid,
+        startedAt: startedAt,
+        lastError: lastExitReason,
+      );
 
   bool get launchFailed =>
       process == WorkspaceServiceProcessStatus.failed ||

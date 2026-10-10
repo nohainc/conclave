@@ -53,15 +53,18 @@ Every implementation task must report:
 - Avoid premature infrastructure: add Durable Objects, Queues, vector databases, or extra providers only when a concrete requirement exists.
 - Update documentation whenever architecture, data model, protocol, workflow behavior, security, or public API changes.
 
-## Workspace Service transition
+## Workspace Service architecture
 
-- The target is one headless Dart Workspace Service owning Cloud connectivity,
-  assignment scheduling, Worker Engine processes, sessions, and runtime state;
-  Flutter Workspace is its management client over the versioned local IPC
-  protocol.
-- Until the Flutter-to-service ownership handoff is verified, do not remove or
-  disable the existing UI runtime path or enable both owners concurrently.
-  Preserve the per-installation lock as the final duplicate-owner guard.
+- The authoritative architecture is
+  [docs/architecture/WORKSPACE_ARCHITECTURE.md](docs/architecture/WORKSPACE_ARCHITECTURE.md).
+  It supersedes the historical phase plans in `docs/architecture/`.
+- One headless Dart Workspace Service owns Cloud connectivity, assignment
+  scheduling, Worker Engine processes, sessions, and runtime state. Flutter
+  Workspace is a management client over authenticated versioned local IPC.
+  Do not reintroduce a second UI-owned runtime or a direct UI Cloud connection.
+- Workspace.app must not spawn a Worker Engine or provider CLI. The generic
+  Worker Engine must not import Cloud, Space, Thread, Workflow, D1, or UI code.
+  Keep process supervision inside the service/Engine boundary.
 - Migrations must preserve the existing installation ID, Cloud Workspace and
   runtime IDs, secure runtime credential, Work Root, Worker registry, Profiles,
   Engine files, and sessions. Do not create a replacement Cloud Workspace as a
@@ -78,8 +81,12 @@ Every implementation task must report:
   `scripts/check-workspace-service.sh`; run the Workspace and direct Worker
   Engine component validations when the environment permits. macOS launchd,
   signing, Keychain, and TCC claims require device or release-build evidence.
-- Phase 1–5 implementation status and remaining release gates are tracked in
-  [Workspace Runtime Service phase documentation](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_5.md).
+- Keep the canonical build pipeline explicit: `build-cli-worker-engine.sh`
+  produces the Engine artifact, `build-workspace-service.sh` builds the
+  standalone service, and `build-workspace-macos.sh` assembles/signs the app.
+- Stop Service must leave registration intact; Disconnect Cloud must leave the
+  service process running. Preserve the per-installation lock as the duplicate
+  owner guard.
 
 ## Review principle
 Implementation and verification should be independent when practical. A worker must not be considered verified solely because it reviewed its own output.

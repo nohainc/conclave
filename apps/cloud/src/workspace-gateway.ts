@@ -11,15 +11,13 @@ import {
   recordAssignmentError,
   recordAssignmentResult,
 } from "./assignment-dispatcher.js";
-import {
-  extractBearerToken,
-  hashToken,
-} from "../../../packages/security/src/index.js";
+import { extractBearerToken } from "../../../packages/security/src/index.js";
 import { logStructured, requestIdFor } from "./observability.js";
 import { recordWorkspaceWorkerInventory } from "./workspace-gateway/inventory.js";
+import { WorkspaceRuntimeAuthenticator } from "./workspace-gateway/runtime-authenticator.js";
+import { WorkspaceRuntimeSessionStore } from "./workspace-gateway/session-store.js";
 
 import {
-  findWorkspaceRuntimeIdentity,
   isCurrentWorkspaceSocket,
   runtimeFacts,
   workspaceAssignmentContextMatches,
@@ -38,6 +36,8 @@ export {
 } from "./workspace-gateway/contracts.js";
 
 export class WorkspaceGateway implements DurableObject {
+  private readonly runtimeAuthenticator: WorkspaceRuntimeAuthenticator;
+  private readonly sessionStore: WorkspaceRuntimeSessionStore;
   private readonly pendingCancelAcks = new Map<
     string,
     {
@@ -65,7 +65,12 @@ export class WorkspaceGateway implements DurableObject {
   constructor(
     private readonly state: DurableObjectState,
     private readonly env: WorkspaceGatewayEnv,
-  ) {}
+  ) {
+    this.runtimeAuthenticator = new WorkspaceRuntimeAuthenticator(
+      env.CONCLAVE_DB,
+    );
+    this.sessionStore = new WorkspaceRuntimeSessionStore(env.CONCLAVE_DB);
+  }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -128,15 +133,11 @@ export class WorkspaceGateway implements DurableObject {
         { error: "Runtime credential required" },
         { status: 401 },
       );
-    const identity = await findWorkspaceRuntimeIdentity(
-      this.env.CONCLAVE_DB,
+    const identity = await this.runtimeAuthenticator.authenticateRuntime(
       runtimeId,
+      token,
     );
-    if (
-      !identity ||
-      identity.executionWorkspaceId !== this.state.id.name ||
-      identity.credentialTokenHash !== (await hashToken(token))
-    ) {
+    if (!identity || identity.executionWorkspaceId !== this.state.id.name) {
       return Response.json(
         { error: "Invalid or revoked Workspace runtime credential" },
         { status: 401 },
@@ -175,23 +176,15 @@ export class WorkspaceGateway implements DurableObject {
       this.httpCursor = 0;
       this.httpLastActivityAt = new Date().toISOString();
       const now = new Date().toISOString();
-      await this.env.CONCLAVE_DB.prepare(
-        "UPDATE workspace_sessions SET disconnected_at = ?1 WHERE runtime_identity_id = ?2 AND disconnected_at IS NULL",
-      )
-        .bind(now, runtimeId)
-        .run();
-      await this.env.CONCLAVE_DB.prepare(
-        "INSERT INTO workspace_sessions (id, workspace_id, runtime_identity_id, client_version, protocol_version, connected_at, last_heartbeat_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
-      )
-        .bind(
-          this.sessionId,
-          this.executionWorkspaceId,
-          runtimeId,
-          "unknown",
-          WORKSPACE_RUNTIME_PROTOCOL_VERSION,
-          now,
-        )
-        .run();
+      await this.sessionStore.closeForRuntime(runtimeId, now);
+      await this.sessionStore.open({
+        sessionId: this.sessionId,
+        workspaceId: this.executionWorkspaceId,
+        runtimeIdentityId: runtimeId,
+        clientVersion: "unknown",
+        protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+        connectedAt: now,
+      });
       await this.env.CONCLAVE_DB.prepare(
         "UPDATE execution_workspaces SET status = 'online', updated_at = ?1 WHERE id = ?2",
       )
@@ -320,12 +313,7 @@ export class WorkspaceGateway implements DurableObject {
     ) {
       const now = new Date().toISOString();
       this.queueProjectionWrite(
-        () =>
-          this.env.CONCLAVE_DB.prepare(
-            "UPDATE workspace_sessions SET disconnected_at = ?1 WHERE id = ?2",
-          )
-            .bind(now, sessionId)
-            .run(),
+        () => this.sessionStore.close(sessionId!, now),
         "session_disconnect_update_failed",
         {
           workspaceId: this.executionWorkspaceId ?? undefined,
@@ -380,12 +368,10 @@ export class WorkspaceGateway implements DurableObject {
 
   private async lastRuntimeActivityAt(): Promise<string | null> {
     if (this.socket && this.sessionId) {
-      const session = await this.env.CONCLAVE_DB.prepare(
-        "SELECT last_heartbeat_at AS lastActivityAt FROM workspace_sessions WHERE id = ?1",
-      )
-        .bind(this.sessionId)
-        .first<{ lastActivityAt: string }>();
-      return session?.lastActivityAt ?? this.socketConnectedAt;
+      return (
+        (await this.sessionStore.lastHeartbeat(this.sessionId)) ??
+        this.socketConnectedAt
+      );
     }
     return this.sessionId ? this.httpLastActivityAt : null;
   }
@@ -469,11 +455,7 @@ export class WorkspaceGateway implements DurableObject {
       }
     } else if (this.sessionId) {
       const now = new Date().toISOString();
-      await this.env.CONCLAVE_DB.prepare(
-        "UPDATE workspace_sessions SET disconnected_at = ?1 WHERE id = ?2",
-      )
-        .bind(now, this.sessionId)
-        .run();
+      await this.sessionStore.close(this.sessionId, now);
       if (this.executionWorkspaceId) {
         await this.env.CONCLAVE_DB.prepare(
           "UPDATE execution_workspaces SET status = 'offline', updated_at = ?1 WHERE id = ?2",
@@ -496,14 +478,16 @@ export class WorkspaceGateway implements DurableObject {
     const token = extractBearerToken(request.headers);
     let runtimeLookupFailed = false;
     let runtimeIdentity: Awaited<
-      ReturnType<typeof findWorkspaceRuntimeIdentity>
+      ReturnType<WorkspaceRuntimeAuthenticator["authenticateRuntime"]>
     > = null;
     if (workspaceRuntimeId) {
       try {
-        runtimeIdentity = await findWorkspaceRuntimeIdentity(
-          this.env.CONCLAVE_DB,
-          workspaceRuntimeId,
-        );
+        runtimeIdentity = token
+          ? await this.runtimeAuthenticator.authenticateRuntime(
+              workspaceRuntimeId,
+              token,
+            )
+          : null;
       } catch {
         runtimeLookupFailed = true;
         runtimeIdentity = null;
@@ -552,25 +536,6 @@ export class WorkspaceGateway implements DurableObject {
       );
     }
 
-    const authorized =
-      runtimeIdentity.credentialTokenHash === (await hashToken(token));
-    if (!authorized) {
-      logStructured(
-        "warn",
-        "GW-06 durable_object_runtime_authentication_failed",
-        {
-          requestId: correlationId,
-          runtimeId: workspaceRuntimeId,
-          workspaceId: runtimeIdentity.executionWorkspaceId,
-        },
-        { reason: "invalid_or_revoked_credential" },
-      );
-      return Response.json(
-        { error: "Invalid or revoked Workspace runtime credential" },
-        { status: 401 },
-      );
-    }
-
     const now = new Date().toISOString();
     logStructured("info", "GW-06 durable_object_runtime_authenticated", {
       requestId: correlationId,
@@ -586,11 +551,7 @@ export class WorkspaceGateway implements DurableObject {
       }
     }
     if (this.sessionId) {
-      await this.env.CONCLAVE_DB.prepare(
-        "UPDATE workspace_sessions SET disconnected_at = ?1 WHERE id = ?2 AND disconnected_at IS NULL",
-      )
-        .bind(now, this.sessionId)
-        .run();
+      await this.sessionStore.close(this.sessionId, now);
     }
     await this.state.storage.delete("http-runtime");
     const pair = new WebSocketPair();
@@ -638,22 +599,15 @@ export class WorkspaceGateway implements DurableObject {
     );
     this.queueProjectionWrite(
       () =>
-        this.env.CONCLAVE_DB.prepare(
-          `INSERT INTO workspace_sessions
-           (id, workspace_id, runtime_identity_id, client_version, protocol_version,
-            ip_address, connected_at, last_heartbeat_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)`,
-        )
-          .bind(
-            sessionId,
-            runtimeIdentity.executionWorkspaceId,
-            workspaceRuntimeId,
-            "0.1.0",
-            WORKSPACE_RUNTIME_PROTOCOL_VERSION,
-            request.headers.get("CF-Connecting-IP") ?? "127.0.0.1",
-            now,
-          )
-          .run(),
+        this.sessionStore.open({
+          sessionId,
+          workspaceId: runtimeIdentity.executionWorkspaceId,
+          runtimeIdentityId: workspaceRuntimeId,
+          clientVersion: "0.1.0",
+          protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+          ipAddress: request.headers.get("CF-Connecting-IP") ?? "127.0.0.1",
+          connectedAt: now,
+        }),
       "session_insert_failed",
       { requestId: correlationId, runtimeId: workspaceRuntimeId },
     );
@@ -722,12 +676,7 @@ export class WorkspaceGateway implements DurableObject {
       );
     }
     this.queueProjectionWrite(
-      () =>
-        this.env.CONCLAVE_DB.prepare(
-          "UPDATE workspace_sessions SET disconnected_at = ?1 WHERE id = ?2",
-        )
-          .bind(now, sessionId)
-          .run(),
+      () => this.sessionStore.close(sessionId, now),
       "session_disconnect_update_failed",
       {
         requestId: this.correlationId ?? undefined,
@@ -862,12 +811,7 @@ export class WorkspaceGateway implements DurableObject {
       case "workspace.heartbeat":
         if (message.payload && typeof message.payload === "object") {
           this.queueProjectionWrite(
-            () =>
-              this.env.CONCLAVE_DB.prepare(
-                "UPDATE workspace_sessions SET last_heartbeat_at = ?1 WHERE id = ?2",
-              )
-                .bind(now, sessionId)
-                .run(),
+            () => this.sessionStore.touch(sessionId, now),
             "session_heartbeat_update_failed",
             {
               requestId: this.correlationId ?? undefined,

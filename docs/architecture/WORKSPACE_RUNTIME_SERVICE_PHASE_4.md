@@ -1,5 +1,8 @@
 # Workspace Runtime Service Phase 4
 
+> **Historical implementation record.** The current architecture is defined
+> in [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md).
+
 ## Runtime ownership
 
 The standalone Workspace Service is the only owner of local execution state:

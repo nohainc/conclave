@@ -21,7 +21,7 @@ import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
 import 'package:conclave_workspace/worker_diagnostic_store.dart';
 import 'package:conclave_workspace/tool_profile_resolver.dart';
 
-Future<Workspace> buildWorkspaceRuntime(
+Future<WorkspaceRuntime> buildWorkspaceRuntime(
   WorkspaceConfig config, {
   List<String> restartArgs = const [],
   SecureCredentialStore? credentialStore,
@@ -75,6 +75,7 @@ Future<Workspace> buildWorkspaceRuntime(
   ).getOrCreate(initialIdentity: effectiveConfig.workspaceId);
   WorkspaceCloudConnection? connection;
   late final WorkerCatalogCoordinator? workerCatalogCoordinator;
+  late final WorkspaceWorkerSubsystem workerSubsystem;
   final localWorkerRegistry = LocalWorkerRegistry(
     dataDirectory: effectiveConfig.dataDirectory,
     workspaceId: localWorkspaceId,
@@ -362,8 +363,9 @@ Future<Workspace> buildWorkspaceRuntime(
           workspaceId: config.workspaceId!,
           credentialAvailable: config.authToken?.isNotEmpty == true,
           activeWorkerIds: activeWorkerIds,
-          assignmentHandler: workerHandler.call,
-          assignmentCancellationHandler: workerHandler.cancel,
+          assignmentHandler: (context) => workerSubsystem.execute(context),
+          assignmentCancellationHandler: (assignmentId, reason) =>
+              workerSubsystem.cancel(assignmentId, reason),
           workerInventoryProvider: () async {
             final localWorkers = await localWorkerRegistry.list();
             return workerCatalogCoordinator?.inventoryForWorkers(
@@ -420,16 +422,25 @@ Future<Workspace> buildWorkspaceRuntime(
       ),
     ),
   );
-  final engine = Workspace(
+  workerSubsystem = WorkspaceWorkerSubsystem(
+    registry: localWorkerRegistry,
+    releaseStore: toolProfileReleaseStore,
+    catalog: workerCatalogCoordinator,
+    readiness: readinessMonitor,
+    engineSupervisor: cliWorkerEngineSupervisor,
+    assignmentHandler: workerHandler,
+  );
+  final engine = WorkspaceRuntime(
     config: effectiveConfig,
     credentialStore: secureCredentialStore,
     localWorkerRegistry: localWorkerRegistry,
     workerReadinessMonitor: readinessMonitor,
+    workerSubsystem: workerSubsystem,
     workerShutdownHandler: () async {
-      await cliWorkerEngineSupervisor?.shutdown();
+      await workerSubsystem.shutdown();
     },
     workerRecoveryHandler: () async =>
-        await cliWorkerEngineSupervisor?.recoverOrphanedProcesses() ?? 0,
+        await workerSubsystem.recoverOrphanedProcesses(),
     cloudConnection: connection,
     toolProfileReleaseStore: toolProfileReleaseStore,
     toolProfileCatalog: toolProfileCatalog,

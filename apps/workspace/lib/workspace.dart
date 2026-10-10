@@ -15,7 +15,7 @@ import 'tool_profile_release_store.dart';
 import 'worker_catalog_coordinator.dart';
 import 'workspace_service_state.dart';
 import 'workspace_registration_models.dart';
-import 'workspace_lifecycle_store.dart';
+import 'workspace_worker_subsystem.dart';
 
 export 'local_worker_registry.dart';
 export 'release_trust_roots.dart';
@@ -25,7 +25,9 @@ export 'tool_profile_release_store.dart';
 export 'worker_catalog_coordinator.dart';
 export 'workspace_paths.dart';
 export 'workspace_background_service.dart';
+export 'workspace_service_lifecycle.dart';
 export 'space_directory.dart';
+export 'workspace_worker_subsystem.dart';
 
 typedef WorkspaceStatusProvider = Future<Map<String, Object?>> Function();
 typedef WorkspaceUpdateHandler = Future<Map<String, Object?>> Function(
@@ -59,130 +61,24 @@ class WorkspaceConfig {
     SecureCredentialStore? credentialStore,
     bool ignoreSavedRegistration = false,
   }) {
-    final index = args.indexOf('--data-dir');
-    final cloudIndex = args.indexOf('--cloud-url');
-    final workspaceRuntimeIndex = args.indexOf('--workspace-runtime-id');
-    final installationIndex = args.indexOf('--installation-id');
-    final workspaceIndex = args.indexOf('--workspace-id');
-    final workRootIndex = args.indexOf('--work-root');
-    final path = index >= 0 && index + 1 < args.length
-        ? args[index + 1]
-        : Platform.environment['CONCLAVE_WORKSPACE_DATA_DIR'];
-    final dataDirectory =
-        path == null ? WorkspacePaths.defaultStateDirectory() : Directory(path);
-    final savedRegistration =
-        WorkspaceRegistrationStore(dataDirectory).readSync();
-    final registration = ignoreSavedRegistration ? null : savedRegistration;
-    final cloudUrl = cloudIndex >= 0 && cloudIndex + 1 < args.length
-        ? args[cloudIndex + 1]
-        : Platform.environment['CONCLAVE_WORKSPACE_CLOUD_URL'] ??
-            savedRegistration?.cloudUrl;
-    final workspaceRuntimeId =
-        workspaceRuntimeIndex >= 0 && workspaceRuntimeIndex + 1 < args.length
-            ? args[workspaceRuntimeIndex + 1]
-            : ignoreSavedRegistration
-                ? null
-                : Platform.environment['CONCLAVE_WORKSPACE_RUNTIME_ID'] ??
-                    registration?.workspaceRuntimeId;
-    final installationId =
-        installationIndex >= 0 && installationIndex + 1 < args.length
-            ? args[installationIndex + 1]
-            : Platform.environment['CONCLAVE_WORKSPACE_INSTALLATION_ID'] ??
-                registration?.installationId ??
-                InstallationIdentityStore(dataDirectory).readSync();
-    final workspaceId = workspaceIndex >= 0 && workspaceIndex + 1 < args.length
-        ? args[workspaceIndex + 1]
-        : ignoreSavedRegistration
-            ? null
-            : Platform.environment['CONCLAVE_WORKSPACE_ID'] ??
-                registration?.workspaceId;
-    final workRootPath = workRootIndex >= 0 && workRootIndex + 1 < args.length
-        ? args[workRootIndex + 1]
-        : Platform.environment['CONCLAVE_WORKSPACE_WORK_ROOT'] ??
-            WorkspaceLifecyclePreferencesStore(dataDirectory)
-                .readSync()
-                .workRootPath;
-    final secureStore =
-        credentialStore ?? const PlatformSecureCredentialStore();
-    final storedToken = workspaceRuntimeId == null
-        ? null
-        : secureStore.readSync(workspaceRuntimeId);
-    final configuredCloudUrl = cloudUrl ?? registration?.cloudUrl;
-    final configuredCloudUri = configuredCloudUrl == null
-        ? null
-        : _workspaceGatewayUri(configuredCloudUrl,
-            workspaceRuntimeId: workspaceRuntimeId);
+    final resolved = const WorkspaceConfigurationResolver().resolve(
+      args,
+      credentialStore: credentialStore,
+      ignoreSavedRegistration: ignoreSavedRegistration,
+    );
     return WorkspaceConfig(
-      dataDirectory: dataDirectory,
-      cloudUri: configuredCloudUri,
-      workspaceRuntimeId: workspaceRuntimeId,
-      installationId: installationId,
-      workspaceId: workspaceId,
-      authToken: ignoreSavedRegistration
-          ? null
-          : Platform.environment['CONCLAVE_WORKSPACE_TOKEN'] ?? storedToken,
-      workRootPath: workRootPath,
+      dataDirectory: resolved.dataDirectory,
+      cloudUri: resolved.cloudUri,
+      workspaceRuntimeId: resolved.workspaceRuntimeId,
+      installationId: resolved.installationId,
+      workspaceId: resolved.workspaceId,
+      authToken: resolved.credentials.runtimeToken,
+      workRootPath: resolved.workRootPath,
     );
   }
 
   static Directory resolveDataDirectory(List<String> args) {
-    final index = args.indexOf('--data-dir');
-    final path = index >= 0 && index + 1 < args.length
-        ? args[index + 1]
-        : Platform.environment['CONCLAVE_WORKSPACE_DATA_DIR'];
-    return path == null
-        ? WorkspacePaths.defaultStateDirectory()
-        : Directory(path);
-  }
-
-  static Uri? _workspaceGatewayUri(String value, {String? workspaceRuntimeId}) {
-    final uri = Uri.tryParse(value);
-    if (uri == null) return null;
-    final socketScheme = switch (uri.scheme) {
-      'https' => 'wss',
-      'http' => 'ws',
-      'wss' => 'wss',
-      'ws' => 'ws',
-      _ => null,
-    };
-    if (socketScheme == null) return uri;
-
-    final isHttpOrigin = uri.scheme == 'http' || uri.scheme == 'https';
-    final existingPath = uri.path.replaceFirst(RegExp(r'/$'), '');
-    final path = isHttpOrigin || uri.path.isEmpty || uri.path == '/'
-        ? '$existingPath/api/workspace-gateway/connect'
-        : uri.path;
-
-    // dart:io's WebSocket.connect converts ws(s) to http(s) internally and
-    // copies Uri.port. For ws(s) Uri.port may be 0 when omitted, which turns
-    // the actual handshake URL into https://invalid:0/... . Materialize the
-    // protocol default here so the SDK receives 443/80 instead.
-    final port = uri.hasPort
-        ? uri.port
-        : socketScheme == 'wss'
-            ? 443
-            : 80;
-    final safeQueryParameters = {
-      for (final entry in uri.queryParameters.entries)
-        if (!RegExp(
-          r'(secret|token|password|api[_-]?key|authorization|cookie|credential)',
-          caseSensitive: false,
-        ).hasMatch(entry.key))
-          entry.key: entry.value,
-    };
-
-    return Uri(
-      scheme: socketScheme,
-      userInfo: uri.userInfo,
-      host: uri.host,
-      port: port,
-      path: path,
-      queryParameters: {
-        ...safeQueryParameters,
-        if (workspaceRuntimeId != null)
-          'workspaceRuntimeId': workspaceRuntimeId,
-      },
-    );
+    return WorkspaceConfigurationResolver.resolveDataDirectory(args);
   }
 }
 
@@ -238,8 +134,8 @@ class WorkspaceLogger {
   }
 }
 
-class Workspace {
-  Workspace({
+class WorkspaceRuntime {
+  WorkspaceRuntime({
     required this.config,
     IOSink? logOutput,
     this.cloudConnection,
@@ -250,6 +146,7 @@ class Workspace {
     this.toolProfileReleaseStore,
     this.toolProfileCatalog,
     this.workerCatalogCoordinator,
+    this.workerSubsystem,
     LocalWorkerRegistry? localWorkerRegistry,
     this.workerReadinessMonitor,
     this.workerShutdownHandler,
@@ -283,6 +180,9 @@ class Workspace {
   final ToolProfileReleaseStore? toolProfileReleaseStore;
   final ToolProfileCatalogClient? toolProfileCatalog;
   final WorkerCatalogCoordinator? workerCatalogCoordinator;
+
+  /// Service-owned facade for registry, Profiles, readiness and execution.
+  final WorkspaceWorkerSubsystem? workerSubsystem;
   final LocalWorkerRegistry? localWorkerRegistry;
   final WorkerReadinessMonitor? workerReadinessMonitor;
   final Future<void> Function()? workerShutdownHandler;
@@ -503,3 +403,7 @@ class Workspace {
     await previous.writeAsBytes(tail, flush: true);
   }
 }
+
+/// Source-compatibility alias for local fixtures and older integrations. New
+/// runtime code should use [WorkspaceRuntime] to make service ownership clear.
+typedef Workspace = WorkspaceRuntime;

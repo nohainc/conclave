@@ -37,7 +37,14 @@ fi
   "-DENGINE_VERSION=$VERSION" \
   bin/conclave_cli_worker.dart \
   -o "$OUTPUT")
+# The Engine is built once from engines/cli_worker. Workspace and Profile Lab
+# only receive materialized copies of that same artifact; they must never drift
+# into independently maintained binaries.
 cp "$OUTPUT" "$PROFILE_LAB_OUTPUT"
+cmp -s "$OUTPUT" "$PROFILE_LAB_OUTPUT" || {
+  echo "Engine materializations differ after the canonical build." >&2
+  exit 1
+}
 if [[ "$OUTPUT" != *.exe ]]; then
   chmod 755 "$OUTPUT"
   chmod 755 "$PROFILE_LAB_OUTPUT"

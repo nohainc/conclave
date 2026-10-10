@@ -166,18 +166,12 @@ Each boundary has its own identity, authorization, transport, versioning, and wi
 See [Protocol Boundaries](docs/architecture/PROTOCOL_BOUNDARIES.md) and the [Tool Profile v1 specification](docs/specifications/TOOL_PROFILE_V1.md).
 
 Workspace uses a persistent Dart service while retaining the separate CLI
-Worker Engine process. Flutter Workspace is an IPC management client and no
-longer composes or starts an in-process runtime. The ownership boundary and
-remaining end-to-end evidence are documented in the
-[Workspace Runtime Service Phase 1 audit](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_1.md).
-The macOS package embeds the signed-service layout and uses an `SMAppService`
-LaunchAgent bridge; device validation remains a release gate. See the
-[Phase 3 macOS service integration](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_3.md).
-The service recovery contract is in
-[Phase 4](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_4.md). The current
-migration, cleanup, and release gates are tracked in
-[Phase 5](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_5.md); the
-current macOS and Cloud-to-Worker end-to-end gates are recorded there.
+Worker Engine process. Flutter Workspace is an IPC management client and does
+not compose or start an in-process runtime. The canonical ownership, lifecycle,
+filesystem, security, build, and validation contract is
+[Workspace architecture](docs/architecture/WORKSPACE_ARCHITECTURE.md).
+The earlier service and cleanup phase files remain historical implementation
+records; they are not competing architecture specifications.
 
 ## Security and release trust
 
