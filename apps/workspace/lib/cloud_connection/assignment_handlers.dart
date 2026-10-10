@@ -89,8 +89,10 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
             'status': 'completed',
             'summary': previous.result!['summary'] ??
                 'Assignment replayed from the local journal',
-            'output': null,
+            'output': previous.result!['output'],
             'artifactIds': previous.result!['artifactIds'] ?? const [],
+            if (previous.result!['evidence'] is Map)
+              'evidence': previous.result!['evidence'],
           },
         )));
       } else if (previous.status == AssignmentStatus.failed) {
@@ -173,55 +175,66 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       correlation,
       {'accepted': true, 'estimatedStartMs': 0},
     )));
+    WorkspaceAssignmentResult result;
     try {
-      final result = await assignmentHandler!(context);
-      socket.send(jsonEncode(_assignmentEnvelope(
-        'assignment.result',
-        correlation,
-        {
-          'status': 'completed',
-          'summary': result.summary,
-          'output': result.output,
-          'artifactIds': result.artifactIds,
-          if (result.evidence != null)
-            'evidence': {
-              'observedAt': DateTime.now().toUtc().toIso8601String(),
-              ...result.evidence!,
-            },
-        },
-      )));
-      await _recordAssignment(
-        context.assignmentId,
-        AssignmentStatus.completed,
-        context: context,
-        result: {'summary': result.summary, 'artifactIds': result.artifactIds},
-      );
+      result = await assignmentHandler!(context);
     } catch (error) {
-      final normalizedError =
-          error is AssignmentExecutionFailure ? error : null;
-      final errorCode = canonicalExecutionErrorCode(normalizedError?.code);
-      final errorMessage = executionErrorMessage(errorCode);
-      socket.send(jsonEncode(_assignmentEnvelope(
-        'assignment.error',
-        correlation,
-        {
+      try {
+        final normalizedError =
+            error is AssignmentExecutionFailure ? error : null;
+        final errorCode = canonicalExecutionErrorCode(normalizedError?.code);
+        final errorMessage = executionErrorMessage(errorCode);
+        final errorPayload = <String, Object?>{
           'status': 'failed',
           'error': {
             'code': errorCode,
             'message': errorMessage,
             'retryable': normalizedError?.retryable ?? true,
           },
+        };
+        await _recordAssignment(
+          context.assignmentId,
+          AssignmentStatus.failed,
+          context: context,
+          result: {
+            ...errorPayload,
+            'error': errorMessage,
+            'errorCode': errorCode,
+          },
+        );
+        socket.send(jsonEncode(_assignmentEnvelope(
+          'assignment.error',
+          correlation,
+          errorPayload,
+        )));
+      } finally {
+        _activeAssignments.remove(context.assignmentId);
+      }
+      return;
+    }
+    final resultPayload = <String, Object?>{
+      'status': 'completed',
+      'summary': result.summary,
+      'output': result.output,
+      'artifactIds': result.artifactIds,
+      if (result.evidence != null)
+        'evidence': {
+          'observedAt': DateTime.now().toUtc().toIso8601String(),
+          ...result.evidence!,
         },
-      )));
+    };
+    try {
       await _recordAssignment(
         context.assignmentId,
-        AssignmentStatus.failed,
+        AssignmentStatus.completed,
         context: context,
-        result: {
-          'error': errorMessage,
-          'errorCode': errorCode,
-        },
+        result: resultPayload,
       );
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.result',
+        correlation,
+        resultPayload,
+      )));
     } finally {
       _activeAssignments.remove(context.assignmentId);
     }

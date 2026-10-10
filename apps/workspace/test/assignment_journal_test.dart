@@ -113,4 +113,37 @@ void main() {
     await expectLater(journal.reconcile(), throwsFormatException);
     await directory.delete(recursive: true);
   });
+
+  test('marks started work outcome-unknown after a service restart', () async {
+    final directory =
+        await Directory.systemTemp.createTemp('journal-recovery-');
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-running',
+      status: AssignmentStatus.running,
+      updatedAt: DateTime.utc(2026, 1, 1),
+      workerId: 'worker-1',
+    ));
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-received',
+      status: AssignmentStatus.received,
+      updatedAt: DateTime.utc(2026, 1, 1),
+    ));
+
+    final recovered = await journal.recoverAfterRestart();
+    expect(
+        recovered['assignment-running']!.status, AssignmentStatus.interrupted);
+    expect(recovered['assignment-running']!.result?['recoveryState'],
+        'outcome_unknown');
+    expect(recovered['assignment-received']!.result?['recoveryState'],
+        'not_started');
+    final recoveredAgain = await journal.recoverAfterRestart();
+    expect(
+        recoveredAgain.values
+            .where((record) => record.status == AssignmentStatus.interrupted)
+            .length,
+        2);
+    await directory.delete(recursive: true);
+  });
 }

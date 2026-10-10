@@ -338,6 +338,17 @@ class WorkspaceCloudConnection {
 
   Future<void> refreshWorkerInventory() => _reportCurrentWorkerInventory();
   List<String> get activeAssignmentIds => _activeAssignments.toList()..sort();
+
+  Future<bool> cancelActiveAssignment(
+    String assignmentId, {
+    String reason = 'Cancelled by Workspace user',
+  }) async {
+    if (!_activeAssignments.contains(assignmentId)) return false;
+    final cancel = assignmentCancellationHandler;
+    if (cancel == null) return false;
+    return cancel(assignmentId, reason);
+  }
+
   int _messageSequence = 0;
   int _heartbeatCount = 0;
   Map<String, Object?>? syncResponse;
@@ -1060,8 +1071,10 @@ class WorkspaceCloudConnection {
             'status': 'completed',
             'summary':
                 record.result?['summary'] ?? 'Recovered assignment result',
-            'output': null,
+            'output': record.result?['output'],
             'artifactIds': record.result?['artifactIds'] ?? const [],
+            if (record.result?['evidence'] is Map)
+              'evidence': record.result?['evidence'],
           },
         )));
       } else if (record.status == AssignmentStatus.failed) {

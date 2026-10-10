@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
-import 'package:flutter/foundation.dart';
 
 /// Explicit local-only draft execution. It never creates a signed admission.
 class DevelopmentToolProfiles {
@@ -10,10 +9,9 @@ class DevelopmentToolProfiles {
     required this.draftsRoot,
     required this.snapshotsRoot,
     required Uri cloudUri,
-    bool releaseBuild = kReleaseMode,
+    bool releaseBuild = const bool.fromEnvironment('dart.vm.product'),
   }) {
-    if (kReleaseMode ||
-        releaseBuild ||
+    if (releaseBuild ||
         !const {'http', 'https'}.contains(cloudUri.scheme) ||
         !const {'localhost', '127.0.0.1', '::1'}.contains(cloudUri.host) ||
         cloudUri.userInfo.isNotEmpty) {

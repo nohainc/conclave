@@ -6,6 +6,25 @@ import 'dart:io';
 class WorkerProcessCleanup {
   const WorkerProcessCleanup();
 
+  /// Stops an orphaned process tree when its former service parent crashed.
+  /// The caller must verify the PID's executable and ownership before calling.
+  Future<void> terminateOrphanedPid(int pid) async {
+    if (Platform.isWindows) {
+      await Process.run('taskkill', ['/PID', '$pid', '/T', '/F']);
+      return;
+    }
+    final descendants = await _descendantsOf(pid);
+    for (final child in descendants) {
+      Process.killPid(child, ProcessSignal.sigterm);
+    }
+    Process.killPid(pid, ProcessSignal.sigterm);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    for (final child in descendants) {
+      Process.killPid(child, ProcessSignal.sigkill);
+    }
+    Process.killPid(pid, ProcessSignal.sigkill);
+  }
+
   Future<void> terminateTree(Process process, {required bool force}) async {
     if (Platform.isWindows) {
       await Process.run('taskkill', [

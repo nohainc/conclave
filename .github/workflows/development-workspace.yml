@@ -15,6 +15,8 @@ on:
       - "packages/conclave_cli_worker_runtime/**"
       - "engines/cli_worker/**"
       - "scripts/check-flutter-app.sh"
+      - "scripts/check-workspace-service.sh"
+      - "scripts/run-workspace-service.sh"
       - "scripts/build-cli-worker-engine.sh"
       - ".github/workflows/development-workspace.yml"
   pull_request:
@@ -30,6 +32,8 @@ on:
       - "packages/conclave_cli_worker_runtime/**"
       - "engines/cli_worker/**"
       - "scripts/check-flutter-app.sh"
+      - "scripts/check-workspace-service.sh"
+      - "scripts/run-workspace-service.sh"
       - "scripts/build-cli-worker-engine.sh"
       - ".github/workflows/development-workspace.yml"
 

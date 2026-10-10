@@ -1,26 +1,25 @@
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/services.dart';
 
 import 'cli_worker_engine_supervisor.dart' show cliWorkerEngineVersion;
 import 'platform_runtime.dart';
 
+typedef WorkspaceEngineAssetLoader = Future<List<int>?> Function(String name);
+
 /// Materializes the app-bundled generic Engine as an isolated local program.
 Future<File?> loadBundledCliWorkerEngine({
   required Directory enginesDirectory,
-  AssetBundle? bundle,
+  WorkspaceEngineAssetLoader? assetLoader,
   PlatformRuntime? platform,
 }) async {
   final runtime = platform ?? currentPlatformRuntime;
-  final assetName = Platform.isWindows
+  final engineName = Platform.isWindows
       ? 'assets/engines/conclave_cli_worker_engine.exe'
       : 'assets/engines/conclave_cli_worker_engine';
-  final assets = bundle ?? rootBundle;
   try {
-    final data = await assets.load(assetName);
-    final bytes =
-        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    final bytes = await (assetLoader ?? _loadDefaultEngineAsset)(engineName);
+    if (bytes == null) return null;
     if (bytes.isEmpty || bytes.length > 128 * 1024 * 1024) return null;
     final digest = sha256.convert(bytes).toString();
     final versionDirectory = Directory(
@@ -50,4 +49,43 @@ Future<File?> loadBundledCliWorkerEngine({
   } on Object {
     return null;
   }
+}
+
+Future<List<int>?> _loadDefaultEngineAsset(String assetName) async {
+  final bundle = _defaultBundleDirectory();
+  if (bundle == null) return null;
+  final source = File(
+    '${bundle.path}${Platform.pathSeparator}'
+    '${assetName.replaceAll('/', Platform.pathSeparator)}',
+  );
+  if (!await source.exists()) return null;
+  return source.readAsBytes();
+}
+
+Directory? _defaultBundleDirectory() {
+  final configured = Platform.environment['CONCLAVE_WORKSPACE_BUNDLE_DIR'];
+  if (configured != null && configured.trim().isNotEmpty) {
+    return Directory(configured);
+  }
+  final executable = File(Platform.resolvedExecutable).absolute;
+  final candidates = <Directory>[
+    Directory.current,
+    executable.parent,
+    executable.parent.parent,
+    Directory(
+      '${executable.parent.parent.path}${Platform.pathSeparator}'
+      'Frameworks${Platform.pathSeparator}App.framework${Platform.pathSeparator}'
+      'Resources${Platform.pathSeparator}flutter_assets',
+    ),
+  ];
+  for (final directory in candidates) {
+    if (File(
+      '${directory.path}${Platform.pathSeparator}assets'
+      '${Platform.pathSeparator}engines${Platform.pathSeparator}'
+      'conclave_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
+    ).existsSync()) {
+      return directory;
+    }
+  }
+  return null;
 }

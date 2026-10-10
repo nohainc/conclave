@@ -1009,7 +1009,9 @@ void main() {
         expect(context.runId, 'run-1');
         expect(context.taskId, 'task-1');
         return const WorkspaceAssignmentResult(
-            summary: 'completed by workspace');
+          summary: 'completed by workspace',
+          output: {'text': 'durable result payload'},
+        );
       },
       assignmentJournal: journal,
     );
@@ -1060,6 +1062,8 @@ void main() {
         'completed by workspace');
     final records = await journal.reconcile();
     expect(records['assignment-1']!.status, AssignmentStatus.completed);
+    expect((records['assignment-1']!.result?['output'] as Map)['text'],
+        'durable result payload');
     await connection.close();
     await directory.delete(recursive: true);
   });
@@ -1251,7 +1255,11 @@ void main() {
       taskId: 'task-1',
       attemptId: 'attempt-1',
       idempotencyKey: 'idem-1',
-      result: {'summary': 'recovered', 'artifactIds': <String>[]},
+      result: {
+        'summary': 'recovered',
+        'output': {'text': 'saved output'},
+        'artifactIds': <String>[],
+      },
     ));
     final connection = WorkspaceCloudConnection(
       uri: Uri.parse(
@@ -1297,6 +1305,9 @@ void main() {
         .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
         .firstWhere((message) => message['type'] == 'assignment.result');
     expect((replay['payload'] as Map<String, dynamic>)['summary'], 'recovered');
+    expect(
+        ((replay['payload'] as Map<String, dynamic>)['output'] as Map)['text'],
+        'saved output');
     expect(
       (await journal.reconcile())['assignment-1']!.status,
       AssignmentStatus.reconciled,

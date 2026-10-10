@@ -21,8 +21,20 @@ mixin _AuthApi on _AxApiClientCore {
 
   @override
   Future<List<int>?> loadAvatar({required String url}) async {
-    final response = await client.get(Uri.parse(url), headers: _headers());
-    if (response.statusCode == 404 || response.statusCode == 401) return null;
+    final supplied = Uri.parse(url);
+    // Private avatar URLs may carry the Cloud origin behind a web proxy.
+    // Fetch through the same API origin as the authenticated session.
+    final privateAvatar = supplied.path.startsWith('/api/users/') &&
+        supplied.path.endsWith('/avatar');
+    final target = privateAvatar
+        ? Uri.parse('$baseUrl/').resolve(
+            'users/${supplied.path.split('/')[3]}/avatar${supplied.hasQuery ? '?${supplied.query}' : ''}')
+        : supplied;
+    final response = await client.get(target, headers: {
+      ..._headers(),
+      'accept': 'image/*',
+    });
+    if (response.statusCode == 404) return null;
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AxApiException('Avatar lookup failed (${response.statusCode})',
           statusCode: response.statusCode);

@@ -3,6 +3,59 @@ import FlutterMacOS
 import ServiceManagement
 import LocalAuthentication
 
+private enum WorkspaceBackgroundService {
+  static let launchAgentPlist = "com.conclaveax.workspace.service.plist"
+  static let helperRelativePath = "Contents/Helpers/conclave-workspace-service"
+
+  @available(macOS 13.0, *)
+  static var service: SMAppService {
+    SMAppService.agent(plistName: launchAgentPlist)
+  }
+
+  static func status() -> [String: Any] {
+    guard #available(macOS 13.0, *) else {
+      return ["supported": false, "registration": "unsupported"]
+    }
+    let helperURL = Bundle.main.bundleURL.appendingPathComponent(helperRelativePath)
+    let plistURL = Bundle.main.bundleURL
+      .appendingPathComponent("Contents/Library/LaunchAgents")
+      .appendingPathComponent(launchAgentPlist)
+    guard FileManager.default.isExecutableFile(atPath: helperURL.path),
+          FileManager.default.fileExists(atPath: plistURL.path) else {
+      return [
+        "supported": true,
+        "registration": "serviceMissing",
+        "running": false,
+        "helperPresent": FileManager.default.isExecutableFile(atPath: helperURL.path),
+        "plistPresent": FileManager.default.fileExists(atPath: plistURL.path),
+      ]
+    }
+    let registration: String
+    switch service.status {
+    case .enabled:
+      registration = "registered"
+    case .requiresApproval:
+      registration = "approvalRequired"
+    case .notRegistered:
+      registration = "notRegistered"
+    case .notFound:
+      registration = "serviceMissing"
+    @unknown default:
+      registration = "unknown"
+    }
+    // SMAppService reports registration/approval, not whether launchd has
+    // started the process. Keep that distinction explicit for the UI.
+    return [
+      "supported": true,
+      "registration": registration,
+      "running": NSNull(),
+      "runningStatus": "checkIpc",
+      "helperPresent": true,
+      "plistPresent": true,
+    ]
+  }
+}
+
 func observeWorkspaceScreenLock(
   center: DistributedNotificationCenter = .default(),
   notificationName: Notification.Name = Notification.Name("com.apple.screenIsLocked"),
@@ -121,6 +174,46 @@ class AppDelegate: FlutterAppDelegate {
         } catch {
           result(FlutterError(code: "launch_at_login_failed", message: error.localizedDescription, details: nil))
         }
+      case "getServiceStatus":
+        result(WorkspaceBackgroundService.status())
+      case "registerService":
+        guard #available(macOS 13.0, *) else {
+          result(FlutterError(code: "unsupported_os", message: "The background service requires macOS 13 or later.", details: nil))
+          return
+        }
+        let helperURL = Bundle.main.bundleURL.appendingPathComponent(WorkspaceBackgroundService.helperRelativePath)
+        guard FileManager.default.isExecutableFile(atPath: helperURL.path) else {
+          result(FlutterError(code: "service_missing", message: "The Workspace background service is missing from this app installation.", details: helperURL.path))
+          return
+        }
+        do {
+          if WorkspaceBackgroundService.service.status != .enabled {
+            try WorkspaceBackgroundService.service.register()
+          }
+          result(WorkspaceBackgroundService.status())
+        } catch {
+          result(FlutterError(code: "service_registration_failed", message: error.localizedDescription, details: WorkspaceBackgroundService.status()))
+        }
+      case "unregisterService":
+        guard #available(macOS 13.0, *) else {
+          result(FlutterError(code: "unsupported_os", message: "The background service requires macOS 13 or later.", details: nil))
+          return
+        }
+        do {
+          if WorkspaceBackgroundService.service.status != .notRegistered {
+            try WorkspaceBackgroundService.service.unregister()
+          }
+          result(WorkspaceBackgroundService.status())
+        } catch {
+          result(FlutterError(code: "service_unregistration_failed", message: error.localizedDescription, details: WorkspaceBackgroundService.status()))
+        }
+      case "openLoginItemsSettings":
+        guard #available(macOS 13.0, *) else {
+          result(FlutterError(code: "unsupported_os", message: "Login Items settings require macOS 13 or later.", details: nil))
+          return
+        }
+        SMAppService.openSystemSettingsLoginItems()
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }

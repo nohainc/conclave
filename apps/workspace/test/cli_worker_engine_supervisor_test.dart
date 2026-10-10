@@ -9,6 +9,45 @@ import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('reaps only registered Engine processes after restart', () async {
+    if (Platform.isWindows) return;
+    final root = await Directory.systemTemp.createTemp('engine-recovery-');
+    addTearDown(() => root.delete(recursive: true));
+    try {
+      final psProbe = await Process.run('ps', ['-p', '1', '-o', 'pid=']);
+      if (psProbe.exitCode != 0) return;
+    } on ProcessException {
+      return;
+    }
+    final state = Directory('${root.path}/worker-state');
+    await state.create();
+    final process = await Process.start(
+      '/bin/sh',
+      [
+        '-c',
+        'sleep 30',
+        'conclave-engine-test',
+        '--state-directory',
+        state.path
+      ],
+    );
+    final registry = Directory('${root.path}/runtime');
+    await registry.create();
+    await File('${registry.path}/assignment.worker-process.json')
+        .writeAsString(jsonEncode({
+      'pid': process.pid,
+      'executable': File('/bin/sh').absolute.path,
+      'stateDirectory': state.path,
+    }));
+    final supervisor = CliWorkerEngineSupervisor(
+      engineExecutable: '/bin/sh',
+      processRegistryDirectory: registry,
+    );
+
+    expect(await supervisor.recoverOrphanedProcesses(), 1);
+    await process.exitCode.timeout(const Duration(seconds: 2));
+  });
+
   test('serializes Engine assignments at the local Worker limit', () async {
     final setup = await _setup();
     addTearDown(() => setup.root.delete(recursive: true));

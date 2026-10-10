@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:conclave_workspace/bundled_cli_worker_engine_loader.dart';
 import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
-import 'package:flutter/services.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -10,11 +9,11 @@ void main() {
       () async {
     final root = await Directory.systemTemp.createTemp('engine-bundle-test-');
     addTearDown(() => root.delete(recursive: true));
-    final bytes = Uint8List.fromList([1, 2, 3, 4, 5]);
+    final List<int> bytes = [1, 2, 3, 4, 5];
 
     final executable = await loadBundledCliWorkerEngine(
       enginesDirectory: root,
-      bundle: _BytesAssetBundle(bytes),
+      assetLoader: (_) async => bytes,
     );
 
     expect(executable, isNotNull);
@@ -27,19 +26,19 @@ void main() {
       () async {
     final root = await Directory.systemTemp.createTemp('engine-repair-test-');
     addTearDown(() => root.delete(recursive: true));
-    final bytes = Uint8List.fromList([11, 22, 33, 44]);
-    final bundle = _BytesAssetBundle(bytes);
+    final List<int> bytes = [11, 22, 33, 44];
+    Future<List<int>?> assetLoader(String _) async => bytes;
 
     final first = await loadBundledCliWorkerEngine(
       enginesDirectory: root,
-      bundle: bundle,
+      assetLoader: assetLoader,
     );
     expect(first, isNotNull);
     await first!.writeAsBytes([99]);
 
     final repaired = await loadBundledCliWorkerEngine(
       enginesDirectory: root,
-      bundle: bundle,
+      assetLoader: assetLoader,
     );
 
     expect(repaired?.path, first.path);
@@ -52,24 +51,10 @@ void main() {
 
     final executable = await loadBundledCliWorkerEngine(
       enginesDirectory: root,
-      bundle: _MissingAssetBundle(),
+      assetLoader: (_) async => null,
     );
 
     expect(executable, isNull);
     expect(await root.list(recursive: true).toList(), isEmpty);
   });
-}
-
-final class _BytesAssetBundle extends CachingAssetBundle {
-  _BytesAssetBundle(this.bytes);
-
-  final Uint8List bytes;
-
-  @override
-  Future<ByteData> load(String key) async => ByteData.sublistView(bytes);
-}
-
-final class _MissingAssetBundle extends CachingAssetBundle {
-  @override
-  Future<ByteData> load(String key) async => throw StateError('missing');
 }

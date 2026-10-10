@@ -6,6 +6,7 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'platform_process_supervisor.dart';
+import 'worker_process_cleanup.dart';
 
 const cliWorkerEngineVersion = '1.0.0';
 
@@ -16,6 +17,7 @@ final class CliWorkerEngineSupervisor {
     required this.engineExecutable,
     this.engineArgumentsPrefix = const [],
     this.environmentOverrides = const {},
+    this.processRegistryDirectory,
     PlatformProcessSupervisor? platformRuntime,
     this.maxFrameBytes = WorkerProtocolLimits.maxFrameBytes,
     this.maxStderrBytes = 64 * 1024,
@@ -24,6 +26,7 @@ final class CliWorkerEngineSupervisor {
   final String engineExecutable;
   final List<String> engineArgumentsPrefix;
   final Map<String, String> environmentOverrides;
+  final Directory? processRegistryDirectory;
   final PlatformProcessSupervisor _platformRuntime;
   final int maxFrameBytes;
   final int maxStderrBytes;
@@ -35,6 +38,64 @@ final class CliWorkerEngineSupervisor {
   final Map<String, _QueuedEngineAssignment> _queuedAssignments = {};
   final Set<String> _reservedAssignmentIds = {};
   final Set<String> _cancelledAssignments = {};
+
+  /// Reaps Engine processes left behind if the owning Workspace Service died.
+  /// A PID is acted on only when its command line still identifies this exact
+  /// bundled Engine and its private state directory.
+  Future<int> recoverOrphanedProcesses() async {
+    final directory = processRegistryDirectory;
+    if (directory == null || !await directory.exists()) return 0;
+    if (Platform.isWindows) return 0;
+    try {
+      final probe = await Process.run('ps', ['-p', '1', '-o', 'pid=']);
+      if (probe.exitCode != 0) return 0;
+    } on ProcessException {
+      return 0;
+    }
+    var reaped = 0;
+    for (final entity in await directory.list(followLinks: false).toList()) {
+      if (entity is! File || !entity.path.endsWith('.worker-process.json')) {
+        continue;
+      }
+      try {
+        final decoded = jsonDecode(await entity.readAsString());
+        if (decoded is! Map) throw const FormatException('invalid record');
+        final record = Map<String, Object?>.from(decoded);
+        final pid = record['pid'];
+        final executable = record['executable'];
+        final stateDirectory = record['stateDirectory'];
+        if (pid is! int ||
+            pid <= 1 ||
+            executable != File(engineExecutable).absolute.path ||
+            stateDirectory is! String) {
+          throw const FormatException('invalid process identity');
+        }
+        final processInfo = await Process.run('ps', [
+          '-p',
+          '$pid',
+          '-o',
+          'command=',
+        ]);
+        final command = processInfo.exitCode == 0
+            ? processInfo.stdout.toString().trimLeft()
+            : '';
+        if (command.isNotEmpty &&
+            command.startsWith('$executable ') &&
+            command.contains(stateDirectory)) {
+          await const WorkerProcessCleanup().terminateOrphanedPid(pid);
+          reaped++;
+        }
+      } on Object {
+        // Stale, malformed, or reused PIDs are discarded without signaling.
+      }
+      try {
+        await entity.delete();
+      } on FileSystemException {
+        // A later startup will retry the bounded cleanup.
+      }
+    }
+    return reaped;
+  }
 
   Future<ProbeResult> probe(
     ToolProfileCandidate release, {
@@ -58,6 +119,7 @@ final class CliWorkerEngineSupervisor {
     await stateDirectory.create(recursive: true);
     final timer = Stopwatch()..start();
     Process? process;
+    File? processRecord;
     CliEngineChannel? channel;
     var stopped = false;
     try {
@@ -73,8 +135,13 @@ final class CliWorkerEngineSupervisor {
           stateDirectory.path,
         ],
         workingDirectory: stateDirectory.path,
-        environment: environmentOverrides,
-        includeParentEnvironment: true,
+        environment: _engineEnvironment(),
+        includeParentEnvironment: false,
+      );
+      processRecord = await _writeProcessRecord(
+        process,
+        assignmentId: 'probe-${DateTime.now().microsecondsSinceEpoch}',
+        stateDirectory: stateDirectory,
       );
       channel = CliEngineChannel(
         process,
@@ -145,6 +212,7 @@ final class CliWorkerEngineSupervisor {
       if (process != null && !stopped) {
         await _platformRuntime.terminateProcessTree(process, force: true);
       }
+      await _deleteProcessRecord(processRecord);
       await channel?.dispose();
     }
   }
@@ -202,6 +270,7 @@ final class CliWorkerEngineSupervisor {
     await _acquireSlot(workerId, assignmentId, maxConcurrentAssignments);
     final timer = Stopwatch()..start();
     Process? process;
+    File? processRecord;
     CliEngineChannel? channel;
     var stopped = false;
     try {
@@ -220,8 +289,13 @@ final class CliWorkerEngineSupervisor {
           stateDirectory.path,
         ],
         workingDirectory: workingDirectory.path,
-        environment: environmentOverrides,
-        includeParentEnvironment: true,
+        environment: _engineEnvironment(),
+        includeParentEnvironment: false,
+      );
+      processRecord = await _writeProcessRecord(
+        process,
+        assignmentId: assignmentId,
+        stateDirectory: stateDirectory,
       );
       _activeAssignments[assignmentId] = process;
       _activeWorkerByAssignment[assignmentId] = workerId;
@@ -333,6 +407,7 @@ final class CliWorkerEngineSupervisor {
       if (process != null && !stopped) {
         await _platformRuntime.terminateProcessTree(process, force: true);
       }
+      await _deleteProcessRecord(processRecord);
       await channel?.dispose();
     }
   }
@@ -434,6 +509,59 @@ final class CliWorkerEngineSupervisor {
     if (raw is! List || raw.length != values.length) return false;
     return values.toSet().length == values.length &&
         values.toSet().containsAll(raw.whereType<String>());
+  }
+
+  Future<File?> _writeProcessRecord(
+    Process process, {
+    required String assignmentId,
+    required Directory stateDirectory,
+  }) async {
+    final directory = processRegistryDirectory;
+    if (directory == null) return null;
+    await directory.create(recursive: true);
+    final safeId = base64Url
+        .encode(utf8.encode(assignmentId))
+        .replaceAll('=', '');
+    final file = File('${directory.path}/$safeId.worker-process.json');
+    await file.writeAsString(
+      jsonEncode({
+        'pid': process.pid,
+        'executable': File(engineExecutable).absolute.path,
+        'stateDirectory': stateDirectory.absolute.path,
+      }),
+      flush: true,
+    );
+    return file;
+  }
+
+  Future<void> _deleteProcessRecord(File? file) async {
+    if (file == null) return;
+    try {
+      if (await file.exists()) await file.delete();
+    } on FileSystemException {
+      // Leave stale records for safe startup validation and cleanup.
+    }
+  }
+
+  Map<String, String> _engineEnvironment() {
+    const inheritedKeys = {
+      'HOME',
+      'PATH',
+      'TMPDIR',
+      'TMP',
+      'TEMP',
+      'LANG',
+      'LC_ALL',
+      'LC_CTYPE',
+      'XDG_CONFIG_HOME',
+      'USERPROFILE',
+      'SystemRoot',
+    };
+    return {
+      for (final key in inheritedKeys)
+        if (Platform.environment[key] case final value?) key: value,
+      ...environmentOverrides,
+    };
   }
 }
 

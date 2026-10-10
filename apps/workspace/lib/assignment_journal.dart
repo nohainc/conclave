@@ -107,11 +107,56 @@ class AssignmentRecord {
 class AssignmentJournal {
   AssignmentJournal(this.file);
   final File file;
+  Future<void> _writeQueue = Future<void>.value();
 
-  Future<void> append(AssignmentRecord record) async {
-    await file.parent.create(recursive: true);
-    await file.writeAsString('${jsonEncode(record.toJson())}\n',
-        mode: FileMode.append, flush: true);
+  Future<void> append(AssignmentRecord record) {
+    final next = _writeQueue.then((_) async {
+      await file.parent.create(recursive: true);
+      await file.writeAsString('${jsonEncode(record.toJson())}\n',
+          mode: FileMode.append, flush: true);
+    });
+    _writeQueue = next.catchError((Object _) {});
+    return next;
+  }
+
+  /// Marks work owned by a previous service process as interrupted.
+  ///
+  /// A journal entry in `received` proves execution had not started. Any later
+  /// non-terminal state has an uncertain outcome and must never be replayed.
+  Future<Map<String, AssignmentRecord>> recoverAfterRestart() async {
+    await _writeQueue;
+    final records = await reconcile();
+    for (final record in records.values) {
+      if (!const {
+        AssignmentStatus.received,
+        AssignmentStatus.accepted,
+        AssignmentStatus.running,
+        AssignmentStatus.cancelling,
+      }.contains(record.status)) {
+        continue;
+      }
+      final recoveryState = record.status == AssignmentStatus.received
+          ? 'not_started'
+          : 'outcome_unknown';
+      await append(AssignmentRecord(
+        assignmentId: record.assignmentId,
+        status: AssignmentStatus.interrupted,
+        updatedAt: DateTime.now().toUtc(),
+        workspaceId: record.workspaceId,
+        workspaceRuntimeId: record.workspaceRuntimeId,
+        workerId: record.workerId,
+        runId: record.runId,
+        taskId: record.taskId,
+        attemptId: record.attemptId,
+        idempotencyKey: record.idempotencyKey,
+        result: {
+          ...?record.result,
+          'recoveryState': recoveryState,
+          'interruptedAt': DateTime.now().toUtc().toIso8601String(),
+        },
+      ));
+    }
+    return reconcile();
   }
 
   Future<Map<String, AssignmentRecord>> reconcile() async {

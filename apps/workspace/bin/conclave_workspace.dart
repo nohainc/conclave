@@ -1,9 +1,3 @@
-import 'package:conclave_workspace/workspace.dart';
-import 'package:conclave_workspace/workspace_runtime.dart';
+import 'conclave_workspace_service.dart' as service;
 
-Future<void> main(List<String> args) async {
-  final config = WorkspaceConfig.fromArgs(args);
-  final engine = await buildWorkspaceRuntime(config, restartArgs: args);
-  await engine.start();
-  if (args.contains('--once')) await engine.stop();
-}
+Future<void> main(List<String> args) => service.main(args);

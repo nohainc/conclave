@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
     show SafeProviderDiagnostics;
 
@@ -12,6 +11,7 @@ import 'tool_profile_release_verifier.dart';
 import 'tool_profile_resolver.dart';
 import 'worker_inventory_projection.dart';
 import 'workspace_worker_view.dart';
+import 'workspace_notifier.dart';
 
 class WorkerCatalogSnapshot {
   const WorkerCatalogSnapshot({
@@ -36,7 +36,7 @@ class WorkerCatalogSnapshot {
 }
 
 /// Owns the Workspace catalog -> Profile -> readiness synchronization pipeline.
-class WorkerCatalogCoordinator extends ChangeNotifier {
+class WorkerCatalogCoordinator extends WorkspaceNotifier {
   WorkerCatalogCoordinator({
     required this.catalog,
     required this.releaseStore,

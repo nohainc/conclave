@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'development_tool_profiles.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -98,7 +97,7 @@ Future<Workspace> buildWorkspaceRuntime(
       snapshotsRoot: Directory(
           '${config.dataDirectory.absolute.path}/development_profiles'),
       cloudUri: cloudUri,
-      releaseBuild: kReleaseMode,
+      releaseBuild: const bool.fromEnvironment('dart.vm.product'),
     );
   }
   final toolProfileReleaseStore = ToolProfileReleaseStore(
@@ -111,7 +110,10 @@ Future<Workspace> buildWorkspaceRuntime(
   );
   cliWorkerEngineSupervisor = bundledEngine == null
       ? null
-      : CliWorkerEngineSupervisor(engineExecutable: bundledEngine.path);
+      : CliWorkerEngineSupervisor(
+          engineExecutable: bundledEngine.path,
+          processRegistryDirectory: workspacePaths.runtimeDirectory,
+        );
   late final WorkerReadinessMonitor readinessMonitor;
   final toolProfileCatalog = config.cloudUri == null
       ? null
@@ -423,6 +425,8 @@ Future<Workspace> buildWorkspaceRuntime(
     workerShutdownHandler: () async {
       await cliWorkerEngineSupervisor?.shutdown();
     },
+    workerRecoveryHandler: () async =>
+        await cliWorkerEngineSupervisor?.recoverOrphanedProcesses() ?? 0,
     cloudConnection: connection,
     toolProfileReleaseStore: toolProfileReleaseStore,
     toolProfileCatalog: toolProfileCatalog,

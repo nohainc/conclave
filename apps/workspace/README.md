@@ -58,6 +58,32 @@ The Workspace release workflow uses the Workspace signing key and public trust
 roots. The generic Engine is bundled with Workspace; provider-specific Worker
 package signing and publishing workflows have been retired.
 
+## Headless Workspace service
+
+The Workspace runtime has a standalone Dart service entry point at
+`bin/conclave_workspace_service.dart`. It uses the existing Cloud and local
+Worker protocols and does not import Flutter APIs. Build it with
+`bash scripts/build-workspace-service.sh`; the resulting executable and its
+generic CLI Worker Engine are placed under `dist/conclave-workspace/service/`.
+The service can be run without starting the Flutter application and maintains
+separate process, Cloud-connection, and execution state in
+`workspace-state.json`.
+
+The service exposes a versioned, authenticated local IPC protocol for status,
+connection, Worker, assignment, log, and diagnostics commands. Service restart
+and shutdown remain host-manager operations. The desktop management shell
+still starts its own in-process runtime and has not yet been converted to a
+local service-protocol client. See the
+[Phase 1 service boundary audit](../../docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_1.md)
+for the current command surface, ownership map, and remaining handoff.
+
+For development, `scripts/run-workspace-service.sh` runs the headless process
+against the existing local configuration without building the Flutter app.
+`scripts/check-workspace-service.sh` compiles it and runs a one-shot lifecycle
+in temporary directories; the Workspace CI validation invokes the same check.
+Do not run the service and the Flutter-owned runtime with the same installation
+identity at the same time; the installation lock rejects the second process.
+
 ## Desktop development and macOS build
 
 Conclave Workspace is the native desktop product. The Flutter GUI and the
@@ -65,6 +91,13 @@ headless entrypoint share the same runtime composition in
 `lib/workspace_runtime.dart`.
 
 The current macOS release target requires macOS 12 or newer.
+
+The package embeds the standalone service helper, its generic Engine, and an
+`SMAppService` LaunchAgent manifest. Background registration requires macOS 13
+or newer. A macOS 12 installation remains able to run Workspace in the UI but
+cannot register the LaunchAgent. See the
+[Phase 3 macOS service integration notes](../../docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_3.md)
+for the bundle contract, status semantics, and signed-device validation.
 
 Build a local macOS Workspace app from repository root:
 
@@ -120,6 +153,12 @@ Workspace verifies installation ownership, registers or recovers through
 `POST /api/workspace-runtime/register`, and then connects to the Workspace
 Gateway using its runtime credential. Disconnect and ownership release use the
 desktop human session.
+
+The service journals assignment outcomes and classifies interrupted work on
+startup before accepting new work. See the
+[runtime recovery contract](../../docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_4.md)
+for recovery states, process cleanup, logging, and current Cloud reconciliation
+limits.
 
 ## First-party Worker v1 contract
 

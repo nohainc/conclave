@@ -114,14 +114,57 @@ if [[ ! -d "$APP" ]]; then
   exit 1
 fi
 
+# Embed the standalone Dart runtime after Flutter assembles the UI app. The
+# helper loads its Worker Engine from its adjacent assets directory, so neither
+# process depends on the current working directory or a shell profile.
+FLUTTER_EXE="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$(command -v flutter)")"
+FLUTTER_ROOT="$(cd "$(dirname "$FLUTTER_EXE")/.." && pwd)"
+DART="$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart"
+if [[ ! -x "$DART" ]]; then
+  command -v dart >/dev/null 2>&1 || {
+    echo "Dart is required to compile the Workspace service." >&2
+    exit 1
+  }
+  DART="$(command -v dart)"
+fi
+HELPERS_DIR="$APP/Contents/Helpers"
+LAUNCH_AGENTS_DIR="$APP/Contents/Library/LaunchAgents"
+mkdir -p "$HELPERS_DIR/assets/engines" "$LAUNCH_AGENTS_DIR"
+"$DART" compile exe \
+  --packages="$WORKSPACE_DIR/.dart_tool/package_config.json" \
+  "$WORKSPACE_DIR/bin/conclave_workspace_service.dart" \
+  -o "$HELPERS_DIR/conclave-workspace-service"
+ENGINE="$WORKSPACE_DIR/assets/engines/conclave_cli_worker_engine"
+if [[ ! -x "$ENGINE" ]]; then
+  echo "The generic CLI Worker Engine is missing: $ENGINE" >&2
+  exit 1
+fi
+cp "$ENGINE" "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
+chmod 755 "$HELPERS_DIR/conclave-workspace-service" \
+  "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
+cp "$WORKSPACE_DIR/macos/Runner/LaunchAgents/com.conclaveax.workspace.service.plist" \
+  "$LAUNCH_AGENTS_DIR/com.conclaveax.workspace.service.plist"
+
 if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
   echo "Signing with configured Developer ID identity"
+  codesign --force --options runtime --timestamp \
+    --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" \
+    "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
+  codesign --force --options runtime --timestamp \
+    --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" \
+    "$HELPERS_DIR/conclave-workspace-service"
   codesign --force --deep --options runtime --timestamp \
     --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" "$APP"
   codesign --verify --deep --strict --verbose=2 "$APP"
 else
-  echo "CONCLAVE_MACOS_SIGN_IDENTITY is not set; producing an unsigned development artifact."
+  echo "CONCLAVE_MACOS_SIGN_IDENTITY is not set; sealing the development bundle with ad-hoc signatures."
+  codesign --force --sign - \
+    "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
+  codesign --force --sign - "$HELPERS_DIR/conclave-workspace-service"
+  codesign --force --deep --sign - "$APP"
 fi
+
+bash "$ROOT/scripts/verify-workspace-service-bundle.sh" "$APP"
 
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"

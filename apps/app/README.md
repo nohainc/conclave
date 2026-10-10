@@ -7,6 +7,11 @@ Work remains the execution surface.
 Logout sends an authenticated JSON request and clears the local session token
 after Cloud confirms success. Failed logout retains the session for retry.
 
+Private account avatars load through AX's configured authenticated API origin,
+including when Cloud returns an absolute URL behind a web proxy. A successful
+upload displays the selected bytes immediately while the stored image is read
+back; read failures are reported without clearing that preview.
+
 AX's shared `ConclaveMarkdownBody` renders authored content as explicit GitHub
 Flavored Markdown with selectable text and soft line breaks. Its theme-derived
 style sheet covers headings, emphasis, code, quotes, lists, read-only task lists,

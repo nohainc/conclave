@@ -20,6 +20,7 @@ import 'workspace_registration.dart';
 import 'workspace_runtime.dart';
 import 'workspace_lifecycle_store.dart';
 import 'workspace_lifecycle.dart';
+import 'workspace_service_management_flutter.dart';
 import 'local_management_authenticator.dart';
 import 'copyable_messages.dart';
 import 'cli_worker_engine_supervisor.dart';

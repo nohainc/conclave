@@ -53,5 +53,33 @@ Every implementation task must report:
 - Avoid premature infrastructure: add Durable Objects, Queues, vector databases, or extra providers only when a concrete requirement exists.
 - Update documentation whenever architecture, data model, protocol, workflow behavior, security, or public API changes.
 
+## Workspace Service transition
+
+- The target is one headless Dart Workspace Service owning Cloud connectivity,
+  assignment scheduling, Worker Engine processes, sessions, and runtime state;
+  Flutter Workspace is its management client over the versioned local IPC
+  protocol.
+- Until the Flutter-to-service ownership handoff is verified, do not remove or
+  disable the existing UI runtime path or enable both owners concurrently.
+  Preserve the per-installation lock as the final duplicate-owner guard.
+- Migrations must preserve the existing installation ID, Cloud Workspace and
+  runtime IDs, secure runtime credential, Work Root, Worker registry, Profiles,
+  Engine files, and sessions. Do not create a replacement Cloud Workspace as a
+  migration shortcut. On uncertain migration state, preserve files and stop
+  activation with a recoverable error.
+- Keep the CLI Worker Engine as a separately supervised child. Runtime-owned
+  state belongs under Application Support; user work remains under Work Root.
+- Keep service registration behind `WorkspaceServiceManager`. Put launchd,
+  Service Control Manager/systemd, native IPC, and platform secret-store details
+  in platform adapters; the shared Dart runtime must not import Apple
+  frameworks. Windows/Linux service adapters are not in scope until separately
+  requested, with Windows user-session and CLI-credential ownership decided.
+- For Workspace Service changes, run focused service/runtime tests and
+  `scripts/check-workspace-service.sh`; run the Workspace and direct Worker
+  Engine component validations when the environment permits. macOS launchd,
+  signing, Keychain, and TCC claims require device or release-build evidence.
+- Phase 1–5 implementation status and remaining release gates are tracked in
+  [Workspace Runtime Service phase documentation](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_5.md).
+
 ## Review principle
 Implementation and verification should be independent when practical. A worker must not be considered verified solely because it reviewed its own output.

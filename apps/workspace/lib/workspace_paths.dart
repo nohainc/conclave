@@ -91,6 +91,11 @@ class WorkspacePaths {
   Directory get enginesDirectory =>
       Directory('${applicationSupportDirectory.path}/Engines');
 
+  /// Service process state, local IPC endpoint, and other private runtime
+  /// coordination metadata. No user work files belong below this directory.
+  Directory get runtimeDirectory =>
+      Directory('${stateDirectory.path}${Platform.pathSeparator}runtime');
+
   /// Private metadata that binds user-visible Space directories to Space IDs.
   Directory get spaceDirectoryRegistryDirectory =>
       Directory('${applicationSupportDirectory.path}/Registry');

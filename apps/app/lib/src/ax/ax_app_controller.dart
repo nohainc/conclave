@@ -887,7 +887,7 @@ extension _AxAppController on _AxAppStateMixin {
       if (viewer != null) {
         store.auth.viewer = viewer.copyWith(avatarUrl: url);
       }
-      if (mounted) _updateState(() => viewerAvatarBytes = null);
+      if (mounted) _updateState(() => viewerAvatarBytes = selected!.bytes);
       await _loadViewerAvatar(url);
     } catch (error) {
       if (mounted) _showSnackBar(error.toString());
@@ -906,9 +906,11 @@ extension _AxAppController on _AxAppStateMixin {
     try {
       final bytes = await widget.dataSource.loadAvatar(url: url);
       if (!mounted || store.auth.viewer?.avatarUrl != url) return;
-      _updateState(() => viewerAvatarBytes = bytes);
-    } catch (_) {
-      // Keep initials visible when the private avatar cannot be loaded.
+      if (bytes != null && bytes.isNotEmpty) {
+        _updateState(() => viewerAvatarBytes = bytes);
+      }
+    } catch (error) {
+      if (mounted) _showSnackBar('Could not load your avatar: $error');
     }
   }
 

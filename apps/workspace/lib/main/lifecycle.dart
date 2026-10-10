@@ -80,6 +80,8 @@ class WorkspaceLifecycleController extends ChangeNotifier {
   bool _managementAuthRequired = true;
   static const _desktopChannel =
       MethodChannel('com.conclave.workspace/desktop');
+  static const WorkspaceServiceManager _serviceManager =
+      MethodChannelWorkspaceServiceManager();
 
   static Future<void> setLaunchAtLogin(bool enabled) async {
     if (!Platform.isMacOS) {
@@ -91,6 +93,25 @@ class WorkspaceLifecycleController extends ChangeNotifier {
       return;
     }
     await _desktopChannel.invokeMethod<void>('setLaunchAtLogin', enabled);
+  }
+
+  static Future<WorkspaceBackgroundServiceStatus>
+      getBackgroundServiceStatus() async {
+    return _serviceManager.status();
+  }
+
+  static Future<WorkspaceBackgroundServiceStatus>
+      registerBackgroundService() async {
+    return _serviceManager.register();
+  }
+
+  static Future<WorkspaceBackgroundServiceStatus>
+      unregisterBackgroundService() async {
+    return _serviceManager.unregister();
+  }
+
+  static Future<void> openLoginItemsSettings() async {
+    await _serviceManager.openSettings();
   }
 
   bool get hidden => _hidden;

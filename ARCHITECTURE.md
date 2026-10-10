@@ -165,6 +165,21 @@ Each boundary has its own identity, authorization, transport, versioning, and wi
 
 See [Protocol Boundaries](docs/architecture/PROTOCOL_BOUNDARIES.md) and the [Tool Profile v1 specification](docs/specifications/TOOL_PROFILE_V1.md).
 
+Workspace is being extracted into a persistent Dart service while retaining
+the separate CLI Worker Engine process. The current service entry point and
+versioned local IPC backend are implemented; the outstanding
+Flutter-to-service ownership handoff is documented in the
+[Workspace Runtime Service Phase 1 audit](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_1.md).
+The macOS package now embeds the signed-service layout and uses an
+`SMAppService` LaunchAgent bridge; device validation and the GUI-to-service
+ownership handoff remain release gates. See the
+[Phase 3 macOS service integration](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_3.md).
+The service recovery contract is in
+[Phase 4](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_4.md). The current
+migration, cleanup, and release gates are tracked in
+[Phase 5](docs/architecture/WORKSPACE_RUNTIME_SERVICE_PHASE_5.md); the
+in-process UI runtime remains active until its IPC replacement is verified.
+
 ## Security and release trust
 
 Cloud owns human identity, Space roles, Workspace ownership, Space-to-Workspace grants, Thread authorization, step-up authentication, and Profile administration. Workspace verifies signed Profile payloads and supervises Engine and provider CLI processes. Signing keys remain in protected release infrastructure; provider credentials remain with the locally installed provider CLI.

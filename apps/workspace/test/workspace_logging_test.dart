@@ -12,7 +12,10 @@ void main() {
     await current.writeAsString('${List.filled(128, 'x').join()}\n');
 
     final engine = Workspace(
-      config: WorkspaceConfig(dataDirectory: directory),
+      config: WorkspaceConfig(
+        dataDirectory: directory,
+        workRootPath: '${directory.path}/work',
+      ),
       logFileMaxBytes: 32,
     );
     await engine.start();
@@ -24,6 +27,8 @@ void main() {
         (await current.readAsLines()).where((line) => line.isNotEmpty);
     expect(lines, isNotEmpty);
     expect(jsonDecode(lines.first), containsPair('level', 'info'));
+    expect(jsonDecode(lines.first), containsPair('severity', 'info'));
+    expect(jsonDecode(lines.first), containsPair('serviceVersion', isNotNull));
     if (!Platform.isWindows) {
       expect((await current.stat()).mode & 0x1ff, 0x180);
       expect((await current.parent.stat()).mode & 0x1ff, 0x1c0);

@@ -28,6 +28,7 @@ dart format --output=none --set-exit-if-changed "${FORMAT_PATHS[@]}"
 flutter analyze
 if [[ "$APP" == workspace ]]; then
   DART_EXECUTABLE="$(command -v dart)" flutter test --concurrency=1
+  bash "$ROOT/scripts/check-workspace-service.sh"
 else
   flutter test
 fi
