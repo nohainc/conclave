@@ -7,6 +7,8 @@ private enum WorkspaceBackgroundService {
   static let launchAgentPlist = "com.conclaveax.workspace.service.plist"
   static let launchAgentLabel = "com.conclaveax.workspace.service"
   static let helperRelativePath = "Contents/Helpers/conclave-service"
+  static let engineRelativePath =
+    "Contents/Helpers/assets/engines/conclave_cli_worker_engine"
 
   @available(macOS 13.0, *)
   static var service: SMAppService {
@@ -63,12 +65,15 @@ private enum WorkspaceBackgroundService {
   }
 
   static func processState(_ launchd: [String: Any]) -> String {
+    if launchd["pid"] == nil, failureReason(launchd) != nil,
+       (launchd["launchdState"] as? String) != "running" {
+      return "failed"
+    }
     switch launchd["launchdState"] as? String {
     case "running": return "running"
     case "starting": return "starting"
     case "stopping": return "stopping"
-    case "stopped", "not running":
-      return launchd["lastExitReason"] != nil ? "failed" : "stopped"
+    case "stopped", "not running": return "stopped"
     default: return "unknown"
     }
   }
@@ -76,24 +81,27 @@ private enum WorkspaceBackgroundService {
   @available(macOS 13.0, *)
   static func validateBundle() throws {
     let helperURL = Bundle.main.bundleURL.appendingPathComponent(helperRelativePath)
+    let engineURL = Bundle.main.bundleURL.appendingPathComponent(engineRelativePath)
     let plistURL = Bundle.main.bundleURL
       .appendingPathComponent("Contents/Library/LaunchAgents")
       .appendingPathComponent(launchAgentPlist)
     guard FileManager.default.isExecutableFile(atPath: helperURL.path),
+          FileManager.default.isExecutableFile(atPath: engineURL.path),
           FileManager.default.fileExists(atPath: plistURL.path) else {
       throw NSError(
         domain: "ConclaveWorkspaceService",
         code: 2,
         userInfo: [NSLocalizedDescriptionKey:
-          "The Workspace Service helper or LaunchAgent manifest is missing."]
+          "The Workspace Service helper, Worker Engine, or LaunchAgent manifest is missing."]
       )
     }
-    guard workspaceServiceHasTrustedSignature(helperURL) else {
+    guard workspaceServiceHasTrustedSignature(helperURL),
+          workspaceServiceHasTrustedSignature(engineURL) else {
       throw NSError(
         domain: "ConclaveWorkspaceService",
         code: 3,
         userInfo: [NSLocalizedDescriptionKey:
-          "The Workspace Service helper does not have a trusted Apple signature. Rebuild with an Apple signing identity."]
+          "The Workspace Service helper or Worker Engine does not have a trusted Apple signature. Rebuild with an Apple signing identity."]
       )
     }
   }
@@ -129,6 +137,7 @@ private enum WorkspaceBackgroundService {
       // Explicitly ask launchd to start the already-registered agent. This is
       // intentionally separate from SMAppService.register().
       try runLaunchctl(["kickstart", launchdTarget])
+      return try verifyStarted()
     }
     return status()
   }
@@ -148,7 +157,57 @@ private enum WorkspaceBackgroundService {
       _ = try registerService()
     }
     try runLaunchctl(["kickstart", "-k", launchdTarget])
-    return status()
+    return try verifyStarted()
+  }
+
+  /// `kickstart` only proves launchd accepted the request. Poll briefly and
+  /// fail immediately if the job never gets a PID.
+  static func verifyStarted() throws -> [String: Any] {
+    var launchd: [String: Any] = [:]
+    for _ in 0..<6 {
+      Thread.sleep(forTimeInterval: 0.15)
+      launchd = (try? launchdStatus()) ?? [:]
+      if launchd["pid"] != nil { return status() }
+      if (launchd["jobState"] as? String) == "spawn failed" { break }
+    }
+    if launchd["pid"] != nil { return status() }
+    let reason = failureReason(launchd) ?? "launchd did not start the process"
+    throw NSError(
+      domain: "ConclaveWorkspaceService", code: 5,
+      userInfo: [NSLocalizedDescriptionKey: "Workspace Service failed to start: \(reason)"])
+  }
+
+  static func failureReason(_ launchd: [String: Any]) -> String? {
+    if let reason = launchd["lastExitReason"] as? String { return reason }
+    let failed = (launchd["jobState"] as? String) == "spawn failed"
+    let code = launchd["lastExitCode"] as? Int ?? 0
+    guard failed || (launchd["pid"] == nil && code != 0) else { return nil }
+    var parts: [String] = []
+    if failed { parts.append("spawn failed") }
+    if code != 0 {
+      parts.append("exit code \(code)" + ((launchd["lastExitCodeLabel"] as? String).map { " (\($0))" } ?? ""))
+    }
+    if let log = launchLogReason() { parts.append(log) }
+    return parts.joined(separator: "; ")
+  }
+
+  /// launchctl print omits code-signing/launch-constraint rejections; the
+  /// unified log carries them.
+  static func launchLogReason() -> String? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
+    process.arguments = ["show", "--last", "2m", "--style", "compact", "--predicate",
+      "eventMessage CONTAINS \"OS_REASON_CODESIGNING\" OR (process == \"launchd\" AND eventMessage CONTAINS \"\(launchAgentLabel)\")"]
+    let output = Pipe()
+    process.standardOutput = output
+    process.standardError = Pipe()
+    guard (try? process.run()) != nil else { return nil }
+    let data = output.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    let text = String(data: data, encoding: .utf8) ?? ""
+    if text.contains("Launch Constraint Violation") { return "OS_REASON_CODESIGNING (Launch Constraint Violation)" }
+    if text.contains("OS_REASON_CODESIGNING") { return "OS_REASON_CODESIGNING" }
+    return nil
   }
 
   static func status() -> [String: Any] {
@@ -156,6 +215,7 @@ private enum WorkspaceBackgroundService {
       return ["supported": false, "registration": "unsupported"]
     }
     let helperURL = Bundle.main.bundleURL.appendingPathComponent(helperRelativePath)
+    let engineURL = Bundle.main.bundleURL.appendingPathComponent(engineRelativePath)
     let plistURL = Bundle.main.bundleURL
       .appendingPathComponent("Contents/Library/LaunchAgents")
       .appendingPathComponent(launchAgentPlist)
@@ -166,6 +226,7 @@ private enum WorkspaceBackgroundService {
         "registration": "serviceMissing",
         "running": false,
         "helperPresent": FileManager.default.isExecutableFile(atPath: helperURL.path),
+        "enginePresent": FileManager.default.isExecutableFile(atPath: engineURL.path),
         "plistPresent": FileManager.default.fileExists(atPath: plistURL.path),
         "launchSupported": false,
       ]
@@ -186,7 +247,8 @@ private enum WorkspaceBackgroundService {
     // SMAppService reports registration/approval, not whether launchd has
     // started the process. Keep that distinction explicit for the UI.
     let launchd = (try? launchdStatus()) ?? ["launchdState": "unknown"]
-    let launchSupported = workspaceServiceHasTrustedSignature(helperURL)
+    let launchSupported = workspaceServiceHasTrustedSignature(helperURL) &&
+      workspaceServiceHasTrustedSignature(engineURL)
     return [
       "supported": true,
       "registration": registration,
@@ -196,8 +258,9 @@ private enum WorkspaceBackgroundService {
       "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") ?? NSNull(),
       "ipc": "unavailable",
       "lastExitCode": launchd["lastExitCode"] ?? NSNull(),
-      "lastExitReason": launchd["lastExitReason"] ?? NSNull(),
+      "lastExitReason": failureReason(launchd) ?? NSNull(),
       "helperPresent": true,
+      "enginePresent": FileManager.default.isExecutableFile(atPath: engineURL.path),
       "plistPresent": true,
       "launchSupported": launchSupported,
     ]
@@ -292,6 +355,28 @@ class AppDelegate: FlutterAppDelegate {
         guard let path = call.arguments as? String else { result(FlutterError(code: "bad_path", message: nil, details: nil)); return }
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
         result(nil)
+      case "chooseDirectory", "requestWorkRootAccess":
+        let initialPath = call.arguments as? String
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.title = call.method == "requestWorkRootAccess"
+          ? "Grant Work Root Access"
+          : "Select Work Root Directory"
+        panel.message = call.method == "requestWorkRootAccess"
+          ? "Select the configured Work Root so Conclave Workspace can access it before starting the service."
+          : "Select the folder used by Conclave Workers."
+        if let initialPath = initialPath, !initialPath.isEmpty {
+          let initialURL = URL(fileURLWithPath: initialPath)
+          panel.directoryURL = FileManager.default.fileExists(atPath: initialPath)
+            ? initialURL
+            : initialURL.deletingLastPathComponent()
+        }
+        panel.begin { response in
+          result(response == .OK ? panel.url?.path : nil)
+        }
       case "openAX":
         if let url = URL(string: "https://app.conclaveax.com") { NSWorkspace.shared.open(url) }
         result(nil)

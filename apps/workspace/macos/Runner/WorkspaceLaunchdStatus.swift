@@ -11,8 +11,15 @@ func parseWorkspaceLaunchdStatus(_ text: String) -> [String: Any] {
     if !foundState && value.hasPrefix("state = ") {
       foundState = true
       result["launchdState"] = String(value.dropFirst("state = ".count))
+    } else if value.hasPrefix("job state = ") {
+      result["jobState"] = String(value.dropFirst("job state = ".count))
     } else if value.hasPrefix("last exit code = ") {
-      result["lastExitCode"] = Int(value.dropFirst("last exit code = ".count))
+      let raw = String(value.dropFirst("last exit code = ".count))
+      let parts = raw.components(separatedBy: ":")
+      result["lastExitCode"] = Int(parts[0].trimmingCharacters(in: .whitespaces))
+      if parts.count > 1 {
+        result["lastExitCodeLabel"] = parts[1].trimmingCharacters(in: .whitespaces)
+      }
     } else if value.hasPrefix("last exit reason = ") {
       result["lastExitReason"] = String(value.dropFirst("last exit reason = ".count))
     } else if value.hasPrefix("pid = ") {

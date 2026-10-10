@@ -133,6 +133,11 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
       );
       final preferenceStore = WorkspaceLifecyclePreferencesStore(dataDirectory);
       final preferences = preferenceStore.readSync();
+      if (!await lifecycle.ensureWorkRootAccess()) {
+        throw StateError(
+          'Work Root access is required before starting the service.',
+        );
+      }
       await lifecycle.ensureBackgroundService();
       await preferenceStore.write(WorkspaceLifecyclePreferences(
         desiredRuntime: DesiredRuntimeState.connected,

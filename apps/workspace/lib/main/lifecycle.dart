@@ -133,6 +133,42 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Touch the configured Work Root before starting the background service.
+  ///
+  /// The service is headless, so a macOS privacy prompt cannot be shown from
+  /// its process. Performing the same write probe in Workspace.app gives the
+  /// user a chance to grant folder access before any Worker Engine starts.
+  Future<bool> ensureWorkRootAccess() async {
+    final configuredPath = config.workRootResolver.configuredPath;
+    try {
+      final root = await config.workRootResolver.resolve();
+      WorkspacePaths(config.dataDirectory).validateWorkRootSeparation(root);
+      return true;
+    } on Object catch (initialError) {
+      if (!Platform.isMacOS) rethrow;
+      final selected = await requestWorkRootAccess(initialPath: configuredPath);
+      if (selected == null || selected.trim().isEmpty) return false;
+      final selectedPath = Directory(selected).absolute.path;
+      final configuredAbsolute = Directory(configuredPath).absolute.path;
+      if (selectedPath != configuredAbsolute) {
+        throw StateError(
+          'Select the configured Work Root before starting the service: '
+          '$configuredPath',
+        );
+      }
+      try {
+        final root = await config.workRootResolver.resolve();
+        WorkspacePaths(config.dataDirectory).validateWorkRootSeparation(root);
+        return true;
+      } on Object catch (retryError) {
+        throw StateError(
+          'Conclave Workspace still cannot access the Work Root. '
+          'Initial check: $initialError. Retry: $retryError',
+        );
+      }
+    }
+  }
+
   Future<void> ensureBackgroundService() async {
     _serviceDiagnostics = const {};
     var info = await _hostServiceManager.getInfo();
@@ -682,6 +718,15 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
       } catch (_) {}
     }
     return null;
+  }
+
+  static Future<String?> requestWorkRootAccess({String? initialPath}) async {
+    try {
+      final result = await _desktopChannel.invokeMethod<String>(
+          'requestWorkRootAccess', initialPath);
+      if (result != null && result.trim().isNotEmpty) return result.trim();
+    } catch (_) {}
+    return chooseDirectory(initialPath: initialPath);
   }
 
   static Future<void> openAX([String? url]) async {

@@ -12,7 +12,7 @@
 		<string>--background-service</string>
 	</array>
 	<key>RunAtLoad</key>
-	<true/>
+	<false/>
 	<key>KeepAlive</key>
 	<dict>
 		<key>Crashed</key>
@@ -22,16 +22,6 @@
 	<integer>30</integer>
 	<key>ProcessType</key>
 	<string>Background</string>
-	<!--
-		macOS 26 applies launch constraints to SMAppService agents. Keep the
-		constraint tied to the signed helper, and let the release build inject
-		the signing team's identifier before the containing app is sealed.
-	-->
-	<key>SpawnConstraint</key>
-	<dict>
-		<key>signing-identifier</key>
-		<string>conclave-service</string>
-	</dict>
 	<key>EnvironmentVariables</key>
 	<dict>
 		<key>PATH</key>

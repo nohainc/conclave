@@ -151,6 +151,8 @@ HELPERS_DIR="$APP/Contents/Helpers"
 LAUNCH_AGENTS_DIR="$APP/Contents/Library/LaunchAgents"
 mkdir -p "$HELPERS_DIR/assets/engines" "$LAUNCH_AGENTS_DIR"
 "$DART" compile exe \
+  --define="CONCLAVE_WORKSPACE_VERSION=$VERSION" \
+  --define="CONCLAVE_RELEASE_TRUST_KEYS_JSON=$PUBLIC_RELEASE_ROOTS" \
   --packages="$WORKSPACE_DIR/.dart_tool/package_config.json" \
   "$WORKSPACE_DIR/bin/conclave_workspace_service.dart" \
   -o "$HELPERS_DIR/conclave-service"
@@ -167,27 +169,40 @@ cp "$WORKSPACE_DIR/macos/Runner/LaunchAgents/com.conclaveax.workspace.service.pl
 
 if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
   echo "Signing with configured Apple identity"
+  if [[ "$MODE" == "debug" ]]; then
+    APP_ENTITLEMENTS="$WORKSPACE_DIR/macos/Runner/DebugProfile.entitlements"
+  else
+    APP_ENTITLEMENTS="$WORKSPACE_DIR/macos/Runner/Release.entitlements"
+  fi
+
+  # Flutter initially signs its embedded frameworks with the build-time
+  # identity. Re-sign every embedded framework with the same identity as the
+  # application before sealing the app, otherwise dyld rejects the framework
+  # as a non-platform mapping at process launch.
+  while IFS= read -r -d '' framework; do
+    codesign --force --options runtime --timestamp \
+      --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" "$framework"
+  done < <(find "$APP/Contents/Frameworks" -type d -name '*.framework' \
+    -prune -print0)
+
+  # Sign the standalone executables with their own hardened-runtime
+  # entitlements first. Do not use --deep for the application after this:
+  # recursive signing can replace these helper entitlements and leave a
+  # launchd job that passes a shallow signature check but exits with
+  # OS_REASON_CODESIGNING.
   codesign --force --options runtime --timestamp \
+    --entitlements "$WORKSPACE_DIR/macos/Runner/WorkspaceHelper.entitlements" \
     --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" \
     "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
   codesign --force --options runtime --timestamp \
+    --entitlements "$WORKSPACE_DIR/macos/Runner/WorkspaceHelper.entitlements" \
     --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" \
     "$HELPERS_DIR/conclave-service"
 
-  # macOS 26 validates SMAppService launch agents against the signed
-  # executable's team. Inject the team identifier before sealing the app so
-  # the launch constraint is part of the signed resource set.
-  TEAM_ID="$(codesign -dv --verbose=4 "$HELPERS_DIR/conclave-service" 2>&1 \
-    | awk -F= '/^TeamIdentifier=/{print $2; exit}')"
-  if [[ -z "$TEAM_ID" ]]; then
-    echo "Could not determine the signing team identifier for the Workspace service." >&2
-    exit 1
-  fi
-  /usr/bin/plutil -insert SpawnConstraint.team-identifier \
-    -string "$TEAM_ID" \
-    "$LAUNCH_AGENTS_DIR/com.conclaveax.workspace.service.plist"
-
-  codesign --force --deep --options runtime --timestamp \
+  # The Flutter build has already signed the embedded Flutter frameworks. Seal
+  # only the application bundle so the helper signatures above remain intact.
+  codesign --force --options runtime --timestamp \
+    --entitlements "$APP_ENTITLEMENTS" \
     --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" "$APP"
   codesign --verify --strict --verbose=2 \
     "$HELPERS_DIR/conclave-service"

@@ -294,6 +294,7 @@ extension _AxAppController on _AxAppStateMixin {
       }));
     }
     if (type == 'realtime.connection') {
+      _clearQueuedRealtimeNotice();
       final status = event['status'];
       _realtimeTransportConnected = status == 'connected';
       _updateLiveState(() {
@@ -305,12 +306,14 @@ extension _AxAppController on _AxAppStateMixin {
       return;
     }
     if (type == 'realtime.ready') {
+      _clearQueuedRealtimeNotice();
       _realtimeTransportConnected = true;
       unawaited(_refreshRealtimeFeatures('space.updated'));
       _updateLiveState(() => realtimeStale = false);
       return;
     }
     if (type == 'reconnect.required') {
+      _clearQueuedRealtimeNotice();
       final scope = AxSyncScope.fromEvent(event);
       _updateLiveState(() {
         realtimeStale = true;
@@ -756,19 +759,39 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
+  void _clearQueuedRealtimeNotice() {
+    _queuedRealtimeNoticeTimer?.cancel();
+    _queuedRealtimeNoticeTimer = null;
+    _pendingQueuedRealtimeNotice = null;
+  }
+
   void _announceRealtimeProgress(Map<String, dynamic> event) {
-    final now = DateTime.now();
-    if (_lastRealtimeAnnouncement != null &&
-        now.difference(_lastRealtimeAnnouncement!).inMilliseconds < 750) {
-      return;
-    }
     final payload = event['payload'];
     final summary = payload is Map
         ? (payload['summary'] ?? payload['status'] ?? payload['phase'])
         : null;
     if (summary is String && summary.trim().isNotEmpty) {
+      final notice = summary.trim();
+      if (notice.toLowerCase().contains('queued')) {
+        _pendingQueuedRealtimeNotice = notice;
+        _queuedRealtimeNoticeTimer ??= Timer(const Duration(seconds: 3), () {
+          _queuedRealtimeNoticeTimer = null;
+          final pending = _pendingQueuedRealtimeNotice;
+          _pendingQueuedRealtimeNotice = null;
+          if (mounted && pending != null) {
+            _updateLiveState(() => realtimeNotice = pending);
+          }
+        });
+        return;
+      }
+      _clearQueuedRealtimeNotice();
+      final now = DateTime.now();
+      if (_lastRealtimeAnnouncement != null &&
+          now.difference(_lastRealtimeAnnouncement!).inMilliseconds < 750) {
+        return;
+      }
       _lastRealtimeAnnouncement = now;
-      _updateLiveState(() => realtimeNotice = summary.trim());
+      _updateLiveState(() => realtimeNotice = notice);
     }
   }
 

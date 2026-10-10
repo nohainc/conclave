@@ -30,8 +30,12 @@ done
   echo "LaunchAgent argv[0] does not identify the embedded service." >&2
   exit 1
 }
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :SpawnConstraint:signing-identifier' "$PLIST")" == "conclave-service" ]] || {
-  echo "LaunchAgent spawn constraint does not identify the embedded service." >&2
+if /usr/libexec/PlistBuddy -c 'Print :SpawnConstraint' "$PLIST" >/dev/null 2>&1; then
+  echo "LaunchAgent must not declare a SpawnConstraint (launchd rejects it)." >&2
+  exit 1
+fi
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :RunAtLoad' "$PLIST")" == "false" ]] || {
+  echo "LaunchAgent must not start on registration (RunAtLoad must be false)." >&2
   exit 1
 }
 
@@ -44,14 +48,38 @@ if codesign -dv "$APP" >/dev/null 2>&1; then
   codesign --verify --strict --verbose=2 "$HELPER"
   codesign --verify --strict --verbose=2 "$ENGINE"
   codesign --verify --deep --strict --verbose=2 "$APP"
+  codesign --verify --strict --verbose=2 \
+    --test-requirement '=anchor apple generic' "$HELPER"
+  codesign --verify --strict --verbose=2 \
+    --test-requirement '=anchor apple generic' "$ENGINE"
+
+  # Dart AOT executables are hardened-runtime code. Keep the helper-specific
+  # entitlements intact after the application bundle is sealed; otherwise
+  # launchd can terminate the service with OS_REASON_CODESIGNING even though a
+  # shallow signature check succeeds.
+  HELPER_ENTITLEMENTS="$(codesign -d --entitlements :- "$HELPER" 2>/dev/null || true)"
+  ENGINE_ENTITLEMENTS="$(codesign -d --entitlements :- "$ENGINE" 2>/dev/null || true)"
+  for entitlement in \
+    com.apple.security.cs.allow-jit \
+    com.apple.security.cs.allow-unsigned-executable-memory \
+    com.apple.security.cs.disable-library-validation; do
+    [[ "$HELPER_ENTITLEMENTS" == *"$entitlement"* ]] || {
+      echo "The service helper is missing hardened-runtime entitlement: $entitlement" >&2
+      exit 1
+    }
+    [[ "$ENGINE_ENTITLEMENTS" == *"$entitlement"* ]] || {
+      echo "The Worker Engine is missing hardened-runtime entitlement: $entitlement" >&2
+      exit 1
+    }
+  done
 
   team_id() {
     codesign -dv --verbose=4 "$1" 2>&1 \
-      | awk -F= '/^TeamIdentifier=/{print $2; exit}'
+      | awk -F= '/^TeamIdentifier=/ && !s{print $2; s=1}'
   }
   identifier() {
     codesign -dv --verbose=4 "$1" 2>&1 \
-      | awk -F= '/^Identifier=/{print $2; exit}'
+      | awk -F= '/^Identifier=/ && !s{print $2; s=1}'
   }
 
   APP_TEAM_ID="$(team_id "$APP")"
@@ -69,11 +97,6 @@ if codesign -dv "$APP" >/dev/null 2>&1; then
   if [[ -n "$APP_TEAM_ID" || -n "$HELPER_TEAM_ID" || -n "$ENGINE_TEAM_ID" ]]; then
     [[ -n "$APP_TEAM_ID" && "$APP_TEAM_ID" == "$HELPER_TEAM_ID" && "$APP_TEAM_ID" == "$ENGINE_TEAM_ID" ]] || {
       echo "Workspace app, service helper, and Worker Engine are not signed by the same team." >&2
-      exit 1
-    }
-    CONSTRAINT_TEAM_ID="$(/usr/libexec/PlistBuddy -c 'Print :SpawnConstraint:team-identifier' "$PLIST" 2>/dev/null || true)"
-    [[ "$CONSTRAINT_TEAM_ID" == "$HELPER_TEAM_ID" ]] || {
-      echo "LaunchAgent team-identifier constraint does not match the signed service helper." >&2
       exit 1
     }
   fi

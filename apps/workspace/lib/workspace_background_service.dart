@@ -35,6 +35,7 @@ class WorkspaceServiceInfo {
     required this.supported,
     required this.helperPresent,
     required this.plistPresent,
+    this.enginePresent = true,
     this.launchSupported = true,
     this.process = WorkspaceServiceProcessStatus.unknown,
     this.pid,
@@ -50,6 +51,7 @@ class WorkspaceServiceInfo {
   final bool supported;
   final bool helperPresent;
   final bool plistPresent;
+  final bool enginePresent;
 
   /// Whether this bundle has an Apple-trusted service helper that SMAppService
   /// can launch. Ad-hoc debug bundles intentionally report false.
@@ -84,6 +86,7 @@ class WorkspaceServiceInfo {
     bool? supported,
     bool? helperPresent,
     bool? plistPresent,
+    bool? enginePresent,
     bool? launchSupported,
     WorkspaceServiceProcessStatus? process,
     int? pid,
@@ -103,6 +106,7 @@ class WorkspaceServiceInfo {
       supported: supported ?? this.supported,
       helperPresent: helperPresent ?? this.helperPresent,
       plistPresent: plistPresent ?? this.plistPresent,
+      enginePresent: enginePresent ?? this.enginePresent,
       launchSupported: launchSupported ?? this.launchSupported,
       process: process ?? this.process,
       pid: clearPid ? null : pid ?? this.pid,
@@ -154,6 +158,7 @@ class WorkspaceServiceInfo {
       supported: value['supported'] == true,
       helperPresent: value['helperPresent'] == true,
       plistPresent: value['plistPresent'] == true,
+      enginePresent: value['enginePresent'] != false,
       launchSupported: value['launchSupported'] != false,
       process: process,
       pid: value['pid'] is int ? value['pid'] as int : null,
@@ -201,6 +206,7 @@ class UnsupportedWorkspaceServiceManager extends WorkspaceServiceManager {
         supported: false,
         helperPresent: false,
         plistPresent: false,
+        enginePresent: false,
         launchSupported: false,
       );
 

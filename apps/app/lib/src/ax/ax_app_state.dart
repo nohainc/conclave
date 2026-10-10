@@ -60,6 +60,8 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   String? desktopAuthError;
   String? authNotice;
   String? authError;
+  Timer? _queuedRealtimeNoticeTimer;
+  String? _pendingQueuedRealtimeNotice;
   final promptResponseController = TextEditingController();
   final TextEditingController _searchQueryController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -281,6 +283,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   @override
   void dispose() {
     _desktopAuthStatusTimer?.cancel();
+    _queuedRealtimeNoticeTimer?.cancel();
     _searchQueryController.removeListener(_onSearchQueryChanged);
     _searchQueryController.dispose();
     _searchFocusNode.dispose();

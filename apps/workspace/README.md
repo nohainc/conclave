@@ -65,6 +65,8 @@ The Workspace runtime has a standalone Dart service entry point at
 Worker protocols and does not import Flutter APIs. Build it with
 `bash scripts/build-workspace-service.sh`; the resulting executable and its
 generic CLI Worker Engine are placed under `dist/conclave-workspace/service/`.
+The build injects `CONCLAVE_RELEASE_TRUST_KEYS_JSON` into the service as well
+as the Flutter app, so the service can verify and use signed Tool Profiles.
 The service can be run without starting the Flutter application and maintains
 separate process, Cloud-connection, and execution state in
 `workspace-state.json`.
@@ -109,10 +111,10 @@ bash scripts/build-workspace-macos.sh
 The local build bundles the generic CLI Worker Engine. With no arguments the
 script creates a signed release using the configured local Apple Development
 identity. Use `--sign` or `CONCLAVE_MACOS_SIGN_IDENTITY` to select another
-certificate. The build embeds a launch constraint
-matching the signed helper and its team. macOS rejects ad-hoc signed helpers
-launched through SMAppService before the service can create its IPC socket.
-The build also verifies the helper and Engine signatures before packaging;
+certificate. The build signs the embedded Flutter frameworks, service helper,
+and Worker Engine with the same identity, preserves the helper entitlements,
+and verifies all three before packaging. macOS rejects ad-hoc signed helpers
+launched through SMAppService before the service can create its IPC socket;
 restore the signing certificate and private key if that check fails.
 `--debug` without an identity is available for UI inspection only; Start Service
 reports the signing requirement immediately. Install a valid signing certificate
@@ -139,11 +141,11 @@ fallback and bounded reconnect backoff. A running service can therefore be
 Cloud-offline without being stopped.
 
 **Stop Service** asks the service to stop accepting work and drain active
-assignments before unregistering the LaunchAgent. If work does not finish
-within the bounded grace period, stopping is refused and admission resumes.
-A successful stop disables automatic startup; starting enables login startup
-again through `SMAppService.agent`. Closing or quitting Workspace.app only
-closes the management client and leaves the service running.
+assignments before terminating the process. If work does not finish within the
+bounded grace period, stopping is refused and admission resumes. Stopping
+does not unregister the LaunchAgent or change the persisted Cloud connection
+intent. Closing or quitting Workspace.app only closes the management client
+and leaves the service running.
 
 The two tabs are **Workspace** and **Workers**. Worker configuration and live
 tests execute in the service through authenticated IPC; the UI awaits results.
@@ -207,6 +209,13 @@ The installation's advisory lock protects against edits while an independent
 service process is running even if its IPC socket is unavailable. A changed
 root applies to future Space directory resolution and never moves existing
 user files. The running-service API rejects Work Root changes.
+
+Before starting or restarting the background service, Workspace.app performs a
+write-access preflight against the configured Work Root. If macOS has not yet
+granted the application access to that folder, the app opens the native folder
+permission flow while the UI is available. The service is started only after
+the preflight succeeds, so the first Worker request does not need to trigger
+the initial folder-access prompt from a headless process.
 
 Start Service first attempts IPC attachment. If macOS has an enabled but stopped
 job (including an old helper path after an update), the native bridge refreshes

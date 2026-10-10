@@ -131,6 +131,22 @@ void main() {
     expect(lifecycle.uiSnapshot.serviceRunning, isFalse);
   });
 
+  test('service startup preflight verifies Work Root access', () async {
+    final root = await Directory.systemTemp.createTemp('work-root-preflight-');
+    addTearDown(() => root.delete(recursive: true));
+    final lifecycle = WorkspaceLifecycleController(
+      WorkspaceConfig(
+        dataDirectory: Directory('${root.path}/state'),
+        workRootPath: '${root.path}/work',
+      ),
+      credentialStore: const PlatformSecureCredentialStore(),
+    );
+    addTearDown(lifecycle.quit);
+
+    expect(await lifecycle.ensureWorkRootAccess(), isTrue);
+    expect(await Directory('${root.path}/work').exists(), isTrue);
+  });
+
   test('running service protects Work Root even when Cloud is offline',
       () async {
     final root = await Directory.systemTemp.createTemp('running-work-root-');

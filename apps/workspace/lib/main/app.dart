@@ -143,6 +143,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
   Future<void> _startWorkspaceService() async {
     final lifecycle = widget.lifecycle;
     try {
+      final workRootReady = await lifecycle.ensureWorkRootAccess();
+      if (!workRootReady) return;
       // Starting the local service is deliberately independent from Cloud.
       // The service restores the user's persisted Cloud intent itself after
       // its IPC endpoint becomes ready.
@@ -186,6 +188,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
 
   Future<void> _restartWorkspaceService() async {
     try {
+      final workRootReady = await widget.lifecycle.ensureWorkRootAccess();
+      if (!workRootReady) return;
       await widget.lifecycle.restartService();
       if (mounted) setState(() {});
     } on Object catch (error) {
@@ -602,8 +606,14 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       Object? restartFailure;
       if (registrationRepaired) {
         try {
-          await lifecycle.ensureBackgroundService();
-          await lifecycle.request('configuration.reload');
+          if (!await lifecycle.ensureWorkRootAccess()) {
+            restartFailure = StateError(
+              'Work Root access is required before restarting the service.',
+            );
+          } else {
+            await lifecycle.ensureBackgroundService();
+            await lifecycle.request('configuration.reload');
+          }
         } on Object catch (error) {
           restartFailure = error;
         }

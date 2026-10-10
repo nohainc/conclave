@@ -172,4 +172,54 @@ void main() {
     expect(find.text('Live updates connected.'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('queued progress notices wait before appearing', (tester) async {
+    final source = PollingSource();
+    final realtime = TestRealtime();
+    await mount(tester, source, realtime);
+
+    const queued = 'Queued for 1 second';
+    realtime.controller.add({
+      'type': 'assignment.progress',
+      'workspaceId': 'workspace',
+      'payload': {'summary': queued},
+    });
+    await tester.pump();
+    expect(find.text(queued), findsNothing);
+
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text(queued), findsNothing);
+
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text(queued), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('queued progress notice is cancelled when work starts',
+      (tester) async {
+    final source = PollingSource();
+    final realtime = TestRealtime();
+    await mount(tester, source, realtime);
+
+    const queued = 'Queued for 1 second';
+    realtime.controller.add({
+      'type': 'assignment.progress',
+      'workspaceId': 'workspace',
+      'payload': {'summary': queued},
+    });
+    await tester.pump();
+
+    realtime.controller.add({
+      'type': 'assignment.progress',
+      'workspaceId': 'workspace',
+      'payload': {'summary': 'Working on your request'},
+    });
+    await tester.pump();
+    expect(find.text(queued), findsNothing);
+    expect(find.text('Working on your request'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text(queued), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

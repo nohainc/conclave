@@ -20,12 +20,20 @@ command -v dart >/dev/null 2>&1 || {
   exit 1
 }
 
+VERSION="${CONCLAVE_WORKSPACE_VERSION:-1.0.3}"
+if [[ -z "${CONCLAVE_WORKSPACE_VERSION:-}" ]]; then
+  VERSION="$(awk '/^version:/ {print $2; exit}' "$WORKSPACE_DIR/pubspec.yaml")"
+fi
+PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-profile-trust.mjs")"
+
 cd "$WORKSPACE_DIR"
 flutter pub get
 bash "$ROOT/scripts/build-cli-worker-engine.sh"
 mkdir -p "$OUT_DIR/assets/engines"
 cp "assets/engines/$ENGINE_NAME" "$OUT_DIR/assets/engines/"
 dart compile exe \
+  --define="CONCLAVE_WORKSPACE_VERSION=$VERSION" \
+  --define="CONCLAVE_RELEASE_TRUST_KEYS_JSON=$PUBLIC_RELEASE_ROOTS" \
   --packages="$WORKSPACE_DIR/.dart_tool/package_config.json" \
   bin/conclave_workspace_service.dart \
   -o "$OUT_DIR/$OUTPUT_NAME"
